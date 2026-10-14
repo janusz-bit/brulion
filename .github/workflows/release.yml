@@ -1,0 +1,216 @@
+# Release: push a tag v<version> (scripts/release.sh bumps the version and creates the tag), or
+# run this workflow by hand. It checks the tag against the version in CMakeLists.txt and
+# nix/package.nix, creates a draft GitHub release (notes: .github/release-notes.md), builds
+#   brulion-<version>-arm64-v8a.apk          Android (android.yml, signed with the release key)
+#   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
+#   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
+#   brulion-<version>-source.tar.gz          the tagged sources (git archive)
+#   SHA256SUMS.txt
+# and publishes the release once every build succeeded. A tag with a suffix (v0.2.0-rc.1)
+# becomes a pre-release; the files carry the CMake version (0.2.0).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Tag to release, e.g. v0.2.0 (must match VERSION in CMakeLists.txt). A missing tag is
+          created on the selected branch; for an existing tag select the tag itself above.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  draft:
+    name: Check the version, draft the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.release.outputs.id }}
+      version: ${{ steps.version.outputs.version }}
+      file-version: ${{ steps.version.outputs.file-version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        name: Check the tag against CMakeLists.txt and nix/package.nix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cmake_version=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
+          nix_version=$(sed -nE 's/^[[:space:]]*version = "([^"]+)";.*/\1/p' nix/package.nix | head -n 1)
+          if ! [[ $TAG =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $TAG is not v<major>.<minor>.<patch>[-<pre-release>]"
+            exit 1
+          fi
+          if [ "${BASH_REMATCH[1]}" != "$cmake_version" ]; then
+            echo "::error file=CMakeLists.txt::Tag $TAG does not match the project VERSION $cmake_version (bump it with scripts/release.sh)"
+            exit 1
+          fi
+          if [ "$nix_version" != "$cmake_version" ]; then
+            echo "::error file=nix/package.nix::nix/package.nix has version $nix_version, CMakeLists.txt $cmake_version (scripts/release.sh updates both)"
+            exit 1
+          fi
+          # Every job builds the checked-out commit: an existing tag must point to it (a run by
+          # hand for an existing tag has to be started from that tag).
+          head=$(git rev-parse HEAD)
+          tag_sha=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha 2>/dev/null || true)
+          if [ -n "$tag_sha" ] && [ "$tag_sha" != "$head" ]; then
+            echo "::error::Tag $TAG points to $tag_sha, but this run builds $head ($GITHUB_REF). Run the workflow from the tag (Use workflow from: Tags -> $TAG)."
+            exit 1
+          fi
+          {
+            echo "version=${TAG#v}"
+            echo "file-version=$cmake_version"
+            echo "commit=$head"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: release
+        name: Create (or reuse) the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          FILE_VERSION: ${{ steps.version.outputs.file-version }}
+          COMMIT: ${{ steps.version.outputs.commit }}
+        run: |
+          existing=$(gh api "repos/$GH_REPO/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$TAG\") | \"\(.id) \(.draft)\"" | head -n 1)
+          if [ -n "$existing" ]; then
+            read -r id draft <<< "$existing"
+            if [ "$draft" != true ]; then
+              echo "::error::Release $TAG is already published; delete it or release a new version"
+              exit 1
+            fi
+            echo "Reusing the draft release $id"
+          else
+            prerelease=false
+            case "$TAG" in *-*) prerelease=true ;; esac
+            owner=${GH_REPO%%/*}
+            pages_url="https://${owner,,}.github.io/${GH_REPO#*/}/"
+            sed -e "s|{{VERSION}}|$VERSION|g" -e "s|{{FILE_VERSION}}|$FILE_VERSION|g" \
+              -e "s|{{TAG}}|$TAG|g" -e "s|{{REPO}}|$GH_REPO|g" -e "s|{{PAGES_URL}}|$pages_url|g" \
+              .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+            id=$(gh api -X POST "repos/$GH_REPO/releases" \
+              -f tag_name="$TAG" -f target_commitish="$COMMIT" -f name="Brulion $VERSION" \
+              -F body=@"$RUNNER_TEMP/notes.md" -F generate_release_notes=true \
+              -F draft=true -F prerelease="$prerelease" --jq .id)
+            echo "Created the draft release $id"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  source:
+    name: Source tarball
+    needs: draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FILE_VERSION: ${{ needs.draft.outputs.file-version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: |
+          mkdir -p dist-source
+          git archive --format=tar.gz --prefix="brulion-$FILE_VERSION/" \
+            -o "dist-source/brulion-$FILE_VERSION-source.tar.gz" HEAD
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: brulion-source
+          path: dist-source/
+          if-no-files-found: error
+          retention-days: 7
+
+  appimage:
+    name: Linux
+    needs: draft
+    permissions:
+      contents: read
+    uses: ./.github/workflows/appimage.yml
+
+  android:
+    name: Android
+    needs: draft
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+
+  web:
+    name: Web
+    needs: draft
+    # wasm.yml's Pages deployment job needs these, although it does not run for releases.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/wasm.yml
+    with:
+      deploy: false
+
+  publish:
+    name: Publish the release
+    needs: [draft, source, appimage, android, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ID: ${{ needs.draft.outputs.release-id }}
+      FILE_VERSION: ${{ needs.draft.outputs.file-version }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Collect the release files
+        run: |
+          mkdir assets
+          cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-source/* assets/
+          (cd artifacts/brulion-web && zip -q -r -X "$GITHUB_WORKSPACE/assets/brulion-web-$FILE_VERSION.zip" .)
+          (cd assets && sha256sum -- * > SHA256SUMS.txt)
+          cat assets/SHA256SUMS.txt
+          {
+            echo "### Files of $TAG"
+            echo
+            echo "| File | Size |"
+            echo "|---|---|"
+            for f in assets/*; do echo "| $(basename "$f") | $(du -h "$f" | cut -f1) |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload them to the release
+        run: gh release upload "$TAG" assets/* --clobber
+
+      - name: Warn about a throwaway signing key in the release notes
+        if: needs.android.outputs.signing == 'throwaway'
+        run: |
+          body=$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq .body)
+          if ! grep -q 'brulion-throwaway' <<< "$body"; then
+            note=$'\n\n> [!WARNING]\n> <!-- brulion-throwaway -->Ten APK jest podpisany tymczasowym kluczem: nie zainstaluje się jako aktualizacja wersji podpisanej innym kluczem. Trzeba najpierw odinstalować aplikację, co usuwa dane z jej pamięci prywatnej (folder z notatkami w pamięci współdzielonej, np. /storage/emulated/0/Brulion, zostaje).'
+            gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -f body="$body$note" > /dev/null
+          fi
+
+      - name: Publish
+        run: |
+          url=$(gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false --jq .html_url)
+          echo "Published $url"
+          echo "### Released [$TAG]($url)" >> "$GITHUB_STEP_SUMMARY"

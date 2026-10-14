@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata of the Linux desktop app, installed by cmake/BrulionInstall.cmake as
+     share/metainfo/io.github.januszbit.brulion.metainfo.xml. The Nix package validates it
+     (appstreamcli validate-tree on its output, see nix/package.nix). No <releases> yet:
+     scripts/release.sh does not maintain them, and a stale entry would be wrong. -->
+<component type="desktop-application">
+  <id>io.github.januszbit.brulion</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+
+  <name>Brulion</name>
+  <summary>Offline-first Markdown notes with an outliner, journals and reminders</summary>
+  <summary xml:lang="pl">Notatki w Markdown offline: konspekt, dziennik i przypomnienia</summary>
+
+  <description>
+    <p>
+      Brulion keeps your notes as plain Markdown files in a folder you choose. Write them as a
+      block outliner with daily journals, link pages and blocks, plan with a calendar, tasks,
+      reminders and alarms, and calculate right inside your notes.
+    </p>
+    <p xml:lang="pl">
+      Brulion trzyma notatki jako zwykłe pliki Markdown w wybranym folderze. Piszesz je w
+      konspekcie z blokami i w dzienniku, łączysz strony i bloki, planujesz w kalendarzu, z
+      zadaniami, przypomnieniami i alarmami, a obliczenia liczysz wprost w notatkach.
+    </p>
+    <ul>
+      <li>Works offline; your files stay readable by Obsidian and Logseq</li>
+      <li xml:lang="pl">Działa offline; pliki da się czytać w Obsidianie i Logseq</li>
+      <li>Daily journals, backlinks, tags, search and queries</li>
+      <li xml:lang="pl">Dziennik, odnośniki zwrotne, tagi, wyszukiwanie i zapytania</li>
+      <li>Calendar, tasks, recurring reminders and alarms from the system tray</li>
+      <li xml:lang="pl">Kalendarz, zadania, powtarzalne przypomnienia i alarmy z zasobnika systemowego</li>
+      <li>Calculations with units, percentages and table formulas</li>
+      <li xml:lang="pl">Obliczenia z jednostkami, procentami i formułami w tabelach</li>
+      <li>Sync through Syncthing (a plain folder) or Nextcloud (WebDAV)</li>
+      <li xml:lang="pl">Synchronizacja przez Syncthing (zwykły folder) albo Nextcloud (WebDAV)</li>
+    </ul>
+  </description>
+
+  <developer id="io.github.janusz-bit">
+    <name>janusz-bit</name>
+  </developer>
+
+  <launchable type="desktop-id">io.github.januszbit.brulion.desktop</launchable>
+  <provides>
+    <binary>brulion</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/janusz-bit/brulion</url>
+  <url type="bugtracker">https://github.com/janusz-bit/brulion/issues</url>
+  <url type="vcs-browser">https://github.com/janusz-bit/brulion</url>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#fbf7ee</color>
+    <color type="primary" scheme_preference="dark">#34405a</color>
+  </branding>
+
+  <content_rating type="oars-1.1"/>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+</component>

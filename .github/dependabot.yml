@@ -1,0 +1,15 @@
+# Monthly, grouped updates of the GitHub Actions used in .github/workflows (one PR).
+# Qt, the NDK, Emscripten and aqtinstall are pinned in the build scripts and bumped by hand
+# (Qt 6.11.2 needs exactly Emscripten 4.0.7 and NDK r27c); the Nix inputs via `nix flake update`.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: CI

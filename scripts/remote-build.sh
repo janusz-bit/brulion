@@ -63,11 +63,14 @@ EOS
 )
 
 # 'path:.' makes the flake include untracked files (there is no .git on the remote copy anyway).
-ssh -o BatchMode=yes "${host}" "cd ${remote_root}/src && nix develop path:. -c bash -c $(printf '%q' "${remote_script}")"
-status=$?
+# `|| status=$?`: with `set -e` a failed build would otherwise end this script here, before
+# the --pull copies (e.g. screenshots of a failing run) and without the build's status.
+status=0
+ssh -o BatchMode=yes "${host}" "cd ${remote_root}/src && nix develop path:. -c bash -c $(printf '%q' "${remote_script}")" ||
+  status=$?
 
 for p in "${pulls[@]}"; do
   mkdir -p "${p}"
-  rsync -a "${host}:${remote_root}/src/${p}/" "${p}/"
+  rsync -a "${host}:${remote_root}/src/${p}/" "${p}/" || echo "remote-build: could not copy ${p} back" >&2
 done
 exit ${status}

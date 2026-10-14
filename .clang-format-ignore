@@ -1,0 +1,5 @@
+# Files clang-format must not touch (also honoured by `git clang-format` in CI).
+# Vendored code.
+3rdparty/**
+# JavaScript inside EM_JS()/EM_ASM() blocks: clang-format would rewrite it as C++.
+src/platform/wasm/*.cpp

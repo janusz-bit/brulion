@@ -1,0 +1,135 @@
+<?xml version="1.0"?>
+<!--
+  Brulion's Android manifest (QT_ANDROID_PACKAGE_SOURCE_DIR = android/, see docs/ANDROID.md).
+
+  Based on Qt 6.11.2's template (src/android/templates/AndroidManifest.xml): androiddeployqt
+  fills in the "-%- %%INSERT_... -%-" placeholders (package name, version, app name, the
+  library to load) and the permissions Qt modules need. Brulion's own parts: the main activity
+  (BrulionActivity, a QtActivity that forwards notification taps to C++), the permissions of
+  reminders/alarms and of a vault on shared storage, the alarm receivers and AlarmActivity
+  (android/src/io/github/januszbit/brulion/android/), the launcher icons.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="org.qtproject.example"
+    android:installLocation="auto"
+    android:versionCode="-- %%INSERT_VERSION_CODE%% --"
+    android:versionName="-- %%INSERT_VERSION_NAME%% --">
+
+    <!-- Permissions of the Qt modules in use (Qt Network: INTERNET, ACCESS_NETWORK_STATE). -->
+    <!-- %%INSERT_PERMISSIONS -->
+
+    <!-- Vault in a Syncthing folder on shared storage ("All files access", Android 11+). -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <!-- Android 9 and 10: the classic storage permission (with requestLegacyExternalStorage). -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+
+    <!-- Reminders and alarms. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <!-- Android 13+: granted at install to apps whose core function includes reminders. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- %%INSERT_FEATURES -->
+
+    <supports-screens
+        android:anyDensity="true"
+        android:largeScreens="true"
+        android:normalScreens="true"
+        android:smallScreens="true" />
+
+    <!-- requestLegacyExternalStorage: Android 10 keeps the classic file API on shared storage. -->
+    <application
+        android:name="org.qtproject.qt.android.bindings.QtApplication"
+        android:hardwareAccelerated="true"
+        android:label="-- %%INSERT_APP_NAME%% --"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:enableOnBackInvokedCallback="false"
+        android:requestLegacyExternalStorage="true"
+        android:allowBackup="true"
+        android:fullBackupOnly="false">
+
+        <!-- QtActivity + notification taps (path/line extras) forwarded to C++ (AndroidBridge). -->
+        <activity
+            android:name="io.github.januszbit.brulion.android.BrulionActivity"
+            android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+            android:launchMode="singleTop"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="-- %%INSERT_APP_LIB_NAME%% --" />
+
+            <meta-data
+                android:name="android.app.arguments"
+                android:value="-- %%INSERT_APP_ARGUMENTS%% --" />
+        </activity>
+
+        <!-- A reminder came due (AlarmManager). -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.ReminderReceiver"
+            android:exported="false" />
+
+        <!-- Notification buttons "Drzemka 10 min" and "OK". -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.ActionReceiver"
+            android:exported="false" />
+
+        <!-- An alarm rang out with no reaction: silence it (AlarmManager one-shot). -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.RingTimeoutReceiver"
+            android:exported="false" />
+
+        <!-- Re-arms the stored reminders. System broadcasts reach non-exported receivers;
+             other apps cannot. -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Full-screen alarm over the lock screen (own task, not in Recents). -->
+        <activity
+            android:name="io.github.januszbit.brulion.android.AlarmActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/Theme.BrulionAlarm" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.qtprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/qtprovider_paths" />
+        </provider>
+    </application>
+</manifest>

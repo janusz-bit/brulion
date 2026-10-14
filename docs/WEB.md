@@ -1,0 +1,330 @@
+# Brulion w przeglądarce (WebAssembly)
+
+Wersja przeglądarkowa to ta sama aplikacja C++/QML co na NixOS i Androidzie, skompilowana
+przez **Qt for WebAssembly** (jednowątkowo). Po pierwszym wczytaniu działa **offline** jako
+PWA (można ją „zainstalować” z menu przeglądarki), a notatki trzyma w **IndexedDB**
+przeglądarki.
+
+* Wdrożenie docelowe: GitHub Pages pod `https://janusz-bit.github.io/brulion/` (działa też
+  dowolny serwer plików statycznych, pod dowolną ścieżką — wszystkie adresy są względne).
+* Ograniczenia wobec aplikacji natywnych: przypomnienia tylko gdy karta/PWA jest otwarta,
+  brak dostępu do folderów na dysku (import/eksport plików zamiast tego), synchronizacja z
+  Nextcloud wymaga CORS (niżej), Syncthing niedostępny.
+
+## Wersje narzędzi
+
+| Składnik | Wersja | Skąd |
+|---|---|---|
+| Qt for WebAssembly | 6.11.2 `wasm_singlethread` | `aqt install-qt all_os wasm 6.11.2 wasm_singlethread` (aqtinstall 3.3.0) |
+| Qt hosta (moc, rcc, qmlcachegen, lrelease…) | 6.11.2 `linux_gcc_64` | `aqt install-qt linux desktop 6.11.2 linux_gcc_64` |
+| Emscripten | **4.0.7** | `emsdk install 4.0.7 && emsdk activate 4.0.7` |
+
+Qt 6.11 wymaga **dokładnie** Emscriptena 4.0.7 (dokumentacja
+[doc.qt.io/qt-6.11/wasm.html](https://doc.qt.io/qt-6.11/wasm.html): „The supported version of
+Emscripten for 6.11.2 is Emscripten 4.0.7”; to samo w `QT_EMCC_RECOMMENDED_VERSION` w
+`lib/cmake/Qt6/QtPublicWasmToolchainHelpers.cmake`). Emscripten nie gwarantuje zgodności ABI
+między wersjami, więc inny emsdk (np. `emscripten` z nixpkgs, obecnie 6.0.x) się nie nadaje.
+Skrypt budujący sprawdza wersję `emcc` i przerywa przy niezgodności. Przy podbiciu Qt zmień
+razem `QT_VERSION` i `EMSDK_VERSION` w `scripts/wasm-build.sh`.
+
+Paczka `all_os/wasm` z aqt jest budowana na Windows: jej skrypty `bin/qt-cmake` nie są
+wykonywalne i wskazują na `C:/…`. Dlatego budujemy zwykłym `cmake` z plikiem
+`lib/cmake/Qt6/qt.toolchain.cmake`, który znajduje Emscripten przez zmienną `EMSDK`.
+
+## Budowanie
+
+```sh
+scripts/wasm-build.sh --setup   # pierwszy raz: emsdk 4.0.7 + Qt 6.11.2 (wasm + host) do ~/.cache
+scripts/wasm-build.sh           # konfiguracja + build + złożenie strony w dist-wasm/
+scripts/wasm-build.sh --clean   # od zera
+scripts/wasm-build.sh --assemble  # tylko ponowne złożenie dist-wasm/ z istniejącego buildu
+```
+
+Skrypt jest idempotentny (ponowne uruchomienie przebudowuje tylko zmiany, `ccache` jeśli jest)
+i konfigurowalny zmiennymi środowiska:
+
+| Zmienna | Domyślnie |
+|---|---|
+| `BRULION_CACHE` | `${XDG_CACHE_HOME:-~/.cache}` |
+| `EMSDK` | `$BRULION_CACHE/brulion-emsdk/emsdk` |
+| `QT_ROOT` | `$BRULION_CACHE/brulion-qt` (wspólne z buildem Androida) |
+| `QT_WASM` / `QT_HOST` | `$QT_ROOT/6.11.2/wasm_singlethread` / `$QT_ROOT/6.11.2/gcc_64` |
+| `BUILD_DIR` / `DIST_DIR` | `build-wasm` / `dist-wasm` |
+| `BUILD_TYPE` | `MinSizeRel` (najmniejszy `.wasm`) |
+| `JOBS` | `nproc` |
+
+Na NixOS skrypt sam wchodzi do `nix shell` (cmake, ninja, ccache, python3) i dokłada do
+`NIX_LD_LIBRARY_PATH` biblioteki potrzebne prekompilowanym narzędziom Qt z aqt (glib, krb5,
+brotli) — wymaga `programs.nix-ld`. Na innych systemach potrzebne są: cmake ≥ 3.24, ninja,
+python3, git, a do `--setup` także `uvx` (uv) albo `aqt`.
+
+**Raspberry Pi (maszyna deweloperska) nie buduje WebAssembly** — linkowanie aplikacji Qt
+(wasm-ld + wasm-opt) potrzebuje kilku GB RAM; skrypt odmawia przy < 6 GB RAM
+(`BRULION_FORCE_LOCAL=1` wymusza). Buduj na laptopie (nowe pliki najpierw `git add -N`):
+
+```sh
+flock <lock> laptop-run bash -c 'BUILD_DIR=~/.cache/brulion-wasm-build scripts/wasm-build.sh'
+```
+
+(katalog roboczy na laptopie jest czyszczony przy każdym `laptop-run`, dlatego katalog buildu
+leży w `~/.cache`).
+
+### Co powstaje w `dist-wasm/`
+
+| Plik | Opis |
+|---|---|
+| `index.html` | nasza powłoka (z `wasm/index.html`, na bazie `wasm_shell.html` Qt): ekran ładowania z logo i postępem pobierania, „Wczytywanie Brulionu…”, ekrany błędów, rejestracja service workera |
+| `brulion.js`, `brulion.wasm` | aplikacja (glue Emscriptena + moduł WebAssembly) |
+| `qtloader.js` | loader Qt (`qtLoad()`) |
+| `sw.js` | service worker (z `wasm/sw.js`): offline, kliknięcia w powiadomienia |
+| `manifest.webmanifest` | manifest PWA (z `wasm/`) |
+| `icons/` | ikony PWA (z `wasm/icons/` + `assets/logo.svg`) |
+| `.nojekyll` | GitHub Pages bez przetwarzania przez Jekyll |
+
+Skrypt wstawia do `index.html` rozmiar `.wasm` (pasek postępu) i hash plików aplikacji
+(`?v=<hash>` w adresach — przeglądarka nigdy nie złoży `brulion.js` i `brulion.wasm` z dwóch
+różnych wydań), a do `sw.js` wersję cache (hash całej strony) i listę plików do zapamiętania.
+
+Wygenerowany przez Qt `build-wasm/src/app/brulion.html` to tylko domyślna strona Qt (bez PWA)
+— do szybkich prób wystarczy, do publikacji służy `dist-wasm/`.
+
+## Uruchamianie lokalnie
+
+Strony nie da się otworzyć z `file://` — potrzebny serwer HTTP:
+
+```sh
+python3 -m http.server 8000 --bind 127.0.0.1 --directory dist-wasm
+# http://127.0.0.1:8000/
+```
+
+Service worker (offline) działa tylko na `https://` oraz na `localhost`/`127.0.0.1`.
+Parametry adresu (do debugowania):
+
+* `?nosw` — nie rejestruj service workera.
+* `?selftest=storage`, `?selftest=notify`, `?selftest=storage,notify` — testy (niżej).
+
+Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
+serwując `site/` (`http://127.0.0.1:8000/brulion/`).
+
+## Test dymny w przeglądarce bez okna
+
+`scripts/wasm-smoke.mjs` (Node ≥ 22, bez zależności) steruje Chromium przez DevTools
+Protocol: otwiera stronę, czeka aż aplikacja zastąpi ekran ładowania, robi zrzut ekranu,
+sprawdza service workera. Z `--selftest` uruchamia `?selftest=storage`: aplikacja zwiększa
+licznik w ukrytym pliku `.brulion-selftest` w każdym zamontowanym katalogu, czeka na
+automatyczny zapis do IndexedDB i publikuje wynik (`window.brulionSelfTest`). Kolejne
+wczytania muszą widzieć licznik +1.
+
+```sh
+python3 -m http.server 8123 --bind 127.0.0.1 --directory site &
+node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
+  --loads 2 --selftest --expect-first 1 --screenshot online.png    # zapis + przeładowanie
+kill %1                                                            # serwer wyłączony
+node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
+  --loads 1 --selftest --expect-first 3 --screenshot offline.png   # offline z cache SW
+```
+
+Drugie uruchomienie (nowy proces Chromium, ten sam profil, serwer wyłączony) dowodzi, że
+dane przetrwały restart przeglądarki, a aplikacja startuje offline z cache service workera.
+
+Pozostałe opcje:
+
+* `--notify` — nadaje stronie zgodę na powiadomienia, aplikacja (`?selftest=notify`) pokazuje
+  powiadomienie testowe, skrypt je „klika” i sprawdza, że kliknięcie (id, ścieżka, linia)
+  dotarło do C++ (`WasmNotifier::activated`).
+* `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
+  karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
+* `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
+  zrzut ekranu ładowania (pasek postępu).
+* `--lang pl-PL` (domyślnie) — język przeglądarki.
+Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez SwiftShader.
+`BRULION_CHROME_NO_SANDBOX=1` (lub `CI=true`) wyłącza sandbox, gdy nie może wystartować
+(kontenery, GitHub Actions na Ubuntu 24.04).
+
+## Publikacja
+
+### GitHub Pages
+
+Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): każdy push na `main`
+(zmiany w `src/`, `wasm/`…) buduje stronę `scripts/wasm-build.sh --setup`, uruchamia test
+dymny w Chrome pod ścieżką `/brulion/` (start, trwałość po przeładowaniu i restarcie
+przeglądarki, start offline z service workera) i wdraża `dist-wasm/` na GitHub Pages.
+Jednorazowo: *Settings → Pages → Build and deployment → Source: GitHub Actions*. Ten sam
+workflow wywołany z `release.yml` tylko buduje (`brulion-web-<wersja>.zip` w wydaniu), bez
+wdrożenia.
+
+GitHub Pages serwuje `.wasm` jako `application/wasm`; kompresją i nagłówkami cache
+(`max-age=600`) steruje GitHub — czy `.wasm` przychodzi skompresowany, widać w nagłówku
+`Content-Encoding`. Wersjonowane adresy `?v=` i service worker z `updateViaCache: 'none'`
+sprawiają, że nowe wydanie dociera przy następnym wczytaniu.
+
+### Własny serwer
+
+Na NixOS: moduł `services.brulion-web` (`docs/NIXOS.md`) — nginx z poprawnymi typami MIME,
+plikami skompresowanymi z góry (gzip/brotli), nagłówkami cache i opcjonalnym proxy do
+Nextcloud. Gdzie indziej wystarczy skopiować `dist-wasm/` (dowolna ścieżka). Zalecenia:
+
+* typ MIME `application/wasm` dla `.wasm` (wymagany do kompilacji strumieniowej),
+* kompresja gzip/brotli (`.wasm` kompresuje się ok. 3×, patrz rozmiary niżej),
+* długi cache tylko dla adresów z `?v=<hash>` (`brulion.js`, `brulion.wasm`, `qtloader.js` —
+  ich adresy zmieniają się z każdym wydaniem); `index.html`, `sw.js`, manifest i ikony bez
+  długiego cache (`Cache-Control: no-cache`),
+* HTTPS (service worker, powiadomienia i trwałe IndexedDB wymagają bezpiecznego kontekstu).
+
+Przykład nginx (w bloku `http` standardowe `include mime.types;`). Uwaga: blok `types { … }`
+wewnątrz `location` **zastępuje** całą mapę typów MIME — dlatego typy `.wasm` i
+`.webmanifest` są tu ustawione osobnymi `location` z pustym `types {}` i `default_type`:
+
+```nginx
+map $arg_v $brulion_cache {
+    ""      "no-cache";
+    default "public, max-age=31536000, immutable";
+}
+server {
+    # …
+    location /brulion/ {
+        alias /srv/brulion/;
+        gzip on;
+        gzip_types application/wasm application/javascript text/javascript application/manifest+json image/svg+xml;
+        add_header Cache-Control $brulion_cache always;
+        location ~ \.wasm$        { types { } default_type application/wasm;           add_header Cache-Control $brulion_cache always; }
+        location ~ \.webmanifest$ { types { } default_type application/manifest+json; add_header Cache-Control "no-cache" always; }
+    }
+}
+```
+
+## Dane w przeglądarce
+
+System plików Emscriptena żyje w pamięci. `WasmStorage` (`src/platform/wasm/wasmstorage.h`)
+montuje na nim IDBFS (lustro w IndexedDB) w dwóch katalogach:
+
+* `/home/web_user/Brulion` — skarbiec (vault) wersji przeglądarkowej,
+* katalog danych aplikacji (`QStandardPaths::AppDataLocation`,
+  `/home/web_user/.local/share/Brulion/Brulion`) — historia wersji, stan synchronizacji,
+  lokalne ustawienia.
+
+Każdy montaż to osobna baza IndexedDB nazwana ścieżką. Przebieg:
+
+1. Start: montowanie i wczytanie z IndexedDB (`FS.syncfs(true)`, asynchronicznie). Dopiero
+   po sygnale `ready()` aplikacja otwiera skarbiec (`main.cpp`); ekran ładowania pokazuje
+   wtedy „Wczytywanie notatek…”.
+2. Każda zmiana w tych katalogach (zamknięcie zapisywanego pliku, zmiana nazwy, usunięcie,
+   mkdir, utime…) jest wychwytywana na poziomie API `FS` Emscriptena i planuje zapis do
+   IndexedDB po 400 ms ciszy, najpóźniej 3 s od pierwszej niezapisanej zmiany. Rdzeń nie
+   musi o niczym wiedzieć; `scheduleFlush()`/`flushNow()` są dostępne do ręcznego sterowania.
+3. Przy ukryciu/zamknięciu karty (`visibilitychange`, `pagehide`) zaległe zmiany zapisują się
+   od razu; `beforeunload` pyta o pozostanie na stronie, jeśli zapis jeszcze trwa.
+4. Zapis nigdy nie rusza przed udanym wczytaniem — pusty stan w pamięci skasowałby notatki.
+   Gdy IndexedDB jest niedostępne (niektóre tryby prywatne, zablokowane dane witryn),
+   aplikacja działa tylko w pamięci, `isBackedByIndexedDb()` = false, sygnał `error()`
+   pozwala UI ostrzec użytkownika.
+5. Po awarii modułu WebAssembly powłoka HTML i tak zapisuje stan z pamięci (część JS żyje).
+6. **Jedna karta naraz.** Każda karta ma własną kopię plików w pamięci, a zapis usuwa z
+   IndexedDB to, czego karta nie ma — dwie karty skasowałyby sobie nawzajem nowe notatki.
+   Dlatego strona trzyma przez cały czas życia blokadę Web Locks; druga karta czeka na
+   ekranie ładowania („Brulion jest otwarty w innej karcie. Zamknij ją, aby kontynuować
+   tutaj.”) i rusza sama, gdy pierwsza zostanie zamknięta. Strona przechodząca do pamięci
+   wstecz/dalej (bfcache) zapisuje zmiany, oddaje blokadę i przy powrocie przeładowuje się.
+   Bez Web Locks (bardzo stare przeglądarki) ochrony nie ma.
+
+Uwagi:
+
+* **Pliki zapisane przed `ready()` giną** (wczytany stan je zastępuje).
+* **Eksmisja danych:** przeglądarka może usunąć dane witryny przy braku miejsca, a Safari
+  usuwa je po 7 dniach bez wizyty, jeśli strona nie jest dodana do ekranu początkowego.
+  `WasmStorage::requestPersistentStorage()` prosi o `navigator.storage.persist()` (Firefox
+  pyta użytkownika — wywoływać z akcji użytkownika). Regularny eksport/synchronizacja to
+  jedyna pełna kopia zapasowa.
+* **Jedno źródło (origin) na GitHub Pages:** wszystkie projekty `janusz-bit.github.io/*`
+  dzielą IndexedDB. Inna strona pod tym adresem mogłaby odczytać notatki — dla prywatnych
+  danych lepiej hostować Brulion pod własną domeną.
+* Ustawienia przez `QSettings` (format natywny) Qt na WebAssembly trzyma w `localStorage`.
+
+## Powiadomienia (przypomnienia)
+
+`WasmNotifier` (`src/platform/wasm/wasmnotifier.h`) używa Notification API:
+
+* `permission()`, `requestPermission()` — przeglądarki pokazują pytanie o zgodę tylko w
+  odpowiedzi na działanie użytkownika (kliknięcie przycisku w UI),
+* `showNow(id, tytuł, treść, ścieżka, linia, alarm)` — alarmy zostają na ekranie do
+  zamknięcia (`requireInteraction`) i wibrują, gdzie to możliwe; ten sam `id` zastępuje
+  poprzednie powiadomienie,
+* `activated(id, ścieżka, linia)` po kliknięciu (strona dostaje fokus),
+* `firesWhenClosed()` = false: przeglądarka nie powiadomi o niczym przy zamkniętej karcie —
+  terminy odmierza rdzeń (`ReminderScheduler`) w otwartej aplikacji.
+
+Chrome na Androidzie nie pozwala stronie tworzyć powiadomień (`new Notification` →
+„Illegal constructor”); wtedy powiadomienie idzie przez rejestrację service workera, a
+`sw.js` przekazuje kliknięcie do otwartej karty (`postMessage`) albo otwiera aplikację z
+`?brulion-id=…&brulion-note=…&brulion-line=…` (`WasmNotifier::takeLaunchActivation()`).
+
+## Nextcloud (WebDAV) a CORS
+
+Przeglądarka pozwala stronie z `https://janusz-bit.github.io` łączyć się z
+`https://chmura.example.com/remote.php/dav/…` tylko wtedy, gdy serwer odpowie nagłówkami
+**CORS** (także na zapytania wstępne `OPTIONS` dla `PROPFIND`, `PUT`, `MKCOL`, `DELETE` z
+nagłówkami `Authorization`, `Depth`, `If-Match`). Nextcloud domyślnie ich nie wysyła dla
+WebDAV, więc synchronizacja z wersji przeglądarkowej „po prostu” nie zadziała. Możliwości:
+
+1. **Ten sam origin (zalecane):** hostuj `dist-wasm/` na tym samym serwerze co Nextcloud,
+   np. `https://chmura.example.com/brulion/` (reverse proxy / dodatkowy `location` w nginx
+   jak wyżej). Zapytania są wtedy same-origin, CORS niepotrzebny, a dane w IndexedDB są
+   oddzielone od innych stron.
+2. **Nagłówki CORS na reverse proxy przed Nextcloud** — tylko dla konkretnego originu
+   (`Access-Control-Allow-Origin: https://janusz-bit.github.io`, nigdy `*` z
+   uwierzytelnianiem), `Access-Control-Allow-Methods: GET, PUT, DELETE, PROPFIND, MKCOL,
+   MOVE, COPY, OPTIONS`, `Access-Control-Allow-Headers: Authorization, Content-Type, Depth,
+   Destination, If-Match, If-None-Match, Overwrite`, `Access-Control-Expose-Headers: ETag,
+   OC-ETag, DAV`, odpowiedź `204` na `OPTIONS` bez wymagania logowania. Uwaga: to otwiera
+   WebDAV dla skryptów z tego originu (na GitHub Pages — z każdego projektu użytkownika).
+   Istnieją też aplikacje Nextcloud dodające CORS dla WebDAV (np. WebAppPassword) —
+   sprawdź ich aktualny stan i zakres przed użyciem.
+3. **Aplikacje natywne:** wersje NixOS i Android nie podlegają CORS i synchronizują się
+   z Nextcloud bez zmian po stronie serwera (a Syncthing tylko tam jest dostępny).
+
+Używaj hasła aplikacji Nextcloud (Ustawienia → Bezpieczeństwo), nie głównego hasła.
+
+## Rozmiar
+
+Build `MinSizeRel` (Qt 6.11.2, emsdk 4.0.7), aplikacja-szkielet (UI w budowie):
+
+| Plik | Surowy | gzip -9 |
+|---|---|---|
+| `brulion.wasm` | 23 725 057 B (22,63 MiB) | 8 912 441 B (8,50 MiB); brotli -q 11: 6 306 203 B (6,01 MiB) |
+| `brulion.js` | 273 953 B (0,26 MiB) | 63 666 B |
+
+Z tego ok. 16,5 MB to kod, 7,1 MB dane (zasoby Qt: czcionki, QML, tabele Unicode). Wynik
+pomiaru z 14.10.2026; `scripts/wasm-build.sh` wypisuje aktualne wartości po każdym buildzie.
+Pierwsze wejście pobiera więc ok. 6–9 MB (zależnie od kompresji serwera), kolejne starty idą
+z cache service workera (lokalnie < 1 s).
+
+## Ograniczenia techniczne
+
+* Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
+  `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
+* Pliki od/do użytkownika: `QFileDialog::getOpenFileContent()` / `saveFileContent()`.
+* Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
+* Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
+* Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
+
+## Pliki
+
+| Ścieżka | Zawartość |
+|---|---|
+| `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
+| `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania (`wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
+
+Ikony po zmianie logo:
+
+```sh
+cd wasm/icons
+rsvg-convert -w 192 -h 192 ../../assets/logo.svg -o icon-192.png
+rsvg-convert -w 512 -h 512 ../../assets/logo.svg -o icon-512.png
+rsvg-convert -w 192 -h 192 maskable.svg -o maskable-192.png
+rsvg-convert -w 512 -h 512 maskable.svg -o maskable-512.png
+rsvg-convert -w 180 -h 180 maskable.svg -o apple-touch-icon.png
+rsvg-convert -w 96 -h 96 badge.svg -o badge-96.png
+optipng -o5 *.png
+```

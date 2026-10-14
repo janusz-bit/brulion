@@ -31,6 +31,7 @@ endif()
 add_subdirectory(src/core)
 add_subdirectory(src/platform)
 add_subdirectory(src/app)
+include(cmake/BrulionInstall.cmake)
 
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)

@@ -1,0 +1,401 @@
+# Brulion na Androidzie
+
+Brulion na Androidzie to ta sama aplikacja C++/Qt Quick co na komputerze (Qt 6.11 for Android),
+z natywną częścią w Kotlinie (`android/src/io/github/januszbit/brulion/android/`), która:
+
+* daje dostęp do folderu z notatkami na pamięci współdzielonej („Dostęp do wszystkich plików”),
+* planuje przypomnienia i alarmy w systemie (`AlarmManager`) — działają przy zamkniętej
+  aplikacji i po restarcie telefonu,
+* otwiera właściwą notatkę po stuknięciu w powiadomienie.
+
+C++ rozmawia z nią przez JNI (`src/platform/android/androidbridge.{h,cpp}`), patrz
+[Most JNI](#most-jni-c--kotlin).
+
+Notatki to zwykłe pliki `.md` w folderze. Na telefonie folder może:
+
+* być **folderem Syncthing** na pamięci współdzielonej (np. `/storage/emulated/0/Brulion`) —
+  wymaga uprawnienia „Dostęp do wszystkich plików”, opis niżej;
+* leżeć w **prywatnym katalogu aplikacji** (bez dodatkowych uprawnień) i być synchronizowany
+  z **Nextcloud** (WebDAV) z poziomu Brulionu — Ustawienia → Synchronizacja.
+
+Wszystko działa offline. Synchronizacja (Syncthing czy Nextcloud) nigdy nie blokuje pisania.
+
+Wymagany **Android 9 (API 28)** lub nowszy — tyle obsługuje Qt 6.11 (cel: API 36, Android 16).
+
+## Folder Syncthing na telefonie
+
+1. Zainstaluj **Syncthing-Fork** (np. z F-Droid). Pierwotna aplikacja „Syncthing” na Androida nie
+   jest już rozwijana — fork jest jej kontynuacją.
+2. W Syncthing-Fork dodaj folder udostępniany z komputera (albo utwórz nowy) i ustaw jego ścieżkę
+   na pamięci telefonu, np. `/storage/emulated/0/Brulion` lub `/storage/emulated/0/Syncthing/Notatki`.
+   Typ folderu: „Wysyłanie i odbieranie”.
+3. Otwórz Brulion → wybór notatnika → wskaż ten sam folder.
+4. Gdy Brulion poprosi o **„Dostęp do wszystkich plików”**, otworzy się ekran systemowy —
+   włącz przełącznik dla Brulionu i wróć do aplikacji (sprawdzi uprawnienie sama).
+   Ręcznie: *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Dostęp do wszystkich plików →
+   Brulion* (nazwy menu różnią się między producentami).
+
+Dlaczego to uprawnienie? Folder Syncthing leży na pamięci współdzielonej, a Brulion czyta i zapisuje
+notatki zwykłym systemem plików (szybka lista plików, zapis atomowy, wykrywanie zmian zrobionych
+przez Syncthing). Bez tego uprawnienia Android 11+ widzi tam tylko pliki multimedialne.
+Brulion nie zagląda poza wybrany folder.
+
+Starsze wersje Androida:
+
+* **Android 10** — zamiast „Dostępu do wszystkich plików” wystarcza zwykłe uprawnienie do plików
+  (Brulion korzysta z `requestLegacyExternalStorage`).
+* **Android 9** — Brulion poprosi o uprawnienie „Pamięć” (pliki i multimedia). Jeśli wcześniej
+  wybrano „Nie pytaj ponownie”, otworzą się ustawienia aplikacji.
+
+Bez folderu na pamięci współdzielonej notatnik powstaje w prywatnym katalogu Brulionu. Do niego
+Syncthing nie ma dostępu — wtedy synchronizuj przez Nextcloud.
+
+Wskazówki do Syncthing:
+
+* W folderze warto mieć plik `.stignore` pomijający pliki tymczasowe (Brulion ma gotowy
+  szablon). Dane urządzenia (historia zmian, indeksy) Brulion trzyma poza folderem, więc nie
+  powodują konfliktów.
+* Konflikty Syncthing (`*.sync-conflict-*.md`) Brulion wykrywa i proponuje scalenie.
+* Wersjonowanie plików w Syncthing („Proste” lub „Przedziałowe”) jest dobrym, dodatkowym
+  zabezpieczeniem.
+
+## Przypomnienia i alarmy
+
+Przypomnienie (`⏰ 2026-10-14 09:00` w notatce) staje się powiadomieniem systemowym, które pojawi
+się **także przy zamkniętej aplikacji i po restarcie telefonu**. **Alarm** (`⏰! 2026-10-14 06:30`)
+dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
+
+### Jak to działa
+
+* Gdy Brulion działa (przy uruchomieniu i po zmianach w notatkach), przekazuje systemowi listę
+  nadchodzących przypomnień, zastępując poprzednią. Część natywna zapisuje ją w pamięci aplikacji
+  i nastawia budziki systemowe (`AlarmManager`): alarmy przez `setAlarmClock` (budzi telefon,
+  w pasku stanu widać ikonę budzika), zwykłe przypomnienia przez `setExactAndAllowWhileIdle`.
+  Naraz planowanych jest najwyżej 400 najbliższych przypomnień.
+* **Kanały powiadomień**: „Przypomnienia” (wysoki priorytet, dźwięk powiadomienia), „Alarmy”
+  (dźwięk budzika na strumieniu alarmu, wibracje, dzwoni aż do reakcji, widoczne na ekranie
+  blokady) i „Przegapione alarmy” (ciche). Dźwięk i wibracje każdego kanału zmienisz
+  w *Ustawienia → Aplikacje → Brulion → Powiadomienia*.
+* **Alarm bez reakcji** przestaje dzwonić sam po **10 minutach** (aplikacja może ustawić inny
+  czas dla danego alarmu, od 1 do 60 minut) — także przy zamkniętej aplikacji. Zamienia się
+  wtedy w ciche powiadomienie **„Przegapiony alarm”**, a ekran alarmu się zamyka; stuknięcie
+  w powiadomienie nadal otwiera notatkę.
+* **Alarm przy wygaszonym ekranie** otwiera pełnoekranowy ekran alarmu nad ekranem blokady
+  z przyciskami **Drzemka 10 min**, **OK** i **Otwórz notatkę**.
+* Przyciski w powiadomieniu: **Drzemka 10 min** (przypomnienie wróci za 10 minut — działa także
+  przy zamkniętej aplikacji) i **OK**. Stuknięcie w powiadomienie otwiera notatkę w miejscu
+  przypomnienia. Przy alarmie każda z tych reakcji wycisza go i zamyka ekran alarmu.
+* **Po restarcie** telefonu (po pierwszym odblokowaniu), po aktualizacji aplikacji i po zmianie
+  godziny przypomnienia są nastawiane ponownie. Te, które przypadły, gdy telefon był wyłączony
+  (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
+* **Zmiana strefy czasowej**: przypomnienia trzymają się czasu lokalnego — „09:00” zostaje
+  o 09:00 w nowej strefie (drzemki nie są przesuwane).
+
+Ograniczenie: Brulion planuje przypomnienia na podstawie notatek, które przeczytał. Przypomnienie
+dodane albo zmienione na innym urządzeniu (i zsynchronizowane, gdy Brulion był zamknięty) zostanie
+zaplanowane przy najbliższym otwarciu Brulionu. Warto otworzyć aplikację po większych zmianach
+na komputerze.
+
+### Uprawnienia
+
+* **Powiadomienia** (Android 13+): Brulion poprosi o zgodę systemowym okienkiem. Gdy system
+  już nie pyta (odmowa „na stałe” albo powiadomienia wyłączone ręcznie), ponowna prośba otwiera
+  ustawienia powiadomień Brulionu.
+* **Alarmy i przypomnienia** (dokładne budziki):
+  * Android 13+ — przyznawane przy instalacji (`USE_EXACT_ALARM`), nic nie trzeba robić;
+  * Android 12 — *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Alarmy i przypomnienia*
+    (Brulion otworzy ten ekran). Po włączeniu przypomnienia są od razu przestawiane na dokładne;
+  * Android 9–11 — nie wymagają zgody;
+  * bez tego uprawnienia przypomnienia przychodzą z opóźnieniem (minuty, w trybie uśpienia dłużej).
+* **Powiadomienia pełnoekranowe** (Android 14+): potrzebne do ekranu alarmu nad ekranem blokady —
+  *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Powiadomienia pełnoekranowe* (Brulion
+  może otworzyć ten ekran; gdy telefon go nie ma — ustawienia powiadomień Brulionu). Bez tego
+  uprawnienia alarm i tak dzwoni, ale pokazuje się jako zwykłe powiadomienie.
+* **Nie przeszkadzać**: alarmy mają kategorię „alarm”. Jeśli w trybie „Nie przeszkadzać” alarmy
+  są wyciszone, zezwól na nie w ustawieniach tego trybu.
+
+### Oszczędzanie baterii
+
+Budziki systemowe działają także w trybie uśpienia (Doze), ale część producentów agresywnie
+„ubija” aplikacje w tle, a **wymuszone zatrzymanie kasuje wszystkie budziki aplikacji** aż do jej
+ponownego uruchomienia. Dlatego:
+
+* *Ustawienia → Aplikacje → Brulion → Bateria* → **Bez ograniczeń**;
+* **Xiaomi / Redmi / POCO** (MIUI, HyperOS): włącz **Autostart** dla Brulionu i ustaw
+  „Oszczędzanie baterii” na „Bez ograniczeń”;
+* **Samsung**: usuń Brulion z „Aplikacji uśpionych” i „Aplikacji w głębokim uśpieniu”
+  (*Ustawienia → Bateria → Limity użycia w tle*);
+* **Huawei / Honor**: *Uruchamianie aplikacji* → Brulion → zarządzaj ręcznie (wszystkie trzy
+  przełączniki włączone);
+* **OnePlus / OPPO / realme**: zezwól na działanie w tle i autostart.
+
+To samo zrób dla **Syncthing-Fork**, żeby synchronizował w tle. Szczegóły dla konkretnych
+telefonów: <https://dontkillmyapp.com>.
+
+## Budowanie APK
+
+Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące
+narzędzia, konfiguruje CMake, buduje bibliotekę `libbrulion_<abi>.so`, pakuje APK przez
+`androiddeployqt` (Gradle), podpisuje i sprawdza wynik. Można go uruchamiać wielokrotnie —
+istniejący katalog budowania jest wykorzystywany ponownie.
+
+```sh
+scripts/android-build.sh            # wynik: dist-android/brulion-<wersja>-arm64-v8a.apk
+adb install -r dist-android/brulion-*.apk
+scripts/android-build.sh --help     # wszystkie zmienne środowiskowe
+```
+
+Wymaga hosta **Linux x86_64** (NDK i narzędzia Qt są tylko na x86_64) — nie Raspberry Pi.
+
+### Wersje (Qt 6.11.2)
+
+| Składnik | Wersja | Skąd |
+|---|---|---|
+| Qt for Android | 6.11.2 `android_arm64_v8a` (opcjonalnie `armv7`, `x86_64`, `x86`) | aqt (`aqtinstall` 3.3.0) → `~/.cache/brulion-qt` |
+| Qt hosta (moc, rcc, qmlcachegen, androiddeployqt…) | 6.11.2 `linux_gcc_64` — ta sama wersja | aqt |
+| Android NDK | r27c (`27.2.12479018`) — wymagany przez Qt 6.11 | `sdkmanager` |
+| Android SDK | platforma `android-36`, build-tools `36.0.0` | `sdkmanager` |
+| CMake + Ninja | 3.31.6 (pakiet SDK `cmake;3.31.6`) | `sdkmanager` |
+| JDK | 21 (Qt 6.11 zaleca 21; działa 17+) | system / nixpkgs `jdk21_headless` |
+| Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (szablon Qt 6.11, wbudowana obsługa Kotlina) | wrapper Gradle z Qt |
+| minSdk / targetSdk / compileSdk | 28 / 36 / 36 | `src/app/CMakeLists.txt` |
+
+Zmienne (wszystkie opcjonalne): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
+(domyślnie `~/.cache/brulion-android-sdk`; brakujące pakiety instaluje jego `cmdline-tools`),
+`ANDROID_NDK_ROOT`, `JAVA_HOME`, `BRULION_ANDROID_ABIS` (np. `"arm64-v8a x86_64"` — jeden APK
+z kilkoma architekturami), `BRULION_ANDROID_BUILD_DIR` (domyślnie `build-android`),
+`BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (także `.aab`),
+`BRULION_ANDROID_UNIT_TESTS=1` (testy Kotlina), `BRULION_ANDROID_LINT=1` (Android lint),
+`BRULION_ANDROID_SELFTEST=1` (także APK testowy mostu), `BRULION_ANDROID_VERSION_CODE`,
+`BRULION_ANDROID_CMAKE=system`, `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są błędami), `JOBS`.
+
+`versionCode` = `major·1000000 + minor·1000 + patch` (0.1.0 → 1000) — ten sam wzór co
+w poprzedniej wersji Brulionu (Tauri), więc nowe APK aktualizują stare (przy tym samym kluczu).
+
+### Podpisywanie
+
+Skrypt podpisuje APK sam (`zipalign -P 16` + `apksigner`; AAB — `jarsigner`) kluczem z tych
+samych zmiennych, które czyta `androiddeployqt`:
+
+* `QT_ANDROID_KEYSTORE_PATH` (albo `QT_ANDROID_KEYSTORE_BASE64` — plik w base64, sekret CI),
+* `QT_ANDROID_KEYSTORE_ALIAS`, `QT_ANDROID_KEYSTORE_STORE_PASS`,
+  `QT_ANDROID_KEYSTORE_KEY_PASS` (domyślnie hasło magazynu).
+
+Klucz wydań tworzy (poza repozytorium) `scripts/android-new-keystore.sh` — wypisuje też polecenia
+`gh secret set` dla GitHub Actions. **Zrób kopię zapasową klucza i hasła**: każda aktualizacja
+musi być podpisana tym samym kluczem.
+
+**Bez klucza** skrypt głośno ostrzega i podpisuje APK **kluczem jednorazowym**
+(`~/.cache/brulion-android/throwaway.jks`, tworzony raz na maszynę). Taki APK da się zainstalować
+i aktualizować kolejnymi kompilacjami z tej samej maszyny, ale nie zaktualizuje wersji podpisanej
+kluczem wydań (trzeba ją odinstalować, co usuwa prywatne dane aplikacji).
+
+### NixOS
+
+Na NixOS skrypt sam uruchamia się ponownie w `nix shell` (ccache, `jdk21_headless`, unzip).
+Gotowe binaria (NDK, narzędzia Qt z aqt, `aapt2` pobierany przez Gradle, CMake z SDK) wymagają
+**nix-ld** (`programs.nix-ld.enable = true`); narzędzia Qt potrzebują dodatkowo glib, krb5,
+brotli i keyutils — skrypt dopisuje je do `NIX_LD_LIBRARY_PATH` (z `nix build nixpkgs#…`).
+CMake z nixpkgs **nie nadaje się**: jest załatany tak, że nie przeszukuje `/usr` — także
+w sysroocie NDK, więc nie znajduje nagłówków EGL/GLES i Qt6Gui się nie konfiguruje. Dlatego
+domyślnie używany jest CMake z Android SDK (`BRULION_ANDROID_CMAKE=system` wybiera ten z `PATH`).
+
+### Budowanie na laptopie (z Raspberry Pi)
+
+Pi (aarch64, 3,7 GB RAM) nie buduje Androida. Kompilacja idzie na laptopie x86_64 przez
+`laptop-run` (kopiuje śledzone pliki repozytorium do `~/work/note-taking` i tam uruchamia
+polecenie; nowe pliki trzeba najpierw oznaczyć `git add -N <ścieżki>`), zawsze pod wspólną blokadą.
+Katalog budowania trzymamy poza `~/work` (jest czyszczony przy każdym `laptop-run`), cache: Qt
+w `~/.cache/brulion-qt`, SDK w `~/.cache/brulion-android-sdk`, ccache w `~/.cache/ccache`,
+Gradle w `~/.gradle`:
+
+```sh
+flock <blokada> laptop-run bash -c '
+  export BRULION_ANDROID_BUILD_DIR=$HOME/.cache/brulion-android-build
+  scripts/android-build.sh > $HOME/.cache/brulion-android-build.log 2>&1; echo "exit=$?"
+  tail -n 60 $HOME/.cache/brulion-android-build.log'
+```
+
+Pierwsza instalacja narzędzi na laptopie (to samo robi skrypt, gdy czegoś brakuje):
+
+```sh
+uvx --from aqtinstall==3.3.0 aqt install-qt all_os android 6.11.2 android_arm64_v8a \
+  -O ~/.cache/brulion-qt --autodesktop      # + linux_gcc_64 (Qt hosta)
+JAVA_HOME=$(nix build --no-link --print-out-paths nixpkgs#jdk21_headless)/lib/openjdk \
+  ~/.cache/brulion-android-sdk/cmdline-tools/latest/bin/sdkmanager \
+  --sdk_root=$HOME/.cache/brulion-android-sdk --install "ndk;27.2.12479018" "cmake;3.31.6"
+```
+
+### Wynik (zweryfikowane 2026-10-14 na laptopie x86_64, NixOS)
+
+`BRULION_WERROR=ON BRULION_ANDROID_UNIT_TESTS=1 BRULION_ANDROID_LINT=1 scripts/android-build.sh`
+(pierwsze budowanie: pobranie Gradle 9.3.1 + zależności AGP, potem Gradle ~45 s; kolejne
+przebiegi z ccache i cache Gradle — kilkadziesiąt sekund). Koniec logu:
+
+```
+==> Checking dist-android/brulion-0.1.0-arm64-v8a.apk
+Signer #1 certificate DN: CN=Brulion unofficial build, O=Throwaway key
+package: name='io.github.januszbit.brulion' versionCode='1000' versionName='0.1.0' … compileSdkVersion='36'
+minSdkVersion:'28'
+targetSdkVersion:'36'
+application-label:'Brulion'
+native-code: 'arm64-v8a'
+permissions: 13 (all required present)
+Kotlin classes in dex: 16
+native libraries: 72 in lib/{arm64-v8a}
+==> Kotlin unit tests (android/tests)          # ReminderJsonTest 5, WallClockTest 4, RingTimeoutTest 3 — 0 błędów
+==> Android lint
+lint: 0 errors, 2 warnings — in Brulion's files: 1
+AndroidManifest.xml:59: Warning: Attribute enableOnBackInvokedCallback is only used in API level 33 and higher … [UnusedAttribute]
+==> Done
+APK: …/dist-android/brulion-0.1.0-arm64-v8a.apk (58M, signing: throwaway)
+```
+
+Scalony manifest (`aapt2 dump xmltree --file AndroidManifest.xml`) zawiera `BrulionActivity`
+(LAUNCHER, `singleTop`), cztery odbiorniki (nieeksportowane; `BootReceiver` z akcjami
+BOOT_COMPLETED, QUICKBOOT_POWERON, MY_PACKAGE_REPLACED, TIME_SET, TIMEZONE_CHANGED,
+SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED), `AlarmActivity`, `requestLegacyExternalStorage`,
+ikony `@mipmap/ic_launcher`/`ic_launcher_round` oraz uprawnienia: ACCESS_NETWORK_STATE, INTERNET
+(z Qt Network), MANAGE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE (max 32), WRITE_EXTERNAL_STORAGE
+(max 29), POST_NOTIFICATIONS, SCHEDULE_EXACT_ALARM (max 32), USE_EXACT_ALARM,
+RECEIVE_BOOT_COMPLETED, VIBRATE, WAKE_LOCK, USE_FULL_SCREEN_INTENT. Sygnatury metod
+skompilowanej klasy `BrulionAndroid` (`javap -s`) zgadzają się z wywołaniami JNI w C++.
+
+Test end-to-end na emulatorze (Android 16 / API 36, x86_64, `google_apis`; ten sam dzień):
+`BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 BRULION_WERROR=ON scripts/android-build.sh`
+i `scripts/android-emulator-test.sh` — wszystkie 14 sprawdzeń przeszło:
+
+```
+==> App: dist-android/brulion-0.1.0-x86_64.apk
+  PASS app is running 15 s after start
+  PASS no crash (FATAL EXCEPTION / Fatal signal)
+  PASS notification channels reminders, alarms, missed-alarms
+==> Bridge self-test: dist-android/brulion-selftest-0.1.0-x86_64.apk
+  PASS scheduleReminders round 1: 2 armed (past one skipped)
+  PASS scheduleReminders round 2: idempotent
+  PASS permissions reported (notifications granted, exact alarms)
+  PASS cold-start tap delivered to C++
+  PASS tap while running delivered to C++ (Polish path)
+  PASS AlarmManager holds Brulion's alarms
+  PASS reminder 101 fired on channel 'reminders'
+  PASS alarm 102 rings on channel 'alarms'
+  PASS alarm 102 became 'missed-alarms' after its ring time (1 min)
+  PASS no crash in the self-test
+W brulion.selftest: SELFTEST permissions(start) allFiles=0 notifications=1 exact=1 fullScreen=1
+W brulion.selftest: SELFTEST schedule round=1 ok=1 scheduled=2 exact=1 error=
+W brulion.selftest: SELFTEST schedule round=2 ok=1 scheduled=2 exact=1 error=
+W brulion.selftest: SELFTEST activated path=dziennik/zimny-start.md line=5
+W brulion.selftest: SELFTEST activated path=strony/Łódź.md line=7
+```
+
+`dumpsys alarm` pokazał przypomnienie jako dokładny budzik RTC_WAKEUP (`setExactAndAllowWhileIdle`)
+i alarm jako budzik z `showIntent` (`setAlarmClock`), oba z akcją `…android.action.FIRE`
+i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
+
+## Dla programistów
+
+### Pliki
+
+| Ścieżka | Zawartość |
+|---|---|
+| `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, ikony |
+| `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity` |
+| `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
+| `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
+| `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
+| `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
+| `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64) |
+
+`android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
+w `<build>/src/app/android-build/`. Nie nadpisujemy `build.gradle` z Qt — szablon 6.11 używa
+AGP 9 z wbudowaną obsługą Kotlina (`kotlin.srcDirs` obejmuje `src/`), więc pliki `.kt` w
+`android/src` kompilują się bez dodatkowej konfiguracji; `androidx.core` (NotificationCompat)
+też jest już w szablonie. Kod nie jest minifikowany (R8 wyłączony w szablonie Qt); gdyby to się
+zmieniło, `BrulionAndroid` (wołany przez JNI) wymaga reguły `-keep`.
+
+### Most JNI (C++ ↔ Kotlin)
+
+`AndroidBridge::instance()` (wątek GUI, po utworzeniu `QGuiApplication`) rejestruje metody
+natywne klasy `io.github.januszbit.brulion.android.BrulionAndroid` i woła jej `attach()`.
+Aplikacja powinna to zrobić w `main()` zaraz po utworzeniu `QGuiApplication`, przed
+załadowaniem QML (żeby stuknięcie, które uruchomiło aplikację, trafiło do UI); dopóki nic nie
+wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
+
+| C++ (`AndroidBridge`) | Kotlin (`BrulionAndroid`, `@JvmStatic`) |
+|---|---|
+| `bool hasAllFilesAccess()` / `void requestAllFilesAccess()` | `hasAllFilesAccess(Context): Boolean` / `requestAllFilesAccess(Context)` |
+| `bool notificationPermission()` / `bool requestNotificationPermission()` | `notificationPermission(Context)` / `requestNotificationPermission(Context): Boolean` |
+| `bool canScheduleExact()` / `void requestExactAlarms()` | `canScheduleExact(Context)` / `requestExactAlarms(Context)` |
+| `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
+| `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
+| `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
+| sygnał `activated(QString path, int line)` | natywna `nativeActivated(String, Int)` |
+| sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
+
+* Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
+  ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int}`.
+  `id` musi być stały między wywołaniami (ponowne nastawienie tego samego `id` zastępuje budzik).
+  Wywołanie zastępuje cały zbiór; drzemki z powiadomienia zostają, dopóki aplikacja nie przyśle
+  tego samego `id`. Błędny JSON nie kasuje nastawionych budzików.
+* Metody przyjmują `Context` (to, co zwraca `QNativeInterface::QAndroidApplication::context()`,
+  zwykle aktywność); okna dialogowe uprawnień korzystają z bieżącej `BrulionActivity`.
+  Prośby (`request*`) tylko wysyłają okno/ekran ustawień do głównego wątku Androida i wracają od
+  razu — wynik sprawdza się ponownie po `permissionsChanged()`.
+* **Stuknięcie w powiadomienie** — wybrany wariant: wywołanie zwrotne JNI + odbiór przy starcie:
+  * aplikacja działa: `BrulionActivity.onNewIntent` (tryb `singleTop`) → `nativeActivated` →
+    sygnał `activated` w wątku Qt (połączenie kolejkowane);
+  * zimny start z powiadomienia: `BrulionActivity.onCreate` zachowuje cel, bo C++ jeszcze nie
+    słucha; konstruktor `AndroidBridge` po `attach()` odbiera go przez `takeActivation()`
+    i emituje `activated` w pierwszym obrocie pętli zdarzeń (po podłączeniu UI);
+  * zabezpieczenie: przy każdym powrocie aplikacji na pierwszy plan (`ApplicationActive`) most
+    jeszcze raz sprawdza `takeActivation()`. Dostęp do celu chroni blokada po stronie Kotlina,
+    więc żadne stuknięcie nie ginie ani nie jest dostarczone dwa razy; intencje odtworzone
+    z „Ostatnich” są pomijane.
+* `nativeActivated` jest wołana w głównym wątku Androida; C++ tylko kolejkuje emisję sygnału.
+  Destruktor `AndroidBridge` woła `detach()` (czeka na blokadę), dopiero potem zeruje wskaźnik.
+
+### Testy i diagnostyka
+
+* Testy jednostkowe Kotlina (czysta logika: przesuwanie czasu ściennego między strefami, czas
+  dzwonienia, JSON przypomnień — z polskimi znakami):
+  `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
+  `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
+  projekcie Gradle).
+* Android lint: `BRULION_ANDROID_LINT=1 scripts/android-build.sh` (`./gradlew lintRelease`,
+  wypisuje uwagi dotyczące plików Brulionu; pełny raport w
+  `<build>/src/app/android-build/build/reports/`).
+* Test end-to-end na emulatorze (wymaga KVM; na NixOS emulator działa przez `steam-run`):
+
+  ```sh
+  BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
+  scripts/android-emulator-test.sh     # logi i zrzuty ekranu: dist-android/emulator-test/
+  ```
+
+  Instaluje emulator i obraz `system-images;android-36;google_apis;x86_64`, uruchamia APK
+  aplikacji (czy działa, kanały powiadomień), potem APK testowy mostu: uprawnienia przez JNI,
+  dwa razy `scheduleReminders` (przypomnienie za 45 s, alarm za 75 s dzwoniący 1 min,
+  przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach `reminders`
+  i `alarms`, zamiana alarmu w „Przegapiony alarm” po czasie dzwonienia, stuknięcia
+  (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++.
+  APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
+  testowym.
+* Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane
+  uprawnienia (`aapt2 dump badging`), komponenty w scalonym manifeście (`aapt2 dump xmltree`),
+  klasy Kotlina w `classes.dex` i `lib/<abi>/libbrulion_<abi>.so`, a także zgodność ze
+  **stronami pamięci 16 KB** (Android 15+; telefony z takimi stronami nie wczytają innych
+  bibliotek): `zipalign -c -P 16` i wyrównanie segmentów `LOAD` 64-bitowych bibliotek
+  (`llvm-readelf`) — źle wyrównana `libbrulion_<abi>.so` przerywa build (NDK r27 dostaje
+  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`), biblioteki Qt są tylko zgłaszane.
+* Logi: `adb logcat -s BrulionAndroid:* brulion.android:* Qt:*`.
+* Nastawione budziki: `adb shell dumpsys alarm | grep -B2 -A6 io.github.januszbit.brulion`.
+* Test ponownego nastawiania bez restartu (odbiornik nie jest eksportowany, więc potrzebny jest
+  `adb root`, np. emulator bez Google Play):
+  `adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p io.github.januszbit.brulion`.
+
+### Uwaga o dystrybucji
+
+Google Play ogranicza uprawnienia `MANAGE_EXTERNAL_STORAGE` (dostęp do wszystkich plików)
+i `USE_EXACT_ALARM` do wybranych kategorii aplikacji. Brulion jest przeznaczony do instalacji
+z pliku APK (np. z wydań na GitHubie) lub z F-Droid.

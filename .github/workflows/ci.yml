@@ -1,0 +1,174 @@
+# Checks for every push to main and every pull request:
+#  * nix     — `nix flake check` + `nix build .#brulion` (builds and runs the unit tests) on
+#              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
+#  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
+#              UndefinedBehaviorSanitizer, ctest (fast feedback, independent of nixpkgs);
+#  * lint    — actionlint + shellcheck (workflows, scripts) and clang-format on the changed lines
+#              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`).
+# Android (android.yml) and the browser build (wasm.yml) have their own workflows.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.11.2
+
+jobs:
+  nix:
+    name: Nix (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      # checks.x86_64-linux.web-vm is a NixOS VM test and needs KVM, which not every runner
+      # has (e.g. some private-repository runners): without /dev/kvm every other check is
+      # built and the VM test is skipped with a warning.
+      - name: nix flake check
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          if [ -e /dev/kvm ] || [ "$SYSTEM" != x86_64-linux ]; then
+            nix flake check -L
+          else
+            echo "::warning title=web-vm skipped::no /dev/kvm on this runner: the NixOS VM test checks.$SYSTEM.web-vm was not run"
+            nix flake check -L --no-build
+            for check in $(nix eval --json ".#checks.$SYSTEM" --apply builtins.attrNames | jq -r '.[]'); do
+              if [ "$check" != web-vm ]; then
+                nix build -L --no-link ".#checks.$SYSTEM.$check"
+              fi
+            done
+          fi
+
+      - name: nix build .#brulion (builds and runs the unit tests)
+        run: nix build .#brulion -L --print-out-paths
+
+  linux:
+    name: Linux (Qt 6.11.2 from aqt, GCC, -Werror, sanitizers)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          aqtversion: ==3.3.0
+          cache: true
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBRULION_WERROR=ON
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+          "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Unit tests (ctest)
+        env:
+          # Leak checking off: Qt keeps global singletons alive until exit.
+          ASAN_OPTIONS: detect_leaks=0:strict_string_checks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
+
+      # qmllint over the app's QML modules; advisory (warnings show up as annotations).
+      - name: QML lint
+        continue-on-error: true
+        run: |
+          if cmake --build build --target help | grep -q '^all_qmllint'; then
+            cmake --build build --target all_qmllint
+          else
+            echo "no all_qmllint target"
+          fi
+
+  lint:
+    name: Lint (actionlint, shellcheck, clang-format)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      - name: Tools from the flake's nixpkgs (the versions `nix develop` has)
+        run: |
+          for path in $(nix build --no-link --print-out-paths --inputs-from . \
+            nixpkgs#actionlint nixpkgs#shellcheck nixpkgs#clang-tools); do
+            if [ -d "$path/bin" ]; then echo "$path/bin" >> "$GITHUB_PATH"; fi
+          done
+
+      # actionlint also runs shellcheck on every `run:` script.
+      - name: actionlint
+        run: actionlint -color
+
+      - name: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh
+
+      # Only the lines a push or pull request changes (the existing code is not reformatted
+      # wholesale). Pull requests fail on a diff; pushes to main only warn.
+      - name: clang-format (changed lines)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          STRICT: ${{ github.event_name == 'pull_request' }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ] ||
+            ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            BASE=$(git rev-parse -q --verify HEAD~1 || true)
+          fi
+          if [ -z "$BASE" ]; then
+            echo "Nothing to compare with."
+            exit 0
+          fi
+          echo "Checking the lines changed in $BASE..HEAD"
+          status=0
+          git clang-format --diff --extensions c,cc,cpp,cxx,h,hh,hpp,hxx "$BASE" HEAD > "$RUNNER_TEMP/format.diff" || status=$?
+          cat "$RUNNER_TEMP/format.diff"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          files=$(sed -n 's#^+++ b/##p' "$RUNNER_TEMP/format.diff" | sort -u)
+          for f in $files; do
+            echo "::warning file=$f,title=clang-format::$f is not formatted as in .clang-format; run: git clang-format $BASE"
+          done
+          {
+            echo '### clang-format'
+            echo
+            echo "Run \`git clang-format $BASE\` inside \`nix develop\` and commit the result:"
+            echo
+            echo '```diff'
+            cat "$RUNNER_TEMP/format.diff"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$STRICT" = true ]; then
+            exit "$status"
+          fi

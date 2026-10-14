@@ -17,3 +17,5 @@ keystore.properties
 /dist-android/
 /dist-wasm/
 /tests/screenshots/
+/dist-appimage/
+/dist-source/

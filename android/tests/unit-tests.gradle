@@ -1,0 +1,25 @@
+// Gradle init script: adds Brulion's Kotlin unit tests (android/tests/kotlin) to the Gradle
+// project androiddeployqt generates (build-android/src/app/android-build), without overriding
+// Qt's build.gradle template. Used by scripts/android-build.sh (BRULION_ANDROID_UNIT_TESTS=1):
+//
+//   cd build-android/src/app/android-build
+//   BRULION_ANDROID_TESTS_DIR=$PWD/../../../../android/tests/kotlin \
+//     ./gradlew --init-script ../../../../android/tests/unit-tests.gradle testDebugUnitTest
+//
+// The tests run on the JVM against android.jar stubs: they cover the pure logic (wall-clock
+// shifting, ring time, the reminder JSON), not Android APIs.
+allprojects {
+    pluginManager.withPlugin('com.android.application') {
+        def testsDir = System.getenv('BRULION_ANDROID_TESTS_DIR')
+        if (testsDir == null || testsDir.isEmpty()) {
+            throw new GradleException('BRULION_ANDROID_TESTS_DIR is not set')
+        }
+        android.sourceSets.test.java.srcDirs += [testsDir]
+        android.sourceSets.test.kotlin.srcDirs += [testsDir]
+        dependencies {
+            testImplementation 'junit:junit:4.13.2'
+            // The real org.json (android.jar only has stubs that throw).
+            testImplementation 'org.json:json:20250517'
+        }
+    }
+}

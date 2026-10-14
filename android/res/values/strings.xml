@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Polish is Brulion's default language; English is in values-en. -->
+<resources>
+    <string name="brulion_channel_reminders">Przypomnienia</string>
+    <string name="brulion_channel_reminders_description">Przypomnienia z notatek i zadań Brulionu</string>
+    <string name="brulion_channel_alarms">Alarmy</string>
+    <string name="brulion_channel_alarms_description">Przypomnienia oznaczone jako alarm: dźwięk budzika, dzwoni do reakcji (domyślnie najwyżej 10 minut)</string>
+    <string name="brulion_channel_missed_alarms">Przegapione alarmy</string>
+    <string name="brulion_channel_missed_alarms_description">Alarmy, które przestały dzwonić bez reakcji — ciche powiadomienie, stuknięcie otwiera notatkę</string>
+    <string name="brulion_reminder_default_title">Przypomnienie</string>
+    <string name="brulion_action_snooze">Drzemka 10 min</string>
+    <string name="brulion_action_ok">OK</string>
+    <string name="brulion_action_open">Otwórz notatkę</string>
+    <!-- %1$s: time of the reminder, e.g. 09:00 -->
+    <string name="brulion_missed">Przegapione · %1$s</string>
+    <!-- %1$s: time of the alarm, e.g. 06:30; shown when it rang out with no reaction -->
+    <string name="brulion_missed_alarm">Przegapiony alarm · %1$s</string>
+    <!-- %1$s: time of the alarm, e.g. 09:00 -->
+    <string name="brulion_alarm_label">Alarm · %1$s</string>
+</resources>
