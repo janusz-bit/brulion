@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { existsSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 
 // TAURI_ENV_PLATFORM is set by the Tauri CLI when it runs the dev server / build.
@@ -60,6 +61,17 @@ export default defineConfig({
     target: isTauri ? ['es2022', 'safari16'] : 'es2022',
     sourcemap: true,
     chunkSizeWarningLimit: 4000,
+    // gallery.html = component gallery (src/app/dev), screenshotted by the e2e suite (e2e/).
+    // Built only once its entry module exists, so the app build never breaks on it.
+    // `rolldownOptions` is Vite 8's name for the deprecated `rollupOptions`.
+    rolldownOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        ...(existsSync(fileURLToPath(new URL('./src/app/dev/gallery-entry.tsx', import.meta.url)))
+          ? { gallery: fileURLToPath(new URL('./gallery.html', import.meta.url)) }
+          : {}),
+      },
+    },
   },
   test: {
     globals: true,

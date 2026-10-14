@@ -1,0 +1,21 @@
+<!doctype html>
+<!--
+  Component gallery (design system). Dev/test page, not part of the app UI: it is an extra
+  build input (vite.config.ts → build.rolldownOptions.input.gallery) so the e2e suite can
+  screenshot it from the production build (see e2e/README.md). The entry module is owned by
+  the design-system code in src/app/dev/.
+-->
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#1f2430" />
+    <title>Brulion — galeria komponentów</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/app/dev/gallery-entry.tsx"></script>
+  </body>
+</html>
