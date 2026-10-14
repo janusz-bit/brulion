@@ -1,0 +1,102 @@
+// DevTools — developer/test command-line options and the screenshot hook (QML singleton
+// `DevTools`). Used by main.cpp and by the component gallery (qml/dev/Gallery.qml).
+//
+//   --gallery              load the component gallery instead of Main.qml
+//   --section <id>         gallery: show only this section (popups in it open by themselves)
+//   --screenshot <file>    after loading (+ --delay ms, default 800) save the window as an
+//                          image and quit (exit code 0 = saved, 1 = failed)
+//   --delay <ms>           see --screenshot
+//   --size <WxH>           initial window size, e.g. 1280x800 (desktop), 412x915 (phone)
+//   --scale <factor>       device pixel ratio (QT_SCALE_FACTOR), e.g. 2 or 2.625
+//   --theme light|dark     force the colour scheme (Theme.mode)
+//   --locale pl|en         UI language (translation + DatesHelper.locale)
+//   --touch                touch UI sizes (Theme.forceTouch), as on a phone
+//   --reduced-motion       Theme.reducedMotion
+//   --now "<date> <time>"  fixed clock for DatesHelper ("2026-10-14 10:00"), for reproducible
+//                          screenshots
+//
+// Headless use: QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./brulion --gallery
+// --section buttons --size 412x915 --screenshot out.png. scripts/screenshots.sh produces the
+// standard set. Unknown arguments are ignored (other subsystems have their own).
+#pragma once
+
+#include <QObject>
+#include <QPointer>
+#include <QSize>
+#include <QString>
+#include <QStringList>
+#include <QtQml/qqmlregistration.h>
+
+class QJSEngine;
+class QQmlApplicationEngine;
+class QQmlEngine;
+class QTranslator;
+
+namespace brulion::ui {
+
+class DevTools : public QObject {
+    Q_OBJECT
+    QML_ELEMENT
+    QML_SINGLETON
+
+    Q_PROPERTY(bool gallery READ gallery CONSTANT FINAL)
+    Q_PROPERTY(QString section READ section CONSTANT FINAL)
+    Q_PROPERTY(QString theme READ theme CONSTANT FINAL)
+    Q_PROPERTY(QString language READ language NOTIFY languageChanged FINAL)
+    Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
+    Q_PROPERTY(bool reducedMotion READ reducedMotion CONSTANT FINAL)
+    /// True when the run ends with a screenshot (QML may skip intro animations).
+    Q_PROPERTY(bool screenshotMode READ screenshotMode CONSTANT FINAL)
+
+public:
+    /// Options that must be applied before QGuiApplication exists (--scale).
+    static void applyEarlyArguments(int argc, char **argv);
+
+    explicit DevTools(const QStringList &arguments, QObject *parent = nullptr);
+    ~DevTools() override;
+
+    /// QML singleton factory: the instance created by main(), or a default one.
+    static DevTools *create(QQmlEngine *qmlEngine, QJSEngine *jsEngine);
+
+    bool gallery() const { return m_gallery; }
+    QString section() const { return m_section; }
+    QString theme() const { return m_theme; }
+    /// "pl" or "en": --locale, else English when the system locale is English, else Polish.
+    QString language() const { return m_language; }
+    bool touch() const { return m_touch; }
+    bool reducedMotion() const { return m_reducedMotion; }
+    bool screenshotMode() const { return !m_screenshot.isEmpty(); }
+
+    /// QML type to load from module Brulion: "Gallery" with --gallery, else "Main".
+    QString rootComponent() const;
+    /// The translator main() installed (brulion_pl.qm, or brulion_en.qm for English plurals);
+    /// setLanguage() reloads it.
+    void setTranslator(QTranslator *translator);
+    /// Apply --size and schedule --screenshot for the engine's first window.
+    void attach(QQmlApplicationEngine *engine);
+
+    /// Switch the UI language at run time ("pl" | "en"): (un)installs the translation and
+    /// retranslates every qsTr() binding.
+    Q_INVOKABLE void setLanguage(const QString &language);
+
+Q_SIGNALS:
+    void languageChanged();
+
+private:
+    void takeScreenshot(QObject *root);
+
+    bool m_gallery = false;
+    QString m_section;
+    QString m_theme;
+    QString m_language;
+    QString m_screenshot;
+    int m_delayMs = 800;
+    QSize m_size;
+    bool m_touch = false;
+    bool m_reducedMotion = false;
+    QPointer<QQmlApplicationEngine> m_engine;
+    QTranslator *m_translator = nullptr;
+    bool m_translatorInstalled = false;
+};
+
+} // namespace brulion::ui

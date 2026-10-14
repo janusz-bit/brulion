@@ -12,3 +12,5 @@ function(brulion_add_test name)
 endfunction()
 
 add_subdirectory(core)
+# Design system helpers of the app (src/app/ui): fuzzy matching, diffs, dates for QML.
+add_subdirectory(app)

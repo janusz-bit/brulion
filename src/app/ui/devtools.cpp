@@ -1,0 +1,180 @@
+#include "devtools.h"
+
+#include "dateshelper.h"
+
+#include <QCoreApplication>
+#include <QImage>
+#include <QJSEngine>
+#include <QLocale>
+#include <QQmlApplicationEngine>
+#include <QQuickWindow>
+#include <QRegularExpression>
+#include <QTimer>
+#include <QTranslator>
+
+#include <cstdio>
+#include <cstring>
+
+using namespace Qt::StringLiterals;
+
+namespace brulion::ui {
+
+namespace {
+
+DevTools *g_instance = nullptr;
+
+QString valueAfter(const QStringList &args, const QString &option)
+{
+    const qsizetype i = args.indexOf(option);
+    if (i >= 0 && i + 1 < args.size())
+        return args.at(i + 1);
+    // Also accept --option=value.
+    const QString prefix = option + u'=';
+    for (const QString &arg : args) {
+        if (arg.startsWith(prefix))
+            return arg.mid(prefix.size());
+    }
+    return {};
+}
+
+} // namespace
+
+void DevTools::applyEarlyArguments(int argc, char **argv)
+{
+    for (int i = 1; i < argc; ++i) {
+        const char *arg = argv[i];
+        const char *value = nullptr;
+        if (std::strcmp(arg, "--scale") == 0 && i + 1 < argc)
+            value = argv[i + 1];
+        else if (std::strncmp(arg, "--scale=", 8) == 0)
+            value = arg + 8;
+        if (value) {
+            const QByteArray factor(value);
+            bool ok = false;
+            const double f = factor.toDouble(&ok);
+            if (ok && f >= 0.5 && f <= 6.0)
+                qputenv("QT_SCALE_FACTOR", factor);
+            else
+                std::fprintf(stderr, "brulion: ignoring invalid --scale %s\n", value);
+        }
+    }
+}
+
+DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(parent)
+{
+    m_gallery = arguments.contains(u"--gallery"_s);
+    m_section = valueAfter(arguments, u"--section"_s);
+    m_screenshot = valueAfter(arguments, u"--screenshot"_s);
+    m_touch = arguments.contains(u"--touch"_s);
+    m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
+
+    const QString theme = valueAfter(arguments, u"--theme"_s);
+    if (theme == u"light" || theme == u"dark")
+        m_theme = theme;
+
+    const QString locale = valueAfter(arguments, u"--locale"_s);
+    if (locale == u"pl" || locale == u"en")
+        m_language = locale;
+    else
+        m_language = QLocale().name().startsWith(u"en") ? u"en"_s : u"pl"_s;
+
+    bool ok = false;
+    const int delay = valueAfter(arguments, u"--delay"_s).toInt(&ok);
+    if (ok && delay >= 0)
+        m_delayMs = delay;
+
+    static const QRegularExpression sizeRe(u"^(\\d{2,5})x(\\d{2,5})$"_s);
+    const auto m = sizeRe.match(valueAfter(arguments, u"--size"_s));
+    if (m.hasMatch())
+        m_size = QSize(m.captured(1).toInt(), m.captured(2).toInt());
+
+    DatesHelper::setDefaults(m_language, valueAfter(arguments, u"--now"_s));
+    if (!g_instance)
+        g_instance = this;
+}
+
+DevTools::~DevTools()
+{
+    if (g_instance == this)
+        g_instance = nullptr;
+}
+
+DevTools *DevTools::create(QQmlEngine *qmlEngine, QJSEngine *jsEngine)
+{
+    Q_UNUSED(qmlEngine);
+    if (g_instance) {
+        QJSEngine::setObjectOwnership(g_instance, QJSEngine::CppOwnership);
+        return g_instance;
+    }
+    // No instance from main() (e.g. QML tooling): defaults, owned by this engine only.
+    auto *tools = new DevTools(QStringList{});
+    g_instance = nullptr;
+    QJSEngine::setObjectOwnership(tools, QJSEngine::JavaScriptOwnership);
+    Q_UNUSED(jsEngine);
+    return tools;
+}
+
+void DevTools::setTranslator(QTranslator *translator)
+{
+    m_translator = translator;
+    m_translatorInstalled = translator && !translator->isEmpty();
+}
+
+QString DevTools::rootComponent() const
+{
+    return m_gallery ? u"Gallery"_s : u"Main"_s;
+}
+
+void DevTools::attach(QQmlApplicationEngine *engine)
+{
+    m_engine = engine;
+    connect(engine, &QQmlApplicationEngine::objectCreated, this, [this](QObject *object, const QUrl &) {
+        auto *window = qobject_cast<QQuickWindow *>(object);
+        if (!window)
+            return;
+        if (m_size.isValid())
+            window->resize(m_size);
+        if (!m_screenshot.isEmpty())
+            QTimer::singleShot(m_delayMs, this, [this, object] { takeScreenshot(object); });
+    });
+}
+
+void DevTools::takeScreenshot(QObject *root)
+{
+    auto *window = qobject_cast<QQuickWindow *>(root);
+    if (!window) {
+        std::fprintf(stderr, "brulion: --screenshot: no window\n");
+        QCoreApplication::exit(1);
+        return;
+    }
+    const QImage image = window->grabWindow();
+    if (image.isNull() || !image.save(m_screenshot)) {
+        std::fprintf(stderr, "brulion: --screenshot: could not save %s\n", qPrintable(m_screenshot));
+        QCoreApplication::exit(1);
+        return;
+    }
+    std::fprintf(stderr, "brulion: screenshot %s (%dx%d)\n", qPrintable(m_screenshot), image.width(), image.height());
+    QCoreApplication::exit(0);
+}
+
+void DevTools::setLanguage(const QString &language)
+{
+    const QString lang = language == u"en" ? u"en"_s : u"pl"_s;
+    if (lang == m_language)
+        return;
+    m_language = lang;
+    if (m_translator) {
+        // brulion_pl.qm (translation) or brulion_en.qm (plural forms of the English sources).
+        if (m_translatorInstalled) {
+            QCoreApplication::removeTranslator(m_translator);
+            m_translatorInstalled = false;
+        }
+        if (m_translator->load(u":/i18n/brulion_"_s + lang + u".qm"_s))
+            m_translatorInstalled = QCoreApplication::installTranslator(m_translator);
+    }
+    if (m_engine)
+        m_engine->retranslate();
+    Q_EMIT languageChanged();
+}
+
+} // namespace brulion::ui
