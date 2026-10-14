@@ -40,3 +40,13 @@ NixOS (Tauri), Android (Tauri) and the browser (PWA). Read these before changing
   with DOMPurify; never `eval`/`new Function` on note content (calc uses mathjs' parser with
   dangerous functions disabled).
 * Keep dependencies minimal; prefer what is already in package.json.
+
+## Resource limits on the dev machine (important)
+
+The Raspberry Pi crashed once from memory exhaustion when many agents ran tests in parallel.
+* vitest is capped at 2 workers (`vite.config.ts`); never raise it here. Prefer running only
+  the test files you touched (`npx vitest run path/to/file.test.ts`).
+* `scripts/e2e.sh` takes a global lock — only one Chromium/Playwright run at a time. Always
+  go through it; never start Chromium directly in parallel with it.
+* Heavy builds (Rust, Nix, Android) run on the x86_64 laptop via
+  `flock <lock> laptop-run …` (see docs/NIXOS.md / docs/ANDROID.md), never on the Pi.

@@ -70,6 +70,10 @@ export default defineConfig({
         ...(existsSync(fileURLToPath(new URL('./src/app/dev/gallery-entry.tsx', import.meta.url)))
           ? { gallery: fileURLToPath(new URL('./gallery.html', import.meta.url)) }
           : {}),
+        // editor.html = editor playground (src/app/dev/editor-playground.tsx), for e2e/editor.spec.ts.
+        ...(existsSync(fileURLToPath(new URL('./src/app/dev/editor-playground.tsx', import.meta.url)))
+          ? { editor: fileURLToPath(new URL('./editor.html', import.meta.url)) }
+          : {}),
       },
     },
   },
@@ -78,5 +82,8 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     setupFiles: ['./src/test/setup.ts'],
+    // The dev machine is a 3.7 GB Raspberry Pi shared by several agents: cap parallelism so
+    // jsdom-heavy suites can't exhaust memory (raise locally with --maxWorkers if you can).
+    maxWorkers: process.env.CI ? undefined : 2,
   },
 });

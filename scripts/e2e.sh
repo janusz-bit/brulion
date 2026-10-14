@@ -14,6 +14,13 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# Only one Chromium run at a time on this machine (low RAM; several agents share it).
+# Re-exec under an exclusive lock unless we already hold it.
+if [[ -z "${BRULION_E2E_LOCKED:-}" ]] && command -v flock >/dev/null 2>&1; then
+  export BRULION_E2E_LOCKED=1
+  exec flock "${BRULION_E2E_LOCK:-${TMPDIR:-/tmp}/brulion-e2e.lock}" "$0" "$@"
+fi
+
 if [[ -z "${CHROMIUM_PATH:-}" ]]; then
   if command -v nix >/dev/null 2>&1; then
     dry_run="$(nix build --dry-run nixpkgs#chromium 2>&1 || true)"
