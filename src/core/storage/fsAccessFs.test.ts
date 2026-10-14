@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FsEvent } from '../types';
 import { describeAdapterContract, makeClock } from './adapterContract.testutil';
 import { isFsError } from './errors';
-import { createFakeRoot, fakeWrite } from './fakeFsAccess.testutil';
+import { createFakeRoot, fakeWrite, type FakeDirectoryHandle } from './fakeFsAccess.testutil';
 import { FsAccessFs, diffSnapshots } from './fsAccessFs';
 import { verifyPermission } from './handles';
 
@@ -184,6 +184,100 @@ describe('FsAccessFs specifics', () => {
     expect(await fs.stat('d')).toEqual({ path: 'd', kind: 'dir', size: 0, mtime: 0 });
     expect(await fs.stat('d/f.md/x')).toBeNull();
     expect(await fs.stat('zz/f.md')).toBeNull();
+  });
+});
+
+describe('FsAccessFs: names stored in NFD form (e.g. copied from macOS)', () => {
+  const nfd = (s: string): string => s.normalize('NFD');
+  const variants = [
+    ['files movable', { move: 'files' }],
+    ['no move()', { move: 'none' }],
+    ['move() everywhere', { move: 'all' }],
+  ] as const;
+
+  for (const [label, opts] of variants) {
+    it(`lists NFD names as NFC and reads, writes, renames and removes them without duplicates (${label})`, async () => {
+      const root = createFakeRoot('v', opts);
+      await fakeWrite(root, nfd('Łąka/Zażółć gęślą jaźń.md'), 'treść z Maca');
+      const fs = new FsAccessFs(root);
+      const listed = (await fs.list()).map((s) => s.path);
+      expect(listed).toEqual(['Łąka', 'Łąka/Zażółć gęślą jaźń.md']);
+      expect(listed.every((p) => p === p.normalize('NFC'))).toBe(true);
+      expect(await fs.readText('Łąka/Zażółć gęślą jaźń.md')).toBe('treść z Maca');
+      expect(await fs.stat('Łąka/Zażółć gęślą jaźń.md')).toMatchObject({ kind: 'file', size: new TextEncoder().encode('treść z Maca').byteLength });
+      expect(await fs.stat('Łąka')).toMatchObject({ kind: 'dir' });
+
+      await fs.writeText('Łąka/Zażółć gęślą jaźń.md', 'poprawione');
+      await fs.writeText('Łąka/nowa.md', 'nowa');
+      // The existing entries were updated in place: no NFC twin next to the NFD original.
+      const dir = root.children.get(nfd('Łąka'));
+      expect(root.children.size).toBe(1);
+      expect(dir?.kind).toBe('directory');
+      expect([...(dir as FakeDirectoryHandle).children.keys()].sort()).toEqual([nfd('Zażółć gęślą jaźń.md'), 'nowa.md'].sort());
+      expect(await fs.readText('Łąka/Zażółć gęślą jaźń.md')).toBe('poprawione');
+      expect((await fs.readBinary('Łąka/Zażółć gęślą jaźń.md')).byteLength).toBe(new TextEncoder().encode('poprawione').byteLength);
+
+      await fs.rename('Łąka/Zażółć gęślą jaźń.md', 'Łąka/Źródło.md');
+      expect((await fs.list()).map((s) => s.path)).toEqual(['Łąka', 'Łąka/nowa.md', 'Łąka/Źródło.md']);
+      expect(await fs.readText('Łąka/Źródło.md')).toBe('poprawione');
+      await fs.rename('Łąka', 'Pole');
+      expect((await fs.list()).map((s) => s.path)).toEqual(['Pole', 'Pole/nowa.md', 'Pole/Źródło.md']);
+
+      await fakeWrite(root, nfd('Pole/ćma.md'), 'ćma');
+      await fs.remove('Pole/ćma.md');
+      expect(await fs.stat('Pole/ćma.md')).toBeNull();
+      await fs.remove('Pole');
+      expect(await fs.list()).toEqual([]);
+    });
+  }
+
+  it('mkdir and writes reuse an existing NFD folder', async () => {
+    const root = createFakeRoot('v');
+    await fakeWrite(root, nfd('Źdźbło/a.md'), 'a');
+    const fs = new FsAccessFs(root);
+    await fs.mkdir('Źdźbło');
+    await fs.writeText('Źdźbło/b.md', 'b');
+    expect([...root.children.keys()]).toEqual([nfd('Źdźbło')]);
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Źdźbło', 'Źdźbło/a.md', 'Źdźbło/b.md']);
+  });
+
+  it('an exact NFC name wins over an NFD twin; the twin is not listed twice', async () => {
+    const root = createFakeRoot('v');
+    await fakeWrite(root, nfd('Żółw.md'), 'nfd');
+    await fakeWrite(root, 'Żółw.md', 'nfc');
+    const fs = new FsAccessFs(root);
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Żółw.md']);
+    expect(await fs.readText('Żółw.md')).toBe('nfc');
+  });
+
+  it('does not report NFD files as changed by polling (snapshots use NFC paths)', async () => {
+    const clock = makeClock(1000);
+    const root = createFakeRoot('v', { now: clock.now });
+    await fakeWrite(root, nfd('Gęś.md'), 'g');
+    const fs = new FsAccessFs(root, { pollInterval: 60_000 });
+    const events: FsEvent[] = [];
+    const stop = fs.watch((e) => events.push(...e));
+    await fs.checkNow();
+    clock.advance(5);
+    await fs.writeText('Gęś.md', 'gęś');
+    await fs.checkNow();
+    expect(events).toEqual([]);
+    clock.advance(5);
+    await fakeWrite(root, nfd('Gęś.md'), 'cudza gęś');
+    await fs.checkNow();
+    expect(events).toEqual([{ type: 'modify', path: 'Gęś.md' }]);
+    stop();
+  });
+});
+
+describe('FsAccessFs: Chromium swap files', () => {
+  it('does not list *.crswap files (createWritable() swap files of writes in progress)', async () => {
+    const root = createFakeRoot('v');
+    await fakeWrite(root, 'Notatka.md', 'n');
+    await fakeWrite(root, 'Notatka.md.crswap', 'połowa');
+    await fakeWrite(root, 'załączniki/zdjęcie.png.crswap', 'x');
+    const fs = new FsAccessFs(root);
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Notatka.md', 'załączniki']);
   });
 });
 

@@ -44,6 +44,16 @@ export interface RecurrenceRule {
 
 type Freq = RecurrenceRule['freq'];
 
+const FREQS: ReadonlySet<string> = new Set<Freq>(['day', 'week', 'month', 'year']);
+
+/**
+ * Whether the rule's frequency is one of the four supported ones. Rules may come from
+ * untyped sources (JSON, UI drafts); the public functions treat anything else as "no rule".
+ */
+function hasKnownFreq(rule: RecurrenceRule): boolean {
+  return FREQS.has(rule.freq);
+}
+
 const MONDAY_FIRST = (d: number): number => (d + 6) % 7;
 const WORKDAYS = [1, 2, 3, 4, 5];
 
@@ -357,9 +367,10 @@ function formatPl(rule: RecurrenceRule): string {
  * Format a rule. `'en'` produces the canonical Obsidian-Tasks-compatible text written into
  * files ("every week on Monday, Friday when done"); `'pl'` produces the Polish form for the UI
  * ("co tydzień w poniedziałek, piątek po wykonaniu"). Both round-trip through
- * {@link parseRecurrence}.
+ * {@link parseRecurrence}. A rule with an unknown `freq` formats as ''.
  */
 export function formatRecurrence(rule: RecurrenceRule, locale: Locale): string {
+  if (!hasKnownFreq(rule)) return '';
   const r = normalizeRule(rule);
   const body = locale === 'pl' ? formatPl(r) : formatEn(r);
   if (!r.whenDone) return body;
@@ -399,6 +410,7 @@ export function repeaterToRule(repeater: string): RecurrenceRule | null {
  * business-day restriction): `{freq:'week', interval:1}` -> "+1w", with `whenDone` -> ".+1w".
  */
 export function ruleToRepeater(rule: RecurrenceRule): string | null {
+  if (!hasKnownFreq(rule)) return null;
   const r = normalizeRule(rule);
   if (r.weekdays || r.monthDay !== undefined || r.weekdaysOnly) return null;
   const unit = r.freq === 'day' ? 'd' : r.freq === 'week' ? 'w' : r.freq === 'month' ? 'm' : 'y';
@@ -489,7 +501,8 @@ function step(rule: RecurrenceRule, date: LocalDate, ctx: SeriesContext): LocalD
  * explicit `monthDay` the base date's day is used, so chaining from a clamped date continues
  * from that day (use {@link occurrencesBetween} for series that remember the anchor's day).
  * Malformed `from` is returned unchanged, and so is `from` when the next date would lie beyond
- * 9999-12-31 — callers can detect "no next occurrence" with `compareLocal(next, from) <= 0`.
+ * 9999-12-31 or the rule has an unknown `freq` — callers can detect "no next occurrence" with
+ * `compareLocal(next, from) <= 0`.
  */
 export function nextOccurrence(
   rule: RecurrenceRule,
@@ -497,7 +510,7 @@ export function nextOccurrence(
   completedOn?: LocalDate,
 ): LocalDate | LocalDateTime {
   const sp = splitLocal(from);
-  if (!sp) return from;
+  if (!sp || !hasKnownFreq(rule)) return from;
   const r = normalizeRule(rule);
   const done = r.whenDone && completedOn ? splitLocal(completedOn)?.date : undefined;
   const base = done ?? sp.date;
@@ -560,31 +573,36 @@ function fastForwardBusinessDays(rule: RecurrenceRule, anchor: LocalDate, from: 
 /** Safety cap on loop iterations (the result count is capped separately by `max`). */
 const MAX_STEPS = 200_000;
 
+/** Default result cap of {@link occurrencesBetween}. */
+const DEFAULT_MAX_OCCURRENCES = 500;
+
 /**
  * All occurrences of a series starting at `anchor` that fall within [`from`, `to`]
  * (inclusive, compared by date). The anchor itself is the first occurrence (it counts even
  * if it doesn't match the rule's weekdays, like a task's original due date). Later
  * occurrences remember the anchor's day of month (Jan 31 monthly -> Feb 28, Mar 31, …).
  * Date-time anchors yield date-times with the anchor's time. `whenDone` is ignored here
- * (future completion dates are unknown). At most `max` results.
+ * (future completion dates are unknown). At most `max` results (fractions are floored, NaN
+ * means the default 500). A rule with an unknown `freq` has no occurrences.
  */
 export function occurrencesBetween(
   rule: RecurrenceRule,
   anchor: LocalDate | LocalDateTime,
   from: LocalDate,
   to: LocalDate,
-  max = 500,
+  max = DEFAULT_MAX_OCCURRENCES,
 ): (LocalDate | LocalDateTime)[] {
+  const limit = Number.isNaN(max) ? DEFAULT_MAX_OCCURRENCES : Math.floor(max);
   const a = splitLocal(anchor);
   const f = splitLocal(from)?.date;
   const t = splitLocal(to)?.date;
-  if (!a || !f || !t || f > t || a.date > t || max <= 0) return [];
+  if (!a || !f || !t || f > t || a.date > t || limit <= 0 || !hasKnownFreq(rule)) return [];
   const r = normalizeRule(rule);
   const ctx = contextOf(a.date);
   const out: (LocalDate | LocalDateTime)[] = [];
   if (a.date >= f) out.push(joinDateTime(a.date, a.time));
   let cur = (a.date < f ? fastForward(r, a.date, f, ctx) : null) ?? a.date;
-  for (let i = 0; i < MAX_STEPS && out.length < max; i++) {
+  for (let i = 0; i < MAX_STEPS && out.length < limit; i++) {
     const next = safeStep(r, cur, ctx);
     if (next === null || next > t || next <= cur) break;
     if (next >= f) out.push(joinDateTime(next, a.time));

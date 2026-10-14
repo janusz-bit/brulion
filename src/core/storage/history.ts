@@ -11,6 +11,9 @@
  *    is kept too;
  *  - pruning keeps at most 50 snapshots per path and drops snapshots older than 90 days,
  *    but always keeps the 5 newest.
+ * Snapshots are kept in the order they were taken (not sorted by timestamp), so a device clock
+ * that is set back (NTP correction, no real-time clock) neither reorders them nor makes prune
+ * drop the newest ones; such a clock also never suppresses snapshots via the throttle.
  */
 import { normalizePath } from '../paths';
 import type { VaultPath } from '../types';
@@ -63,9 +66,9 @@ function isStoredEntry(v: unknown): v is StoredEntry {
   return typeof e.id === 'string' && typeof e.time === 'number' && typeof e.size === 'number' && typeof e.reason === 'string' && typeof e.hash === 'string';
 }
 
-/** Defensive read of a stored index (malformed data -> empty / filtered). */
+/** Defensive read of a stored index, oldest first as stored (malformed data -> empty / filtered). */
 function sanitizeEntries(v: unknown): StoredEntry[] {
-  return Array.isArray(v) ? v.filter(isStoredEntry).sort((a, b) => a.time - b.time) : [];
+  return Array.isArray(v) ? v.filter(isStoredEntry) : [];
 }
 
 /** Time encoded in a snapshot id (base-36 prefix), or NaN. */
@@ -215,7 +218,9 @@ export class History {
     const hash = contentHash(content);
     const time = this.now();
     if (newest && newest.hash === hash) return;
-    const throttled = !ALWAYS_KEEP.has(reason) && newest !== undefined && !ALWAYS_KEEP.has(newest.reason) && time - newest.time < this.throttleMs;
+    // A negative age means the clock was set back: do not throttle (it could last for days).
+    const age = newest === undefined ? Infinity : time - newest.time;
+    const throttled = !ALWAYS_KEEP.has(reason) && newest !== undefined && !ALWAYS_KEEP.has(newest.reason) && age >= 0 && age < this.throttleMs;
     if (throttled) return;
     const entry: StoredEntry = { id: this.newId(time), time, size: utf8Length(content), reason, hash };
     // Content first: an interrupted snapshot leaves only an orphan (cleaned by prune), never a dangling entry.

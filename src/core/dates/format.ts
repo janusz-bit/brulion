@@ -2,7 +2,7 @@
  * Human-friendly date formatting for the UI ("dziś 09:00", "jutro", "pt 17 paź").
  */
 import type { LocalDate, LocalDateTime, Locale } from '../types';
-import { diffDaysLocal, splitLocal, toLocalDate, weekdayOf } from './local';
+import { diffDaysLocal, localParts, splitLocal, toLocalDate, weekdayOf } from './local';
 import { monthShortName, own, weekdayShortName } from './names';
 
 const RELATIVE: Record<Locale, Record<string, string>> = {
@@ -10,11 +10,14 @@ const RELATIVE: Record<Locale, Record<string, string>> = {
   en: { [-1]: 'yesterday', 0: 'today', 1: 'tomorrow' },
 };
 
-/** Date without the relative words: "pt 17 paź" / "Fri, Oct 17"; with year when not `nowYear`. */
+/**
+ * Date without the relative words: "pt 17 paź" / "Fri, Oct 17"; with year when not `nowYear`.
+ * A date-time's time is ignored; malformed input is returned unchanged.
+ */
 export function formatDateShort(date: LocalDate, locale: Locale, nowYear?: number): string {
-  const year = Number(date.slice(0, 4));
-  const month = Number(date.slice(5, 7));
-  const day = Number(date.slice(8, 10));
+  const p = localParts(date);
+  if (!p) return date;
+  const { year, month, day } = p;
   const mon = monthShortName(month, locale);
   const sameYear = nowYear === undefined || nowYear === year;
   if (locale === 'pl') {

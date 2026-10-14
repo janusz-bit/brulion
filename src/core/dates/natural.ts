@@ -27,7 +27,10 @@
  * * "w przyszłym tygodniu/miesiącu/roku", "next week/month/year": first day of that period.
  * * Midnight words and small hours at night after a named day mean the following night:
  *   "dziś o północy" / "tonight at midnight" = tomorrow 00:00, "jutro o 2 w nocy" = the day
- *   after tomorrow 02:00 (a numeric "jutro o 0:00" stays tomorrow 00:00).
+ *   after tomorrow 02:00 (a numeric "jutro o 0:00" stays tomorrow 00:00). "12" with an
+ *   evening word is midnight too ("tonight at 12", "wieczorem o 12").
+ * * A unit without a number must be in the case its preposition governs: "za tydzień",
+ *   "tydzień temu", "w ciągu tygodnia" (so the idiom "za dnia" is no date).
  *
  * To avoid false positives in prose: weekday abbreviations ("pt", "sat") are used only with
  * a preposition/modifier, next to another date/time token, or as the whole input; a bare
@@ -38,6 +41,12 @@
  * "o 15 sie <word>" (typed without diacritics after an hour); numbers followed by units
  * ("12.05 zł") are not dates; numeric dates without a year need a two-digit month
  * ("15.10", not "12.5"), and slash dates two-digit parts ("15/10", not "1/2" or "8/10").
+ * Day-of-month ordinals ("the 15th", "15-go") are dates only when no noun follows them
+ * ("the 2nd bug", "2-go stopnia" are not).
+ *
+ * Nothing is recognised inside URLs, e-mail addresses, wiki/Markdown links, inline code, tags
+ * or canonical date tokens ("📅 2026-10-15") — see protect.ts — so stripping a phrase can
+ * never corrupt them.
  */
 import type { LocalDate, Locale } from '../types';
 import { type FoldedText, foldWithMap, unfoldRange } from './fold';
@@ -61,6 +70,7 @@ import {
   weekdayOf,
 } from './local';
 import { MONTH_LOOKUP, NUMBER_WORDS, WEEKDAY_LOOKUP, alternation, own } from './names';
+import { protectedMask } from './protect';
 
 /** A recognised date phrase. */
 export interface NaturalDateResult {
@@ -92,8 +102,12 @@ interface TimeSpec {
   midnight?: boolean;
 }
 
-/** Why a token is ambiguous: 'alone' = only as the whole input; 'hour' = needs time-ish context. */
-type Weakness = 'alone' | 'hour';
+/**
+ * Why a token is ambiguous: 'alone' = only as the whole input; 'hour' = needs time-ish
+ * context; 'ordinal' = a day-of-month ordinal ("the 2nd", "2-go") that is no date when it
+ * modifies a following noun ("the 2nd bug", "2-go stopnia").
+ */
+type Weakness = 'alone' | 'hour' | 'ordinal';
 
 interface TokenValue {
   date?: LocalDate;
@@ -200,12 +214,18 @@ const UNITS: Record<string, Unit> = {
   rok: 'year', lata: 'year', lat: 'year', roku: 'year', year: 'year', years: 'year', yr: 'year', yrs: 'year',
   godzina: 'hour', godzine: 'hour', godziny: 'hour', godzin: 'hour', godz: 'hour', h: 'hour', hour: 'hour', hours: 'hour', hr: 'hour', hrs: 'hour',
   minuta: 'minute', minute: 'minute', minuty: 'minute', minut: 'minute', min: 'minute', minutes: 'minute', mins: 'minute',
-  kwadrans: 'quarter', kwadranse: 'quarter', kwadransow: 'quarter',
+  kwadrans: 'quarter', kwadranse: 'quarter', kwadransow: 'quarter', kwadransa: 'quarter',
 };
-/** Unit words that may stand without a number ("za tydzień", "w ciągu godziny", "tydzień temu"). */
-const SINGULAR_UNITS = new Set([
-  'dzien', 'dnia', 'tydzien', 'tygodnia', 'miesiac', 'miesiaca', 'rok', 'roku',
-  'godzine', 'godziny', 'minute', 'minuty', 'kwadrans',
+/**
+ * Unit words that may stand without a number, in the case the preceding/following word
+ * governs: accusative after "za" and before "temu" ("za tydzień", "tydzień temu"), genitive
+ * after "w ciągu" ("w ciągu godziny"). "za dnia" (= in daylight) is therefore no offset.
+ */
+const BARE_UNITS_ACC: ReadonlySet<string> = new Set([
+  'dzien', 'tydzien', 'miesiac', 'rok', 'godzine', 'minute', 'kwadrans',
+]);
+const BARE_UNITS_GEN: ReadonlySet<string> = new Set([
+  'dnia', 'tygodnia', 'miesiaca', 'roku', 'godziny', 'minuty', 'kwadransa',
 ]);
 /** Fractions: [unit, value in minutes or months]. */
 const FRACTIONS: Record<string, Partial<Record<Unit, { minutes?: number; months?: number }>>> = {
@@ -263,6 +283,17 @@ const HOUR_FOLLOWERS = new Set([
   'dla', 'przez', 'ale', 'bo', 'zeby', 'gdy', 'jak', 'jesli', 'czy', 'wiec', 'tez', 'juz', 'trzeba', 'musze',
   'sie', 'mam', 'mamy', 'bede', 'bedzie', 'bedziemy', 'ide', 'idziemy', 'wyjazd', 'wyjscie', 'spotkanie',
   'in', 'on', 'at', 'with', 'for', 'to', 'and', 'or', 'but', 'until', 'by', 'then', 'sharp',
+]);
+
+/**
+ * Words after a day-of-month ordinal ("on the 15th at 6pm", "15-go w biurze", "do 10-go
+ * każdego miesiąca") that keep it a date: the Polish followers of a bare hour plus a few
+ * period words. English prepositions like "in"/"on"/"to" are left out ("the 2nd in line").
+ */
+const ORDINAL_FOLLOWERS = new Set([
+  ...[...HOUR_FOLLOWERS].filter((w) => !['in', 'on', 'with', 'for', 'to', 'sharp'].includes(w)),
+  'of', 'next', 'this', 'every', 'please',
+  'kazdego', 'tego', 'przyszlego', 'nastepnego', 'biezacego', 'miesiaca',
 ]);
 
 /** Units/currencies after a number that mean it is a quantity, not a date (sticky: tested at an offset). */
@@ -377,24 +408,34 @@ function offsetValue(unit: Unit, n: number, ctx: Ctx): TokenValue {
 }
 
 /**
- * Value of "za N <unit>" / "N <unit> temu": `count` may be missing for singular units
- * ("za tydzień"); English ("in …") always needs a number or "a"/"an".
+ * Value of "za N <unit>" / "N <unit> temu": `count` may be missing for the singular unit
+ * words in `bare` ("za tydzień"); English ("in …") passes an empty set, so it always needs a
+ * number or "a"/"an".
  */
 function relativeValue(
   count: string | undefined,
   unitWord: string,
   sign: 1 | -1,
-  needsCount: boolean,
+  bare: ReadonlySet<string>,
   ctx: Ctx,
 ): TokenValue | null {
   const unit = own(UNITS, unitWord);
   if (!unit) return null;
   let n = parseCount(count);
   if (n === null) {
-    if (count !== undefined || needsCount || !SINGULAR_UNITS.has(unitWord)) return null;
+    if (count !== undefined || !bare.has(unitWord)) return null;
     n = 1;
   }
   return offsetValue(unit, sign * n, ctx);
+}
+
+const NO_BARE_UNITS: ReadonlySet<string> = new Set();
+
+/** Which bare unit words a relative-offset preposition accepts (folded, whitespace-collapsed). */
+function bareUnitsAfter(prep: string): ReadonlySet<string> {
+  if (prep === 'za') return BARE_UNITS_ACC;
+  if (prep === 'w ciagu') return BARE_UNITS_GEN;
+  return NO_BARE_UNITS; // "in" / "within"
 }
 
 function exactAfterMinutes(minutes: number, ctx: Ctx): TokenValue {
@@ -414,6 +455,8 @@ function resolveTime(spec: TimeSpec): string | null {
   else if (!spec.meridiem && spec.daypart) {
     // Hour 0 is unambiguous (24-hour clock): "tonight at 0:00" must not become noon.
     if ((spec.daypart === 'afternoon' || spec.daypart === 'evening') && h >= 1 && h < 12) h += 12;
+    // "tonight at 12" / "wieczorem o 12" is midnight (then moved to the following night).
+    else if (spec.daypart === 'evening' && h === 12) h = 0;
     else if (spec.daypart === 'night') h = h === 12 ? 0 : h >= 6 && h < 12 ? h + 12 : h;
   }
   return h >= 0 && h <= 23 && min >= 0 && min <= 59 ? formatHm(h, min) : null;
@@ -544,10 +587,7 @@ function buildMatchers(): Matcher[] {
     // Relative: "za 2 dni", "za tydzień", "za 3 godziny", "w ciągu godziny", "in 2 weeks", "in an hour"
     {
       re: re(`${L}(za|w\\s+ciagu|in|within)\\s+(?:(\\d{1,4})\\s*|(${numWords})\\s+)?(${unitWords})${R}`),
-      build(m, ctx) {
-        const english = m[1] === 'in' || m[1] === 'within';
-        return relativeValue(m[2] ?? m[3], m[4] ?? '', 1, english, ctx);
-      },
+      build: (m, ctx) => relativeValue(m[2] ?? m[3], m[4] ?? '', 1, bareUnitsAfter(key(m[1])), ctx),
     },
     // Fractions: "za pół godziny", "za półtorej godziny", "in half an hour", "za pół roku"
     {
@@ -564,7 +604,7 @@ function buildMatchers(): Matcher[] {
     // Ago: "2 dni temu", "tydzień temu", "3 weeks ago"
     {
       re: re(`${L}(?:(\\d{1,4})\\s*|(${numWords})\\s+)?(${unitWords})\\s+(?:temu|ago)${R}`),
-      build: (m, ctx) => relativeValue(m[1] ?? m[2], m[3] ?? '', -1, false, ctx),
+      build: (m, ctx) => relativeValue(m[1] ?? m[2], m[3] ?? '', -1, BARE_UNITS_ACC, ctx),
     },
     // ISO: "2026-10-15", "2026/10/15", "2026-10-15T18:30"
     {
@@ -640,21 +680,28 @@ function buildMatchers(): Matcher[] {
         return date ? { date } : null;
       },
     },
-    // Day of month only: "the 15th", "on the 3rd", "15-go", "do 20-tego"
-    {
-      re: re(`${L}(?:(?:on|na|do|dnia)\\s+)?(?:the\\s+(\\d{1,2})(?:st|nd|rd|th)|(\\d{1,2})-(?:go|ego|tego))${R}`),
-      build(m, ctx) {
-        const date = nextMonthDay(Number(m[1] ?? m[2]), ctx);
-        return date ? { date } : null;
-      },
-    },
-    // "o 9", "o 9:30", "o 18.30", "o godz. 9", "at 9", "at 6pm", "o 18h"
+    // Day of month only: "the 15th", "on the 3rd", "by the 15th", "15-go", "do 20-tego"
     {
       re: re(
-        `${L}(o|at)\\s+(?:(godz\\.?|godzinie|godzina)\\s*)?(\\d{1,2})(?:[:.](\\d{2}))?(?![\\p{N}])(?![:.]\\p{N})(?:\\s*(${MERIDIEM})(?![\\p{L}]))?(?:\\s*(h|godz\\.?)(?![\\p{L}]))?(?![\\p{L}])`,
+        `${L}(?:(on|by|until|till|na|do|od|dnia)\\s+)?(?:the\\s+(\\d{1,2})(?:st|nd|rd|th)|(\\d{1,2})-(?:go|ego|tego))${R}`,
+      ),
+      build(m, ctx) {
+        const date = nextMonthDay(Number(m[2] ?? m[3]), ctx);
+        if (!date) return null;
+        // "the 2nd bug", "on the 3rd floor", "na 2-go piętrze" are ordinals, not dates.
+        return { date, weak: 'ordinal' };
+      },
+    },
+    // "o 9", "o 9:30", "o 18.30", "o godz. 9", "at 9", "at 6pm", "o 18h", "o 9h30"
+    {
+      re: re(
+        `${L}(o|at)\\s+(?:(godz\\.?|godzinie|godzina)\\s*)?(\\d{1,2})(?:[:.](\\d{2}))?(?![\\p{N}])(?![:.]\\p{N})(?:\\s*(${MERIDIEM})(?![\\p{L}]))?(?:\\s*(h(?:\\d{2})?|godz\\.?)(?![\\p{L}\\p{N}]))?(?![\\p{L}])`,
       ),
       build(m) {
-        const spec = timeSpec(m[3], m[4], m[5]);
+        // "9h30": minutes after the "h" (never together with "9:30h15").
+        const hMinutes = /^h(\d{2})$/.exec(m[6] ?? '')?.[1];
+        if (hMinutes !== undefined && m[4] !== undefined) return null;
+        const spec = timeSpec(m[3], m[4] ?? hMinutes, m[5]);
         if (!spec) return null;
         const value: TokenValue = { time: spec };
         if (m[2] === undefined && m[4] === undefined && m[5] === undefined && m[6] === undefined) value.weak = 'hour';
@@ -796,9 +843,10 @@ function collectTokens(ctx: Ctx): Token[] {
   });
   // Longest first, then leftmost, then matcher order; keep non-overlapping. An occupancy map
   // keeps this linear in the total token length (comparing against every picked token was
-  // quadratic for long inputs with many phrases).
+  // quadratic for long inputs with many phrases). It starts with the protected spans (URLs,
+  // links, code, tags, date tokens), so no token may touch those.
   all.sort((a, b) => b.end - b.start - (a.end - a.start) || a.start - b.start || a.prio - b.prio);
-  const taken = new Uint8Array(ctx.text.length);
+  const taken = protectedMask(ctx.text);
   const picked: Token[] = [];
   for (const t of all) {
     if (taken.subarray(t.start, t.end).includes(1)) continue;
@@ -877,12 +925,12 @@ const WORD_AFTER = /\s+(\p{L}+)/uy;
 function weakTokenOk(t: Token, ctx: Ctx): boolean {
   // The whole input apart from punctuation/whitespace ("pt", "  sob. ").
   if (ctx.firstContent >= t.start && ctx.contentEnd <= t.end) return true;
-  if (t.weak !== 'hour') return false;
+  if (t.weak === 'alone') return false;
   if (execAt(HOUR_PUNCT_AFTER, ctx.text, t.end)) return true;
   const w = execAt(WORD_AFTER, ctx.text, t.end);
   if (!w) return false;
   const word = w[1] ?? '';
-  if (HOUR_FOLLOWERS.has(word)) return true;
+  if ((t.weak === 'ordinal' ? ORDINAL_FOLLOWERS : HOUR_FOLLOWERS).has(word)) return true;
   // A Polish infinitive verb ("o 18 zadzwonić") — checked on the original text (ć vs c).
   const wordStart = t.end + w[0].length - word.length;
   return originalSlice(ctx, wordStart, wordStart + word.length).toLowerCase().endsWith('ć');
@@ -991,18 +1039,40 @@ export function parseNaturalDate(input: string, now: Date, opts?: NaturalDateOpt
 /** One separator character around a stripped phrase. */
 const STRIP_SEPARATOR = /[\s,;:–—-]/u;
 
+/** Opening bracket/quote -> its closing counterpart. */
+const BRACKET_PAIRS: Readonly<Record<string, string>> = {
+  '(': ')', '[': ']', '{': '}', '„': '”', '“': '”', '"': '"', "'": "'", '«': '»', '‘': '’',
+};
+
+/** Index before the separators that end at `i` (loops: regexes like /[\s,]+$/ backtrack). */
+function skipSeparatorsBack(s: string, i: number): number {
+  while (i > 0 && STRIP_SEPARATOR.test(s.charAt(i - 1))) i--;
+  return i;
+}
+
+/** Index after the separators that start at `i`. */
+function skipSeparatorsForward(s: string, i: number): number {
+  while (i < s.length && STRIP_SEPARATOR.test(s.charAt(i))) i++;
+  return i;
+}
+
 /**
  * Remove a recognised phrase from the input and tidy whitespace / dangling separators:
- * ("Zadzwoń do mamy jutro o 18", result) -> "Zadzwoń do mamy".
+ * ("Zadzwoń do mamy jutro o 18", result) -> "Zadzwoń do mamy". Brackets or quotes that only
+ * wrapped the phrase go too: "Kupić mleko (jutro)" -> "Kupić mleko".
  */
 export function stripNaturalDate(input: string, result: Pick<NaturalDateResult, 'matched' | 'index'>): string {
-  // Trailing separators are trimmed with a loop: /[\s,;:–—-]+$/ backtracks quadratically.
-  let cut = result.index;
-  while (cut > 0 && STRIP_SEPARATOR.test(input.charAt(cut - 1))) cut--;
+  let cut = skipSeparatorsBack(input, result.index);
+  let resume = skipSeparatorsForward(input, result.index + result.matched.length);
+  if (cut > 0 && resume < input.length && own(BRACKET_PAIRS, input.charAt(cut - 1)) === input.charAt(resume)) {
+    cut = skipSeparatorsBack(input, cut - 1);
+    resume = skipSeparatorsForward(input, resume + 1);
+  }
   const before = input.slice(0, cut);
-  const after = input.slice(result.index + result.matched.length).replace(/^[\s,;:–—-]+/u, '');
+  const after = input.slice(resume);
   if (!before) return after.replace(/^[.!?…]+\s*/u, '').trim();
   if (!after) return before.trim();
-  const glue = /^[.!?…)]/u.test(after) ? '' : ' ';
+  // No space before closing punctuation or after an opening bracket ("Kupić (2 l)").
+  const glue = /^[.!?…)\]}”»’]/u.test(after) || /[([{„“«‘]$/u.test(before) ? '' : ' ';
   return `${before}${glue}${after}`.replace(/\s{2,}/g, ' ').trim();
 }

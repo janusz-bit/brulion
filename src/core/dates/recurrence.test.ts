@@ -523,3 +523,32 @@ describe('review regressions', () => {
     expect(canonicalRecurrence(input)).toBe(expected);
   });
 });
+
+describe('second review regressions', () => {
+  const daily = { freq: 'day', interval: 1 } as const;
+
+  it('occurrencesBetween treats a NaN max as the default and floors fractional ones', () => {
+    expect(occurrencesBetween(daily, '2026-10-01', '2026-10-01', '2026-10-05', Number.NaN)).toHaveLength(5);
+    expect(occurrencesBetween(daily, '2026-10-01', '2026-10-01', '2026-10-31', 2.5)).toEqual(['2026-10-01', '2026-10-02']);
+    expect(occurrencesBetween(daily, '2026-10-01', '2026-10-01', '2026-10-31', 0.5)).toEqual([]);
+    expect(occurrencesBetween(daily, '2026-10-01', '2026-10-01', '2026-10-03', Number.POSITIVE_INFINITY)).toHaveLength(3);
+  });
+
+  describe('rules with an unknown frequency (e.g. from corrupted JSON)', () => {
+    const bad = { freq: 'hour', interval: 1 } as unknown as RecurrenceRule;
+    it('formatRecurrence returns an empty string, never undefined', () => {
+      expect(formatRecurrence(bad, 'en')).toBe('');
+      expect(formatRecurrence({ ...bad, whenDone: true }, 'pl')).toBe('');
+    });
+    it('nextOccurrence returns "from" unchanged (no next occurrence)', () => {
+      expect(nextOccurrence(bad, '2026-10-14')).toBe('2026-10-14');
+      expect(nextOccurrence(bad, '2026-10-14T09:00')).toBe('2026-10-14T09:00');
+    });
+    it('occurrencesBetween returns no occurrences', () => {
+      expect(occurrencesBetween(bad, '2026-10-14', '2026-10-01', '2026-10-31')).toEqual([]);
+    });
+    it('ruleToRepeater returns null', () => {
+      expect(ruleToRepeater(bad)).toBeNull();
+    });
+  });
+});

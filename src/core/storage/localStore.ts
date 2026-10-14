@@ -6,7 +6,7 @@
  * structured-cloneable; they are cloned on the way in and out in both backends.
  */
 import type { DBSchema, IDBPDatabase } from 'idb';
-import { closeCachedDb, inTransaction, openCachedDb } from './idb';
+import { closeCachedDb, inTransaction, openCachedDb, withConnection } from './idb';
 
 export const LOCAL_DB = 'brulion-local';
 const STORE = 'kv';
@@ -48,23 +48,28 @@ function prefixRange(ns: string, prefix: string): IDBKeyRange {
   return upper === null ? IDBKeyRange.bound([ns, prefix], [ns, []]) : IDBKeyRange.bound([ns, prefix], [ns, upper], false, true);
 }
 
+/**
+ * IndexedDB backend. The connection is looked up for every operation (never kept), so a
+ * connection the browser closed or lost is replaced instead of failing every later call.
+ */
 class IdbBackend implements KvBackend {
-  constructor(
-    private readonly db: IDBPDatabase<LocalSchema>,
-    private readonly ns: string,
-  ) {}
+  constructor(private readonly ns: string) {}
+
+  private db<T>(fn: (db: IDBPDatabase<LocalSchema>) => Promise<T>): Promise<T> {
+    return withConnection(LOCAL_DB, openLocalDb, fn);
+  }
 
   get(key: string): Promise<unknown> {
-    return this.db.get(STORE, [this.ns, key]);
+    return this.db((db) => db.get(STORE, [this.ns, key]));
   }
 
   getMany(keys: readonly string[]): Promise<unknown[]> {
-    return inTransaction(this.db, [STORE], 'readonly', (tx) => Promise.all(keys.map((k) => tx.objectStore(STORE).get([this.ns, k]))));
+    return this.db((db) => inTransaction(db, [STORE], 'readonly', (tx) => Promise.all(keys.map((k) => tx.objectStore(STORE).get([this.ns, k])))));
   }
 
   async write(puts: readonly (readonly [string, unknown])[], deletes: readonly string[]): Promise<void> {
     if (puts.length === 0 && deletes.length === 0) return;
-    await inTransaction(this.db, [STORE], 'readwrite', async (tx) => {
+    await this.db((db) => inTransaction(db, [STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(STORE);
       const requests: Promise<unknown>[] = [];
       try {
@@ -77,11 +82,11 @@ class IdbBackend implements KvBackend {
         throw e;
       }
       await Promise.all(requests);
-    });
+    }));
   }
 
   async entries(prefix: string): Promise<[string, unknown][]> {
-    return inTransaction(this.db, [STORE], 'readonly', async (tx) => {
+    return this.db((db) => inTransaction(db, [STORE], 'readonly', async (tx) => {
       const range = prefixRange(this.ns, prefix);
       const store = tx.objectStore(STORE);
       const [keys, values] = await Promise.all([store.getAllKeys(range), store.getAll(range)]);
@@ -90,26 +95,28 @@ class IdbBackend implements KvBackend {
         if (k[1].startsWith(prefix)) out.push([k[1], values[i]]);
       });
       return out;
-    });
+    }));
   }
 
   async keys(prefix: string): Promise<string[]> {
-    const keys = await this.db.getAllKeys(STORE, prefixRange(this.ns, prefix));
+    const keys = await this.db((db) => db.getAllKeys(STORE, prefixRange(this.ns, prefix)));
     return keys.map((k) => k[1]).filter((k) => k.startsWith(prefix));
   }
 
   update(key: string, fn: (old: unknown) => unknown): Promise<unknown> {
-    return inTransaction(this.db, [STORE], 'readwrite', async (tx) => {
-      const store = tx.objectStore(STORE);
-      const next = fn(await store.get([this.ns, key]));
-      if (next === undefined) await store.delete([this.ns, key]);
-      else await store.put(next, [this.ns, key]);
-      return next;
-    });
+    return this.db((db) =>
+      inTransaction(db, [STORE], 'readwrite', async (tx) => {
+        const store = tx.objectStore(STORE);
+        const next = fn(await store.get([this.ns, key]));
+        if (next === undefined) await store.delete([this.ns, key]);
+        else await store.put(next, [this.ns, key]);
+        return next;
+      }),
+    );
   }
 
   async clear(): Promise<void> {
-    await this.db.delete(STORE, prefixRange(this.ns, ''));
+    await this.db((db) => db.delete(STORE, prefixRange(this.ns, '')));
   }
 }
 
@@ -167,8 +174,9 @@ export class LocalStore {
 
   /** Open the IndexedDB-backed store for `namespace`. Rejects when IndexedDB is unavailable. */
   static async open(namespace: string): Promise<LocalStore> {
-    const db = await openLocalDb();
-    return new LocalStore(namespace, new IdbBackend(db, namespace));
+    // Opened once here so that a missing/blocked IndexedDB rejects now, not on first use.
+    await openLocalDb();
+    return new LocalStore(namespace, new IdbBackend(namespace));
   }
 
   /** A fresh in-memory store (tests, fallbacks). Each call returns an independent store. */

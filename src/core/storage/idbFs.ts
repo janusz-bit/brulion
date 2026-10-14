@@ -5,16 +5,17 @@
  *  - `files`: `{ vaultId, path, kind, size, mtime }` — metadata only, so `list()` stays cheap
  *    even with large attachments;
  *  - `data`:  `{ vaultId, path, data: string | Uint8Array }` — file contents.
- * Directories are explicit records (from `mkdir`) or implied by the files below them.
+ * Directories are explicit records (from `mkdir`) or implied by the files below them. Like on
+ * disk, a folder stays when its last entry is removed or moved away (it becomes explicit).
  * Every operation runs in a single transaction, so writes, recursive renames and removes are
  * atomic. Changes are broadcast to other tabs (BroadcastChannel) and reported by `watch()`.
  */
 import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
-import { normalizePath } from '../paths';
+import { dirname, normalizePath } from '../paths';
 import type { FileStat, FileSystemAdapter, FsEvent, VaultPath } from '../types';
 import { FsError, requireEntryPath } from './errors';
 import { decodeUtf8, encodeUtf8, utf8Length } from './hash';
-import { closeCachedDb, inTransaction, openCachedDb } from './idb';
+import { closeCachedDb, inTransaction, openCachedDb, withConnection } from './idb';
 import { ancestors, isStrictlyWithin, rebase } from './pathUtil';
 
 export const IDB_FS_DB = 'brulion-fs';
@@ -48,6 +49,11 @@ function openFsDb(): Promise<IDBPDatabase<FsSchema>> {
     if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: ['vaultId', 'path'] });
     if (!db.objectStoreNames.contains('data')) db.createObjectStore('data', { keyPath: ['vaultId', 'path'] });
   });
+}
+
+/** Run `fn` on the shared connection, reopening it once if the browser closed or lost it. */
+function withFsDb<T>(fn: (db: IDBPDatabase<FsSchema>) => Promise<T>): Promise<T> {
+  return withConnection(IDB_FS_DB, openFsDb, fn);
 }
 
 /** Key range covering every path of a vault: [id, ""] .. [id, []] (arrays sort after strings). */
@@ -106,10 +112,9 @@ export class IdbFs implements FileSystemAdapter {
 
   /** Delete every file of a vault from IndexedDB. */
   static async deleteVault(vaultId: string): Promise<void> {
-    const db = await openFsDb();
-    await inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
+    await withFsDb((db) => inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
       await Promise.all([tx.objectStore('files').delete(vaultRange(vaultId)), tx.objectStore('data').delete(vaultRange(vaultId))]);
-    });
+    }));
   }
 
   /** Close the shared database connection (tests). */
@@ -122,8 +127,7 @@ export class IdbFs implements FileSystemAdapter {
   // -------------------------------------------------------------------------
 
   async list(): Promise<FileStat[]> {
-    const db = await openFsDb();
-    const records = await db.getAll('files', vaultRange(this.vaultId));
+    const records = await withFsDb((db) => db.getAll('files', vaultRange(this.vaultId)));
     const out = new Map<VaultPath, FileStat>();
     for (const r of records) out.set(r.path, toStat(r));
     // Implied directories: every ancestor of a stored entry; mtime = newest descendant.
@@ -140,8 +144,7 @@ export class IdbFs implements FileSystemAdapter {
   async stat(path: VaultPath): Promise<FileStat | null> {
     const p = normalizePath(path);
     if (p === '') return { path: '', kind: 'dir', size: 0, mtime: 0 };
-    const db = await openFsDb();
-    return inTransaction(db, ['files'], 'readonly', (tx) => this.statIn(tx, p));
+    return withFsDb((db) => inTransaction(db, ['files'], 'readonly', (tx) => this.statIn(tx, p)));
   }
 
   async readText(path: VaultPath): Promise<string> {
@@ -164,12 +167,12 @@ export class IdbFs implements FileSystemAdapter {
 
   async remove(path: VaultPath): Promise<void> {
     const p = requireEntryPath(path);
-    const db = await openFsDb();
-    const removed = await inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
+    const removed = await withFsDb((db) => inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
       const files = tx.objectStore('files');
       const keys = [...(await files.getAllKeys(subtreeRange(this.vaultId, p)))];
       const own = await files.getKey([this.vaultId, p]);
       if (own) keys.push(own);
+      if (keys.length > 0) await this.keepParent(tx, p);
       await Promise.all([
         files.delete([this.vaultId, p]),
         files.delete(subtreeRange(this.vaultId, p)),
@@ -177,7 +180,7 @@ export class IdbFs implements FileSystemAdapter {
         tx.objectStore('data').delete(subtreeRange(this.vaultId, p)),
       ]);
       return keys.map((k) => k[1]);
-    });
+    }));
     this.post(removed.map((r) => ({ type: 'delete', path: r })));
   }
 
@@ -185,8 +188,7 @@ export class IdbFs implements FileSystemAdapter {
     const a = requireEntryPath(from);
     const b = requireEntryPath(to);
     if (isStrictlyWithin(b, a)) throw new FsError('EINVAL', b, 'Cannot move a directory into itself');
-    const db = await openFsDb();
-    const moved = await inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
+    const moved = await withFsDb((db) => inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
       const src = await this.statIn(tx, a);
       if (!src) throw new FsError('ENOENT', a);
       if (a === b) return false;
@@ -198,24 +200,24 @@ export class IdbFs implements FileSystemAdapter {
         await this.deleteIn(tx, b);
       }
       await this.assertParentsAreDirs(tx, b);
+      await this.keepParent(tx, a);
       await this.moveIn(tx, a, b);
       return true;
-    });
+    }));
     if (moved) this.post([{ type: 'rename', path: b, oldPath: a }]);
   }
 
   async mkdir(path: VaultPath): Promise<void> {
     const p = normalizePath(path);
     if (p === '') return;
-    const db = await openFsDb();
-    const created = await inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
+    const created = await withFsDb((db) => inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
       const existing = await this.statIn(tx, p);
       if (existing?.kind === 'file') throw new FsError('EEXIST', p);
       await this.assertParentsAreDirs(tx, p);
       if (existing) return false;
       await tx.objectStore('files').put({ vaultId: this.vaultId, path: p, kind: 'dir', size: 0, mtime: this.now() });
       return true;
-    });
+    }));
     if (created) this.post([{ type: 'create', path: p }]);
   }
 
@@ -269,26 +271,24 @@ export class IdbFs implements FileSystemAdapter {
 
   private async readData(path: VaultPath): Promise<string | Uint8Array> {
     const p = requireEntryPath(path);
-    const db = await openFsDb();
-    return inTransaction(db, ['files', 'data'], 'readonly', async (tx) => {
+    return withFsDb((db) => inTransaction(db, ['files', 'data'], 'readonly', async (tx) => {
       const rec = await tx.objectStore('data').get([this.vaultId, p]);
       if (rec) return rec.data;
       const st = await this.statIn(tx, p);
       throw new FsError(st?.kind === 'dir' ? 'EISDIR' : 'ENOENT', p);
-    });
+    }));
   }
 
   private async writeData(path: VaultPath, data: string | Uint8Array, size: number): Promise<FileStat> {
     const p = requireEntryPath(path);
-    const db = await openFsDb();
-    const { stat, created } = await inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
+    const { stat, created } = await withFsDb((db) => inTransaction(db, ['files', 'data'], 'readwrite', async (tx) => {
       const existing = await this.statIn(tx, p);
       if (existing?.kind === 'dir') throw new FsError('EISDIR', p);
       await this.assertParentsAreDirs(tx, p);
       const meta: FileMetaRecord = { vaultId: this.vaultId, path: p, kind: 'file', size, mtime: this.now() };
       await Promise.all([tx.objectStore('files').put(meta), tx.objectStore('data').put({ vaultId: this.vaultId, path: p, data })]);
       return { stat: toStat(meta), created: !existing };
-    });
+    }));
     this.post([{ type: created ? 'create' : 'modify', path: p }]);
     return stat;
   }
@@ -300,6 +300,18 @@ export class IdbFs implements FileSystemAdapter {
     const children = await files.getAll(subtreeRange(this.vaultId, p));
     if (children.length === 0) return null;
     return { path: p, kind: 'dir', size: 0, mtime: newestMtime(children) };
+  }
+
+  /**
+   * Make the parent folder of `p` an explicit record (if it is only implied), so it does not
+   * vanish when `p` is removed or moved away.
+   */
+  private async keepParent(tx: RwTx, p: VaultPath): Promise<void> {
+    const parent = dirname(p);
+    if (parent === '') return;
+    const files = tx.objectStore('files');
+    if (await files.getKey([this.vaultId, parent])) return;
+    await files.put({ vaultId: this.vaultId, path: parent, kind: 'dir', size: 0, mtime: this.now() });
   }
 
   private async hasChildren(tx: AnyTx, p: VaultPath): Promise<boolean> {

@@ -616,3 +616,159 @@ describe('review regressions', () => {
     expect(performance.now() - t0).toBeLessThan(2000);
   });
 });
+
+describe('second review regressions', () => {
+  it.each([
+    'Fix the 2nd bug',
+    'Read the 3rd chapter',
+    'the 21st century',
+    'Meeting on the 3rd floor',
+    'Zadanie 2-go stopnia',
+    'Mieszkanie na 2-go piętrze',
+  ])('ordinal adjectives before a noun are not dates: %j', (input) => {
+    expect(when(input)).toBeNull();
+  });
+  it.each([
+    ['the 15th', '2026-10-15', 'the 15th'],
+    ['Pay rent on the 1st', '2026-11-01', 'on the 1st'],
+    ['Pay rent on the 1st.', '2026-11-01', 'on the 1st'],
+    ['Finish the report by the 15th', '2026-10-15', 'by the 15th'],
+    ['Keep it until the 20th', '2026-10-20', 'until the 20th'],
+    ['the 15th at 6pm', '2026-10-15 18:00', 'the 15th at 6pm'],
+    ['Call on the 20th and email Tom', '2026-10-20', 'on the 20th'],
+    ['the 1st of every month', '2026-11-01', 'the 1st'],
+    ['Spotkanie 15-go w biurze', '2026-10-15', '15-go'],
+    ['do 20-tego zapłacić czynsz', '2026-10-20', 'do 20-tego'],
+    ['czynsz do 20-tego', '2026-10-20', 'do 20-tego'],
+    ['20-go', '2026-10-20', '20-go'],
+    ['Czynsz płatny do 10-go każdego miesiąca', '2026-11-10', 'do 10-go'],
+    ['na 15-go mamy spotkanie', '2026-10-15', 'na 15-go'],
+  ])('day-of-month phrases still work: %j', (input, expected, m) => {
+    expect(when(input)).toBe(expected);
+    expect(matched(input)).toBe(m);
+  });
+  it('strips the deadline preposition together with "the Nth"', () => {
+    const input = 'Finish the report by the 15th';
+    expect(stripNaturalDate(input, parseNaturalDate(input, NOW)!)).toBe('Finish the report');
+  });
+
+  it.each([
+    ['tonight at 12', '2026-10-15 00:00'],
+    ['this evening at 12', '2026-10-15 00:00'],
+    ['wieczorem o 12', '2026-10-15 00:00'],
+    ['dziś wieczorem o 12', '2026-10-15 00:00'],
+    ['12 wieczorem', '2026-10-15 00:00'],
+    ['jutro wieczorem o 12', '2026-10-16 00:00'],
+    // Unchanged neighbours.
+    ['tonight at 11', '2026-10-14 23:00'],
+    ['tonight at 12pm', '2026-10-14 12:00'],
+    ['po południu o 12', '2026-10-14 12:00'],
+  ])('12 with an evening word is midnight, not noon: %j', (input, expected) => {
+    expect(when(input)).toBe(expected);
+  });
+
+  it.each(['za dnia', 'Wrócę do domu za dnia', 'za tygodnia', 'za roku', 'za godziny', 'za minuty'])(
+    'a genitive unit after "za" is not an offset: %j',
+    (input) => {
+      expect(when(input)).toBeNull();
+    },
+  );
+  it.each([
+    ['za dzień', '2026-10-15'],
+    ['za tydzień', '2026-10-21'],
+    ['za rok', '2027-10-14'],
+    ['za godzinę', '2026-10-14 11:00'],
+    ['za minutę', '2026-10-14 10:01'],
+    ['za kwadrans', '2026-10-14 10:15'],
+    ['w ciągu tygodnia', '2026-10-21'],
+    ['w ciągu godziny', '2026-10-14 11:00'],
+    ['w ciągu kwadransa', '2026-10-14 10:15'],
+    ['tydzień temu', '2026-10-07'],
+    ['rok temu', '2025-10-14'],
+  ])('bare units keep working in the right grammatical case: %j', (input, expected) => {
+    expect(when(input)).toBe(expected);
+    expect(matched(input)).toBe(input);
+  });
+
+  it.each([
+    ['o 9h30', '2026-10-15 09:30', 'o 9h30'],
+    ['jutro o 18h15', '2026-10-15 18:15', 'jutro o 18h15'],
+    ['o 18h', '2026-10-14 18:00', 'o 18h'],
+  ])('reads "9h30" as hours and minutes instead of leaving digits behind: %j', (input, expected, m) => {
+    expect(when(input)).toBe(expected);
+    expect(matched(input)).toBe(m);
+  });
+  it('does not match half of "o 9h3" / "o 9h305"', () => {
+    expect(when('o 9h3')).toBeNull();
+    expect(when('o 9h305')).toBeNull();
+  });
+
+  it.each([
+    ['Kupić mleko (jutro)', 'Kupić mleko'],
+    ['Kupić (jutro) mleko', 'Kupić mleko'],
+    ['Zadzwoń (w piątek o 18) do mamy', 'Zadzwoń do mamy'],
+    ['(jutro) Kupić mleko', 'Kupić mleko'],
+    ['Kupić mleko [jutro]', 'Kupić mleko'],
+    ['Kupić mleko „jutro”', 'Kupić mleko'],
+    ['Termin "jutro" mija', 'Termin mija'],
+    ['(jutro)', ''],
+    // Brackets with other content stay.
+    ['Kupić mleko (jutro, 2 l)', 'Kupić mleko (2 l)'],
+    ['Zakupy (mleko) jutro', 'Zakupy (mleko)'],
+  ])('stripNaturalDate removes brackets/quotes that only wrapped the phrase: %j', (input, expected) => {
+    const r = parseNaturalDate(input, NOW);
+    expect(r).not.toBeNull();
+    expect(stripNaturalDate(input, r!)).toBe(expected);
+  });
+});
+
+describe('second review — protected Markdown/URL spans', () => {
+  it.each([
+    ['Przeczytać https://blog.example.com/2026/10/15/wpis', null],
+    ['Read https://news.com/tomorrow-show later', null],
+    ['Obejrzeć https://yt.com/watch?v=abc&t=1:30', null],
+    ['www.example.com/2026/10/15', null],
+    ['Notatka do [[2026-10-15]]', null],
+    ['Zobacz [[Spotkanie w piątek]]', null],
+    ['Zobacz ![[2026-10-15]]', null],
+    ['Link [jutro](https://x.pl/2026-10-15)', null],
+    ['Kod `o 9`', null],
+    ['Mail jan.jutro@x.pl', null],
+    ['Tag #jutro', null],
+    ['Tag #2026-10-15', null],
+    ['Tag #[[w piątek]]', null],
+    ['Zadanie 📅 2026-10-15', null],
+    ['Zadanie ⏰ 2026-10-15 09:00', null],
+    ['Zadanie ⏰! 2026-10-15 06:30', null],
+    ['Zadanie (@2026-10-15 09:00)', null],
+  ])('never matches inside a URL, link, code span, tag or date token: %j', (input, expected) => {
+    expect(when(input)).toBe(expected);
+  });
+  it.each([
+    ['Przeczytać https://blog.example.com/2026/10/15/wpis jutro', 'jutro', 'Przeczytać https://blog.example.com/2026/10/15/wpis'],
+    ['Sprawdź https://x.pl/a?d=15.10 jutro o 9', 'jutro o 9', 'Sprawdź https://x.pl/a?d=15.10'],
+    ['[[Projekty/Dom]] w piątek', 'w piątek', '[[Projekty/Dom]]'],
+    ['Zobacz [[Spotkanie w piątek]] jutro', 'jutro', 'Zobacz [[Spotkanie w piątek]]'],
+    ['Kod `o 9` jutro', 'jutro', 'Kod `o 9`'],
+    ['((abc123)) jutro', 'jutro', '((abc123))'],
+    ['#praca jutro o 9', 'jutro o 9', '#praca'],
+    ['Zadanie 📅 2026-10-15 przypomnij jutro', 'jutro', 'Zadanie 📅 2026-10-15 przypomnij'],
+  ])('finds phrases next to protected spans and strips only them: %j', (input, m, rest) => {
+    const r = parseNaturalDate(input, NOW);
+    expect(r?.matched).toBe(m);
+    expect(stripNaturalDate(input, r!)).toBe(rest);
+  });
+  it('a date right after a URL is still found', () => {
+    expect(when('https://x.pl 15.10')).toBe('2026-10-15');
+  });
+  it('stays linear on many unclosed brackets, backticks and @ signs', () => {
+    const t0 = performance.now();
+    expect(findNaturalDates(`${'[['.repeat(20_000)} jutro`, NOW)).toHaveLength(1);
+    expect(findNaturalDates(`${'[a'.repeat(20_000)} jutro`, NOW)).toHaveLength(1);
+    expect(findNaturalDates(`${'`a'.repeat(20_000)}`, NOW)).toHaveLength(0);
+    expect(findNaturalDates(`${'a@'.repeat(20_000)} jutro`, NOW)).toHaveLength(1);
+    expect(findNaturalDates(`${'a'.repeat(40_000)} jutro`, NOW)).toHaveLength(1);
+    expect(findNaturalDates(`${'#a '.repeat(20_000)} jutro`, NOW)).toHaveLength(1);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  }, 60_000);
+});

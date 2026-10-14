@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { deleteDirectoryHandle, listDirectoryHandles, loadDirectoryHandle, saveDirectoryHandle } from './handles';
+import { deleteDirectoryHandle, HANDLES_DB, listDirectoryHandles, loadDirectoryHandle, saveDirectoryHandle } from './handles';
+import { openCachedDb } from './idb';
 
 // Real FileSystemDirectoryHandles are structured-cloneable host objects; in tests a plain
 // object stands in for one (fake-indexeddb clones it with structuredClone).
@@ -25,5 +26,14 @@ describe('directory handle persistence', () => {
     await deleteDirectoryHandle('h-a');
     expect(await loadDirectoryHandle('h-a')).toBeNull();
     expect(await loadDirectoryHandle('h-b')).toMatchObject({ name: 'Bąk' });
+  });
+});
+
+describe('directory handle persistence after a lost connection', () => {
+  it('reopens the handles database', async () => {
+    const handle = { kind: 'directory', name: 'Zażółć' } as unknown as FileSystemDirectoryHandle;
+    await saveDirectoryHandle('po-utracie', handle);
+    (await openCachedDb(HANDLES_DB, 1, () => {})).close();
+    expect(await loadDirectoryHandle('po-utracie')).toEqual(handle);
   });
 });

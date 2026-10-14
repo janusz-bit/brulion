@@ -3,7 +3,7 @@ import { DEFAULT_VAULT_CONFIG, type FsEvent } from '../types';
 import { makeClock } from './adapterContract.testutil';
 import { CONFIG_PATH } from './config';
 import { isFsError } from './errors';
-import { createFakeRoot, fakeWrite } from './fakeFsAccess.testutil';
+import { createFakeRoot, fakeWrite, type FakeDirectoryHandle } from './fakeFsAccess.testutil';
 import { FsAccessFs } from './fsAccessFs';
 import { History } from './history';
 import { IdbFs } from './idbFs';
@@ -1180,5 +1180,220 @@ describe('Vault.writeBinary on text files', () => {
     const spy = vi.spyOn(fs, 'writeBinary');
     await vault.writeBinary('a.md', new TextEncoder().encode('ćma'), 'sync');
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('Vault: notes stored with NFD names (FsAccessFs, files copied from macOS)', () => {
+  it('opens, edits and renames them without creating NFC duplicates', async () => {
+    const clock = makeClock(START);
+    const root = createFakeRoot('Notatki', { now: clock.now });
+    await fakeWrite(root, 'Spotkania/Żółta kartka.md'.normalize('NFD'), '- pierwsza wersja');
+    const fs = new FsAccessFs(root, { pollInterval: 60_000 });
+    const history = new History(LocalStore.memory('nfd-h'), { now: clock.now });
+    const vault = new Vault(fs, { id: 'nfd', name: 'Notatki', store: LocalStore.memory('nfd'), history, now: clock.now });
+    await vault.open();
+    expect(vault.files().map((f) => f.path)).toEqual(['Spotkania/Żółta kartka.md']);
+    expect(await vault.read('Spotkania/Żółta kartka.md')).toBe('- pierwsza wersja');
+    clock.advance(1000);
+    await vault.write('Spotkania/Żółta kartka.md', '- druga wersja');
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Spotkania', 'Spotkania/Żółta kartka.md']);
+    expect(await fs.readText('Spotkania/Żółta kartka.md')).toBe('- druga wersja');
+    const versions = await history.list('Spotkania/Żółta kartka.md');
+    expect(await history.get(versions[0]!.id)).toBe('- pierwsza wersja');
+    await vault.rename('Spotkania/Żółta kartka.md', 'Spotkania/Zielona kartka.md');
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Spotkania', 'Spotkania/Zielona kartka.md']);
+    await vault.close();
+  });
+});
+
+describe('Vault: watcher batches with many new folders', () => {
+  it('lists the backend at most once per batch, not once per new folder', async () => {
+    const { vault, fs, all } = setup();
+    await vault.open();
+    vault.startWatching();
+    for (let i = 0; i < 20; i++) fs.externalWrite(`Folder ${i}/Notatka ż ${i}.md`, `treść ${i}`, { silent: true });
+    const list = vi.spyOn(fs, 'list');
+    // e.g. Syncthing's first sync: the native watcher reports only the new top folders
+    fs.externalEvents(Array.from({ length: 20 }, (_, i): FsEvent => ({ type: 'create', path: `Folder ${i}` })));
+    await vault.idle();
+    expect(list.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(vault.files()).toHaveLength(20);
+    expect(all()).toHaveLength(20);
+    expect(all().every((c) => c.type === 'create' && c.source === 'external')).toBe(true);
+  });
+});
+
+describe('Vault.delete: trash paths blocked by trashed files', () => {
+  it('moves a file whose trash folder name is taken by a trashed file into a stamped folder, and restores it', async () => {
+    const { vault, fs, clock } = setup({ files: { Zakupy: 'plik bez rozszerzenia' } });
+    await vault.open();
+    await vault.delete('Zakupy');
+    expect(Object.keys(fs.dump())).toEqual(['.trash/Zakupy']);
+    clock.advance(1000);
+    await vault.write('Zakupy/Lista ż.md', '- masło');
+    await vault.delete('Zakupy/Lista ż.md');
+    const stamp = trashStamp(clock.now());
+    expect(Object.keys(fs.dump()).sort()).toEqual(['.trash/Zakupy', `.trash/Zakupy (${stamp})/Lista ż.md`]);
+    expect(vault.files()).toEqual([]);
+    expect(await vault.restore(`.trash/Zakupy (${stamp})/Lista ż.md`)).toBe('Zakupy/Lista ż.md');
+    expect(await vault.read('Zakupy/Lista ż.md')).toBe('- masło');
+  });
+
+  it('works the same for folders and without trash metadata (path-based restore)', async () => {
+    const { vault, fs, clock, store } = setup({ files: { Projekt: 'plik' } });
+    await vault.open();
+    await vault.delete('Projekt');
+    clock.advance(1000);
+    await vault.write('Projekt/Etap 1/zadania.md', '- [ ] ćwiczenie');
+    await vault.delete('Projekt/Etap 1');
+    const stamp = trashStamp(clock.now());
+    expect(Object.keys(fs.dump()).sort()).toEqual(['.trash/Projekt', `.trash/Projekt (${stamp})/Etap 1/zadania.md`]);
+    await store.clear();
+    expect(await vault.restore(`.trash/Projekt (${stamp})/Etap 1/zadania.md`)).toBe('Projekt/Etap 1/zadania.md');
+  });
+});
+
+describe('Vault.restore: original folder replaced by a file', () => {
+  it('restores into "<folder> 2/" instead of failing with ENOTDIR', async () => {
+    const { vault, fs } = setup({ files: { 'Przepisy/Żurek.md': '- zakwas' } });
+    await vault.open();
+    await vault.delete('Przepisy');
+    await vault.write('Przepisy', 'teraz to plik');
+    expect(await vault.restore('.trash/Przepisy/Żurek.md')).toBe('Przepisy 2/Żurek.md');
+    expect(fs.dump()).toEqual({ Przepisy: 'teraz to plik', 'Przepisy 2/Żurek.md': '- zakwas' });
+    expect(vault.files().map((f) => f.path)).toEqual(['Przepisy', 'Przepisy 2/Żurek.md']);
+  });
+});
+
+describe('Vault: folders removed by other programs', () => {
+  it('drops a folder deleted externally from folders() (polling reports only its files)', async () => {
+    const clock = makeClock(START);
+    const root = createFakeRoot('Notatki', { now: clock.now });
+    await fakeWrite(root, 'Projekt/Etap/a.md', 'a');
+    await fakeWrite(root, 'Projekt/b.md', 'b');
+    await fakeWrite(root, 'Inne/c.md', 'c');
+    const fs = new FsAccessFs(root, { pollInterval: 60_000 });
+    const vault = new Vault(fs, { id: 'gone', name: 'Notatki', store: LocalStore.memory('gone') });
+    await vault.open();
+    vault.startWatching();
+    await fs.checkNow();
+    await root.removeEntry('Projekt', { recursive: true });
+    // A folder emptied by another program but still on disk stays.
+    await (root.children.get('Inne') as FakeDirectoryHandle).removeEntry('c.md');
+    await fs.checkNow();
+    await vault.idle();
+    expect(vault.files()).toEqual([]);
+    expect(vault.folders().map((f) => f.path)).toEqual(['Inne']);
+    await vault.close();
+  });
+});
+
+describe('Vault.write: a path differing only in letter case on case-insensitive storage', () => {
+  async function ciVault() {
+    const clock = makeClock(START);
+    const root = createFakeRoot('Notatki', { now: clock.now, caseInsensitive: true });
+    await fakeWrite(root, 'Dziennik/2026-10-14.md', '- moje notatki');
+    const fs = new FsAccessFs(root, { pollInterval: 60_000 });
+    const history = new History(LocalStore.memory('ci-w-h'), { now: clock.now });
+    const vault = new Vault(fs, { id: 'ci-w', name: 'Notatki', store: LocalStore.memory('ci-w'), history, now: clock.now });
+    await vault.open();
+    const seen: VaultChange[] = [];
+    vault.onChange((c) => seen.push(...c));
+    return { root, fs, vault, history, seen, clock };
+  }
+
+  it('updates the stored note instead of tracking a phantom duplicate', async () => {
+    const { fs, vault, history, seen, clock } = await ciVault();
+    expect(await vault.read('Dziennik/2026-10-14.md')).toBe('- moje notatki');
+    clock.advance(1000);
+    await vault.write('dziennik/2026-10-14.md', '- zażółć');
+    expect(vault.files().map((f) => f.path)).toEqual(['Dziennik/2026-10-14.md']);
+    expect(vault.folders().map((f) => f.path)).toEqual(['Dziennik']);
+    expect(await vault.read('Dziennik/2026-10-14.md')).toBe('- zażółć');
+    expect(await fs.readText('Dziennik/2026-10-14.md')).toBe('- zażółć');
+    await vault.idle();
+    expect(short(seen)).toEqual(['modify:Dziennik/2026-10-14.md@user']);
+    const versions = await history.list('Dziennik/2026-10-14.md');
+    expect(await history.get(versions[0]!.id)).toBe('- moje notatki');
+  });
+
+  it('writeBinary takes the same path', async () => {
+    const { vault } = await ciVault();
+    await vault.writeBinary('DZIENNIK/2026-10-14.md', new TextEncoder().encode('- bajty'), 'sync');
+    expect(vault.files().map((f) => f.path)).toEqual(['Dziennik/2026-10-14.md']);
+    expect(await vault.read('Dziennik/2026-10-14.md')).toBe('- bajty');
+  });
+
+  it('a distinct file on a case-sensitive backend is still written as itself', async () => {
+    const { vault, fs, clock } = setup({ files: { 'Notatka.md': 'duża' } });
+    await vault.open();
+    clock.advance(1000);
+    fs.externalWrite('notatka.md', 'mała, inna', { silent: true });
+    await vault.write('notatka.md', 'mała, nowa');
+    expect(fs.dump()).toEqual({ 'Notatka.md': 'duża', 'notatka.md': 'mała, nowa' });
+    expect(vault.files().map((f) => f.path)).toEqual(['Notatka.md', 'notatka.md']);
+  });
+});
+
+describe('Vault: a folder replaced by a file of the same name (external)', () => {
+  it('reports the files that were inside as deleted and tracks the new file', async () => {
+    const { vault, fs, all, clock } = setup({ files: { 'Szkic/a.md': 'a', 'Szkic/b/ć.md': 'ć', 'inne.md': 'i' } });
+    await vault.open();
+    vault.startWatching();
+    clock.advance(1000);
+    fs.externalRemove('Szkic', { silent: true });
+    fs.externalWrite('Szkic', 'teraz plik', { silent: true });
+    fs.externalEvents([{ type: 'modify', path: 'Szkic' }]);
+    await vault.idle();
+    expect(vault.files().map((f) => f.path)).toEqual(['Szkic', 'inne.md']);
+    expect(vault.folders()).toEqual([]);
+    expect(short(all()).sort()).toEqual(['create:Szkic@external', 'delete:Szkic/a.md@external', 'delete:Szkic/b/ć.md@external']);
+  });
+});
+
+describe('Vault: a file replaced by a folder of the same name (external)', () => {
+  it('rescan reports the file as deleted (keeping its content in history) and the new files as created', async () => {
+    const { vault, fs, all, history, clock } = setup({ files: { Szkic: 'stary plik — zażółć', 'inne.md': 'i' } });
+    await vault.open();
+    expect(await vault.read('Szkic')).toBe('stary plik — zażółć');
+    clock.advance(1000);
+    fs.externalRemove('Szkic', { silent: true });
+    fs.externalWrite('Szkic/nowy.md', 'nowy', { silent: true });
+    const changes = await vault.rescan();
+    expect(short(changes).sort()).toEqual(['create:Szkic/nowy.md@external', 'delete:Szkic@external']);
+    await vault.idle();
+    expect(short(all()).sort()).toEqual(['create:Szkic/nowy.md@external', 'delete:Szkic@external']);
+    expect(vault.files().map((f) => f.path)).toEqual(['Szkic/nowy.md', 'inne.md']);
+    expect(vault.folders().map((f) => f.path)).toEqual(['Szkic']);
+    const versions = await history!.list('Szkic');
+    expect(versions.map((v) => v.reason)).toEqual(['external']);
+    expect(await history!.get(versions[0]!.id)).toBe('stary plik — zażółć');
+  });
+
+  it('the watcher does the same', async () => {
+    const { vault, fs, all, history, clock } = setup({ files: { Szkic: 'stary plik' } });
+    await vault.open();
+    await vault.read('Szkic');
+    vault.startWatching();
+    clock.advance(1000);
+    fs.externalRemove('Szkic', { silent: true });
+    fs.externalWrite('Szkic/nowy.md', 'nowy', { silent: true });
+    fs.externalEvents([{ type: 'create', path: 'Szkic' }]);
+    await vault.idle();
+    expect(short(all()).sort()).toEqual(['create:Szkic/nowy.md@external', 'delete:Szkic@external']);
+    expect((await history!.list('Szkic')).map((v) => v.reason)).toEqual(['external']);
+  });
+});
+
+describe('Vault: deleting the ignored .brulion folder', () => {
+  it('forgets the config file inside it and falls back to the default config', async () => {
+    const { vault, all } = setup({ files: { [CONFIG_PATH]: '{"journalsFolder":"Dziennik"}', 'a.md': 'a' } });
+    await vault.open();
+    expect(vault.config.journalsFolder).toBe('Dziennik');
+    await vault.delete('.brulion');
+    await vault.idle();
+    expect(vault.config).toEqual(DEFAULT_VAULT_CONFIG);
+    expect(vault.exists(CONFIG_PATH)).toBe(false);
+    expect(short(all())).toEqual([`delete:${CONFIG_PATH}@user`]);
   });
 });

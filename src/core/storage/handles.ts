@@ -5,7 +5,7 @@
  */
 import type { DBSchema, IDBPDatabase } from 'idb';
 import type { FsaDirectoryHandle, FsaPermissionDescriptor, FsaPermissionState } from './fsAccessFs';
-import { closeCachedDb, openCachedDb } from './idb';
+import { closeCachedDb, openCachedDb, withConnection } from './idb';
 
 export const HANDLES_DB = 'brulion-handles';
 const STORE = 'handles';
@@ -20,28 +20,29 @@ function openHandlesDb(): Promise<IDBPDatabase<HandlesSchema>> {
   });
 }
 
+/** Run `fn` on the shared connection, reopening it once if the browser closed or lost it. */
+function withHandlesDb<T>(fn: (db: IDBPDatabase<HandlesSchema>) => Promise<T>): Promise<T> {
+  return withConnection(HANDLES_DB, openHandlesDb, fn);
+}
+
 /** Store a directory handle under `id` (e.g. the vault's handleId). */
 export async function saveDirectoryHandle(id: string, h: FileSystemDirectoryHandle): Promise<void> {
-  const db = await openHandlesDb();
-  await db.put(STORE, h, id);
+  await withHandlesDb((db) => db.put(STORE, h, id));
 }
 
 /** Load a previously saved directory handle, or null. */
 export async function loadDirectoryHandle(id: string): Promise<FileSystemDirectoryHandle | null> {
-  const db = await openHandlesDb();
-  return (await db.get(STORE, id)) ?? null;
+  return (await withHandlesDb((db) => db.get(STORE, id))) ?? null;
 }
 
 /** Forget a saved directory handle. */
 export async function deleteDirectoryHandle(id: string): Promise<void> {
-  const db = await openHandlesDb();
-  await db.delete(STORE, id);
+  await withHandlesDb((db) => db.delete(STORE, id));
 }
 
 /** Ids of all saved directory handles. */
 export async function listDirectoryHandles(): Promise<string[]> {
-  const db = await openHandlesDb();
-  return (await db.getAllKeys(STORE)).map(String);
+  return (await withHandlesDb((db) => db.getAllKeys(STORE))).map(String);
 }
 
 /** Close the handles database connection (tests). */

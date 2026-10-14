@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LocalStore } from './localStore';
+import { openCachedDb } from './idb';
+import { LOCAL_DB, LocalStore } from './localStore';
 
 let n = 0;
 const ns = (): string => `test-${Date.now()}-${n++}`;
@@ -203,5 +204,38 @@ describe('LocalStore.setMany atomicity', () => {
       ['b', 2],
       ['c', 3],
     ]);
+  });
+});
+
+describe('LocalStore after the database connection is lost', () => {
+  it('reconnects when the browser closes the connection (e.g. Safari after backgrounding)', async () => {
+    const store = await LocalStore.open(ns());
+    await store.set('zażółć', { n: 1 });
+    await LocalStore.closeDatabase();
+    expect(await store.get('zażółć')).toEqual({ n: 1 });
+    await store.set('gęś', 2);
+    expect(await store.keys()).toEqual(['gęś', 'zażółć']);
+    await LocalStore.closeDatabase();
+    expect(await store.update<number>('gęś', (v) => (v ?? 0) + 1)).toBe(3);
+    expect(await store.entries()).toEqual([
+      ['gęś', 3],
+      ['zażółć', { n: 1 }],
+    ]);
+  });
+});
+
+describe('LocalStore when the browser drops the connection without notice', () => {
+  it('reopens the database and retries the operation once', async () => {
+    const store = await LocalStore.open(ns());
+    await store.set('ćma', 'nocna');
+    // The cached connection is closed behind the store's back (e.g. Safari "connection lost").
+    (await openCachedDb(LOCAL_DB, 1, () => {})).close();
+    expect(await store.get('ćma')).toBe('nocna');
+    (await openCachedDb(LOCAL_DB, 1, () => {})).close();
+    await store.setMany([
+      ['ćma', undefined],
+      ['ważka', 'dzienna'],
+    ]);
+    expect(await store.entries()).toEqual([['ważka', 'dzienna']]);
   });
 });

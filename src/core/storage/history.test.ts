@@ -259,3 +259,31 @@ describe('History shared between instances (two tabs) and concurrent maintenance
     expect((await history.list('a.md')).length).toBe(3);
   });
 });
+
+describe('History when the device clock is set back', () => {
+  it('keeps taking snapshots and lists them in the order they were taken', async () => {
+    const { clock, history } = setup();
+    await history.snapshot('Dziennik/środa.md', 'wersja 1', 'user');
+    clock.advance(-DAY); // clock corrected (NTP, manual change)
+    await history.snapshot('Dziennik/środa.md', 'wersja 2', 'user');
+    clock.advance(10 * MIN);
+    await history.snapshot('Dziennik/środa.md', 'wersja 3', 'user');
+    const list = await history.list('Dziennik/środa.md');
+    expect(await Promise.all(list.map((e) => history.get(e.id)))).toEqual(['wersja 3', 'wersja 2', 'wersja 1']);
+  });
+
+  it('prune does not drop the newest snapshots because of their (earlier) timestamps', async () => {
+    const { clock, history } = setup({ minKeep: 2 });
+    for (let i = 1; i <= 3; i++) {
+      await history.snapshot('a.md', `stara ${i}`, 'sync');
+      clock.advance(MIN);
+    }
+    clock.advance(-200 * DAY); // e.g. a device that booted without a real-time clock
+    await history.snapshot('a.md', 'nowa', 'sync');
+    clock.advance(200 * DAY);
+    await history.prune();
+    const list = await history.list('a.md');
+    expect(await history.get(list[0]!.id)).toBe('nowa');
+    expect(list).toHaveLength(4);
+  });
+});

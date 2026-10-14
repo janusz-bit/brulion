@@ -80,3 +80,15 @@ describe('formatDateHuman — review regressions', () => {
     expect(formatDateHuman('2026-10-16T09:00', 'en', bad)).toBe('Oct 16, 2026 09:00');
   });
 });
+
+describe('formatDateShort — second review regressions', () => {
+  it('returns malformed input unchanged instead of "0  NaN"', () => {
+    expect(formatDateShort('bad', 'pl', 2026)).toBe('bad');
+    expect(formatDateShort('', 'en')).toBe('');
+    expect(formatDateShort('2026-02-30', 'pl', 2026)).toBe('2026-02-30');
+  });
+  it('accepts a date-time and formats its date (Polish diacritics kept)', () => {
+    expect(formatDateShort('2026-10-14T09:00', 'pl', 2026)).toBe('śr 14 paź');
+    expect(formatDateShort('2026-10-18 09:00', 'pl', 2026)).toBe('nd 18 paź');
+  });
+});

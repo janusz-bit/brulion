@@ -34,6 +34,45 @@ export function openCachedDb<S extends DBSchema>(name: string, version: number, 
   return promise;
 }
 
+/** True for errors meaning "this connection cannot be used any more" (closed, or lost by the browser). */
+function isConnectionGone(e: unknown): boolean {
+  if (typeof e !== 'object' || e === null) return false;
+  const { name, message } = e as { name?: unknown; message?: unknown };
+  if (name === 'InvalidStateError') return true;
+  // Safari: "UnknownError: Connection to Indexed Database server lost. Refresh the page to try again".
+  return name === 'UnknownError' && typeof message === 'string' && /connection/i.test(message);
+}
+
+/** Forget the cached connection of `name` if it is still `db` (a newer one is kept). */
+async function evictIfCurrent(name: string, db: unknown): Promise<void> {
+  const cached = connections.get(name);
+  if (cached && (await cached.catch(() => null)) === db) {
+    connections.delete(name);
+    (db as { close(): void }).close();
+  }
+}
+
+/**
+ * Run `fn` with the cached connection of `name` (opened by `open`). When that connection turns
+ * out to be closed or lost (browsers drop connections, e.g. Safari while a PWA is in the
+ * background), it is evicted and `fn` runs once more on a fresh connection. A transaction that
+ * failed this way never committed, so the retry cannot apply anything twice.
+ */
+export async function withConnection<S extends DBSchema, T>(
+  name: string,
+  open: () => Promise<IDBPDatabase<S>>,
+  fn: (db: IDBPDatabase<S>) => Promise<T>,
+): Promise<T> {
+  const db = await open();
+  try {
+    return await fn(db);
+  } catch (e) {
+    if (!isConnectionGone(e)) throw e;
+    await evictIfCurrent(name, db);
+    return fn(await open());
+  }
+}
+
 /** Close and forget a cached connection (tests, deleting databases). */
 export async function closeCachedDb(name: string): Promise<void> {
   const cached = connections.get(name);

@@ -7,7 +7,8 @@
  *   overwriting it checks (mtime, size) on disk, so an external change the watcher has not
  *   reported yet is taken in (reported + kept in History) instead of silently overwritten.
  * - Deletes go to `.trash/` (restorable). Renames work for files and whole folders; case-only
- *   renames work on case-insensitive backends and never replace a distinct file.
+ *   renames work on case-insensitive backends and never replace a distinct file. On such
+ *   backends a write to "notatka.md" updates the known "Notatka.md" (no phantom duplicate).
  * - External changes (Syncthing, Nextcloud client, other editors, other tabs) arrive through
  *   `fs.watch` (`startWatching`) or `rescan()` and are emitted with source 'external'. An
  *   event for the vault root (`path: ''`) triggers a full rescan (watcher overflow).
@@ -187,6 +188,24 @@ class StatMap extends Map<VaultPath, FileStat> {
   }
 }
 
+/** Source of a backend listing; one batch of watcher events shares one listing. */
+type Lister = () => Promise<FileStat[]>;
+
+/** A Lister that lists at most once (a failed listing is retried on the next call). */
+function listOnce(list: Lister): Lister {
+  let pending: Promise<FileStat[]> | null = null;
+  return () => {
+    if (!pending) {
+      const p = list();
+      pending = p;
+      p.catch(() => {
+        if (pending === p) pending = null;
+      });
+    }
+    return pending;
+  };
+}
+
 /** Structural check for watcher events (they come from native code and other tabs). */
 function isWellFormedEvent(ev: unknown): ev is FsEvent {
   if (typeof ev !== 'object' || ev === null) return false;
@@ -319,13 +338,16 @@ export class Vault {
    */
   async write(path: VaultPath, content: string, source: ChangeSource = 'user'): Promise<void> {
     const p = requireEntryPath(path);
-    return this.locks.runWith(fileKeys(p), () => this.writeUnlocked(p, content, source));
+    const stored = await this.locks.runWith(fileKeys(p), () => this.writeUnlocked(p, content, source));
+    // Case-insensitive backend: `p` reaches a known file spelled differently; update that one.
+    if (stored !== null) await this.write(stored, content, source);
   }
 
   /** Write a binary file (attachments). No-op when the bytes are known to be unchanged. */
   async writeBinary(path: VaultPath, data: Uint8Array, source: ChangeSource = 'user'): Promise<void> {
     const p = requireEntryPath(path);
-    return this.locks.runWith(fileKeys(p), () => this.writeUnlocked(p, data, source));
+    const stored = await this.locks.runWith(fileKeys(p), () => this.writeUnlocked(p, data, source));
+    if (stored !== null) await this.writeBinary(stored, data, source);
   }
 
   /** Create a new file; if `path` is taken, " 2", " 3", ... is appended. Returns the path used. */
@@ -344,8 +366,8 @@ export class Vault {
             this.track(st);
             return false;
           }
-          await this.writeUnlocked(candidate, content, source);
-          return true;
+          // A case variant is never a candidate (freeCandidate), so this always writes.
+          return (await this.writeUnlocked(candidate, content, source)) === null;
         });
         if (created) return candidate;
         taken.add(key);
@@ -460,7 +482,8 @@ export class Vault {
     return this.locks.runWith(bothKeys(t, original), async () => {
       const st = await this.fs.stat(t);
       if (!st) throw new FsError('ENOENT', t);
-      const target = await this.freePath(original);
+      // A folder of the original path may meanwhile be a file: restore into "Folder 2/" then.
+      const target = await this.freePath(await this.avoidFileAncestors(original, 0, (n) => ` ${n + 1}`));
       const key = target.toLowerCase();
       this.reserved.add(key);
       try {
@@ -536,9 +559,11 @@ export class Vault {
       if (!known || known.mtime !== st.mtime || known.size !== st.size) candidates.add(p);
     }
     for (const p of this.fileStats.keys()) if (!files.has(p)) candidates.add(p);
-    for (const st of dirs.values()) if (!this.dirStats.has(st.path)) this.track(st);
+    // A known *file* that is now a folder is left to reconcile (it reports the file's deletion).
+    for (const st of dirs.values()) if (!this.dirStats.has(st.path) && !this.fileStats.has(st.path)) this.track(st);
+    const sameListing: Lister = () => Promise.resolve(listing);
     for (const p of candidates) {
-      changes.push(...(await this.locks.runWith(entryKeys(p), () => this.reconcile(p, 'external'))));
+      changes.push(...(await this.locks.runWith(entryKeys(p), () => this.reconcile(p, 'external', sameListing))));
     }
     this.dropVanishedDirs(new Set(dirs.keys()));
     this.emit(changes);
@@ -637,13 +662,17 @@ export class Vault {
     }
   }
 
-  private async writeUnlocked(p: VaultPath, data: string | Uint8Array, source: ChangeSource): Promise<void> {
+  /**
+   * Write `data` to `p` (caller holds the lock). Returns null when done, or, without writing,
+   * the known path `p` resolves to on a case-insensitive backend (see storedCaseVariant).
+   */
+  private async writeUnlocked(p: VaultPath, data: string | Uint8Array, source: ChangeSource): Promise<VaultPath | null> {
     const isText = typeof data === 'string';
     // Notes written as bytes (sync downloads, imports) still get their old text snapshotted.
     const textual = isText || isTextPath(p);
     const hash = contentHash(data);
     const known = this.fileStats.get(p);
-    if (known && this.hashes.get(p) === hash) return;
+    if (known && this.hashes.get(p) === hash) return null;
     if (known) {
       // The file may have changed behind our back (watcher event still pending, not watching,
       // another tab). Take that change in first, so it is reported and kept in History
@@ -656,7 +685,7 @@ export class Vault {
       }
       if (disk === null || (disk !== undefined && !sameStat(disk, known))) {
         this.emit(await this.reconcile(p, 'external'));
-        if (this.fileStats.has(p) && this.hashes.get(p) === hash) return;
+        if (this.fileStats.has(p) && this.hashes.get(p) === hash) return null;
       }
     }
     let existed = this.fileStats.has(p);
@@ -664,6 +693,8 @@ export class Vault {
       const st = await this.fs.stat(p);
       if (st?.kind === 'dir') throw new FsError('EISDIR', p);
       if (st) {
+        const stored = await this.storedCaseVariant(p, st);
+        if (stored !== null) return stored;
         this.track(st);
         existed = true;
       }
@@ -677,7 +708,7 @@ export class Vault {
       }
       if (prev !== undefined && contentHash(prev) === hash) {
         this.cacheText(p, prev);
-        return;
+        return null;
       }
     }
     if (textual && prev !== undefined) await this.snapshot(p, prev, source);
@@ -694,13 +725,31 @@ export class Vault {
     }
     if (!this.track({ ...st, path: p })) {
       this.hashes.delete(p);
-      return;
+      return null;
     }
     if (isText) {
       this.contents.set(p, data);
       if (p === CONFIG_PATH) this.applyConfig(data);
     }
     this.emit([{ type: existed ? 'modify' : 'create', path: p, source }]);
+    return null;
+  }
+
+  /**
+   * The known file that the unknown path `p` reaches on a case-insensitive backend (Android
+   * shared storage, Windows, macOS): a tracked file spelled like `p` except for letter case that
+   * the backend reports with the same stat. On case-sensitive backends `p` is a distinct file
+   * with its own stat. Null when there is no such file.
+   */
+  private async storedCaseVariant(p: VaultPath, st: FileStat): Promise<VaultPath | null> {
+    const lower = p.toLowerCase();
+    if (st.kind !== 'file' || !this.lowerPaths.has(lower)) return null;
+    for (const v of Array.from(this.fileStats.keys())) {
+      if (v === p || v.toLowerCase() !== lower) continue;
+      const vst = await this.fs.stat(v).catch(() => null);
+      if (vst && sameStat(vst, st)) return v;
+    }
+    return null;
   }
 
   /** First candidate path derived from `base` not known, reserved or in `taken` (case-insensitive). */
@@ -753,28 +802,63 @@ export class Vault {
   }
 
   private async trashTarget(p: VaultPath, kind: 'file' | 'dir'): Promise<VaultPath> {
-    const base = joinPath(TRASH_DIR, p);
+    const stamp = ` (${trashStamp(this.now())})`;
+    // ".trash/Zakupy" may be a trashed *file* while "Zakupy/x.md" is deleted: use "Zakupy (stamp)/".
+    const base = await this.avoidFileAncestors(joinPath(TRASH_DIR, p), 1, (n) => (n === 1 ? stamp : `${stamp} ${n}`));
     if (!(await this.fs.stat(base))) return base;
-    const stamped = insertBeforeExtension(base, ` (${trashStamp(this.now())})`, kind === 'dir');
+    const stamped = insertBeforeExtension(base, stamp, kind === 'dir');
     let candidate = stamped;
     for (let i = 2; await this.fs.stat(candidate); i++) candidate = insertBeforeExtension(stamped, ` ${i}`, kind === 'dir');
     return candidate;
   }
 
+  /**
+   * Rewrite `path` so that none of its folders is an existing *file* on the backend (moving
+   * there would fail with ENOTDIR): the first blocking segment gets `suffix(1)`, `suffix(2)`,
+   * ... appended until it names a folder or nothing. The first `keep` segments are left alone.
+   */
+  private async avoidFileAncestors(path: VaultPath, keep: number, suffix: (n: number) => string): Promise<VaultPath> {
+    const segments = path.split('/');
+    for (let i = keep; i < segments.length - 1; i++) {
+      let st = await this.fs.stat(segments.slice(0, i + 1).join('/'));
+      const name = segments[i]!;
+      for (let n = 1; st?.kind === 'file'; n++) {
+        segments[i] = name + suffix(n);
+        st = await this.fs.stat(segments.slice(0, i + 1).join('/'));
+      }
+      // Nothing exists below a missing folder.
+      if (!st) break;
+    }
+    return segments.join('/');
+  }
+
   /** Drop `p` (and everything below it) from the caches; returns 'delete' changes for files. */
   private forget(p: VaultPath, source: ChangeSource): VaultChange[] {
-    const changes: VaultChange[] = [];
-    for (const path of this.fileStats.keys()) {
-      if (!isWithin(path, p)) continue;
-      this.fileStats.delete(path);
-      this.contents.delete(path);
-      this.hashes.delete(path);
-      this.bump(path);
-      changes.push({ type: 'delete', path, source });
-      if (path === CONFIG_PATH) this.applyConfig(null);
-    }
-    for (const d of this.dirStats.keys()) if (isWithin(d, p)) this.dirStats.delete(d);
+    return [...this.dropFile(p, source), ...this.dropFolder(p, source)];
+  }
+
+  /** Drop the file `p` from the caches; returns its 'delete' change (none if unknown). O(1). */
+  private dropFile(p: VaultPath, source: ChangeSource): VaultChange[] {
+    if (!this.fileStats.has(p)) return [];
+    this.fileStats.delete(p);
+    this.contents.delete(p);
+    this.hashes.delete(p);
+    this.bump(p);
     this.sortedFiles = null;
+    if (p === CONFIG_PATH) this.applyConfig(null);
+    return [{ type: 'delete', path: p, source }];
+  }
+
+  /**
+   * Drop the folder `p` and everything below it; returns 'delete' changes for the files. Every
+   * tracked ancestor of a known file is a known folder (see track), so below a tracked path
+   * that is not a known folder nothing is cached: deleting a file does not scan the vault.
+   */
+  private dropFolder(p: VaultPath, source: ChangeSource): VaultChange[] {
+    if (!this.dirStats.has(p) && isTracked(p)) return [];
+    const changes: VaultChange[] = [];
+    for (const path of Array.from(this.fileStats.keys())) if (isStrictlyWithin(path, p)) changes.push(...this.dropFile(path, source));
+    for (const d of this.dirStats.keys()) if (isWithin(d, p)) this.dirStats.delete(d);
     return changes;
   }
 
@@ -828,14 +912,17 @@ export class Vault {
     return changes;
   }
 
-  /** Reconcile everything at/below `target` with the backend (caller holds the lock). */
-  private async scanInto(target: VaultPath, source: ChangeSource): Promise<VaultChange[]> {
+  /**
+   * Reconcile everything at/below `target` with the backend (caller holds the lock). `list`
+   * provides the backend listing (shared by a batch of watcher events).
+   */
+  private async scanInto(target: VaultPath, source: ChangeSource, list: Lister = () => this.fs.list()): Promise<VaultChange[]> {
     const st = await this.fs.stat(target);
     if (!st) return [];
-    if (st.kind === 'file') return this.reconcile(target, source);
+    if (st.kind === 'file') return this.reconcile(target, source, list);
     this.track(st);
     const changes: VaultChange[] = [];
-    const listing = await this.fs.list();
+    const listing = await list();
     for (const raw of listing) {
       const p = normalizePath(raw.path);
       if (!isStrictlyWithin(p, target) || !isTracked(p)) continue;
@@ -844,7 +931,7 @@ export class Vault {
         continue;
       }
       const known = this.fileStats.get(p);
-      if (!known || known.mtime !== raw.mtime || known.size !== raw.size) changes.push(...(await this.reconcile(p, source)));
+      if (!known || known.mtime !== raw.mtime || known.size !== raw.size) changes.push(...(await this.reconcile(p, source, list)));
     }
     return changes;
   }
@@ -853,7 +940,7 @@ export class Vault {
    * Bring the caches for `p` in line with the backend (caller holds the lock). Content
    * equal to what we know (e.g. the echo of our own write) produces no change.
    */
-  private async reconcile(p: VaultPath, source: ChangeSource): Promise<VaultChange[]> {
+  private async reconcile(p: VaultPath, source: ChangeSource, list?: Lister): Promise<VaultChange[]> {
     if (!isTracked(p)) return [];
     let st: FileStat | null;
     try {
@@ -873,11 +960,22 @@ export class Vault {
     }
     if (st.kind === 'dir') {
       const wasKnownDir = this.dirStats.has(p);
-      const changes = known ? this.forget(p, source) : [];
+      // A file replaced by a folder of the same name: the file is gone (keep its content).
+      const prev = known ? this.contents.get(p) : undefined;
+      if (prev !== undefined) await this.snapshot(p, prev, source);
+      // Only the file entry: files inside the new folder may already be tracked.
+      const changes = known ? this.dropFile(p, source) : [];
       this.track(st);
-      if (!wasKnownDir) changes.push(...(await this.scanInto(p, source)));
+      if (!wasKnownDir) changes.push(...(await this.scanInto(p, source, list)));
       return changes;
     }
+    // A folder replaced by a file of the same name: everything that was inside is gone.
+    const gone = this.dirStats.has(p) ? this.dropFolder(p, source) : [];
+    return [...gone, ...(await this.reconcileFile(p, st, known, source))];
+  }
+
+  /** reconcile() for a path that is a file on the backend (`st`); `known` is its cached stat. */
+  private async reconcileFile(p: VaultPath, st: FileStat, known: FileStat | undefined, source: ChangeSource): Promise<VaultChange[]> {
     if (!isTextPath(p)) {
       if (known && known.mtime === st.mtime && known.size === st.size) return [];
       this.bump(p);
@@ -941,7 +1039,7 @@ export class Vault {
    * macOS) stat(o) still succeeds because it finds `n`, so the real names are taken from a
    * listing. Returns null when the batch has no candidate pairs (no listing needed).
    */
-  private async caseOnlyRenames(events: FsEvent[]): Promise<{ pairs: [VaultPath, VaultPath][]; listedDirs: Set<VaultPath> } | null> {
+  private async caseOnlyRenames(events: FsEvent[], list: Lister): Promise<{ pairs: [VaultPath, VaultPath][]; listedDirs: Set<VaultPath> } | null> {
     const gone = new Set<VaultPath>();
     const addedByLower = new Map<string, VaultPath>();
     const added = (raw: string): void => {
@@ -963,7 +1061,7 @@ export class Vault {
     if (candidates.length === 0) return null;
     let listing: FileStat[];
     try {
-      listing = await this.fs.list();
+      listing = await list();
     } catch (e) {
       console.warn('[vault] listing failed', e);
       return null;
@@ -1023,7 +1121,10 @@ export class Vault {
     }
     const changes: VaultChange[] = [];
     const handled = new Set<VaultPath>();
-    const caseRenames = await this.caseOnlyRenames(events);
+    // At most one listing per batch: a sync that adds hundreds of folders must not list the
+    // whole vault once per folder event.
+    const list = listOnce(() => this.fs.list());
+    const caseRenames = await this.caseOnlyRenames(events, list);
     if (caseRenames) {
       for (const [o, n] of caseRenames.pairs) {
         const moved = await this.locks.runWith(bothKeys(o, n), () => this.relocateCaseVariant(o, n));
@@ -1052,10 +1153,44 @@ export class Vault {
         const p = normalizePath(raw);
         if (!p || handled.has(p) || !isTracked(p)) continue;
         handled.add(p);
-        changes.push(...(await this.locks.runWith(entryKeys(p), () => this.reconcile(p, 'external'))));
+        changes.push(...(await this.locks.runWith(entryKeys(p), () => this.reconcile(p, 'external', list))));
       }
     }
+    await this.dropRemovedFolders(changes);
     this.emit(changes);
+  }
+
+  /**
+   * After files vanished (deleted or moved away by another program), forget the folders that
+   * held them if those folders are gone from the backend too. Polling watchers report only
+   * files, so a folder deleted with everything inside would otherwise linger in folders().
+   */
+  private async dropRemovedFolders(changes: readonly VaultChange[]): Promise<void> {
+    const candidates = new Set<VaultPath>();
+    for (const c of changes) {
+      const gone = c.type === 'delete' ? c.path : c.type === 'rename' ? c.oldPath : undefined;
+      if (gone !== undefined) for (const d of ancestors(gone)) if (this.dirStats.has(d)) candidates.add(d);
+    }
+    if (candidates.size === 0) return;
+    const occupied = new Set<VaultPath>();
+    for (const f of this.fileStats.keys()) for (const d of ancestors(f)) occupied.add(d);
+    // Deepest first; a folder's subfolders are checked before the folder itself.
+    for (const d of [...candidates].sort((a, b) => b.length - a.length)) {
+      if (occupied.has(d)) continue;
+      // Under the folder's lock: a concurrent write into it either ran before (the folder
+      // exists again) or runs after and tracks it again.
+      await this.locks.runWith(entryKeys(d), async () => {
+        if (!this.dirStats.has(d)) return;
+        let st: FileStat | null;
+        try {
+          st = await this.fs.stat(d);
+        } catch {
+          return;
+        }
+        if (st) return;
+        for (const x of this.dirStats.keys()) if (isWithin(x, d) && !occupied.has(x)) this.dirStats.delete(x);
+      });
+    }
   }
 
   private emit(changes: VaultChange[]): void {

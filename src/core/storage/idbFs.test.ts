@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FsEvent } from '../types';
 import { describeAdapterContract, makeClock } from './adapterContract.testutil';
-import { IdbFs, newestMtime } from './idbFs';
+import { openCachedDb } from './idb';
+import { IDB_FS_DB, IdbFs, newestMtime } from './idbFs';
 
 let counter = 0;
 const uniqueId = (): string => `vault-${Date.now()}-${counter++}`;
@@ -146,14 +147,49 @@ describe('IdbFs specifics', () => {
   });
 });
 
+describe('IdbFs folders behave like on disk', () => {
+  it('keeps a folder when its last file is removed or moved away', async () => {
+    const fs = new IdbFs(uniqueId(), undefined, { broadcast: false });
+    await fs.writeText('Projekty/Plan ćwiczeń.md', 'p');
+    await fs.writeText('Archiwum/Stary/x.md', 'x');
+    await fs.remove('Projekty/Plan ćwiczeń.md');
+    await fs.rename('Archiwum/Stary/x.md', 'x.md');
+    expect(await fs.stat('Projekty')).toMatchObject({ kind: 'dir' });
+    expect(await fs.stat('Archiwum/Stary')).toMatchObject({ kind: 'dir' });
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Archiwum', 'Archiwum/Stary', 'Projekty', 'x.md']);
+    await fs.rename('Archiwum', 'Kosz/Archiwum');
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Kosz', 'Kosz/Archiwum', 'Kosz/Archiwum/Stary', 'Projekty', 'x.md']);
+    await fs.remove('Projekty');
+    await fs.remove('Kosz');
+    expect((await fs.list()).map((s) => s.path)).toEqual(['x.md']);
+  });
+});
+
 describe('newestMtime', () => {
   it('handles folders with very many descendants (no argument-spread stack overflow)', () => {
     const records = Array.from({ length: 300_000 }, (_, i) => ({ mtime: (i * 7919) % 1_000_003 }));
     records[123_456] = { mtime: 5_000_000 };
     expect(newestMtime(records)).toBe(5_000_000);
-  });
+    // Allocating 300k records can take seconds on a loaded Raspberry Pi.
+  }, 30_000);
 
   it('returns 0 for no records', () => {
     expect(newestMtime([])).toBe(0);
+  });
+});
+
+describe('IdbFs when the browser drops the database connection', () => {
+  it('reopens the database and keeps working (closed with or without notice)', async () => {
+    const fs = new IdbFs(uniqueId(), undefined, { broadcast: false });
+    await fs.writeText('Dziennik/środa.md', '- przed');
+    // Without notice (e.g. Safari "Connection to Indexed Database server lost").
+    (await openCachedDb(IDB_FS_DB, 1, () => {})).close();
+    expect(await fs.readText('Dziennik/środa.md')).toBe('- przed');
+    // Evicted (browser terminated the connection, `terminated` callback).
+    await IdbFs.closeDatabase();
+    await fs.writeText('Dziennik/środa.md', '- po');
+    (await openCachedDb(IDB_FS_DB, 1, () => {})).close();
+    expect((await fs.list()).map((s) => s.path)).toEqual(['Dziennik', 'Dziennik/środa.md']);
+    expect(await fs.readText('Dziennik/środa.md')).toBe('- po');
   });
 });

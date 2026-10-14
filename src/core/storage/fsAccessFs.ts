@@ -7,6 +7,10 @@
  *   atomically on `close()` — sync tools never see half-written notes.
  * - `rename` uses `handle.move()` when available, otherwise copy + delete.
  * - `watch()` polls (default every 3 s) and diffs (mtime, size) snapshots.
+ * - Vault paths are NFC. Names stored on disk in another normalisation form (macOS writes NFD:
+ *   "Zażółć" as "Za" + U+0307 + ...) are listed as NFC and found again by every operation, so
+ *   such notes open and are updated in place instead of getting an NFC twin.
+ * - Chromium's swap files of writes in progress (`<name>.crswap`) are never listed.
  */
 import { basename, dirname, joinPath, normalizePath } from '../paths';
 import type { FileStat, FileSystemAdapter, FsEvent, VaultPath } from '../types';
@@ -68,6 +72,9 @@ const TEMP_PREFIX = '.brulion-tmp-';
 /** Directories never listed (huge and irrelevant), same as the native Tauri lister. */
 const SKIPPED_DIRS = new Set(['.git', 'node_modules']);
 
+/** Suffix of the swap file Chromium writes next to a file while a `createWritable()` stream is open. */
+const SWAP_SUFFIX = '.crswap';
+
 export interface FsAccessFsOptions {
   /** Label shown in the UI (default: the folder name). */
   label?: string;
@@ -91,6 +98,78 @@ function mapError(e: unknown, path: VaultPath, expect: 'file' | 'dir' | 'any' = 
     default:
       return e;
   }
+}
+
+/** An error that callers treat like the browser's TypeMismatchError (entry has the other kind). */
+function typeMismatch(name: string): Error {
+  const e = new Error(`${name} has the other kind (file vs directory)`);
+  e.name = 'TypeMismatchError';
+  return e;
+}
+
+/** True if `name` contains non-ASCII characters (only those can have another normalisation form). */
+function hasNonAscii(name: string): boolean {
+  for (let i = 0; i < name.length; i++) if (name.charCodeAt(i) > 0x7f) return true;
+  return false;
+}
+
+/**
+ * Entry of `dir` whose name is `name` in another Unicode normalisation form (e.g. the NFD name
+ * macOS gives "Zażółć.md"), as [stored name, handle]; null when there is none. Only called after
+ * an exact lookup missed, so ASCII names never pay for the directory scan.
+ */
+async function findTwin(dir: FsaDirectoryHandle, name: string): Promise<[string, FsaHandle] | null> {
+  if (!hasNonAscii(name)) return null;
+  const nfc = name.normalize('NFC');
+  for await (const [stored, handle] of dir.entries()) {
+    if (stored !== name && stored.normalize('NFC') === nfc) return [stored, handle];
+  }
+  return null;
+}
+
+/** Subdirectory `name` of `dir` (also under another normalisation form); created when missing and `create`. */
+async function subdirOf(dir: FsaDirectoryHandle, name: string, create: boolean): Promise<FsaDirectoryHandle> {
+  try {
+    return await dir.getDirectoryHandle(name);
+  } catch (e) {
+    if (errorName(e) !== 'NotFoundError') throw e;
+    const twin = await findTwin(dir, name);
+    if (twin) {
+      if (twin[1].kind === 'directory') return twin[1];
+      throw typeMismatch(name);
+    }
+    if (!create) throw e;
+  }
+  return dir.getDirectoryHandle(name, { create: true });
+}
+
+/** File `name` of `dir` (also under another normalisation form); created when missing and `create`. */
+async function fileIn(dir: FsaDirectoryHandle, name: string, create: boolean): Promise<FsaFileHandle> {
+  try {
+    return await dir.getFileHandle(name);
+  } catch (e) {
+    if (errorName(e) !== 'NotFoundError') throw e;
+    const twin = await findTwin(dir, name);
+    if (twin) {
+      if (twin[1].kind === 'file') return twin[1];
+      throw typeMismatch(name);
+    }
+    if (!create) throw e;
+  }
+  return dir.getFileHandle(name, { create: true });
+}
+
+/**
+ * Entries of `dir` keyed by their NFC name. Names that differ only in normalisation map to one
+ * key; the entry stored exactly as NFC wins (the one NFC lookups reach first).
+ */
+async function entriesByNfc(dir: FsaDirectoryHandle): Promise<Map<string, [string, FsaHandle]>> {
+  const out = new Map<string, [string, FsaHandle]>();
+  for await (const [stored, handle] of dir.entries()) {
+    const nfc = stored.normalize('NFC');
+    if (!out.has(nfc) || stored === nfc) out.set(nfc, [stored, handle]);
+  }
+  return out;
 }
 
 /** Signature used to detect changes between polls. */
@@ -188,11 +267,19 @@ export class FsAccessFs implements FileSystemAdapter {
       if (errorName(e) === 'NotFoundError' || errorName(e) === 'TypeMismatchError') return;
       throw mapError(e, p);
     }
+    const name = basename(p);
     try {
-      await parent.removeEntry(basename(p), { recursive: true });
+      await parent.removeEntry(name, { recursive: true });
     } catch (e) {
-      if (errorName(e) === 'NotFoundError') return;
-      throw mapError(e, p);
+      if (errorName(e) !== 'NotFoundError') throw mapError(e, p);
+      const twin = await findTwin(parent, name);
+      if (!twin) return;
+      try {
+        await parent.removeEntry(twin[0], { recursive: true });
+      } catch (e2) {
+        if (errorName(e2) === 'NotFoundError') return;
+        throw mapError(e2, p);
+      }
     }
     this.forgetOwn(p);
   }
@@ -292,13 +379,14 @@ export class FsAccessFs implements FileSystemAdapter {
   private async walk(dir: FsaDirectoryHandle, prefix: string, out: FileStat[]): Promise<void> {
     const files: [VaultPath, FsaFileHandle][] = [];
     const dirs: [VaultPath, FsaDirectoryHandle][] = [];
-    for await (const [name, handle] of dir.entries()) {
+    // Listed under NFC names (vault paths); lookups find the stored name again.
+    for (const [name, [, handle]] of await entriesByNfc(dir)) {
       const p = prefix ? `${prefix}/${name}` : name;
       if (handle.kind === 'directory') {
         if (SKIPPED_DIRS.has(name)) continue;
         out.push({ path: p, kind: 'dir', size: 0, mtime: 0 });
         dirs.push([p, handle]);
-      } else files.push([p, handle]);
+      } else if (!name.endsWith(SWAP_SUFFIX)) files.push([p, handle]);
     }
     await Promise.all(
       files.map(async ([p, h]) => {
@@ -324,7 +412,7 @@ export class FsAccessFs implements FileSystemAdapter {
   private async dirAt(path: VaultPath, create: boolean): Promise<FsaDirectoryHandle> {
     let dir = this.root;
     if (path === '') return dir;
-    for (const seg of path.split('/')) dir = await dir.getDirectoryHandle(seg, { create });
+    for (const seg of path.split('/')) dir = await subdirOf(dir, seg, create);
     return dir;
   }
 
@@ -348,9 +436,9 @@ export class FsAccessFs implements FileSystemAdapter {
     try {
       return await parent.getDirectoryHandle(name);
     } catch (e) {
-      if (errorName(e) === 'NotFoundError' || errorName(e) === 'TypeMismatchError') return null;
-      throw e;
+      if (errorName(e) !== 'NotFoundError' && errorName(e) !== 'TypeMismatchError') throw e;
     }
+    return (await findTwin(parent, name))?.[1] ?? null;
   }
 
   private async parentDir(p: VaultPath, create: boolean): Promise<FsaDirectoryHandle> {
@@ -364,7 +452,7 @@ export class FsAccessFs implements FileSystemAdapter {
   private async fileOf(p: VaultPath): Promise<FsaFile> {
     const parent = await this.parentDir(p, false);
     try {
-      const fh = await parent.getFileHandle(basename(p));
+      const fh = await fileIn(parent, basename(p), false);
       return await fh.getFile();
     } catch (e) {
       throw mapError(e, p, 'file');
@@ -375,7 +463,7 @@ export class FsAccessFs implements FileSystemAdapter {
     const parent = await this.parentDir(p, true);
     let fh: FsaFileHandle;
     try {
-      fh = await parent.getFileHandle(basename(p), { create: true });
+      fh = await fileIn(parent, basename(p), true);
     } catch (e) {
       throw mapError(e, p, 'file');
     }
