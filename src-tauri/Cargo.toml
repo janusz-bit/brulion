@@ -1,0 +1,74 @@
+[package]
+name = "brulion"
+version = "0.1.0"
+description = "Brulion — offline-first notatki w Markdown (Tauri shell: Linux desktop + Android)"
+authors = ["janusz-bit"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/janusz-bit/brulion"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+# The local Android plugin is a workspace member so `cargo test/clippy --workspace` (CI, Nix)
+# also run its contract tests (Rust <-> Kotlin <-> permissions <-> docs/ARCHITECTURE.md) with
+# this Cargo.lock. Commands without `--workspace` still act on the app crate only.
+[workspace]
+members = ["plugins/brulion-android"]
+
+[lib]
+# The `_lib` suffix keeps the library name distinct from the binary (cargo issue #8519).
+name = "brulion_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = ["tray-icon", "image-png", "protocol-asset"] }
+tauri-plugin-notification = "2.6"
+# No `cookies` feature: sync clients authenticate every request (Basic auth / API key);
+# a persisted cookie jar would only keep server sessions alive on disk.
+tauri-plugin-http = { version = "2.8", default-features = false, features = ["rustls-tls", "http2", "charset", "system-proxy"] }
+tauri-plugin-dialog = "2.8"
+tauri-plugin-opener = "2.7"
+tauri-plugin-os = "2.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+walkdir = "2.5"
+notify = "8.2"
+percent-encoding = "2.3"
+# Compact `{ base64 }` bodies for Android's JSON-only IPC (already used by tauri/reqwest).
+base64 = "0.22"
+log = "0.4"
+# Local Android plugin (all-files access, native reminders and alarms); its commands return
+# neutral values on desktop.
+tauri-plugin-brulion-android = { path = "plugins/brulion-android" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2.5"
+tauri-plugin-window-state = "2.5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Probe for libayatana-appindicator before creating the tray: Tauri's tray backend
+# (libappindicator-sys, which uses this same libloading version) panics when it is missing.
+libloading = "0.7"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# Only used from Rust (no JS permissions granted): the dialog plugin returns `content://` URIs
+# on Android, which `write_export` opens through the fs plugin's ContentResolver bridge.
+tauri-plugin-fs = "2.7"
+
+[dev-dependencies]
+tempfile = "3"
+# Config tests replay tauri-plugin-http's URL-scope matching (same crate versions).
+regex = "1"
+url = "2"
+urlpattern = "0.6"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"
+strip = true
+# No `panic = "abort"`: a panic in a command, plugin or the watcher thread must not take the
+# whole app (and the unsaved edits in the webview) down.

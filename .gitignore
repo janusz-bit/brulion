@@ -16,3 +16,11 @@ playwright-report/
 *.jks
 .env
 .env.*
+# Generated Android project (`tauri android init`, see scripts/android-build.sh) and its outputs
+src-tauri/gen/android/
+dist-android/
+keystore.properties
+# Playwright e2e (see e2e/README.md): screenshots and the e2e build output
+e2e/screenshots/
+e2e/.dist/
+.claude/scheduled_tasks.lock

@@ -252,15 +252,33 @@ All vault commands take `root` = absolute vault folder path and `path` = VaultPa
 | `fs_read_binary` | `{ root, path }` | raw bytes (`tauri::ipc::Response`) → `ArrayBuffer` in JS |
 | `fs_write_text` | `{ root, path, content }` | `FileStatDto` (atomic: temp file `.brulion-tmp-*` + rename) |
 | `fs_write_binary` | raw body = bytes, headers `x-root`, `x-path` (encodeURIComponent) | `FileStatDto` (atomic) |
-| `fs_remove` | `{ root, path }` | `null` (recursive for dirs, ok if missing) |
+| `fs_remove` | `{ root, path }` | `null` (recursive for dirs, ok if missing — also below a file) |
 | `fs_rename` | `{ root, from, to }` | `null` (creates parent dirs) |
 | `fs_mkdir` | `{ root, path }` | `null` (recursive) |
 | `watch_start` | `{ root }` | `null`; emits `brulion://fs-events` with `{ root, events: FsEvent[] }` (debounced ~300 ms, relative paths, ignored dirs filtered) |
-| `watch_stop` | `{ root }` | `null` |
+| `watch_stop` | `{ root }` | `null` (for one root the last `watch_start`/`watch_stop` call wins, also while a start is still running) |
 | `default_vault_dir` | – | `string` (desktop: `~/Brulion`; Android: `/storage/emulated/0/Brulion` if all-files access, else app data dir + `/vault`) |
 | `write_export` | raw body = bytes, header `x-path` (absolute target from save dialog) | `null` |
+| `allow_vault_assets` | `{ root }` | `null`; adds `root` (recursive) to the asset-protocol scope so `convertFileSrc(abs)` can show vault images/media (dot-folders stay hidden) |
+| `set_close_to_tray` | `{ enabled }` | `null` (desktop: closing the main window hides it to the tray; default on, ignored when no tray exists — then closing quits, see `brulion://quit-requested`; no-op on mobile) |
+| `quit_app` | – | `null` (exits the app at once, also when close-to-tray is on; the answer to `brulion://quit-requested`) |
+| `show_main_window` | – | `null` (shows, un-minimises and focuses the main window) |
 
 `FileStatDto = { path: string; kind: 'file' | 'dir'; size: number; mtime: number /* ms */ }`.
+Rust details: errors are strings `"<CODE>: <message>: <path>"` with POSIX codes (`ENOENT`, `EEXIST`,
+`EISDIR`, `ENOTDIR`, `EINVAL`, `EACCES`, ...) like `FsError`; `fs_stat`/`fs_mkdir` accept `path: ''`
+(the root). `fs_read_text` decodes like `TextDecoder` (BOM dropped, invalid UTF-8 → U+FFFD).
+`brulion://fs-events` may carry `rescan: true` (events lost: re-list the vault); a `create` can name
+an already known path (atomic replace via rename, e.g. Syncthing) — treat create/modify as upserts.
+Raw bodies arrive as JSON number arrays on Android (handled by Rust, but Tauri parses ~32 bytes of
+memory per byte): for big files send `{ base64: '<padded standard base64>' }` as the body instead
+(`fs_write_binary`, `write_export`; headers unchanged). `write_export` also accepts the `content://`
+URI returned by the Android save dialog. Windows set `dragDropEnabled: false`, so
+HTML5 drag & drop of files works in the webview as in the browser.
+Quitting on desktop (tray "Zakończ", or closing the main window when it is not hidden to the tray)
+hides the window and emits `brulion://quit-requested` (no payload): flush pending writes, then call
+`quit_app`. Without an answer Brulion exits after 3 s. Do not use `onCloseRequested` for this (the
+capabilities do not grant `core:window:allow-destroy`; Rust owns hide-vs-quit).
 
 Android-only plugin `brulion-android` (Rust crate `src-tauri/plugins/brulion-android` + Kotlin).
 JS calls `invoke('plugin:brulion-android|<cmd>', args)`; on desktop the commands exist but return
@@ -277,14 +295,18 @@ neutral values (`granted: true`, `scheduled: 0`, empty activation).
 | `schedule_reminders` | `{ items: AndroidReminder[] }` | `{ scheduled: number; exact: boolean }` — replaces the whole set |
 | `take_activation` | – | `{ path?: string; line?: number }` — notification tap that opened the app (cleared on read) |
 
-`AndroidReminder = { id: number /* int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number }`.
+`AndroidReminder = { id: number /* int32; a uint32 is wrapped into int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number }`.
 The plugin also emits the event `notification-activated` `{ path, line }` (listen with
 `addPluginListener('brulion-android', 'notification-activated', cb)`).
 Native side: AlarmManager exact alarms (`setAlarmClock` for alarms, `setExactAndAllowWhileIdle`
 for reminders; inexact fallback without permission), reminders persisted in SharedPreferences
 and re-armed on BOOT_COMPLETED / app update / time change; notification channels `reminders`
-(high) and `alarms` (max, alarm sound, insistent, full-screen intent); actions "Drzemka 10 min"
-(native re-arm) and "OK".
+(high) and `alarms` (high importance + PRIORITY_MAX, alarm sound, insistent, full-screen intent
+to a native lock-screen `AlarmActivity`); actions "Drzemka 10 min" (native re-arm) and "OK".
+`schedule_reminders` drops past items, keeps the last copy of a repeated id and arms at most the
+400 soonest; native snoozes survive it unless the same id is sent again. Reminders keep their
+local wall-clock time across time-zone changes; ones missed while the phone was off (≤ 24 h)
+are shown as "Przegapione" after boot.
 
 Notifications: on **Android** reminders are scheduled through `brulion-android`
 (`schedule_reminders`), so they fire while the app is closed and after reboot. On **desktop** the

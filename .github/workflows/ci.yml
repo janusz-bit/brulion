@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  web:
+    name: Web (typecheck, lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          check-latest: true
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libsoup-3.0-dev libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev build-essential pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      # tauri::generate_context!() embeds frontendDist (../dist); the real frontend is not needed.
+      - name: Placeholder frontend
+        run: mkdir -p ../dist && echo '<!doctype html><title>Brulion</title>' > ../dist/index.html
+      - run: cargo fmt --all --check
+      # --workspace: the app and the brulion-android plugin (its Rust <-> Kotlin <-> docs
+      # contract tests included).
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - run: cargo test --locked --workspace
+
+  rust-android:
+    name: Rust (clippy, Android target)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: src-tauri
+    env:
+      # What `tauri android build` would export for the app's build scripts.
+      TAURI_ANDROID_PACKAGE_NAME_PREFIX: io_github_januszbit
+      TAURI_ANDROID_PACKAGE_NAME_APP_NAME: brulion
+      WRY_ANDROID_PACKAGE: io.github.januszbit.brulion
+      WRY_ANDROID_LIBRARY: brulion_lib
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: Use the preinstalled NDK
+        run: |
+          ndk=${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}
+          bin=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin
+          test -x "$bin/aarch64-linux-android24-clang"
+          {
+            echo "CC_aarch64_linux_android=$bin/aarch64-linux-android24-clang"
+            echo "CXX_aarch64_linux_android=$bin/aarch64-linux-android24-clang++"
+            echo "AR_aarch64_linux_android=$bin/llvm-ar"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android24-clang"
+          } >> "$GITHUB_ENV"
+      - name: Placeholder frontend
+        run: mkdir -p ../dist && echo '<!doctype html><title>Brulion</title>' > ../dist/index.html
+      - run: cargo clippy --locked --workspace --target aarch64-linux-android -- -D warnings
+
+  scripts:
+    name: Scripts and workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: shellcheck
+        run: shellcheck scripts/*.sh
+      - name: android-signing.py unit tests
+        run: python3 -m unittest discover -s scripts/tests -v
+      - name: actionlint
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+
+  nix:
+    name: Nix flake
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+        with:
+          determinate: false
+      # Clear message when package-lock.json changed without nix/npm-deps.nix.
+      - run: scripts/update-nix-hashes.sh --check
+      - run: nix flake check -L
+      - run: nix build .#brulion -L
+      - run: nix build .#brulion-web -L

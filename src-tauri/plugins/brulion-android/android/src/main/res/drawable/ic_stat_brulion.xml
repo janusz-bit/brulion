@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon of Brulion's notifications: a notebook with a binding and ruled lines.
+     Monochrome (only the alpha channel is used by the system). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Cover with the page cut out; the strip on the left is the binding. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M7,3H17A2,2 0,0 1,19 5V19A2,2 0,0 1,17 21H7A2,2 0,0 1,5 19V5A2,2 0,0 1,7 3ZM9,5V19H17V5Z" />
+    <!-- Ruled lines. -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,8H15.5V9.5H11ZM11,11.25H15.5V12.75H11ZM11,14.5H14V16H11Z" />
+</vector>

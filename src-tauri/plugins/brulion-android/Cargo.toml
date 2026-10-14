@@ -1,0 +1,22 @@
+[package]
+name = "tauri-plugin-brulion-android"
+version = "0.1.0"
+description = "Brulion's local Tauri plugin for Android: all-files access, notification and exact-alarm permissions, native reminders and alarms"
+authors = ["janusz-bit"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/janusz-bit/brulion"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+# Required by tauri-plugin's build script: the app's tauri-build discovers the plugin's
+# permissions and Android library through the `DEP_TAURI_PLUGIN_BRULION_ANDROID_*` variables.
+links = "tauri-plugin-brulion-android"
+exclude = ["/android/.tauri", "/android/build"]
+
+[dependencies]
+tauri = { version = "2.12", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2.7", features = ["build"] }

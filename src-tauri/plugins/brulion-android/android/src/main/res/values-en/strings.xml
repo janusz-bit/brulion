@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="brulion_channel_reminders">Reminders</string>
+    <string name="brulion_channel_reminders_description">Reminders from Brulion notes and tasks</string>
+    <string name="brulion_channel_alarms">Alarms</string>
+    <string name="brulion_channel_alarms_description">Reminders marked as alarms: alarm sound, rings until turned off</string>
+    <string name="brulion_reminder_default_title">Reminder</string>
+    <string name="brulion_action_snooze">Snooze 10 min</string>
+    <string name="brulion_action_ok">OK</string>
+    <string name="brulion_action_open">Open note</string>
+    <string name="brulion_missed">Missed · %1$s</string>
+    <string name="brulion_alarm_label">Alarm · %1$s</string>
+</resources>

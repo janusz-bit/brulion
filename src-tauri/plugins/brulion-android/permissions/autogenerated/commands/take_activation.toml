@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-take-activation"
+description = "Enables the take_activation command without any pre-configured scope."
+commands.allow = ["take_activation"]
+
+[[permission]]
+identifier = "deny-take-activation"
+description = "Denies the take_activation command without any pre-configured scope."
+commands.deny = ["take_activation"]

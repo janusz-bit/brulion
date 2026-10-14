@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions of the main window on every platform. Brulion's own commands (fs_*, watch_*, ...) need no entry: app commands are allowed unless an app manifest restricts them. \"brulion-android:default\" is here because the local Android plugin's commands also exist on desktop (returning neutral values).",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-request-user-attention",
+    "core:webview:allow-set-webview-zoom",
+    "notification:default",
+    "dialog:default",
+    "opener:default",
+    "os:default",
+    "brulion-android:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "https://*:*" },
+        { "url": "http://*" },
+        { "url": "http://*:*" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+# Signed universal Android APK (artifact "brulion-android-apk"). Also called by release.yml.
+# Release signing uses the repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD (create them with scripts/new-android-keystore.sh).
+# Without them the APK is signed with a throwaway key (see the warning in the run summary).
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - src-tauri/**
+      - package.json
+      - package-lock.json
+      - index.html
+      - vite.config.ts
+      - public/**
+      - assets-src/**
+      - scripts/**
+      - .github/workflows/android.yml
+  workflow_dispatch:
+    inputs:
+      aab:
+        description: Also build an Android App Bundle (.aab)
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      aab:
+        description: Also build an Android App Bundle (.aab)
+        type: boolean
+        default: false
+    outputs:
+      version:
+        description: App version of the built APK
+        value: ${{ jobs.apk.outputs.version }}
+      signing:
+        description: '"release" (repository keystore) or "throwaway" (generated key)'
+        value: ${{ jobs.apk.outputs.signing }}
+      artifact:
+        description: Name of the uploaded workflow artifact
+        value: brulion-android-apk
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+# The literal prefix keeps this group distinct from the caller's when run via workflow_call;
+# github.workflow is the caller's name there ("Release"), so a push to main never cancels the
+# APK build of a release started from main (and vice versa).
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+
+env:
+  NDK_VERSION: 27.2.12479018
+  CARGO_TERM_COLOR: always
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+      signing: ${{ steps.build.outputs.signing }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Four Rust targets + NDK + Gradle need more room than the runner has free by default.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/share/boost \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
+          df -h /
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v4
+        with:
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install the Android NDK
+        run: |
+          sdkmanager --install "ndk;$NDK_VERSION" > /dev/null
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          # One cache per caller (push to main / release) would only duplicate ~GBs.
+          shared-key: android
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          check-latest: true
+          cache: npm
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: on-failure
+
+      - run: npm ci
+
+      - id: build
+        name: Build signed APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          BRULION_ANDROID_AAB: ${{ inputs.aab && '1' || '0' }}
+        run: bash scripts/android-build.sh
+
+      # The plugin's Kotlin unit tests (WallClockTest) and Android lint (manifest, API levels).
+      - name: Test and lint the brulion-android plugin
+        working-directory: src-tauri/gen/android
+        run: ./gradlew --no-daemon :tauri-plugin-brulion-android:testDebugUnitTest :tauri-plugin-brulion-android:lintDebug
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+          SIGNING: ${{ steps.build.outputs.signing }}
+        run: |
+          {
+            echo "### Brulion $VERSION for Android"
+            echo
+            echo "| File | Size | SHA-256 |"
+            echo "|---|---|---|"
+            for f in dist-android/*; do
+              echo "| $(basename "$f") | $(du -h "$f" | cut -f1) | \`$(sha256sum "$f" | cut -d' ' -f1)\` |"
+            done
+            if [ "$SIGNING" = throwaway ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> Signed with a **throwaway key**: it will not install over (update) an APK signed"
+              echo "> with another key. Set the ANDROID_KEYSTORE_* secrets (scripts/new-android-keystore.sh)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: brulion-android-apk
+          path: dist-android/
+          if-no-files-found: error
+          retention-days: 30
