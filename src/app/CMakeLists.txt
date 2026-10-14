@@ -89,6 +89,16 @@ qt_add_qml_module(brulion
 
 set_target_properties(brulion PROPERTIES OUTPUT_NAME brulion)
 
+# --- App areas (editor, shell, views, ...): every src/app/<area>/area.cmake is included here.
+# An area adds its C++ with target_sources(brulion PRIVATE <area>/x.cpp ...) and its QML with
+# qt_target_qml_sources(brulion QML_FILES qml/<area>/X.qml ...) (paths relative to src/app),
+# so parallel work never edits this file. C++ types use QML_ELEMENT/QML_SINGLETON.
+file(GLOB _brulion_app_areas CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*/area.cmake)
+list(SORT _brulion_app_areas)
+foreach(_area IN LISTS _brulion_app_areas)
+    include(${_area})
+endforeach()
+
 # Android package (APK/AAB via androiddeployqt): docs/ANDROID.md, scripts/android-build.sh.
 # android/ holds the manifest, resources and the Kotlin sources (alarms, permissions,
 # notification taps). ABIs come from the configure option QT_ANDROID_ABIS (default: the ABI

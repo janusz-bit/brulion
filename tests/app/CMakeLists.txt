@@ -4,3 +4,12 @@
 brulion_add_test(tst_ui_helpers
     SOURCES tst_uihelpers.cpp
     LIBS brulion_ui_helpers)
+
+# App areas add their tests in tests/app/<area>/CMakeLists.txt (picked up automatically).
+file(GLOB _brulion_app_test_dirs LIST_DIRECTORIES true RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)
+list(SORT _brulion_app_test_dirs)
+foreach(_d IN LISTS _brulion_app_test_dirs)
+    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${_d} AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${_d}/CMakeLists.txt)
+        add_subdirectory(${_d})
+    endif()
+endforeach()
