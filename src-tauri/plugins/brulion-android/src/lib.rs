@@ -2,10 +2,12 @@
 //!
 //! * all-files access (MANAGE_EXTERNAL_STORAGE) so a Syncthing folder on shared storage can be
 //!   the vault,
-//! * notification and exact-alarm permissions,
+//! * notification, exact-alarm and (Android 14+) full-screen-intent permissions,
 //! * native reminders: AlarmManager alarms persisted in SharedPreferences and re-armed after a
-//!   reboot / app update / clock or time-zone change, notification channels `reminders` and
-//!   `alarms`, actions "Drzemka 10 min" (re-armed natively) and "OK", a full-screen alarm screen,
+//!   reboot / app update / clock or time-zone change, notification channels `reminders`,
+//!   `alarms` and `missed-alarms`, actions "Drzemka 10 min" (re-armed natively) and "OK", a
+//!   full-screen alarm screen; an alarm nobody reacts to stops ringing after `ringMinutes`
+//!   (default [`DEFAULT_RING_MINUTES`]) and turns into a silent "Przegapiony alarm",
 //! * the notification tap that opened the app (`take_activation`, event
 //!   `notification-activated`).
 //!
@@ -35,7 +37,7 @@ use desktop as platform;
 pub use command_names::COMMANDS;
 pub use models::{
     normalize_reminders, Activation, AndroidReminder, Granted, ScheduleArgs, ScheduleResult,
-    MAX_REMINDERS,
+    DEFAULT_RING_MINUTES, MAX_REMINDERS, MAX_RING_MINUTES,
 };
 
 /// Plugin name (`plugin:brulion-android|...`, capability `brulion-android:default`).
@@ -60,6 +62,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         commands::request_notification_permission,
         commands::can_schedule_exact,
         commands::request_exact_alarms,
+        commands::can_use_full_screen_intent,
+        commands::request_full_screen_intent,
         commands::schedule_reminders,
         commands::take_activation,
     ]);
@@ -72,6 +76,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         commands::request_notification_permission,
         commands::can_schedule_exact,
         commands::request_exact_alarms,
+        commands::can_use_full_screen_intent,
+        commands::request_full_screen_intent,
         commands::schedule_reminders,
         commands::take_activation,
         commands::register_listener,
@@ -92,6 +98,10 @@ mod contract_tests {
     const KOTLIN_PLUGIN: &str = include_str!(
         "../android/src/main/java/io/github/januszbit/brulion/android/BrulionAndroidPlugin.kt"
     );
+    const KOTLIN_REMINDER: &str =
+        include_str!("../android/src/main/java/io/github/januszbit/brulion/android/Reminder.kt");
+    const KOTLIN_RING_TIMEOUT: &str =
+        include_str!("../android/src/main/java/io/github/januszbit/brulion/android/RingTimeout.kt");
     const MANIFEST: &str = include_str!("../android/src/main/AndroidManifest.xml");
 
     const LISTENER_COMMANDS: &[&str] = &["register_listener", "remove_listener"];
@@ -159,6 +169,88 @@ mod contract_tests {
         );
     }
 
+    /// Every field of `AndroidReminder` is documented, parsed by Kotlin's `ReminderArg` and
+    /// persisted by Kotlin's `Reminder`.
+    #[test]
+    fn reminder_fields_match_kotlin_and_docs() {
+        let full = crate::AndroidReminder {
+            id: 1,
+            title: "t".into(),
+            body: "b".into(),
+            at: 2,
+            alarm: true,
+            path: "p.md".into(),
+            line: 3,
+            ring_minutes: Some(5),
+        };
+        let value = serde_json::to_value(full).unwrap();
+        let fields = value.as_object().unwrap();
+        assert_eq!(fields.len(), 8, "a new field needs a check here");
+        let doc_line = ARCHITECTURE
+            .lines()
+            .find(|l| l.starts_with("`AndroidReminder = {"))
+            .expect("AndroidReminder type in docs/ARCHITECTURE.md");
+        for name in fields.keys() {
+            assert!(
+                doc_line.contains(&format!(" {name}: "))
+                    || doc_line.contains(&format!(" {name}?: ")),
+                "docs/ARCHITECTURE.md AndroidReminder lacks {name}"
+            );
+            assert!(
+                KOTLIN_PLUGIN.contains(&format!("var {name}: ")),
+                "ReminderArg (BrulionAndroidPlugin.kt) lacks `var {name}`"
+            );
+            assert!(
+                KOTLIN_REMINDER.contains(&format!("json.put(\"{name}\"")),
+                "Reminder.toJson (Reminder.kt) does not persist {name}"
+            );
+        }
+    }
+
+    /// Rust documents the ring-time defaults, Kotlin applies them: they must agree.
+    #[test]
+    fn ring_time_limits_match_kotlin() {
+        assert!(KOTLIN_RING_TIMEOUT.contains(&format!(
+            "const val DEFAULT_MINUTES = {}",
+            crate::DEFAULT_RING_MINUTES
+        )));
+        assert!(KOTLIN_RING_TIMEOUT.contains(&format!(
+            "const val MAX_MINUTES = {}",
+            crate::MAX_RING_MINUTES
+        )));
+        assert!(ARCHITECTURE.contains(&format!(
+            "default {}, clamped to 1–{}",
+            crate::DEFAULT_RING_MINUTES,
+            crate::MAX_RING_MINUTES
+        )));
+    }
+
+    /// `build.rs` writes one permission file per command; none may be left over from a
+    /// removed command.
+    #[test]
+    fn autogenerated_permissions_match_the_commands() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("permissions/autogenerated/commands");
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        files.sort();
+        let mut expected: Vec<String> = COMMANDS.iter().map(|c| format!("{c}.toml")).collect();
+        expected.sort();
+        assert_eq!(files, expected);
+        let reference = std::fs::read_to_string(dir.join("../reference.md")).unwrap();
+        for cmd in COMMANDS {
+            assert!(
+                reference.contains(&format!(
+                    "`brulion-android:allow-{}`",
+                    cmd.replace('_', "-")
+                )),
+                "permissions/autogenerated/reference.md lacks {cmd}"
+            );
+        }
+    }
+
     #[test]
     fn manifest_declares_the_contract_permissions_and_components() {
         for perm in [
@@ -181,6 +273,7 @@ mod contract_tests {
         for component in [
             "ReminderReceiver",
             "ActionReceiver",
+            "RingTimeoutReceiver",
             "BootReceiver",
             "AlarmActivity",
         ] {

@@ -64,15 +64,19 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`, rozdział 6.
   i nastawia budziki systemowe (`AlarmManager`): alarmy przez `setAlarmClock` (budzi telefon,
   w pasku stanu widać ikonę budzika), zwykłe przypomnienia przez `setExactAndAllowWhileIdle`.
   Naraz planowanych jest najwyżej 400 najbliższych przypomnień.
-* **Kanały powiadomień**: „Przypomnienia” (wysoki priorytet, dźwięk powiadomienia) i „Alarmy”
+* **Kanały powiadomień**: „Przypomnienia” (wysoki priorytet, dźwięk powiadomienia), „Alarmy”
   (dźwięk budzika na strumieniu alarmu, wibracje, dzwoni aż do reakcji, widoczne na ekranie
-  blokady). Dźwięk i wibracje każdego kanału zmienisz w *Ustawienia → Aplikacje → Brulion →
-  Powiadomienia*.
+  blokady) i „Przegapione alarmy” (ciche). Dźwięk i wibracje każdego kanału zmienisz
+  w *Ustawienia → Aplikacje → Brulion → Powiadomienia*.
+* **Alarm bez reakcji** przestaje dzwonić sam po **10 minutach** (aplikacja może ustawić inny
+  czas dla danego alarmu, od 1 do 60 minut) — także przy zamkniętej aplikacji. Zamienia się
+  wtedy w ciche powiadomienie **„Przegapiony alarm”**, a ekran alarmu się zamyka; stuknięcie
+  w powiadomienie nadal otwiera notatkę.
 * **Alarm przy wygaszonym ekranie** otwiera pełnoekranowy ekran alarmu nad ekranem blokady
   z przyciskami **Drzemka 10 min**, **OK** i **Otwórz notatkę**.
 * Przyciski w powiadomieniu: **Drzemka 10 min** (przypomnienie wróci za 10 minut — działa także
   przy zamkniętej aplikacji) i **OK**. Stuknięcie w powiadomienie otwiera notatkę w miejscu
-  przypomnienia.
+  przypomnienia. Przy alarmie każda z tych reakcji wycisza go i zamyka ekran alarmu.
 * **Po restarcie** telefonu (po pierwszym odblokowaniu), po aktualizacji aplikacji i po zmianie
   godziny przypomnienia są nastawiane ponownie. Te, które przypadły, gdy telefon był wyłączony
   (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
@@ -95,8 +99,9 @@ na komputerze.
     (Brulion otworzy ten ekran). Po włączeniu przypomnienia są od razu przestawiane na dokładne;
   * bez tego uprawnienia przypomnienia przychodzą z opóźnieniem (minuty, w trybie uśpienia dłużej).
 * **Powiadomienia pełnoekranowe** (Android 14+): potrzebne do ekranu alarmu nad ekranem blokady —
-  *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Powiadomienia pełnoekranowe*. Bez niego
-  alarm i tak dzwoni, ale pokazuje się jako zwykłe powiadomienie.
+  *Ustawienia → Aplikacje → Specjalny dostęp aplikacji → Powiadomienia pełnoekranowe* (Brulion
+  może otworzyć ten ekran; gdy telefon go nie ma — ustawienia powiadomień Brulionu). Bez tego
+  uprawnienia alarm i tak dzwoni, ale pokazuje się jako zwykłe powiadomienie.
 * **Nie przeszkadzać**: alarmy mają kategorię „alarm”. Jeśli w trybie „Nie przeszkadzać” alarmy
   są wyciszone, zezwól na nie w ustawieniach tego trybu.
 
@@ -173,13 +178,23 @@ zaktualizuje wersji podpisanej innym kluczem. `BRULION_ANDROID_TARGETS=aarch64` 
 dla 64-bitowych telefonów ARM (prawie wszystkie współczesne); bez tej zmiennej APK obejmuje
 wszystkie architektury. Opcje: `scripts/android-build.sh --help`.
 
-Ręcznie, samym Tauri CLI (APK niepodpisany):
+Ręcznie, samym Tauri CLI (APK niepodpisany) — zalecany jest jednak `scripts/android-build.sh`,
+który robi to samo i omija znane pułapki:
 
 ```sh
 npx tauri android init          # tylko raz: tworzy projekt Gradle w src-tauri/gen/android
+# tylko raz: jeden wątek Gradle (patrz niżej)
+printf '\norg.gradle.workers.max=1\n' >> src-tauri/gen/android/gradle.properties
 npx tauri android build --apk --target aarch64
 # src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
+
+Bez `org.gradle.workers.max=1` budowanie potrafi losowo przerwać się błędem
+„failed to copy tauri-api to the plugin project … No such file or directory”: skrypty `build.rs`
+wtyczek Tauri kopiują bibliotekę `tauri-android` (razem z jej katalogiem `build/`) do każdej
+wtyczki, a Gradle może w tym samym czasie kompilować tę bibliotekę w innym wątku. Jeden wątek
+Gradle rozdziela te kroki (Rust i tak kompiluje się na wszystkich rdzeniach).
+`scripts/android-build.sh` dopisuje to ustawienie sam.
 
 Do pracy nad aplikacją na podłączonym telefonie (USB, debugowanie włączone):
 `npx tauri android dev`.
@@ -194,8 +209,9 @@ Do pracy nad aplikacją na podłączonym telefonie (USB, debugowanie włączone)
   `cargo test --workspace` w `src-tauri` (wtyczka jest członkiem workspace’u aplikacji; to samo
   uruchamia CI i `nix build`).
 * Kotlin: `src-tauri/plugins/brulion-android/android` (pakiet `io.github.januszbit.brulion.android`).
-  Testy jednostkowe: w `src-tauri/gen/android` uruchom
-  `./gradlew :tauri-plugin-brulion-android:testDebugUnitTest`.
+  Testy jednostkowe i lint: w `src-tauri/gen/android` uruchom
+  `./gradlew :tauri-plugin-brulion-android:testDebugUnitTest :tauri-plugin-brulion-android:lintDebug`
+  (to samo robi `android.yml` w CI).
 * Logi: `adb logcat -s BrulionAndroid:* Tauri:*`.
 * Nastawione budziki: `adb shell dumpsys alarm | grep -B2 -A6 io.github.januszbit.brulion`.
 * Test ponownego nastawiania bez restartu (odbiornik nie jest eksportowany, więc potrzebny jest

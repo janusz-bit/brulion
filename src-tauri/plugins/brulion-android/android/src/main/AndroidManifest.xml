@@ -36,6 +36,11 @@
             android:name="io.github.januszbit.brulion.android.ActionReceiver"
             android:exported="false" />
 
+        <!-- An alarm rang out with no reaction: silence it (AlarmManager one-shot). -->
+        <receiver
+            android:name="io.github.januszbit.brulion.android.RingTimeoutReceiver"
+            android:exported="false" />
+
         <!-- System broadcasts reach non-exported receivers; other apps cannot. -->
         <receiver
             android:name="io.github.januszbit.brulion.android.BootReceiver"

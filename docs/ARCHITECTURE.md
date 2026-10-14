@@ -292,10 +292,12 @@ neutral values (`granted: true`, `scheduled: 0`, empty activation).
 | `request_notification_permission` | – | `{ granted: boolean }` (Android 13+ POST_NOTIFICATIONS) |
 | `can_schedule_exact` | – | `{ granted: boolean }` |
 | `request_exact_alarms` | – | `null` (opens settings on Android 12+) |
+| `can_use_full_screen_intent` | – | `{ granted: boolean }` — may alarms open the alarm screen over the lock screen (Android 14+ `canUseFullScreenIntent()`; `true` below) |
+| `request_full_screen_intent` | – | `null` (Android 14+ when not granted: opens "Full-screen notifications" settings, fallback the app's notification settings; app re-checks on resume) |
 | `schedule_reminders` | `{ items: AndroidReminder[] }` | `{ scheduled: number; exact: boolean }` — replaces the whole set |
 | `take_activation` | – | `{ path?: string; line?: number }` — notification tap that opened the app (cleared on read) |
 
-`AndroidReminder = { id: number /* int32; a uint32 is wrapped into int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number }`.
+`AndroidReminder = { id: number /* int32; a uint32 is wrapped into int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number; ringMinutes?: number /* alarms: ring time, default 10, clamped to 1–60 */ }`.
 The plugin also emits the event `notification-activated` `{ path, line }` (listen with
 `addPluginListener('brulion-android', 'notification-activated', cb)`).
 Native side: AlarmManager exact alarms (`setAlarmClock` for alarms, `setExactAndAllowWhileIdle`
@@ -303,6 +305,11 @@ for reminders; inexact fallback without permission), reminders persisted in Shar
 and re-armed on BOOT_COMPLETED / app update / time change; notification channels `reminders`
 (high) and `alarms` (high importance + PRIORITY_MAX, alarm sound, insistent, full-screen intent
 to a native lock-screen `AlarmActivity`); actions "Drzemka 10 min" (native re-arm) and "OK".
+An alarm nobody reacts to stops ringing after `ringMinutes` (an AlarmManager one-shot, so also
+with the app and the alarm screen closed): it is replaced by a silent "Przegapiony alarm"
+notification on channel `missed-alarms` (a tap still opens the note) and the alarm screen
+closes; every reaction (tap, snooze, OK, swipe) cancels the pending auto-stop and closes an
+open alarm screen.
 `schedule_reminders` drops past items, keeps the last copy of a repeated id and arms at most the
 400 soonest; native snoozes survive it unless the same id is sent again. Reminders keep their
 local wall-clock time across time-zone changes; ones missed while the phone was off (≤ 24 h)

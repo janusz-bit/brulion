@@ -1,10 +1,10 @@
 ## Default Permission
 
 Everything Brulion's frontend needs from the Android plugin: checking and requesting
-all-files access (Syncthing folders on shared storage), the notification and exact-alarm
-permissions, replacing the set of native reminders, reading the notification tap that
-opened the app and listening to `notification-activated`. On desktop the commands exist
-and return neutral values.
+all-files access (Syncthing folders on shared storage), the notification, exact-alarm and
+full-screen-intent permissions, replacing the set of native reminders, reading the
+notification tap that opened the app and listening to `notification-activated`. On desktop
+the commands exist and return neutral values.
 
 #### This default permission set includes the following:
 
@@ -14,6 +14,8 @@ and return neutral values.
 - `allow-request-notification-permission`
 - `allow-can-schedule-exact`
 - `allow-request-exact-alarms`
+- `allow-can-use-full-screen-intent`
+- `allow-request-full-screen-intent`
 - `allow-schedule-reminders`
 - `allow-take-activation`
 - `allow-register-listener`
@@ -50,6 +52,32 @@ Enables the can_schedule_exact command without any pre-configured scope.
 <td>
 
 Denies the can_schedule_exact command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`brulion-android:allow-can-use-full-screen-intent`
+
+</td>
+<td>
+
+Enables the can_use_full_screen_intent command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`brulion-android:deny-can-use-full-screen-intent`
+
+</td>
+<td>
+
+Denies the can_use_full_screen_intent command without any pre-configured scope.
 
 </td>
 </tr>
@@ -206,6 +234,32 @@ Enables the request_exact_alarms command without any pre-configured scope.
 <td>
 
 Denies the request_exact_alarms command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`brulion-android:allow-request-full-screen-intent`
+
+</td>
+<td>
+
+Enables the request_full_screen_intent command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`brulion-android:deny-request-full-screen-intent`
+
+</td>
+<td>
+
+Denies the request_full_screen_intent command without any pre-configured scope.
 
 </td>
 </tr>

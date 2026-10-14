@@ -82,6 +82,18 @@ pub(crate) async fn request_exact_alarms<R: Runtime>(app: &AppHandle<R>) -> Resu
     call(app, "requestExactAlarms", ()).await
 }
 
+pub(crate) async fn can_use_full_screen_intent<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Granted, String> {
+    call(app, "canUseFullScreenIntent", ()).await
+}
+
+pub(crate) async fn request_full_screen_intent<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<(), String> {
+    call(app, "requestFullScreenIntent", ()).await
+}
+
 pub(crate) async fn schedule_reminders<R: Runtime>(
     app: &AppHandle<R>,
     items: Vec<AndroidReminder>,

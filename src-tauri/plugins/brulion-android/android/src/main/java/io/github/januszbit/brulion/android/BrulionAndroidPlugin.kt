@@ -13,6 +13,7 @@ import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import android.webkit.WebView
+import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import app.tauri.PermissionState
@@ -47,8 +48,20 @@ class ReminderArg {
   var path: String = ""
   var line: Int = 0
 
+  /** Alarms only: minutes of ringing before it turns into a silent "Przegapiony alarm". */
+  var ringMinutes: Int? = null
+
   internal fun toReminder(): Reminder =
-    Reminder(id = id, title = title, body = body, at = at, alarm = alarm, path = path, line = line)
+    Reminder(
+      id = id,
+      title = title,
+      body = body,
+      at = at,
+      alarm = alarm,
+      path = path,
+      line = line,
+      ringMinutes = RingTimeout.minutes(ringMinutes?.toLong())
+    )
 }
 
 @InvokeArg
@@ -164,13 +177,34 @@ class BrulionAndroidPlugin(private val activity: Activity) : Plugin(activity) {
 
   private fun openNotificationSettings() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      startFirst(
-        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName),
-        appDetailsIntent()
-      )
+      startFirst(notificationSettingsIntent(), appDetailsIntent())
     } else {
       startFirst(appDetailsIntent())
     }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Full-screen intents (the alarm screen over the lock screen, Android 14+)
+  // ---------------------------------------------------------------------------------------------
+
+  @Command
+  fun canUseFullScreenIntent(invoke: Invoke) {
+    invoke.resolve(granted(ReminderNotifier.canUseFullScreenIntent(activity)))
+  }
+
+  @Command
+  fun requestFullScreenIntent(invoke: Invoke) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+      !ReminderNotifier.canUseFullScreenIntent(activity)
+    ) {
+      // "Full screen notifications" special access; the app re-checks when it resumes.
+      startFirst(
+        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri()),
+        notificationSettingsIntent(),
+        appDetailsIntent()
+      )
+    }
+    invoke.resolve()
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -261,6 +295,11 @@ class BrulionAndroidPlugin(private val activity: Activity) : Plugin(activity) {
   private fun packageUri(): Uri = Uri.parse("package:" + activity.packageName)
 
   private fun appDetailsIntent(): Intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri())
+
+  /** The app's notification settings (Android 8+). */
+  @RequiresApi(Build.VERSION_CODES.O)
+  private fun notificationSettingsIntent(): Intent =
+    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
 
   /** Starts the first of [intents] the system can handle (settings screens vary by vendor). */
   private fun startFirst(vararg intents: Intent): Boolean {

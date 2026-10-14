@@ -46,6 +46,18 @@ pub(crate) async fn request_exact_alarms<R: Runtime>(_app: &AppHandle<R>) -> Res
     Ok(())
 }
 
+pub(crate) async fn can_use_full_screen_intent<R: Runtime>(
+    _app: &AppHandle<R>,
+) -> Result<Granted, String> {
+    Ok(GRANTED)
+}
+
+pub(crate) async fn request_full_screen_intent<R: Runtime>(
+    _app: &AppHandle<R>,
+) -> Result<(), String> {
+    Ok(())
+}
+
 /// Desktop keeps reminders in the in-app `ReminderScheduler`; nothing is armed natively.
 pub(crate) async fn schedule_reminders<R: Runtime>(
     _app: &AppHandle<R>,

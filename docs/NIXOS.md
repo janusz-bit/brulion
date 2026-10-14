@@ -244,17 +244,41 @@ uruchom:
 
 ```sh
 scripts/update-nix-hashes.sh           # przelicza i wpisuje nowy hash
-scripts/update-nix-hashes.sh --check   # tylko sprawdza (kod 1, gdy hash jest nieaktualny)
+scripts/update-nix-hashes.sh --check   # tylko sprawdza: kod 1, gdy hash jest nieaktualny
+                                       # (2, gdy nie da się go policzyć, np. brak sieci)
 ```
 
 i zatwierdź `nix/npm-deps.nix` razem z `package-lock.json`. Nieaktualny hash objawia się
 w `nix build` błędem `hash mismatch in fixed-output derivation ... brulion-npm-deps`
-albo `npmDepsHash is out of date` (CI sprawdza to na początku zadania „Nix flake”).
-`scripts/release.sh` robi to sam przy podbiciu wersji, jeśli Nix jest zainstalowany. Pull
-requesty Dependabota z aktualizacjami npm wymagają tego kroku ręcznie.
+albo `npmDepsHash is out of date` (CI sprawdza to na początku zadania „Nix flake” i podaje
+wtedy, co uruchomić). `scripts/release.sh` robi to sam przy podbiciu wersji, jeśli Nix jest
+zainstalowany.
 
 Zależności Rusta nie mają hasha do pilnowania: `nix/package.nix` czyta je wprost
 z `src-tauri/Cargo.lock` (tylko zależności z gita wymagałyby `cargoLock.outputHashes`).
 Wersję aplikacji Nix bierze z `package.json`.
 
 Nowszy nixpkgs: `nix flake update`, potem `nix flake check -L`.
+
+### Pull requesty Dependabota
+
+Pull requesty Dependabota z aktualizacjami npm poprawia workflow „Nix hash”
+(`.github/workflows/nix-hash.yml`): uruchamia `scripts/update-nix-hashes.sh` na gałęzi PR-a
+i, jeśli hash się zmienił, dopisuje do niej commit z `nix/npm-deps.nix` (jako
+`github-actions[bot]`, domyślnym `GITHUB_TOKEN`). Na dowolnej innej gałęzi to samo robi
+Actions → Nix hash → Run workflow (wybierz gałąź).
+
+* Commit wypchnięty przez `GITHUB_TOKEN` sam nie uruchamia żadnego workflow, dlatego „Nix hash”
+  uruchamia potem CI na tej gałęzi (`workflow_dispatch`, wyjątek od tej reguły) — jego wyniki
+  dotyczą nowego commita i widać je w PR-ze. **Ponowne uruchomienie** (Re-run) starego,
+  czerwonego przebiegu CI nic nie da: re-run testuje commit z pierwotnego zdarzenia, czyli ten
+  z nieaktualnym hashem. Jeśli wyniki CI dla nowego commita się nie pojawiły, uruchom CI ręcznie:
+  Actions → CI → Run workflow → gałąź PR-a (zamykanie PR-a Dependabota odradzamy — Dependabot
+  traktuje to jako rezygnację z tej wersji).
+* Pierwszy przebieg CI (dla commita samego Dependabota) kończy się w zadaniu „Nix flake”
+  błędem o nieaktualnym hashu — to oczekiwane; liczy się przebieg dla commita z poprawką.
+* Z cudzym commitem na gałęzi Dependabot może przestać sam aktualizować PR („edited by someone
+  else”) i odmówić `@dependabot rebase`. Komentarz `@dependabot recreate` nadpisuje gałąź bez
+  tego commita, a „Nix hash” dopisuje go od nowa.
+* Workflow działa tylko dla PR-ów Dependabota z tego repozytorium; gdy na gałąź Dependabota
+  wypchnie coś człowiek, hash przelicza on sam (albo Run workflow jak wyżej).

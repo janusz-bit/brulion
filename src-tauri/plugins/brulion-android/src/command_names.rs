@@ -10,6 +10,8 @@ pub const COMMANDS: &[&str] = &[
     "request_notification_permission",
     "can_schedule_exact",
     "request_exact_alarms",
+    "can_use_full_screen_intent",
+    "request_full_screen_intent",
     "schedule_reminders",
     "take_activation",
     "register_listener",

@@ -46,4 +46,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.0")
     implementation(project(":tauri-android"))
     testImplementation("junit:junit:4.13.2")
+    // The real org.json for JVM unit tests (android.jar only has stubs that throw).
+    testImplementation("org.json:json:20260814")
 }

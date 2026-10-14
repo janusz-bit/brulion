@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the can_schedule_exact command without any pre-configured scope."
         },
         {
+          "description": "Enables the can_use_full_screen_intent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-can-use-full-screen-intent",
+          "markdownDescription": "Enables the can_use_full_screen_intent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the can_use_full_screen_intent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-can-use-full-screen-intent",
+          "markdownDescription": "Denies the can_use_full_screen_intent command without any pre-configured scope."
+        },
+        {
           "description": "Enables the has_all_files_access command without any pre-configured scope.",
           "type": "string",
           "const": "allow-has-all-files-access",
@@ -379,6 +391,18 @@
           "markdownDescription": "Denies the request_exact_alarms command without any pre-configured scope."
         },
         {
+          "description": "Enables the request_full_screen_intent command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-request-full-screen-intent",
+          "markdownDescription": "Enables the request_full_screen_intent command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the request_full_screen_intent command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-request-full-screen-intent",
+          "markdownDescription": "Denies the request_full_screen_intent command without any pre-configured scope."
+        },
+        {
           "description": "Enables the request_notification_permission command without any pre-configured scope.",
           "type": "string",
           "const": "allow-request-notification-permission",
@@ -415,10 +439,10 @@
           "markdownDescription": "Denies the take_activation command without any pre-configured scope."
         },
         {
-          "description": "Everything Brulion's frontend needs from the Android plugin: checking and requesting\nall-files access (Syncthing folders on shared storage), the notification and exact-alarm\npermissions, replacing the set of native reminders, reading the notification tap that\nopened the app and listening to `notification-activated`. On desktop the commands exist\nand return neutral values.\n\n#### This default permission set includes:\n\n- `allow-has-all-files-access`\n- `allow-request-all-files-access`\n- `allow-notification-permission`\n- `allow-request-notification-permission`\n- `allow-can-schedule-exact`\n- `allow-request-exact-alarms`\n- `allow-schedule-reminders`\n- `allow-take-activation`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Everything Brulion's frontend needs from the Android plugin: checking and requesting\nall-files access (Syncthing folders on shared storage), the notification, exact-alarm and\nfull-screen-intent permissions, replacing the set of native reminders, reading the\nnotification tap that opened the app and listening to `notification-activated`. On desktop\nthe commands exist and return neutral values.\n\n#### This default permission set includes:\n\n- `allow-has-all-files-access`\n- `allow-request-all-files-access`\n- `allow-notification-permission`\n- `allow-request-notification-permission`\n- `allow-can-schedule-exact`\n- `allow-request-exact-alarms`\n- `allow-can-use-full-screen-intent`\n- `allow-request-full-screen-intent`\n- `allow-schedule-reminders`\n- `allow-take-activation`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Everything Brulion's frontend needs from the Android plugin: checking and requesting\nall-files access (Syncthing folders on shared storage), the notification and exact-alarm\npermissions, replacing the set of native reminders, reading the notification tap that\nopened the app and listening to `notification-activated`. On desktop the commands exist\nand return neutral values.\n\n#### This default permission set includes:\n\n- `allow-has-all-files-access`\n- `allow-request-all-files-access`\n- `allow-notification-permission`\n- `allow-request-notification-permission`\n- `allow-can-schedule-exact`\n- `allow-request-exact-alarms`\n- `allow-schedule-reminders`\n- `allow-take-activation`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Everything Brulion's frontend needs from the Android plugin: checking and requesting\nall-files access (Syncthing folders on shared storage), the notification, exact-alarm and\nfull-screen-intent permissions, replacing the set of native reminders, reading the\nnotification tap that opened the app and listening to `notification-activated`. On desktop\nthe commands exist and return neutral values.\n\n#### This default permission set includes:\n\n- `allow-has-all-files-access`\n- `allow-request-all-files-access`\n- `allow-notification-permission`\n- `allow-request-notification-permission`\n- `allow-can-schedule-exact`\n- `allow-request-exact-alarms`\n- `allow-can-use-full-screen-intent`\n- `allow-request-full-screen-intent`\n- `allow-schedule-reminders`\n- `allow-take-activation`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

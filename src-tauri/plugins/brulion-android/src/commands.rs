@@ -49,6 +49,24 @@ pub(crate) async fn request_exact_alarms<R: Runtime>(app: AppHandle<R>) -> Resul
     platform::request_exact_alarms(&app).await
 }
 
+/// `{ granted }`: may alarms open the full-screen alarm screen over the lock screen? Android
+/// 14+ lets the user revoke this ("Full-screen notifications"); always true below.
+#[command]
+pub(crate) async fn can_use_full_screen_intent<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Granted, String> {
+    platform::can_use_full_screen_intent(&app).await
+}
+
+/// Opens the "Full-screen notifications" settings of the app (Android 14+ when not granted;
+/// falls back to the app's notification settings). The app re-checks when it resumes.
+#[command]
+pub(crate) async fn request_full_screen_intent<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<(), String> {
+    platform::request_full_screen_intent(&app).await
+}
+
 /// Replaces the whole set of natively scheduled reminders with `items`.
 #[command]
 pub(crate) async fn schedule_reminders<R: Runtime>(

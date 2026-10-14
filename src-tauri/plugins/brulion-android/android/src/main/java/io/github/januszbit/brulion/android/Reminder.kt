@@ -23,6 +23,9 @@ internal object Extras {
 
   /** Notification to dismiss once the app is opened from it. */
   const val NOTIFICATION_ID = "io.github.januszbit.brulion.android.extra.NOTIFICATION_ID"
+
+  /** When a ringing alarm stops by itself (`SystemClock.elapsedRealtime` ms) — alarm screen. */
+  const val STOP_AT = "io.github.januszbit.brulion.android.extra.STOP_AT"
 }
 
 /** Intent actions of the plugin's own broadcasts. */
@@ -30,13 +33,18 @@ internal object Actions {
   const val FIRE = "io.github.januszbit.brulion.android.action.FIRE"
   const val SNOOZE = "io.github.januszbit.brulion.android.action.SNOOZE"
   const val DISMISS = "io.github.januszbit.brulion.android.action.DISMISS"
+
+  /** The ring time of an alarm is over (see [RingTimeout]). */
+  const val RING_TIMEOUT = "io.github.januszbit.brulion.android.action.RING_TIMEOUT"
 }
 
 /**
  * One native reminder — `AndroidReminder` of the IPC contract (docs/ARCHITECTURE.md).
  *
- * [at] is epoch ms. [snoozed] marks a reminder re-armed natively by "Drzemka 10 min": the
- * frontend does not know about it, so it survives `scheduleReminders` replacing the set.
+ * [at] is epoch ms. [ringMinutes] (alarms only) is how long the alarm rings before it turns into
+ * a silent "Przegapiony alarm", already resolved by [RingTimeout.minutes]. [snoozed] marks a
+ * reminder re-armed natively by "Drzemka 10 min": the frontend does not know about it, so it
+ * survives `scheduleReminders` replacing the set.
  */
 internal data class Reminder(
   val id: Int,
@@ -46,7 +54,8 @@ internal data class Reminder(
   val alarm: Boolean,
   val path: String,
   val line: Int,
-  val snoozed: Boolean = false
+  val snoozed: Boolean = false,
+  val ringMinutes: Int = RingTimeout.DEFAULT_MINUTES
 ) {
   fun toJson(): JSONObject {
     val json = JSONObject()
@@ -58,6 +67,7 @@ internal data class Reminder(
     json.put("path", path)
     json.put("line", line)
     json.put("snoozed", snoozed)
+    json.put("ringMinutes", ringMinutes)
     return json
   }
 
@@ -75,7 +85,9 @@ internal data class Reminder(
           alarm = json.optBoolean("alarm", false),
           path = json.optString("path", ""),
           line = json.optInt("line", 0),
-          snoozed = json.optBoolean("snoozed", false)
+          snoozed = json.optBoolean("snoozed", false),
+          // Absent in reminders stored by older versions: the default.
+          ringMinutes = RingTimeout.minutes((json.opt("ringMinutes") as? Number)?.toLong())
         )
       } catch (e: JSONException) {
         null

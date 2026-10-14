@@ -124,8 +124,17 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v23
         with:
           determinate: false
-      # Clear message when package-lock.json changed without nix/npm-deps.nix.
-      - run: scripts/update-nix-hashes.sh --check
+      # First, so that a lock file change without nix/npm-deps.nix fails fast with a clear
+      # message instead of a "hash mismatch in fixed-output derivation" deep in the build.
+      # Exit codes of the script: 1 = hash out of date, 2 = it could not check.
+      - name: Check the npm hash in nix/npm-deps.nix
+        run: |
+          status=0
+          scripts/update-nix-hashes.sh --check || status=$?
+          if [ "$status" -eq 1 ]; then
+            echo "::error file=nix/npm-deps.nix,title=nix/npm-deps.nix is out of date::package-lock.json changed but the npm dependency hash in nix/npm-deps.nix did not. Run scripts/update-nix-hashes.sh (needs Nix) and commit nix/npm-deps.nix together with package-lock.json. Dependabot PRs get this commit automatically from the 'Nix hash' workflow (nix-hash.yml); any branch can get it from Actions -> Nix hash -> Run workflow."
+          fi
+          exit "$status"
       - run: nix flake check -L
       - run: nix build .#brulion -L
       - run: nix build .#brulion-web -L

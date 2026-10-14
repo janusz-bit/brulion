@@ -7,6 +7,9 @@
 #
 # Usage: scripts/update-nix-hashes.sh [--check]
 #   --check  only compare: exit 1 when nix/npm-deps.nix is out of date (CI, pre-commit)
+# Exit status 2: the hash could not be computed (no nix, network, unexpected file layout).
+#
+# Dependabot's npm PRs get this commit from .github/workflows/nix-hash.yml.
 #
 # The hash comes from prefetch-npm-deps of the nixpkgs pinned in flake.lock, the same tool
 # fetchNpmDeps runs in the build. Cargo needs no hash: nix/package.nix vendors the crates
@@ -19,7 +22,7 @@ cd "$ROOT"
 FILE=nix/npm-deps.nix
 HASH_LINE='^  hash = "sha256-[A-Za-z0-9+/]*=*";$'
 
-die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+die() { printf 'error: %s\n' "$*" >&2; exit 2; }
 
 check=0
 for arg in "$@"; do
@@ -44,7 +47,7 @@ echo "Fetching the npm dependencies of package-lock.json (prefetch-npm-deps)..."
 new=$(
   NPM_FETCHER_VERSION=1 nix --extra-experimental-features 'nix-command flakes' \
     run --inputs-from . nixpkgs#prefetch-npm-deps -- package-lock.json
-)
+) || die "prefetch-npm-deps failed (see above)"
 new=${new##*$'\n'}
 [[ $new =~ ^sha256-[A-Za-z0-9+/]+=*$ ]] || die "unexpected output of prefetch-npm-deps: $new"
 
@@ -54,8 +57,10 @@ if [[ $new == "$current" ]]; then
 fi
 
 if ((check)); then
-  printf '%s is out of date:\n  has:    %s\n  should: %s\nRun scripts/update-nix-hashes.sh\n' \
+  printf '%s is out of date (package-lock.json changed):\n  has:    %s\n  should: %s\n' \
     "$FILE" "$current" "$new" >&2
+  printf 'Run scripts/update-nix-hashes.sh and commit %s together with package-lock.json.\n' \
+    "$FILE" >&2
   exit 1
 fi
 

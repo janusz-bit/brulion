@@ -12,6 +12,13 @@ pub const MAX_REMINDERS: usize = 400;
 /// Largest timestamp a JS `Date` can hold (±8.64e15 ms).
 const MAX_EPOCH_MS: f64 = 8.64e15;
 
+/// How long an alarm rings when the item has no `ringMinutes`: after that it stops by itself
+/// and turns into a silent "Przegapiony alarm" notification (applied natively).
+pub const DEFAULT_RING_MINUTES: u32 = 10;
+
+/// Longest ring time an item may ask for (`ringMinutes` is clamped to `1..=MAX_RING_MINUTES`).
+pub const MAX_RING_MINUTES: u32 = 60;
+
 /// `{ granted }` — answer of the permission commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Granted {
@@ -43,6 +50,16 @@ pub struct AndroidReminder {
     /// Line of the reminder in that note.
     #[serde(default)]
     pub line: i32,
+    /// Alarms only: minutes the alarm rings before it stops by itself and turns into a silent
+    /// "Przegapiony alarm" notification. Absent: [`DEFAULT_RING_MINUTES`] (decided natively,
+    /// so reminders stored by older versions get it too). Rounded, clamped to
+    /// `1..=`[`MAX_RING_MINUTES`].
+    #[serde(
+        default,
+        deserialize_with = "ring_minutes",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ring_minutes: Option<u32>,
 }
 
 /// Arguments of `schedule_reminders` (also the payload sent to Kotlin's `scheduleReminders`).
@@ -91,6 +108,19 @@ fn epoch_ms<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
     Ok(ms.round() as i64)
 }
 
+fn ring_minutes<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
+    let Some(minutes) = Option::<f64>::deserialize(d)? else {
+        return Ok(None);
+    };
+    if !minutes.is_finite() {
+        return Err(D::Error::custom("`ringMinutes` must be a finite number"));
+    }
+    // In range after the clamp, so the cast is exact.
+    Ok(Some(
+        minutes.round().clamp(1.0, f64::from(MAX_RING_MINUTES)) as u32,
+    ))
+}
+
 /// Prepares the set handed to the native scheduler: drops reminders that are not in the
 /// future (`at <= now_ms`), keeps the last entry of a duplicated id, orders by time (then
 /// id) and keeps the [`MAX_REMINDERS`] soonest.
@@ -119,6 +149,7 @@ mod tests {
             alarm: false,
             path: "dzienniki/2026_10_14.md".into(),
             line: 3,
+            ring_minutes: None,
         }
     }
 
@@ -155,6 +186,47 @@ mod tests {
         );
         assert!(!r.alarm);
         assert_eq!(r.line, 0);
+        assert_eq!(r.ring_minutes, None);
+        // Absent stays absent on the way to Kotlin, which applies its own default.
+        assert!(serde_json::to_value(&r)
+            .unwrap()
+            .get("ringMinutes")
+            .is_none());
+    }
+
+    #[test]
+    fn ring_minutes_is_optional_rounded_and_clamped() {
+        let ring = |v: serde_json::Value| {
+            serde_json::from_value::<AndroidReminder>(
+                json!({ "id": 1, "at": 1, "alarm": true, "ringMinutes": v }),
+            )
+            .map(|r| r.ring_minutes)
+        };
+        assert_eq!(ring(json!(null)).unwrap(), None);
+        assert_eq!(ring(json!(1)).unwrap(), Some(1));
+        assert_eq!(ring(json!(15)).unwrap(), Some(15));
+        assert_eq!(ring(json!(2.4)).unwrap(), Some(2));
+        assert_eq!(ring(json!(2.5)).unwrap(), Some(3));
+        assert_eq!(
+            ring(json!(MAX_RING_MINUTES)).unwrap(),
+            Some(MAX_RING_MINUTES)
+        );
+        // Out of range: clamped rather than failing the whole set.
+        assert_eq!(ring(json!(0)).unwrap(), Some(1));
+        assert_eq!(ring(json!(-5)).unwrap(), Some(1));
+        assert_eq!(ring(json!(0.2)).unwrap(), Some(1));
+        assert_eq!(ring(json!(1e12)).unwrap(), Some(MAX_RING_MINUTES));
+        for bad in [json!("10"), json!(true), json!([10])] {
+            assert!(ring(bad.clone()).is_err(), "{bad}");
+        }
+        // Sent to Kotlin as an integer under the camelCase name.
+        let r: AndroidReminder =
+            serde_json::from_value(json!({ "id": 2, "at": 1, "alarm": true, "ringMinutes": 25 }))
+                .unwrap();
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(v["ringMinutes"], json!(25));
+        assert!(v["ringMinutes"].is_u64());
+        assert_eq!(serde_json::from_value::<AndroidReminder>(v).unwrap(), r);
     }
 
     #[test]

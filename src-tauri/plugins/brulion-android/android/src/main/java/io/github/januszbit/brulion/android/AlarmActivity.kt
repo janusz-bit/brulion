@@ -9,6 +9,9 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.text.format.DateFormat
 import android.util.TypedValue
 import android.view.Gravity
@@ -24,11 +27,38 @@ import java.util.Date
  * Full-screen alarm shown over the lock screen when an alarm rings while the screen is off
  * (the notification's full-screen intent). The ringing itself belongs to the notification;
  * every button ends it.
+ *
+ * The screen also closes when the alarm stops some other way: its ring time is over
+ * ([RingTimeout]: at the deadline while it is shown, or when the AlarmManager deadline fires
+ * first), a reaction in the notification ("OK", "Drzemka 10 min", a tap — all through
+ * [ReminderNotifier.cancel]), and when it comes back to the front with its alarm no longer
+ * ringing.
  */
 class AlarmActivity : Activity() {
+  private val handler = Handler(Looper.getMainLooper())
+
+  /** The alarm shown. */
+  private var reminder: Reminder? = null
+
+  /** A button was pressed: this screen finishes by itself (opening the note may need unlocking). */
+  private var handled = false
+
+  private val stopRinging = Runnable {
+    if (!handled) {
+      reminder?.let { RingTimeout.expire(this, it) }
+      finish()
+    }
+  }
+
+  // Not after a button press: "Otwórz notatkę" stays open until the keyguard is dismissed.
+  private val onAlarmStopped: (Int) -> Unit = { id ->
+    if (!handled && id == reminder?.id) finish()
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     showOverLockScreen()
+    RingTimeout.addListener(onAlarmStopped)
     if (!bind(intent)) finish()
   }
 
@@ -36,6 +66,18 @@ class AlarmActivity : Activity() {
     super.onNewIntent(intent)
     setIntent(intent)
     bind(intent)
+  }
+
+  override fun onResume() {
+    super.onResume()
+    val shown = reminder ?: return
+    if (!handled && !ReminderNotifier.isRinging(this, shown.id)) finish()
+  }
+
+  override fun onDestroy() {
+    handler.removeCallbacks(stopRinging)
+    RingTimeout.removeListener(onAlarmStopped)
+    super.onDestroy()
   }
 
   private fun showOverLockScreen() {
@@ -53,7 +95,14 @@ class AlarmActivity : Activity() {
 
   private fun bind(intent: Intent?): Boolean {
     val reminder = Reminder.fromIntent(intent) ?: return false
+    this.reminder = reminder
+    handled = false
     setContentView(content(reminder))
+    handler.removeCallbacks(stopRinging)
+    val stopAt = intent?.getLongExtra(Extras.STOP_AT, 0L) ?: 0L
+    if (stopAt > 0L) {
+      handler.postDelayed(stopRinging, (stopAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
+    }
     return true
   }
 
@@ -94,6 +143,7 @@ class AlarmActivity : Activity() {
 
     root.addView(
       button(R.string.brulion_action_snooze) {
+        handled = true
         ReminderActions.snooze(this, reminder)
         finish()
       },
@@ -101,6 +151,7 @@ class AlarmActivity : Activity() {
     )
     root.addView(
       button(R.string.brulion_action_ok) {
+        handled = true
         ReminderActions.dismiss(this, reminder.id)
         finish()
       },
@@ -108,6 +159,7 @@ class AlarmActivity : Activity() {
     )
     root.addView(
       button(R.string.brulion_action_open) {
+        handled = true
         ReminderActions.dismiss(this, reminder.id)
         openNote(reminder)
       },
