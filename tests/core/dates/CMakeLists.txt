@@ -1,0 +1,3 @@
+brulion_add_test(tst_dates SOURCES tst_dates.cpp LIBS brulion_core_dates)
+brulion_add_test(tst_dates_natural SOURCES tst_dates_natural.cpp LIBS brulion_core_dates)
+brulion_add_test(tst_dates_recurrence SOURCES tst_dates_recurrence.cpp LIBS brulion_core_dates)
