@@ -10,18 +10,21 @@
 #   scripts/remote-build.sh -n core -t '^tst_dates' tst_dates   # build target(s), run ctest regex
 #   scripts/remote-build.sh -n ui --run 'scripts/screenshots.sh'  # run a command in the dev shell
 #   scripts/remote-build.sh -n ui --pull tests/screenshots   # copy a directory back afterwards
+#   scripts/remote-build.sh -n core -x src/app/shell -x tests/app/shell   # leave out another
+#       agent's unfinished directories (they are not copied, so CMake never sees them)
 #
 # Environment: REMOTE_HOST (default: laptop), JOBS (default 16), BUILD_TYPE (default Debug).
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-name="default"; tests=""; run=""; pulls=(); targets=()
+name="default"; tests=""; run=""; pulls=(); targets=(); excludes=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n) name="$2"; shift 2 ;;
     -t) tests="$2"; shift 2 ;;
     --run) run="$2"; shift 2 ;;
     --pull) pulls+=("$2"); shift 2 ;;
+    -x) excludes+=("--exclude=/${2#/}"); shift 2 ;;
     *) targets+=("$1"); shift ;;
   esac
 done
@@ -36,6 +39,7 @@ ssh -o BatchMode=yes "${host}" "mkdir -p ${remote_root}/src ${remote_root}/build
 rsync -a --delete \
   --exclude='/build*/' --exclude='/.git/' --exclude='/result*' --exclude='/.direnv/' \
   --exclude='/tests/screenshots/' --exclude='/dist-*/' --exclude='*.o' \
+  ${excludes[@]+"${excludes[@]}"} \
   ./ "${host}:${remote_root}/src/"
 
 target_args=""

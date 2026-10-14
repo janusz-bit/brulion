@@ -21,7 +21,9 @@ Read before changing code:
   files) to `laptop:~/work/brulion-<name>/src`, builds incrementally in `…/build` inside the
   flake dev shell and runs ctest there; `--run '<cmd>'` runs a command in the dev shell
   (`$BRULION_BUILD_DIR` = build dir), `--pull <dir>` copies a directory (e.g.
-  `tests/screenshots`) back. Use a distinct `-n` per agent/task so builds never interfere.
+  `tests/screenshots`) back. Use a distinct `-n` per agent/task so builds never interfere. If another agent's
+  unfinished directory breaks CMake configure, leave it out with `-x <dir>` (repeatable)
+  instead of copying the script.
 * Fallback when the laptop is off (`ssh -o BatchMode=yes laptop true` fails), inside
   `nix develop` on this Pi:
 * `scripts/dev-build.sh` — configure + build `./build` (Ninja, ccache, Debug, -Werror).
