@@ -1,0 +1,206 @@
+#include "sync/merge.h"
+
+#include "sync/diff.h"
+
+#include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+
+using namespace Qt::StringLiterals;
+
+namespace brulion::sync {
+
+namespace {
+
+/// Resolve one diff3 conflict region, or std::nullopt when it is a real conflict.
+std::optional<QStringList> resolveRegion(const QStringList &base, const QStringList &local, const QStringList &remote)
+{
+    if (local == remote)
+        return local;
+    if (local == base)
+        return remote;
+    if (remote == base)
+        return local;
+    if (base.isEmpty())
+        return unionLines(local, remote);
+    return std::nullopt;
+}
+
+void appendOk(QList<MergeHunk> &hunks, const QStringList &lines)
+{
+    if (lines.isEmpty())
+        return;
+    if (!hunks.isEmpty() && hunks.last().kind == MergeHunk::Kind::Ok)
+        hunks.last().lines += lines;
+    else
+        hunks.append(MergeHunk::ok(lines));
+}
+
+QList<MergeHunk> okHunks(const QString &text)
+{
+    const SplitText split = splitText(text);
+    return split.lines.isEmpty() ? QList<MergeHunk>() : QList<MergeHunk>{MergeHunk::ok(split.lines)};
+}
+
+/// Three-way merge of the "ends with a line break" flag; an empty side has no opinion.
+bool mergeFinalNewline(const SplitText &o, const SplitText &a, const SplitText &b)
+{
+    if (a.lines.isEmpty())
+        return b.finalNewline;
+    if (b.lines.isEmpty())
+        return a.finalNewline;
+    return a.finalNewline == o.finalNewline ? b.finalNewline : a.finalNewline;
+}
+
+std::optional<QJsonObject> parseObject(const QString &text)
+{
+    if (text.trimmed().isEmpty())
+        return QJsonObject();
+    QString json = text;
+    if (json.startsWith(QChar(0xFEFF)))
+        json.remove(0, 1);
+    QJsonParseError error;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject())
+        return std::nullopt;
+    return doc.object();
+}
+
+} // namespace
+
+MergeHunk MergeHunk::ok(const QStringList &lines)
+{
+    MergeHunk h;
+    h.kind = Kind::Ok;
+    h.lines = lines;
+    return h;
+}
+
+MergeHunk MergeHunk::conflict(const QStringList &base, const QStringList &local, const QStringList &remote)
+{
+    MergeHunk h;
+    h.kind = Kind::Conflict;
+    h.base = base;
+    h.local = local;
+    h.remote = remote;
+    return h;
+}
+
+SplitText splitText(const QString &text)
+{
+    SplitText out;
+    if (text.isEmpty())
+        return out;
+    const qsizetype lf = text.count(u'\n');
+    const qsizetype crlf = text.count(u"\r\n"_s);
+    if (lf > 0)
+        out.eol = crlf * 2 >= lf ? u"\r\n"_s : u"\n"_s;
+    QString normalized = text;
+    normalized.replace(u"\r\n"_s, u"\n"_s);
+    out.finalNewline = normalized.endsWith(u'\n');
+    if (out.finalNewline)
+        normalized.chop(1);
+    out.lines = normalized.split(u'\n');
+    return out;
+}
+
+QString joinLines(const QStringList &lines, const QString &eol, bool finalNewline)
+{
+    if (lines.isEmpty())
+        return {};
+    QString out = lines.join(eol);
+    if (finalNewline)
+        out += eol;
+    return out;
+}
+
+QStringList unionLines(const QStringList &local, const QStringList &remote)
+{
+    const QList<CommPart> parts = diffComm(local, remote);
+    // Local lines outside the common subsequence: a remote line equal to one of them is a duplicate.
+    QHash<QString, int> localOnly;
+    for (const CommPart &part : parts) {
+        if (!part.common) {
+            for (const QString &line : part.a)
+                ++localOnly[line];
+        }
+    }
+    QStringList out;
+    for (const CommPart &part : parts) {
+        if (part.common) {
+            out += part.commonLines;
+            continue;
+        }
+        out += part.a;
+        for (const QString &line : part.b) {
+            const auto it = localOnly.find(line);
+            if (it != localOnly.end() && *it > 0)
+                --*it;
+            else
+                out.append(line);
+        }
+    }
+    return out;
+}
+
+MergeResult merge3(const QString &base, const QString &local, const QString &remote)
+{
+    if (local == remote || base == remote)
+        return MergeResult{local, true, okHunks(local)};
+    if (base == local)
+        return MergeResult{remote, true, okHunks(remote)};
+
+    const SplitText o = splitText(base);
+    const SplitText a = splitText(local);
+    const SplitText b = splitText(remote);
+    MergeResult result;
+    for (const Diff3Region &region : diff3Regions(a.lines, o.lines, b.lines)) {
+        if (!region.conflict) {
+            appendOk(result.hunks, region.ok);
+            continue;
+        }
+        if (const std::optional<QStringList> resolved = resolveRegion(region.o, region.a, region.b)) {
+            appendOk(result.hunks, *resolved);
+        } else {
+            result.clean = false;
+            result.hunks.append(MergeHunk::conflict(region.o, region.a, region.b));
+        }
+    }
+    QStringList lines;
+    for (const MergeHunk &h : std::as_const(result.hunks))
+        lines += h.kind == MergeHunk::Kind::Ok ? h.lines : h.local;
+    QString eol = !a.eol.isEmpty() ? a.eol : !b.eol.isEmpty() ? b.eol : !o.eol.isEmpty() ? o.eol : u"\n"_s;
+    result.text = joinLines(lines, eol, mergeFinalNewline(o, a, b));
+    return result;
+}
+
+std::optional<QString> mergeJson3(const QString &base, const QString &local, const QString &remote)
+{
+    const std::optional<QJsonObject> l = parseObject(local);
+    const std::optional<QJsonObject> r = parseObject(remote);
+    if (!l || !r)
+        return std::nullopt;
+    const QJsonObject o = parseObject(base).value_or(QJsonObject());
+    QStringList keys = l->keys();
+    for (const QString &key : r->keys()) {
+        if (!l->contains(key))
+            keys.append(key);
+    }
+    QJsonObject out;
+    for (const QString &key : std::as_const(keys)) {
+        const bool inL = l->contains(key);
+        const bool inR = r->contains(key);
+        const bool inO = o.contains(key);
+        const bool localUnchanged = inL == inO && (!inL || l->value(key) == o.value(key));
+        const bool present = localUnchanged ? inR : inL;
+        if (present)
+            out.insert(key, localUnchanged ? r->value(key) : l->value(key));
+    }
+    QString json = QString::fromUtf8(QJsonDocument(out).toJson(QJsonDocument::Indented));
+    if (!json.endsWith(u'\n'))
+        json += u'\n';
+    return json;
+}
+
+} // namespace brulion::sync

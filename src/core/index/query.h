@@ -1,0 +1,153 @@
+// The query language of ```query blocks (docs/SYNTAX.md §10): parseQuery() validates the text,
+// runQuery() evaluates it against a VaultIndex. Part of the index module — see index/index.h.
+//
+//   type:tasks status:todo,doing tag:praca -tag:prywatne due:<=+7d sort:due,-priority limit:20
+//   "dokładna fraza" słowo #tag [[Strona]] page:this path:Projekty/ ref:[[Jan]] group:page
+//
+// Syntax: tokens are separated by whitespace or newlines; `"…"` (also „…” “…” «…») and `[[…]]`
+// may contain spaces; `//` starts a comment up to the end of the line, and so does `#` followed
+// by a space at the start of a line (`# Moje zadania`; `#tag` is a tag filter). `key:value`
+// filters accept comma lists (values ORed); all filters are ANDed; a leading `-` negates a
+// filter or excludes a word.
+// Bare words and quoted phrases search the text (case- and diacritic-insensitive); `#tag` is
+// `tag:tag`; `[[Page]]` is `ref:Page`. Keys and values also have Polish spellings (`termin:`,
+// `status:otwarte`, `typ:zadania`, `sortuj:`, …).
+//
+// Filters: type (tasks|blocks|pages|reminders; default tasks when a task filter, sort or group
+// is used, reminders when `remind:` is, else blocks), status (todo, doing, done, cancelled,
+// deferred, open = todo+doing, closed = done+cancelled, all), priority (highest … lowest, none),
+// tag (`a` also matches `a/b`; block tags incl. ancestors' and page tags), page (title, path,
+// alias or link target; `*` wildcards; `this` = the page containing the query), path (prefix;
+// `*` wildcards), ref (items linking to a page), text, and the date fields due, scheduled,
+// start, done, created, remind and date (journal date of the page) with an optional `<`, `<=`,
+// `>`, `>=` before a dates::resolveDateExpr() expression (`today`, `+7d`, `this-week`,
+// `2026-10-15`, `today..+7d`, `overdue`, `none`, `any`). sort: due, scheduled, start, done,
+// created, remind, date, priority, status, page, path (`-key` descending; missing values last).
+// group: page, due, scheduled, date, tag, status, priority. limit: 1…MaxQueryLimit.
+#pragma once
+
+#include "index/vaultindex.h"
+#include "types.h"
+
+#include <QDate>
+#include <QList>
+#include <QString>
+#include <QStringList>
+#include <QTime>
+
+#include <optional>
+#include <variant>
+
+namespace brulion {
+
+/// Largest accepted `limit:`.
+inline constexpr int MaxQueryLimit = 10000;
+/// Items returned when the query has no `limit:`.
+inline constexpr int DefaultQueryLimit = 500;
+
+/// What a query returns.
+enum class QueryType { Tasks, Blocks, Pages, Reminders };
+
+/// Date fields: task dates, reminder times (`remind`) and the journal date of the page (`date`).
+enum class QueryDateField { Due, Scheduled, Start, Done, Created, Remind, Date };
+
+/// Comparison written before a date expression; Within (no operator) = inside the range.
+enum class QueryDateOp { Within, Before, OnOrBefore, After, OnOrAfter };
+
+/// One date condition: operator + expression understood by dates::resolveDateExpr().
+struct QueryDateCondition {
+    QueryDateOp op = QueryDateOp::Within;
+    QString expr;
+
+    friend bool operator==(const QueryDateCondition &, const QueryDateCondition &) = default;
+};
+
+enum class QueryFilterKind { Status, Priority, Tag, Page, Path, Ref, Text, Date };
+
+/// A filter. Values of one filter are ORed; `negate` (written `-key:`) inverts the filter.
+struct QueryFilter {
+    QueryFilterKind kind = QueryFilterKind::Text;
+    bool negate = false;
+    /// Tag (lower-case NFC, no '#'), Page, Path, Ref and Text values.
+    QStringList values;
+    QList<TaskStatus> statuses;                 ///< Status
+    QList<Priority> priorities;                 ///< Priority (Priority::None = no priority set)
+    QueryDateField field = QueryDateField::Due; ///< Date
+    QList<QueryDateCondition> dates;            ///< Date
+
+    friend bool operator==(const QueryFilter &, const QueryFilter &) = default;
+};
+
+enum class QuerySortKey { Due, Scheduled, Start, Done, Created, Remind, Date, Priority, Status, Page, Path };
+
+struct QuerySort {
+    QuerySortKey key = QuerySortKey::Due;
+    bool descending = false; ///< written `-key`; missing values stay last either way
+
+    friend bool operator==(const QuerySort &, const QuerySort &) = default;
+};
+
+enum class QueryGroupKey { None, Page, Due, Scheduled, Date, Tag, Status, Priority };
+
+/// A validated query.
+struct Query {
+    QString source; ///< the query text as written
+    QueryType type = QueryType::Blocks;
+    bool explicitType = false; ///< written `type:`; otherwise inferred
+    QList<QueryFilter> filters;
+    QList<QuerySort> sort;
+    QueryGroupKey group = QueryGroupKey::None;
+    std::optional<int> limit;
+};
+
+/// Parse and validate a query (the body of a ```query block). Returns the Query, or a
+/// translated, helpful error message (QCoreApplication::translate context "brulion::Query").
+std::variant<Query, QString> parseQuery(const QString &source);
+
+/// One result item. Pages have blockIndex -1.
+struct QueryItem {
+    VaultPath path;
+    int blockIndex = -1;
+    std::optional<Task> task;         ///< tasks; blocks/reminders whose block is a task
+    std::optional<Reminder> reminder; ///< reminders
+};
+
+/// Items of one group (`group:` queries), in result order.
+struct QueryGroup {
+    QString key;   ///< path, ISO date, tag, status / priority name; empty for "none"
+    QString label; ///< display text (translated for "none", statuses and priorities)
+    QList<QueryItem> items;
+};
+
+struct QueryResult {
+    QueryType type = QueryType::Blocks;
+    QList<QueryItem> items;   ///< matches after sorting and `limit`
+    QList<QueryGroup> groups; ///< for `group:` queries (built from `items`; a tag group per tag)
+    int total = 0;            ///< number of matches before `limit`
+};
+
+/// Extra context for runQuery().
+struct QueryOptions {
+    /// Page containing the query block: `page:this` and relative `ref:` targets use it.
+    VaultPath currentPath;
+    /// Current wall-clock time: `remind:overdue` = reminders before today at this time
+    /// (default: before today).
+    std::optional<QTime> now;
+    /// Items returned without `limit:`.
+    int defaultLimit = DefaultQueryLimit;
+};
+
+/// Run a parsed query against the index. `today` defines `today`, `overdue` etc.; `weekStart`
+/// defines `this-week`. Semantics: block tags include their ancestors' tags and the page tags;
+/// dates compare by day; `overdue` = before today on an open task (done/cancelled never are);
+/// `none` = missing, `any` = present; missing dates never satisfy a range. `type:blocks` drops
+/// blocks whose ancestor also matched (shown inside it), frontmatter and ```query blocks.
+/// Default order: tasks/blocks by path then line, reminders by time, pages by title.
+QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Qt::DayOfWeek weekStart = Qt::Monday,
+                     const QueryOptions &options = {});
+
+/// Translated group/status labels (also handy for UIs).
+QString queryStatusLabel(TaskStatus status);
+QString queryPriorityLabel(Priority priority);
+
+} // namespace brulion
