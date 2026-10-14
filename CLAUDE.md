@@ -38,10 +38,13 @@ builds) run on the x86_64 laptop via `flock <lock> laptop-run …` or in GitHub 
   `QT_NO_CAST_FROM_ASCII`: use `QStringLiteral`/`u"..."_s`/`QLatin1String`.
 * `src/core` is GUI-free (QtCore + QtNetwork; `src/core/io` may use QtGui for
   `QTextDocument`). No platform `#ifdef`s in core — platform code lives in `src/platform`.
-* One directory per core module (`src/core/<module>/`) with its own `CMakeLists.txt` that
-  calls `target_sources(brulion_core PRIVATE …)`; it is picked up automatically. Tests:
-  `tests/core/<module>/CMakeLists.txt` with `brulion_add_test(tst_<name> SOURCES …)`. Never
-  edit another module's CMake files.
+* One directory per core module (`src/core/<module>/`) with its own `CMakeLists.txt` calling
+  `brulion_add_core_module(<module> SOURCES … DEPS <modules it uses> [QT Network|Gui])` →
+  static library `brulion_core_<module>`; picked up automatically. Include headers relative to
+  `src/core` (`#include "dates/dates.h"`). Tests: `tests/core/<module>/CMakeLists.txt` with
+  `brulion_add_test(tst_<name> SOURCES … LIBS brulion_core_<module>)`. Build only what you
+  test: `scripts/dev-build.sh -t tst_dates tst_dates` (target names after the options).
+  Never edit another module's files or CMake.
 * Tests: QtTest (`QTEST_GUILESS_MAIN` for core), data-driven (`_data()` functions) where
   sensible, Polish text with diacritics (ąćęłńóśźż), edge cases, malformed input.
 * Dates: reminders are local wall-clock time (`DateSpec`); never convert through UTC.
