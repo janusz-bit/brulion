@@ -14,8 +14,16 @@ Read before changing code:
   as a reference and port test cases from it: `git show archive/web-v1:src/core/dates/natural.ts`,
   `git ls-tree -r --name-only archive/web-v1 src/core`.
 
-## Commands (inside `nix develop`)
+## Commands
 
+* **Preferred: build and test on the x86_64 laptop** (16 cores) — `scripts/remote-build.sh -n
+  <your-unique-name> -t '<ctest regex>' [targets…]` rsyncs the working tree (incl. untracked
+  files) to `laptop:~/work/brulion-<name>/src`, builds incrementally in `…/build` inside the
+  flake dev shell and runs ctest there; `--run '<cmd>'` runs a command in the dev shell
+  (`$BRULION_BUILD_DIR` = build dir), `--pull <dir>` copies a directory (e.g.
+  `tests/screenshots`) back. Use a distinct `-n` per agent/task so builds never interfere.
+* Fallback when the laptop is off (`ssh -o BatchMode=yes laptop true` fails), inside
+  `nix develop` on this Pi:
 * `scripts/dev-build.sh` — configure + build `./build` (Ninja, ccache, Debug, -Werror).
   `scripts/dev-build.sh -t tst_dates` builds and runs tests matching a regex.
   `BUILD_DIR=build-foo scripts/dev-build.sh` uses another build dir.

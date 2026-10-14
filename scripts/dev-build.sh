@@ -11,9 +11,11 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# A fixed path, not $TMPDIR: `nix develop` gives every shell its own TMPDIR
+# (/tmp/nix-shell.XXXXXX), which would make the lock per shell instead of machine-wide.
 if [[ -z "${BRULION_BUILD_LOCKED:-}" ]] && command -v flock >/dev/null 2>&1; then
   export BRULION_BUILD_LOCKED=1
-  exec flock "${BRULION_BUILD_LOCK:-${TMPDIR:-/tmp}/brulion-build.lock}" "$0" "$@"
+  exec flock "${BRULION_BUILD_LOCK:-/tmp/brulion-build.lock}" "$0" "$@"
 fi
 
 tests=""
