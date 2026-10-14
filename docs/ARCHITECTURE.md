@@ -1,321 +1,98 @@
-# Brulion — architecture
+# Brulion — architecture (C++20 / Qt 6)
 
-Brulion is an offline-first Markdown notes app (Obsidian-like files, Logseq-like outliner and
-journals) that runs as:
+Brulion is an offline-first Markdown notes app: Obsidian-style plain files, a Logseq-style
+block outliner with daily journals, calendar, reminders and alarms, calculations and tables,
+sync through Syncthing (plain folder) or Nextcloud (WebDAV), import/export from other apps.
 
-* **Desktop (NixOS/Linux)** — Tauri 2 shell (Rust) + the web frontend; vault = a folder on disk
-  (typically a Syncthing folder); reminders via system notifications while the app lives in the tray.
-* **Android** — the same Tauri 2 shell built for Android; vault = a folder on shared storage
-  (Syncthing-Fork) or app storage + Nextcloud sync; reminders scheduled natively (fire when closed).
-* **Browser (PWA)** — the same frontend served statically (GitHub Pages / self-hosted), works
-  offline via a service worker; vault = IndexedDB, or a local folder through the File System
-  Access API (Chromium); sync with Nextcloud over WebDAV.
+One C++/QML code base, three targets, all built against **Qt 6.11.2**:
+
+| Target | How | Vault storage | Reminders |
+|---|---|---|---|
+| **NixOS / Linux desktop** | Qt from nixpkgs, Nix flake package + NixOS module | a folder (e.g. a Syncthing folder) | tray app + freedesktop notifications (D-Bus) |
+| **Android** | Qt for Android (aqt prebuilt, CI), APK via `androiddeployqt` | folder on shared storage (Syncthing-Fork) or app storage + Nextcloud | native `AlarmManager` alarms (Java/Kotlin via JNI) — fire when closed, survive reboot |
+| **Browser** | Qt for WebAssembly (single-threaded, aqt prebuilt + emsdk, CI) → GitHub Pages | Emscripten IDBFS (IndexedDB) + import/export of files, Nextcloud sync | browser Notification API while the page is open |
+
+## Layers
 
 ```
-┌──────────────────────────── src/app (React UI) ─────────────────────────────┐
-│ shell/ (layout, store, commands)  editor/ (CodeMirror 6)  views/ (journals,  │
-│ calendar, tasks, graph, search, sync, import/export, history, settings)      │
-├──────────────────────────── src/app/services ───────────────────────────────┤
-│ Workspace: Vault + VaultIndex + History + ReminderScheduler + SyncScheduler  │
-├──────────────────────────── src/core (pure TS) ─────────────────────────────┤
-│ markdown  dates  calc  render  index(+query, search)  storage(vault, idb)    │
-│ reminders(+calendar)  sync(webdav, engine, merge, syncthing)  import  export │
-│ i18n  paths  types                                                           │
-├──────────────────────────── src/platform ───────────────────────────────────┤
-│ web.ts (IndexedDB / FS Access / fetch / Notification API)                    │
-│ tauri.ts (Rust fs commands / plugin-notification / plugin-http / dialog)     │
-├──────────────────────────── src-tauri (Rust) ───────────────────────────────┤
-│ fs commands (atomic writes, recursive list, notify watcher), tray,           │
-│ android plugin (all-files access), official plugins                          │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌─────────────── src/app  (executable "brulion", QML module "Brulion") ───────────────┐
+│ QML: theme, components, block editor, views (journals, page, calendar, tasks, graph,  │
+│ search, sync, import/export, history, trash, settings, onboarding)                    │
+│ C++ controllers/models exposed to QML (QML_ELEMENT / QML_SINGLETON)                   │
+├─────────────── src/platform  (library brulion_platform) ─────────────────────────────┤
+│ Notifier (desktop D-Bus+tray / Android JNI / WASM JS), storage permission (Android),  │
+│ WASM persistence (IDBFS sync), file pick/save abstraction                             │
+├─────────────── src/core  (library brulion_core, QtCore + QtNetwork; io also QtGui) ──┤
+│ dates · markdown · calc · vault · index(search, query) · sync(webdav, merge,           │
+│ syncthing) · reminders(calendar) · io(import/export, zip) · util                      │
+└───────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Principles
+### Principles
 
-1. **Files are the truth.** Every note is a `.md` file in a folder. No database owns the notes.
-   Indexes are rebuilt from files; device-local bookkeeping lives in IndexedDB (`LocalStore`).
-2. **Offline first.** Every feature works without network. Sync is opportunistic, runs in the
-   background, never blocks editing, never loses data (conflict → automatic 3-way merge,
-   otherwise keep both versions and offer a merge UI).
-3. **Compatible.** Obsidian (+Tasks plugin) and Logseq can open the same vault (docs/SYNTAX.md).
-4. **Pure core.** `src/core` has no React/Tauri/DOM-global imports (DOMParser/DOMPurify use is
-   allowed only in `render` and importers, injected or guarded). Platform code is behind
-   interfaces in `src/core/types.ts`.
-5. **Polish first.** UI language defaults to Polish, English available. Natural-language date
-   input understands Polish and English.
+1. **Files are the truth.** Notes are `.md` files in a folder; indexes are rebuilt from them.
+   Device-local state (sync bookkeeping + merge bases, version history, settings, caches) lives
+   in `QStandardPaths::AppDataLocation`, never inside the vault (so Syncthing never syncs it).
+2. **Offline first.** Everything works without network. Sync is background and opportunistic,
+   never blocks editing and never loses data (3-way merge, else keep both versions + merge UI).
+3. **Compatible with Obsidian (+Tasks plugin) and readable by Logseq** — see docs/SYNTAX.md.
+4. **Core is GUI-free and fully unit-tested** (QtTest). It compiles unchanged for Linux,
+   Android and WebAssembly. No `#ifdef` platform code in `src/core`.
+5. **Polish first.** Source strings in English with `tr()`/`qsTr()`; Polish translation
+   (`i18n/brulion_pl.ts`) is the default UI language; English selectable.
+6. **Round-trip fidelity.** Editing one block never rewrites other bytes of the file
+   (line endings, indentation, unknown syntax preserved).
 
-## Module ownership and public APIs
+## Core modules (`src/core/<module>/`, namespace `brulion`)
 
-Each module exposes its public API from `src/core/<module>/index.ts`. Other modules import
-only from that index. Signatures below are the contract; modules may add more exports.
+Each module has a public header named after it (e.g. `src/core/dates/dates.h`) plus internal
+headers, and its tests in `tests/core/tst_<module>*.cpp`. Shared types: `src/core/types.h`.
 
-### `src/core/paths.ts` (done)
-`normalizePath, joinPath, dirname, basename, extname, isMarkdown, stripMdExtension, pageTitle,
-isIgnoredPath, isTempFile, parseSyncthingConflict, isConflictCopy, sanitizeFileName, uniquePath`.
+| Module | Responsibility (main classes / functions) |
+|---|---|
+| `util` | `paths.h` (normalize, join, dirname, basename, isMarkdown, isIgnoredPath, Syncthing conflict names, sanitizeFileName, uniquePath), `text.h` (diacritic folding `foldDiacritics`, Unicode-aware word boundaries, line splitting preserving EOLs), `hash.h` (FNV-1a 64) |
+| `dates` | local date helpers; `parseNaturalDate(text, now, Locale)` for Polish + English phrases ("jutro o 9", "w piątek 18:00", "za 2 godziny", "15 października", "next friday 6pm") returning date/time + matched span; `RecurrenceRule` parse (canonical English + Polish) / format(en/pl) / `nextOccurrence` / `occurrencesBetween`; Logseq repeaters; query date expressions (`today`, `+7d`, `this-week`, `overdue`…); human formatting ("dziś 09:00", "pt 17 paź") |
+| `markdown` | `parseNote(path, content, config) -> ParsedNote` (blocks/outline, links, tags, tasks, reminders, properties, frontmatter YAML subset, headings, block ids, journal date); inline extraction; **BlockDocument** (editable list of blocks keeping each block's raw text for lossless round-trip: split/merge/indent/outdent/move subtree/toggle task/set reminder/ensure block id) ; pure edit helpers (`setTaskStatus` incl. recurrence next occurrence, `renameLinks`, `applyTemplate`, journal paths); `InlineRenderer` → Qt rich-text HTML subset for QML `Text` (links as `page:`, `tag:`, `block:`, `ext:` URLs, chips for dates/reminders) |
+| `calc` | own expression engine (tokenizer + Pratt parser + evaluator; no `eval`): numbers with Polish decimal comma, variables (Unicode names), `ans`, percent sugar (`x + 10%`, `20% z x`), units and conversions (`5 km to mi`, `3 h + 20 min`), currencies as tags (`12 zł + 5 zł`), functions (sum avg min max round abs sqrt pow if …), `sum`/`suma` lines; calc blocks; inline `= expr`; **table formulas** (A1 refs, ranges, `[Kolumna]`, `above`, `left`, dependency order, cycle detection) |
+| `vault` | `Vault` (open folder, list/read/write with `QSaveFile` atomic writes, per-path write serialisation, change signals with source, external changes via `QFileSystemWatcher` + rescan diffing, echo suppression by content hash, trash `.trash/`, rename/move, `.brulion/config.json`); `History` (version snapshots per file in AppData with pruning); `LocalStore` (small JSON key-value store per vault in AppData) |
+| `index` | `VaultIndex` (incremental: notes, link resolution per SYNTAX §2, backlinks, unlinked references, block ids, tags, tasks, reminders, journals, attachments, graph data); `SearchIndex` (inverted index, prefix + fuzzy, diacritic-insensitive, excerpts); `Query` language (SYNTAX §10: parse + run) |
+| `sync` | `WebDavClient` (QNetworkAccessManager: PROPFIND/GET/PUT/DELETE/MKCOL, If-Match, Basic auth); `SyncEngine` (bidirectional, per-file state + merge bases in LocalStore, conflict copies, deletions); `merge3()` line diff3 with union of concurrent appends; `SyncScheduler` (interval, debounce after edits, online detection); Syncthing helpers (conflict copies, REST status client, `.stignore` template) |
+| `reminders` | `upcomingNotifications(index, now, horizon)` (stable ids, recurrence expansion, done tasks skipped); `ReminderScheduler` (QTimer based for platforms without background alarms; missed-reminder detection); `calendarItems(index, from, to)`; snooze edits |
+| `io` | importers (Obsidian, Logseq, Notion, Evernote ENEX, Google Keep, Joplin, Simplenote, Roam, Bear, Markdown/TXT, HTML, iCalendar) and exporters (Markdown ZIP, Obsidian, Logseq, HTML site, single HTML, JSON, iCalendar, OPML, CSV tasks); ZIP via vendored `3rdparty/miniz`; HTML→Markdown via `QTextDocument` (QtGui) |
 
-### `src/core/dates`
-```ts
-todayLocal(now?: Date): LocalDate
-toLocalDate(d: Date): LocalDate
-toLocalDateTime(d: Date): LocalDateTime
-parseLocal(s: LocalDate | LocalDateTime): Date            // local-time Date
-isLocalDate(s: string): boolean; isLocalDateTime(s: string): boolean
-addDaysLocal(d: LocalDate, n: number): LocalDate
-compareLocal(a: string, b: string): number                 // date < datetime on same day
-interface NaturalDateResult { date: LocalDate; time?: string; matched: string; index: number }
-parseNaturalDate(input: string, now: Date, opts?: { locale?: Locale; weekStartsOn?: 0 | 1 }): NaturalDateResult | null
-interface RecurrenceRule { freq: 'day' | 'week' | 'month' | 'year'; interval: number;
-  weekdays?: number[]; monthDay?: number | 'last'; weekdaysOnly?: boolean; whenDone?: boolean }
-parseRecurrence(text: string): RecurrenceRule | null        // canonical English + Polish
-formatRecurrence(rule: RecurrenceRule, locale: Locale): string
-canonicalRecurrence(text: string): string | null           // parse + format 'en'
-repeaterToRule(repeater: string): RecurrenceRule | null     // Logseq "+1w", ".+1d", "++2m"
-nextOccurrence(rule: RecurrenceRule, from: LocalDate | LocalDateTime, completedOn?: LocalDate): LocalDate | LocalDateTime
-occurrencesBetween(rule, anchor: LocalDate | LocalDateTime, from: LocalDate, to: LocalDate, max?: number): (LocalDate | LocalDateTime)[]
-type DateRange = { from: LocalDate; to: LocalDate }
-resolveDateExpr(expr: string, now: Date, weekStartsOn?: 0 | 1): DateRange | 'overdue' | 'none' | 'any' | null
-formatDateHuman(d: LocalDate | LocalDateTime, locale: Locale, now?: Date): string   // "dziś 09:00", "jutro", "pt 17 paź"
-```
+## Platform layer (`src/platform/`)
 
-### `src/core/markdown`
-```ts
-parseNote(path: VaultPath, content: string, config?: VaultConfig): ParsedNote
-parseFrontmatter(content: string): { data: Record<string, unknown>; bodyStart: number; bodyStartLine: number } // YAML subset, no deps
-stringifyFrontmatter(data: Record<string, unknown>): string
-extractInline(text: string, baseOffset?: number, line?: number): { links: Link[]; tags: string[] }
-stripTokens(text: string): string
-TOKENS                                                   // emoji signifiers (see SYNTAX §5-6)
-formatReminderToken(at: LocalDateTime, alarm?: boolean): string
-// pure edit helpers: content in -> content out
-setTaskStatus(content: string, line: number, status: TaskStatus, today: LocalDate): string
-toggleTask(content: string, line: number, today: LocalDate): string
-ensureBlockId(content: string, line: number): { content: string; id: string }
-generateBlockId(): string
-renameLinksInContent(content: string, oldName: string, newName: string, oldPath?: VaultPath, newPath?: VaultPath): string
-journalPathForDate(date: LocalDate, config: VaultConfig): VaultPath
-journalDateFromPath(path: VaultPath, config: VaultConfig): LocalDate | null
-applyTemplate(template: string, vars: { now: Date; title: string; locale: Locale }): { text: string; cursor: number | null }
-// outline helpers used by the editor
-listItemRange(content: string, line: number): { from: number; to: number } | null   // item + children lines
-```
+`Notifier` interface: `permission()`, `requestPermission()`, `schedule(QList<ScheduledNotification>)`
+(replaces the whole set), `showNow()`, signal `activated(path, line)`, `firesWhenClosed()`.
+Implementations selected at compile time:
+* `DesktopNotifier` (Linux): `org.freedesktop.Notifications` over QtDBus with actions
+  "Drzemka 10 min"/"OK", urgency critical + sound hint for alarms; fallback `QSystemTrayIcon`.
+* `AndroidNotifier`: JNI → `android/src/io/github/januszbit/brulion/` (AlarmManager exact
+  alarms, receivers incl. BOOT_COMPLETED, notification channels `reminders`/`alarms`, alarm
+  activity over the lock screen, auto-stop, snooze) — ported from the v1 Kotlin plugin
+  (branch `archive/web-v1`, `src-tauri/plugins/brulion-android`).
+* `WasmNotifier`: browser Notification API via Emscripten `EM_JS`.
+Also: `StorageAccess` (Android "All files access" check/request), `WasmPersistence` (mount
+IDBFS at the vault path, `FS.syncfs` after writes), `FileExchange` (pick/save files — native
+dialogs on desktop/Android, `QFileDialog::getOpenFileContent`/`saveFileContent` on WASM).
 
-### `src/core/calc`
-```ts
-interface CalcLineResult { line: number; input: string; value?: string; error?: string; assigned?: string; numeric?: number }
-evaluateCalc(source: string, opts?: { scope?: Record<string, unknown>; locale?: Locale }): { lines: CalcLineResult[]; scope: Record<string, unknown> }
-evaluateInline(expr: string, scope: Record<string, unknown>, locale?: Locale): { value?: string; error?: string }
-pageScope(content: string, uptoLine?: number, locale?: Locale): Record<string, unknown>
-interface TableModel { header: string[]; aligns: ('left' | 'center' | 'right' | null)[]; rows: string[][] }
-parseTable(markdown: string): TableModel | null
-serializeTable(model: TableModel): string               // aligned GFM
-evaluateTable(model: TableModel, locale?: Locale): { values: (string | null)[][]; errors: (string | null)[][] }
-findTables(content: string): { from: number; to: number; startLine: number; endLine: number }[]
-formatNumber(n: number, locale: Locale): string
-```
+## App (`src/app/`, QML module `Brulion`)
 
-### `src/core/render`
-```ts
-interface RenderContext {
-  path: VaultPath; locale: Locale;
-  resolveLink(target: string, from: VaultPath): VaultPath | null;
-  href(path: VaultPath | null, target: string, heading?: string, blockId?: string): string;
-  assetUrl(path: VaultPath): string | null;
-  embed?(target: string, heading: string | undefined, blockId: string | undefined, depth: number): string | null;
-  blockRef?(id: string): { path: VaultPath; text: string } | null;
-}
-renderMarkdown(content: string, ctx: RenderContext): string        // sanitised HTML
-sanitizeHtml(html: string): string
-```
+C++ controllers exposed to QML: `AppController` (vault lifecycle, settings, navigation
+stack), `PageController` + `BlockListModel` (block editor model over `BlockDocument`, debounced
+saves, external-change merge), `JournalModel`, `CalendarModel`, `TaskListModel`,
+`SearchModel`, `GraphModel` (force layout in C++), `SyncController`, `ImportExportController`,
+`HistoryModel`, `SettingsController`. QML: `qml/Main.qml`, `qml/theme/Theme.qml` (singleton,
+light/dark), `qml/components/*`, `qml/editor/*` (block editor), `qml/views/*`. See docs/UI.md.
 
-### `src/core/storage`
-```ts
-class MemoryFs implements FileSystemAdapter
-class IdbFs implements FileSystemAdapter              // new IdbFs(vaultId, label?)
-class FsAccessFs implements FileSystemAdapter         // new FsAccessFs(dirHandle) — polls for watch
-saveDirectoryHandle(id: string, h: FileSystemDirectoryHandle): Promise<void>
-loadDirectoryHandle(id: string): Promise<FileSystemDirectoryHandle | null>
-class LocalStore { static open(namespace: string): Promise<LocalStore>; get<T>(key): Promise<T | undefined>;
-  set(key, value): Promise<void>; delete(key): Promise<void>; keys(prefix?): Promise<string[]>; entries<T>(prefix): Promise<[string, T][]> }
-type ChangeSource = 'user' | 'external' | 'sync' | 'import' | 'system'
-interface VaultChange { type: FsEventType; path: VaultPath; oldPath?: VaultPath; source: ChangeSource }
-class Vault {
-  constructor(fs: FileSystemAdapter, opts: { id: string; name: string; store: LocalStore; history?: History })
-  readonly id; readonly name; readonly fs; config: VaultConfig
-  open(): Promise<void>                    // list + load config
-  files(): FileStat[]                      // non-ignored files (conflict copies included)
-  markdownFiles(): FileStat[]
-  exists(path): boolean; stat(path): FileStat | undefined
-  read(path): Promise<string>; readBinary(path): Promise<Uint8Array>
-  write(path, content: string, source?: ChangeSource): Promise<void>   // no-op if unchanged; snapshots history
-  writeBinary(path, data, source?): Promise<void>
-  create(path, content): Promise<VaultPath>                            // unique path if taken
-  delete(path, source?): Promise<void>                                 // -> .trash/
-  rename(from, to, source?): Promise<void>
-  saveConfig(cfg: VaultConfig): Promise<void>
-  onChange(cb: (changes: VaultChange[]) => void): () => void
-  startWatching(): void; stopWatching(): void
-  rescan(): Promise<VaultChange[]>        // detect external changes by diffing stats
-  trash(): Promise<FileStat[]>; restore(trashPath): Promise<VaultPath>
-}
-class History { constructor(store: LocalStore); snapshot(path, content, reason): Promise<void>;
-  list(path): Promise<{ id: string; time: number; size: number; reason: string }[]>;
-  get(id): Promise<string | undefined>; prune(): Promise<void> }
-contentHash(s: string | Uint8Array): string             // fast stable hash (FNV-1a 64 hex)
-```
+## Build, test, packaging
 
-### `src/core/index`
-```ts
-class VaultIndex {
-  constructor(config?: VaultConfig)
-  setConfig(c: VaultConfig): void
-  update(path: VaultPath, content: string): void
-  remove(path: VaultPath): void
-  rename(oldPath: VaultPath, newPath: VaultPath, content: string): void
-  clear(): void
-  readonly version: number
-  note(path): ParsedNote | undefined; notes(): ParsedNote[]; paths(): VaultPath[]
-  content(path): string | undefined
-  resolveLink(target: string, from?: VaultPath): VaultPath | null
-  backlinks(path): Backlink[]
-  unlinkedReferences(path): { path: VaultPath; line: number; excerpt: string }[]
-  linksTo(path): VaultPath[]                       // files linking to path (for rename refactor)
-  blockById(id: string): BlockRef | null
-  tags(): { tag: string; count: number; paths: VaultPath[] }[]
-  tasks(): TaskRef[]; reminders(): ReminderRef[]
-  journals(): { date: LocalDate; path: VaultPath }[]    // newest first
-  search(q: string, opts?: { limit?: number }): SearchHit[]
-  suggestPages(prefix: string, limit?: number): { path: VaultPath; title: string; alias?: string }[]
-  suggestBlocks(text: string, limit?: number): BlockRef[]
-  graph(opts?: { tags?: boolean; missing?: boolean }): GraphData
-  subscribe(cb: () => void): () => void            // batched notifications
-}
-parseQuery(src: string): ParsedQuery | { error: string }
-runQuery(q: ParsedQuery, index: VaultIndex, now: Date, weekStartsOn?: 0 | 1): QueryResult
-```
-
-### `src/core/reminders`
-```ts
-upcomingNotifications(index: VaultIndex, now: Date, opts?: { horizonDays?: number; max?: number; config?: VaultConfig }): ScheduledNotification[]
-class ReminderScheduler { constructor(index: VaultIndex, svc: NotificationService, store: LocalStore, opts?);
-  start(): void; stop(): void; refresh(): Promise<void>; missed(): ReminderRef[] }
-interface CalendarItem { date: LocalDate; time?: string; kind: 'journal' | 'due' | 'scheduled' | 'start' | 'reminder' | 'done';
-  title: string; path: VaultPath; line: number; status?: TaskStatus; recurring?: boolean; alarm?: boolean }
-calendarItems(index: VaultIndex, from: LocalDate, to: LocalDate): CalendarItem[]
-snoozeReminder(content: string, line: number, newAt: LocalDateTime): string
-```
-
-### `src/core/sync`
-```ts
-class WebDavClient { constructor(o: { baseUrl: string; username: string; password: string; transport: HttpTransport });
-  test(): Promise<{ ok: boolean; error?: string }>; list(): Promise<RemoteEntry[]>; get(path): Promise<{ data: Uint8Array; etag: string }>;
-  put(path, data, opts?: { ifMatch?: string; ifNoneMatch?: boolean }): Promise<{ etag?: string }>; delete(path): Promise<void>; mkcol(path): Promise<void> }
-nextcloudDavUrl(server: string, user: string, folder: string): string
-merge3(base: string, local: string, remote: string): { text: string; clean: boolean }   // line diff3 + union for pure additions
-class SyncEngine { constructor(o: { vault: Vault; client: WebDavClient; store: LocalStore; device: string }); sync(o?: { signal?: AbortSignal; onProgress?: (p: SyncProgress) => void }): Promise<SyncReport> }
-class SyncScheduler { ... periodic + on change + on online }
-findSyncthingConflicts(files: FileStat[]): { original: VaultPath; copy: VaultPath; time: string; device: string }[]
-class SyncthingClient { status(): Promise<SyncthingStatus>; folders() ... }
-STIGNORE_TEMPLATE: string
-```
-
-### `src/core/import` / `src/core/export`
-`importers: Importer[]` (obsidian, logseq, notion, evernote, keep, joplin, simplenote, roam, bear,
-markdown/text, html, ics) and `exporters: Exporter[]` (markdown zip, html site, single html, json,
-logseq, ics, opml). Each in its own file; `index.ts` exports the registries and `detectImporter`.
-
-### `src/core/i18n`
-`createTranslator(locale): (key, params?) => string`, `plural(locale, n, forms)`. Messages are
-split per area in `src/core/i18n/messages/<area>.ts` (each exports `{ pl: {...}, en: {...} }`) so
-parallel work never edits the same file; `index.ts` merges them.
-
-### `src/platform`
-`getPlatform(): Promise<Platform>` — `web.ts` and `tauri.ts` implement `Platform` from types.ts.
-
-### `src-tauri`
-Rust commands (all paths absolute vault root + relative path): `fs_list`, `fs_stat`, `fs_read_text`,
-`fs_read_binary`, `fs_write_text` (atomic temp+rename), `fs_write_binary`, `fs_remove`, `fs_rename`,
-`fs_mkdir`, `watch_start`, `watch_stop` (emits `brulion://fs-events`), `default_vault_dir`,
-`write_export` (save dialog target). Plugins: notification, http, dialog, opener, os,
-single-instance + window-state (desktop). Tray icon with show/quit (desktop). Android: local plugin
-`brulion-android` (Kotlin) for MANAGE_EXTERNAL_STORAGE check/request.
-
-## Tauri IPC contract (shared by `src/platform/tauri.ts` and `src-tauri/`)
-
-All vault commands take `root` = absolute vault folder path and `path` = VaultPath (relative,
-`/`-separated). Rust must reject any `path` that is absolute or escapes `root` (`..`).
-
-| Command | Args (JS camelCase) | Returns |
-|---|---|---|
-| `fs_list` | `{ root }` | `FileStatDto[]` — recursive, skips `.git`, `node_modules` |
-| `fs_stat` | `{ root, path }` | `FileStatDto \| null` |
-| `fs_read_text` | `{ root, path }` | `string` |
-| `fs_read_binary` | `{ root, path }` | raw bytes (`tauri::ipc::Response`) → `ArrayBuffer` in JS |
-| `fs_write_text` | `{ root, path, content }` | `FileStatDto` (atomic: temp file `.brulion-tmp-*` + rename) |
-| `fs_write_binary` | raw body = bytes, headers `x-root`, `x-path` (encodeURIComponent) | `FileStatDto` (atomic) |
-| `fs_remove` | `{ root, path }` | `null` (recursive for dirs, ok if missing — also below a file) |
-| `fs_rename` | `{ root, from, to }` | `null` (creates parent dirs) |
-| `fs_mkdir` | `{ root, path }` | `null` (recursive) |
-| `watch_start` | `{ root }` | `null`; emits `brulion://fs-events` with `{ root, events: FsEvent[] }` (debounced ~300 ms, relative paths, ignored dirs filtered) |
-| `watch_stop` | `{ root }` | `null` (for one root the last `watch_start`/`watch_stop` call wins, also while a start is still running) |
-| `default_vault_dir` | – | `string` (desktop: `~/Brulion`; Android: `/storage/emulated/0/Brulion` if all-files access, else app data dir + `/vault`) |
-| `write_export` | raw body = bytes, header `x-path` (absolute target from save dialog) | `null` |
-| `allow_vault_assets` | `{ root }` | `null`; adds `root` (recursive) to the asset-protocol scope so `convertFileSrc(abs)` can show vault images/media (dot-folders stay hidden) |
-| `set_close_to_tray` | `{ enabled }` | `null` (desktop: closing the main window hides it to the tray; default on, ignored when no tray exists — then closing quits, see `brulion://quit-requested`; no-op on mobile) |
-| `quit_app` | – | `null` (exits the app at once, also when close-to-tray is on; the answer to `brulion://quit-requested`) |
-| `show_main_window` | – | `null` (shows, un-minimises and focuses the main window) |
-
-`FileStatDto = { path: string; kind: 'file' | 'dir'; size: number; mtime: number /* ms */ }`.
-Rust details: errors are strings `"<CODE>: <message>: <path>"` with POSIX codes (`ENOENT`, `EEXIST`,
-`EISDIR`, `ENOTDIR`, `EINVAL`, `EACCES`, ...) like `FsError`; `fs_stat`/`fs_mkdir` accept `path: ''`
-(the root). `fs_read_text` decodes like `TextDecoder` (BOM dropped, invalid UTF-8 → U+FFFD).
-`brulion://fs-events` may carry `rescan: true` (events lost: re-list the vault); a `create` can name
-an already known path (atomic replace via rename, e.g. Syncthing) — treat create/modify as upserts.
-Raw bodies arrive as JSON number arrays on Android (handled by Rust, but Tauri parses ~32 bytes of
-memory per byte): for big files send `{ base64: '<padded standard base64>' }` as the body instead
-(`fs_write_binary`, `write_export`; headers unchanged). `write_export` also accepts the `content://`
-URI returned by the Android save dialog. Windows set `dragDropEnabled: false`, so
-HTML5 drag & drop of files works in the webview as in the browser.
-Quitting on desktop (tray "Zakończ", or closing the main window when it is not hidden to the tray)
-hides the window and emits `brulion://quit-requested` (no payload): flush pending writes, then call
-`quit_app`. Without an answer Brulion exits after 3 s. Do not use `onCloseRequested` for this (the
-capabilities do not grant `core:window:allow-destroy`; Rust owns hide-vs-quit).
-
-Android-only plugin `brulion-android` (Rust crate `src-tauri/plugins/brulion-android` + Kotlin).
-JS calls `invoke('plugin:brulion-android|<cmd>', args)`; on desktop the commands exist but return
-neutral values (`granted: true`, `scheduled: 0`, empty activation).
-
-| Command | Args | Returns |
-|---|---|---|
-| `has_all_files_access` | – | `{ granted: boolean }` |
-| `request_all_files_access` | – | `null` (opens system settings; app re-checks on resume) |
-| `notification_permission` | – | `{ granted: boolean }` |
-| `request_notification_permission` | – | `{ granted: boolean }` (Android 13+ POST_NOTIFICATIONS) |
-| `can_schedule_exact` | – | `{ granted: boolean }` |
-| `request_exact_alarms` | – | `null` (opens settings on Android 12+) |
-| `can_use_full_screen_intent` | – | `{ granted: boolean }` — may alarms open the alarm screen over the lock screen (Android 14+ `canUseFullScreenIntent()`; `true` below) |
-| `request_full_screen_intent` | – | `null` (Android 14+ when not granted: opens "Full-screen notifications" settings, fallback the app's notification settings; app re-checks on resume) |
-| `schedule_reminders` | `{ items: AndroidReminder[] }` | `{ scheduled: number; exact: boolean }` — replaces the whole set |
-| `take_activation` | – | `{ path?: string; line?: number }` — notification tap that opened the app (cleared on read) |
-
-`AndroidReminder = { id: number /* int32; a uint32 is wrapped into int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number; ringMinutes?: number /* alarms: ring time, default 10, clamped to 1–60 */ }`.
-The plugin also emits the event `notification-activated` `{ path, line }` (listen with
-`addPluginListener('brulion-android', 'notification-activated', cb)`).
-Native side: AlarmManager exact alarms (`setAlarmClock` for alarms, `setExactAndAllowWhileIdle`
-for reminders; inexact fallback without permission), reminders persisted in SharedPreferences
-and re-armed on BOOT_COMPLETED / app update / time change; notification channels `reminders`
-(high) and `alarms` (high importance + PRIORITY_MAX, alarm sound, insistent, full-screen intent
-to a native lock-screen `AlarmActivity`); actions "Drzemka 10 min" (native re-arm) and "OK".
-An alarm nobody reacts to stops ringing after `ringMinutes` (an AlarmManager one-shot, so also
-with the app and the alarm screen closed): it is replaced by a silent "Przegapiony alarm"
-notification on channel `missed-alarms` (a tap still opens the note) and the alarm screen
-closes; every reaction (tap, snooze, OK, swipe) cancels the pending auto-stop and closes an
-open alarm screen.
-`schedule_reminders` drops past items, keeps the last copy of a repeated id and arms at most the
-400 soonest; native snoozes survive it unless the same id is sent again. Reminders keep their
-local wall-clock time across time-zone changes; ones missed while the phone was off (≤ 24 h)
-are shown as "Przegapione" after boot.
-
-Notifications: on **Android** reminders are scheduled through `brulion-android`
-(`schedule_reminders`), so they fire while the app is closed and after reboot. On **desktop** the
-official `@tauri-apps/plugin-notification` shows notifications immediately while the in-app
-`ReminderScheduler` keeps timers (the app lives in the tray; `--hidden` starts it minimised).
+* CMake ≥ 3.24 + Ninja, C++20, `qt_standard_project_setup(REQUIRES 6.8)`, `qt_add_qml_module`.
+  Targets: `brulion_core` (static), `brulion_platform` (static), `brulion` (app), tests via
+  CTest (`tests/`). Warnings as errors for our code in CI.
+* Nix: `nix develop` (Qt 6.11 from nixpkgs, cmake, ninja, ccache, clang-tools, gdb);
+  `nix build .#brulion` (wrapQtAppsHook); NixOS module `programs.brulion` (+ autostart in tray).
+* Android: Qt 6.11.2 `android_arm64_v8a` (+ armv7, x86_64) from aqt with host tools from the
+  same Qt version; `android/` package sources; signed APK in GitHub Actions.
+* WebAssembly: Qt 6.11.2 `wasm_singlethread` + matching emsdk; custom HTML shell + service
+  worker for offline use; deployed to GitHub Pages.

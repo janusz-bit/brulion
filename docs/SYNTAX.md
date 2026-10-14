@@ -24,7 +24,7 @@ This file is the single source of truth for parsers, renderers, importers and ex
 * **Page title** = file base name without `.md` (`Projekty/Dom.md` → title `Dom`,
   full name `Projekty/Dom`). Frontmatter `aliases:` adds extra link names.
 * Device-local state (sync bookkeeping, merge bases, history snapshots, caches) is **never**
-  stored inside the vault — it lives in IndexedDB on the device. This keeps Syncthing /
+  stored inside the vault — it lives in the app data directory on the device (`QStandardPaths::AppDataLocation`). This keeps Syncthing /
   Nextcloud from syncing machine-specific data.
 * Ignored when indexing: `.brulion/`, `.trash/`, `.git/`, `.obsidian/`, `logseq/`,
   `.stfolder`, `.stversions/`, `node_modules/`, temp files (`~syncthing~*.tmp`,
@@ -47,7 +47,7 @@ This file is the single source of truth for parsers, renderers, importers and ex
   "weekStartsOn": 1
 }
 ```
-`journalFileFormat` uses date-fns tokens. Missing keys fall back to these defaults.
+`journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …). Missing keys fall back to these defaults.
 
 ---
 
@@ -186,7 +186,7 @@ ans - rabat           → 42.5
 sum                   → (sum of the result lines above, up to the previous blank line)
 ```
 ````
-* Each line is evaluated top-to-bottom with a shared scope (mathjs semantics + units).
+* Each line is evaluated top-to-bottom with a shared scope (Brulion's own expression engine with units).
 * `name = expr` assigns a variable (Unicode names allowed, e.g. `ilość`). `ans` = previous
   result. `sum`/`total`/`suma` alone on a line = sum of results above until a blank line;
   `avg`/`średnia` likewise.
@@ -208,7 +208,7 @@ Any GFM table cell whose content starts with `=` is a formula, rendered as its r
 | `A1:A5`, `B2:C4` | range |
 | `[Cena]` | cell in the **current row** of the column whose header is `Cena` |
 | `above`, `left` | all numeric cells above (same column) / left (same row) |
-| `sum avg min max count round abs if ...` | functions (mathjs) |
+| `sum avg min max count round abs if ...` | functions |
 
 Example: `| Suma | =sum(above) |`, `| | =[Cena]*[Ilość] |`.
 Errors render as `#ERR` with a tooltip; cycles render `#CYCLE`.
@@ -241,11 +241,11 @@ type:tasks status:todo,doing tag:praca due:<=+7d sort:due limit:20
 
 `==highlight==`, `%%hidden comment%%`, callouts `> [!note] Title` (`note`, `tip`,
 `warning`, `danger`, `info`, `todo`, `quote`), footnotes `[^1]`, GFM tables, task lists,
-strikethrough, autolinks. Raw HTML in notes is rendered **sanitised** (DOMPurify), never
-executed.
+strikethrough, autolinks. Raw HTML in notes is rendered as escaped text (never
+executed).
 
 ## 12. Templates
 
 Files in `templatesFolder`. Variables: `{{date}}` (yyyy-MM-dd), `{{date:FORMAT}}`
-(date-fns tokens), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),
+(Qt date format), `{{time}}` (HH:mm), `{{title}}`, `{{weekday}}` (localised),
 `{{cursor}}` (caret position after insert). `journalTemplate` is applied to new daily notes.
