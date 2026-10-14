@@ -1,0 +1,500 @@
+// InlineRenderer: exact Qt rich text for inline Markdown, chips, links, hidden syntax, escaping
+// of hostile input, block-level rendering.
+#include "markdown/inlinerenderer.h"
+#include "markdown/tokens.h"
+
+#include <QElapsedTimer>
+#include <QRegularExpression>
+#include <QSet>
+#include <QTest>
+
+using namespace brulion;
+using namespace brulion::markdown;
+using namespace Qt::StringLiterals;
+
+namespace {
+
+/// A context with short colour names so the expected HTML stays readable.
+RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
+{
+    RenderContext c;
+    c.today = QDate(2026, 10, 14);
+    c.locale = locale;
+    Palette p;
+    p.link = u"L"_s;
+    p.unresolved = u"U"_s;
+    p.muted = u"M"_s;
+    p.codeBackground = u"C"_s;
+    p.highlightBackground = u"H"_s;
+    p.tag = {u"TF"_s, u"TB"_s};
+    p.due = {u"DF"_s, u"DB"_s};
+    p.overdue = {u"OF"_s, u"OB"_s};
+    p.scheduled = {u"SF"_s, u"SB"_s};
+    p.reminder = {u"RF"_s, u"RB"_s};
+    p.alarm = {u"AF"_s, u"AB"_s};
+    p.recurrence = {u"EF"_s, u"EB"_s};
+    p.done = {u"XF"_s, u"XB"_s};
+    p.neutral = {u"NF"_s, u"NB"_s};
+    c.palette = p;
+    c.resolvePage = [](const QString &target) -> std::optional<QString> {
+        if (target == u"Brak")
+            return std::nullopt;
+        return target + u".md"_s;
+    };
+    c.blockText = [](const QString &id) -> std::optional<QString> {
+        if (id == u"abc")
+            return u"Treść <b>bloku</b>"_s;
+        return std::nullopt;
+    };
+    c.inlineCalc = [](const QString &expr) { return expr == u"2 + 2" ? u"4"_s : QString(); };
+    return c;
+}
+
+QString render(const QString &text)
+{
+    return InlineRenderer(context()).render(text);
+}
+
+QString link(const QString &href, const QString &color, const QString &label)
+{
+    return u"<a href=\"%1\" style=\"color:%2;text-decoration:none\">%3</a>"_s.arg(href, color, label);
+}
+
+QString chip(const QString &fg, const QString &bg, const QString &text)
+{
+    QString t = text;
+    return u"<span style=\"background-color:%1;color:%2\">&nbsp;%3&nbsp;</span>"_s.arg(bg, fg,
+                                                                                       t.replace(u' ', u"&nbsp;"_s));
+}
+
+QString reminderChip(int from, int to, const QString &fg, const QString &bg, const QString &text)
+{
+    return u"<a href=\"reminder:%1-%2\" style=\"text-decoration:none\">"_s.arg(from).arg(to) + chip(fg, bg, text)
+           + u"</a>"_s;
+}
+
+QString tag(const QString &href, const QString &name)
+{
+    return u"<a href=\"tag:%1\" style=\"color:TF;background-color:TB;text-decoration:none\">#%2</a>"_s.arg(href, name);
+}
+
+const QString Code = u"<code style=\"background-color:C\">"_s;
+
+} // namespace
+
+class TestRender : public QObject {
+    Q_OBJECT
+
+private Q_SLOTS:
+    void inlineMarkdown_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("plain polish") << u"zwykły tekst ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ"_s << u"zwykły tekst ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ"_s;
+        QTest::newRow("emphasis") << u"**pogrubienie** i *kursywa* oraz _też_"_s
+                                  << u"<b>pogrubienie</b> i <i>kursywa</i> oraz <i>też</i>"_s;
+        QTest::newRow("strike highlight") << u"~~skreślone~~ ==ważne=="_s
+                                          << u"<s>skreślone</s> <span style=\"background-color:H\">ważne</span>"_s;
+        QTest::newRow("triple") << u"***oba***"_s << u"<i><b>oba</b></i>"_s;
+        QTest::newRow("nested") << u"**bold *it* bold**"_s << u"<b>bold <i>it</i> bold</b>"_s;
+        QTest::newRow("intraword underscore") << u"snake_case_name i 2 * 3 * 4"_s << u"snake_case_name i 2 * 3 * 4"_s;
+        QTest::newRow("unclosed") << u"**niezamknięte"_s << u"**niezamknięte"_s;
+        QTest::newRow("single tilde and equals") << u"~a~ a = b =c="_s << u"~a~ a = b =c="_s;
+        QTest::newRow("code") << u"`kod <b>`"_s << Code + u"kod &lt;b&gt;</code>"_s;
+        QTest::newRow("code keeps markup") << u"`**x** [[y]] #z`"_s << Code + u"**x** [[y]] #z</code>"_s;
+        QTest::newRow("double backticks") << u"`` a ` b ``"_s << Code + u"a ` b</code>"_s;
+        QTest::newRow("inline calc") << u"wynik `= 2 + 2`"_s << u"wynik "_s + chip(u"NF"_s, u"NB"_s, u"4"_s);
+        QTest::newRow("inline calc unknown") << u"`= nieznane`"_s << Code + u"= nieznane</code>"_s;
+        QTest::newRow("html escaped") << u"<script>alert(1)</script> & \"cudzysłów\""_s
+                                      << u"&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;cudzysłów&quot;"_s;
+        QTest::newRow("html comment hidden") << u"a <!-- ukryte --> b"_s << u"a  b"_s;
+        QTest::newRow("comment hidden") << u"Widoczne %%ukryte [[X]]%% dalej"_s << u"Widoczne  dalej"_s;
+        QTest::newRow("line breaks") << u"linia 1\nlinia 2"_s << u"linia 1<br/>linia 2"_s;
+        QTest::newRow("escapes") << u"\\*nie kursywa\\* \\[[nie link]]"_s << u"*nie kursywa* [[nie link]]"_s;
+        QTest::newRow("hard line break") << u"linia 1\\\nlinia 2\\\r\nkoniec \\"_s
+                                         << u"linia 1<br/>linia 2<br/>koniec \\"_s;
+        QTest::newRow("footnote") << u"tekst[^1]"_s << u"tekst<sup>1</sup>"_s;
+        QTest::newRow("javascript text") << u"javascript:alert(1)"_s << u"javascript:alert(1)"_s;
+    }
+
+    void inlineMarkdown()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void links_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("wiki") << u"[[Strona]]"_s << link(u"page:Strona"_s, u"L"_s, u"Strona"_s);
+        QTest::newRow("unresolved") << u"[[Brak]]"_s << link(u"page:Brak"_s, u"U"_s, u"Brak"_s);
+        QTest::newRow("alias heading") << u"[[Projekty/Dom#Plan|dom]]"_s
+                                       << link(u"page:Projekty%2FDom#Plan"_s, u"L"_s, u"dom"_s);
+        QTest::newRow("block link") << u"[[Strona#^blok1]]"_s
+                                    << link(u"page:Strona#^blok1"_s, u"L"_s, u"Strona › ^blok1"_s);
+        QTest::newRow("same page") << u"[[#Sekcja]]"_s << link(u"page:#Sekcja"_s, u"L"_s, u"Sekcja"_s);
+        QTest::newRow("polish") << u"[[Żółw]]"_s << link(u"page:%C5%BB%C3%B3%C5%82w"_s, u"L"_s, u"Żółw"_s);
+        QTest::newRow("embed file") << u"![[obraz.png]]"_s << link(u"page:obraz.png"_s, u"L"_s, u"📎 obraz.png"_s);
+        QTest::newRow("embed page") << u"![[Strona]]"_s << link(u"page:Strona"_s, u"L"_s, u"⧉ Strona"_s);
+        QTest::newRow("external") << u"[strona](https://example.com/a?b=c&d=e)"_s
+                                  << link(u"ext:https://example.com/a?b=c&amp;d=e"_s, u"L"_s, u"strona"_s);
+        QTest::newRow("label markup") << u"[**pogrubiony** link](https://example.com)"_s
+                                      << link(u"ext:https://example.com"_s, u"L"_s, u"<b>pogrubiony</b> link"_s);
+        QTest::newRow("label no links") << u"[a [[X]] #t](https://e.pl)"_s
+                                        << link(u"ext:https://e.pl"_s, u"L"_s, u"a [[X]] #t"_s);
+        QTest::newRow("mailto") << u"[x](mailto:jan@example.com)"_s
+                                << link(u"ext:mailto:jan@example.com"_s, u"L"_s, u"x"_s);
+        QTest::newRow("relative") << u"[notatka](Folder/Moja%20notatka.md#Sekcja)"_s
+                                  << link(u"page:Folder%2FMoja%20notatka.md#Sekcja"_s, u"L"_s, u"notatka"_s);
+        QTest::newRow("image") << u"![wykres](https://x.pl/a.png)"_s
+                               << link(u"ext:https://x.pl/a.png"_s, u"L"_s, u"🖼&nbsp;wykres"_s);
+        QTest::newRow("bare url") << u"https://example.com/x."_s
+                                  << link(u"ext:https://example.com/x"_s, u"L"_s, u"https://example.com/x"_s) + u"."_s;
+        QTest::newRow("autolink") << u"<https://a.pl>"_s << link(u"ext:https://a.pl"_s, u"L"_s, u"https://a.pl"_s);
+        QTest::newRow("email autolink") << u"<jan@example.com>"_s
+                                        << link(u"ext:mailto:jan@example.com"_s, u"L"_s, u"jan@example.com"_s);
+        QTest::newRow("angle destination")
+                << u"[x](<https://a.pl/x y>)"_s << link(u"ext:https://a.pl/x%20y"_s, u"L"_s, u"x"_s);
+        QTest::newRow("tag") << u"#zakupy/spożywcze"_s << tag(u"zakupy%2Fspo%C5%BCywcze"_s, u"zakupy/spożywcze"_s);
+        QTest::newRow("bracket tag") << u"#[[dwa słowa]]"_s << tag(u"dwa%20s%C5%82owa"_s, u"dwa słowa"_s);
+        QTest::newRow("block ref") << u"((abc))"_s << link(u"block:abc"_s, u"L"_s, u"Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("unknown block ref") << u"((nieznany))"_s << link(u"block:nieznany"_s, u"U"_s, u"((nieznany))"_s);
+        QTest::newRow("block embed") << u"!((abc))"_s
+                                     << link(u"block:abc"_s, u"L"_s, u"⧉ Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("emphasis around link")
+                << u"**pogrubiony [[Link]] tekst**"_s
+                << u"<b>pogrubiony "_s + link(u"page:Link"_s, u"L"_s, u"Link"_s) + u" tekst</b>"_s;
+        QTest::newRow("italic link") << u"*[[Link]]*"_s
+                                     << u"<i>"_s + link(u"page:Link"_s, u"L"_s, u"Link"_s) + u"</i>"_s;
+    }
+
+    void links()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void hostileInput_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("javascript link") << u"[x](javascript:alert(1))"_s << u"[x](javascript:alert(1))"_s;
+        QTest::newRow("javascript upper") << u"[x](JaVaScRiPt:alert(1))"_s << u"[x](JaVaScRiPt:alert(1))"_s;
+        QTest::newRow("data link") << u"[x](data:text/html;base64,PHNjcmlwdD4=)"_s
+                                   << u"[x](data:text/html;base64,PHNjcmlwdD4=)"_s;
+        QTest::newRow("file link") << u"[x](file:///etc/passwd)"_s << u"[x](file:///etc/passwd)"_s;
+        QTest::newRow("javascript autolink") << u"<javascript:alert(1)>"_s << u"&lt;javascript:alert(1)&gt;"_s;
+        QTest::newRow("entity trick") << u"[x](jav&#x09;ascript:alert(1))"_s
+                                      << link(u"page:jav%26#x09%3Bascript%3Aalert%281%29"_s, u"L"_s, u"x"_s);
+        QTest::newRow("alias html") << u"[[Strona|<img src=x onerror=alert(1)>]]"_s
+                                    << link(u"page:Strona"_s, u"L"_s, u"&lt;img src=x onerror=alert(1)&gt;"_s);
+        QTest::newRow("quote in target") << u"[[a\"b]]"_s << link(u"page:a%22b"_s, u"L"_s, u"a&quot;b"_s);
+        QTest::newRow("html in label") << u"[<b>x</b>](https://e.pl)"_s
+                                       << link(u"ext:https://e.pl"_s, u"L"_s, u"&lt;b&gt;x&lt;/b&gt;"_s);
+        QTest::newRow("quote in url") << u"[x](https://e.pl/\"onmouseover=\"alert(1))"_s
+                                      << link(u"ext:https://e.pl/&quot;onmouseover=&quot;alert(1)"_s, u"L"_s, u"x"_s);
+        QTest::newRow("img tag") << u"<img src=\"https://tracker.example/p.gif\">"_s
+                                 << u"&lt;img src=&quot;"_s
+                                            + link(u"ext:https://tracker.example/p.gif"_s, u"L"_s,
+                                                   u"https://tracker.example/p.gif"_s)
+                                            + u"&quot;&gt;"_s;
+        QTest::newRow("style tag") << u"<style>*{display:none}</style>"_s
+                                   << u"&lt;style&gt;*{display:none}&lt;/style&gt;"_s;
+    }
+
+    void hostileInput()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void tasksAndChips_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        const QString todo = link(u"task:toggle"_s, u"L"_s, u"☐"_s) + u"&nbsp;"_s;
+        QTest::newRow("overdue") << u"[ ] Zadanie 📅 2026-10-13"_s
+                                 << todo + u"Zadanie "_s + chip(u"OF"_s, u"OB"_s, u"📅 wczoraj"_s);
+        QTest::newRow("due tomorrow") << u"[/] Zadanie 📅 2026-10-15 10:00"_s
+                                      << link(u"task:toggle"_s, u"L"_s, u"◐"_s) + u"&nbsp;Zadanie "_s
+                                                 + chip(u"DF"_s, u"DB"_s, u"📅 jutro 10:00"_s);
+        QTest::newRow("done not overdue")
+                << u"[x] Zrobione 📅 2026-10-13 ✅ 2026-10-14"_s
+                << link(u"task:toggle"_s, u"XF"_s, u"☑"_s) + u"&nbsp;Zrobione "_s
+                           + chip(u"DF"_s, u"DB"_s, u"📅 wczoraj"_s) + u" "_s + chip(u"XF"_s, u"XB"_s, u"✅ dziś"_s);
+        QTest::newRow("cancelled") << u"[-] Odwołane ❌ 2026-10-14"_s
+                                   << link(u"task:toggle"_s, u"XF"_s, u"☒"_s) + u"&nbsp;Odwołane "_s
+                                              + chip(u"XF"_s, u"XB"_s, u"❌ dziś"_s);
+        QTest::newRow("no task") << u"Zwykły blok 📅 2026-10-13"_s
+                                 << u"Zwykły blok "_s + chip(u"DF"_s, u"DB"_s, u"📅 wczoraj"_s);
+        QTest::newRow("reminder") << u"Spotkanie ⏰ 2026-10-14 09:00"_s
+                                  << u"Spotkanie "_s + reminderChip(10, 28, u"RF"_s, u"RB"_s, u"⏰ dziś 09:00"_s);
+        QTest::newRow("alarm") << u"Pobudka ⏰! 2026-10-15 06:30"_s
+                               << u"Pobudka "_s + reminderChip(8, 27, u"AF"_s, u"AB"_s, u"🔔 jutro 06:30"_s);
+        QTest::newRow("compat reminder") << u"(@2026-10-14 18:00) dzwonić"_s
+                                         << reminderChip(0, 19, u"RF"_s, u"RB"_s, u"⏰ dziś 18:00"_s) + u" dzwonić"_s;
+        QTest::newRow("recurrence") << u"Podlać 🔁 every week on Monday"_s
+                                    << u"Podlać "_s + chip(u"EF"_s, u"EB"_s, u"🔁 co tydzień w poniedziałek"_s);
+        QTest::newRow("polish recurrence")
+                << u"Czynsz 🔁 co miesiąc"_s << u"Czynsz "_s + chip(u"EF"_s, u"EB"_s, u"🔁 co miesiąc"_s);
+        QTest::newRow("raw recurrence") << u"x 🔁 every blue moon"_s
+                                        << u"x "_s + chip(u"EF"_s, u"EB"_s, u"🔁 every blue moon"_s);
+        QTest::newRow("other dates") << u"Plan ⏳ 2026-10-15 🛫 2026-10-14 ➕ 2026-10-01"_s
+                                     << u"Plan "_s + chip(u"SF"_s, u"SB"_s, u"⏳ jutro"_s) + u" "_s
+                                                + chip(u"NF"_s, u"NB"_s, u"🛫 dziś"_s) + u" "_s
+                                                + chip(u"NF"_s, u"NB"_s, u"➕ czw 1 paź"_s);
+        QTest::newRow("priorities") << u"Ważne ⏫ [#A]"_s << u"Ważne ⏫ "_s + chip(u"NF"_s, u"NB"_s, u"A"_s);
+        QTest::newRow("logseq task") << u"TODO Zadzwonić\nSCHEDULED: <2026-10-15 Thu .+1w>"_s
+                                     << todo + u"Zadzwonić<br/>"_s + chip(u"SF"_s, u"SB"_s, u"⏳ jutro"_s) + u" "_s
+                                                + chip(u"EF"_s, u"EB"_s, u"🔁 co tydzień po wykonaniu"_s);
+        QTest::newRow("deadline overdue") << u"LATER x\nDEADLINE: <2026-10-01 Thu>"_s
+                                          << todo + u"x<br/>"_s + chip(u"OF"_s, u"OB"_s, u"📅 czw 1 paź"_s);
+        QTest::newRow("task ids")
+                << u"🆔 abc123 zadanie ⛔ x1,y2"_s
+                << u"<span style=\"color:M\">🆔 abc123</span> zadanie <span style=\"color:M\">⛔ x1,y2</span>"_s;
+        QTest::newRow("token in code") << u"`📅 2026-10-13` tekst"_s << Code + u"📅 2026-10-13</code> tekst"_s;
+    }
+
+    void tasksAndChips()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void hiddenAndProperties_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("property") << u"kwota:: 1200 zł"_s << u"<span style=\"color:M\">kwota:</span> 1200 zł"_s;
+        QTest::newRow("property link") << u"autor:: [[Lem]]"_s
+                                       << u"<span style=\"color:M\">autor:</span> "_s
+                                                  + link(u"page:Lem"_s, u"L"_s, u"Lem"_s);
+        QTest::newRow("empty property") << u"tekst\npusty::"_s << u"tekst<br/><span style=\"color:M\">pusty:</span>"_s;
+        QTest::newRow("id lines") << u"tekst\nid:: 64f0a1b2\ncollapsed:: true"_s << u"tekst"_s;
+        QTest::newRow("id line in middle") << u"a\nid:: x\nb"_s << u"a<br/>b"_s;
+        QTest::newRow("block id") << u"tekst ^abc123"_s << u"tekst"_s;
+        QTest::newRow("block id lines") << u"pierwsza ^a1\ndruga ^b2"_s << u"pierwsza<br/>druga"_s;
+        QTest::newRow("drawer") << u"Zrobione\n:LOGBOOK:\nCLOCK: x\n:END:\nnotatka"_s << u"Zrobione<br/>notatka"_s;
+    }
+
+    void hiddenAndProperties()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void taskCheckboxHidden()
+    {
+        RenderContext c = context();
+        c.taskCheckbox = false;
+        QCOMPARE(InlineRenderer(c).render(u"[ ] Zadanie"), u"Zadanie"_s);
+        QCOMPARE(InlineRenderer(c).render(u"DONE Zrobione"), u"Zrobione"_s);
+    }
+
+    void englishLocale()
+    {
+        const InlineRenderer r(context(dates::UiLocale::English));
+        QCOMPARE(r.render(u"x 📅 2026-10-15 🔁 every week on Monday"),
+                 u"x "_s + chip(u"DF"_s, u"DB"_s, u"📅 tomorrow"_s) + u" "_s
+                         + chip(u"EF"_s, u"EB"_s, u"🔁 every week on Monday"_s));
+        QCOMPARE(r.render(u"⏰ 2026-10-20 08:00"), reminderChip(0, 18, u"RF"_s, u"RB"_s, u"⏰ Tue, Oct 20 08:00"_s));
+    }
+
+    void withoutCallbacksOrToday()
+    {
+        RenderContext c;
+        c.palette.link = u"L"_s;
+        const InlineRenderer r(c);
+        QCOMPARE(r.render(u"[[Brak]] `= 2 + 2`"),
+                 link(u"page:Brak"_s, u"L"_s, u"Brak"_s)
+                         + u" <code style=\"background-color:#f3eee2\">= 2 + 2</code>"_s);
+        QCOMPARE(r.render(u"((abc))"),
+                 u"<a href=\"block:abc\" style=\"color:#7a5ea3;text-decoration:none\">((abc))</a>"_s);
+        QVERIFY(r.render(u"📅 2026-10-15").contains(u"15&nbsp;paź&nbsp;2026"));
+    }
+
+    void paletteIsSanitised()
+    {
+        RenderContext c = context();
+        c.palette.link = u"red\" onclick=\"alert(1)"_s;
+        const QString out = InlineRenderer(c).render(u"[[Strona]]");
+        QVERIFY(!out.contains(u"onclick=\""));
+        QCOMPARE(out.count(u'"'), 4);
+    }
+
+    void escapeHelper() { QCOMPARE(InlineRenderer::escape(u"a<b\nc & \"d\""), u"a&lt;b<br/>c &amp; &quot;d&quot;"_s); }
+
+    void renderBlocks()
+    {
+        const InlineRenderer r(context());
+        QCOMPARE(r.renderBlock(u"## Tytuł ##", BlockKind::Heading), u"Tytuł"_s);
+        QCOMPARE(r.renderBlock(u"# **Ważne** #tag", BlockKind::Heading), u"<b>Ważne</b> "_s + tag(u"tag"_s, u"tag"_s));
+        QCOMPARE(r.renderBlock(u"Tytuł\n===", BlockKind::Heading), u"Tytuł"_s);
+        QCOMPARE(r.renderBlock(u"> a\n> b", BlockKind::Quote), u"a<br/>b"_s);
+        QCOMPARE(r.renderBlock(u"> - punkt\n> - [[Link]]", BlockKind::Quote),
+                 u"• punkt<br/>• "_s + link(u"page:Link"_s, u"L"_s, u"Link"_s));
+        QCOMPARE(r.renderBlock(u"> [!note] Uwaga\n> treść", BlockKind::Callout), u"<b>Uwaga</b><br/>treść"_s);
+        QCOMPARE(r.renderBlock(u"> [!tip]\n> x", BlockKind::Callout), u"<b>Tip</b><br/>x"_s);
+        QCOMPARE(r.renderBlock(u"> [!warning]- Zwinięte", BlockKind::Callout), u"<b>Zwinięte</b>"_s);
+        QCOMPARE(r.renderBlock(u"```js\nif (a < b) {}\n```", BlockKind::Code),
+                 u"<pre>```js\nif (a &lt; b) {}\n```</pre>"_s);
+        QCOMPARE(r.renderBlock(u"---", BlockKind::Rule), u"<hr/>"_s);
+        QCOMPARE(r.renderBlock(u"<div onclick=\"x\">a</div>", BlockKind::Html),
+                 u"&lt;div onclick=&quot;x&quot;&gt;a&lt;/div&gt;"_s);
+        QCOMPARE(r.renderBlock(u"**p**", BlockKind::Paragraph), u"<b>p</b>"_s);
+        QCOMPARE(r.renderBlock(u"[ ] t", BlockKind::ListItem), link(u"task:toggle"_s, u"L"_s, u"☐"_s) + u"&nbsp;t"_s);
+    }
+
+    void reminderRangesPointIntoTheBody_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<int>("chips");
+        QTest::newRow("paragraph") << u"Spotkanie ⏰ 2026-10-15 09:00\ndruga ⏰! 2026-10-16 06:30"_s
+                                   << int(BlockKind::Paragraph) << 2;
+        QTest::newRow("list item") << u"[ ] zadanie 😀 ⏰ 2026-10-15 09:00"_s << int(BlockKind::ListItem) << 1;
+        QTest::newRow("atx heading") << u"## Spotkanie ⏰ 2026-10-15 09:00 ##"_s << int(BlockKind::Heading) << 1;
+        QTest::newRow("setext heading") << u"Spotkanie (@2026-10-15 09:00)\n==="_s << int(BlockKind::Heading) << 1;
+        QTest::newRow("quote") << u"> Cytat ⏰ 2026-10-15 09:00\n> > głębiej ⏰ 2026-10-16"_s << int(BlockKind::Quote)
+                               << 2;
+        QTest::newRow("quote with list") << u"> - punkt ⏰ 2026-10-15 09:00\r\n>   * pod ⏰! 2026-10-16 07:00"_s
+                                         << int(BlockKind::Quote) << 2;
+        QTest::newRow("callout")
+                << u"> [!todo] Tytuł ⏰ 2026-10-14 08:00\n> - [ ] zadanie ⏰ 2026-10-15 09:00\n> tekst ⏰ 2026-10-16"_s
+                << int(BlockKind::Callout) << 3;
+        QTest::newRow("callout without space")
+                << u">[!note]⏰ 2026-10-15\n>żółw ⏰ 2026-10-16"_s << int(BlockKind::Callout) << 2;
+    }
+
+    void reminderRangesPointIntoTheBody()
+    {
+        // Review regression: the UI edits [from, to) of the block body when a reminder chip is
+        // clicked, so the range must point at the token in the body even when renderBlock() strips
+        // heading markers or quote / callout prefixes first.
+        QFETCH(QString, body);
+        QFETCH(int, kind);
+        QFETCH(int, chips);
+        const QString out = InlineRenderer(context()).renderBlock(body, BlockKind(kind));
+        static const QRegularExpression re(u"reminder:(\\d+)-(\\d+)"_s);
+        int found = 0;
+        for (auto it = re.globalMatch(out); it.hasNext(); ++found) {
+            const auto m = it.next();
+            const qsizetype from = m.captured(1).toLongLong();
+            const qsizetype to = m.captured(2).toLongLong();
+            QVERIFY2(from >= 0 && from < to && to <= body.size(), qPrintable(out));
+            const QString token = body.sliced(from, to - from);
+            const QList<Token> tokens = findTokens(token);
+            QVERIFY2(tokens.size() == 1 && tokens.first().from == 0 && tokens.first().to == token.size()
+                             && (tokens.first().kind == TokenKind::Reminder
+                                 || tokens.first().kind == TokenKind::ReminderCompat),
+                     qPrintable(token + u" in "_s + out));
+        }
+        QCOMPARE(found, chips);
+    }
+
+    void onlyWhitelistedTags()
+    {
+        const QStringList pieces{u"**"_s,
+                                 u"*"_s,
+                                 u"_"_s,
+                                 u"~~"_s,
+                                 u"=="_s,
+                                 u"`"_s,
+                                 u"[["_s,
+                                 u"]]"_s,
+                                 u"[x]("_s,
+                                 u")"_s,
+                                 u"<script>"_s,
+                                 u"<img src=x>"_s,
+                                 u"\""_s,
+                                 u"'"_s,
+                                 u"&"_s,
+                                 u"#tag "_s,
+                                 u"((abc))"_s,
+                                 u"📅 2026-10-15"_s,
+                                 u"⏰ 2026-10-15 09:00"_s,
+                                 u"🔁 every day"_s,
+                                 u"%%"_s,
+                                 u"\\"_s,
+                                 u"\n"_s,
+                                 u"key:: "_s,
+                                 u"https://e.pl/a "_s,
+                                 u"javascript:"_s,
+                                 u"![["_s,
+                                 u"^id"_s,
+                                 u" "_s,
+                                 u"żółw"_s,
+                                 u"[ ] "_s,
+                                 u"<!--"_s,
+                                 u"-->"_s,
+                                 u"[^1]"_s};
+        static const QRegularExpression tagRe(u"<(/?)([A-Za-z]+)"_s);
+        const QSet<QString> allowed{u"a"_s, u"b"_s, u"i"_s, u"s"_s, u"code"_s, u"span"_s, u"sup"_s, u"br"_s};
+        quint32 seed = 5;
+        const auto rnd = [&](quint32 n) {
+            seed = (seed * 1103515245u + 12345u) % 2147483648u;
+            return seed % n;
+        };
+        const InlineRenderer r(context());
+        for (int k = 0; k < 400; ++k) {
+            QString s;
+            const quint32 len = 1 + rnd(40);
+            for (quint32 i = 0; i < len; ++i)
+                s += pieces[rnd(quint32(pieces.size()))];
+            const QString out = r.render(s);
+            auto it = tagRe.globalMatch(out);
+            QStringList open;
+            while (it.hasNext()) {
+                const auto m = it.next();
+                const QString name = m.captured(2).toLower();
+                QVERIFY2(allowed.contains(name), qPrintable(s + u" -> "_s + out));
+                if (name == u"br")
+                    continue;
+                if (m.captured(1).isEmpty()) {
+                    open.append(name);
+                } else {
+                    QVERIFY2(!open.isEmpty() && open.last() == name,
+                             qPrintable(u"bad nesting: "_s + s + u" -> "_s + out));
+                    open.removeLast();
+                }
+            }
+            QVERIFY2(open.isEmpty(), qPrintable(u"unclosed: "_s + s + u" -> "_s + out));
+            QVERIFY(!out.contains(u"href=\"javascript", Qt::CaseInsensitive));
+        }
+    }
+
+    void unmatchedDelimitersAreLinear()
+    {
+        QString s;
+        for (int i = 0; i < 20000; ++i)
+            s += u"*a "_s;
+        for (int i = 0; i < 20000; ++i)
+            s += u"b_ ~~c "_s;
+        QElapsedTimer t;
+        t.start();
+        const QString out = render(s);
+        QVERIFY(out.startsWith(u"*a *a"));
+        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+    }
+
+    void largeInputIsFast()
+    {
+        QString s;
+        for (int i = 0; i < 5000; ++i)
+            s += u"**a* _b_ [[c]] #d `e` 📅 2026-10-15 ~~f "_s;
+        QElapsedTimer t;
+        t.start();
+        const QString out = render(s);
+        QVERIFY(!out.isEmpty());
+        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+    }
+};
+
+QTEST_GUILESS_MAIN(TestRender)
+#include "tst_markdown_render.moc"
