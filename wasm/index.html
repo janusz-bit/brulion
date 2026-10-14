@@ -1,0 +1,374 @@
+<!doctype html>
+<!--
+  Brulion — browser version (Qt for WebAssembly). Copyright the Brulion authors,
+  AGPL-3.0-or-later; source: https://github.com/janusz-bit/brulion
+
+  Custom shell based on Qt's wasm_shell.html: loading screen, download progress, error and
+  exit screens, service worker registration (offline PWA). scripts/wasm-build.sh fills in the
+  @BRULION_…@ placeholders. All URLs are relative, so the site works under any base path
+  (GitHub Pages: /brulion/).
+-->
+<html lang="pl">
+  <head>
+    <meta charset="utf-8">
+    <!-- 1:1 mapping between CSS pixels and Qt device independent pixels (as in Qt's shell). -->
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=0">
+    <title>Brulion</title>
+    <meta name="description" content="Brulion — notatki offline w Markdown: konspekt, dziennik, kalendarz, przypomnienia.">
+    <meta name="application-name" content="Brulion">
+    <meta name="theme-color" content="#1f2430">
+    <meta name="color-scheme" content="light dark">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/logo.svg" type="image/svg+xml">
+    <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="license" href="https://www.gnu.org/licenses/agpl-3.0.html">
+    <style>
+      :root {
+        --paper: #fbf7ee;
+        --ink: #1f2430;
+        --muted: #5b6375;
+        --accent: #e2574c;
+        --track: rgba(31, 36, 48, 0.12);
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1f2430;
+          --ink: #ece6d8;
+          --muted: #a7aebf;
+          --track: rgba(236, 230, 216, 0.16);
+        }
+      }
+      /* The page covers the visual viewport with no scroll bars (as in Qt's shell). */
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+      }
+      [hidden] { display: none !important; }
+      /* Qt's screen: must have its final size when the app starts (QScreen geometry). */
+      #screen { position: fixed; inset: 0; }
+      #loader {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+        background: var(--paper);
+        transition: opacity 160ms ease-out;
+      }
+      #loader.fading { opacity: 0; }
+      #loader img { width: 112px; height: 112px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.18)); }
+      #title { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.01em; }
+      #bar {
+        width: min(260px, 70vw);
+        height: 6px;
+        border-radius: 3px;
+        background: var(--track);
+        overflow: hidden;
+      }
+      #bar > div {
+        height: 100%;
+        width: 0;
+        border-radius: 3px;
+        background: var(--accent);
+        transition: width 180ms linear;
+      }
+      #bar.indeterminate > div { width: 30%; animation: slide 1.3s ease-in-out infinite; }
+      @keyframes slide {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(340%); }
+      }
+      #status { color: var(--muted); font-size: 0.92rem; min-height: 1.3em; font-variant-numeric: tabular-nums; }
+      #details {
+        max-width: min(36rem, 90vw);
+        max-height: 30vh;
+        overflow: auto;
+        color: var(--muted);
+        font: 0.8rem/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      #actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+      #actions button {
+        font: inherit;
+        font-size: 0.95rem;
+        padding: 9px 18px;
+        min-height: 44px;
+        border-radius: 8px;
+        border: 1px solid var(--track);
+        background: var(--ink);
+        color: var(--paper);
+        cursor: pointer;
+      }
+      #actions button.secondary { background: transparent; color: var(--ink); }
+      @media (prefers-reduced-motion: reduce) {
+        #loader, #bar > div { transition: none; }
+        #bar.indeterminate > div { animation: none; width: 100%; opacity: 0.5; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="screen" hidden></div>
+    <div id="loader" role="status" aria-live="polite">
+      <img src="icons/logo.svg" alt="" width="112" height="112">
+      <div id="title">Wczytywanie Brulionu…</div>
+      <div id="bar" class="indeterminate" aria-hidden="true"><div></div></div>
+      <div id="status"></div>
+      <div id="details" hidden></div>
+      <div id="actions" hidden></div>
+      <noscript>Brulion potrzebuje JavaScriptu i WebAssembly — włącz JavaScript w przeglądarce.</noscript>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        // Filled in by scripts/wasm-build.sh (left as "@…@" when the file is used unprocessed).
+        var WASM_SIZE = parseInt('@BRULION_WASM_SIZE@', 10);
+        var ASSET_VERSION = '@BRULION_ASSET_VERSION@';
+        var assetQuery = ASSET_VERSION.charAt(0) === '@' ? '' : '?v=' + ASSET_VERSION;
+
+        // Polish by default, English for English browsers (like the app's own translation).
+        var english = /^en\b/i.test(navigator.language || '');
+        var T = english ? {
+          title: 'Loading Brulion…',
+          download: 'Downloading the app…',
+          start: 'Starting…',
+          storage: 'Loading notes…',
+          locked: 'Brulion is open in another tab. Close it to continue here.',
+          ui: 'Opening…',
+          failed: 'Brulion could not start.',
+          noWasm: 'This browser does not support WebAssembly. Use a current Firefox, Chrome, Edge or Safari.',
+          noWebgl: 'Brulion needs WebGL 2 (browser graphics). Turn on hardware acceleration or use another browser.',
+          tryAnyway: 'Try anyway',
+          crashed: 'Brulion stopped working. Notes saved so far are safe.',
+          exited: 'Brulion has exited.',
+          reload: 'Restart'
+        } : {
+          title: 'Wczytywanie Brulionu…',
+          download: 'Pobieranie aplikacji…',
+          start: 'Uruchamianie…',
+          storage: 'Wczytywanie notatek…',
+          locked: 'Brulion jest otwarty w innej karcie. Zamknij ją, aby kontynuować tutaj.',
+          ui: 'Otwieranie…',
+          failed: 'Nie udało się uruchomić Brulionu.',
+          noWasm: 'Ta przeglądarka nie obsługuje WebAssembly. Użyj aktualnego Firefoksa, Chrome, Edge albo Safari.',
+          noWebgl: 'Brulion potrzebuje WebGL 2 (grafiki w przeglądarce). Włącz akcelerację sprzętową albo użyj innej przeglądarki.',
+          tryAnyway: 'Spróbuj mimo to',
+          crashed: 'Brulion przestał działać. Zapisane notatki są bezpieczne.',
+          exited: 'Brulion zakończył działanie.',
+          reload: 'Uruchom ponownie'
+        };
+        if (english) document.documentElement.lang = 'en';
+
+        var screen = document.getElementById('screen');
+        var loader = document.getElementById('loader');
+        var title = document.getElementById('title');
+        var bar = document.getElementById('bar');
+        var status = document.getElementById('status');
+        var details = document.getElementById('details');
+        var actions = document.getElementById('actions');
+        title.textContent = T.title;
+
+        function setProgress(fraction) {
+          if (!(fraction >= 0)) {
+            bar.classList.add('indeterminate');
+            bar.firstElementChild.style.width = '';
+            return;
+          }
+          bar.classList.remove('indeterminate');
+          bar.firstElementChild.style.width = Math.min(100, fraction * 100).toFixed(1) + '%';
+        }
+        function setStatus(text) { status.textContent = text; }
+
+        function showProblem(message, detailText, buttons) {
+          loader.hidden = false;
+          loader.classList.remove('fading');
+          loader.setAttribute('role', 'alert');
+          bar.hidden = true;
+          title.textContent = message;
+          setStatus('');
+          details.textContent = detailText || '';
+          details.hidden = !detailText;
+          actions.textContent = '';
+          (buttons || []).forEach(function (b) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = b.label;
+            if (b.secondary) button.className = 'secondary';
+            button.addEventListener('click', b.action);
+            actions.appendChild(button);
+          });
+          actions.hidden = !buttons || buttons.length === 0;
+        }
+        var reloadButton = { label: T.reload, action: function () { location.reload(); } };
+
+        // Called by the app (src/platform/wasm/wasmshell.cpp, wasmstorage.cpp).
+        var loaderDone = false;
+        var bridged = false;
+        function hideLoader() {
+          if (loaderDone) return;
+          loaderDone = true;
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              loader.classList.add('fading');
+              setTimeout(function () { loader.hidden = true; }, 200);
+            });
+          });
+        }
+        window.brulionShell = {
+          stage: function (name) {
+            bridged = true;
+            if (T[name]) setStatus(T[name]);
+            setProgress(NaN);
+          },
+          done: hideLoader
+        };
+
+        // Downloads the .wasm with progress (bytes of the uncompressed file vs. its known size).
+        function fetchWasm(url) {
+          return fetch(url).then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + url);
+            var headers = { 'Content-Type': 'application/wasm' };
+            if (!response.body || !(WASM_SIZE > 0) || typeof ReadableStream === 'undefined') {
+              return new Response(response.body, { headers: headers });
+            }
+            var reader = response.body.getReader();
+            var loaded = 0;
+            var stream = new ReadableStream({
+              pull: function (controller) {
+                return reader.read().then(function (chunk) {
+                  if (chunk.done) {
+                    setProgress(1);
+                    setStatus(T.start);
+                    controller.close();
+                    return;
+                  }
+                  loaded += chunk.value.byteLength;
+                  setProgress(loaded / WASM_SIZE);
+                  setStatus(T.download + ' ' + Math.min(100, Math.floor(loaded * 100 / WASM_SIZE)) + '%');
+                  controller.enqueue(chunk.value);
+                });
+              },
+              cancel: function (reason) { return reader.cancel(reason); }
+            });
+            return new Response(stream, { headers: headers });
+          });
+        }
+        function compileWasm(url) {
+          if (WebAssembly.compileStreaming) return WebAssembly.compileStreaming(fetchWasm(url));
+          return fetchWasm(url).then(function (r) { return r.arrayBuffer(); }).then(WebAssembly.compile);
+        }
+
+        function loadScript(src) {
+          return new Promise(function (resolve, reject) {
+            var script = document.createElement('script');
+            script.src = src;
+            script.async = false;
+            script.onload = resolve;
+            script.onerror = function () { reject(new Error('Cannot load ' + src)); };
+            document.body.appendChild(script);
+          });
+        }
+
+        function hasWebGl2() {
+          try {
+            var canvas = document.createElement('canvas');
+            return !!(window.WebGL2RenderingContext && canvas.getContext('webgl2'));
+          } catch (e) {
+            return false;
+          }
+        }
+
+        function registerServiceWorker() {
+          var params = new URLSearchParams(location.search);
+          if (!('serviceWorker' in navigator) || !window.isSecureContext || params.has('nosw')) return;
+          navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function (e) {
+            console.warn('Brulion: service worker not registered', e);
+          });
+        }
+
+        function start() {
+          setStatus(T.download);
+          var params = new URLSearchParams(location.search);
+          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify
+          var args = [];
+          (params.get('selftest') || '').split(',').forEach(function (name) {
+            if (name === 'storage' || name === 'notify') args.push('--selftest-' + name);
+          });
+
+          // Start the big download first; the small scripts load in parallel.
+          var wasmModule = compileWasm('brulion.wasm' + assetQuery);
+          wasmModule.catch(function () {});
+
+          Promise.all([loadScript('qtloader.js' + assetQuery), loadScript('brulion.js' + assetQuery)])
+            .then(function () {
+              if (typeof qtLoad !== 'function' || typeof window.brulion_entry !== 'function') {
+                throw new Error('qtloader.js / brulion.js did not load');
+              }
+              return qtLoad({
+                arguments: args,
+                qt: {
+                  entryFunction: window.brulion_entry,
+                  containerElements: [screen],
+                  module: wasmModule,
+                  onLoaded: function () {
+                    // Qt sizes its screen from the container: show it now, keep the loading
+                    // screen on top until the app reports its UI. Fallback for a build
+                    // without the bridge: hide it after 20 s unless the app reported a stage.
+                    screen.hidden = false;
+                    setStatus(T.start);
+                    setProgress(NaN);
+                    setTimeout(function () { if (!bridged) hideLoader(); }, 20000);
+                    registerServiceWorker();
+                  },
+                  onExit: function (exit) {
+                    // The JavaScript side of the storage survives a crash: save what is in memory.
+                    try {
+                      if (window.brulionStorage && window.brulionStorage.flush) window.brulionStorage.flush();
+                    } catch (e) {
+                      console.error(e);
+                    }
+                    loaderDone = true;
+                    var info = exit.crashed ? (exit.text || '') : (exit.code !== undefined ? 'exit code ' + exit.code : '');
+                    showProblem(exit.crashed ? T.crashed : T.exited, info, [reloadButton]);
+                  }
+                }
+              });
+            })
+            .catch(function (e) {
+              console.error(e);
+              if (!loaderDone) showProblem(T.failed, String((e && e.message) || e), [reloadButton]);
+            });
+        }
+
+        if (typeof WebAssembly !== 'object') {
+          showProblem(T.noWasm, '', []);
+        } else if (!hasWebGl2()) {
+          showProblem(T.noWebgl, '', [{ label: T.tryAnyway, secondary: true, action: function () {
+            actions.hidden = true;
+            details.hidden = true;
+            bar.hidden = false;
+            loader.setAttribute('role', 'status');
+            title.textContent = T.title;
+            start();
+          } }]);
+        } else {
+          start();
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96">
+  <!-- Monochrome notification badge (Android status bar; only alpha is used): a notebook with
+       a binding and ruled lines — same drawing as the Android app's ic_stat_brulion. -->
+  <path fill="#fff" fill-rule="evenodd" d="M7,3H17A2,2 0,0 1,19 5V19A2,2 0,0 1,17 21H7A2,2 0,0 1,5 19V5A2,2 0,0 1,7 3ZM9,5V19H17V5Z"/>
+  <path fill="#fff" d="M11,8H15.5V9.5H11ZM11,11.25H15.5V12.75H11ZM11,14.5H14V16H11Z"/>
+</svg>
