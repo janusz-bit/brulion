@@ -1,1 +1,1 @@
-target_sources(brulion_core PRIVATE paths.h paths.cpp)
+brulion_add_core_module(util SOURCES ../types.h paths.h paths.cpp)
