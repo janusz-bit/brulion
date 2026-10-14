@@ -262,11 +262,31 @@ All vault commands take `root` = absolute vault folder path and `path` = VaultPa
 
 `FileStatDto = { path: string; kind: 'file' | 'dir'; size: number; mtime: number /* ms */ }`.
 
-Android-only plugin `brulion-android` (`invoke('plugin:brulion-android|<cmd>')`):
-`has_all_files_access → { granted: boolean }`, `request_all_files_access → null` (opens the
-system settings screen; the app re-checks on resume).
+Android-only plugin `brulion-android` (Rust crate `src-tauri/plugins/brulion-android` + Kotlin).
+JS calls `invoke('plugin:brulion-android|<cmd>', args)`; on desktop the commands exist but return
+neutral values (`granted: true`, `scheduled: 0`, empty activation).
 
-Notifications use the official `@tauri-apps/plugin-notification`: Android schedules natively
-(`schedule: Schedule.at(date, false, true)`, channels `reminders` (high) and `alarms` (max,
-vibration)); desktop shows immediately while the in-app scheduler keeps timers (app stays in
-the tray). Notification `extra` carries `{ path, line }`.
+| Command | Args | Returns |
+|---|---|---|
+| `has_all_files_access` | – | `{ granted: boolean }` |
+| `request_all_files_access` | – | `null` (opens system settings; app re-checks on resume) |
+| `notification_permission` | – | `{ granted: boolean }` |
+| `request_notification_permission` | – | `{ granted: boolean }` (Android 13+ POST_NOTIFICATIONS) |
+| `can_schedule_exact` | – | `{ granted: boolean }` |
+| `request_exact_alarms` | – | `null` (opens settings on Android 12+) |
+| `schedule_reminders` | `{ items: AndroidReminder[] }` | `{ scheduled: number; exact: boolean }` — replaces the whole set |
+| `take_activation` | – | `{ path?: string; line?: number }` — notification tap that opened the app (cleared on read) |
+
+`AndroidReminder = { id: number /* int32 */; title: string; body: string; at: number /* epoch ms */; alarm: boolean; path: string; line: number }`.
+The plugin also emits the event `notification-activated` `{ path, line }` (listen with
+`addPluginListener('brulion-android', 'notification-activated', cb)`).
+Native side: AlarmManager exact alarms (`setAlarmClock` for alarms, `setExactAndAllowWhileIdle`
+for reminders; inexact fallback without permission), reminders persisted in SharedPreferences
+and re-armed on BOOT_COMPLETED / app update / time change; notification channels `reminders`
+(high) and `alarms` (max, alarm sound, insistent, full-screen intent); actions "Drzemka 10 min"
+(native re-arm) and "OK".
+
+Notifications: on **Android** reminders are scheduled through `brulion-android`
+(`schedule_reminders`), so they fire while the app is closed and after reboot. On **desktop** the
+official `@tauri-apps/plugin-notification` shows notifications immediately while the in-app
+`ReminderScheduler` keeps timers (the app lives in the tray; `--hidden` starts it minimised).
