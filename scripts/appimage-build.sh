@@ -78,6 +78,8 @@ install_deps() {
   local packages=(
     # build tools (python3-venv: aqtinstall, and CMake >= 3.24 on Ubuntu 22.04)
     build-essential git curl ca-certificates file zstd zsync xz-utils python3 python3-venv ninja-build
+    # time zone database: the tests pin TZ=Europe/Warsaw (minimal containers ship without it)
+    tzdata
     # needed to compile against Qt Gui
     libgl-dev libegl-dev libopengl-dev libxkbcommon-dev libvulkan-dev
     # libraries of Qt and of the xcb/Wayland platform plugins, bundled by linuxdeploy
