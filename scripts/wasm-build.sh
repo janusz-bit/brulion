@@ -62,7 +62,7 @@ sha256() {
 }
 
 aqt() {
-  if command -v aqt >/dev/null; then
+  if type -P aqt >/dev/null; then
     command aqt "$@"
   elif command -v uvx >/dev/null; then
     uvx --from "aqtinstall==$AQT_VERSION" aqt "$@"
