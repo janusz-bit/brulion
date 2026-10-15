@@ -23,7 +23,7 @@ private Q_SLOTS:
     void specExample()
     {
         const QString src = u"cena = 12.50\nilość = 4\ncena * ilość\nrabat = 15%\nans - rabat\n5 km to mi\n20% of 150\nsum"_s;
-        QCOMPARE(results(src), (QStringList{u"12,5"_s, u"4"_s, u"50"_s, u"15%"_s, u"42,5"_s, u"3,106855961 mi"_s,
+        QCOMPARE(results(src), (QStringList{u"12,5"_s, u"4"_s, u"50"_s, u"15%"_s, u"42,5"_s, u"3,11 mi"_s,
                                             u"30"_s, u"139"_s}));
     }
 
@@ -411,14 +411,14 @@ private Q_SLOTS:
         QTest::addColumn<QString>("source");
         QTest::addColumn<QString>("expected");
         const QList<std::pair<QString, QString>> cases = {
-            {u"5 km to mi"_s, u"3,106855961 mi"_s},
-            {u"3 h + 20 min"_s, u"3,333333333 h"_s},
-            {u"2 kg in lb"_s, u"4,409245244 lb"_s},
+            {u"5 km to mi"_s, u"3,11 mi"_s},
+            {u"3 h + 20 min"_s, u"3,33 h"_s},
+            {u"2 kg in lb"_s, u"4,41 lb"_s},
             {u"90 min to h"_s, u"1,5 h"_s},
             {u"1500 m"_s, u"1500 m"_s},
             {u"2 kg * 3 m / s^2"_s, u"6 N"_s},
-            {u"5 km na mi"_s, u"3,106855961 mi"_s},
-            {u"5 km w mi"_s, u"3,106855961 mi"_s},
+            {u"5 km na mi"_s, u"3,11 mi"_s},
+            {u"5 km w mi"_s, u"3,11 mi"_s},
             {u"20°C to °F"_s, u"68°F"_s},
             {u"3 godz + 30 minut"_s, u"3,5 h"_s},
             {u"2 dni to godz"_s, u"48 h"_s},
@@ -427,26 +427,35 @@ private Q_SLOTS:
             {u"10 m / 2 m"_s, u"5"_s},
             {u"5 km + 2 kg"_s, u"!Niezgodne jednostki"_s},
             {u"2 km + 3 m to cm"_s, nb(u"200_300 cm"_s)},
-            {u"120 km/h to m/s"_s, u"33,33333333 m/s"_s},
-            {u"60 mph to km/h"_s, u"96,56064 km/h"_s},
-            {u"1 GiB to MB"_s, u"1073,741824 MB"_s},
+            {u"120 km/h to m/s"_s, u"33,33 m/s"_s},
+            {u"60 mph to km/h"_s, u"96,56 km/h"_s},
+            {u"1 GiB to MB"_s, u"1073,74 MB"_s},
             {u"2 kW * 3 h"_s, u"6 kWh"_s},
             {u"1 kWh to kJ"_s, u"3600 kJ"_s},
             {u"2 l + 500 ml"_s, u"2,5 l"_s},
             {u"3 m * 4 m"_s, u"12 m²"_s},
             {u"1 ha to m2"_s, nb(u"10_000 m²"_s)},
             {u"300 K to °C"_s, u"26,85°C"_s},
-            {u"100 °F to C"_s, u"37,77777778°C"_s},
+            {u"100 °F to C"_s, u"37,78°C"_s},
             {u"20°C + 5°C"_s, u"25°C"_s},
             {u"1 rok to dni"_s, u"365,25 d"_s},
             {u"5 km to kg"_s, u"!Niezgodne jednostki"_s},
             {u"5 to km"_s, u"!Niezgodne jednostki"_s},
             {u"5 km to foo"_s, u"!„foo” nie jest jednostką"_s},
-            {u"5 cm in in"_s, u"1,968503937 in"_s},
+            {u"5 cm in in"_s, u"1,97 in"_s},
             {u"1 dag + 1 dkg"_s, u"2 dag"_s},
             {u"sqrt(16 m²)"_s, u"4 m"_s},
             {u"(3 m)^2"_s, u"9 m²"_s},
             {u"2 km * 3 m"_s, u"0,006 km²"_s},
+            // Quantities show at most two decimals; below 1 two significant digits remain.
+            {u"1 m to km"_s, u"0,001 km"_s},
+            {u"4,2 m to km"_s, u"0,0042 km"_s},
+            {u"1 cm to km"_s, u"0,00001 km"_s},
+            {u"20 min to h"_s, u"0,33 h"_s},
+            {u"1 min to h"_s, u"0,017 h"_s},
+            {u"12345,678 m"_s, nb(u"12_345,68 m"_s)},
+            {u"2,005 kg"_s, u"2 kg"_s},
+            {u"-5 km to mi"_s, u"-3,11 mi"_s},
             {u"1 GB / (10 MB/s)"_s, u"100 s"_s},
             {u"5 a to m2"_s, u"500 m²"_s},
             {u"1 ha to a"_s, u"100 a"_s},
@@ -468,7 +477,8 @@ private Q_SLOTS:
 
     void englishUnits()
     {
-        QCOMPARE(last(u"5 km to mi"_s, En), u"3.106855961 mi"_s);
+        QCOMPARE(last(u"5 km to mi"_s, En), u"3.11 mi"_s);
+        QCOMPARE(last(u"3 h + 20 min"_s, En), u"3.33 h"_s);
         QCOMPARE(last(u"14 d to week"_s, En), u"2 wk"_s);
         QCOMPARE(last(u"14 d to week"_s, Pl), u"2 tydz."_s);
     }

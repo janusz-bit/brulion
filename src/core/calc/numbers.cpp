@@ -352,6 +352,17 @@ QString formatNumber(double value, CalcLocale locale, NumberFormatOptions option
     return localiseDecimal(plain, locale, options.grouping);
 }
 
+QString formatUnitNumber(double value, CalcLocale locale, NumberFormatOptions options)
+{
+    const double a = std::abs(value);
+    if (!std::isfinite(value) || value == 0 || a >= 1e15 || a < 1e-6)
+        return formatNumber(value, locale, options);
+    const int decimals = a >= 1 ? kUnitDecimals : leadingZeros(a) + kUnitDecimals;
+    // Rounded in decimal text (like the display), then shown without trailing zeros.
+    const double rounded = QString::number(value, 'f', decimals).toDouble();
+    return formatNumber(rounded, locale, options);
+}
+
 QString formatFixed(double value, int fractionDigits, CalcLocale locale, NumberFormatOptions options)
 {
     if (!std::isfinite(value) || std::abs(value) >= 1e15)

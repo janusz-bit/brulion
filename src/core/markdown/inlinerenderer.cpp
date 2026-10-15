@@ -56,10 +56,25 @@ QString percentEncoded(QStringView s)
     return QString::fromLatin1(QUrl::toPercentEncoding(s.toString()));
 }
 
-/// Escaped text with spaces as &nbsp; (chips never wrap inside).
+/// Chips up to this many UTF-16 code units never wrap; longer ones (long recurrence rules)
+/// may wrap between words, so a chip wider than the line is never broken inside a word.
+constexpr qsizetype MaxUnbreakableChip = 32;
+
+/// Escaped chip text. Spaces become &nbsp; (a short chip never wraps inside); in a long chip only
+/// the space after the leading emoji and after one- or two-letter words ("co", "w", "2") stay
+/// non-breaking, the others are break opportunities at word boundaries.
 QString chipText(const QString &text)
 {
-    return esc(text).replace(u' ', u"&nbsp;"_s);
+    if (text.size() <= MaxUnbreakableChip)
+        return esc(text).replace(u' ', u"&nbsp;"_s);
+    QString out;
+    const QList<QStringView> words = QStringView(text).split(u' ');
+    for (qsizetype k = 0; k < words.size(); ++k) {
+        out += esc(words[k]);
+        if (k + 1 < words.size())
+            out += k == 0 || words[k].size() <= 2 ? u"&nbsp;"_s : u" "_s;
+    }
+    return out;
 }
 
 QString chipStyle(const ChipColors &c)
@@ -305,6 +320,40 @@ QString assemble(QStringView text, const QList<Piece> &pieces)
     return out;
 }
 
+/// The recurrence rule of a 🔁 token and where its text ends: the whole value when it parses,
+/// else the longest run of leading words that does ("co tydzień" of "co tydzień kupić mleko");
+/// nullopt when no rule starts there (the token is shown as text).
+std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStringView masked, const Token &tok)
+{
+    if (tok.valueFrom < 0 || tok.valueTo <= tok.valueFrom)
+        return std::nullopt;
+    const QStringView value = masked.sliced(tok.valueFrom, tok.valueTo - tok.valueFrom);
+    if (const auto rule = dates::parseRecurrence(value))
+        return std::pair{*rule, tok.valueTo};
+    // Ends of the leading words (at most a dozen: no rule is longer).
+    constexpr int MaxRuleWords = 12;
+    QList<qsizetype> ends;
+    for (qsizetype i = 0; i < value.size() && ends.size() < MaxRuleWords;) {
+        while (i < value.size() && value[i].isSpace())
+            ++i;
+        qsizetype j = i;
+        while (j < value.size() && !value[j].isSpace())
+            ++j;
+        if (j > i)
+            ends.append(j);
+        i = j;
+    }
+    for (qsizetype k = ends.size() - 1; k >= 0; --k) {
+        QStringView candidate = value.first(ends[k]);
+        // "co tydzień, kupić" -> "co tydzień": punctuation glued to the last word is not rule text.
+        while (!candidate.isEmpty() && (candidate.back() == u',' || candidate.back() == u';' || candidate.back() == u':'))
+            candidate.chop(1);
+        if (const auto rule = dates::parseRecurrence(candidate))
+            return std::pair{*rule, tok.valueFrom + candidate.size()};
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 InlineRenderer::InlineRenderer(RenderContext context) : m_ctx(std::move(context)) { }
@@ -446,6 +495,9 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 const QString ext =
                         w.target.contains(u'.') ? w.target.sliced(w.target.lastIndexOf(u'.')).toLower() : QString();
                 const bool attachment = !ext.isEmpty() && ext != u".md" && !ext.contains(u'/');
+                if (!attachment && m_ctx.hideTransclusions
+                    && (!w.target.isEmpty() || !w.heading.isEmpty() || !w.blockId.isEmpty()))
+                    break; // shown next to the text by the caller
                 QString name = w.target;
                 if (!w.heading.isEmpty())
                     name += u" › "_s + w.heading;
@@ -480,6 +532,8 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             }
             case InlineKind::BlockRef:
             case InlineKind::BlockEmbed: {
+                if (item.kind == InlineKind::BlockEmbed && m_ctx.hideTransclusions)
+                    break; // shown next to the text by the caller
                 const auto blockText = m_ctx.blockText ? m_ctx.blockText(item.target) : std::nullopt;
                 const QString prefix = item.kind == InlineKind::BlockEmbed ? u"⧉ "_s : QString();
                 html = link(u"block:"_s + item.target, blockText ? pal.link : pal.unresolved,
@@ -510,13 +564,10 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             const bool overdue = open && m_ctx.today.isValid() && spec.date < m_ctx.today;
             return chip(overdue ? pal.overdue : pal.due, u"📅 "_s + human(spec));
         };
-        const auto ruleText = [&](const QString &raw) {
-            const auto rule = dates::parseRecurrence(raw);
-            return rule ? dates::formatRecurrence(*rule, m_ctx.locale) : raw;
-        };
         for (const Token &tok : findTokens(masked)) {
             const QStringView source = text.sliced(tok.from, tok.to - tok.from);
             QString html;
+            qsizetype to = tok.to;
             switch (tok.kind) {
             case TokenKind::Due: html = dueChip(tok.spec()); break;
             case TokenKind::Scheduled: html = chip(pal.scheduled, u"⏳ "_s + human(tok.spec())); break;
@@ -524,9 +575,16 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case TokenKind::Created: html = chip(pal.neutral, u"➕ "_s + human(tok.spec())); break;
             case TokenKind::Done: html = chip(pal.done, u"✅ "_s + human(tok.spec())); break;
             case TokenKind::Cancelled: html = chip(pal.done, u"❌ "_s + human(tok.spec())); break;
-            case TokenKind::Recurrence:
-                html = chip(pal.recurrence, tok.value.isEmpty() ? u"🔁"_s : u"🔁 "_s + ruleText(tok.value));
+            case TokenKind::Recurrence: {
+                // Only a rule that parses is a chip (the longest one at the start of the text
+                // after 🔁: "🔁 co tydzień kupić mleko" -> chip + text); anything else stays text.
+                const auto rule = recurrencePrefix(masked, tok);
+                if (!rule)
+                    continue;
+                html = chip(pal.recurrence, u"🔁 "_s + dates::formatRecurrence(rule->first, m_ctx.locale));
+                to = rule->second;
                 break;
+            }
             case TokenKind::Reminder:
             case TokenKind::ReminderCompat:
                 // docs/UI.md: ⏰ reminders, a bell for alarms.
@@ -547,7 +605,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     html += u' ' + chip(pal.recurrence, u"🔁 "_s + dates::formatRecurrence(*rule, m_ctx.locale));
                 break;
             }
-            atoms.append({tok.from, tok.to, html});
+            atoms.append({tok.from, to, html});
         }
 
         // Footnote references [^1].

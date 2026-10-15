@@ -7,10 +7,15 @@ import Brulion
 // (on hover; always shown when folded or on touch), the round bullet of list items (click:
 // zoom into the block; right click / long press: block menu), the task checkbox, and the
 // content for the block's `view` (rendered text / inline editor, code, calc, table, query,
-// callout, quote, rule, frontmatter) with image embeds below.
+// callout, quote, rule, frontmatter) with image embeds and embedded pages / sections / blocks
+// (TransclusionView) below.
 //
 // Hidden rows (zoom, folds) stay in the model with `visible` false: the delegate collapses to
 // zero height.
+// A leading "# Title" repeating the page title right after the page properties
+// (PageController.titleRow) trades places with the properties panel on screen — the title
+// first, the panel under it — through a vertical translation of both delegates; the file and
+// the row order stay as they are.
 Item {
     id: block
 
@@ -38,8 +43,11 @@ Item {
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
     readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "table"
                                    || view === "callout" || view === "frontmatter"
+    // The title shown above the properties panel (see the file comment).
+    readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
+    readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
     readonly property real topPad: {
-        if (headingLevel > 0 && index > 0)
+        if (headingLevel > 0 && index > 0 && !titleFirst)
             return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
         if (framed)
             return Theme.space2
@@ -48,20 +56,41 @@ Item {
     /// Text rows: a little air between blocks; more on touch so 44 px targets fit the rows.
     readonly property real rowPad: Theme.touchUi ? 4 : 2
     readonly property real bottomPad: framed ? Theme.space2 : headingLevel > 0 ? Theme.space1 : rowPad
-    /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
-    readonly property real firstLineCenter: topPad + (content.item ? content.item.firstLineCenter : editor.firstLineCenter(0))
-
     readonly property var embeds: model.embeds
     readonly property bool hasEmbeds: embeds !== undefined && embeds !== null && embeds.length > 0
                                       && (view === "text" || view === "heading" || view === "quote" || view === "callout")
+    readonly property var transclusions: model.transclusions
+    readonly property bool hasTransclusions: transclusions !== undefined && transclusions !== null && transclusions.length > 0
+    /// Nothing but embedded pages / sections / blocks: no empty text line above their frames.
+    readonly property bool onlyTransclusions: hasTransclusions && !hasEmbeds && model.onlyEmbeds && !editing && view === "text"
+    readonly property real contentHeight: onlyTransclusions ? 0 : content.height
+    readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
+    readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
+                                           + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
+    readonly property real bodyBottom: hasTransclusions ? transclusionsY + transclusionView.height
+                                     : hasEmbeds ? embedsY + embedView.height : topPad + contentHeight
+
+    /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
+    readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionView.firstLineCenter
+                                                      : content.item ? content.item.firstLineCenter : editor.firstLineCenter(0))
 
     width: ListView.view ? ListView.view.width : 0
-    height: shown ? Math.ceil(topPad + content.height + (hasEmbeds ? embedView.height + (model.onlyEmbeds ? 0 : Theme.space2) : 0) + bottomPad) : 0
+    height: shown ? Math.ceil(bodyBottom + bottomPad) : 0
     visible: shown
     clip: !shown
+    // Title above the properties panel: the two delegates trade places on screen.
+    transform: Translate {
+        y: block.titleFirst ? -block.editor.propertiesHeight : block.propertiesAfterTitle ? block.editor.titleHeight : 0
+    }
+    Binding { when: block.titleFirst; target: block.editor; property: "titleHeight"; value: block.height }
+    Binding { when: block.propertiesAfterTitle; target: block.editor; property: "propertiesHeight"; value: block.height }
 
     Accessible.role: Accessible.ListItem
     Accessible.name: model.plainText
+
+    /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
+    readonly property Item contentItem: content.item
+    readonly property alias transclusionView: transclusionView
 
     /// Give the keyboard to the block content (tables: the first cell).
     function focusContent() {
@@ -195,6 +224,7 @@ Item {
         y: block.topPad
         width: Math.max(40, block.contentRight - x)
         active: block.shown
+        visible: !block.onlyTransclusions
         sourceComponent: {
             switch (block.view) {
             case "code": return codeComponent
@@ -214,10 +244,20 @@ Item {
         id: embedView
         visible: block.hasEmbeds
         x: block.contentLeft
-        y: block.topPad + content.height + (block.model.onlyEmbeds ? 0 : Theme.space2)
+        y: block.embedsY
         width: Math.max(40, block.contentRight - x)
         embeds: block.hasEmbeds ? block.embeds : []
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
+    }
+
+    TransclusionView {
+        id: transclusionView
+        visible: block.hasTransclusions
+        x: block.contentLeft
+        y: block.transclusionsY
+        width: Math.max(40, block.contentRight - x)
+        block: block
+        transclusions: block.hasTransclusions ? block.transclusions : []
     }
 
     Component {
@@ -333,6 +373,11 @@ Item {
             text: qsTr("Copy block reference")
             iconName: "link"
             onTriggered: block.controller.copyBlockRef(block.index)
+        }
+        BMenuItem {
+            text: qsTr("Insert picture…")
+            iconName: "image"
+            onTriggered: block.editor.dialogs.pickImage(block.index, -1)
         }
         BMenuSeparator {}
         BMenuItem {

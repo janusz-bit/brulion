@@ -1,5 +1,10 @@
 #include "fakeeditorhost.h"
 
+#include "blocktext.h"
+
+#include "dates/local.h"
+#include "index/query.h"
+#include "index/vaultindex.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"
 #include "markdown/parse.h"
@@ -13,7 +18,9 @@
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
+#include <QDateTime>
 #include <QRadialGradient>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -83,9 +90,186 @@ QByteArray sampleImagePng()
 
 } // namespace
 
+namespace {
+
+/// The shell's QueryHost item shape (src/app/shell/workspacequery.cpp, editor/queryhost.h).
+QString statusName(TaskStatus status)
+{
+    return taskStatusName(status);
+}
+
+QString priorityName(Priority priority)
+{
+    switch (priority) {
+    case Priority::None: return {};
+    case Priority::Lowest: return u"lowest"_s;
+    case Priority::Low: return u"low"_s;
+    case Priority::Medium: return u"medium"_s;
+    case Priority::High: return u"high"_s;
+    case Priority::Highest: return u"highest"_s;
+    }
+    return {};
+}
+
+QVariantMap taskMap(const Task &task)
+{
+    QVariantMap m{{u"status"_s, statusName(task.status)},
+                  {u"marker"_s, task.marker},
+                  {u"text"_s, task.text},
+                  {u"priority"_s, priorityName(task.priority)}};
+    if (task.due)
+        m.insert(u"due"_s, task.due->toString());
+    if (task.scheduled)
+        m.insert(u"scheduled"_s, task.scheduled->toString());
+    if (task.start)
+        m.insert(u"start"_s, task.start->toString());
+    if (task.doneDate)
+        m.insert(u"done"_s, task.doneDate->toString(Qt::ISODate));
+    if (!task.recurrence.isEmpty())
+        m.insert(u"recurrence"_s, task.recurrence);
+    return m;
+}
+
+QVariantMap queryItemMap(const QueryItem &item, const VaultIndex &index)
+{
+    const ParsedNote *note = index.note(item.path);
+    QVariantMap m{{u"path"_s, item.path},
+                  {u"title"_s, note ? note->title : paths::pageTitle(item.path)},
+                  {u"folder"_s, paths::dirname(item.path)},
+                  {u"line"_s, 0},
+                  {u"depth"_s, 0}};
+    if (note && item.blockIndex >= 0 && item.blockIndex < note->blocks.size()) {
+        const Block &block = note->blocks.at(item.blockIndex);
+        m.insert(u"line"_s, block.line);
+        m.insert(u"text"_s, block.text);
+        m.insert(u"raw"_s, block.raw);
+        m.insert(u"depth"_s, block.depth);
+        if (!block.id.isEmpty())
+            m.insert(u"blockId"_s, block.id);
+    } else {
+        m.insert(u"text"_s, note ? note->title : paths::pageTitle(item.path));
+        m.insert(u"raw"_s, QString());
+    }
+    if (item.task) {
+        m.insert(u"task"_s, taskMap(*item.task));
+        if (item.blockIndex < 0)
+            m.insert(u"line"_s, item.task->line);
+    }
+    if (item.reminder) {
+        QVariantMap r{{u"at"_s, item.reminder->at.toString()}, {u"alarm"_s, item.reminder->alarm}};
+        if (!item.reminder->recurrence.isEmpty())
+            r.insert(u"recurrence"_s, item.reminder->recurrence);
+        m.insert(u"reminder"_s, r);
+        m.insert(u"line"_s, item.reminder->line);
+    }
+    return m;
+}
+
+QString queryTypeName(QueryType type)
+{
+    switch (type) {
+    case QueryType::Tasks: return u"tasks"_s;
+    case QueryType::Blocks: return u"blocks"_s;
+    case QueryType::Pages: return u"pages"_s;
+    case QueryType::Reminders: return u"reminders"_s;
+    }
+    return {};
+}
+
+} // namespace
+
 FakeEditorHost::FakeEditorHost(QObject *parent) : EditorHost(parent) {}
 
 FakeEditorHost::~FakeEditorHost() = default;
+
+void FakeEditorHost::filesChanged(bool announce)
+{
+    m_indexDirty = true;
+    if (!announce || m_indexSignalPending)
+        return;
+    m_indexSignalPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_indexSignalPending = false;
+        Q_EMIT indexChanged();
+    });
+}
+
+void FakeEditorHost::setNow(const QString &now)
+{
+    if (m_now == now)
+        return;
+    m_now = now;
+    Q_EMIT nowChanged();
+}
+
+QVariantMap FakeEditorHost::runQuery(const QString &source, const QString &currentPath)
+{
+    ++m_queryRuns;
+    QVariantMap out{{u"ok"_s, false},        {u"error"_s, QString()},      {u"type"_s, u"blocks"_s},
+                    {u"total"_s, 0},         {u"items"_s, QVariantList()}, {u"groups"_s, QVariantList()},
+                    {u"complete"_s, true}};
+    if (m_queriesFail) {
+        out.insert(u"error"_s, u"No notebook is open."_s);
+        return out;
+    }
+    const std::variant<Query, QString> parsed = parseQuery(source);
+    if (const QString *error = std::get_if<QString>(&parsed)) {
+        out.insert(u"error"_s, *error);
+        return out;
+    }
+    if (!m_index || m_indexDirty) {
+        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
+        VaultIndex::Batch batch(*m_index);
+        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
+            m_index->update(it.key(), it.value());
+        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
+            m_index->update(it.key(), QString());
+        m_indexDirty = false;
+    }
+    QDateTime current = QDateTime::currentDateTime();
+    if (const auto spec = dates::parseDateSpec(m_now))
+        current = spec->toLocalDateTime();
+    QueryOptions options;
+    options.currentPath = paths::normalize(currentPath);
+    options.now = current.time();
+    const QueryResult result = brulion::runQuery(std::get<Query>(parsed), *m_index, current.date(), Qt::Monday, options);
+    QVariantList items;
+    for (const QueryItem &item : result.items)
+        items.append(queryItemMap(item, *m_index));
+    QVariantList groups;
+    for (const QueryGroup &group : result.groups) {
+        QVariantList groupItems;
+        for (const QueryItem &item : group.items)
+            groupItems.append(queryItemMap(item, *m_index));
+        groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
+    }
+    out.insert(u"ok"_s, true);
+    out.insert(u"type"_s, queryTypeName(result.type));
+    out.insert(u"total"_s, result.total);
+    out.insert(u"items"_s, items);
+    out.insert(u"groups"_s, groups);
+    return out;
+}
+
+bool FakeEditorHost::setTaskStatus(const QString &path, int line, const QString &status)
+{
+    const std::optional<TaskStatus> wanted = taskStatusFromName(status);
+    const auto it = m_files.find(path);
+    if (!wanted || line < 0 || it == m_files.end())
+        return false;
+    QDate today = QDate::currentDate();
+    if (const auto spec = dates::parseDateSpec(m_now))
+        today = spec->date;
+    const QString edited = markdown::setTaskStatus(*it, line, *wanted, today);
+    if (edited == *it)
+        return false;
+    *it = edited;
+    ++m_taskEdits;
+    Q_EMIT taskEdited(path, line);
+    Q_EMIT fileChanged(path);
+    filesChanged();
+    return true;
+}
 
 QString FakeEditorHost::read(const QString &path, bool *ok)
 {
@@ -102,6 +286,7 @@ bool FakeEditorHost::write(const QString &path, const QString &content)
     m_files.insert(path, content);
     ++m_writeCount;
     Q_EMIT written(path);
+    filesChanged();
     return true;
 }
 
@@ -268,6 +453,7 @@ QString FakeEditorHost::ensureBlockId(const QString &path, int line)
     });
     if (!res.id.isEmpty() && res.content != *it) {
         m_files.insert(path, res.content);
+        m_indexDirty = true;
         Q_EMIT fileChanged(path);
         Q_EMIT indexChanged();
     }
@@ -314,6 +500,7 @@ QString FakeEditorHost::saveAttachment(const QString &fileName, const QByteArray
                                            [this](const QString &p) { return m_assets.contains(p); });
     m_assets.insert(path, data);
     m_assetUrls.remove(path);
+    filesChanged(false);
     return path;
 }
 
@@ -341,18 +528,22 @@ void FakeEditorHost::openUrl(const QUrl &url)
 void FakeEditorHost::setFile(const QString &path, const QString &content)
 {
     m_files.insert(path, content);
+    filesChanged(false);
 }
 
 void FakeEditorHost::externalWrite(const QString &path, const QString &content)
 {
     m_files.insert(path, content);
     Q_EMIT fileChanged(path);
+    filesChanged();
 }
 
 void FakeEditorHost::removeFile(const QString &path)
 {
-    if (m_files.remove(path))
+    if (m_files.remove(path)) {
         Q_EMIT fileChanged(path);
+        filesChanged();
+    }
 }
 
 QString FakeEditorHost::file(const QString &path) const
@@ -415,9 +606,9 @@ Zostaje z budżetu: `= budżet - płytki - klej - robocizna`
 
 | Pozycja | Ilość | Cena | Razem |
 | --- | ---: | ---: | ---: |
-| Płytki | 6,5 | 89 | =[Ilość]*[Cena] |
-| Klej | 4 | 45 | =B2*C2 |
-| Fuga | 2 | 38 | =[Ilość]*[Cena] |
+| **Płytki** z [[Castorama]] | 6,5 | 89 | =[Ilość]*[Cena] |
+| Klej *elastyczny* | 4 | 45 | =B2*C2 |
+| Fuga #zakupy | 2 | 38 | =[Ilość]*[Cena] |
 | Suma |  |  | =sum(above) |
 
 > [!tip] Wskazówka
@@ -427,11 +618,48 @@ Zostaje z budżetu: `= budżet - płytki - klej - robocizna`
 type:tasks status:open tag:zakupy sort:due
 ```
 
+## Powiązane
+
+- Budżet na październik
+	- ![[Budżet domowy#Październik]]
+- Hydraulik z kontaktów: !((hydr))
+
 ![[łazienka-szkic.png]]
 
 ---
 
 > Dobrze zaplanowany remont to połowa remontu.
+)"_s;
+}
+
+QString FakeEditorHost::recipePath() const
+{
+    return u"Przepisy/Pierogi ruskie.md"_s;
+}
+
+QString FakeEditorHost::recipeNote()
+{
+    return uR"(---
+tags: [przepis, obiad]
+porcje: 4
+czas: 90 min
+---
+# Pierogi ruskie
+
+Babcine pierogi z ziemniakami i twarogiem — najlepsze z **podsmażoną cebulką**. #przepis
+
+## Składniki
+
+- 1 kg ziemniaków
+- 500 g twarogu półtłustego
+- 2 duże cebule
+- [ ] Kupić twaróg i mąkę #zakupy
+
+## Przygotowanie
+
+1. Ugotować ziemniaki i przecisnąć przez praskę.
+2. Zeszklić cebulę, wymieszać z twarogiem; doprawić pieprzem.
+3. Lepić, gotować 3 minuty od wypłynięcia.
 )"_s;
 }
 
@@ -442,7 +670,8 @@ void FakeEditorHost::populateSample()
     m_assetUrls.clear();
     setFile(samplePath(), sampleNote());
     setFile(u"Budżet domowy.md"_s,
-            u"# Budżet domowy\n\n- Październik #finanse\n\t- Remont: 12 000 zł ^bud01\n\t- Jedzenie: 1 800 zł\n"_s);
+            u"# Budżet domowy\n\n## Październik\n\n- Remont: **12 000 zł** #finanse ^bud01\n- Jedzenie: 1 800 zł\n"
+            u"- [ ] Opłacić czynsz 📅 2026-10-20 #finanse\n\n## Listopad\n\n- Prezenty: 400 zł\n"_s);
     setFile(u"Kontakty.md"_s,
             u"---\naliases: [Telefony]\n---\n- Hydraulik: pan Marek, 600 100 200 #telefon ^hydr\n- Elektryk: pani Ewa #telefon\n"_s);
     setFile(u"Projekty/Ogród.md"_s, u"- [ ] Przyciąć żywopłot #ogród\n- Pomysły na wiosnę #pomysły\n"_s);
@@ -455,7 +684,9 @@ void FakeEditorHost::populateSample()
     setFile(u"templates/Spotkanie.md"_s,
             u"- Spotkanie {{date}} — {{title}}\n\t- Uczestnicy:: \n\t- Ustalenia\n\t\t- {{cursor}}\n\t- [ ] Wysłać notatkę\n"_s);
     setFile(u"templates/Zakupy tygodniowe.md"_s, u"- [ ] Pieczywo\n- [ ] Warzywa\n- [ ] Owoce\n"_s);
+    setFile(recipePath(), recipeNote());
     m_assets.insert(u"assets/łazienka-szkic.png"_s, sampleImagePng());
+    m_indexDirty = true;
     Q_EMIT indexChanged();
 }
 

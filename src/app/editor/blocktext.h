@@ -105,8 +105,25 @@ struct Embed {
 };
 /// Attachment embeds of a body (embeds of pages and blocks are not included).
 QList<Embed> embedsOf(QStringView body);
-/// True when the body consists of nothing but attachment embeds (and whitespace).
-bool onlyEmbeds(QStringView body);
+/// True when the body consists of nothing but attachment embeds (and whitespace); with
+/// `transclusions` also page, section and block embeds count (transclusionsOf()).
+bool onlyEmbeds(QStringView body, bool transclusions = false);
+
+/// A page, section or block embedded in a block body (docs/SYNTAX.md §2, "transclusion"):
+/// `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`, same-page `![[#Heading]]` / `![[#^id]]`
+/// and Logseq's vault-wide `!((id))`. Attachments (`![[photo.png]]`) are Embeds instead.
+struct Transclusion {
+    enum class Kind { Page, Heading, Block };
+    Kind kind = Kind::Page;
+    QString target;  ///< page as written ("" = this page; empty for `!((id))`)
+    QString heading; ///< Heading: the heading text after '#'
+    QString blockId; ///< Block: the id (without '^')
+    QString display; ///< alias after '|'
+    bool blockRef = false; ///< written `!((id))`: the id is looked up in the whole vault
+    friend bool operator==(const Transclusion &, const Transclusion &) = default;
+};
+/// Transclusions of a body in order (inline code and comments are skipped).
+QList<Transclusion> transclusionsOf(QStringView body);
 
 // ---------------------------------------------------------------------------------------------
 // Token edits (SYNTAX §5-6): content in -> content out, first line of the body

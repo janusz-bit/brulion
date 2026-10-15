@@ -3,7 +3,8 @@
 //
 // Formatting is implemented by hand (not QLocale) so results are identical on every platform
 // regardless of ICU data: Polish "12 345,5" (no-break space grouping from 10 000 up), English
-// "12,345.5" (grouping from 1,000 up); at most 10 significant digits.
+// "12,345.5" (grouping from 1,000 up); at most 10 significant digits for plain numbers, at most
+// 2 decimals for quantities with units ("3,11 mi") and exactly cents for money ("12,50 zł").
 #pragma once
 
 #include "calc/calclocale.h"
@@ -19,6 +20,8 @@ namespace brulion::calc {
 inline constexpr QChar kNbsp = QChar(0x00a0);
 /// Maximum significant digits shown for fractional results.
 inline constexpr int kSignificantDigits = 10;
+/// Maximum decimals shown for quantities with a unit (formatUnitNumber()).
+inline constexpr int kUnitDecimals = 2;
 
 /// A currency a number was written with. Currencies are tags on numbers, never converted.
 struct Currency {
@@ -47,6 +50,12 @@ struct NumberFormatOptions {
 /// rounded), trailing zeros trimmed, "-0" shown as "0", NaN as "NaN", infinities as "∞"/"-∞".
 /// Magnitudes >= 1e15 or < 1e-6 use exponent notation ("1,5e21", "1e-7").
 QString formatNumber(double value, CalcLocale locale, NumberFormatOptions options = {});
+
+/// Format the number of a quantity with a unit ("5 km to mi" -> "3,11"): at most kUnitDecimals
+/// decimals, trailing zeros trimmed ("1,5", "48"); magnitudes below 1 keep two significant
+/// digits ("0,0042" km, "0,33" h) so small amounts never show as 0. Only the display is rounded
+/// — values keep full precision. Non-finite, huge and tiny values format like formatNumber().
+QString formatUnitNumber(double value, CalcLocale locale, NumberFormatOptions options = {});
 
 /// Format with exactly `fractionDigits` decimals ("12,50"); non-finite or huge values fall back
 /// to formatNumber().

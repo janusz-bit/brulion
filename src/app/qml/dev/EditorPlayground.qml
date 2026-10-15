@@ -11,7 +11,8 @@ import Brulion
 //
 // `--editor-script <name>` puts the editor into a state for screenshots (see runScript()):
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
-// table, calc, empty, conflict, markup; `selftest` runs keyboard/input-method checks and exits.
+// table, calc, query, embeds, title, empty, conflict, markup; `selftest` runs keyboard/input-method
+// checks and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
 ApplicationWindow {
     id: window
 
@@ -29,6 +30,7 @@ ApplicationWindow {
 
     FakeEditorHost {
         id: host
+        now: DatesHelper.fixedNow
         onNavigated: (route, newPane) => {
             const what = route.view === "tag" ? "#" + route.tag
                        : route.path !== undefined && route.path !== "" ? route.path
@@ -48,7 +50,8 @@ ApplicationWindow {
     Component.onCompleted: {
         host.populateSample()
         page.host = host
-        page.path = DevTools.editorScript === "empty" ? "Nowa strona.md" : host.samplePath
+        page.path = DevTools.editorScript === "empty" ? "Nowa strona.md"
+                  : DevTools.editorScript === "title" ? host.recipePath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
     }
@@ -169,6 +172,7 @@ ApplicationWindow {
         anchors.fill: parent
         controller: page
         focus: true
+        onNotice: (text, kind) => toasts.show(text, { kind: kind })
         header: Component {
             Item {
                 width: editor.width
@@ -180,6 +184,8 @@ ApplicationWindow {
                     width: editor.contentWidth - editor.gutter
                     spacing: Theme.space1
                     Text {
+                        // A page starting with "# Title" shows that heading as its title.
+                        visible: page.titleRow < 0
                         width: parent.width
                         text: page.title
                         textFormat: Text.PlainText
@@ -461,7 +467,36 @@ ApplicationWindow {
                 editor.dialogs.reminderDialog.close()
             },
             () => { page.save() },
-            () => check(!page.dirty && host.file(page.path).indexOf("[[Remont kuchni]]") > 0, "saved to the host")
+            () => check(!page.dirty && host.file(page.path).indexOf("[[Remont kuchni]]") > 0, "saved to the host"),
+            // ---- Live query results: tasks from the vault, checkable in their own files ----------
+            () => {
+                const row = viewRow("query")
+                editor.listView.positionViewAtIndex(row, ListView.Beginning)
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(viewRow("query")) as BlockDelegate
+                const view = item ? item.contentItem as QueryBlockView : null
+                const results = view ? view.results : null
+                check(results !== null && results.available && results.ok && results.rowCount() >= 4,
+                      "the query block lists its results: " + (results ? results.rowCount() : -1))
+                let milk = -1
+                for (let i = 0; results && i < results.rowCount(); ++i) {
+                    if (results.get(i).text.indexOf("Mleko") === 0)
+                        milk = i
+                }
+                check(milk >= 0 && results.toggleTask(milk) && host.file("Zakupy.md").indexOf("- [x] Mleko") === 0,
+                      "a result's checkbox completes the task in its file: " + host.file("Zakupy.md").split("\n")[0])
+            },
+            () => {
+                // Embedded section and block: frames with the source's blocks.
+                const row = rowOf("Hydraulik z kontaktów")
+                editor.listView.positionViewAtIndex(row, ListView.Center)
+                const item = editor.listView.itemAtIndex(row) as BlockDelegate
+                check(item !== null && item.transclusions.length === 1 && item.transclusions[0].found
+                      && item.transclusionView.height > 20, "a block embed shows the block in a frame")
+                const section = info(rowOf("Budżet na październik") + 1)
+                check(section.view === "text", "the embedded section's block is a text block")
+            }
         ]
         stepIndex = 0
         stepTimer.start()
@@ -531,6 +566,16 @@ ApplicationWindow {
             editor.startEditing(row, 0)
             break
         }
+        case "query": {
+            const row = viewRow("query")
+            editor.listView.positionViewAtIndex(row, ListView.Beginning)
+            break
+        }
+        case "embeds":
+            editor.listView.positionViewAtIndex(rowOf("Powiązane"), ListView.Beginning)
+            break
+        case "title":
+            break
         case "empty":
             page.appendEmptyBlock()
             break

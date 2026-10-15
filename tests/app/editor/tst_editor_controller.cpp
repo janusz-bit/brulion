@@ -9,6 +9,10 @@
 
 #include <QAbstractItemModelTester>
 #include <QClipboard>
+#include <QFile>
+#include <QImage>
+#include <QMimeData>
+#include <QTemporaryDir>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QSignalSpy>
@@ -147,9 +151,12 @@ private Q_SLOTS:
             } else if (view == u"frontmatter") {
                 QCOMPARE(f.role(r, "properties").toList().size(), 4);
             } else if (f.role(r, "onlyEmbeds").toBool()) {
+                // Pictures, or embedded sections (their frames come from `transclusions`).
                 const QVariantList embeds = f.role(r, "embeds").toList();
-                QCOMPARE(embeds.size(), 1);
-                QVERIFY(embeds[0].toMap().value(u"url"_s).toUrl().isLocalFile());
+                const QVariantList transclusions = f.role(r, "transclusions").toList();
+                QCOMPARE(embeds.size() + transclusions.size(), 1);
+                if (!embeds.isEmpty())
+                    QVERIFY(embeds[0].toMap().value(u"url"_s).toUrl().isLocalFile());
                 QVERIFY(f.role(r, "html").toString().isEmpty());
             }
         }
@@ -791,6 +798,331 @@ private Q_SLOTS:
         f.page.undo();
         f.page.undo();
         QCOMPARE(f.text(), u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
+    }
+
+    void tableCellsAreRendered()
+    {
+        Fixture f(u"| Rzecz | Cena |\n| --- | ---: |\n| **Płytki** z [[Inna]] #zakupy | 89 |\n| <b>x</b> ⏰ 2026-10-16 09:00 | =2*3 |\n| Brak [[Nie ma]] | =1+ |\n"_s);
+        QVariantMap data = f.role(0, "tableData").toMap();
+        const QVariantList rows = data.value(u"rows"_s).toList();
+        const QVariantMap tiles = rows[0].toList()[0].toMap();
+        const QString html = tiles.value(u"html"_s).toString();
+        QVERIFY2(html.contains(u"<b>Płytki</b>"_s) && html.contains(u"href=\"page:Inna\""_s) && html.contains(u"tag:zakupy"_s),
+                 qPrintable(html));
+        // The visible text measures the column; the raw text stays what the cell editor edits.
+        QCOMPARE(tiles.value(u"plain"_s).toString(), u"Płytki z Inna #zakupy"_s);
+        QCOMPARE(tiles.value(u"text"_s).toString(), u"**Płytki** z [[Inna]] #zakupy"_s);
+        // Note text that looks like HTML stays text; chips render.
+        const QString hostile = rows[1].toList()[0].toMap().value(u"html"_s).toString();
+        QVERIFY2(hostile.contains(u"&lt;b&gt;x&lt;/b&gt;"_s) && !hostile.contains(u"<b>x"_s), qPrintable(hostile));
+        QVERIFY(hostile.contains(u"⏰&nbsp;jutro&nbsp;09:00"_s));
+        // Formula results are values (escaped), not Markdown.
+        const QVariantMap six = rows[1].toList()[1].toMap();
+        QCOMPARE(six.value(u"html"_s).toString(), u"6"_s);
+        QCOMPARE(six.value(u"plain"_s).toString(), u"6"_s);
+        QVERIFY(!rows[2].toList()[1].toMap().value(u"error"_s).toString().isEmpty());
+        QCOMPARE(rows[2].toList()[1].toMap().value(u"html"_s).toString(),
+                 rows[2].toList()[1].toMap().value(u"display"_s).toString().toHtmlEscaped());
+        // Header cells are rendered too.
+        QCOMPARE(data.value(u"headerHtml"_s).toList().size(), 2);
+        QCOMPARE(data.value(u"headerHtml"_s).toList()[0].toString(), u"Rzecz"_s);
+        // Theme colours and the index re-render the cells (a page that appears resolves its link).
+        QVERIFY(rows[2].toList()[0].toMap().value(u"html"_s).toString().contains(u"#7a5ea3"_s, Qt::CaseInsensitive));
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        f.page.setPalette({{u"link"_s, u"#102030"_s}, {u"tagFg"_s, u"#405060"_s}});
+        QVERIFY(changed.size() > 0);
+        data = f.role(0, "tableData").toMap();
+        QVERIFY(data.value(u"rows"_s).toList()[0].toList()[0].toMap().value(u"html"_s).toString().contains(u"#102030"_s));
+        f.host.setFile(u"Nie ma.md"_s, u"- teraz jest\n"_s);
+        Q_EMIT f.host.indexChanged();
+        data = f.role(0, "tableData").toMap();
+        QVERIFY(data.value(u"rows"_s).toList()[2].toList()[0].toMap().value(u"html"_s).toString().contains(u"#102030"_s));
+    }
+
+    void transclusions()
+    {
+        Fixture f(u"- Wstęp ^wst\n- ![[Budżet#Październik]]\n- Zobacz ![[Inna#^inny1]] i !((kont))\n- ![[Brak strony]] ![[Budżet#Grudzień]]\n"_s);
+        f.host.setFile(u"Budżet.md"_s,
+                       u"# Budżet\n\n## Październik\n\n- Czynsz **1800 zł** #opłaty\n\t- [ ] Zapłacić 📅 2026-10-20\n- Jedzenie\n\n## Listopad\n\n- Prezenty\n"_s);
+        f.host.setFile(u"Kontakty.md"_s, u"- Hydraulik: pan Marek ^kont\n\t- 600 100 200\n"_s);
+        f.model()->invalidateRendering();
+        // A section: the blocks under the heading up to the next one of its level.
+        QVERIFY(f.role(1, "onlyEmbeds").toBool());
+        QVERIFY(f.role(1, "html").toString().isEmpty());
+        QVariantList t = f.role(1, "transclusions").toList();
+        QCOMPARE(t.size(), 1);
+        QVariantMap section = t[0].toMap();
+        QCOMPARE(section.value(u"kind"_s).toString(), u"heading"_s);
+        QVERIFY(section.value(u"found"_s).toBool());
+        QCOMPARE(section.value(u"title"_s).toString(), u"Budżet › Październik"_s);
+        QCOMPARE(section.value(u"href"_s).toString(), u"page:Bud%C5%BCet#Pa%C5%BAdziernik"_s);
+        QCOMPARE(section.value(u"path"_s).toString(), u"Budżet.md"_s);
+        QVariantList blocks = section.value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 3);
+        QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"<b>1800 zł</b>"_s));
+        QCOMPARE(blocks[0].toMap().value(u"depth"_s).toInt(), 0);
+        QCOMPARE(blocks[1].toMap().value(u"depth"_s).toInt(), 1);
+        QCOMPARE(blocks[1].toMap().value(u"task"_s).toString(), u"todo"_s);
+        QCOMPARE(blocks[1].toMap().value(u"path"_s).toString(), u"Budżet.md"_s);
+        QCOMPARE(blocks[1].toMap().value(u"line"_s).toInt(), 5);
+        QVERIFY(!blocks[1].toMap().value(u"html"_s).toString().contains(u"[ ]"_s));
+        QVERIFY(blocks[2].toMap().value(u"html"_s).toString().contains(u"Jedzenie"_s));
+        // A block of a page (with its children) and a vault-wide block embed, next to text.
+        QVERIFY(!f.role(2, "onlyEmbeds").toBool());
+        QVERIFY(!f.role(2, "html").toString().isEmpty());
+        t = f.role(2, "transclusions").toList();
+        QCOMPARE(t.size(), 2);
+        QCOMPARE(t[0].toMap().value(u"kind"_s).toString(), u"block"_s);
+        QCOMPARE(t[0].toMap().value(u"title"_s).toString(), u"Inna"_s);
+        QCOMPARE(t[0].toMap().value(u"href"_s).toString(), u"page:Inna#^inny1"_s);
+        QVERIFY(t[0].toMap().value(u"blocks"_s).toList()[0].toMap().value(u"html"_s).toString().contains(u"Blok z innej strony"_s));
+        const QVariantMap contact = t[1].toMap();
+        QCOMPARE(contact.value(u"href"_s).toString(), u"block:kont"_s);
+        QCOMPARE(contact.value(u"path"_s).toString(), u"Kontakty.md"_s);
+        QCOMPARE(contact.value(u"title"_s).toString(), u"Kontakty"_s);
+        blocks = contact.value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 2);
+        QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"pan Marek"_s));
+        QCOMPARE(blocks[1].toMap().value(u"depth"_s).toInt(), 1);
+        // Missing page and section.
+        t = f.role(3, "transclusions").toList();
+        QCOMPARE(t.size(), 2);
+        QVERIFY(!t[0].toMap().value(u"found"_s).toBool());
+        QCOMPARE(t[0].toMap().value(u"message"_s).toString(), u"missingPage"_s);
+        QCOMPARE(t[0].toMap().value(u"title"_s).toString(), u"Brak strony"_s);
+        QCOMPARE(t[1].toMap().value(u"message"_s).toString(), u"missingSection"_s);
+        // The index changed (another device edited the page): the embed follows.
+        f.host.setFile(u"Budżet.md"_s, u"## Październik\n\n- Czynsz 1900 zł\n"_s);
+        Q_EMIT f.host.indexChanged();
+        blocks = f.role(1, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 1);
+        QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"1900"_s));
+    }
+
+    void transclusionsOfThisPageAndCycles()
+    {
+        // ![[#Heading]] shows this page's section as edited (unsaved too); a section embedding
+        // itself is shown once, with a note instead of the repetition.
+        Fixture f(u"## Plan\n\n- Krok pierwszy\n- ![[#Plan]]\n\n## Inne\n\n- ![[#Plan]]\n"_s, 100000);
+        int inner = -1;
+        int outer = -1;
+        for (int r = 0; r < f.count(); ++r) {
+            if (f.edit(r) == u"![[#Plan]]"_s)
+                (inner < 0 ? inner : outer) = r;
+        }
+        QVERIFY(inner > 0 && outer > inner);
+        QVariantList blocks = f.role(outer, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 2);
+        QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"Krok pierwszy"_s));
+        QCOMPARE(blocks[1].toMap().value(u"kind"_s).toString(), u"embed"_s);
+        QCOMPARE(blocks[1].toMap().value(u"message"_s).toString(), u"cycle"_s);
+        QCOMPARE(f.role(outer, "transclusions").toList()[0].toMap().value(u"href"_s).toString(), u"page:#Plan"_s);
+        // The embed follows edits of this page right away.
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        f.page.setEditText(1, u"Krok pierwszy ąę"_s);
+        blocks = f.role(outer, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
+        QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"Krok pierwszy ąę"_s));
+        bool outerChanged = false;
+        for (const QList<QVariant> &args : std::as_const(changed)) {
+            if (args.at(0).toModelIndex().row() <= outer && args.at(1).toModelIndex().row() >= outer)
+                outerChanged = true;
+        }
+        QVERIFY(outerChanged);
+        // The whole page embedded in itself.
+        Fixture self(u"- Jedyny blok\n- ![[Strona]]\n"_s);
+        blocks = self.role(1, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 2);
+        QCOMPARE(blocks[1].toMap().value(u"message"_s).toString(), u"cycle"_s);
+    }
+
+    void transclusionsAreDepthLimited()
+    {
+        // A chain of pages embedding the next one: MaxTransclusionDepth levels, then a note.
+        Fixture f(u"- ![[P1]]\n"_s);
+        for (int i = 1; i <= 6; ++i)
+            f.host.setFile(u"P%1.md"_s.arg(i), u"- Poziom %1\n- ![[P%2]]\n"_s.arg(i).arg(i + 1));
+        f.model()->invalidateRendering();
+        const QVariantList blocks = f.role(0, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
+        int levels = 0;
+        QString note;
+        for (const QVariant &b : blocks) {
+            const QVariantMap m = b.toMap();
+            if (m.value(u"kind"_s).toString() == u"block"_s)
+                ++levels;
+            if (!m.value(u"message"_s).toString().isEmpty())
+                note = m.value(u"message"_s).toString();
+        }
+        QCOMPARE(levels, BlockListModel::MaxTransclusionDepth);
+        QCOMPARE(note, u"depth"_s);
+        // Big pages: at most MaxTransclusionBlocks blocks, the rest counted.
+        QString big;
+        for (int i = 0; i < 100; ++i)
+            big += u"- Wiersz %1\n"_s.arg(i);
+        f.host.setFile(u"Duża.md"_s, big);
+        f.page.setEditText(0, u"![[Duża]]"_s);
+        const QVariantMap t = f.role(0, "transclusions").toList()[0].toMap();
+        QCOMPARE(t.value(u"blocks"_s).toList().size(), BlockListModel::MaxTransclusionBlocks);
+        QCOMPARE(t.value(u"more"_s).toInt(), 100 - BlockListModel::MaxTransclusionBlocks);
+    }
+
+    void titleRow()
+    {
+        Fixture f(u"---\ntags: [a]\n---\n# Strona\n\nTreść\n"_s);
+        QCOMPARE(f.page.titleRow(), 1);
+        QSignalSpy spy(&f.page, &PageController::titleRowChanged);
+        f.page.setBody(1, u"# Inny tytuł"_s);
+        QCOMPARE(f.page.titleRow(), -1);
+        f.page.undo();
+        QCOMPARE(f.page.titleRow(), 1);
+        QVERIFY(spy.size() >= 2);
+        // Diacritics and case do not matter, a Logseq "- # Title" item counts; a level-2 heading
+        // or a heading after other blocks is no title.
+        Fixture folded(u"# STRONA\n- a\n"_s);
+        QCOMPARE(folded.page.titleRow(), 0);
+        Fixture h2(u"---\na: 1\n---\n## Strona\n"_s);
+        QCOMPARE(h2.page.titleRow(), -1);
+        Fixture item(u"---\na: 1\n---\n- # Strona\n\t- dziecko\n"_s);
+        QCOMPARE(item.page.titleRow(), 1);
+        Fixture later(u"Wstęp\n\n# Strona\n"_s);
+        QCOMPARE(later.page.titleRow(), -1);
+        Fixture polish(u"# zazolc gesla\n- treść\n"_s);
+        QCOMPARE(polish.page.titleRow(), -1);
+        polish.page.followRename(Page, u"Notatki/Zażółć gęślą.md"_s); // diacritics folded
+        QCOMPARE(polish.page.titleRow(), 0);
+        // While zoomed there is no title row.
+        Fixture zoom(u"---\na: 1\n---\n# Strona\n- rodzic\n\t- dziecko\n"_s);
+        QCOMPARE(zoom.page.titleRow(), 1);
+        zoom.page.zoomInto(2);
+        QCOMPARE(zoom.page.titleRow(), -1);
+        zoom.page.zoomOut();
+        QCOMPARE(zoom.page.titleRow(), 1);
+    }
+
+    void tasksElsewhere()
+    {
+        Fixture f(u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
+        f.host.setNow(Now);
+        f.host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko\n"_s);
+        QVERIFY(f.page.queriesAvailable());
+        // This page: an editing command.
+        QVERIFY(f.page.toggleTaskAt(Page, 0, u"todo"_s));
+        QCOMPARE(f.text(), u"- [x] Tutaj 📅 2026-10-20 ✅ 2026-10-15\n- zwykły\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(Page, 0, u"done"_s)); // already
+        QVERIFY(!f.page.setTaskStatusAt(Page, 1, u"done"_s)); // no task
+        QVERIFY(!f.page.setTaskStatusAt(Page, 0, u"nonsense"_s));
+        f.page.undo();
+        QVERIFY(f.text().startsWith(u"- [ ] Tutaj"_s));
+        // Another file: through the host's QueryHost.
+        QVERIFY(f.page.toggleTaskAt(u"Zakupy.md"_s, 0, u"todo"_s));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [x] Mleko ✅ 2026-10-15\n"_s);
+        QVERIFY(!f.page.toggleTaskAt(u"Nie ma.md"_s, 0, u"todo"_s));
+        QCOMPARE(PageController::toggledStatus(u"doing"_s), u"done"_s);
+        QCOMPARE(PageController::toggledStatus(u"cancelled"_s), u"todo"_s);
+        QCOMPARE(PageController::toggledStatus(QString()), QString());
+        // Locations: this page scrolls, others navigate.
+        QCOMPARE(f.page.openLocation(Page, 1).value(u"row"_s).toInt(), 1);
+        QVERIFY(f.page.openLocation(u"Zakupy.md"_s, 0).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Zakupy.md"_s);
+        QCOMPARE(f.host.lastRoute().value(u"line"_s).toInt(), 0);
+    }
+
+    void attachments()
+    {
+        Fixture f(u"- Szkic łazienki\n\n| a |\n| --- |\n| 1 |\n"_s);
+        // Into the text at the caret, with spaces around the embed.
+        f.page.startEditing(0, 5);
+        QVariantMap r = f.page.insertAttachment(0, 5, 5, u"plan piętra.png"_s, QByteArray("\x89PNG"));
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.edit(0), u"Szkic ![[plan piętra.png]] łazienki"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 26);
+        QCOMPARE(f.page.cursorPosition(), 26);
+        QVERIFY(f.role(0, "embeds").toList().size() == 1);
+        f.page.undo();
+        QCOMPARE(f.edit(0), u"Szkic łazienki"_s);
+        // Not into a table: a block of its own after it.
+        const int table = 1;
+        QCOMPARE(f.role(table, "view").toString(), u"table"_s);
+        r = f.page.insertAttachment(table, 0, 0, u"zdjęcie.jpg"_s, QByteArray("JPEG"));
+        QCOMPARE(r.value(u"row"_s).toInt(), table + 1);
+        QCOMPARE(f.edit(table + 1), u"![[zdjęcie.jpg]]"_s);
+        QCOMPARE(f.page.editingRow(), -1);
+        // A name that would find another file is embedded by its path.
+        QCOMPARE(f.page.embedFor(u"assets/plan piętra.png"_s), u"![[plan piętra.png]]"_s);
+        f.host.setFile(u"plan piętra.png.md"_s, u"- strona o tej nazwie\n"_s);
+        QCOMPARE(f.page.embedFor(u"assets/plan piętra.png"_s), u"![[assets/plan piętra.png]]"_s);
+        // Saving fails: nothing inserted, a signal for the message.
+        QSignalSpy failed(&f.page, &PageController::attachmentFailed);
+        r = f.page.insertAttachment(0, 0, 0, u"pusty.png"_s, QByteArray());
+        QCOMPARE(r.value(u"row"_s).toInt(), -1);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(failed.at(0).at(0).toString(), u"pusty.png"_s);
+        // Files (drops, pickers): stored and embedded, after the block or in the edited text.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString a = dir.filePath(u"żółw.png"_s);
+        const QString b = dir.filePath(u"umowa najmu.pdf"_s);
+        for (const QString &path : {a, b}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("dane");
+        }
+        r = f.page.insertFilesAfter(0, {QUrl::fromLocalFile(a), QUrl::fromLocalFile(b), QUrl::fromLocalFile(dir.filePath(u"brak.png"_s))});
+        QCOMPARE(r.value(u"count"_s).toInt(), 2);
+        QCOMPARE(f.edit(r.value(u"row"_s).toInt()), u"![[żółw.png]] ![[umowa najmu.pdf]]"_s);
+        QCOMPARE(failed.size(), 2); // the missing file
+        r = f.page.insertFiles(0, -1, -1, {QUrl::fromLocalFile(a)});
+        QVERIFY(f.edit(0).endsWith(u" ![[żółw 2.png]]"_s) || f.edit(0).endsWith(u" ![[żółw-2.png]]"_s)
+                || f.edit(0).contains(u"![[żółw"_s));
+        // At the end of an empty page.
+        Fixture empty{QString()};
+        r = empty.page.insertFilesAfter(-1, {QUrl::fromLocalFile(a)});
+        QVERIFY2(empty.text().startsWith(u"- ![[żółw.png]]"_s), qPrintable(empty.text()));
+    }
+
+    void pastingPictures()
+    {
+        Fixture f(u"- Zrzut: \n"_s);
+        QClipboard *clipboard = QGuiApplication::clipboard();
+        clipboard->setText(u"zwykły tekst"_s);
+        QVERIFY(!f.page.clipboardHasImage());
+        QCOMPARE(f.page.pasteImage(0, 7, 7).value(u"row"_s).toInt(), -1);
+        QImage image(40, 20, QImage::Format_ARGB32);
+        image.fill(QColor(u"#f2b33d"_s));
+        clipboard->setImage(image);
+        QVERIFY(f.page.clipboardHasImage());
+        f.page.startEditing(0, 7);
+        const QVariantMap r = f.page.pasteImage(0, 7, 7);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.edit(0), u"Zrzut: ![[Pasted image 20261015100000.png]]"_s);
+        const QVariantList embeds = f.role(0, "embeds").toList();
+        QCOMPARE(embeds.size(), 1);
+        QVERIFY(embeds[0].toMap().value(u"image"_s).toBool());
+        // Copied files (a file manager's copy) paste as attachments too.
+        QTemporaryDir dir;
+        const QString file = dir.filePath(u"skan.pdf"_s);
+        {
+            QFile out(file);
+            QVERIFY(out.open(QIODevice::WriteOnly));
+            out.write("%PDF");
+        }
+        auto *mime = new QMimeData;
+        mime->setUrls({QUrl::fromLocalFile(file)});
+        clipboard->setMimeData(mime);
+        QVERIFY(f.page.clipboardHasImage());
+        f.page.pasteImage(0, int(f.edit(0).size()), int(f.edit(0).size()));
+        QVERIFY(f.edit(0).endsWith(u"![[skan.pdf]]"_s));
+        clipboard->clear();
+    }
+
+    void imageSlashCommand()
+    {
+        Fixture f(u"- Zdjęcie /obr\n"_s);
+        const QVariantMap r = f.page.applySlashCommand(0, 8, 12, u"image"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"image"_s);
+        QCOMPARE(f.text(), u"- Zdjęcie \n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 8);
+        QVERIFY(!f.page.imageNameFilters().isEmpty());
+        QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FileDialog outside the browser
     }
 
     void tableCellTypingIsSavedAndOneUndoStep()

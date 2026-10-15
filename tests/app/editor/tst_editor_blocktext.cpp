@@ -210,6 +210,44 @@ private Q_SLOTS:
         QVERIFY(!onlyEmbeds(u"tekst ![[a.png]]"_s));
         QVERIFY(!onlyEmbeds(u"zwykły tekst"_s));
         QVERIFY(!onlyEmbeds(u"![[Strona]]"_s));
+        // With transclusions: pages, sections and blocks count as embeds too.
+        QVERIFY(onlyEmbeds(u"![[Strona]]"_s, true));
+        QVERIFY(onlyEmbeds(u" ![[Budżet#Październik]] !((abc123)) ![[a.png]]"_s, true));
+        QVERIFY(!onlyEmbeds(u"Zobacz ![[Budżet#Październik]]"_s, true));
+        QVERIFY(!onlyEmbeds(u"[[Strona]]"_s, true));
+        QVERIFY(!onlyEmbeds(u"((abc123))"_s, true));
+    }
+
+    void transclusions_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QStringList>("expected"); // kind|target|heading|blockId|display|ref
+        QTest::newRow("page") << u"![[Budżet domowy]]"_s << QStringList{u"page|Budżet domowy||||0"_s};
+        QTest::newRow("section") << u"Zobacz ![[Budżet domowy#Październik]] tutaj"_s
+                                 << QStringList{u"heading|Budżet domowy|Październik|||0"_s};
+        QTest::newRow("block in page") << u"![[Kontakty#^hydr]]"_s << QStringList{u"block|Kontakty||hydr||0"_s};
+        QTest::newRow("same page") << u"![[#Koszty]] ![[#^przyg]]"_s
+                                   << QStringList{u"heading||Koszty|||0"_s, u"block|||przyg||0"_s};
+        QTest::newRow("block ref embed") << u"!((hydr)) i ((tylko-odwołanie))"_s << QStringList{u"block|||hydr||1"_s};
+        QTest::newRow("alias") << u"![[Zażółć gęślą|jaźń]]"_s << QStringList{u"page|Zażółć gęślą|||jaźń|0"_s};
+        QTest::newRow("attachments are not transclusions") << u"![[plan.png]] ![[umowa.pdf]]"_s << QStringList{};
+        QTest::newRow("links are not") << u"[[Strona]] ((abc)) [x](Strona.md)"_s << QStringList{};
+        QTest::newRow("in code") << u"`![[Strona]]` i `!((abc))`"_s << QStringList{};
+        QTest::newRow("empty") << u"![[]] ![[#]]"_s << QStringList{};
+    }
+
+    void transclusions()
+    {
+        QFETCH(QString, body);
+        QFETCH(QStringList, expected);
+        QStringList got;
+        for (const Transclusion &t : transclusionsOf(body)) {
+            const QString kind = t.kind == Transclusion::Kind::Page ? u"page"_s
+                                 : t.kind == Transclusion::Kind::Heading ? u"heading"_s
+                                                                         : u"block"_s;
+            got.append(QStringList{kind, t.target, t.heading, t.blockId, t.display, t.blockRef ? u"1"_s : u"0"_s}.join(u'|'));
+        }
+        QCOMPARE(got, expected);
     }
 
     // --- tokens ---------------------------------------------------------------------------------
@@ -364,6 +402,9 @@ private Q_SLOTS:
         QTest::newRow("keyword") << u"budzik"_s << u"alarm"_s;
         QTest::newRow("szablon") << u"szabl"_s << u"template"_s;
         QTest::newRow("osadz") << u"osadz"_s << u"embed"_s;
+        QTest::newRow("obraz") << u"obraz"_s << u"image"_s;
+        QTest::newRow("zdjęcie") << u"zdjecie"_s << u"image"_s;
+        QTest::newRow("image") << u"image"_s << u"image"_s;
     }
 
     void slash()

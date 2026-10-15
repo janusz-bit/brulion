@@ -2,6 +2,7 @@
 
 #include "blocktext.h"
 #include "editorhost.h"
+#include "queryhost.h"
 
 #include "calc/table.h"
 #include "dates/local.h"
@@ -18,14 +19,23 @@
 #include "sync/merge.h"
 #endif
 
+#include <QBuffer>
 #include <QClipboard>
 #include <QColor>
+#include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QImage>
+#include <QMimeData>
 #include <QRegularExpression>
 #include <QSysInfo>
 #include <QUndoCommand>
 #include <QUndoStack>
 #include <QUrl>
+
+#ifdef Q_OS_WASM
+#include <QFileDialog>
+#endif
 
 #include <algorithm>
 
@@ -144,6 +154,17 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
     connect(&m_saveTimer, &QTimer::timeout, this, [this] { save(); });
     connect(m_undo, &QUndoStack::canUndoChanged, this, &PageController::undoStateChanged);
     connect(m_undo, &QUndoStack::canRedoChanged, this, &PageController::undoStateChanged);
+    // The leading "# Title" (titleRow) follows every change of the first blocks.
+    connect(m_model, &QAbstractItemModel::modelReset, this, &PageController::updateTitleRow);
+    connect(m_model, &QAbstractItemModel::rowsInserted, this, &PageController::updateTitleRow);
+    connect(m_model, &QAbstractItemModel::rowsRemoved, this, &PageController::updateTitleRow);
+    connect(m_model, &QAbstractItemModel::rowsMoved, this, &PageController::updateTitleRow);
+    connect(m_model, &QAbstractItemModel::dataChanged, this, [this](const QModelIndex &from) {
+        if (from.row() <= std::max(1, m_titleRow))
+            updateTitleRow();
+    });
+    connect(this, &PageController::zoomChanged, this, &PageController::updateTitleRow);
+    connect(this, &PageController::pathChanged, this, &PageController::updateTitleRow);
     // Leaving the foreground (Android may then kill the process without running destructors)
     // and quitting flush the page; the QML tear-down after the event loop may come too late
     // (hosts owned elsewhere can be gone by then).
@@ -1770,7 +1791,7 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
             focus = {r2, std::max(0, cursor + int(m_model->editTextAt(r2).size()) - before)};
         }
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled"
-               || cmd == u"recurrence" || cmd == u"date" || cmd == u"template") {
+               || cmd == u"recurrence" || cmd == u"date" || cmd == u"template" || cmd == u"image") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -2047,6 +2068,280 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         return out;
     }
     return out;
+}
+
+// --- Title, tasks elsewhere, locations ----------------------------------------------------------------
+
+void PageController::updateTitleRow()
+{
+    int row = -1;
+    if (zoomBlock() < 0 && !m_path.isEmpty()) {
+        const BlockDocument &doc = m_model->document();
+        int i = 0;
+        while (i < doc.count() && doc.at(i).kind == BlockKind::Frontmatter)
+            ++i;
+        if (i < doc.count()) {
+            const BlockShape shape = m_model->shapeAt(i);
+            if (shape.view == BlockView::Heading && shape.headingLevel == 1
+                && text::foldKey(plainTextOf(doc.at(i), 400)) == text::foldKey(title().trimmed()))
+                row = i;
+        }
+    }
+    if (row == m_titleRow)
+        return;
+    m_titleRow = row;
+    Q_EMIT titleRowChanged();
+}
+
+bool PageController::queriesAvailable() const
+{
+    return qobject_cast<QueryHost *>(m_host.data()) != nullptr;
+}
+
+QString PageController::toggledStatus(const QString &status)
+{
+    if (status == u"done" || status == u"cancelled")
+        return u"todo"_s;
+    if (status.isEmpty())
+        return {};
+    return u"done"_s;
+}
+
+bool PageController::setTaskStatusAt(const QString &path, int line, const QString &status)
+{
+    if (path.isEmpty() || line < 0 || !taskStatusFromName(status))
+        return false;
+    if (path == m_path) {
+        const int row = rowOfLine(line);
+        if (!validRow(row) || m_model->document().at(row).kind != BlockKind::ListItem)
+            return false;
+        const BlockShape shape = m_model->shapeAt(row);
+        if (!shape.task || taskStatusName(shape.task) == status)
+            return false;
+        setTaskStatus(row, status);
+        return true;
+    }
+    auto *queries = qobject_cast<QueryHost *>(m_host.data());
+    return queries && queries->setTaskStatus(path, line, status);
+}
+
+bool PageController::toggleTaskAt(const QString &path, int line, const QString &currentStatus)
+{
+    const QString next = toggledStatus(currentStatus);
+    return !next.isEmpty() && setTaskStatusAt(path, line, next);
+}
+
+QVariantMap PageController::openLocation(const QString &path, int line, bool newPane)
+{
+    if (path.isEmpty())
+        return {};
+    if (path == m_path && !newPane) {
+        const int row = line >= 0 ? rowOfLine(line) : -1;
+        if (row >= 0)
+            return {{u"action"_s, u"scrollTo"_s}, {u"row"_s, row}};
+    }
+    if (m_host) {
+        QVariantMap route{{u"view"_s, u"page"_s}, {u"path"_s, path}};
+        if (line >= 0)
+            route.insert(u"line"_s, line);
+        m_host->navigate(route, newPane);
+    }
+    return {};
+}
+
+// --- Attachments -------------------------------------------------------------------------------------------
+
+namespace {
+
+/// Largest file stored as an attachment (pictures, PDFs; not whole videos by mistake).
+constexpr qint64 MaxAttachmentBytes = 200LL * 1024 * 1024;
+
+/// Local files of a copy or drop (file:// URLs; Android content:// documents).
+bool isFileUrl(const QUrl &url)
+{
+    return url.isLocalFile() || url.scheme() == u"content";
+}
+
+/// What QFile opens: a local path, or the URL itself for content:// documents.
+QString fileSystemPath(const QUrl &url)
+{
+    return url.isLocalFile() ? url.toLocalFile() : url.toString();
+}
+
+/// A copied picture is pasted as a picture unless real text came with it (a browser's "Copy
+/// image" adds the image's address, nothing to type into a note).
+bool imageWithoutText(const QMimeData *data)
+{
+    if (!data || !data->hasImage())
+        return false;
+    const QString text = data->text().trimmed();
+    if (text.isEmpty())
+        return true;
+    static const QRegularExpression address(u"^(https?|file|data):\\S*$"_s);
+    return address.match(text).hasMatch();
+}
+
+QList<QUrl> copiedFiles(const QMimeData *data)
+{
+    QList<QUrl> out;
+    if (!data || !data->hasUrls())
+        return out;
+    for (const QUrl &url : data->urls()) {
+        if (!isFileUrl(url) || (url.isLocalFile() && !QFileInfo(url.toLocalFile()).isFile()))
+            return {};
+        out.append(url);
+    }
+    return out;
+}
+
+} // namespace
+
+QStringList PageController::imageNameFilters() const
+{
+    return {tr("Pictures (*.png *.jpg *.jpeg *.gif *.webp *.svg *.bmp *.avif)"), tr("All files (*)")};
+}
+
+bool PageController::clipboardHasImage() const
+{
+    const QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    const QMimeData *data = clipboard ? clipboard->mimeData() : nullptr;
+    return imageWithoutText(data) || !copiedFiles(data).isEmpty();
+}
+
+QString PageController::embedFor(const QString &path) const
+{
+    const QString name = paths::basename(path);
+    const bool byName = !name.isEmpty() && (!m_host || m_host->resolveLink(name, m_path) == path);
+    return u"![["_s + (byName ? name : path) + u"]]"_s;
+}
+
+QVariantMap PageController::insertEmbeds(int row, int from, int to, const QStringList &stored, bool newBlock)
+{
+    QStringList embeds;
+    for (const QString &path : stored)
+        embeds.append(embedFor(path));
+    if (embeds.isEmpty())
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    const QString inserted = embeds.join(u' ');
+    const BlockView view = validRow(row) ? m_model->shapeAt(row).view : BlockView::Rule;
+    if (!newBlock && (view == BlockView::Text || view == BlockView::Heading)) {
+        const QString edit = m_model->editTextAt(row);
+        from = snapToCharacter(edit, from < 0 ? int(edit.size()) : from);
+        to = std::max(from, snapToCharacter(edit, to < 0 ? from : to));
+        const QString before = from > 0 && !edit[from - 1].isSpace() ? u" "_s : QString();
+        const QString after = to < edit.size() && !edit[to].isSpace() ? u" "_s : QString();
+        const int cursor = replaceRange(row, from, to, before + inserted + after) - int(after.size());
+        if (editingRow() == row)
+            setFocus({row, cursor}, true);
+        return {{u"row"_s, row}, {u"cursor"_s, cursor}};
+    }
+    // Not into text: a block of its own after the row, or at the end of the page.
+    beginCommand();
+    int target = -1;
+    if (validRow(row)) {
+        target = insertBlockAfter(row, inserted);
+    } else {
+        target = appendEmptyBlock();
+        replaceRange(target, 0, int(m_model->editTextAt(target).size()), inserted);
+    }
+    endCommand(Focus{-1, -1});
+    stopEditing();
+    return {{u"row"_s, target}, {u"cursor"_s, -1}};
+}
+
+QVariantMap PageController::insertAttachment(int row, int from, int to, const QString &fileName, const QByteArray &data)
+{
+    const QString name = fileName.trimmed().isEmpty() ? tr("Attachment") : fileName.trimmed();
+    const QString path = m_host && !data.isEmpty() ? m_host->saveAttachment(name, data) : QString();
+    if (path.isEmpty()) {
+        Q_EMIT attachmentFailed(name);
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    }
+    return insertEmbeds(row, from, to, {path});
+}
+
+QVariantMap PageController::insertFiles(int row, int from, int to, const QList<QUrl> &urls)
+{
+    const QStringList stored = storeFiles(urls);
+    QVariantMap out = insertEmbeds(row, from, to, stored);
+    out.insert(u"count"_s, stored.size());
+    return out;
+}
+
+QVariantMap PageController::insertFilesAfter(int row, const QList<QUrl> &urls)
+{
+    const QStringList stored = storeFiles(urls);
+    QVariantMap out = insertEmbeds(validRow(row) ? row : -1, -1, -1, stored, true);
+    out.insert(u"count"_s, stored.size());
+    return out;
+}
+
+QStringList PageController::storeFiles(const QList<QUrl> &urls)
+{
+    QStringList stored;
+    for (const QUrl &url : urls) {
+        if (!isFileUrl(url))
+            continue;
+        const QString fsPath = fileSystemPath(url);
+        QString name = QFileInfo(fsPath).fileName();
+        if (name.isEmpty())
+            name = url.fileName();
+        QFile file(fsPath);
+        if (!file.open(QIODevice::ReadOnly) || file.size() > MaxAttachmentBytes) {
+            Q_EMIT attachmentFailed(name);
+            continue;
+        }
+        const QByteArray data = file.readAll();
+        const QString path = m_host && !data.isEmpty() ? m_host->saveAttachment(name, data) : QString();
+        if (path.isEmpty()) {
+            Q_EMIT attachmentFailed(name);
+            continue;
+        }
+        stored.append(path);
+    }
+    return stored;
+}
+
+QVariantMap PageController::pasteImage(int row, int from, int to)
+{
+    const QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    const QMimeData *data = clipboard ? clipboard->mimeData() : nullptr;
+    if (const QList<QUrl> files = copiedFiles(data); !files.isEmpty())
+        return insertFiles(row, from, to, files);
+    if (!imageWithoutText(data))
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    const QImage image = qvariant_cast<QImage>(data->imageData());
+    QByteArray png;
+    QBuffer buffer(&png);
+    if (image.isNull() || !buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG"))
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    const QString name = tr("Pasted image %1").arg(currentDateTime().toString(u"yyyyMMddHHmmss"_s)) + u".png"_s;
+    return insertAttachment(row, from, to, name, png);
+}
+
+bool PageController::pickImageInBrowser(int row, int from, int to)
+{
+#ifdef Q_OS_WASM
+    const int handle = trackBlock(row);
+    const QPointer<PageController> self(this);
+    const QString filter = imageNameFilters().join(u";;"_s);
+    QFileDialog::getOpenFileContent(filter, [self, handle, from, to](const QString &fileName, const QByteArray &content) {
+        if (!self)
+            return;
+        const int current = self->trackedRow(handle);
+        self->untrack(handle);
+        if (fileName.isEmpty())
+            return; // cancelled
+        self->insertAttachment(current, current >= 0 ? from : -1, current >= 0 ? to : -1, QFileInfo(fileName).fileName(),
+                               content);
+    });
+    return true;
+#else
+    Q_UNUSED(row);
+    Q_UNUSED(from);
+    Q_UNUSED(to);
+    return false;
+#endif
 }
 
 // --- Undo -----------------------------------------------------------------------------------------------

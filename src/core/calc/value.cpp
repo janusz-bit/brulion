@@ -42,9 +42,10 @@ QString formatQuantity(const Value &v, CalcLocale locale, NumberFormatOptions op
         }
         return money + u' ' + unit.toString(locale);
     }
-    const QString number = formatNumber(magnitude, locale, options);
     if (unit.isEmpty())
-        return number;
+        return formatNumber(magnitude, locale, options);
+    // Quantities: at most two decimals ("3,11 mi", "3,33 h"); the value keeps full precision.
+    const QString number = formatUnitNumber(magnitude, locale, options);
     const QString unitText = unit.toString(locale);
     if (unitText.startsWith(u'°'))
         return number + unitText;

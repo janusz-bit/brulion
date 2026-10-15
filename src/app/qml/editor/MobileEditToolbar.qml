@@ -4,8 +4,8 @@ import Brulion
 
 // MobileEditToolbar — the editing toolbar of touch UIs, sitting right above the virtual
 // keyboard (Qt.inputMethod.keyboardRectangle; at the bottom when the window is resized for the
-// keyboard): outdent, indent, move up/down, task, [[, #, /, date, reminder, undo, redo, hide
-// keyboard. Buttons never take focus, so the caret stays in the block being edited. Scrolls
+// keyboard): outdent, indent, move up/down, task, [[, #, /, date, reminder, picture, undo, redo,
+// hide keyboard. Buttons never take focus, so the caret stays in the block being edited. Scrolls
 // sideways when the window is narrower than the buttons.
 Rectangle {
     id: bar
@@ -138,6 +138,15 @@ Rectangle {
                 iconName: "bell"
                 label: qsTr("Reminder")
                 onClicked: { bar.commitComposition(); bar.editor.dialogs.createReminder(bar.row, false) }
+            }
+            ToolButton {
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "image"
+                label: qsTr("Insert picture")
+                onClicked: {
+                    bar.commitComposition()
+                    bar.editor.dialogs.pickImage(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                }
             }
             Rectangle { width: 1; height: parent.height * 0.5; anchors.verticalCenter: parent.verticalCenter; color: Theme.border }
             ToolButton {

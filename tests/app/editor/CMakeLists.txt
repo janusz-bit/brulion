@@ -12,6 +12,9 @@ brulion_add_test(tst_editor_suggestions
 brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
+brulion_add_test(tst_editor_queryresults
+    SOURCES tst_editor_queryresults.cpp
+    LIBS brulion_editor)
 
 # The block editor in its real QML (the playground, `brulion --editor --editor-script selftest`):
 # keyboard flows (Enter, Backspace, Tab, Up/Down, Alt+Up/Down, Ctrl+Z, Ctrl+Enter, Esc,

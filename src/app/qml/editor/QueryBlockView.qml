@@ -3,18 +3,28 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// QueryBlockView — a ```query block (docs/SYNTAX.md §10). Until the editor host can run index
-// queries, the block shows its filters as chips ("type: tasks", "tag: zakupy") and a note that
-// the results appear once the vault is indexed. Click (or Enter when selected) edits the query
-// source in place.
+// QueryBlockView — a ```query block (docs/SYNTAX.md §10) with its live results: the query's
+// filters as chips ("typ: zadania", "tag: zakupy"), then the matches from the vault index
+// (QueryResultModel over the host's QueryHost): tasks with a checkbox that changes the task in
+// its own file (this page: an undoable edit), blocks and pages rendered like the editor renders
+// them (links, tags, date chips), `group:` results under group headers, the page of each item
+// (unless grouped by page) as a quiet link. A click on an item opens it at its block; the
+// results follow the index (other devices, edits elsewhere). The header, the filters (or Enter
+// when the block is selected) edit the query source in place; while editing, the results
+// follow the typed query. Without a host that runs queries (QueryHost) only the filters show.
 Rectangle {
     id: root
 
     property BlockDelegate block
+    readonly property BlockEditor editor: block.editor
     readonly property var query: block.model.query || ({})
     readonly property var filters: query.filters || []
     readonly property var terms: query.terms || []
     readonly property real firstLineCenter: Theme.space3 + headerRow.height / 2
+    readonly property bool live: results.available
+    readonly property bool emptySource: (block.model.editText || "").trim() === ""
+    readonly property int itemFontSize: Theme.textEditor
+    readonly property int itemLineHeight: Theme.lineHeightPx(itemFontSize, 1.45)
 
     implicitHeight: column.implicitHeight + 2 * Theme.space3
     height: implicitHeight
@@ -22,6 +32,18 @@ Rectangle {
     color: Theme.bgElevated
     border.width: 1
     border.color: root.block.editing ? Theme.alpha(Theme.focusRing, 0.5) : Theme.border
+
+    Accessible.role: Accessible.Grouping
+    Accessible.name: qsTr("Query")
+
+    /// The live results (tests, the playground's self test).
+    readonly property alias results: results
+
+    QueryResultModel {
+        id: results
+        controller: root.block.controller
+        source: root.block.model.editText
+    }
 
     function filterLabel(key) {
         switch (key) {
@@ -52,6 +74,39 @@ Rectangle {
         default: return "neutral"
         }
     }
+    /// "3 tasks", "12 of 40 blocks" — what the header says about the results.
+    function countText() {
+        if (!results.ready || !results.ok || root.emptySource || results.itemCount === 0)
+            return ""
+        const n = results.itemCount
+        let what
+        switch (results.type) {
+        case "tasks": what = qsTr("%n task(s)", "", n); break
+        case "pages": what = qsTr("%n page(s)", "", n); break
+        case "reminders": what = qsTr("%n reminder(s)", "", n); break
+        default: what = qsTr("%n block(s)", "", n); break
+        }
+        return results.total > n ? qsTr("%1 of %2").arg(what).arg(results.total) : what
+    }
+    /// The page of an item for its quiet link: daily notes by their date.
+    function pageLabel(title, journal) {
+        return journal !== "" ? DatesHelper.formatHuman(journal) : title
+    }
+    /// Opening an item: on this page the editor scrolls to the block.
+    function openResult(index) {
+        const r = results.open(index, false)
+        if (r && r.action === "scrollTo")
+            root.editor.revealRow(r.row)
+    }
+    function activateResultLink(index, link) {
+        if (link === "open:") {
+            openResult(index)
+            return
+        }
+        const r = results.activateLink(index, link, false)
+        if (r && r.action === "scrollTo")
+            root.editor.revealRow(r.row)
+    }
 
     ColumnLayout {
         id: column
@@ -60,22 +115,55 @@ Rectangle {
         width: parent.width - 2 * Theme.space4
         spacing: Theme.space2
 
-        RowLayout {
+        // ---- Header: what the block is, how many results; a tap edits the query -------------
+        Item {
             id: headerRow
             Layout.fillWidth: true
-            spacing: Theme.space2
-            BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
-            Text {
-                Layout.fillWidth: true
-                text: qsTr("Query")
-                font.family: Theme.fontUi
-                font.pixelSize: Theme.textSm
-                font.weight: Theme.weightSemiBold
-                color: Theme.fgMuted
-                elide: Text.ElideRight
+            implicitHeight: Math.max(headerContent.implicitHeight, Theme.touchUi ? 32 : 22)
+
+            RowLayout {
+                id: headerContent
+                anchors.fill: parent
+                spacing: Theme.space2
+                BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
+                Text {
+                    text: qsTr("Query")
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    font.weight: Theme.weightSemiBold
+                    color: Theme.fgMuted
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: root.countText()
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fgFaint
+                    elide: Text.ElideRight
+                }
+                BSpinner {
+                    visible: root.live && !results.complete
+                    size: 14
+                    running: visible
+                }
+                BIconButton {
+                    visible: !root.block.editing && (headerHover.hovered || Theme.touchUi)
+                    size: "small"
+                    iconName: "pencil"
+                    label: qsTr("Edit query")
+                    focusPolicy: Qt.NoFocus
+                    onClicked: root.editor.startEditing(root.block.index, -1)
+                }
+            }
+            HoverHandler { id: headerHover; enabled: !Theme.touchUi }
+            TapHandler {
+                enabled: !root.block.editing
+                onTapped: root.editor.startEditing(root.block.index, -1)
             }
         }
 
+        // ---- The filters as chips (a tap edits the query) ----------------------------------------
         Flow {
             Layout.fillWidth: true
             visible: !root.block.editing && (root.filters.length > 0 || root.terms.length > 0)
@@ -87,7 +175,7 @@ Rectangle {
                     size: "small"
                     variant: root.chipVariant(modelData.key)
                     showIcon: variant !== "neutral" && variant !== "done"
-                    text: root.block.editor.autoTextSafe((modelData.negated ? "≠ " : "") + root.filterLabel(modelData.key) + ": " + modelData.value)
+                    text: root.editor.autoTextSafe((modelData.negated ? "≠ " : "") + root.filterLabel(modelData.key) + ": " + modelData.value)
                 }
             }
             Repeater {
@@ -96,8 +184,12 @@ Rectangle {
                     required property var modelData
                     size: "small"
                     iconName: "search"
-                    text: root.block.editor.autoTextSafe("„" + modelData + "”")
+                    text: root.editor.autoTextSafe("„" + modelData + "”")
                 }
+            }
+            TapHandler {
+                enabled: !root.block.editing
+                onTapped: root.editor.startEditing(root.block.index, -1)
             }
         }
 
@@ -117,23 +209,171 @@ Rectangle {
             }
         }
 
+        // ---- Results ---------------------------------------------------------------------------
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.space1
+            visible: root.live && results.ready && !root.emptySource && (results.rowCount() > 0 || !results.ok)
+            implicitHeight: 1
+            color: Theme.borderSubtle
+        }
+
+        Column {
+            id: resultList
+            Layout.fillWidth: true
+            visible: root.live && results.ok && !root.emptySource
+            spacing: Theme.touchUi ? 0 : 2
+
+            Repeater {
+                model: root.live ? results : null
+                delegate: Item {
+                    id: row
+                    required property int index
+                    required property string kind
+                    required property string label
+                    required property int count
+                    required property string path
+                    required property string title
+                    required property string html
+                    required property string status
+                    required property bool isTask
+                    required property bool showPage
+                    required property string journal
+                    required property string text
+                    readonly property bool group: kind === "group"
+                    readonly property bool closed: status === "done" || status === "cancelled"
+                    /// Touch: one line of text centred in a 44 px row (the checkbox's target).
+                    readonly property real pad: Theme.touchUi ? Math.max(3, Math.round((Theme.touchTarget - root.itemLineHeight) / 2)) : 1
+                    width: resultList.width
+                    height: group ? groupLabel.implicitHeight + (index > 0 ? Theme.space3 : Theme.space1) + Theme.space1
+                                  : Math.max(itemText.implicitHeight + 2 * pad, Theme.touchUi ? Theme.touchTarget : 0)
+
+                    // Group header: "Remont łazienki · 3".
+                    Text {
+                        id: groupLabel
+                        visible: row.group
+                        y: row.index > 0 ? Theme.space3 : Theme.space1
+                        width: parent.width
+                        text: row.label + "  ·  " + row.count
+                        textFormat: Text.PlainText
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textXs
+                        font.weight: Theme.weightSemiBold
+                        font.capitalization: Font.AllUppercase
+                        font.letterSpacing: 0.4
+                        color: Theme.fgMuted
+                        elide: Text.ElideRight
+                    }
+
+                    Rectangle {
+                        visible: !row.group && itemHover.hovered
+                        x: -Theme.space2
+                        width: parent.width + 2 * Theme.space2
+                        height: parent.height
+                        radius: Theme.radiusSm
+                        color: Theme.bgHover
+                    }
+
+                    TaskBox {
+                        id: taskBox
+                        visible: !row.group && row.isTask
+                        status: row.status
+                        x: -Math.round((width - boxSize) / 2) + 2
+                        y: Math.round(row.pad + root.itemLineHeight / 2 - height / 2)
+                        Accessible.name: qsTr("Task: %1").arg(row.text)
+                        onToggled: results.toggleTask(row.index)
+                    }
+
+                    Text {
+                        id: itemText
+                        visible: !row.group
+                        x: row.isTask ? root.editor.taskBoxWidth + 2 : 0
+                        y: row.pad
+                        width: parent.width - x
+                        textFormat: Text.RichText
+                        text: row.group ? "" : row.html + (row.showPage && row.title !== ""
+                              ? "&nbsp;&nbsp;<a href=\"open:\" style=\"color:" + Theme.fgFaint + ";text-decoration:none\">·&nbsp;"
+                                + TextHelper.escapeHtml(root.pageLabel(row.title, row.journal)) + "</a>" : "")
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 4
+                        elide: Text.ElideRight
+                        font.family: Theme.fontEditor
+                        font.pixelSize: root.itemFontSize
+                        font.strikeout: row.status === "cancelled"
+                        lineHeightMode: Text.FixedHeight
+                        lineHeight: root.itemLineHeight
+                        color: row.closed ? Theme.fgFaint : Theme.fg
+                        linkColor: Theme.link
+                        Accessible.role: Accessible.Link
+                        Accessible.name: row.text + (row.showPage ? " — " + row.title : "")
+                    }
+                    HoverHandler {
+                        id: itemHover
+                        enabled: !row.group && !Theme.touchUi
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        enabled: !row.group
+                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                        onTapped: (eventPoint) => {
+                            const p = itemText.mapFromItem(row, eventPoint.position.x, eventPoint.position.y)
+                            const link = itemText.linkAt(p.x, p.y)
+                            if (link !== "")
+                                root.activateResultLink(row.index, link)
+                            else
+                                root.openResult(row.index)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- States: more results, nothing found, errors, no live results ------------------------
+        BButton {
+            visible: root.live && results.ok && results.hiddenCount > 0 && !root.emptySource
+            size: "small"
+            variant: "ghost"
+            iconName: "chevron-down"
+            text: qsTr("Show %n more", "", Math.min(50, results.hiddenCount))
+            focusPolicy: Qt.NoFocus
+            onClicked: results.showMore()
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
-            BIcon { name: "info"; size: Theme.iconSizeSm; color: Theme.fgFaint }
+            visible: message.text !== ""
+            BIcon {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: 1
+                name: !root.live ? "info" : !results.ok ? "circle-alert" : root.emptySource ? "info" : "search"
+                size: Theme.iconSizeSm
+                color: root.live && !results.ok ? Theme.dangerText : Theme.fgFaint
+            }
             Text {
+                id: message
                 Layout.fillWidth: true
-                text: qsTr("Query results are not shown in this version yet.")
+                text: {
+                    if (!root.live)
+                        return qsTr("Query results are shown when a notebook is open.")
+                    if (!results.ready)
+                        return ""
+                    if (!results.ok)
+                        return results.error !== "" ? results.error : qsTr("This query cannot be run.")
+                    if (root.emptySource)
+                        return qsTr("Write filters, e.g. type:tasks status:open tag:zakupy")
+                    if (results.itemCount === 0)
+                        return results.complete ? qsTr("Nothing matches this query.") : qsTr("Nothing yet — the notebook is still being indexed.")
+                    if (!results.complete)
+                        return qsTr("The notebook is still being indexed: more results may appear.")
+                    return ""
+                }
+                textFormat: Text.PlainText
                 font.family: Theme.fontUi
-                font.pixelSize: Theme.textXs
-                color: Theme.fgFaint
+                font.pixelSize: Theme.textSm
+                color: root.live && !results.ok ? Theme.dangerText : Theme.fgFaint
                 wrapMode: Text.Wrap
             }
         }
-    }
-
-    TapHandler {
-        enabled: !root.block.editing
-        onTapped: root.block.editor.startEditing(root.block.index, -1)
     }
 }

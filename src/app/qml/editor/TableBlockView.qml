@@ -4,8 +4,10 @@ import QtQuick.Templates as T
 import Brulion
 
 // TableBlockView — a GFM table as a grid (docs/SYNTAX.md §9 "Table formulas"). Cells show their
-// value; formula cells (`=sum(above)`, `=[Cena]*[Ilość]`) show the result (errors as #ERR with
-// the message as tooltip, cycles as #CYCLE). Clicking a cell edits its raw text (the formula);
+// Markdown rendered like block text (bold, links, tags, date chips — the core InlineRenderer, so
+// note text is never interpreted as HTML); formula cells (`=sum(above)`, `=[Cena]*[Ilość]`) show
+// the result (errors as #ERR with the message as tooltip, cycles as #CYCLE). Links in cells work
+// like links in blocks (a click elsewhere edits the cell). Clicking a cell edits its raw text (the formula);
 // Enter / Tab / Shift+Tab move, Esc cancels the cell's edit. Typing reaches the document at once
 // (PageController.setTableCell with `typing`: one undo step per cell), so a cell left open when
 // the app is suspended or closed is saved like any text. Rows and columns are added with
@@ -16,6 +18,7 @@ Item {
     property BlockDelegate block
     readonly property var table: block.model.tableData || ({})
     readonly property var header: table.header || []
+    readonly property var headerHtml: table.headerHtml || []
     readonly property var aligns: table.aligns || []
     readonly property var rows: table.rows || []
     readonly property int columns: header.length
@@ -35,7 +38,7 @@ Item {
             for (let r = 0; r < rows.length; ++r) {
                 const cell = rows[r][c]
                 if (cell)
-                    w = Math.max(w, cellMetrics.advanceWidth(cell.display || ""))
+                    w = Math.max(w, cellMetrics.advanceWidth(cell.plain !== undefined ? cell.plain : (cell.display || "")))
             }
             w = Math.min(280, Math.max(56, Math.ceil(w) + 2 * cellPadding))
             out.push(w)
@@ -145,6 +148,9 @@ Item {
                             readonly property bool formula: cellData ? cellData.formula : false
                             readonly property string error: cellData ? cellData.error : ""
                             readonly property string shown: headerCell ? (root.header[c] || "") : cellData ? cellData.display : ""
+                            /// Rendered cell (escaped rich text from the core renderer).
+                            readonly property string shownHtml: headerCell ? (root.headerHtml[c] || "")
+                                                                : cellData && cellData.html !== undefined ? cellData.html : ""
                             readonly property string align: root.aligns[c] || ""
                             readonly property bool editingCell: root.editRow === rowItem.r && root.editColumn === c
                             x: root.columnWidths.slice(0, c).reduce((a, b) => a + b, 0)
@@ -166,6 +172,7 @@ Item {
                                 color: Theme.alpha(Theme.info, Theme.dark ? 0.07 : 0.06)
                             }
                             Text {
+                                id: cellText
                                 visible: !cell.editingCell
                                 anchors.fill: parent
                                 anchors.leftMargin: root.cellPadding
@@ -173,22 +180,41 @@ Item {
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: cell.align === "right" || (cell.formula && cell.align === "") ? Text.AlignRight
                                                    : cell.align === "center" ? Text.AlignHCenter : Text.AlignLeft
-                                text: cell.shown
-                                textFormat: Text.PlainText
-                                elide: Text.ElideRight
+                                // Rich text cannot elide: one line, clipped at the cell's edge.
+                                text: cell.shownHtml
+                                textFormat: Text.RichText
+                                wrapMode: Text.NoWrap
+                                clip: contentWidth > width
                                 font.family: Theme.fontUi
                                 font.pixelSize: Theme.textBase
                                 font.weight: cell.headerCell ? Theme.weightSemiBold : cell.formula ? Theme.weightMedium : Theme.weightNormal
-                                color: cell.error !== "" ? Theme.dangerText : cell.headerCell ? Theme.fg : Theme.fg
+                                color: cell.error !== "" ? Theme.dangerText : Theme.fg
+                                linkColor: Theme.link
+                                Accessible.ignored: true
                             }
                             BToolTip {
-                                visible: cell.error !== "" && cellHover.hovered
-                                text: root.block.editor.autoTextSafe(cell.error)
+                                visible: (cell.error !== "" || cellText.contentWidth > cellText.width) && cellHover.hovered
+                                text: root.block.editor.autoTextSafe(cell.error !== "" ? cell.error : cell.shown)
                             }
-                            HoverHandler { id: cellHover; enabled: !Theme.touchUi; cursorShape: Qt.IBeamCursor }
+                            HoverHandler {
+                                id: cellHover
+                                enabled: !Theme.touchUi
+                                cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
+                                             ? Qt.PointingHandCursor : Qt.IBeamCursor
+                            }
                             TapHandler {
                                 enabled: !cell.editingCell
-                                onTapped: root.startCell(rowItem.r, cell.c)
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: (eventPoint) => {
+                                    const p = eventPoint.position
+                                    // Reminder chips name ranges of the cell's text, not of the
+                                    // block: those cells are edited like any other.
+                                    const link = cellText.linkAt(p.x - cellText.x, p.y - cellText.y)
+                                    if (link !== "" && !link.startsWith("reminder:"))
+                                        root.block.editor.activateLink(root.block.index, link)
+                                    else
+                                        root.startCell(rowItem.r, cell.c)
+                                }
                             }
 
                             Loader {

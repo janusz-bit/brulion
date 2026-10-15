@@ -450,18 +450,58 @@ QList<Embed> embedsOf(QStringView body)
     return out;
 }
 
-bool onlyEmbeds(QStringView body)
+QList<Transclusion> transclusionsOf(QStringView body)
 {
+    QList<Transclusion> out;
+    if (!body.contains(u"![[") && !body.contains(u"!(("))
+        return out;
+    const markdown::InlineScan scan = markdown::extractInline(body);
+    for (const Link &link : scan.links) {
+        Transclusion t;
+        if (link.kind == LinkKind::BlockEmbed) {
+            if (link.blockId.isEmpty())
+                continue;
+            t.kind = Transclusion::Kind::Block;
+            t.blockId = link.blockId;
+            t.blockRef = true;
+        } else if (link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)) {
+            t.target = link.target;
+            t.display = link.display;
+            if (!link.blockId.isEmpty()) {
+                t.kind = Transclusion::Kind::Block;
+                t.blockId = link.blockId;
+            } else if (!link.heading.isEmpty()) {
+                t.kind = Transclusion::Kind::Heading;
+                t.heading = link.heading;
+            } else if (link.target.isEmpty()) {
+                continue; // "![[#]]"
+            }
+        } else {
+            continue;
+        }
+        out.append(t);
+    }
+    return out;
+}
+
+bool onlyEmbeds(QStringView body, bool transclusions)
+{
+    if (!body.contains(u"![") && !body.contains(u"!(("))
+        return false; // no embed at all: no need to scan (called for every rendered block)
     const markdown::InlineScan scan = markdown::extractInline(body);
     QString rest = body.toString();
     bool any = false;
-    // Blank out the attachment embeds from the end so offsets stay valid.
+    // Blank out the embeds from the end so offsets stay valid.
     QList<Link> links = scan.links;
     std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
     for (const Link &link : std::as_const(links)) {
         const bool attachment = (link.kind == LinkKind::Embed && isAttachmentTarget(link.target))
                                 || (link.kind == LinkKind::Markdown && link.from < body.size() && body[link.from] == u'!');
-        if (!attachment || link.from < 0 || link.to > rest.size())
+        const bool transclusion = transclusions
+                                  && ((link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)
+                                       && (!link.target.isEmpty() || !link.heading.isEmpty() || !link.blockId.isEmpty()))
+                                      || link.kind == LinkKind::BlockEmbed);
+        if ((!attachment && !transclusion) || link.from < 0 || link.to > rest.size())
             continue;
         rest.remove(link.from, link.to - link.from);
         any = true;
@@ -729,8 +769,11 @@ const QList<SlashCommand> &slashCommands()
              {u"ramka"_s, u"notatka"_s, u"admonition"_s, u"note"_s, u"wskazówka"_s, u"tip"_s}},
             {u"code"_s, u"Kod"_s, u"Code block"_s, u"code"_s, u"```"_s, {u"snippet"_s, u"fence"_s, u"program"_s}},
             {u"template"_s, u"Szablon…"_s, u"Template…"_s, u"sparkles"_s, u"{{ }}"_s, {u"wzór"_s, u"szablony"_s}},
-            {u"embed"_s, u"Osadź"_s, u"Embed"_s, u"image"_s, u"![[ ]]"_s,
-             {u"osadź stronę"_s, u"obraz"_s, u"zdjęcie"_s, u"transclude"_s, u"image"_s}},
+            {u"image"_s, u"Obraz…"_s, u"Image…"_s, u"image"_s, u"![[…]]"_s,
+             {u"zdjęcie"_s, u"obrazek"_s, u"foto"_s, u"grafika"_s, u"załącznik"_s, u"plik"_s, u"picture"_s,
+              u"photo"_s, u"attachment"_s, u"file"_s}},
+            {u"embed"_s, u"Osadź"_s, u"Embed"_s, u"copy"_s, u"![[ ]]"_s,
+             {u"osadź stronę"_s, u"sekcja"_s, u"transkluzja"_s, u"transclude"_s, u"section"_s, u"page"_s}},
             {u"blockRef"_s, u"Odwołanie do bloku"_s, u"Block reference"_s, u"link"_s, u"(( ))"_s,
              {u"blok"_s, u"odwołanie"_s, u"reference"_s, u"ref"_s}},
             {u"priorityHigh"_s, u"Priorytet wysoki"_s, u"High priority"_s, u"arrow-up"_s, u"⏫"_s,

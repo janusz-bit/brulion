@@ -20,6 +20,7 @@ qt_target_qml_sources(brulion
         qml/editor/QueryBlockView.qml
         qml/editor/FrontmatterView.qml
         qml/editor/EmbedView.qml
+        qml/editor/TransclusionView.qml
         qml/editor/SuggestionPopup.qml
         qml/editor/EditorDialogs.qml
         qml/editor/MobileEditToolbar.qml

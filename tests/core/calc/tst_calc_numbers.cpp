@@ -1,4 +1,5 @@
 // Number formatting and parsing (ported from the v1 numbers.test.ts).
+#include "calc/calc.h"
 #include "calc/numbers.h"
 
 #include "calctest.h"
@@ -83,6 +84,45 @@ private Q_SLOTS:
         QCOMPARE(brulion::calc::formatFixed(-0.001, 2, Pl), u"0,00"_s);
         QCOMPARE(brulion::calc::formatFixed(std::numeric_limits<double>::infinity(), 2, Pl), u"∞"_s);
         QCOMPARE(brulion::calc::formatFixed(0.125, 2, En), u"0.13"_s); // ties round up like JS toFixed
+    }
+
+    void formatUnitNumber_data()
+    {
+        QTest::addColumn<double>("value");
+        QTest::addColumn<QString>("pl");
+        QTest::addColumn<QString>("en");
+        QTest::newRow("miles") << 3.106855961 << u"3,11"_s << u"3.11"_s;
+        QTest::newRow("hours") << 10.0 / 3 << u"3,33"_s << u"3.33"_s;
+        QTest::newRow("trimmed") << 1.5 << u"1,5"_s << u"1.5"_s;
+        QTest::newRow("integer") << 48.0 << u"48"_s << u"48"_s;
+        QTest::newRow("rounds to integer") << 2.999 << u"3"_s << u"3"_s;
+        QTest::newRow("negative") << -3.106855961 << u"-3,11"_s << u"-3.11"_s;
+        QTest::newRow("grouped") << 12345.678 << nb(u"12_345,68"_s) << u"12,345.68"_s;
+        QTest::newRow("below one") << 1.0 / 3 << u"0,33"_s << u"0.33"_s;
+        QTest::newRow("small") << 0.0042 << u"0,0042"_s << u"0.0042"_s;
+        QTest::newRow("small rounded") << 0.0166666 << u"0,017"_s << u"0.017"_s;
+        QTest::newRow("zero") << 0.0 << u"0"_s << u"0"_s;
+        QTest::newRow("negative zero") << -0.001 * 0 << u"0"_s << u"0"_s;
+        QTest::newRow("huge") << 1.5e21 << u"1,5e21"_s << u"1.5e21"_s;
+    }
+
+    void formatUnitNumber()
+    {
+        QFETCH(double, value);
+        QFETCH(QString, pl);
+        QFETCH(QString, en);
+        QCOMPARE(brulion::calc::formatUnitNumber(value, Pl), pl);
+        QCOMPARE(brulion::calc::formatUnitNumber(value, En), en);
+    }
+
+    void unitValuesKeepPrecision()
+    {
+        // Only the display is rounded: 5 km to mi and back is 5 km again.
+        brulion::calc::Scope scope;
+        const auto lines = brulion::calc::evaluateCalc(u"d = 5 km to mi\nd\nd to km"_s, scope, Pl);
+        QCOMPARE(lines.size(), 3);
+        QCOMPARE(lines[1].value, u"3,11 mi"_s);
+        QCOMPARE(lines[2].value, u"5 km"_s);
     }
 
     void formatMoney()

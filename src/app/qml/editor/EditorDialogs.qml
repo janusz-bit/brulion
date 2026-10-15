@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Templates as T
+import QtQuick.Dialogs
 import Brulion
 
 // EditorDialogs — the dialogs the block editor opens (all asynchronous, never exec()):
@@ -11,6 +12,8 @@ import Brulion
 //   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
 //   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
+//   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
+//                                   Android) or the browser's, stored as attachments, `![[…]]`
 // The page may change while a dialog is open (sync, Syncthing): a dialog tracks its block
 // (PageController.trackBlock) and acts on wherever that block is then — never on whatever block
 // moved into its row (and on nothing when the block itself changed or is gone).
@@ -20,6 +23,7 @@ Item {
     property BlockEditor editor
     property PageController controller
     readonly property bool anyOpen: reminder.opened || dateDialog.opened || recurrenceDialog.opened || templateDialog.opened
+                                    || imageDialog.visible
 
     property int row: -1
     /// PageController.trackBlock() handle of the dialog's block (see blockRow()).
@@ -108,6 +112,33 @@ Item {
         remember(r)
         templateModel.filter = ""
         templateDialog.open()
+    }
+    function pickImage(r, c) {
+        if (!controller)
+            return
+        remember(r)
+        cursor = c
+        // The browser has its own picker (asynchronous, inserted by the controller).
+        if (controller.pickImageInBrowser(r, c, c))
+            return
+        imageDialog.open()
+    }
+
+    FileDialog {
+        id: imageDialog
+        title: qsTr("Insert a picture")
+        fileMode: FileDialog.OpenFiles
+        nameFilters: root.controller ? root.controller.imageNameFilters : []
+        onAccepted: {
+            const r = root.blockRow()
+            const c = r >= 0 ? root.cursor : -1
+            if (r >= 0 && root.controller.blocks.get(r).view === "text")
+                root.controller.insertFiles(r, c, c, selectedFiles)
+            else
+                root.controller.insertFilesAfter(r, selectedFiles)
+            root.refocus()
+        }
+        onRejected: root.refocus()
     }
 
     BReminderDialog {

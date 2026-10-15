@@ -25,7 +25,7 @@ now="${NOW:-2026-10-15 10:00}"
 delay="${DELAY:-1600}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
-all_states=(page editing suggest tags slash date zoom folded selected source reminder recurrence table calc empty conflict markup)
+all_states=(page editing suggest tags slash date zoom folded selected source reminder recurrence table calc query embeds title empty conflict markup)
 if [[ $# -gt 0 ]]; then states=("$@"); else states=("${all_states[@]}"); fi
 
 mkdir -p "$out"

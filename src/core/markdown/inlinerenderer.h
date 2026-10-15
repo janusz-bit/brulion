@@ -72,6 +72,11 @@ struct RenderContext {
     /// Render a leading task marker ("[ ] ", "TODO ") as a clickable task:toggle glyph; when
     /// false it is hidden (the delegate draws its own checkbox).
     bool taskCheckbox = true;
+    /// Embedded pages, sections and blocks (`![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`,
+    /// `!((id))`) are shown by the caller next to the text (the editor's embed frames): their
+    /// syntax is hidden instead of rendered as a placeholder link. Attachment embeds
+    /// (`![[photo.png]]`) still render as links.
+    bool hideTransclusions = false;
 };
 
 class InlineRenderer {

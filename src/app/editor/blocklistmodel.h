@@ -13,17 +13,27 @@
 //   raw          block source as written (prefix + body)        body        editable body
 //   editText     the part edited inline (no task marker / fences) editOffset  hidden chars before it
 //   html         rich text from markdown::InlineRenderer (escaped; chips, page:/tag:/block:/ext:/
-//                reminder: links); "" for code/calc/query/table/rule/frontmatter views
+//                reminder: links; embedded pages/sections/blocks hidden — see `transclusions`);
+//                "" for code/calc/query/table/rule/frontmatter views
 //   depth        display depth (relative to the zoomed block)    docDepth    outline depth in the file
 //   kind         listItem | paragraph | heading | code | table | quote | callout | rule | html | frontmatter
 //   view         text | heading | code | calc | query | table | quote | callout | rule | frontmatter | html
 //   headingLevel, lang, hasChildren, collapsed, visible (zoom + folds), taskStatus ("" | todo |
 //   doing | done | cancelled | deferred), blockId, isEditing, isSelected, isZoomRoot,
 //   calcResults  calc views: [{ line, value, error, assigned }] per line of editText
-//   tableData    table views: { header: [..], aligns: ["left"|"center"|"right"|""], rows:
-//                [[{ text, display, error, formula }]] } with table formulas evaluated
+//   tableData    table views: { header: [..], headerHtml: [..], aligns: ["left"|"center"|"right"|""],
+//                rows: [[{ text, display, html, plain, error, formula }]] } with table formulas
+//                evaluated; `html` is the cell's Markdown rendered by the InlineRenderer (formula
+//                results and errors escaped), `plain` its visible text (column widths)
 //   embeds       [{ target, alt, image, url }] attachment embeds (url from EditorHost::assetUrl)
-//   onlyEmbeds   the block consists of embeds only (html is "")
+//   onlyEmbeds   the block consists of embeds only — attachments, pages, sections, blocks (html is "")
+//   transclusions  page / section / block embeds (`![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`,
+//                `!((id))`) with their content rendered read-only: [{ kind: "page" | "heading" |
+//                "block", target, title, href (page:/block: link of the header), path ("" when not
+//                found), found, message ("" | "missingPage" | "missingSection" | "missingBlock" |
+//                "empty"), more (blocks left out), blocks: [{ kind: "block" | "embed" | "note", html,
+//                depth, view, headingLevel, task, path, line, title, href, message ("cycle" |
+//                "depth" | ...) }] }]; nested embeds up to MaxTransclusionDepth levels, cycles cut
 //   properties   frontmatter: [{ key, value }]          query: { source, filters, terms }
 //   calloutType, calloutFolded, line (first line in the file), uid, plainText (one line, for
 //   breadcrumbs and accessibility)
@@ -85,7 +95,13 @@ public:
         LineRole,
         UidRole,
         PlainTextRole,
+        TransclusionsRole,
     };
+
+    /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
+    static constexpr int MaxTransclusionDepth = 3;
+    /// Blocks rendered per transclusion (the rest is counted in `more`).
+    static constexpr int MaxTransclusionBlocks = 60;
     Q_ENUM(Role)
 
     explicit BlockListModel(QObject *parent = nullptr);
@@ -141,8 +157,15 @@ public:
 
     // --- Rendering context ----------------------------------------------------------------------
     void setHost(EditorHost *host);
+    EditorHost *host() const { return m_host; }
     void setPath(const QString &path) { m_path = path; }
+    QString path() const { return m_path; }
     void setPalette(const markdown::Palette &palette);
+    const markdown::Palette &palette() const { return m_palette; }
+    /// Renderer context for text of another file (query results, transclusions): links resolve
+    /// from `path`, `((id))` through the host, inline calculations see the variables of
+    /// `content` above `line`; embedded pages / sections / blocks are hidden (shown in frames).
+    markdown::RenderContext renderContextFor(const QString &path, const QString &content, int line) const;
     void setEnglish(bool english);
     bool english() const { return m_english; }
     void setToday(QDate today);
@@ -173,6 +196,10 @@ private:
         bool onlyEmbeds = false;
         QVariantList calcResults;
         QVariantMap tableData;
+        QHash<QString, QString> cellHtml; ///< rendered table cells by text (until the rendering changes)
+        bool transclusionsValid = false;
+        bool transclusionsLocal = false; ///< embeds this page: follows every change of it
+        QVariantList transclusions;
         bool dependsOnPage = false; ///< inline calculations, own block refs: re-render on any change
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
     };
@@ -184,6 +211,7 @@ private:
     QString renderHtml(int docIndex) const;
     markdown::RenderContext renderContext(int docIndex) const;
     void ensureEmbeds(int row) const;
+    void ensureTransclusions(int row) const;
     void rebuildIndex();
     void replay(const QList<markdown::BlockChange> &changes, const QList<quint64> &finalUids);
     void invalidateContent(quint64 uid);

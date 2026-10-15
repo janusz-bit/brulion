@@ -241,8 +241,8 @@ private Q_SLOTS:
                                     << u"Podlać "_s + chip(u"EF"_s, u"EB"_s, u"🔁 co tydzień w poniedziałek"_s);
         QTest::newRow("polish recurrence")
                 << u"Czynsz 🔁 co miesiąc"_s << u"Czynsz "_s + chip(u"EF"_s, u"EB"_s, u"🔁 co miesiąc"_s);
-        QTest::newRow("raw recurrence") << u"x 🔁 every blue moon"_s
-                                        << u"x "_s + chip(u"EF"_s, u"EB"_s, u"🔁 every blue moon"_s);
+        // A 🔁 whose text is no rule stays text (it never swallows the rest of the line in a chip).
+        QTest::newRow("raw recurrence") << u"x 🔁 every blue moon"_s << u"x 🔁 every blue moon"_s;
         QTest::newRow("other dates") << u"Plan ⏳ 2026-10-15 🛫 2026-10-14 ➕ 2026-10-01"_s
                                      << u"Plan "_s + chip(u"SF"_s, u"SB"_s, u"⏳ jutro"_s) + u" "_s
                                                 + chip(u"NF"_s, u"NB"_s, u"🛫 dziś"_s) + u" "_s
@@ -257,6 +257,48 @@ private Q_SLOTS:
                 << u"🆔 abc123 zadanie ⛔ x1,y2"_s
                 << u"<span style=\"color:M\">🆔 abc123</span> zadanie <span style=\"color:M\">⛔ x1,y2</span>"_s;
         QTest::newRow("token in code") << u"`📅 2026-10-13` tekst"_s << Code + u"📅 2026-10-13</code> tekst"_s;
+    }
+
+    void recurrenceChips_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("empty rule") << u"Podlać 🔁"_s << u"Podlać 🔁"_s;
+        QTest::newRow("no rule") << u"Spotkanie 🔁 kiedyś tam, zobaczymy"_s << u"Spotkanie 🔁 kiedyś tam, zobaczymy"_s;
+        QTest::newRow("rule then text")
+                << u"Podlać 🔁 co tydzień kwiaty na balkonie"_s
+                << u"Podlać "_s + chip(u"EF"_s, u"EB"_s, u"🔁 co tydzień"_s) + u" kwiaty na balkonie"_s;
+        QTest::newRow("english rule then text")
+                << u"Water 🔁 every day the żółte plants"_s
+                << u"Water "_s + chip(u"EF"_s, u"EB"_s, u"🔁 codziennie"_s) + u" the żółte plants"_s;
+        QTest::newRow("comma after the rule")
+                << u"🔁 co miesiąc, czynsz"_s << chip(u"EF"_s, u"EB"_s, u"🔁 co miesiąc"_s) + u", czynsz"_s;
+        QTest::newRow("rule before a tag")
+                << u"x 🔁 every day #dom"_s << u"x "_s + chip(u"EF"_s, u"EB"_s, u"🔁 codziennie"_s) + u" "_s + tag(u"dom"_s, u"dom"_s);
+        QTest::newRow("text before a due date")
+                << u"x 🔁 nie wiem 📅 2026-10-15"_s << u"x 🔁 nie wiem "_s + chip(u"DF"_s, u"DB"_s, u"📅 jutro"_s);
+        QTest::newRow("escaped text after the rule")
+                << u"🔁 every week <b>x</b>"_s << chip(u"EF"_s, u"EB"_s, u"🔁 co tydzień"_s) + u" &lt;b&gt;x&lt;/b&gt;"_s;
+    }
+
+    void recurrenceChips()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
+    }
+
+    void longChipsWrapBetweenWords()
+    {
+        // A long chip may wrap at word boundaries (never inside a word); the emoji and short
+        // words ("co", "w", "2") stay with the next word.
+        const QString html = render(u"Raport 🔁 every 2 weeks on Wednesday, Saturday, Sunday"_s);
+        QCOMPARE(html, u"Raport <span style=\"background-color:EB;color:EF\">&nbsp;🔁&nbsp;co&nbsp;2&nbsp;tygodnie "
+                       u"w&nbsp;środę, sobotę, niedzielę&nbsp;</span>"_s);
+        // Short chips never wrap: no breakable space in their visible text.
+        QString visible = render(u"📅 2026-10-20"_s);
+        visible.remove(QRegularExpression(u"<[^>]*>"_s));
+        QCOMPARE(visible, u"&nbsp;📅&nbsp;wt&nbsp;20&nbsp;paź&nbsp;"_s);
     }
 
     void tasksAndChips()
@@ -287,6 +329,23 @@ private Q_SLOTS:
         QFETCH(QString, input);
         QFETCH(QString, expected);
         QCOMPARE(render(input), expected);
+    }
+
+    void transclusionsHidden()
+    {
+        // The editor shows embedded pages, sections and blocks in frames: their syntax is hidden,
+        // attachments and plain links stay.
+        RenderContext c = context();
+        c.hideTransclusions = true;
+        const InlineRenderer r(c);
+        QCOMPARE(r.render(u"Zobacz ![[Budżet#Październik]] i !((abc)) tutaj"),
+                 u"Zobacz  i  tutaj"_s);
+        QCOMPARE(r.render(u"![[Strona]] ![[Strona#^id1]]"), u" "_s);
+        QVERIFY(r.render(u"![[plan.png]]"_s).contains(u"📎"_s));
+        QVERIFY(r.render(u"[[Strona]] ((abc))"_s).contains(u"block:abc"_s));
+        QVERIFY(r.render(u"[[Strona]] ((abc))"_s).contains(u"page:Strona"_s));
+        // Off by default (query results, table cells): placeholder links.
+        QVERIFY(render(u"![[Budżet#Październik]]"_s).contains(u"page:Bud%C5%BCet#Pa%C5%BAdziernik"_s));
     }
 
     void taskCheckboxHidden()

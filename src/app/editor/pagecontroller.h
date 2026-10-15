@@ -19,6 +19,12 @@
 //
 // Folding is device-local: kept in memory and reported by foldStateChanged() as the lines of
 // folded blocks (`foldState`) for the shell to persist; restore with setFoldState().
+//
+// Beyond the page itself: tasks shown in ```query results and embeds are checked through
+// setTaskStatusAt() (this page: an undoable edit; other files: the host's QueryHost), pictures
+// and files are pasted / dropped / picked as attachments (EditorHost::saveAttachment, embedded
+// as `![[name]]`), and `titleRow` names a leading "# Title" the editor shows above the page
+// properties.
 #pragma once
 
 #include "blocklistmodel.h"
@@ -28,7 +34,9 @@
 #include <QPoint>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -95,6 +103,15 @@ class PageController : public QObject {
     Q_PROPERTY(int saveDelay READ saveDelay WRITE setSaveDelay NOTIFY saveDelayChanged FINAL)
     /// Lines of folded blocks (for the shell to persist per device).
     Q_PROPERTY(QVariantList foldState READ foldState NOTIFY foldStateChanged FINAL)
+    /// Row of a leading "# Title" heading that repeats the page title — the first block after
+    /// the page properties (-1 when there is none, and while zoomed). The editor shows the
+    /// properties panel right after it; the page header need not show the title again.
+    Q_PROPERTY(int titleRow READ titleRow NOTIFY titleRowChanged FINAL)
+    /// The host also runs queries and changes tasks in other files (an EditorHost that is a
+    /// QueryHost, see queryhost.h): live ```query results, checkable tasks in results and embeds.
+    Q_PROPERTY(bool queriesAvailable READ queriesAvailable NOTIFY hostChanged FINAL)
+    /// Name filters for picking a picture (FileDialog.nameFilters).
+    Q_PROPERTY(QStringList imageNameFilters READ imageNameFilters CONSTANT FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -135,6 +152,13 @@ public:
     int saveDelay() const { return m_saveTimer.interval(); }
     void setSaveDelay(int ms);
     QVariantList foldState() const;
+    int titleRow() const { return m_titleRow; }
+    bool queriesAvailable() const;
+    QStringList imageNameFilters() const;
+    /// Colours the renderer uses (from `palette`).
+    const markdown::Palette &rendererPalette() const { return m_model->palette(); }
+    /// The status a checkbox click gives: todo/doing/deferred -> "done", done/cancelled -> "todo".
+    static QString toggledStatus(const QString &status);
 
     /// Three-way merge used for external changes while dirty (base, local, remote). Defaults to
     /// sync::merge3 when the sync module is available; without one, conflicts keep local.
@@ -293,6 +317,43 @@ public:
     /// Returns "" when handled, or { action: "reminder", from, to } for the reminder dialog.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
+    // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------
+    /// Set the status of the task on `line` (0-based) of `path`: on this page as an editing
+    /// command (undo), in other files through the host's QueryHost. False when nothing changed or
+    /// the host cannot edit other files.
+    Q_INVOKABLE bool setTaskStatusAt(const QString &path, int line, const QString &status);
+    /// A checkbox click on a task shown elsewhere: toggledStatus(currentStatus) at path:line.
+    Q_INVOKABLE bool toggleTaskAt(const QString &path, int line, const QString &currentStatus);
+    /// Open `path` at `line` (-1: the page): this page gives { action: "scrollTo", row } for the
+    /// editor, other pages are opened through the host (route { view: "page", path, line }).
+    Q_INVOKABLE QVariantMap openLocation(const QString &path, int line, bool newPane = false);
+
+    // --- Attachments (pasted / dropped / picked pictures and files) ----------------------------------
+    /// The clipboard holds a picture (a screenshot, a copied image) or copied files to paste as
+    /// attachments instead of text.
+    Q_INVOKABLE bool clipboardHasImage() const;
+    /// Paste the clipboard's picture (PNG "Pasted image <yyyyMMddHHmmss>.png") or copied files as
+    /// attachments into [from, to) of the row's edit text. Returns { row, cursor } of the caret
+    /// (row -1 when there was nothing to paste or saving failed).
+    Q_INVOKABLE QVariantMap pasteImage(int row, int from, int to);
+    /// Store `data` as the attachment `fileName` (EditorHost::saveAttachment) and insert its embed
+    /// `![[name]]` into [from, to) of the row's edit text — or, for row -1 or a block that is not
+    /// text, as a new block after the row (at the end). Returns { row, cursor } (row -1: failed).
+    Q_INVOKABLE QVariantMap insertAttachment(int row, int from, int to, const QString &fileName, const QByteArray &data);
+    /// Dropped or picked files (file:// URLs, Android content:// documents): each is stored as an
+    /// attachment and embedded like insertAttachment(). Returns { row, cursor, count }.
+    Q_INVOKABLE QVariantMap insertFiles(int row, int from, int to, const QList<QUrl> &urls);
+    /// Like insertFiles(), always as a new block after `row` (-1: at the end of the page) — files
+    /// dropped on a block that is not being edited.
+    Q_INVOKABLE QVariantMap insertFilesAfter(int row, const QList<QUrl> &urls);
+    /// Browser (WebAssembly): the browser's file picker for a picture, inserted asynchronously like
+    /// insertAttachment() into the row (tracked while the picker is open). False elsewhere — use
+    /// a FileDialog and insertFiles() there.
+    Q_INVOKABLE bool pickImageInBrowser(int row, int from, int to);
+    /// The embed for an attachment at vault path `path`: "![[name]]" when the name finds it,
+    /// else "![[path]]".
+    Q_INVOKABLE QString embedFor(const QString &path) const;
+
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
@@ -322,6 +383,9 @@ Q_SIGNALS:
     void nowChanged();
     void saveDelayChanged();
     void foldStateChanged();
+    void titleRowChanged();
+    /// An attachment could not be read or stored (file name for the message).
+    void attachmentFailed(const QString &name);
     /// The edit text of `row` changed by something other than typing in it.
     void editTextReset(int row, const QString &text, int cursor);
     void saved();
@@ -369,6 +433,11 @@ private:
     void remapBlocks(const QHash<quint64, quint64> &mapping);
     /// Save now, or write the conflict copy while a conflict is unresolved.
     void flush();
+    void updateTitleRow();
+    /// Insert embeds of stored attachments (see insertAttachment()).
+    QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
+    /// Read and store files as attachments (attachmentFailed() for each one that fails).
+    QStringList storeFiles(const QList<QUrl> &urls);
 
     QPointer<EditorHost> m_host;
     QString m_path;
@@ -397,6 +466,7 @@ private:
     bool m_english = false;
     QString m_fixedNow;
     MergeFunction m_merge;
+    int m_titleRow = -1;
 
     // Command bookkeeping.
     int m_commandDepth = 0;

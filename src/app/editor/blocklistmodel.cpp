@@ -1,5 +1,6 @@
 #include "blocklistmodel.h"
 
+#include "blockrender_p.h"
 #include "editorhost.h"
 
 #include "calc/calc.h"
@@ -82,6 +83,88 @@ QList<std::pair<int, int>> matchBlocks(const QStringList &a, const QStringList &
 
 } // namespace
 
+namespace detail {
+
+QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const markdown::InlineRenderer &renderer,
+                       int *renderOffset)
+{
+    QString html;
+    int offset = 0;
+    switch (s.view) {
+    case BlockView::Text:
+        html = onlyEmbeds(e.body, true) ? QString() : renderer.render(e.body);
+        break;
+    case BlockView::Heading:
+        if (e.kind == BlockKind::Heading) {
+            html = renderer.renderBlock(e.body, BlockKind::Heading);
+        } else {
+            // "# Title" inside a list item: the heading line, then any further lines.
+            const QString rest = e.body.mid(s.editOffset);
+            const qsizetype nl = rest.indexOf(u'\n');
+            offset = s.editOffset;
+            html = renderer.renderBlock(nl < 0 ? rest : rest.left(nl), BlockKind::Heading);
+            if (nl >= 0)
+                html += u"<br/>"_s + renderer.render(QStringView(rest).sliced(nl + 1));
+        }
+        break;
+    case BlockView::Quote: html = renderer.renderBlock(e.body, BlockKind::Quote); break;
+    case BlockView::Callout: html = renderer.renderBlock(e.body, BlockKind::Callout); break;
+    case BlockView::Html: html = markdown::InlineRenderer::escape(e.body); break;
+    default: break;
+    }
+    if (renderOffset)
+        *renderOffset = offset;
+    return html;
+}
+
+QString richTextToPlain(const QString &html)
+{
+    QString out;
+    out.reserve(html.size());
+    bool inTag = false;
+    for (qsizetype i = 0; i < html.size(); ++i) {
+        const QChar c = html[i];
+        if (inTag) {
+            inTag = c != u'>';
+            continue;
+        }
+        if (c == u'<') {
+            inTag = true;
+            if (QStringView(html).sliced(i).startsWith(u"<br"))
+                out += u' ';
+            continue;
+        }
+        if (c == u'&') {
+            const qsizetype semi = html.indexOf(u';', i);
+            if (semi > i && semi - i <= 6) {
+                const QStringView entity = QStringView(html).sliced(i + 1, semi - i - 1);
+                QChar decoded;
+                if (entity == u"nbsp")
+                    decoded = QChar(0x00a0);
+                else if (entity == u"amp")
+                    decoded = u'&';
+                else if (entity == u"lt")
+                    decoded = u'<';
+                else if (entity == u"gt")
+                    decoded = u'>';
+                else if (entity == u"quot")
+                    decoded = u'"';
+                else if (entity == u"#39")
+                    decoded = u'\'';
+                if (!decoded.isNull()) {
+                    out += decoded;
+                    i = semi;
+                    continue;
+                }
+            }
+        }
+        out += c;
+    }
+    return out;
+}
+
+} // namespace detail
+
 BlockListModel::BlockListModel(QObject *parent) : QAbstractListModel(parent), m_today(QDate::currentDate()) {}
 
 BlockListModel::~BlockListModel() = default;
@@ -124,6 +207,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {LineRole, "line"},
             {UidRole, "uid"},
             {PlainTextRole, "plainText"},
+            {TransclusionsRole, "transclusions"},
     };
 }
 
@@ -406,6 +490,7 @@ void BlockListModel::invalidateContent(quint64 uid)
     it->shapeValid = false;
     it->htmlValid = false;
     it->embedsValid = false;
+    it->transclusionsValid = false;
 }
 
 void BlockListModel::emitRowsChanged(const QList<int> &rows, const QList<int> &roles)
@@ -451,6 +536,7 @@ void BlockListModel::refresh(bool contentChanged)
     QList<int> calcRows;
     QList<int> tableRows;
     QList<int> htmlRows;
+    QList<int> transclusionRows;
     for (int row = 0; row < n; ++row) {
         const int i = docIndexOfRow(row);
         if (i < 0)
@@ -510,11 +596,20 @@ void BlockListModel::refresh(bool contentChanged)
             if (renderHtml(i) != before)
                 htmlRows.append(row);
         }
+        // Embeds of this page show its current text.
+        if (st.transclusionsValid && st.transclusionsLocal) {
+            const QVariantList before = st.transclusions;
+            st.transclusionsValid = false;
+            ensureTransclusions(row);
+            if (st.transclusions != before)
+                transclusionRows.append(row);
+        }
     }
     emitRowsChanged(structural, StructuralRoles);
     emitRowsChanged(calcRows, {CalcResultsRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(htmlRows, {HtmlRole});
+    emitRowsChanged(transclusionRows, {TransclusionsRole});
 }
 
 QVariantList BlockListModel::computeCalcResults(int i) const
@@ -544,9 +639,31 @@ QVariantMap BlockListModel::computeTableData(int i) const
         return {};
     const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     const calc::TableEval eval = calc::evaluateTable(*model, locale, calc::pageScope(text(), e.line, locale));
+    // Cells are inline Markdown (bold, links, tags, chips): rendered like paragraphs, cached by
+    // their text until the rendering changes (theme, index, language, today).
+    RowState &st = stateFor(e.uid);
+    std::optional<markdown::InlineRenderer> renderer;
+    const auto cellHtml = [&](const QString &cell) -> QString {
+        if (cell.trimmed().isEmpty())
+            return {};
+        const auto cached = st.cellHtml.constFind(cell);
+        if (cached != st.cellHtml.constEnd())
+            return *cached;
+        if (!renderer) {
+            markdown::RenderContext ctx = renderContext(i);
+            ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
+            renderer.emplace(ctx);
+        }
+        const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
+        st.cellHtml.insert(cell, html);
+        return html;
+    };
     QVariantList aligns;
     for (const calc::TableAlign a : model->aligns)
         aligns.append(alignName(a));
+    QVariantList headerHtml;
+    for (const QString &h : model->header)
+        headerHtml.append(cellHtml(h));
     QVariantList rows;
     for (qsizetype r = 0; r < model->rows.size(); ++r) {
         QVariantList cells;
@@ -559,11 +676,21 @@ QVariantMap BlockListModel::computeTableData(int i) const
                 display = eval.values[r][c];
             if (r < eval.errors.size() && c < eval.errors[r].size())
                 error = eval.errors[r][c];
-            cells.append(QVariantMap{{u"text"_s, cell}, {u"display"_s, display}, {u"error"_s, error}, {u"formula"_s, formula}});
+            // Formula results (and errors) are values, not Markdown.
+            const QString html = formula || !error.isEmpty() ? markdown::InlineRenderer::escape(display) : cellHtml(cell);
+            cells.append(QVariantMap{{u"text"_s, cell},
+                                     {u"display"_s, display},
+                                     {u"html"_s, html},
+                                     {u"plain"_s, formula ? display : detail::richTextToPlain(html)},
+                                     {u"error"_s, error},
+                                     {u"formula"_s, formula}});
         }
         rows.append(QVariant(cells));
     }
-    return {{u"header"_s, QVariant(QStringList(model->header))}, {u"aligns"_s, aligns}, {u"rows"_s, rows}};
+    return {{u"header"_s, QVariant(QStringList(model->header))},
+            {u"headerHtml"_s, headerHtml},
+            {u"aligns"_s, aligns},
+            {u"rows"_s, rows}};
 }
 
 markdown::RenderContext BlockListModel::renderContext(int docIndex) const
@@ -573,6 +700,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     ctx.palette = m_palette;
     ctx.taskCheckbox = false;
+    ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
     const QPointer<EditorHost> host = m_host;
     const QString path = m_path;
     if (host) {
@@ -612,6 +740,44 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     return ctx;
 }
 
+markdown::RenderContext BlockListModel::renderContextFor(const QString &path, const QString &content, int line) const
+{
+    markdown::RenderContext ctx;
+    ctx.today = m_today;
+    ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
+    ctx.palette = m_palette;
+    ctx.taskCheckbox = false;
+    ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
+    const QPointer<EditorHost> host = m_host;
+    if (host) {
+        ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {
+            if (!host)
+                return target;
+            const QString resolved = host->resolveLink(target, path);
+            if (resolved.isEmpty())
+                return std::nullopt;
+            return resolved;
+        };
+        ctx.blockText = [host](const QString &id) -> std::optional<QString> {
+            const QString t = host ? host->blockText(id) : QString();
+            if (t.isEmpty())
+                return std::nullopt;
+            return t.simplified();
+        };
+    }
+    const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
+    auto scope = std::make_shared<std::optional<calc::Scope>>();
+    ctx.inlineCalc = [scope, content, line, locale](const QString &expr) -> QString {
+        if (!scope->has_value())
+            *scope = calc::pageScope(content, line, locale);
+        const calc::CalcLineResult r = calc::evaluateInline(expr, **scope, locale);
+        if (r.hasValue())
+            return r.value;
+        return r.hasError() ? u"#ERR"_s : QString();
+    };
+    return ctx;
+}
+
 QString BlockListModel::renderHtml(int i) const
 {
     const markdown::BlockEntry &e = m_doc.at(i);
@@ -620,30 +786,8 @@ QString BlockListModel::renderHtml(int i) const
         return st.html;
     const BlockShape s = shapeOf(e);
     const markdown::InlineRenderer renderer(renderContext(i));
-    QString html;
     int offset = 0;
-    switch (s.view) {
-    case BlockView::Text:
-        html = onlyEmbeds(e.body) ? QString() : renderer.render(e.body);
-        break;
-    case BlockView::Heading:
-        if (e.kind == BlockKind::Heading) {
-            html = renderer.renderBlock(e.body, BlockKind::Heading);
-        } else {
-            // "# Title" inside a list item: the heading line, then any further lines.
-            const QString rest = e.body.mid(s.editOffset);
-            const qsizetype nl = rest.indexOf(u'\n');
-            offset = s.editOffset;
-            html = renderer.renderBlock(nl < 0 ? rest : rest.left(nl), BlockKind::Heading);
-            if (nl >= 0)
-                html += u"<br/>"_s + renderer.render(QStringView(rest).sliced(nl + 1));
-        }
-        break;
-    case BlockView::Quote: html = renderer.renderBlock(e.body, BlockKind::Quote); break;
-    case BlockView::Callout: html = renderer.renderBlock(e.body, BlockKind::Callout); break;
-    case BlockView::Html: html = markdown::InlineRenderer::escape(e.body); break;
-    default: break;
-    }
+    const QString html = detail::renderBodyHtml(e, s, renderer, &offset);
     st.html = html;
     st.htmlValid = true;
     st.renderOffset = offset;
@@ -666,10 +810,10 @@ void BlockListModel::ensureEmbeds(int row) const
     const BlockView view = cachedShape(row).view;
     if (view != BlockView::Text && view != BlockView::Heading && view != BlockView::Quote && view != BlockView::Callout)
         return;
+    st.onlyEmbeds = view == BlockView::Text && (e.body.contains(u"![") || e.body.contains(u"!((")) && onlyEmbeds(e.body, true);
     const QList<Embed> embeds = embedsOf(e.body);
     if (embeds.isEmpty())
         return;
-    st.onlyEmbeds = view == BlockView::Text && onlyEmbeds(e.body);
     QString attachments = u"assets"_s;
     if (m_host) {
         const QString folder = m_host->vaultConfig().value(u"attachmentsFolder"_s).toString();
@@ -738,6 +882,7 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case CalloutFoldedRole: return cachedShape(row).calloutFolded;
     case LineRole: return e.line;
     case UidRole: return QString::number(e.uid);
+    case TransclusionsRole: ensureTransclusions(row); return stateFor(e.uid).transclusions;
     default: return {};
     }
 }
@@ -883,9 +1028,26 @@ void BlockListModel::invalidateRendering()
     for (auto it = m_state.begin(); it != m_state.end(); ++it) {
         it->htmlValid = false;
         it->embedsValid = false;
+        it->transclusionsValid = false;
+        it->cellHtml.clear();
+    }
+    // Table cells are rendered too (links resolve differently, other colours).
+    QList<int> tableRows;
+    for (int row = 0; row < m_rows.size(); ++row) {
+        const int i = docIndexOfRow(row);
+        if (i < 0 || cachedShape(row).view != BlockView::Table)
+            continue;
+        RowState &st = stateFor(m_rows[row]);
+        QVariantMap table = computeTableData(i);
+        if (table != st.tableData) {
+            st.tableData = table;
+            tableRows.append(row);
+        }
     }
     if (!m_rows.isEmpty())
-        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), {HtmlRole, EmbedsRole, OnlyEmbedsRole});
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
+                           {HtmlRole, EmbedsRole, OnlyEmbedsRole, TransclusionsRole});
+    emitRowsChanged(tableRows, {TableDataRole});
 }
 
 } // namespace brulion::editor

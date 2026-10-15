@@ -22,6 +22,12 @@ import Brulion
 // Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter, Ctrl+., Esc clear.
 // Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
 // that need input open EditorDialogs; on touch UIs MobileEditToolbar sits above the keyboard.
+// Pictures: Ctrl+V pastes a copied picture (or copied files) as an attachment `![[…]]`, files
+// dropped on the page are stored and embedded (in the block being edited at the caret, else in
+// a new block after the one under the drop), "/Obraz…" and the toolbar pick files.
+// A leading "# Title" repeating the page title is shown above the page properties
+// (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
+// `notice(text, kind)` tells about problems the host should show as a toast.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
@@ -57,6 +63,41 @@ FocusScope {
     readonly property real toolbarHeight: toolbar.height
     /// Top of the mobile toolbar (it sits on the virtual keyboard): text below it is hidden.
     readonly property real toolbarTop: toolbarVisible ? toolbar.y : height
+
+    /// Something to tell the user (a toast): kind "error" | "info".
+    signal notice(string text, string kind)
+
+    // The title above the properties panel (BlockDelegate trades their places on screen): set by
+    // those two delegates.
+    readonly property bool titleFirst: controller !== null && controller.titleRow > 0 && controller.zoomBlock < 0
+    property real titleHeight: 0
+    property real propertiesHeight: 0
+
+    /// The next / previous visible row in on-screen order (the title above the properties).
+    function visualNext(row) {
+        if (titleFirst) {
+            const t = controller.titleRow
+            if (row === -1)
+                return t
+            if (row === t)
+                return t - 1
+            if (row === t - 1)
+                return controller.nextVisibleRow(t)
+        }
+        return controller.nextVisibleRow(row)
+    }
+    function visualPrevious(row) {
+        if (titleFirst) {
+            const t = controller.titleRow
+            if (row === t)
+                return -1
+            if (row === t - 1)
+                return t
+            if (controller.previousVisibleRow(row) === t)
+                return t - 1
+        }
+        return controller.previousVisibleRow(row)
+    }
 
     // Navigation between blocks with Up/Down keeps the caret's x position.
     property real navigationX: -1
@@ -255,6 +296,7 @@ FocusScope {
         case "recurrence": dialogs.pickRecurrence(row); break
         case "date": dialogs.pickJournalDate(row, result.cursor); break
         case "template": dialogs.pickTemplate(row); break
+        case "image": dialogs.pickImage(row, result.cursor); break
         case "table":
             list.forceActiveFocus()
             break
@@ -372,6 +414,13 @@ FocusScope {
             }
         }
 
+        // A copied picture (or copied files) goes in as an attachment, not as text.
+        if (((ctrl && !alt && !shift && event.key === Qt.Key_V) || (shift && !ctrl && event.key === Qt.Key_Insert))
+                && !multiline && controller.clipboardHasImage()) {
+            const pasted = controller.pasteImage(row, edit.selectionStart, edit.selectionEnd)
+            if (pasted.row >= 0)
+                return true
+        }
         if (ctrl && !alt) {
             switch (event.key) {
             case Qt.Key_Z:
@@ -444,13 +493,13 @@ FocusScope {
             return true
         case Qt.Key_Up:
             if (!shift && isFirstLine(edit)) {
-                goToRow(controller.previousVisibleRow(row), "bottom", edit.cursorRectangle.x)
+                goToRow(visualPrevious(row), "bottom", edit.cursorRectangle.x)
                 return true
             }
             return false
         case Qt.Key_Down:
             if (!shift && isLastLine(edit)) {
-                goToRow(controller.nextVisibleRow(row), "top", edit.cursorRectangle.x)
+                goToRow(visualNext(row), "top", edit.cursorRectangle.x)
                 return true
             }
             return false
@@ -514,7 +563,7 @@ FocusScope {
         }
         if (row < 0) {
             if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
-                const first = event.key === Qt.Key_Down ? controller.nextVisibleRow(-1) : controller.lastVisibleRow()
+                const first = event.key === Qt.Key_Down ? visualNext(-1) : controller.lastVisibleRow()
                 controller.selectedRow = first
                 ensureRowVisible(first)
                 return true
@@ -528,12 +577,12 @@ FocusScope {
         }
         switch (event.key) {
         case Qt.Key_Up: {
-            const prev = controller.previousVisibleRow(row)
+            const prev = visualPrevious(row)
             if (prev >= 0) { controller.selectedRow = prev; ensureRowVisible(prev) }
             return true
         }
         case Qt.Key_Down: {
-            const next = controller.nextVisibleRow(row)
+            const next = visualNext(row)
             if (next >= 0) { controller.selectedRow = next; ensureRowVisible(next) }
             return true
         }
@@ -602,6 +651,9 @@ FocusScope {
         function onSourceModeChanged() {
             if (!editor.controller.sourceMode)
                 list.forceActiveFocus()
+        }
+        function onAttachmentFailed(name) {
+            editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error")
         }
     }
 
@@ -755,6 +807,61 @@ FocusScope {
         T.ScrollBar.vertical: BScrollBar {}
         // The header (page title) gets its height after the first layout: start at the top.
         Component.onCompleted: Qt.callLater(() => list.positionViewAtBeginning())
+    }
+
+    // ---- Files dropped on the page: attachments ------------------------------------------------
+    DropArea {
+        id: fileDrop
+        anchors.fill: list
+        enabled: editor.controller !== null && !editor.controller.sourceMode
+        keys: ["text/uri-list"]
+        onEntered: (drag) => drag.accepted = drag.hasUrls
+        onDropped: (drop) => {
+            if (!drop.hasUrls || !editor.controller)
+                return
+            const p = list.contentItem.mapFromItem(fileDrop, drop.x, drop.y)
+            const row = list.indexAt(editor.contentX + 1, p.y)
+            const c = editor.controller
+            if (row >= 0 && row === c.editingRow && editor.activeEditor && editor.activeEditor.row === row)
+                c.insertFiles(row, editor.activeEditor.selectionStart, editor.activeEditor.selectionEnd, drop.urls)
+            else
+                c.insertFilesAfter(row, drop.urls)
+            drop.acceptProposedAction()
+        }
+    }
+    Rectangle {
+        // While files are dragged over the page.
+        visible: fileDrop.containsDrag
+        anchors.fill: list
+        anchors.margins: Theme.space2
+        radius: Theme.radiusLg
+        color: Theme.alpha(Theme.info, 0.06)
+        border.width: 2
+        border.color: Theme.alpha(Theme.focusRing, 0.6)
+        z: 5
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: Theme.space4
+            width: dropLabel.implicitWidth + 2 * Theme.space4
+            height: dropLabel.implicitHeight + 2 * Theme.space2
+            radius: height / 2
+            color: Theme.bgElevated
+            border.width: 1
+            border.color: Theme.border
+            Row {
+                id: dropLabel
+                anchors.centerIn: parent
+                spacing: Theme.space2
+                BIcon { name: "image"; size: Theme.iconSizeSm; color: Theme.fgMuted; anchors.verticalCenter: parent.verticalCenter }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Drop to add to this page")
+                    font.family: Theme.fontUi
+                    font.pixelSize: Theme.textSm
+                    color: Theme.fg
+                }
+            }
+        }
     }
 
     Loader {
