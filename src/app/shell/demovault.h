@@ -1,8 +1,9 @@
-// The sample vault "Przykładowy brulion": a Polish guide page that shows every feature with
-// live examples (outliner, links, tags, block references, tasks, reminders and alarms, calc
-// blocks, tables with formulas, queries, embeds, callouts, templates, calendar, sync,
-// import/export, shortcuts), daily notes for today / yesterday / a week ago, project pages
-// with tables and formulas, templates and an image. Dates are relative to `now`, so tasks,
+// The sample vault "Przykładowy brulion": a Polish guide page — a document (`brulion: document`)
+// — that shows every feature with live examples (the two note modes, outliner, links, tags, block
+// references, tasks, reminders and alarms, calc blocks, tables with formulas, queries, embeds,
+// callouts, templates, calendar, sync, import/export, shortcuts), daily notes for today /
+// yesterday / a week ago (outlines), project pages with tables and formulas (the renovation one
+// an outline: `brulion: outline`), templates and an image. Dates are relative to `now`, so tasks,
 // reminders and the calendar look alive whenever it is created.
 #pragma once
 

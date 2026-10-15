@@ -4,12 +4,17 @@ import QtQuick.Layouts
 import Brulion
 
 // ShellNewPageDialog — name a new page (or folder) and open it. `folder` = where ("" = the
-// vault's folder for new pages); a "/" in the title creates folders ("Projekty/Dom").
+// vault's folder for new pages); a "/" in the title creates folders ("Projekty/Dom"). A page gets
+// its note mode here (ContentNoteModeChoice: document like Obsidian / outline like Logseq,
+// preselected from the last choice or the notebook's default; Workspace.createPage writes the
+// `brulion:` key only when needed).
 BDialog {
     id: dialog
 
     property string folder
     property bool folderMode: false
+    /// The new page's note mode: "document" | "outline".
+    property string mode: "document"
 
     function openFor(folderPath, makeFolder) {
         folder = folderPath || ""
@@ -23,9 +28,12 @@ BDialog {
     acceptText: qsTr("Create")
     acceptEnabled: nameField.text.trim() !== ""
     initialFocusItem: nameField
-    preferredWidth: Theme.dialogWidthSm
+    preferredWidth: folderMode ? Theme.dialogWidthSm : Theme.dialogWidth
 
-    onAboutToShow: nameField.text = ""
+    onAboutToShow: {
+        nameField.text = ""
+        mode = modeChoice.preferred()
+    }
     onAccepted: {
         const name = nameField.text.trim()
         if (folderMode) {
@@ -34,7 +42,8 @@ BDialog {
                 AppController.toast(qsTr("Could not create the folder."), "error")
             return
         }
-        const created = folder !== "" ? Workspace.createPage(name, folder) : Workspace.createPage(name)
+        modeChoice.remember(mode)
+        const created = Workspace.createPage(name, folder !== "" ? folder : (Workspace.config.newPagesFolder || ""), mode)
         if (created !== "")
             AppController.openPage(created)
     }
@@ -53,5 +62,14 @@ BDialog {
         variant: "faint"
         font.pixelSize: Theme.textSm
         wrapMode: Text.Wrap
+    }
+    ContentNoteModeChoice {
+        id: modeChoice
+        objectName: "newPageModeChoice"
+        visible: !dialog.folderMode
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.space2
+        mode: dialog.mode
+        onActivated: (value) => dialog.mode = value
     }
 }

@@ -17,6 +17,13 @@ import Brulion
 //   source    source mode (Ctrl+E)
 //   sidepanel "Przepisy" opened in the side panel next to this page (wide windows)
 //   empty     an existing but empty page ("Pusta strona.md" is written empty and opened)
+//   doc-paragraph / doc-list / doc-heading   the guide is a document (Obsidian-like): editing its
+//             first paragraph (caret in the middle), a list item of "Dokument i konspekt", that
+//             section's heading
+//   doc-outline  the guide switched to an outline (the header's toggle), nothing else changed
+//   edit:<text>[@<caret>]  any page (--route): edit the block whose text starts with <text>
+//             (one word: the screenshot scripts split arguments at spaces), caret at the end or
+//             at <caret>
 Item {
     id: script
 
@@ -85,10 +92,31 @@ Item {
             case "sidepanel":
                 AppController.openPage("Przepisy.md", -1, true)
                 break
+            case "doc-paragraph":
+                script.editor.startEditing(script.rowOf("Brulion to notatnik"), 58)
+                break
+            case "doc-list":
+                script.editor.startEditing(script.rowOf("Dokument, jak w Obsidianie"), -1)
+                break
+            case "doc-heading": {
+                const row = script.rowOf("Dokument i konspekt")
+                script.editor.startEditing(row, -1)
+                break
+            }
+            case "doc-outline":
+                script.controller.setMode("outline")
+                break
             case "empty":
                 if (script.controller.path !== "Pusta strona.md") {
                     Workspace.writeFile("Pusta strona.md", "")
                     AppController.openPage("Pusta strona.md", -1, false)
+                }
+                break
+            default:
+                if (script.scenario.indexOf("edit:") === 0) {
+                    const spec = script.scenario.substring(5).split("@")
+                    const row = script.rowOf(spec[0])
+                    script.editor.startEditing(row, spec.length > 1 ? parseInt(spec[1]) : -1)
                 }
                 break
             }

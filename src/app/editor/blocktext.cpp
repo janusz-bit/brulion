@@ -3,6 +3,7 @@
 #include "calc/table.h"
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
+#include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
 #include "text/text.h"
@@ -421,8 +422,12 @@ QVariantList frontmatterProperties(const QString &body)
         if (!content.endsWith(u'\n'))
             content += u'\n';
         const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
-        for (const QString &key : fm.keys)
+        for (const QString &key : fm.keys) {
+            // The note mode is the page header's mode toggle, not a property to show.
+            if (key == markdown::NoteModeKey)
+                continue;
             out.append(QVariantMap{{u"key"_s, key}, {u"value"_s, valueText(fm.data.value(key))}});
+        }
         return out;
     }
     for (const text::Line &l : text::splitLines(body)) {
@@ -433,6 +438,17 @@ QVariantList frontmatterProperties(const QString &body)
         }
     }
     return out;
+}
+
+bool onlyNoteModeKey(const QString &body)
+{
+    if (!body.trimmed().startsWith(u"---"))
+        return false;
+    QString content = body;
+    if (!content.endsWith(u'\n'))
+        content += u'\n';
+    const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
+    return fm.keys == QStringList{markdown::NoteModeKey.toString()};
 }
 
 QList<Embed> embedsOf(QStringView body)
@@ -736,6 +752,10 @@ VaultConfig vaultConfigFromMap(const QVariantMap &m)
     const int ws = m.value(u"weekStartsOn"_s).toInt();
     if (ws >= 1 && ws <= 7)
         c.weekStartsOn = Qt::DayOfWeek(ws);
+    if (const auto mode = markdown::parseNoteMode(m.value(u"journalMode"_s).toString()))
+        c.journalMode = *mode;
+    if (const auto mode = markdown::parseNoteMode(m.value(u"pageMode"_s).toString()))
+        c.pageMode = *mode;
     return c;
 }
 

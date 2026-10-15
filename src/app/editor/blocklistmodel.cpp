@@ -18,10 +18,10 @@ namespace brulion::editor {
 
 namespace {
 
-const QList<int> StructuralRoles{BlockListModel::DepthRole,    BlockListModel::HasChildrenRole,
-                                 BlockListModel::CollapsedRole, BlockListModel::VisibleRole,
-                                 BlockListModel::IsEditingRole, BlockListModel::IsSelectedRole,
-                                 BlockListModel::IsZoomRootRole};
+const QList<int> StructuralRoles{BlockListModel::DepthRole,      BlockListModel::HasChildrenRole,
+                                 BlockListModel::CollapsedRole,  BlockListModel::VisibleRole,
+                                 BlockListModel::IsEditingRole,  BlockListModel::IsSelectedRole,
+                                 BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole};
 
 QString alignName(calc::TableAlign a)
 {
@@ -212,6 +212,9 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {UidRole, "uid"},
             {PlainTextRole, "plainText"},
             {TransclusionsRole, "transclusions"},
+            {ListMarkerRole, "listMarker"},
+            {PrevKindRole, "prevKind"},
+            {NoteModeOnlyRole, "noteModeOnly"},
     };
 }
 
@@ -262,7 +265,9 @@ const BlockShape &BlockListModel::cachedShape(int row) const
         return empty;
     RowState &st = stateFor(m_rows[row]);
     if (!st.shapeValid) {
-        st.shape = shapeOf(m_doc.at(i));
+        const markdown::BlockEntry &e = m_doc.at(i);
+        st.shape = shapeOf(e);
+        st.noteModeOnly = st.shape.view == BlockView::Frontmatter && onlyNoteModeKey(e.body);
         st.shapeValid = true;
     }
     return st.shape;
@@ -541,17 +546,27 @@ void BlockListModel::refresh(bool contentChanged)
     QList<int> tableRows;
     QList<int> htmlRows;
     QList<int> transclusionRows;
+    QString prevKind; // of the last visible row
+    int visibleCount = 0;
     for (int row = 0; row < n; ++row) {
         const int i = docIndexOfRow(row);
         if (i < 0)
             continue;
         const markdown::BlockEntry &e = m_doc.at(i);
+        // The shape first: it may create the row's state (a reference taken before would dangle).
+        bool noteModeOnly = false;
+        if (e.kind == BlockKind::Frontmatter) {
+            (void)cachedShape(row);
+            noteModeOnly = stateFor(e.uid).noteModeOnly;
+        }
         RowState &st = stateFor(e.uid);
         RowState next = st;
         next.hasChildren = m_doc.hasChildren(i);
-        next.collapsed = next.hasChildren && m_collapsed.contains(e.uid);
+        next.collapsed = m_foldingEnabled && next.hasChildren && m_collapsed.contains(e.uid);
+        next.editing = m_editingUid && e.uid == m_editingUid;
+        next.selected = m_selectedUid && e.uid == m_selectedUid;
         bool visible = zoomRow < 0 || (i >= zoomRange.first && i <= zoomRange.last());
-        if (visible) {
+        if (visible && m_foldingEnabled) {
             for (int p = e.parent; p >= 0; p = m_doc.at(p).parent) {
                 if (p == zoomRow)
                     break;
@@ -561,14 +576,20 @@ void BlockListModel::refresh(bool contentChanged)
                 }
             }
         }
+        // Frontmatter with nothing but the note mode: shown only while it is edited or selected.
+        if (noteModeOnly && !next.editing && !next.selected)
+            visible = false;
         next.visible = visible;
         next.displayDepth = std::max(0, e.depth - zoomDepth);
-        next.editing = m_editingUid && e.uid == m_editingUid;
-        next.selected = m_selectedUid && e.uid == m_selectedUid;
         next.zoomRoot = row == zoomRow;
+        next.prevKind = prevKind;
+        if (visible) {
+            prevKind = kindName(e.kind);
+            ++visibleCount;
+        }
         if (next.hasChildren != st.hasChildren || next.collapsed != st.collapsed || next.visible != st.visible
             || next.displayDepth != st.displayDepth || next.editing != st.editing || next.selected != st.selected
-            || next.zoomRoot != st.zoomRoot) {
+            || next.zoomRoot != st.zoomRoot || next.prevKind != st.prevKind) {
             st.hasChildren = next.hasChildren;
             st.collapsed = next.collapsed;
             st.visible = next.visible;
@@ -576,6 +597,7 @@ void BlockListModel::refresh(bool contentChanged)
             st.editing = next.editing;
             st.selected = next.selected;
             st.zoomRoot = next.zoomRoot;
+            st.prevKind = next.prevKind;
             structural.append(row);
         }
         if (!contentChanged)
@@ -610,6 +632,10 @@ void BlockListModel::refresh(bool contentChanged)
         }
     }
     emitRowsChanged(structural, StructuralRoles);
+    if (visibleCount != m_visibleCount) {
+        m_visibleCount = visibleCount;
+        Q_EMIT visibleCountChanged();
+    }
     emitRowsChanged(calcRows, {CalcResultsRole});
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(htmlRows, {HtmlRole});
@@ -896,6 +922,9 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case LineRole: return e.line;
     case UidRole: return QString::number(e.uid);
     case TransclusionsRole: ensureTransclusions(row); return stateFor(e.uid).transclusions;
+    case ListMarkerRole: return e.kind == BlockKind::ListItem ? e.prefix.trimmed() : QString();
+    case PrevKindRole: return st.prevKind;
+    case NoteModeOnlyRole: (void)cachedShape(row); return stateFor(e.uid).noteModeOnly;
     default: return {};
     }
 }
@@ -914,7 +943,8 @@ QVariantMap BlockListModel::get(int row) const
             {u"visible"_s, data(idx, VisibleRole)},
             {u"blockId"_s, data(idx, BlockIdRole)},
             {u"headingLevel"_s, data(idx, HeadingLevelRole)},
-            {u"plainText"_s, data(idx, PlainTextRole)}};
+            {u"plainText"_s, data(idx, PlainTextRole)},
+            {u"listMarker"_s, data(idx, ListMarkerRole)}};
 }
 
 // --- View state ------------------------------------------------------------------------------
@@ -948,6 +978,14 @@ void BlockListModel::setCollapsed(int row, bool collapsed)
 void BlockListModel::setCollapsedUids(const QSet<quint64> &uids)
 {
     m_collapsed = uids;
+    refresh(false);
+}
+
+void BlockListModel::setFoldingEnabled(bool enabled)
+{
+    if (m_foldingEnabled == enabled)
+        return;
+    m_foldingEnabled = enabled;
     refresh(false);
 }
 

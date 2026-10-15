@@ -1,10 +1,9 @@
 // CommandModel — the commands of the command palette (Ctrl+K, QML singleton `CommandModel`):
-// navigation, journals, new page, quick capture, theme, language, sync, panels, settings,
-// about. `commands` is the array BCommandPalette takes ({ id, title, subtitle, icon, shortcut,
-// enabled }); QML runs the chosen one with run(id). Commands that only move around or change
-// state run here; those that open shell popups (new page, quick switcher, capture, about,
-// theme toggle — the effective theme is known to QML only) come back as
-// AppController::uiActionRequested(action).
+// navigation, journals, new page, quick capture, the page's source and note mode, theme,
+// language, sync, panels, settings, about. `commands` is the array BCommandPalette takes ({ id, title, subtitle, icon,
+// shortcut, enabled }); QML runs the chosen one with run(id). Commands that only move around or change state run here;
+// those that open shell popups (new page, quick switcher, capture, about, theme toggle — the effective theme is known
+// to QML only) come back as AppController::uiActionRequested(action).
 //
 // Titles are translated (tr); `commands` is re-read after a language switch.
 #pragma once

@@ -44,6 +44,7 @@ QString fill(QString text, const QHash<QString, QString> &vars)
 const auto kWelcome = uR"md(---
 tags: [przewodnik]
 aliases: [Przewodnik, Start]
+brulion: document
 ---
 # Witaj w Brulionie
 
@@ -52,13 +53,21 @@ Brulion to notatnik w zwykłych plikach Markdown. Działa bez internetu — na k
 > [!tip] Od czego zacząć?
 > Otwórz [[{today}|dzisiejszy dziennik]] (Ctrl+J) i zapisz pierwszą myśl. Każdy punkt listy (linia zaczynająca się od myślnika) to osobny blok.
 
+## Dokument i konspekt
+Każda notatka ma jeden z dwóch trybów. Przełączysz go ikoną obok tytułu strony, w menu strony albo poleceniem „Przełącz tryb notatki” (Ctrl+K).
+
+- **Dokument**, jak w Obsidianie — tak wygląda ta strona. Akapity, nagłówki i listy czyta się jak zwykły tekst; kliknij akapit, żeby go zmienić.
+- **Konspekt**, jak w Logsequ — tak wyglądają dziennik i [[Remont mieszkania]]. Każdy punkt to blok z kropką, który można wcinać, zwijać i przybliżać.
+
+Tryb jest zapisany w samej notatce (właściwość `brulion: document` albo `brulion: outline`), więc na każdym urządzeniu wygląda tak samo. Nową stronę od razu tworzysz w wybranym trybie, a domyślne tryby ustawisz w Ustawieniach → Notatnik.
+
 ## Konspekt
 - Każdy punkt listy to **blok**. Kliknij go, żeby edytować.
   - Tab wcina blok razem z jego dziećmi, Shift+Tab go wysuwa.
   - Alt+↑ i Alt+↓ przesuwają blok w górę i w dół.
-    - Kliknij kropkę przy bloku, żeby się do niego przybliżyć.
-- Enter dzieli blok w miejscu kursora, Backspace na początku łączy go z poprzednim.
-- Ctrl+. zwija i rozwija dzieci bloku.
+    - W konspekcie kliknij kropkę przy bloku, żeby się do niego przybliżyć.
+- Enter dzieli blok w miejscu kursora; w dokumencie Enter w pustym punkcie kończy listę.
+- Ctrl+. zwija i rozwija dzieci bloku w konspekcie.
 
 ## Linki i odwołania
 - Link do strony: [[Remont mieszkania]]. Strona jeszcze nie istnieje? Kliknięcie ją utworzy: [[Pomysły na prezenty]].
@@ -213,6 +222,7 @@ const auto kWeekAgo = uR"md(- Początek remontu! #projekt/dom
 const auto kRemont = uR"md(---
 tags: [projekt/dom]
 status: w toku
+brulion: outline
 ---
 # Remont mieszkania
 

@@ -192,7 +192,12 @@ public:
     /// page differing only in letter case ("dom" next to "Dom.md") is that page: its path is
     /// returned (noticeOccurred() says so) — case-insensitive storage holds one file for both.
     /// Folders are used as spelled in the vault ("projekty/Dom" -> "Projekty/Dom.md").
-    Q_INVOKABLE QString createPage(const QString &title, const QString &folder = QString());
+    /// `mode` ("document" | "outline", "" = the notebook's default): the note mode chosen in the
+    /// new-page dialog — written as the frontmatter key `brulion:` only when the page would not
+    /// get that mode anyway (markdown::withNoteModeChoice; the existing page of a letter-case twin
+    /// is never changed).
+    Q_INVOKABLE QString createPage(const QString &title, const QString &folder = QString(),
+                                   const QString &mode = QString());
     Q_INVOKABLE bool createFolder(const QString &path);
     /// Rename a page in place and rewrite links to it in every file. Returns the new path or
     /// "" (target exists, invalid name, I/O error).
@@ -272,7 +277,8 @@ public:
 
     // ---- Configuration ----------------------------------------------------------------------
     /// Save .brulion/config.json from a map with the keys of vaultConfig() (missing keys keep
-    /// their value). False for an unusable journal file format or on I/O errors.
+    /// their value; journalMode / pageMode "outline" | "document"). False for an unusable journal
+    /// file format, an unknown mode or on I/O errors.
     Q_INVOKABLE bool setConfig(const QVariantMap &config);
     /// Problems found in .brulion/config.json (English, for the settings page).
     Q_INVOKABLE QStringList configWarnings() const;

@@ -8,8 +8,9 @@ import Brulion
 // cancels) — with the favourite star and the page menu, previous / next day arrows for daily
 // notes, the folder breadcrumb in the side panel (the shell's top bar shows it otherwise), and
 // the page's aliases and tags as chips (the editor shows all properties in its collapsed
-// "Właściwości" block). An empty page gets a "Start writing" button; a page that does not
-// exist yet says that typing creates it.
+// "Właściwości" block). Next to the star: the note mode toggle (document / outline; its icon
+// shows the current mode, a click asks for the other one: modeToggleRequested). An empty page
+// gets a "Start writing" button; a page that does not exist yet says that typing creates it.
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -33,14 +34,25 @@ Item {
 
     signal renameRequested(string title)
     signal menuRequested(Item anchor)
+    /// The mode toggle was clicked (PageView switches: PageController.toggleMode).
+    signal modeToggleRequested()
+    /// The page menu's button (route.open "menu" opens the menu there).
+    property Item menuAnchor: null
 
     readonly property bool small: Theme.compact || inSidePanel
     readonly property string path: controller ? controller.path : ""
     readonly property bool exists: controller ? controller.exists : false
     readonly property bool loaded: controller ? controller.loaded : false
     readonly property bool journal: journalDate !== ""
+    readonly property bool documentMode: controller ? controller.documentMode : false
     // Workspace.revision: the summary follows saves (frontmatter edits) and other devices.
-    readonly property var summary: Workspace.revision >= 0 && path !== "" ? tools.summary(path) : ({})
+    // Workspace.indexing: a page opened while the notebook is still being read (at start-up)
+    // gets its tags and aliases once the index has it.
+    readonly property var summary: {
+        void Workspace.revision
+        void Workspace.indexing
+        return path !== "" ? tools.summary(path) : ({})
+    }
     readonly property var folderParts: summary.folderParts || []
     readonly property bool favorite: Workspace.favorites.some(f => f.path === header.path)
     readonly property bool showTitle: !startsWithTitle || journal
@@ -87,6 +99,14 @@ Item {
         Row {
             spacing: 2
             BIconButton {
+                objectName: "noteModeToggle"
+                visible: header.loaded
+                iconName: header.documentMode ? "file-text" : "list"
+                label: header.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
+                size: "small"
+                onClicked: header.modeToggleRequested()
+            }
+            BIconButton {
                 visible: header.exists
                 iconName: "star"
                 label: header.favorite ? qsTr("Remove from favorites") : qsTr("Add to favorites")
@@ -102,6 +122,8 @@ Item {
                 label: qsTr("Page actions")
                 size: "small"
                 onClicked: header.menuRequested(menuButton)
+                Component.onCompleted: header.menuAnchor = menuButton
+                Component.onDestruction: if (header.menuAnchor === menuButton) header.menuAnchor = null
             }
         }
     }
@@ -287,7 +309,7 @@ Item {
 
         // An empty page (e.g. today's journal without a template): say where to type.
         BButton {
-            visible: header.loaded && header.controller.blocks.count === 0
+            visible: header.loaded && header.controller.blocks.visibleCount === 0
             Layout.topMargin: Theme.space2
             Layout.leftMargin: -Theme.space3
             variant: "ghost"

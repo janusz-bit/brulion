@@ -9,6 +9,11 @@ import Brulion
 // content for the block's `view` (rendered text / inline editor, code, calc, table, query,
 // callout, quote, rule, frontmatter) with image embeds and embedded pages / sections / blocks
 // (TransclusionView) below.
+// Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
+// headings; a list item shows its Markdown marker in its level's marker column — a bullet (disc,
+// circle, square by depth), its number ("3."), or the checkbox of a task — and the text starts
+// one column in per level. Spacing follows the previous block (`prevKind`): paragraph gaps,
+// tight list items, air above headings.
 //
 // Hidden rows (zoom, folds) stay in the model with `visible` false: the delegate collapses to
 // zero height.
@@ -34,11 +39,17 @@ Item {
     readonly property int headingLevel: view === "heading" ? Math.max(1, model.headingLevel) : 0
     readonly property int depth: model.depth
     readonly property bool hovered: hover.hovered
+    readonly property bool doc: editor.documentMode
+    readonly property string listMarker: model.listMarker || ""
+    readonly property bool ordered: listItem && listMarker.length > 0 && listMarker.charAt(0) >= "0" && listMarker.charAt(0) <= "9"
 
-    // Horizontal geometry: the text column of this depth, the bullet centred left of it.
-    readonly property real levelX: editor.contentX + editor.gutter + depth * editor.indentStep
-    readonly property real bulletX: levelX - editor.bulletColumn / 2
-    readonly property real contentLeft: levelX + (isTask ? editor.taskBoxWidth : 0)
+    // Horizontal geometry. Outline: the text column of this depth, the bullet centred left of it.
+    // Document: paragraphs at the text column; a list item one marker column in per level, its
+    // marker (bullet, number, checkbox) in the column before its text.
+    readonly property real levelX: doc ? editor.contentX + (listItem ? (depth + 1) * editor.listIndent : 0)
+                                       : editor.contentX + editor.gutter + depth * editor.indentStep
+    readonly property real bulletX: doc ? levelX - Math.round(editor.listIndent * 0.55) : levelX - editor.bulletColumn / 2
+    readonly property real contentLeft: levelX + (isTask && !doc ? editor.taskBoxWidth : 0)
     readonly property real contentRight: editor.contentX + editor.contentWidth
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
     readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "table"
@@ -46,16 +57,36 @@ Item {
     // The title shown above the properties panel (see the file comment).
     readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
     readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
-    readonly property real topPad: {
+    readonly property real topPad: doc ? docTopPad : outlineTopPad
+    readonly property real outlineTopPad: {
         if (headingLevel > 0 && index > 0 && !titleFirst)
             return headingLevel === 1 ? Theme.space5 : headingLevel === 2 ? Theme.space4 : Theme.space3
         if (framed)
             return Theme.space2
         return view === "rule" ? Theme.space2 : rowPad
     }
+    /// Document: the space above a block follows the block before it (a page of text: paragraph
+    /// gaps, list items close together, headings with air above and close to what follows).
+    readonly property string prevKind: model.prevKind || ""
+    readonly property real docTopPad: {
+        if (propertiesAfterTitle)
+            return Theme.space3 // the properties panel under the title
+        if (prevKind === "" || titleFirst)
+            return 0
+        if (headingLevel > 0 && !listItem)
+            return editor.headingGapAbove(headingLevel)
+        if (prevKind === "heading")
+            return editor.headingGapBelow
+        if (prevKind === "frontmatter")
+            return Theme.space3
+        if (listItem && prevKind === "listItem")
+            return editor.listGap
+        return editor.paragraphGap
+    }
     /// Text rows: a little air between blocks; more on touch so 44 px targets fit the rows.
     readonly property real rowPad: Theme.touchUi ? 4 : 2
-    readonly property real bottomPad: framed ? Theme.space2 : headingLevel > 0 ? Theme.space1 : rowPad
+    readonly property real bottomPad: doc ? (listItem ? editor.listGap / 2 : 0)
+                                          : framed ? Theme.space2 : headingLevel > 0 ? Theme.space1 : rowPad
     readonly property var embeds: model.embeds
     readonly property bool hasEmbeds: embeds !== undefined && embeds !== null && embeds.length > 0
                                       && (view === "text" || view === "heading" || view === "quote" || view === "callout")
@@ -63,7 +94,11 @@ Item {
     readonly property bool hasTransclusions: transclusions !== undefined && transclusions !== null && transclusions.length > 0
     /// Nothing but embedded pages / sections / blocks: no empty text line above their frames.
     readonly property bool onlyTransclusions: hasTransclusions && !hasEmbeds && model.onlyEmbeds && !editing && view === "text"
-    readonly property real contentHeight: onlyTransclusions ? 0 : content.height
+    /// Document: a paragraph of nothing but pictures shows just them, like a picture in a page
+    /// of text (the outline keeps the line its bullet sits on); a click beside one edits it.
+    readonly property bool onlyPictures: doc && hasEmbeds && !listItem && model.onlyEmbeds && !editing && view === "text"
+    readonly property bool noTextLine: onlyTransclusions || onlyPictures
+    readonly property real contentHeight: noTextLine ? 0 : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
     readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
                                            + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
@@ -91,6 +126,7 @@ Item {
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
     readonly property Item contentItem: content.item
     readonly property alias transclusionView: transclusionView
+    readonly property alias embedView: embedView
 
     /// Give the keyboard to the block content (tables: the first cell).
     function focusContent() {
@@ -103,7 +139,8 @@ Item {
     // ---- Selection ---------------------------------------------------------------------------
     Rectangle {
         visible: block.model.isSelected && block.shown
-        x: block.bulletX - block.editor.bulletColumn / 2 - 2
+        x: block.doc ? (block.listItem ? block.levelX - block.editor.listIndent : block.levelX) - Theme.space2
+                     : block.bulletX - block.editor.bulletColumn / 2 - 2
         width: block.contentRight - x + Theme.space2
         y: 1
         height: block.height - 2
@@ -115,7 +152,7 @@ Item {
 
     // ---- Guide lines -------------------------------------------------------------------------
     Repeater {
-        model: block.shown ? block.depth : 0
+        model: block.shown && !block.doc ? block.depth : 0
         delegate: Rectangle {
             required property int index
             x: Math.round(block.editor.contentX + block.editor.gutter - block.editor.bulletColumn / 2 + index * block.editor.indentStep)
@@ -126,7 +163,7 @@ Item {
     }
     // From this bullet down to its (visible) children.
     Rectangle {
-        visible: block.shown && block.listItem && block.model.hasChildren && !block.model.collapsed
+        visible: block.shown && !block.doc && block.listItem && block.model.hasChildren && !block.model.collapsed
         x: Math.round(block.bulletX)
         y: Math.round(block.firstLineCenter + 9)
         width: 1
@@ -137,7 +174,7 @@ Item {
     // ---- Fold arrow ------------------------------------------------------------------------
     Item {
         id: arrow
-        readonly property bool available: block.model.hasChildren && block.shown
+        readonly property bool available: block.model.hasChildren && block.shown && !block.doc
         visible: available && (block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed)
         width: block.editor.arrowColumn
         height: Math.max(block.editor.arrowColumn, 24)
@@ -172,13 +209,14 @@ Item {
     // ---- Bullet --------------------------------------------------------------------------------
     Item {
         id: bullet
-        visible: block.listItem && block.shown
+        // Document: tasks show their checkbox, numbered items their number instead.
+        visible: block.listItem && block.shown && !(block.doc && (block.isTask || block.ordered))
         width: block.editor.bulletColumn + (Theme.touchUi ? 6 : 0)
         height: Math.max(block.editor.bulletColumn, Theme.touchUi ? Theme.touchTarget : 22)
         x: block.bulletX - width / 2
         y: block.firstLineCenter - height / 2
-        Accessible.role: Accessible.Button
-        Accessible.name: qsTr("Zoom into block")
+        Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
+        Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
 
         // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
         Rectangle {
@@ -187,19 +225,29 @@ Item {
             height: 16
             radius: 8
             color: block.model.collapsed ? Theme.bgPressed : Theme.bgHover
-            visible: block.model.collapsed || bulletHover.hovered
+            visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
         }
         Rectangle {
+            // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
+            readonly property int shape: block.doc ? block.depth % 3 : 0
             anchors.centerIn: parent
-            width: 6
-            height: 6
-            radius: 3
-            color: block.closedTask ? Theme.fgFaint : bulletHover.hovered ? Theme.fg : Theme.fgMuted
+            width: shape === 2 ? 5 : 6
+            height: width
+            radius: shape === 2 ? 1 : width / 2
+            color: shape === 1 ? "transparent"
+                   : block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
+            border.width: shape === 1 ? 1.5 : 0
+            border.color: Theme.fgMuted
         }
-        HoverHandler { id: bulletHover; cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi }
+        HoverHandler {
+            id: bulletHover
+            cursorShape: block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
+            enabled: !Theme.touchUi
+        }
         TapHandler {
             acceptedButtons: Qt.LeftButton
-            onTapped: block.controller.zoomInto(block.index)
+            // A document has no zoom: the bullet is part of the text, a click edits the item.
+            onTapped: block.doc ? block.editor.startEditing(block.index, 0) : block.controller.zoomInto(block.index)
             onLongPressed: blockMenu.popup(bullet, bullet.width / 2, bullet.height)
         }
         TapHandler {
@@ -208,11 +256,40 @@ Item {
         }
     }
 
+    // ---- Number of an ordered list item (document mode) -----------------------------------------
+    Text {
+        visible: block.doc && block.ordered && !block.isTask && block.shown
+        // Right-aligned in the marker column, on the first line's baseline (body font).
+        x: block.levelX - width - Math.round(block.editor.listIndent * 0.25)
+        y: block.firstLineCenter - block.editor.firstLineCenter(0)
+        // Rich text like the item's own rendered text: the same line layout, the same baseline.
+        text: TextHelper.escapeHtml(block.listMarker)
+        textFormat: Text.RichText
+        font.family: Theme.fontEditor
+        font.pixelSize: block.editor.fontSize
+        font.features: { "tnum": 1 }
+        lineHeightMode: Text.FixedHeight
+        lineHeight: block.editor.lineHeight
+        color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
+        Accessible.ignored: true
+        TapHandler {
+            acceptedButtons: Qt.LeftButton
+            onTapped: block.editor.startEditing(block.index, 0)
+            onLongPressed: blockMenu.popup(parent, 0, parent.height)
+        }
+        TapHandler {
+            acceptedButtons: Qt.RightButton
+            onTapped: blockMenu.popup(parent, 0, parent.height)
+        }
+    }
+
     // ---- Task checkbox ---------------------------------------------------------------------------
     TaskBox {
         visible: block.isTask && block.shown
         status: block.taskStatus
-        x: block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
+        // Outline: after the bullet; document: in the marker column, instead of the bullet.
+        x: block.doc ? block.bulletX - width / 2
+                     : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
         onToggled: block.controller.toggleTask(block.index)
     }
@@ -224,7 +301,7 @@ Item {
         y: block.topPad
         width: Math.max(40, block.contentRight - x)
         active: block.shown
-        visible: !block.onlyTransclusions
+        visible: !block.noTextLine
         sourceComponent: {
             switch (block.view) {
             case "code": return codeComponent
@@ -248,6 +325,7 @@ Item {
         width: Math.max(40, block.contentRight - x)
         embeds: block.hasEmbeds ? block.embeds : []
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
+        onBackgroundClicked: block.editor.startEditing(block.index, -1)
     }
 
     TransclusionView {
@@ -357,12 +435,14 @@ Item {
     BMenu {
         id: blockMenu
         BMenuItem {
+            visible: !block.doc
+            height: visible ? implicitHeight : 0
             text: qsTr("Zoom in")
             iconName: "search"
             onTriggered: block.controller.zoomInto(block.index)
         }
         BMenuItem {
-            visible: block.model.hasChildren
+            visible: block.model.hasChildren && !block.doc
             height: visible ? implicitHeight : 0
             text: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
             iconName: block.model.collapsed ? "chevrons-up-down" : "chevrons-down-up"
@@ -381,12 +461,16 @@ Item {
         }
         BMenuSeparator {}
         BMenuItem {
+            visible: !block.doc || block.listItem
+            height: visible ? implicitHeight : 0
             text: qsTr("Indent")
             iconName: "list-indent-increase"
             shortcut: "Tab"
             onTriggered: block.controller.indent(block.index)
         }
         BMenuItem {
+            visible: !block.doc || block.listItem
+            height: visible ? implicitHeight : 0
             text: qsTr("Outdent")
             iconName: "list-indent-decrease"
             shortcut: "Shift+Tab"

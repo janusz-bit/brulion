@@ -4,7 +4,12 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// BlockEditor — one page as a Logseq-like outline of blocks (docs/UI.md "The block editor").
+// BlockEditor — one page as a Logseq-like outline of blocks (docs/UI.md "The block editor"), or,
+// in the document mode (controller.documentMode, docs/UI.md "Note modes"), as an Obsidian-like
+// continuous document: no bullets, guides or fold arrows for paragraphs and headings, lists as
+// ordinary Markdown lists in the flow, larger headings and paragraph spacing; the same inline
+// editing. Document keys: Enter on an empty list item / Backspace at its start leave the list,
+// Tab / Shift+Tab only in list items.
 //
 //   PageController { id: page; host: Workspace; path: "Projekty/Dom.md" }
 //   BlockEditor { anchors.fill: parent; controller: page; header: Component { PageTitle {} } }
@@ -43,15 +48,30 @@ FocusScope {
     property real horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
     /// Extra space below the last block (click there to add a block).
     property real bottomSpace: Theme.space16 * 2
+    /// Document mode: the size of the largest heading (0: no limit). The journal stream sets the
+    /// size of its days' dates, so a "## Praca" inside a day never outranks the day itself.
+    property int headingCap: 0
 
     // ---- Geometry shared by the delegates ---------------------------------------------------
+    /// The page is shown as a document (Obsidian-like), not as an outline.
+    readonly property bool documentMode: controller !== null && controller.documentMode
     readonly property int fontSize: Theme.textEditor
     readonly property int lineHeight: Theme.lineHeightPx(fontSize, Theme.lineHeightLoose)
     readonly property real indentStep: Theme.compact ? 20 : 26
     /// Bullet column (the bullet is centred in it) and the fold arrow column left of it.
     readonly property real bulletColumn: Theme.touchUi ? 22 : 20
     readonly property real arrowColumn: Theme.touchUi ? 18 : 16
-    readonly property real gutter: arrowColumn + bulletColumn
+    /// Room left of the text column: the outline's fold arrows and bullets; none in a document.
+    readonly property real gutter: documentMode ? 0 : arrowColumn + bulletColumn
+    // Document mode: the marker column of a list level (bullet, number or checkbox) — the text
+    // of a list item starts one column in per level — and the vertical rhythm of a page of text.
+    readonly property real listIndent: Math.round(fontSize * (Theme.compact ? 1.5 : 1.7))
+    readonly property int paragraphGap: Math.round(fontSize * 0.75)
+    readonly property int listGap: Theme.touchUi ? 4 : 2
+    readonly property int headingGapBelow: Math.round(fontSize * 0.3)
+    function headingGapAbove(level) {
+        return Math.round(fontSize * (level === 1 ? 1.6 : level === 2 ? 1.3 : level === 3 ? 1.05 : 0.85))
+    }
     readonly property real taskBoxWidth: Theme.touchUi ? 26 : 24
     readonly property real contentX: Math.max(horizontalPadding, (width - maxTextWidth) / 2)
     readonly property real contentWidth: Math.max(120, Math.min(maxTextWidth, width - 2 * horizontalPadding))
@@ -106,12 +126,23 @@ FocusScope {
     property int pendingClickRow: -1
     property point pendingClick: Qt.point(0, 0)
 
-    // Fonts of the block kinds: body text and headings (level 1-3; deeper levels use the body
-    // size in bold). Fixed pixel line heights, see Theme.lineHeightPx.
+    // Fonts of the block kinds: body text and headings (outline: levels 1-3, deeper levels use
+    // the body size in bold; document: larger, relative to the text size, levels 1-4). Fixed
+    // pixel line heights, see Theme.lineHeightPx.
     function headingSize(level) {
+        if (documentMode) {
+            if (level < 1 || level > 4)
+                return fontSize
+            // headingCap compresses the steps above the body size (the levels stay apart).
+            const top = fontSize * 1.75
+            const k = headingCap > fontSize && headingCap < top ? (headingCap - fontSize) / (top - fontSize) : 1
+            return Math.round(fontSize + fontSize * ([1.75, 1.45, 1.25, 1.1][level - 1] - 1) * k)
+        }
         return level === 1 ? Theme.text2xl : level === 2 ? Theme.textXl : level === 3 ? Theme.textLg : fontSize
     }
     function headingLineHeight(level) {
+        if (documentMode)
+            return level >= 1 && level <= 4 ? Theme.lineHeightPx(headingSize(level), 1.3) : lineHeight
         return level >= 1 && level <= 3 ? Theme.lineHeightPx(headingSize(level), 1.4) : lineHeight
     }
     /// Baseline of the first line (from the top of a text item) for a heading level (0 = body);
@@ -122,6 +153,7 @@ FocusScope {
         case 1: return probeH1.firstBaselineY
         case 2: return probeH2.firstBaselineY
         case 3: return probeH3.firstBaselineY
+        case 4: return probeH4.firstBaselineY
         default: return probeBody.firstBaselineY
         }
     }
@@ -130,6 +162,7 @@ FocusScope {
         case 1: return probeH1.xHeight
         case 2: return probeH2.xHeight
         case 3: return probeH3.xHeight
+        case 4: return probeH4.xHeight
         default: return probeBody.xHeight
         }
     }
@@ -157,6 +190,7 @@ FocusScope {
     LineProbe { id: probeH1; level: 1 }
     LineProbe { id: probeH2; level: 2 }
     LineProbe { id: probeH3; level: 3 }
+    LineProbe { id: probeH4; level: 4 }
 
     readonly property var rendererPalette: ({
         link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
@@ -376,6 +410,7 @@ FocusScope {
         return edit.cursorRectangle.y + edit.cursorRectangle.height > edit.contentHeight - edit.lineHeightPx / 2
     }
 
+    /// `x`: the caret's x in the editor's coordinates (blocks are indented differently).
     function goToRow(row, edge, x) {
         if (row < 0)
             return
@@ -487,6 +522,13 @@ FocusScope {
                     controller.removeTaskMarker(row)
                     return true
                 }
+                // A document's list item loses its marker (Obsidian), a nested one moves out.
+                if (documentMode && info.kind === "listItem") {
+                    const left = controller.leaveList(row)
+                    if (left.row >= 0)
+                        ensureRowVisible(left.row)
+                    return true
+                }
                 const r = controller.mergeWithPrevious(row)
                 if (r.row >= 0)
                     ensureRowVisible(r.row)
@@ -504,20 +546,23 @@ FocusScope {
                 edit.insert(edit.cursorPosition, "\t")
                 return true
             }
-            controller.indent(row)
+            // A document indents list items only; in a paragraph Tab does nothing (no outline).
+            if (!documentMode || controller.blocks.get(row).kind === "listItem")
+                controller.indent(row)
             return true
         case Qt.Key_Backtab:
-            controller.outdent(row)
+            if (!documentMode || controller.blocks.get(row).kind === "listItem")
+                controller.outdent(row)
             return true
         case Qt.Key_Up:
             if (!shift && isFirstLine(edit)) {
-                goToRow(visualPrevious(row), "bottom", edit.cursorRectangle.x)
+                goToRow(visualPrevious(row), "bottom", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
                 return true
             }
             return false
         case Qt.Key_Down:
             if (!shift && isLastLine(edit)) {
-                goToRow(visualNext(row), "top", edit.cursorRectangle.x)
+                goToRow(visualNext(row), "top", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
                 return true
             }
             return false

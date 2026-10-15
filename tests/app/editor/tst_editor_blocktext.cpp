@@ -200,6 +200,33 @@ private Q_SLOTS:
         const QVariantList logseq = frontmatterProperties(u"typ:: plan\nautor:: [[Lem]]"_s);
         QCOMPARE(logseq.size(), 2);
         QCOMPARE(logseq[1].toMap().value(u"value"_s).toString(), u"[[Lem]]"_s);
+        // The note mode key is the page header's toggle, not a property (YAML only: a Logseq
+        // `brulion::` line is an ordinary property).
+        const QVariantList mode = frontmatterProperties(u"---\nbrulion: document\nautor: Łucja\n---"_s);
+        QCOMPARE(mode.size(), 1);
+        QCOMPARE(mode[0].toMap().value(u"key"_s).toString(), u"autor"_s);
+        QCOMPARE(frontmatterProperties(u"brulion:: document"_s).size(), 1);
+    }
+
+    void onlyNoteModeKey_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<bool>("only");
+        QTest::newRow("document") << u"---\nbrulion: document\n---"_s << true;
+        QTest::newRow("outline, crlf") << u"---\r\nbrulion: outline\r\n---"_s << true;
+        QTest::newRow("invalid value is still the key") << u"---\nbrulion: kanban\n---"_s << true;
+        QTest::newRow("with other keys") << u"---\nbrulion: document\ntags: [a]\n---"_s << false;
+        QTest::newRow("empty yaml") << u"---\n---"_s << false;
+        QTest::newRow("other key only") << u"---\nautor: Łucja\n---"_s << false;
+        QTest::newRow("logseq property") << u"brulion:: document"_s << false;
+        QTest::newRow("comment and key") << u"---\n# tryb notatki\nbrulion: document\n---"_s << true;
+    }
+
+    void onlyNoteModeKey()
+    {
+        QFETCH(QString, body);
+        QFETCH(bool, only);
+        QCOMPARE(editor::onlyNoteModeKey(body), only);
     }
 
     void embeds()
@@ -455,6 +482,14 @@ private Q_SLOTS:
         QCOMPARE(c.defaultReminderTime, QTime(8, 30));
         QCOMPARE(c.weekStartsOn, Qt::Sunday);
         QCOMPARE(vaultConfigFromMap({}).journalsFolder, u"journals"_s);
+        // Note modes: names as in config.json; anything else keeps the defaults.
+        const VaultConfig modes =
+                vaultConfigFromMap({{u"journalMode"_s, u"Document"_s}, {u"pageMode"_s, u" outline "_s}});
+        QCOMPARE(modes.journalMode, NoteMode::Document);
+        QCOMPARE(modes.pageMode, NoteMode::Outline);
+        const VaultConfig defaults = vaultConfigFromMap({{u"journalMode"_s, u"kanban"_s}, {u"pageMode"_s, 3}});
+        QCOMPARE(defaults.journalMode, NoteMode::Outline);
+        QCOMPARE(defaults.pageMode, NoteMode::Document);
     }
 
     // --- text coming back from a QML TextEdit -----------------------------------------------------

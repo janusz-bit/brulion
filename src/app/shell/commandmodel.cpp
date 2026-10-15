@@ -112,10 +112,28 @@ static QList<Command> buildCommands(const AppController *app)
     };
 }
 
+/// buildCommands() with the note mode command right after "Markdown source", available where that
+/// is (an editor shows a page or a day): document (Obsidian-like) / outline (Logseq-like), written
+/// into the note (docs/UI.md "Note modes").
+static QList<Command> allCommands(const AppController *app)
+{
+    QList<Command> out = buildCommands(app);
+    const auto source = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.source"; });
+    const bool inEditor = source != out.cend() && source->enabled;
+    out.insert(source == out.cend() ? out.size() : std::distance(out.cbegin(), source) + 1,
+               {u"page.mode"_s,
+                CommandModel::tr("Toggle note mode"),
+                CommandModel::tr("Document (like Obsidian) or outline (like Logseq)"),
+                u"file-text"_s,
+                {},
+                inEditor});
+    return out;
+}
+
 QVariantList CommandModel::commands() const
 {
     QVariantList out;
-    for (const Command &c : buildCommands(m_app))
+    for (const Command &c : allCommands(m_app))
         out.append(toMap(c));
     return out;
 }
@@ -123,14 +141,14 @@ QVariantList CommandModel::commands() const
 QStringList CommandModel::ids() const
 {
     QStringList out;
-    for (const Command &c : buildCommands(m_app))
+    for (const Command &c : allCommands(m_app))
         out.append(c.id);
     return out;
 }
 
 bool CommandModel::run(const QString &id)
 {
-    const QList<Command> all = buildCommands(m_app);
+    const QList<Command> all = allCommands(m_app);
     const auto it = std::find_if(all.cbegin(), all.cend(), [&](const Command &c) { return c.id == id; });
     if (it == all.cend() || !it->enabled)
         return false;
@@ -156,6 +174,8 @@ bool CommandModel::run(const QString &id)
         m_app->navigate({ { u"view"_s, u"history"_s }, { u"path"_s, m_app->currentRoute().value(u"path"_s) } });
     else if (id == u"page.source")
         m_app->requestUiAction(u"toggleSourceMode"_s);
+    else if (id == u"page.mode")
+        m_app->requestUiAction(u"toggleNoteMode"_s);
     else if (id == u"nav.back")
         m_app->back();
     else if (id == u"nav.forward")

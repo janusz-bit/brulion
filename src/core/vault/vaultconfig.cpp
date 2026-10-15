@@ -25,6 +25,8 @@ constexpr auto kTemplatesFolder = "templatesFolder"_L1;
 constexpr auto kJournalTemplate = "journalTemplate"_L1;
 constexpr auto kDefaultReminderTime = "defaultReminderTime"_L1;
 constexpr auto kWeekStartsOn = "weekStartsOn"_L1;
+constexpr auto kJournalMode = "journalMode"_L1;
+constexpr auto kPageMode = "pageMode"_L1;
 
 std::optional<QString> pathValue(const QJsonValue &v)
 {
@@ -61,6 +63,27 @@ std::optional<Qt::DayOfWeek> weekStartValue(const QJsonValue &v)
         return std::nullopt;
     const int n = static_cast<int>(d);
     return n == 0 ? Qt::Sunday : static_cast<Qt::DayOfWeek>(n);
+}
+
+/// "outline" / "document" (as markdown::noteModeName / parseNoteMode, which this module does not
+/// depend on): case-insensitive, surrounding whitespace ignored.
+std::optional<NoteMode> noteModeValue(const QJsonValue &v)
+{
+    if (!v.isString())
+        return std::nullopt;
+    const QString name = v.toString().trimmed();
+    if (name.compare("outline"_L1, Qt::CaseInsensitive) == 0)
+        return NoteMode::Outline;
+    if (name.compare("document"_L1, Qt::CaseInsensitive) == 0)
+        return NoteMode::Document;
+    return std::nullopt;
+}
+
+QString noteModeName(NoteMode mode, NoteMode fallback)
+{
+    if (mode != NoteMode::Outline && mode != NoteMode::Document)
+        mode = fallback;
+    return mode == NoteMode::Outline ? u"outline"_s : u"document"_s;
 }
 
 QString compactJson(const QJsonValue &v)
@@ -135,6 +158,8 @@ ParsedVaultConfig parseVaultConfig(QByteArrayView json)
     mergeKey<QString>(raw, kJournalTemplate, pathValue, [&](const QString &v) { c.journalTemplate = v; }, w);
     mergeKey<QTime>(raw, kDefaultReminderTime, timeValue, [&](QTime v) { c.defaultReminderTime = v; }, w);
     mergeKey<Qt::DayOfWeek>(raw, kWeekStartsOn, weekStartValue, [&](Qt::DayOfWeek v) { c.weekStartsOn = v; }, w);
+    mergeKey<NoteMode>(raw, kJournalMode, noteModeValue, [&](NoteMode v) { c.journalMode = v; }, w);
+    mergeKey<NoteMode>(raw, kPageMode, noteModeValue, [&](NoteMode v) { c.pageMode = v; }, w);
     return out;
 }
 
@@ -156,6 +181,8 @@ QJsonObject vaultConfigToJson(const VaultConfig &config)
     o.insert(kJournalTemplate, paths::normalize(config.journalTemplate));
     o.insert(kDefaultReminderTime, time.toString(u"HH:mm"_s));
     o.insert(kWeekStartsOn, weekStart == Qt::Sunday ? 0 : weekStart);
+    o.insert(kJournalMode, noteModeName(config.journalMode, defaults.journalMode));
+    o.insert(kPageMode, noteModeName(config.pageMode, defaults.pageMode));
     return o;
 }
 
@@ -173,7 +200,8 @@ bool sameVaultConfig(const VaultConfig &a, const VaultConfig &b)
     return a.journalsFolder == b.journalsFolder && a.journalFileFormat == b.journalFileFormat
            && a.newPagesFolder == b.newPagesFolder && a.attachmentsFolder == b.attachmentsFolder
            && a.templatesFolder == b.templatesFolder && a.journalTemplate == b.journalTemplate
-           && a.defaultReminderTime == b.defaultReminderTime && a.weekStartsOn == b.weekStartsOn;
+           && a.defaultReminderTime == b.defaultReminderTime && a.weekStartsOn == b.weekStartsOn
+           && a.journalMode == b.journalMode && a.pageMode == b.pageMode;
 }
 
 } // namespace brulion

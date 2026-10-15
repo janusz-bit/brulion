@@ -188,6 +188,15 @@ Rectangle {
             onTriggered: AppController.requestUiAction("toggleSourceMode")
         }
         BMenuItem {
+            // Document (like Obsidian) / outline (like Logseq): the page shown, in the journal
+            // stream the day being written in (docs/UI.md "Note modes").
+            visible: bar.inEditor
+            height: visible ? implicitHeight : 0
+            text: qsTr("Toggle note mode")
+            iconName: "file-text"
+            onTriggered: AppController.requestUiAction("toggleNoteMode")
+        }
+        BMenuItem {
             visible: bar.onPage && !Theme.narrow
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")

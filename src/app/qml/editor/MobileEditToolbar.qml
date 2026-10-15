@@ -5,7 +5,8 @@ import Brulion
 // MobileEditToolbar — the editing toolbar of touch UIs, sitting right above the virtual
 // keyboard (Qt.inputMethod.keyboardRectangle; at the bottom when the window is resized for the
 // keyboard): outdent, indent, move up/down, task, [[, #, /, date, reminder, picture, undo, redo,
-// hide keyboard. Buttons never take focus, so the caret stays in the block being edited. Scrolls
+// hide keyboard. In the document mode a list button (paragraph ↔ list item) comes first and the
+// indent buttons work on list items only. Buttons never take focus, so the caret stays in the block being edited. Scrolls
 // sideways when the window is narrower than the buttons.
 Rectangle {
     id: bar
@@ -14,6 +15,9 @@ Rectangle {
     readonly property PageController controller: editor ? editor.controller : null
     readonly property int row: controller ? controller.editingRow : -1
     readonly property InlineEditor edit: editor ? editor.activeEditor : null
+    readonly property bool documentMode: editor !== null && editor.documentMode
+    /// The edited block is a list item (the document mode indents only those).
+    readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
     /// Top of the virtual keyboard in the editor's coordinates (its height when hidden).
     readonly property real keyboardTop: {
         const kb = Qt.inputMethod.keyboardRectangle
@@ -81,14 +85,24 @@ Rectangle {
 
             ToolButton {
                 anchors.verticalCenter: parent.verticalCenter
+                visible: bar.documentMode
+                iconName: "list"
+                label: qsTr("Bulleted list")
+                checked: bar.listItem // not checkable: the block's kind says it
+                onClicked: { bar.commitComposition(); bar.controller.toggleList(bar.row) }
+            }
+            ToolButton {
+                anchors.verticalCenter: parent.verticalCenter
                 iconName: "list-indent-decrease"
                 label: qsTr("Outdent")
+                enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
                 onClicked: { bar.commitComposition(); bar.controller.outdent(bar.row) }
             }
             ToolButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "list-indent-increase"
                 label: qsTr("Indent")
+                enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
                 onClicked: { bar.commitComposition(); bar.controller.indent(bar.row) }
             }
             ToolButton {

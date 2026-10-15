@@ -208,7 +208,8 @@ private Q_SLOTS:
                                 "\"journalFileFormat\": \"yyyy-MM-dd\", \"newPagesFolder\": \"\", "
                                 "\"attachmentsFolder\": \"assets\", \"templatesFolder\": \"templates\", "
                                 "\"journalTemplate\": \"templates/journal.md\", "
-                                "\"defaultReminderTime\": \"09:00\", \"weekStartsOn\": 1}";
+                                "\"defaultReminderTime\": \"09:00\", \"weekStartsOn\": 1, "
+                                "\"journalMode\": \"outline\", \"pageMode\": \"document\"}";
         const ParsedVaultConfig parsed = parseVaultConfig(json);
         QVERIFY(parsed.warnings.isEmpty());
         QVERIFY(sameVaultConfig(parsed.config, VaultConfig{}));
@@ -247,6 +248,12 @@ private Q_SLOTS:
         QTest::newRow("week string") << QByteArray(R"({"weekStartsOn": "1"})") << u"weekStartsOn"_s;
         QTest::newRow("version 2") << QByteArray(R"({"version": 2})") << u"version"_s;
         QTest::newRow("template null") << QByteArray(R"({"journalTemplate": null})") << u"journalTemplate"_s;
+        QTest::newRow("journal mode unknown") << QByteArray(R"({"journalMode": "kanban"})") << u"journalMode"_s;
+        QTest::newRow("journal mode empty") << QByteArray(R"({"journalMode": ""})") << u"journalMode"_s;
+        QTest::newRow("page mode number") << QByteArray(R"({"pageMode": 1})") << u"pageMode"_s;
+        QTest::newRow("page mode bool") << QByteArray(R"({"pageMode": true})") << u"pageMode"_s;
+        QTest::newRow("page mode polish") << QByteArray(R"({"pageMode": "dokument"})") << u"pageMode"_s;
+        QTest::newRow("page mode null") << QByteArray(R"({"pageMode": null})") << u"pageMode"_s;
     }
     void parseInvalidValues()
     {
@@ -298,6 +305,57 @@ private Q_SLOTS:
         QCOMPARE(int(parsed.config.weekStartsOn), expected);
     }
 
+    void parseNoteModes_data()
+    {
+        QTest::addColumn<QByteArray>("json");
+        QTest::addColumn<int>("journalMode");
+        QTest::addColumn<int>("pageMode");
+        QTest::newRow("defaults") << "{}"_ba << int(NoteMode::Outline) << int(NoteMode::Document);
+        QTest::newRow("swapped") << QByteArray(R"({"journalMode":"document","pageMode":"outline"})")
+                                 << int(NoteMode::Document) << int(NoteMode::Outline);
+        QTest::newRow("explicit defaults") << QByteArray(R"({"journalMode":"outline","pageMode":"document"})")
+                                           << int(NoteMode::Outline) << int(NoteMode::Document);
+        QTest::newRow("case and spaces") << QByteArray(R"({"journalMode":" Document ","pageMode":"OUTLINE"})")
+                                         << int(NoteMode::Document) << int(NoteMode::Outline);
+        QTest::newRow("only page mode") << QByteArray(R"({"pageMode":"outline"})") << int(NoteMode::Outline)
+                                        << int(NoteMode::Outline);
+    }
+    void parseNoteModes()
+    {
+        QFETCH(QByteArray, json);
+        QFETCH(int, journalMode);
+        QFETCH(int, pageMode);
+        const ParsedVaultConfig parsed = parseVaultConfig(json);
+        QVERIFY2(parsed.warnings.isEmpty(), qPrintable(parsed.warnings.join(u'\n')));
+        QCOMPARE(int(parsed.config.journalMode), journalMode);
+        QCOMPARE(int(parsed.config.pageMode), pageMode);
+    }
+
+    void noteModesRoundTrip()
+    {
+        VaultConfig config;
+        config.journalMode = NoteMode::Document;
+        config.pageMode = NoteMode::Outline;
+        QVERIFY(!sameVaultConfig(config, VaultConfig{}));
+        // An unknown value read from a newer device falls back to the default; unknown keys stay.
+        const ParsedVaultConfig old = parseVaultConfig(R"({"pageMode":"kanban","przyszłość":"żółw"})"_ba);
+        QCOMPARE(old.config.pageMode, NoteMode::Document);
+        const QByteArray json = serializeVaultConfig(config, old.raw);
+        QVERIFY(json.contains("\"journalMode\": \"document\""));
+        QVERIFY(json.contains("\"pageMode\": \"outline\""));
+        const ParsedVaultConfig parsed = parseVaultConfig(json);
+        QVERIFY2(parsed.warnings.isEmpty(), qPrintable(parsed.warnings.join(u'\n')));
+        QVERIFY(sameVaultConfig(parsed.config, config));
+        QCOMPARE(parsed.raw.value(u"przyszłość"_s).toString(), u"żółw"_s);
+        // Each mode field takes part in the comparison.
+        VaultConfig journalOnly;
+        journalOnly.journalMode = NoteMode::Document;
+        QVERIFY(!sameVaultConfig(journalOnly, VaultConfig{}));
+        VaultConfig pageOnly;
+        pageOnly.pageMode = NoteMode::Outline;
+        QVERIFY(!sameVaultConfig(pageOnly, VaultConfig{}));
+    }
+
     void serializeRoundTrip()
     {
         VaultConfig config;
@@ -326,12 +384,16 @@ private Q_SLOTS:
         config.defaultReminderTime = QTime(); // invalid
         config.weekStartsOn = static_cast<Qt::DayOfWeek>(0);
         config.journalsFolder = u"/Dziennik/../Dni/"_s;
+        config.journalMode = static_cast<NoteMode>(7);
+        config.pageMode = static_cast<NoteMode>(-1);
         const QJsonObject json = vaultConfigToJson(config);
         QCOMPARE(json.value("journalFileFormat"_L1).toString(), u"yyyy-MM-dd"_s);
         QCOMPARE(json.value("defaultReminderTime"_L1).toString(), u"09:00"_s);
         QCOMPARE(json.value("weekStartsOn"_L1).toInt(), 1);
         QCOMPARE(json.value("journalsFolder"_L1).toString(), u"Dni"_s);
-        QCOMPARE(json.size(), 9);
+        QCOMPARE(json.value("journalMode"_L1).toString(), u"outline"_s);
+        QCOMPARE(json.value("pageMode"_L1).toString(), u"document"_s);
+        QCOMPARE(json.size(), 11);
     }
 
     void usableJournalFormat_data()

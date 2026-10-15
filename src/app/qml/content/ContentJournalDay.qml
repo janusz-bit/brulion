@@ -15,7 +15,9 @@ import Brulion
 // Caret visibility is the journal list's job (scroller.ensureVisible(item, rect)): scroll
 // requests of the embedded editor (keeping the caret above the keyboard toolbar) are passed on.
 // Ctrl+E (Markdown source) opens the day as a page in source mode instead of a source editor
-// inside the list. Fold state is kept per day like in PageView.
+// inside the list. Fold state is kept per day like in PageView. Each day is shown in its own note
+// mode (its `brulion:` key, else the notebook's journal mode — outline by default): a day switched
+// to a document reads like one in the stream too.
 FocusScope {
     id: day
 
@@ -33,7 +35,8 @@ FocusScope {
     readonly property alias controller: page
     readonly property alias editor: editor
     readonly property bool editing: page.editingRow >= 0
-    readonly property bool empty: page.loaded && page.blocks.count === 0
+    /// Nothing to show (also a day holding nothing but its note mode).
+    readonly property bool empty: page.loaded && page.blocks.visibleCount === 0
     property bool _foldsRestored: false
     /// The editor has had its width (see its `controller`); stays true.
     property bool _editorSized: false
@@ -49,7 +52,7 @@ FocusScope {
     function begin() {
         if (!page.loaded)
             return
-        if (page.blocks.count > 0) {
+        if (page.blocks.visibleCount > 0) {
             editor.startEditing(page.lastVisibleRow(), -1)
             return
         }
@@ -112,6 +115,8 @@ FocusScope {
             if (page.path === oldPath)
                 page.followRename(oldPath, newPath)
         }
+        // The notebook's journal mode changed (settings, another device).
+        function onConfigChanged() { page.refreshMode() }
     }
 
     ColumnLayout {
@@ -264,6 +269,8 @@ FocusScope {
             maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
             horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
             bottomSpace: Theme.space3
+            // Document days: headings stay below the date (the size of other days' dates).
+            headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
         }
     }
 

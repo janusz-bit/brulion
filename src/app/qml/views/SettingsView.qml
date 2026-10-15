@@ -6,8 +6,8 @@ import Brulion
 
 // SettingsView — route "settings" ({section?}). Sections: Ogólne (language, theme, text size,
 // motion), Edytor (font, size, width, source mode), Notatnik (the vault's shared settings in
-// .brulion/config.json: journal folder and file names, attachments, templates, default reminder
-// time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
+// .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
+// names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, snooze, alarm length, test notification), Synchronizacja (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Aplikacja (close to tray, version, licence, source code).
 //
@@ -362,6 +362,34 @@ Item {
                     iconName: "folder-open"
                     size: "small"
                     onClicked: AppController.closeVault()
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Default mode of new pages")
+                description: qsTr("For pages that do not choose a mode themselves. The new-page dialog starts with it.")
+                BSegmented {
+                    objectName: "pageModeSetting"
+                    accessibleName: qsTr("Default mode of new pages")
+                    model: [
+                        { value: "document", text: qsTr("Document"), icon: "file-text" },
+                        { value: "outline", text: qsTr("Outline"), icon: "list" }
+                    ]
+                    currentValue: Workspace.config.pageMode
+                    onActivated: (value) => Workspace.setConfig({ pageMode: value })
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Journal mode")
+                description: qsTr("Daily notes as an outline (like Logseq) or as documents. A day switched on its own keeps its mode.")
+                BSegmented {
+                    objectName: "journalModeSetting"
+                    accessibleName: qsTr("Journal mode")
+                    model: [
+                        { value: "outline", text: qsTr("Outline"), icon: "list" },
+                        { value: "document", text: qsTr("Document"), icon: "file-text" }
+                    ]
+                    currentValue: Workspace.config.journalMode
+                    onActivated: (value) => Workspace.setConfig({ journalMode: value })
                 }
             }
             ShellSettingRow {

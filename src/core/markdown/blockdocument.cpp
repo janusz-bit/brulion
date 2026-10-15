@@ -1063,6 +1063,36 @@ EditResult BlockDocument::convertToList(int i)
     return finish(before, i, -1);
 }
 
+EditResult BlockDocument::convertToParagraph(int i)
+{
+    if (i < 0 || i >= count() || !isListItem(i) || at(i).parent >= 0)
+        return {};
+    const Snapshot before = snapshot();
+    const quint64 uid = at(i).uid;
+    // The children move one level out: to the indentation of the item itself.
+    const int end = subtreeEnd(i);
+    if (end > i + 1)
+        shiftIndent(i + 1, end, leadingWhitespace(i + 1), leadingWhitespace(i));
+    QString body = at(i).body;
+    if (const auto marker = matchTaskMarker(body, 0))
+        body = body.sliced(marker->contentStart);
+    // The item's own lines without the marker and the continuation indentation (the body holds
+    // them that way), with the block's line terminator.
+    const Item &it = m_items[i];
+    QString eol = firstEol(it.own);
+    if (eol.isEmpty())
+        eol = it.eol.isEmpty() ? m_eol : it.eol;
+    setOwn(i, normalizeNewlines(body).split(u'\n').join(eol));
+    touch(i);
+    recompute();
+    renumberChildren(-1);
+    const int ni = indexOfUid(uid);
+    ensureSeparated(ni - 1);
+    ensureSeparated(ni);
+    fixEnds();
+    return finish(before, indexOfUid(uid), 0);
+}
+
 EditResult BlockDocument::indent(int i)
 {
     if (i < 0 || i >= count())

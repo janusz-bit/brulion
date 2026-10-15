@@ -51,7 +51,8 @@ public:
 
     // --- Context -----------------------------------------------------------------------------
     /// Vault configuration as a map (journalsFolder, journalFileFormat, attachmentsFolder,
-    /// templatesFolder, defaultReminderTime "HH:mm", weekStartsOn 1..7).
+    /// templatesFolder, defaultReminderTime "HH:mm", weekStartsOn 1..7, journalMode / pageMode
+    /// "outline" | "document" — the note modes, docs/SYNTAX.md §4).
     virtual QVariantMap vaultConfig() const = 0;
 
     // --- Navigation --------------------------------------------------------------------------

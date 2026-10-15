@@ -597,14 +597,16 @@ QVariantMap Workspace::vaultConfig() const
 {
     const VaultConfig c = m_vault ? m_vault->config() : VaultConfig();
     return {
-        { u"journalsFolder"_s, c.journalsFolder },
-        { u"journalFileFormat"_s, c.journalFileFormat },
-        { u"newPagesFolder"_s, c.newPagesFolder },
-        { u"attachmentsFolder"_s, c.attachmentsFolder },
-        { u"templatesFolder"_s, c.templatesFolder },
-        { u"journalTemplate"_s, c.journalTemplate },
-        { u"defaultReminderTime"_s, c.defaultReminderTime.toString(u"HH:mm"_s) },
-        { u"weekStartsOn"_s, int(c.weekStartsOn) },
+            {u"journalsFolder"_s, c.journalsFolder},
+            {u"journalFileFormat"_s, c.journalFileFormat},
+            {u"newPagesFolder"_s, c.newPagesFolder},
+            {u"attachmentsFolder"_s, c.attachmentsFolder},
+            {u"templatesFolder"_s, c.templatesFolder},
+            {u"journalTemplate"_s, c.journalTemplate},
+            {u"defaultReminderTime"_s, c.defaultReminderTime.toString(u"HH:mm"_s)},
+            {u"weekStartsOn"_s, int(c.weekStartsOn)},
+            {u"journalMode"_s, markdown::noteModeName(c.journalMode)},
+            {u"pageMode"_s, markdown::noteModeName(c.pageMode)},
     };
 }
 
@@ -640,6 +642,16 @@ bool Workspace::setConfig(const QVariantMap &map)
         if (day < 1 || day > 7)
             return false;
         c.weekStartsOn = Qt::DayOfWeek(day);
+    }
+    // Note modes: "outline" | "document" (anything else is refused).
+    for (const auto &[key, field] :
+         {std::pair{u"journalMode"_s, &c.journalMode}, std::pair{u"pageMode"_s, &c.pageMode}}) {
+        if (!map.contains(key))
+            continue;
+        const auto mode = markdown::parseNoteMode(map.value(key).toString());
+        if (!mode)
+            return false;
+        *field = *mode;
     }
     if (sameVaultConfig(c, m_vault->config()))
         return true;
@@ -729,7 +741,7 @@ void Workspace::openUrl(const QUrl &url)
 
 // ---- Pages ------------------------------------------------------------------------------------
 
-QString Workspace::createPage(const QString &title, const QString &folder)
+QString Workspace::createPage(const QString &title, const QString &folder, const QString &mode)
 {
     if (!m_vault)
         return {};
@@ -754,7 +766,15 @@ QString Workspace::createPage(const QString &title, const QString &folder)
                                       .arg(paths::pageTitle(wanted), paths::pageTitle(spelled)));
         return spelled;
     }
-    const VaultPath path = m_vault->create(wanted, QString(), ChangeSource::User);
+    // The mode chosen for the page is written only when the new page would not get it anyway
+    // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
+    QString content;
+    if (const auto chosen = markdown::parseNoteMode(mode)) {
+        const VaultConfig config = m_vault->config();
+        content = markdown::withNoteModeChoice(QString(), *chosen,
+                                               markdown::journalDateFromPath(wanted, config).has_value(), config);
+    }
+    const VaultPath path = m_vault->create(wanted, content, ChangeSource::User);
     if (path.isEmpty())
         Q_EMIT errorOccurred(tr("Could not create the page: %1").arg(m_vault->errorString()));
     return path;

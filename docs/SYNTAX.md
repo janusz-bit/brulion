@@ -49,10 +49,15 @@ This file is the single source of truth for parsers, renderers, importers and ex
   "templatesFolder": "templates",
   "journalTemplate": "templates/journal.md",
   "defaultReminderTime": "09:00",
-  "weekStartsOn": 1
+  "weekStartsOn": 1,
+  "journalMode": "outline",
+  "pageMode": "document"
 }
 ```
-`journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …). Missing keys fall back to these defaults.
+`journalFileFormat` uses Qt `QDate` format strings (`yyyy-MM-dd`, `dd.MM.yyyy`, …).
+`journalMode` / `pageMode` (`"outline"` | `"document"`) are the note modes of daily notes and of
+pages the content does not decide (§4 "Tryb notatki"). Missing keys and invalid values fall back
+to these defaults; unknown keys are kept when Brulion saves the file.
 
 ---
 
@@ -105,6 +110,53 @@ first-seen casing.
   `#tags` are parsed as lists. Logseq's `id:: <uuid>` property is treated as the block id.
 * **Page properties**: YAML frontmatter at the very start (`---` … `---`), or `key:: value`
   lines at the very top of the file before any other block (Logseq style).
+
+### Tryb notatki / Note mode
+
+Every note is shown in one of two modes; the Markdown is the same in both:
+
+* **outline** (*konspekt*, Logseq-like) — the block editor: a bullet per block, Tab indents,
+  folding, zoom, guide lines;
+* **document** (*dokument*, Obsidian-like live preview) — a continuous formatted document:
+  paragraphs and headings without bullets, lists drawn as ordinary Markdown lists; clicking a
+  block edits its Markdown in place.
+
+An explicit choice is stored in the note itself — portable and synced — as the frontmatter key
+`brulion`, following the Obsidian plugin convention (like Kanban's `kanban-plugin: board`):
+
+```yaml
+---
+brulion: document   # or: outline
+---
+```
+
+**Resolution** (`markdown::resolveNoteMode`, first match wins):
+
+1. the frontmatter key `brulion` (lower-case key) with the value `document` or `outline`
+   (case-insensitive, may be quoted); any other value is ignored;
+2. daily notes → `journalMode` of `.brulion/config.json` (default `outline`);
+3. other pages → their content: the top-level blocks of this section (YAML frontmatter and
+   Logseq page properties do not count; headings, code, tables, quotes… count as non-list
+   blocks; nested list items are part of their top-level item). With **at least two** such
+   blocks: **≥ 70 %** list items → outline, **≤ 30 %** → document;
+4. otherwise (empty, a single block, more than 30 % but less than 70 % list items) →
+   `pageMode` (default `document`).
+
+So imported Logseq pages (bullets only) open as outlines and Obsidian notes (headings and
+paragraphs) as documents without anything being written.
+
+**Writing.** The key is written only on an explicit choice: by the new-page dialog when the chosen
+mode differs from what the resolution gives for the initial content (template), and by every
+mode switch (`markdown::setNoteModeKey`). A switch changes nothing but that one entry: an
+existing `brulion:` entry is replaced in place (keeping its line ending; duplicates are dropped),
+a missing one is appended before the closing `---`, and a note without frontmatter gets
+`---` / `brulion: …` / `---` in front (after a BOM, with the note's line ending). Other keys,
+comments, their order, line endings and the body stay byte-for-byte. Removing the key (no UI
+offers it) also removes a frontmatter block that holds nothing else afterwards. Frontmatter that
+cannot be edited safely (malformed YAML, or a `brulion` key that is not on a line of its own at
+the start of the line, e.g. in an indented mapping) is left unchanged — a second `brulion` entry
+is never added, because other YAML readers refuse duplicate keys. Obsidian and Logseq show
+`brulion` as an ordinary page property.
 
 ## 5. Tasks (Obsidian Tasks compatible)
 

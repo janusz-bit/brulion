@@ -37,6 +37,14 @@
 //   properties   frontmatter: [{ key, value }]          query: { source, filters, terms }
 //   calloutType, calloutFolded, line (first line in the file), uid, plainText (one line, for
 //   breadcrumbs and accessibility)
+//   listMarker   list items: the marker as written ("-", "*", "+", "3.", "2)"); "" otherwise —
+//                the document mode draws bullets and numbers from it
+//   prevKind     `kind` of the previous visible row ("" for the first one): the document mode's
+//                spacing between blocks (a list item after a list item sits tight)
+//   noteModeOnly YAML frontmatter holding nothing but the note mode key `brulion` — such a row is
+//                not `visible` (the page header's mode toggle stands for it) unless edited
+// Folding can be switched off (setFoldingEnabled(false), the document mode): folded blocks then
+// show their children (`collapsed` false) while the folds are kept for the outline mode.
 #pragma once
 
 #include "blocktext.h"
@@ -62,6 +70,8 @@ namespace brulion::editor {
 class BlockListModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
+    /// Rows shown (`visible`): 0 for an empty page — also one holding nothing but its note mode.
+    Q_PROPERTY(int visibleCount READ visibleCount NOTIFY visibleCountChanged FINAL)
 
 public:
     enum Role {
@@ -96,6 +106,9 @@ public:
         UidRole,
         PlainTextRole,
         TransclusionsRole,
+        ListMarkerRole,
+        PrevKindRole,
+        NoteModeOnlyRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -112,6 +125,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     int count() const { return int(m_rows.size()); }
+    int visibleCount() const { return m_visibleCount; }
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
     /// visible, blockId, headingLevel, plainText); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
@@ -145,6 +159,9 @@ public:
     void setCollapsed(int row, bool collapsed);
     QSet<quint64> collapsedUids() const { return m_collapsed; }
     void setCollapsedUids(const QSet<quint64> &uids);
+    /// Folds hide children (outline mode, default) or are ignored (document mode).
+    bool foldingEnabled() const { return m_foldingEnabled; }
+    void setFoldingEnabled(bool enabled);
     void setEditingUid(quint64 uid);
     void setSelectedUid(quint64 uid);
     bool isRowVisible(int row) const;
@@ -177,6 +194,7 @@ public:
 
 Q_SIGNALS:
     void countChanged();
+    void visibleCountChanged();
 
 private:
     struct RowState {
@@ -188,9 +206,11 @@ private:
         bool editing = false;
         bool selected = false;
         bool zoomRoot = false;
+        QString prevKind;
         // Content caches.
         BlockShape shape;
         bool shapeValid = false;
+        bool noteModeOnly = false; ///< with the shape
         bool htmlValid = false;
         bool embedsValid = false;
         QString html;
@@ -233,6 +253,8 @@ private:
 
     quint64 m_zoomUid = 0;
     QSet<quint64> m_collapsed;
+    bool m_foldingEnabled = true;
+    int m_visibleCount = 0;
     quint64 m_editingUid = 0;
     quint64 m_selectedUid = 0;
 

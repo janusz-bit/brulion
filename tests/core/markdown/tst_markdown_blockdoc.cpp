@@ -1,6 +1,7 @@
 // BlockDocument: lossless round trip, block entries and every editing operation (including the
 // row changes reported for the UI model).
 #include "markdown/blockdocument.h"
+#include "markdown/frontmatter.h"
 #include "markdown/parse.h"
 
 #include <QElapsedTimer>
@@ -240,7 +241,7 @@ private Q_SLOTS:
                 const int n = doc.count();
                 const int i = n ? int(rnd(quint32(n))) : -1;
                 EditResult r;
-                switch (rnd(13)) {
+                switch (rnd(14)) {
                 case 0: r = doc.setBody(i, u"nowy **tekst** #tag\ndruga linia"_s); break;
                 case 1: r = doc.split(i, int(rnd(20))); break;
                 case 2: r = doc.insertAfter(i, u"wstawiony"_s, int(rnd(3))); break;
@@ -253,6 +254,7 @@ private Q_SLOTS:
                 case 9: r = doc.toggleTask(i, Today); break;
                 case 10: r = doc.ensureBlockId(i).edit; break;
                 case 11: r = doc.convertToList(i); break;
+                case 12: r = doc.convertToParagraph(i); break;
                 default: r = doc.insertAfter(i, u"akapit"_s, 0, false); break;
                 }
                 QString why;
@@ -917,6 +919,111 @@ private Q_SLOTS:
         QCOMPARE(heading.toString(), u"- # T\n\nPo\n"_s);
         QVERIFY(!BlockDocument(u"***\n"_s).convertToList(0).changed());
         QVERIFY(!BlockDocument(u"- x\n"_s).convertToList(0).changed());
+    }
+
+    void convertToParagraph_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("block");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QStringList>("kinds");
+        QTest::newRow("middle of a list")
+                << u"- jabłka\n- gruszki\n- śliwki\n"_s << 1 << u"- jabłka\n\ngruszki\n\n- śliwki\n"_s
+                << QStringList{u"li:0:- |jabłka"_s, u"p:0:|gruszki"_s, u"li:0:- |śliwki"_s};
+        QTest::newRow("first item") << u"- Zażółć\n- gęślą\n"_s << 0 << u"Zażółć\n\n- gęślą\n"_s
+                                    << QStringList{u"p:0:|Zażółć"_s, u"li:0:- |gęślą"_s};
+        QTest::newRow("last item, no final newline")
+                << u"- a\n- ostatni"_s << 1 << u"- a\n\nostatni"_s << QStringList{u"li:0:- |a"_s, u"p:0:|ostatni"_s};
+        QTest::newRow("task checkbox goes too")
+                << u"- [ ] Kupić mleko 📅 2026-10-16\n"_s << 0 << u"Kupić mleko 📅 2026-10-16\n"_s
+                << QStringList{u"p:0:|Kupić mleko 📅 2026-10-16"_s};
+        QTest::newRow("logseq task") << u"- TODO zadzwonić\n"_s << 0 << u"zadzwonić\n"_s
+                                     << QStringList{u"p:0:|zadzwonić"_s};
+        QTest::newRow("empty item") << u"- a\n- \n"_s << 1 << u"- a\n\n\n"_s << QStringList{u"li:0:- |a"_s, u"p:0:|"_s};
+        QTest::newRow("children move out")
+                << u"- rodzic\n\t- dziecko\n\t\t- wnuk\n- dalej\n"_s << 0
+                << u"rodzic\n\n- dziecko\n\t- wnuk\n- dalej\n"_s
+                << QStringList{u"p:0:|rodzic"_s, u"li:0:- |dziecko"_s, u"li:1:→- |wnuk"_s, u"li:0:- |dalej"_s};
+        QTest::newRow("children with spaces") << u"- a\n  - b\n    - c\n"_s << 0 << u"a\n\n- b\n  - c\n"_s
+                                              << QStringList{u"p:0:|a"_s, u"li:0:- |b"_s, u"li:1:  - |c"_s};
+        QTest::newRow("continuation lines, crlf")
+                << u"- pierwsza\r\n  druga\r\n- b\r\n"_s << 0 << u"pierwsza\r\ndruga\r\n\r\n- b\r\n"_s
+                << QStringList{u"p:0:|pierwsza⏎druga"_s, u"li:0:- |b"_s};
+        QTest::newRow("numbered list keeps its numbers") << u"1. a\n2. b\n3. c\n"_s << 1 << u"1. a\n\nb\n\n3. c\n"_s
+                                                         << QStringList{u"li:0:1. |a"_s, u"p:0:|b"_s, u"li:0:3. |c"_s};
+        QTest::newRow("numbered children join the list")
+                << u"1. a\n   1. x\n   2. y\n2. b\n"_s << 0 << u"a\n\n1. x\n2. y\n3. b\n"_s
+                << QStringList{u"p:0:|a"_s, u"li:0:1. |x"_s, u"li:0:2. |y"_s, u"li:0:3. |b"_s};
+        QTest::newRow("heading text") << u"- # Tytuł\n- b\n"_s << 0 << u"# Tytuł\n- b\n"_s
+                                      << QStringList{u"h:0:|# Tytuł"_s, u"li:0:- |b"_s};
+        QTest::newRow("after frontmatter")
+                << u"---\nbrulion: document\n---\n- punkt\n"_s << 1 << u"---\nbrulion: document\n---\npunkt\n"_s
+                << QStringList{u"fm:0:|---⏎brulion: document⏎---"_s, u"p:0:|punkt"_s};
+        QTest::newRow("after a nested item") << u"- a\n\t- a1\n- b\n"_s << 2 << u"- a\n\t- a1\n\nb\n"_s
+                                             << QStringList{u"li:0:- |a"_s, u"li:1:→- |a1"_s, u"p:0:|b"_s};
+    }
+
+    void convertToParagraph()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, block);
+        QFETCH(QString, expected);
+        QFETCH(QStringList, kinds);
+        BlockDocument doc(content);
+        const QList<quint64> before = uids(doc);
+        const quint64 uid = doc.at(block).uid;
+        const EditResult r = doc.convertToParagraph(block);
+        QVERIFY(r.changed());
+        QCOMPARE(doc.toString(), expected);
+        QCOMPARE(entries(doc), kinds);
+        QCOMPARE(r.focus, doc.indexOfUid(uid));
+        QCOMPARE(r.cursor, 0);
+        QString why;
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why + u": "_s + describe(r.changes)));
+        // The text parses back to the same blocks (only empty paragraphs are an in-memory state).
+        if (!expected.contains(u"\n\n\n"_s))
+            QCOMPARE(entries(BlockDocument(doc.toString())), kinds);
+    }
+
+    void convertToParagraphLeavesOthers()
+    {
+        // Nested items, paragraphs and other blocks are not list items to leave.
+        for (const auto &[content, block] :
+             {std::pair{u"- a\n\t- b\n"_s, 1}, std::pair{u"Akapit\n"_s, 0}, std::pair{u"# H\n"_s, 0},
+              std::pair{u"---\na: 1\n---\n"_s, 0}, std::pair{u"- a\n"_s, 5}, std::pair{u"- a\n"_s, -1}}) {
+            BlockDocument doc(content);
+            QVERIFY2(!doc.convertToParagraph(block).changed(), qPrintable(content));
+            QCOMPARE(doc.toString(), content);
+        }
+        // Untouched blocks keep their bytes.
+        const QString src = u"*   odstępy   \r\n\r\n+ inny\r\n+ trzeci  \r\n\r\nKoniec  "_s;
+        BlockDocument doc(src);
+        doc.convertToParagraph(1);
+        QCOMPARE(doc.toString(), u"*   odstępy   \r\n\r\ninny\r\n\r\n+ trzeci  \r\n\r\nKoniec  "_s);
+        // Undo-like round trip: the paragraph made a list again is the original list item.
+        BlockDocument again(u"- jeden\n- dwa\n"_s);
+        again.convertToParagraph(1);
+        again.convertToList(1);
+        QCOMPARE(again.toString(), u"- jeden\n\n- dwa\n"_s);
+    }
+
+    void convertToParagraphNeverMakesFrontmatter()
+    {
+        // "+ ---" is a list item holding a rule (not a rule itself, unlike "- ---"): as the first
+        // block it would become a `---` line that, with another one below, reads as YAML
+        // frontmatter on reload — everything between them would turn into properties.
+        for (const QString &content : {u"+ ---\n\nŻółta łódź\n\n---\n"_s, u"+ ---\r\n- b\r\n\r\n---\r\n"_s}) {
+            BlockDocument doc(content);
+            QCOMPARE(doc.at(0).kind, BlockKind::ListItem);
+            QVERIFY(doc.convertToParagraph(0).changed());
+            const QString out = doc.toString();
+            QVERIFY2(!findFrontmatter(out), qPrintable(out));
+            const BlockDocument reloaded(out);
+            QCOMPARE(reloaded.count(), doc.count());
+            for (int i = 0; i < reloaded.count(); ++i)
+                QCOMPARE(reloaded.at(i).kind, doc.at(i).kind);
+            QVERIFY(reloaded.at(0).kind != BlockKind::Frontmatter);
+        }
     }
 
     // --- performance ---------------------------------------------------------------------------

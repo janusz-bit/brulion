@@ -9,7 +9,9 @@
 // per invalid value); invalid JSON or a non-object yields the defaults plus a warning. Unknown
 // keys are kept so a newer Brulion on another device does not lose its settings when this
 // device saves the file. `weekStartsOn` uses the JavaScript convention of the v1 app
-// (0 = Sunday, 1 = Monday, … 6 = Saturday); 7 is accepted as Sunday too.
+// (0 = Sunday, 1 = Monday, … 6 = Saturday); 7 is accepted as Sunday too. `journalMode` /
+// `pageMode` are "outline" or "document" (VaultConfig::journalMode / pageMode, the note modes of
+// markdown/notemode.h; case-insensitive when read).
 #pragma once
 
 #include "types.h"

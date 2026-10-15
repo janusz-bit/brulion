@@ -5,6 +5,9 @@
 // run on the real index module (a VaultIndex rebuilt from the files after changes), so live
 // results and their checkboxes work as in the app. Writes, external changes and task edits
 // emit indexChanged() once per event-loop turn, like the shell's Workspace.
+// Its vault configuration has the app's defaults except the note modes: `pageMode` is "outline"
+// here (the editor's tests and the playground's sample pages were written for the outliner;
+// the document mode is tried on pages that name it, see documentPath, or with pageMode set).
 //
 //   FakeEditorHost { id: host; Component.onCompleted: populateSample() }
 //   PageController { host: host; path: host.samplePath }
@@ -42,6 +45,11 @@ class FakeEditorHost : public EditorHost, public QueryHost {
     Q_PROPERTY(QString now READ now WRITE setNow NOTIFY nowChanged FINAL)
     /// Number of setTaskStatus() calls that changed a file (tests).
     Q_PROPERTY(int taskEdits READ taskEdits NOTIFY taskEdited FINAL)
+    /// A sample document (`brulion: document`) for the document mode, see documentNote().
+    Q_PROPERTY(QString documentPath READ documentPath CONSTANT FINAL)
+    /// vaultConfig()'s note modes, "outline" | "document" (default: both "outline").
+    Q_PROPERTY(QString pageMode READ pageMode WRITE setPageMode NOTIFY configChanged FINAL)
+    Q_PROPERTY(QString journalMode READ journalMode WRITE setJournalMode NOTIFY configChanged FINAL)
 
 public:
     explicit FakeEditorHost(QObject *parent = nullptr);
@@ -71,12 +79,18 @@ public:
 
     QString now() const { return m_now; }
     void setNow(const QString &now);
+    QString pageMode() const { return m_pageMode; }
+    void setPageMode(const QString &mode);
+    QString journalMode() const { return m_journalMode; }
+    void setJournalMode(const QString &mode);
     int taskEdits() const { return m_taskEdits; }
     /// Number of runQuery() calls (tests).
     int queryRuns() const { return m_queryRuns; }
 
     /// Put a file without any signal (setting up a test or the playground).
     Q_INVOKABLE void setFile(const QString &path, const QString &content);
+    /// Put an attachment given as text (an SVG picture in the playground's self-test).
+    Q_INVOKABLE void setTextAsset(const QString &path, const QString &content);
     /// Change a file "outside the editor": stores it and emits fileChanged(path).
     Q_INVOKABLE void externalWrite(const QString &path, const QString &content);
     Q_INVOKABLE void removeFile(const QString &path);
@@ -95,9 +109,14 @@ public:
     /// A sample recipe with page properties and a "# Title" heading repeating its name.
     QString recipePath() const;
     static QString recipeNote();
+    /// A trip plan written as a document (headings, paragraphs, nested and numbered lists, tasks,
+    /// a callout, inline calculation) with `brulion: document` in its frontmatter.
+    QString documentPath() const;
+    static QString documentNote();
 
 Q_SIGNALS:
     void nowChanged();
+    void configChanged();
     void taskEdited(const QString &path, int line);
     void written(const QString &path);
     void navigated(const QVariantMap &route, bool newPane);
@@ -112,6 +131,8 @@ private:
     bool m_failWrites = false;
     QVariantMap m_lastRoute;
     QString m_now;
+    QString m_pageMode = QStringLiteral("outline");
+    QString m_journalMode = QStringLiteral("outline");
     int m_taskEdits = 0;
     int m_queryRuns = 0;
     bool m_queriesFail = false;

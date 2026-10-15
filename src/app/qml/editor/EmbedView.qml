@@ -5,12 +5,15 @@ import Brulion
 // EmbedView — attachments embedded in a block (`![[photo.png]]`, `![alt](assets/a.png)`):
 // images at their natural size up to the column width (rounded, with a hairline border),
 // other files as chips. URLs come from EditorHost::assetUrl (file:// on desktop/Android,
-// blob/data on WebAssembly). A click on a picture emits clicked(target).
+// blob/data on WebAssembly). A click on a picture emits clicked(target), a click beside it
+// backgroundClicked() (BlockDelegate: edit the block). SVG pictures are drawn to fit 1024×420
+// with their aspect ratio (a vector picture has no pixel size of its own to cap).
 Column {
     id: root
 
     property var embeds: []
     signal clicked(string target)
+    signal backgroundClicked()
 
     /// See BlockEditor.autoTextSafe (BChip shows its text with Text.AutoText).
     function autoTextSafe(s) {
@@ -25,8 +28,19 @@ Column {
             id: embed
             required property var modelData
             readonly property bool image: modelData.image && modelData.url.toString() !== ""
+            readonly property bool scalable: /\.svgz?$/i.test(modelData.name || "")
             width: root.width
             height: image ? picture.height : chip.height
+
+            // Beside the picture / chip: a click there edits the block (an embed-only paragraph of
+            // a document has no text line to click).
+            Item {
+                x: embed.image ? picture.width : chip.width
+                width: Math.max(0, embed.width - x)
+                height: embed.height
+                HoverHandler { cursorShape: Qt.IBeamCursor; enabled: !Theme.touchUi }
+                TapHandler { onTapped: root.backgroundClicked() }
+            }
 
             Rectangle {
                 id: picture
@@ -45,12 +59,15 @@ Column {
                 // Decoded at most 2048 px wide/high: a phone photo (12 MP) would otherwise take
                 // 48 MB (+ mipmaps) per embed. No PreserveAspectFit: with it Qt also scales small
                 // images *up* to sourceSize; the frame has the picture's aspect ratio anyway.
+                // SVG is rendered at sourceSize itself — both sides given, it would be stretched
+                // to a 2048 px square — so it is fitted (aspect kept) into the largest box shown.
                 Image {
                     id: img
                     anchors.fill: parent
                     anchors.margins: 1
                     source: embed.image ? embed.modelData.url : ""
-                    sourceSize: Qt.size(2048, 2048)
+                    sourceSize: embed.scalable ? Qt.size(1024, 420) : Qt.size(2048, 2048)
+                    fillMode: embed.scalable ? Image.PreserveAspectFit : Image.Stretch
                     asynchronous: true
                     smooth: true
                     mipmap: true

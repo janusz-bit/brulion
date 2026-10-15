@@ -10,6 +10,7 @@
 #include "dates/recurrence.h"
 #include "markdown/inline.h"
 #include "markdown/journal.h"
+#include "markdown/notemode.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
@@ -458,6 +459,7 @@ void PageController::load()
     }
     if (!folded.isEmpty())
         m_model->setCollapsedUids(folded);
+    resolveMode(true);
     m_loaded = true;
     if (m_exists != ok) {
         m_exists = ok;
@@ -539,6 +541,9 @@ void PageController::markDirty()
     } else if (!m_dirty) {
         m_saveTimer.stop();
     }
+    // The note's own mode key may have changed (undo of a switch, source mode, typing in the
+    // properties); anything else keeps the mode the page was opened with.
+    resolveMode(false, &current);
 }
 
 void PageController::setDirty(bool dirty)
@@ -641,6 +646,7 @@ void PageController::onFileChanged(const QString &path)
         Q_EMIT zoomChanged();
         Q_EMIT foldStateChanged();
         emitEditTextReset();
+        resolveMode(false); // another device may have switched the mode
     };
     if (!m_dirty) {
         setConflict(false);
@@ -851,6 +857,119 @@ void PageController::applyText(const QString &newText, const Focus &after)
         Q_EMIT editingRowChanged();
 }
 
+// --- Note mode ------------------------------------------------------------------------------------------
+
+QString PageController::mode() const
+{
+    return markdown::noteModeName(m_mode);
+}
+
+QString PageController::modeSource() const
+{
+    switch (markdown::NoteModeSource(m_modeSource)) {
+    case markdown::NoteModeSource::Frontmatter: return u"frontmatter"_s;
+    case markdown::NoteModeSource::JournalDefault: return u"journal"_s;
+    case markdown::NoteModeSource::Heuristic: return u"heuristic"_s;
+    case markdown::NoteModeSource::PageDefault: break;
+    }
+    return u"default"_s;
+}
+
+void PageController::resolveMode(bool force, const QString *current)
+{
+    if (!force && !m_loaded)
+        return;
+    const QString content = current ? *current : m_sourceMode ? m_sourceText : text();
+    const std::optional<NoteMode> key = markdown::frontmatterNoteMode(content);
+    if (force)
+        m_keylessSource = -1; // a new session: the content decides again
+    else if (key == m_modeKey)
+        return;
+    m_modeKey = key;
+    if (key) {
+        applyMode(*key, int(markdown::NoteModeSource::Frontmatter));
+        return;
+    }
+    // Without the key: the mode this session had without it (undoing a switch, or another device
+    // removing the key, brings back the mode the page was opened with), resolved from the content
+    // only the first time the page has no key.
+    if (m_keylessSource < 0) {
+        const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+        const bool journal = !m_path.isEmpty() && markdown::journalDateFromPath(m_path, config).has_value();
+        const markdown::ResolvedNoteMode resolved = markdown::resolveNoteMode(content, journal, config);
+        m_keylessMode = resolved.mode;
+        m_keylessSource = int(resolved.source);
+    }
+    applyMode(m_keylessMode, m_keylessSource);
+}
+
+void PageController::applyMode(NoteMode mode, int source)
+{
+    const bool changed = mode != m_mode;
+    if (!changed && source == m_modeSource)
+        return;
+    m_mode = mode;
+    m_modeSource = source;
+    m_model->setFoldingEnabled(mode == NoteMode::Outline);
+    if (changed) {
+        if (mode == NoteMode::Document && zoomBlock() >= 0)
+            zoomTo(-1);
+        // Back in the outline the folds hide children again: the block being edited stays in view.
+        const int editing = editingRow();
+        if (editing >= 0 && !m_model->isRowVisible(editing))
+            reveal(editing);
+    }
+    Q_EMIT modeChanged();
+}
+
+void PageController::refreshMode()
+{
+    // Only a mode taken from the notebook's defaults follows them. The content is not looked at
+    // again (any setting, also from another device, gives configChanged): what was written since
+    // the page was opened never flips it.
+    if (!m_loaded || m_keylessSource < 0)
+        return;
+    const auto source = markdown::NoteModeSource(m_keylessSource);
+    if (source != markdown::NoteModeSource::JournalDefault && source != markdown::NoteModeSource::PageDefault)
+        return;
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    m_keylessMode = source == markdown::NoteModeSource::JournalDefault ? config.journalMode : config.pageMode;
+    if (!m_modeKey)
+        applyMode(m_keylessMode, m_keylessSource);
+}
+
+bool PageController::setMode(const QString &name)
+{
+    const std::optional<NoteMode> mode = markdown::parseNoteMode(name);
+    if (!mode || !m_loaded)
+        return false;
+    const QString current = m_sourceMode ? m_sourceText : text();
+    const QString updated = markdown::setNoteModeKey(current, *mode);
+    // Frontmatter that cannot be edited safely (malformed YAML) is left alone: no switch then.
+    if (markdown::frontmatterNoteMode(updated) != mode)
+        return false;
+    if (updated != current) {
+        if (m_sourceMode) {
+            m_sourceText = updated;
+            m_sourceEdited = true;
+            Q_EMIT sourceTextChanged();
+            markDirty();
+        } else {
+            // The edited block keeps the caret: it follows its block (rows move down when the
+            // frontmatter block appears), so no row is given here.
+            applyText(updated, Focus{-1, -1});
+        }
+    }
+    resolveMode(false);
+    save();
+    return true;
+}
+
+bool PageController::toggleMode()
+{
+    return setMode(markdown::noteModeName(documentMode() ? NoteMode::Outline : NoteMode::Document));
+}
+
 // --- Editing commands --------------------------------------------------------------------------------
 
 void PageController::startEditing(int row, int cursor)
@@ -935,8 +1054,16 @@ QVariantMap PageController::split(int row, int cursor)
         return result(f.row, f.cursor);
     }
 
-    // Enter on an empty nested item outdents it (common outliner behaviour).
+    // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves
+    // one level out, a top-level one becomes a paragraph.
     const int zoom = zoomBlock();
+    if (len == 0 && entry.kind == BlockKind::ListItem && documentMode()) {
+        const QVariantMap left = leaveList(row);
+        if (left.value(u"row"_s).toInt() >= 0)
+            return left;
+    }
+
+    // Enter on an empty nested item outdents it (common outliner behaviour).
     if (len == 0 && !shape.task && entry.kind == BlockKind::ListItem && entry.depth > 0
         && (zoom < 0 || entry.parent != zoom)) {
         if (outdent(row))
@@ -1010,9 +1137,61 @@ QVariantMap PageController::mergeNext(int row)
     return result(f.row, f.cursor);
 }
 
+QVariantMap PageController::leaveList(int row)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row) || row == zoomBlock())
+        return result(-1, -1);
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    if (entry.kind != BlockKind::ListItem)
+        return result(-1, -1);
+    const bool editingThis = editingRow() == row;
+    if (entry.depth > 0) {
+        const quint64 uid = entry.uid;
+        if (!outdent(row))
+            return result(-1, -1);
+        return result(m_model->rowOfUid(uid), editingThis ? m_cursor : 0);
+    }
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.convertToParagraph(row); });
+    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, 0};
+    endCommand(editingThis ? f : currentFocus());
+    if (!r.changed())
+        return result(-1, -1);
+    if (editingThis)
+        setFocus(f, true);
+    return result(f.row, f.cursor);
+}
+
+QVariantMap PageController::toggleList(int row)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row))
+        return result(-1, -1);
+    const BlockKind kind = m_model->document().at(row).kind;
+    if (kind == BlockKind::ListItem)
+        return leaveList(row);
+    if (kind != BlockKind::Paragraph)
+        return result(-1, -1);
+    const bool editingThis = editingRow() == row;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.convertToList(row); });
+    // The edit text is the same (the marker is drawn, not edited): the caret stays where it was.
+    const Focus f{row, editingThis ? m_cursor : 0};
+    endCommand(editingThis ? f : currentFocus());
+    if (!r.changed())
+        return result(-1, -1);
+    if (editingThis)
+        setFocus(f, true);
+    return result(row, f.cursor);
+}
+
 bool PageController::indent(int row)
 {
     if (!validRow(row) || row == zoomBlock())
+        return false;
+    // Document mode: Tab indents list items only (a paragraph never becomes an outline block).
+    if (documentMode() && m_model->document().at(row).kind != BlockKind::ListItem)
         return false;
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.indent(row); });
@@ -1164,8 +1343,10 @@ int PageController::insertBlockAfter(int row, const QString &body)
         depth = doc.at(row).depth;
     else
         row = -1;
+    // Document mode: a paragraph after text, a list item only inside a list.
+    const bool listItem = !documentMode() || (row >= 0 && doc.at(row).kind == BlockKind::ListItem);
     beginCommand();
-    const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, body, depth); });
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, body, depth, listItem); });
     const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, -1};
     endCommand(f);
     if (r.changed())
@@ -1193,6 +1374,21 @@ int PageController::appendEmptyBlock()
         return f.row;
     }
     const int last = m_model->count() - 1;
+    if (documentMode()) {
+        // A document ends with an empty paragraph to type into (an empty list item there is used).
+        if (last >= 0 && m_model->isRowVisible(last) && m_model->shapeAt(last).view == BlockView::Text
+            && m_model->editTextAt(last).isEmpty()
+            && (doc.at(last).kind == BlockKind::Paragraph || doc.at(last).kind == BlockKind::ListItem)) {
+            setFocus({last, 0}, true);
+            return last;
+        }
+        beginCommand();
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, QString(), 0, false); });
+        const Focus f = r.changed() ? focusFromResult(r, last) : Focus{last, -1};
+        endCommand(f);
+        setFocus(f, true);
+        return f.row;
+    }
     if (last >= 0 && doc.at(last).kind == BlockKind::ListItem && doc.at(last).depth == 0
         && m_model->editTextAt(last).isEmpty() && m_model->isRowVisible(last)) {
         setFocus({last, 0}, true);
@@ -1296,6 +1492,7 @@ int PageController::startNewPage(const QString &templatePath)
     // The template is the page's starting text, like the content of a loaded file: no undo step
     // and nothing to save until the user changes something.
     m_model->resetContent(filled);
+    resolveMode(true); // the template may name the mode
     int row = -1;
     for (int r = 0; r < m_model->count() && row < 0; ++r) {
         if (m_model->document().at(r).kind == BlockKind::ListItem && m_model->shapeAt(r).view == BlockView::Text
@@ -1303,9 +1500,12 @@ int PageController::startNewPage(const QString &templatePath)
             row = r;
     }
     if (row < 0) {
-        // No empty block in the template: one to type into at the end (part of the start too).
+        // No empty block in the template: one to type into at the end (part of the start too) — a
+        // paragraph in a document.
         const int last = m_model->count() - 1;
-        const EditResult r = m_model->apply([&](BlockDocument &d) { return d.insertAfter(last, QString(), 0); });
+        const bool listItem = !documentMode();
+        const EditResult r =
+                m_model->apply([&](BlockDocument &d) { return d.insertAfter(last, QString(), 0, listItem); });
         row = r.changed() ? focusFromResult(r, last).row : last;
     }
     m_savedText = text();
@@ -1322,7 +1522,7 @@ int PageController::startNewPage(const QString &templatePath)
 
 void PageController::zoomInto(int row)
 {
-    if (!validRow(row))
+    if (!validRow(row) || documentMode()) // a document has no bullets to zoom into
         return;
     m_model->setZoomUid(m_model->uidAt(row));
     const int editing = editingRow();
@@ -1347,14 +1547,16 @@ void PageController::zoomTo(int row)
 
 void PageController::toggleFold(int row)
 {
-    if (!validRow(row))
+    if (!validRow(row) || documentMode())
         return;
     setFolded(row, !m_model->isCollapsed(row));
 }
 
 void PageController::setFolded(int row, bool folded)
 {
-    if (!validRow(row) || !m_model->document().hasChildren(row) || m_model->isCollapsed(row) == folded)
+    // Document mode: folds are kept for the outline mode but none are made or undone.
+    if (!validRow(row) || documentMode() || !m_model->document().hasChildren(row)
+        || m_model->isCollapsed(row) == folded)
         return;
     m_model->setCollapsed(row, folded);
     const int editing = editingRow();
@@ -1365,6 +1567,8 @@ void PageController::setFolded(int row, bool folded)
 
 void PageController::foldAll(bool folded)
 {
+    if (documentMode())
+        return;
     QSet<quint64> uids;
     const BlockDocument &doc = m_model->document();
     if (folded) {

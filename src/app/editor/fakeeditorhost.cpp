@@ -506,12 +506,26 @@ QString FakeEditorHost::saveAttachment(const QString &fileName, const QByteArray
 
 QVariantMap FakeEditorHost::vaultConfig() const
 {
-    return {{u"journalsFolder"_s, u"journals"_s},
-            {u"journalFileFormat"_s, u"yyyy-MM-dd"_s},
-            {u"attachmentsFolder"_s, u"assets"_s},
-            {u"templatesFolder"_s, u"templates"_s},
-            {u"defaultReminderTime"_s, u"09:00"_s},
-            {u"weekStartsOn"_s, 1}};
+    return {{u"journalsFolder"_s, u"journals"_s},   {u"journalFileFormat"_s, u"yyyy-MM-dd"_s},
+            {u"attachmentsFolder"_s, u"assets"_s},  {u"templatesFolder"_s, u"templates"_s},
+            {u"defaultReminderTime"_s, u"09:00"_s}, {u"weekStartsOn"_s, 1},
+            {u"journalMode"_s, m_journalMode},      {u"pageMode"_s, m_pageMode}};
+}
+
+void FakeEditorHost::setPageMode(const QString &mode)
+{
+    if (m_pageMode == mode)
+        return;
+    m_pageMode = mode;
+    Q_EMIT configChanged();
+}
+
+void FakeEditorHost::setJournalMode(const QString &mode)
+{
+    if (m_journalMode == mode)
+        return;
+    m_journalMode = mode;
+    Q_EMIT configChanged();
 }
 
 void FakeEditorHost::navigate(const QVariantMap &route, bool newPane)
@@ -528,6 +542,13 @@ void FakeEditorHost::openUrl(const QUrl &url)
 void FakeEditorHost::setFile(const QString &path, const QString &content)
 {
     m_files.insert(path, content);
+    filesChanged(false);
+}
+
+void FakeEditorHost::setTextAsset(const QString &path, const QString &content)
+{
+    m_assets.insert(path, content.toUtf8());
+    m_assetUrls.remove(path);
     filesChanged(false);
 }
 
@@ -632,6 +653,50 @@ type:tasks status:open tag:zakupy sort:due
 )"_s;
 }
 
+QString FakeEditorHost::documentPath() const
+{
+    return u"Podróże/Wyjazd w Tatry.md"_s;
+}
+
+QString FakeEditorHost::documentNote()
+{
+    return uR"(---
+tags: [podróże]
+brulion: document
+---
+# Wyjazd w Tatry
+
+Trzy dni w Zakopanem pod koniec października: pociąg w piątek rano, powrót w niedzielę wieczorem. Budżet liczymy w [[Budżet domowy]]. #podróże
+
+## Plan
+
+Pierwszego dnia spokojnie — Krupówki, Gubałówka i kolacja w góralskiej karczmie. Drugiego dnia **Morskie Oko**: wyjście o świcie, zanim na szlaku zrobi się tłoczno.
+
+- Piątek: Gubałówka i Krupówki
+- Sobota: Morskie Oko
+	- Wejście od Palenicy Białczańskiej, ok. 2,5 h
+	- Z powrotem bryczką, jeśli zabraknie sił
+- Niedziela: termy w Bukowinie
+
+## Do spakowania
+
+- [x] Buty trekkingowe ✅ 2026-10-12
+- [ ] Kurtka przeciwdeszczowa
+- [ ] Termos i czołówka 📅 2026-10-22
+
+## Koszty
+
+1. Pociąg: 2 × 89 zł
+2. Nocleg: dwie noce po 240 zł
+3. Bilety do parku: 2 × 9 zł
+
+Razem wychodzi `= 2 * 89 + 2 * 240 + 2 * 9` zł na dwie osoby.
+
+> [!tip] Pogoda
+> W październiku w Tatrach bywa już śnieg — sprawdź prognozę dzień przed wyjazdem.
+)"_s;
+}
+
 QString FakeEditorHost::recipePath() const
 {
     return u"Przepisy/Pierogi ruskie.md"_s;
@@ -685,6 +750,7 @@ void FakeEditorHost::populateSample()
             u"- Spotkanie {{date}} — {{title}}\n\t- Uczestnicy:: \n\t- Ustalenia\n\t\t- {{cursor}}\n\t- [ ] Wysłać notatkę\n"_s);
     setFile(u"templates/Zakupy tygodniowe.md"_s, u"- [ ] Pieczywo\n- [ ] Warzywa\n- [ ] Owoce\n"_s);
     setFile(recipePath(), recipeNote());
+    setFile(documentPath(), documentNote());
     m_assets.insert(u"assets/łazienka-szkic.png"_s, sampleImagePng());
     m_indexDirty = true;
     Q_EMIT indexChanged();

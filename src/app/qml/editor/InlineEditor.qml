@@ -104,7 +104,9 @@ TextEdit {
             c = positionAt(editor.pendingClick.x, editor.pendingClick.y)
             editor.pendingClickRow = -1
         } else if (editor.navigationEdge !== "") {
-            c = positionAt(Math.max(0, editor.navigationX), editor.navigationEdge === "bottom" ? contentHeight - 2 : 2)
+            // navigationX is in the editor's coordinates: blocks are indented differently.
+            const x = editor.navigationX - mapToItem(editor, 0, 0).x
+            c = positionAt(Math.max(0, x), editor.navigationEdge === "bottom" ? contentHeight - 2 : 2)
             editor.navigationEdge = ""
         } else {
             c = editor.controller.cursorPosition

@@ -180,6 +180,16 @@ public:
     /// "- …" (continuation lines indented). Frontmatter and rules cannot be converted.
     EditResult convertToList(int i);
 
+    /// The inverse for a top-level list item `i` — the document mode's Backspace at the start of
+    /// a list item and Enter on an empty one (docs/UI.md "Note modes"): the block becomes what its
+    /// text is without the list (a paragraph, or a heading / code block / quote when the text is
+    /// one) in the same place. The marker and a task checkbox go, continuation lines lose the
+    /// item's indentation, and its children move one level out (they start a list right after
+    /// it). The list items around it stay lists (a blank line separates them from the block).
+    /// Nested items and non-list blocks: nothing changes (outdent() a nested item instead).
+    /// Focus: the block, caret at the start.
+    EditResult convertToParagraph(int i);
+
 private:
     struct Item {
         BlockEntry entry;

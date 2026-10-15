@@ -22,9 +22,13 @@ import Brulion
 // to type into (a day without a note: the journal template) and the editor creates the file with
 // its first change; settings (text width,
 // "open pages as source", Ctrl+E); merged external changes are told with a toast.
+// The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Przełącz na
+// dokument / konspekt" and the palette's "Przełącz tryb notatki" (uiAction "toggleNoteMode")
+// switch it (PageController.toggleMode writes the `brulion:` key); a change of the notebook's
+// default modes re-resolves pages that have no key.
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
-// dialog), "unlinked" (the unlinked mentions, scrolled to), "links" | "outline" | "calendar"
-// (the side panel on that tab). route.source opens in source mode.
+// dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
+// "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (daily notes by their date), `sidePanel` and `editing`. `--editor-script <state>` drives the
@@ -144,6 +148,9 @@ FocusScope {
         case "export":
             editor.later(() => exportDialog.openFor(page.path))
             break
+        case "menu":
+            menuTimer.restart()
+            break
         case "unlinked":
             refsSection.unlinkedOpen = true
             scrollToEnd.restart()
@@ -184,6 +191,14 @@ FocusScope {
         }
     }
 
+    /// Switch between document and outline (the header's toggle, the menu, the palette).
+    function toggleNoteMode() {
+        if (!page.loaded)
+            return
+        if (!page.toggleMode())
+            AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
+    }
+
     function copyLink() {
         const link = tools.wikiLink(page.path)
         if (tools.copyText(link))
@@ -221,6 +236,13 @@ FocusScope {
 
     PageTools { id: tools; workspace: Workspace }
 
+    // route.open "menu": once the header has its buttons.
+    Timer {
+        id: menuTimer
+        interval: 300
+        onTriggered: if (root.pageHeader && root.pageHeader.menuAnchor) root.pageHeader.menuRequested(root.pageHeader.menuAnchor)
+    }
+
     // route.open "unlinked": once the editor settled (it scrolls to the top after loading).
     Timer {
         id: scrollToEnd
@@ -241,6 +263,8 @@ FocusScope {
 
     Connections {
         target: Workspace
+        // The notebook's default modes changed (settings, another device).
+        function onConfigChanged() { page.refreshMode() }
         function onPathRenamed(oldPath, newPath) {
             if (page.path === oldPath) {
                 page.followRename(oldPath, newPath)
@@ -276,6 +300,7 @@ FocusScope {
                 startsWithTitle: root.startsWithTitle
                 inSidePanel: root.inSidePanel
                 onRenameRequested: (newTitle) => root.rename(newTitle)
+                onModeToggleRequested: root.toggleNoteMode()
                 onMenuRequested: (anchor) => pageMenu.popup(anchor, anchor.width - pageMenu.width, anchor.height)
                 Component.onCompleted: root.pageHeader = pageHeader
                 Component.onDestruction: if (root.pageHeader === pageHeader) root.pageHeader = null
@@ -289,9 +314,9 @@ FocusScope {
         id: refsSection
         parent: editor.listView.contentItem
         visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== ""
-        x: editor.contentX + (root.inSidePanel || Theme.compact ? 0 : editor.arrowColumn)
+        x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         y: (editor.listView.footerItem ? editor.listView.footerItem.y : 0) + root.refsGap
-        width: editor.contentWidth - (root.inSidePanel || Theme.compact ? 0 : editor.arrowColumn)
+        width: editor.contentWidth - (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)
         path: page.path
         rendererPalette: editor.rendererPalette
         compact: Theme.compact || root.inSidePanel
@@ -344,6 +369,12 @@ FocusScope {
             text: qsTr("Open in side panel")
             iconName: "panel-right"
             onTriggered: AppController.openPage(page.path, -1, true)
+        }
+        BMenuItem {
+            text: page.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
+            iconName: page.documentMode ? "list" : "file-text"
+            enabled: page.loaded
+            onTriggered: root.toggleNoteMode()
         }
         BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
@@ -410,6 +441,8 @@ FocusScope {
         function onUiActionRequested(action) {
             if (action === "toggleSourceMode" && root.visible && !root.inSidePanel)
                 editor.toggleSourceMode()
+            else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel)
+                root.toggleNoteMode()
         }
     }
 

@@ -148,6 +148,10 @@ struct ParsedNote {
 // Vault configuration (.brulion/config.json, synced between devices)
 // ---------------------------------------------------------------------------------------------
 
+/// How a note is shown and edited (docs/SYNTAX.md §4 "Tryb notatki / Note mode"): a Logseq-like
+/// outline of blocks or an Obsidian-like continuous document. See markdown/notemode.h.
+enum class NoteMode { Outline, Document };
+
 struct VaultConfig {
     QString journalsFolder = QStringLiteral("journals");
     QString journalFileFormat = QStringLiteral("yyyy-MM-dd");  ///< Qt QDate format string
@@ -157,6 +161,8 @@ struct VaultConfig {
     QString journalTemplate = QStringLiteral("templates/journal.md");
     QTime defaultReminderTime = QTime(9, 0);
     Qt::DayOfWeek weekStartsOn = Qt::Monday;
+    NoteMode journalMode = NoteMode::Outline; ///< journal pages without an explicit `brulion:` mode
+    NoteMode pageMode = NoteMode::Document;   ///< new pages; other pages the content does not decide
 };
 
 } // namespace brulion

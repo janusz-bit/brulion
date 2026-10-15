@@ -11,8 +11,11 @@ import Brulion
 //
 // `--editor-script <name>` puts the editor into a state for screenshots (see runScript()):
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
-// table, calc, query, embeds, title, empty, conflict, markup; `selftest` runs keyboard/input-method
-// checks and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
+// table, calc, query, embeds, title, empty, conflict, markup; the document mode on the sample
+// trip plan (FakeEditorHost.documentPath): document (reading), document-paragraph,
+// document-list, document-heading, document-task (editing one), document-outline (the same page
+// switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
+// mode) and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
 ApplicationWindow {
     id: window
 
@@ -73,7 +76,8 @@ ApplicationWindow {
         host.populateSample()
         page.host = host
         page.path = DevTools.editorScript === "empty" ? "Nowa strona.md"
-                  : DevTools.editorScript === "title" ? host.recipePath : host.samplePath
+                  : DevTools.editorScript === "title" ? host.recipePath
+                  : DevTools.editorScript.startsWith("document") ? host.documentPath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
     }
@@ -137,6 +141,13 @@ ApplicationWindow {
                 focusPolicy: Qt.NoFocus
                 visible: !Theme.compact
                 onClicked: page.redo()
+            }
+            BIconButton {
+                // The note mode (docs/UI.md "Note modes"): the icon shows the current one.
+                iconName: page.documentMode ? "file-text" : "list"
+                label: page.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
+                focusPolicy: Qt.NoFocus
+                onClicked: page.toggleMode()
             }
             BIconButton {
                 iconName: "code"
@@ -289,6 +300,8 @@ ApplicationWindow {
     property int realRow: -1
     property int farRow: -1
     property string textBefore: ""
+    /// Repeats of a step waiting for something asynchronous (a picture loading).
+    property int waits: 0
     function check(ok, what) {
         if (!ok)
             failures += 1
@@ -519,6 +532,108 @@ ApplicationWindow {
                 const section = info(rowOf("Budżet na październik") + 1)
                 check(section.view === "text", "the embedded section's block is a text block")
             },
+            // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
+            () => { page.save(); page.path = host.documentPath },
+            () => {
+                check(page.loaded && page.mode === "document" && editor.documentMode, "the document sample opens as a document")
+                const para = rowOf("Pierwszego dnia")
+                const item = editor.listView.itemAtIndex(para) as BlockDelegate
+                check(item !== null && Math.abs(item.contentLeft - editor.contentX) < 0.5 && editor.gutter === 0,
+                      "paragraphs start at the text column, no outline gutter")
+                const li = rowOf("Sobota")
+                const nested = rowOf("Wejście od Palenicy")
+                const liItem = editor.listView.itemAtIndex(li) as BlockDelegate
+                const nestedItem = editor.listView.itemAtIndex(nested) as BlockDelegate
+                check(liItem !== null && nestedItem !== null && liItem.contentLeft > editor.contentX
+                      && nestedItem.contentLeft > liItem.contentLeft, "list items are indented per level")
+                check(liItem !== null && liItem.topPad < item.topPad, "list items sit closer together than paragraphs")
+                const h = rowOf("Plan")
+                const hItem = editor.listView.itemAtIndex(h) as BlockDelegate
+                check(hItem !== null && hItem.topPad > item.topPad && editor.headingSize(2) > editor.fontSize,
+                      "headings are larger with air above them")
+                check(info(rowOf("Pociąg")).listMarker === "1.", "numbered items keep their numbers")
+            },
+            () => editor.startEditing(rowOf("Niedziela"), -1),
+            () => realKey(Qt.Key_Return),
+            () => check(page.editingRow === rowOf("Niedziela") + 1 && info(page.editingRow).kind === "listItem",
+                        "Enter in a list item adds a list item"),
+            () => typeKeys("Powrót ąę"),
+            () => realKey(Qt.Key_Return),
+            () => { window.realRow = page.editingRow },
+            () => realKey(Qt.Key_Return),
+            () => check(page.editingRow === window.realRow && info(window.realRow).kind === "paragraph",
+                        "Enter on an empty list item leaves the list: " + info(window.realRow).kind),
+            () => typeKeys("Akapit po liście"),
+            () => realKey(Qt.Key_Tab),
+            () => check(info(window.realRow).kind === "paragraph" && info(window.realRow).depth === 0
+                        && editor.activeEditor && editor.activeEditor.activeFocus, "Tab in a paragraph does nothing"),
+            () => editor.startEditing(rowOf("Powrót ąę"), 0),
+            () => realKey(Qt.Key_Backspace),
+            () => check(info(rowOf("Powrót ąę")).kind === "paragraph" && page.editingRow === rowOf("Powrót ąę"),
+                        "Backspace at the start of a list item removes its marker"),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier),
+            () => check(info(rowOf("Powrót ąę")).kind === "listItem", "Ctrl+Z brings the list item back"),
+            () => editor.startEditing(rowOf("Z powrotem bryczką"), 0),
+            () => realKey(Qt.Key_Tab),
+            () => check(info(rowOf("Z powrotem bryczką")).depth === 2, "Tab indents a list item"),
+            () => realKey(Qt.Key_Backtab),
+            () => check(info(rowOf("Z powrotem bryczką")).depth === 1, "Shift+Tab outdents it"),
+            () => editor.startEditing(rowOf("Pierwszego dnia"), 0),
+            () => realKey(Qt.Key_Up),
+            () => check(page.editingRow === rowOf("Plan"), "Up goes to the previous block like in a text"),
+            () => realKey(Qt.Key_Down),
+            () => check(page.editingRow === rowOf("Pierwszego dnia"), "Down comes back"),
+            () => { page.stopEditing(); page.toggleMode() },
+            () => check(page.mode === "outline" && editor.gutter > 0 && host.file(page.path).indexOf("brulion: outline") > 0,
+                        "the header's toggle switches to an outline and writes only the key"),
+            () => page.toggleMode(),
+            () => check(page.mode === "document" && host.file(page.path).indexOf("brulion: document") > 0
+                        && host.file(page.path).indexOf("Akapit po liście") > 0, "and back to a document"),
+            // A paragraph of nothing but a picture shows just the picture (no empty text line above
+            // it); an SVG keeps its aspect ratio (it was stretched to a square); a click beside the
+            // picture edits the line.
+            () => {
+                host.setTextAsset("assets/trasa.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"100\""
+                                  + " viewBox=\"0 0 400 100\"><rect width=\"400\" height=\"100\" fill=\"#9fc3e6\"/></svg>")
+                window.realRow = page.insertBlockAfter(rowOf("Akapit po liście"), "![[trasa.svg]]")
+                page.stopEditing()
+                window.waits = 0
+            },
+            () => editor.listView.positionViewAtIndex(window.realRow, ListView.Center),
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const w = item ? item.embedView.width : 0
+                const h = item ? item.embedView.height : 0
+                // The picture loads asynchronously: this step repeats until it has (or 6 s passed).
+                if ((!item || Math.abs(h - w / 4) > 2) && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                check(item !== null && Math.abs(h - w / 4) <= 2, "an SVG picture keeps its aspect ratio: " + w + "×" + h)
+                check(item !== null && item.onlyPictures && item.contentHeight === 0 && item.embedsY === item.topPad,
+                      "a picture-only paragraph has no empty text line above the picture")
+                if (item)
+                    item.embedView.backgroundClicked()
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                check(page.editingRow === window.realRow && item !== null && !item.onlyPictures && item.contentHeight > 0
+                      && editor.activeEditor && editor.activeEditor.text === "![[trasa.svg]]",
+                      "a click beside the picture edits its line")
+                page.stopEditing()
+            },
+            // The journal stream caps document headings at the size of a day's date: smaller, in
+            // the same order.
+            () => {
+                const plain = [1, 2, 3, 4].map(l => editor.headingSize(l))
+                editor.headingCap = editor.fontSize + 4
+                const capped = [1, 2, 3, 4].map(l => editor.headingSize(l))
+                editor.headingCap = 0
+                check(plain[0] === Math.round(editor.fontSize * 1.75) && capped[0] === editor.fontSize + 4
+                      && capped[1] < capped[0] && capped[2] <= capped[1] && capped[3] <= capped[2]
+                      && capped[3] >= editor.fontSize && capped.every((s, i) => s <= plain[i]),
+                      "a heading cap shrinks the document's headings, keeping their order: " + plain + " → " + capped)
+            },
             // ---- An editor destroyed before its deferred work runs (scrolling to a row, focus
             // loss, completions, scrolling to the top after loading): nothing touches it then.
             // A TypeError in the output fails the ctest (tests/app/editor/CMakeLists.txt). -------
@@ -629,6 +744,23 @@ ApplicationWindow {
             page.zoomInto(row)
             break
         }
+        case "document":
+            break
+        case "document-paragraph":
+            editor.startEditing(rowOf("Pierwszego dnia"), 43)
+            break
+        case "document-list":
+            editor.startEditing(rowOf("Wejście od Palenicy"), -1)
+            break
+        case "document-heading":
+            editor.startEditing(rowOf("Do spakowania"), -1)
+            break
+        case "document-task":
+            editor.startEditing(rowOf("Kurtka"), -1)
+            break
+        case "document-outline":
+            page.setMode("outline")
+            break
         case "conflict":
             page.saveDelay = 100000
             page.setEditText(rowOf("Prace"), "Prace (lokalnie)", 16)

@@ -474,7 +474,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="184"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="198"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -885,7 +885,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="412"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="413"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -893,7 +893,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="416"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="417"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -901,7 +901,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="684"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="685"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>

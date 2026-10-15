@@ -120,11 +120,11 @@ private Q_SLOTS:
         QStringList headings;
         for (const Heading &h : note.headings)
             headings.append(h.text);
-        for (const QString &section : { u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
-                                        u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s,
-                                        u"Zapytania"_s, u"Osadzenia"_s, u"Ramki (callouty)"_s, u"Szablony"_s,
-                                        u"Kalendarz i dziennik"_s, u"Synchronizacja"_s, u"Import i eksport"_s,
-                                        u"Skróty klawiszowe"_s })
+        for (const QString &section :
+             {u"Dokument i konspekt"_s, u"Konspekt"_s, u"Linki i odwołania"_s, u"Tagi"_s, u"Zadania"_s,
+              u"Przypomnienia i alarmy"_s, u"Obliczenia"_s, u"Tabele z formułami"_s, u"Zapytania"_s, u"Osadzenia"_s,
+              u"Ramki (callouty)"_s, u"Szablony"_s, u"Kalendarz i dziennik"_s, u"Synchronizacja"_s,
+              u"Import i eksport"_s, u"Skróty klawiszowe"_s})
             QVERIFY2(headings.contains(section), qPrintable(section));
     }
 
@@ -164,6 +164,33 @@ private Q_SLOTS:
         for (const Heading &h : recipes.headings)
             recipeHeadings.append(h.text);
         QVERIFY(recipeHeadings.contains(u"Szarlotka babci"_s));
+    }
+
+    void showsBothNoteModes()
+    {
+        // The guide reads as a document, the renovation project and the journal as outlines
+        // (docs/SYNTAX.md §4 "Tryb notatki"), whatever the notebook's defaults.
+        const auto files = filesByPath(kNow);
+        VaultConfig swapped; // the other defaults
+        swapped.pageMode = NoteMode::Outline;
+        swapped.journalMode = NoteMode::Document;
+        for (const VaultConfig &config : {VaultConfig(), swapped}) {
+            const auto mode = [&](const QString &path) {
+                return markdown::resolveNoteMode(files.value(path),
+                                                 markdown::journalDateFromPath(path, config).has_value(), config);
+            };
+            QCOMPARE(mode(shell::demoWelcomePage()).mode, NoteMode::Document);
+            QVERIFY(mode(shell::demoWelcomePage()).isExplicit());
+            QCOMPARE(mode(u"Projekty/Remont mieszkania.md"_s).mode, NoteMode::Outline);
+            QVERIFY(mode(u"Projekty/Remont mieszkania.md"_s).isExplicit());
+        }
+        // The journal follows the notebook's journal mode (outline by default).
+        QCOMPARE(markdown::resolveNoteMode(files.value(u"journals/2026-10-14.md"_s), true, VaultConfig()).mode,
+                 NoteMode::Outline);
+        // The guide explains the modes and the key that stores them.
+        const QString guide = files.value(shell::demoWelcomePage());
+        QVERIFY(guide.contains(u"brulion: document"_s) && guide.contains(u"`brulion: outline`"_s));
+        QVERIFY(guide.contains(u"Przełącz tryb notatki"_s));
     }
 
     void datesFollowNow()

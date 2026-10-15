@@ -603,8 +603,13 @@ private Q_SLOTS:
         QVERIFY(model->run(u"page.source"_s)); // today's journal is shown in the editor at home
         QCOMPARE(sourceUi.size(), 1);
         QCOMPARE(sourceUi.first().first().toString(), u"toggleSourceMode"_s);
+        // The note mode of the page in the editor (document / outline): the editor switches it.
+        QVERIFY(model->run(u"page.mode"_s));
+        QCOMPARE(sourceUi.size(), 2);
+        QCOMPARE(sourceUi.last().first().toString(), u"toggleNoteMode"_s);
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
+        QVERIFY(!model->run(u"page.mode"_s));
         QVERIFY(model->run(u"nav.back"_s));
         QVERIFY(!model->run(u"sync.now"_s));     // no sync configured
         QVERIFY(!model->run(u"no.such"_s));

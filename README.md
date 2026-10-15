@@ -75,6 +75,11 @@
 * **Dziennik + outliner.** Codzienna strona dziennika, bloki z wcięciami (Tab / Shift+Tab),
   zwijanie, przybliżanie bloku, przenoszenie bloków z dziećmi, odwołania do bloków
   `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne.
+* **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
+  (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
+  **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
+  i przełączasz w każdej chwili; zapisuje się w notatce jako `brulion: document` /
+  `brulion: outline`, a notatki z Obsidiana i Logseq same otwierają się we właściwym trybie.
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
   powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
@@ -194,7 +199,8 @@ Tauri) jest zachowana na gałęzi `archive/web-v1`.
 ## English
 
 **Brulion** (Polish for “rough notebook”) is an offline-first Markdown notes app: Logseq-style
-daily journals and block outliner on top of plain Obsidian-compatible `.md` files, with a
+daily journals and block outliner on top of plain Obsidian-compatible `.md` files (every note is
+either an Obsidian-like document or a Logseq-like outline, switchable at any time), with a
 calendar, reminders and real alarms, calculation blocks and spreadsheet-like table formulas,
 live queries, version history, and import/export for Obsidian, Logseq, Notion, Evernote,
 Google Keep, Joplin, Simplenote, Roam, Bear, HTML and iCalendar.

@@ -38,6 +38,18 @@ FocusScope {
 
     PageTools { id: tools; workspace: Workspace }
 
+    // The palette's "Przełącz tryb notatki" in the journal stream: the day being written in
+    // (today until another day gets the caret). One day as a page: its PageView does it.
+    Connections {
+        target: AppController
+        function onUiActionRequested(action) {
+            if (action !== "toggleNoteMode" || root.single || root.inSidePanel || !root.visible || !root.activeDay)
+                return
+            if (!root.activeDay.controller.toggleMode())
+                AppController.toast(qsTr("The note mode could not be changed: the page's properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E)."), "error")
+        }
+    }
+
     // ---- One day ---------------------------------------------------------------------------------
     Loader {
         id: singleLoader
@@ -166,7 +178,9 @@ FocusScope {
                         // after the fold-arrow and bullet columns: BlockEditor.gutter).
                         readonly property real maxWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
                         readonly property real pad: Theme.compact ? Theme.space3 : Theme.space8
-                        readonly property real arrow: Theme.touchUi ? 18 + 22 : 16 + 20
+                        // (Days in the document mode have no gutter: the notebook's journal mode.)
+                        readonly property real arrow: Workspace.config.journalMode === "document" ? 0
+                                                      : Theme.touchUi ? 18 + 22 : 16 + 20
                         x: Math.max(pad, (list.width - maxWidth) / 2) + arrow
                         y: Theme.compact ? Theme.space3 : Theme.space5
                         width: Math.max(120, Math.min(maxWidth, list.width - 2 * pad)) - arrow

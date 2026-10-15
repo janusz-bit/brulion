@@ -60,9 +60,33 @@ declare -A shot_args=(
   [page-sidepanel]="--demo --editor-script sidepanel"
   [page-empty]="--demo --editor-script empty"
   [page-new]="--demo --route {\"view\":\"page\",\"path\":\"Prezenty.md\"}"
+  # Note modes: the guide is a document; editing it; switched to an outline; the page menu with
+  # "Przełącz na konspekt"; the renovation project (an outline).
+  [page-doc-paragraph]="--demo --editor-script doc-paragraph"
+  [page-doc-list]="--demo --editor-script doc-list"
+  [page-doc-heading]="--demo --editor-script doc-heading"
+  [page-doc-outline]="--demo --editor-script doc-outline"
+  [page-menu]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"menu\"}"
+  [page-project]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
+  # The document mode on a long Obsidian-like note (tests/app/shell/notemode/, added to the
+  # sample notebook): reading, editing a paragraph, a nested list item, a wrapped nested task, the
+  # same note switched to an outline; the journal stream with the notebook's journal mode "document".
+  [doc-long]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"}"
+  [doc-long-paragraph]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Pierwszy@60"
+  [doc-long-list]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Bilety"
+  [doc-long-task]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Plastry"
+  [doc-long-outline]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script doc-outline"
+  [doc-journal]="--route journals"
+)
+# Shots on a notebook of their own: the sample notebook seeded by a first run, then the files of
+# tests/app/shell/notemode/ added ("journal": today's journal replaced by a document-like day and
+# the notebook's journal mode set to "document").
+declare -A shot_notemode=(
+  [doc-long]=page [doc-long-paragraph]=page [doc-long-list]=page [doc-long-task]=page [doc-long-outline]=page [doc-journal]=journal
 )
 all_shots=(onboarding journals page page-editing page-suggest page-tags page-slash page-date page-reminder
-  page-source page-sidepanel page-new page-empty settings settings-editor settings-vault settings-reminders settings-app
+  page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
+  page-menu page-project doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline doc-journal settings settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
@@ -81,7 +105,7 @@ for shot in "${shots[@]}"; do
   read -r -a args <<< "${shot_args[$shot]}"
   # Editor states are scripted after the page loaded (typing, scrolling): give them time.
   shot_delay="$delay"
-  [[ "$shot" == page-* ]] && shot_delay=$((delay + 800))
+  [[ "$shot" == page-* || "$shot" == doc-* ]] && shot_delay=$((delay + 800))
   for size in "${sizes[@]}"; do
     case "$size" in
       desktop) geometry=1280x800; extra=() ;;
@@ -99,9 +123,27 @@ for shot in "${shots[@]}"; do
     for theme in "${themes[@]}"; do
       file="$out/shell-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
+      vault_args=()
+      if [[ -n "${shot_notemode[$shot]:-}" ]]; then
+        vault="$home/Przykładowy brulion"
+        fixtures=tests/app/shell/notemode
+        XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+          QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+          "$bin" --demo --vault "$vault" --size "$geometry" --locale "$locale" --now "$now" \
+          --delay 600 --screenshot "$home/prep.png" >/dev/null 2>&1 || true
+        cp "$fixtures/Wyprawa w Bieszczady.md" "$vault/"
+        mkdir -p "$vault/assets"
+        cp "$fixtures/bieszczady-trasa.svg" "$vault/assets/"
+        if [[ "${shot_notemode[$shot]}" == journal ]]; then
+          cp "$fixtures/journal-document.md" "$vault/journals/${now%% *}.md"
+          mkdir -p "$vault/.brulion"
+          printf '{\n  "journalMode": "document"\n}\n' > "$vault/.brulion/config.json"
+        fi
+        vault_args=(--vault "$vault")
+      fi
       if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-        "$bin" "${args[@]}" --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" \
+        "$bin" ${vault_args[@]+"${vault_args[@]}"} "${args[@]}" --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" \
         --delay "$shot_delay" "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then
         echo "$file"
       else

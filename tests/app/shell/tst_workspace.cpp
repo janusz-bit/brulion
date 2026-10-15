@@ -324,6 +324,31 @@ private Q_SLOTS:
         QCOMPARE(ws->renamePage(u"Łąka.md"_s, u"Polana.md"_s), u"Polana.md"_s);
     }
 
+    void createPagesInAMode()
+    {
+        // The new-page dialog's mode: written only when the page would not get it anyway.
+        auto ws = open({{u"Żółw.md"_s, u"- istniejący\n"_s}});
+        QCOMPARE(ws->createPage(u"Dokument"_s, QString(), u"document"_s), u"Dokument.md"_s);
+        QCOMPARE(ws->readFile(u"Dokument.md"_s), QString()); // the default: nothing written
+        QCOMPARE(ws->createPage(u"Konspekt"_s, QString(), u"outline"_s), u"Konspekt.md"_s);
+        QCOMPARE(ws->readFile(u"Konspekt.md"_s), u"---\nbrulion: outline\n---\n"_s);
+        QCOMPARE(ws->createPage(u"Bez trybu"_s, QString(), QString()), u"Bez trybu.md"_s);
+        QCOMPARE(ws->readFile(u"Bez trybu.md"_s), QString());
+        QCOMPARE(ws->createPage(u"Dziwny"_s, QString(), u"kanban"_s), u"Dziwny.md"_s); // unknown: the default
+        QCOMPARE(ws->readFile(u"Dziwny.md"_s), QString());
+        QCOMPARE(brulion::markdown::resolveNoteMode(ws->readFile(u"Konspekt.md"_s), false, ws->vault()->config()).mode,
+                 brulion::NoteMode::Outline);
+        // With outline as the notebook's default, a document needs the key.
+        QVERIFY(ws->setConfig({{u"pageMode"_s, u"outline"_s}}));
+        QCOMPARE(ws->createPage(u"Artykuł"_s, u"Teksty"_s, u"document"_s), u"Teksty/Artykuł.md"_s);
+        QCOMPARE(ws->readFile(u"Teksty/Artykuł.md"_s), u"---\nbrulion: document\n---\n"_s);
+        QCOMPARE(ws->createPage(u"Lista"_s, QString(), u"outline"_s), u"Lista.md"_s);
+        QCOMPARE(ws->readFile(u"Lista.md"_s), QString());
+        // A letter-case twin opens the existing page, which is never rewritten.
+        QCOMPARE(ws->createPage(u"żółw"_s, QString(), u"document"_s), u"Żółw.md"_s);
+        QCOMPARE(ws->readFile(u"Żółw.md"_s), u"- istniejący\n"_s);
+    }
+
     void renameWhileIndexing()
     {
         // Right after opening, the index is still being built in the background; a rename
@@ -475,6 +500,8 @@ private Q_SLOTS:
         QCOMPARE(c.value(u"journalTemplate"_s).toString(), u"templates/journal.md"_s);
         QCOMPARE(c.value(u"defaultReminderTime"_s).toString(), u"09:00"_s);
         QCOMPARE(c.value(u"weekStartsOn"_s).toInt(), 1);
+        QCOMPARE(c.value(u"journalMode"_s).toString(), u"outline"_s);
+        QCOMPARE(c.value(u"pageMode"_s).toString(), u"document"_s);
 
         QVERIFY(ws->setConfig({ { u"defaultReminderTime"_s, u"7:30"_s }, { u"weekStartsOn"_s, 7 } }));
         QCOMPARE(changed.size(), 1);
@@ -488,6 +515,17 @@ private Q_SLOTS:
         QVERIFY(ws->setConfig({ { u"weekStartsOn"_s, 7 } })); // unchanged
         QCOMPARE(changed.size(), 1);
         QVERIFY(ws->configWarnings().isEmpty());
+
+        // Note modes (Settings → Notatnik), saved in the synced config.json.
+        QVERIFY(ws->setConfig({{u"pageMode"_s, u"outline"_s}, {u"journalMode"_s, u"Document"_s}}));
+        QCOMPARE(changed.size(), 2);
+        QCOMPARE(ws->vaultConfig().value(u"pageMode"_s).toString(), u"outline"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalMode"_s).toString(), u"document"_s);
+        QVERIFY(ws->readFile(u".brulion/config.json"_s).contains(u"\"journalMode\": \"document\""_s));
+        QVERIFY(!ws->setConfig({{u"pageMode"_s, u"kanban"_s}}));
+        QVERIFY(!ws->setConfig({{u"journalMode"_s, QString()}}));
+        QCOMPARE(ws->vaultConfig().value(u"pageMode"_s).toString(), u"outline"_s);
+        QCOMPARE(changed.size(), 2);
     }
 
     void favoritesAndRecentPages()

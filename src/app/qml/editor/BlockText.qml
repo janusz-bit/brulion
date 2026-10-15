@@ -5,7 +5,8 @@ import Brulion
 // BlockText — the text of a block: rendered rich text (escaped HTML from the core
 // InlineRenderer: links, tags, chips) while the block is not edited, an InlineEditor with the raw
 // Markdown while it is. Both use the same font and fixed line height, so the block does not
-// move when it switches. Clicks on links are handled (page:, tag:, block:, ext:, task:,
+// move when it switches (the rendered text's height is counted in whole lines: a rich-text Text
+// gives its last line the font's own height, the editor the fixed one). Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:); a click elsewhere starts editing with the caret at the clicked position.
 Item {
     id: root
@@ -22,7 +23,10 @@ Item {
     readonly property bool mono: block.view === "html"
     readonly property bool editing: block.editing
 
-    implicitHeight: Math.max(lineHeightPx, editing && editorLoader.item ? (editorLoader.item as Item).implicitHeight : rendered.implicitHeight)
+    /// The rendered text's height in whole fixed-height lines.
+    readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(rendered.implicitHeight / lineHeightPx)) * lineHeightPx
+                                                            : rendered.implicitHeight
+    implicitHeight: Math.max(lineHeightPx, editing && editorLoader.item ? (editorLoader.item as Item).implicitHeight : renderedHeight)
     height: implicitHeight
 
     Text {

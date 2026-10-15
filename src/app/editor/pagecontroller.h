@@ -25,6 +25,17 @@
 // and files are pasted / dropped / picked as attachments (EditorHost::saveAttachment, embedded
 // as `![[name]]`), and `titleRow` names a leading "# Title" the editor shows above the page
 // properties.
+//
+// Note mode (docs/UI.md "Note modes"): `mode` is "outline" (Logseq-like) or "document"
+// (Obsidian-like), resolved by markdown::resolveNoteMode when the page is loaded (the `brulion:`
+// frontmatter key, else the vault's journal / page default and the content). It stays while the
+// page is open — typing a list into a document does not turn it into an outline — and follows
+// only a change of the key itself (undo, source mode, another device; without the key again the
+// page has the mode it had without it) and, for a mode taken from the vault's defaults, a change
+// of those (refreshMode()). setMode() writes the key (one undo step, saved at once). The
+// document mode changes a few commands: Enter on an empty list item and Backspace at its start
+// leave the list (leaveList()), Tab never makes a list item of a paragraph, new blocks after text
+// are paragraphs, and there is no zoom and no folding (folds are kept for the outline mode).
 #pragma once
 
 #include "blocklistmodel.h"
@@ -42,6 +53,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 class QUndoStack;
 
@@ -112,6 +124,13 @@ class PageController : public QObject {
     Q_PROPERTY(bool queriesAvailable READ queriesAvailable NOTIFY hostChanged FINAL)
     /// Name filters for picking a picture (FileDialog.nameFilters).
     Q_PROPERTY(QStringList imageNameFilters READ imageNameFilters CONSTANT FINAL)
+    /// Note mode: "outline" | "document" (see the file comment).
+    Q_PROPERTY(QString mode READ mode NOTIFY modeChanged FINAL)
+    /// Where `mode` comes from: "frontmatter" (the note's `brulion:` key), "journal" (the vault's
+    /// journal mode), "heuristic" (the page's content), "default" (the vault's page mode).
+    Q_PROPERTY(QString modeSource READ modeSource NOTIFY modeChanged FINAL)
+    /// mode === "document".
+    Q_PROPERTY(bool documentMode READ documentMode NOTIFY modeChanged FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -155,6 +174,10 @@ public:
     int titleRow() const { return m_titleRow; }
     bool queriesAvailable() const;
     QStringList imageNameFilters() const;
+    QString mode() const;
+    QString modeSource() const;
+    bool documentMode() const { return m_mode == NoteMode::Document; }
+    NoteMode noteMode() const { return m_mode; }
     /// Colours the renderer uses (from `palette`).
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
     /// The status a checkbox click gives: todo/doing/deferred -> "done", done/cancelled -> "todo".
@@ -187,6 +210,19 @@ public:
     /// `path` instead would first save to the old path and bring the page back as a duplicate).
     Q_INVOKABLE void followRename(const QString &oldPath, const QString &newPath);
 
+    // --- Note mode -------------------------------------------------------------------------------
+    /// Switch to "outline" or "document": writes the frontmatter key `brulion` (always — an explicit
+    /// choice; markdown::setNoteModeKey changes nothing else in the file) as one undo step and
+    /// saves. Also in source mode (the source text gets the key). False for an unknown mode, before
+    /// loading, or when the note's frontmatter cannot be edited safely (nothing changed then).
+    Q_INVOKABLE bool setMode(const QString &mode);
+    /// setMode() with the other mode.
+    Q_INVOKABLE bool toggleMode();
+    /// The vault's journal / page mode may have changed (Workspace.configChanged): a page whose
+    /// mode came from that default follows it. The content is not resolved again — a page never
+    /// flips because of what was written since it was opened.
+    Q_INVOKABLE void refreshMode();
+
     // --- Editing ---------------------------------------------------------------------------------
     Q_INVOKABLE void startEditing(int row, int cursor = -1);
     Q_INVOKABLE void stopEditing();
@@ -201,6 +237,15 @@ public:
     Q_INVOKABLE QVariantMap mergeWithPrevious(int row);
     /// Delete at the end: merge the next visible block into this one. Returns { row, cursor }.
     Q_INVOKABLE QVariantMap mergeNext(int row);
+    /// Leave the list from list item `row` (document mode: Backspace at its start, Enter on an
+    /// empty one): a nested item moves one level out, a top-level one becomes a paragraph in its
+    /// place (BlockDocument::convertToParagraph: its marker and checkbox go, its children move out).
+    /// Returns { row, cursor } of the caret (row -1 when nothing changed).
+    Q_INVOKABLE QVariantMap leaveList(int row);
+    /// The document mode's list button (touch toolbar): a paragraph becomes a list item "- …"
+    /// (BlockDocument::convertToList; the caret keeps its place in the text), a list item leaves
+    /// the list (leaveList()). Returns { row, cursor } (row -1 when nothing changed).
+    Q_INVOKABLE QVariantMap toggleList(int row);
     Q_INVOKABLE bool indent(int row);
     Q_INVOKABLE bool outdent(int row);
     Q_INVOKABLE bool moveUp(int row);
@@ -217,6 +262,7 @@ public:
     /// Delete a block with its children. Returns the row that should get focus (-1: none).
     Q_INVOKABLE int deleteBlock(int row);
     /// Insert a new list item after `row` (its subtree) at the same depth; -1 = at the start.
+    /// Document mode: after a block that is not a list item (and at the start) a paragraph.
     /// Returns the new row.
     Q_INVOKABLE int insertBlockAfter(int row, const QString &text = QString());
     /// Insert Markdown (templates, pasted text): replaces `row` when it is empty, else goes after
@@ -225,7 +271,8 @@ public:
     /// Fill the template at vault path `templatePath` ({{date}}, {{title}}, …) and insert it
     /// like insertMarkdown(). Returns the first new row (-1 when the template cannot be read).
     Q_INVOKABLE int insertTemplate(int row, const QString &templatePath);
-    /// Make sure the page ends with an empty block to type into (click below the last block).
+    /// Make sure the page ends with an empty block to type into (click below the last block): a
+    /// list item, in document mode a paragraph (an empty list item at the end is used as it is).
     /// Returns its row.
     Q_INVOKABLE int appendEmptyBlock();
     /// Start writing in a page that does not exist yet (a day without a note): the template at
@@ -398,6 +445,7 @@ Q_SIGNALS:
     void saveDelayChanged();
     void foldStateChanged();
     void titleRowChanged();
+    void modeChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
     /// The edit text of `row` changed by something other than typing in it.
@@ -452,6 +500,12 @@ private:
     QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
     /// Read and store files as attachments (attachmentFailed() for each one that fails).
     QStringList storeFiles(const QList<QUrl> &urls);
+    /// Resolve the note mode: `force` from scratch (loading), else only when the frontmatter key
+    /// changed since the last resolution (edits, undo, source mode, external changes); without
+    /// the key the page gets the mode it had without it in this session. `current`: the page's
+    /// text when the caller has it.
+    void resolveMode(bool force, const QString *current = nullptr);
+    void applyMode(NoteMode mode, int source);
 
     QPointer<EditorHost> m_host;
     QString m_path;
@@ -481,6 +535,13 @@ private:
     QString m_fixedNow;
     MergeFunction m_merge;
     int m_titleRow = -1;
+    NoteMode m_mode = NoteMode::Outline;
+    int m_modeSource = -1;             ///< markdown::NoteModeSource; -1 before loading
+    std::optional<NoteMode> m_modeKey; ///< the frontmatter key at the last resolution
+    /// The mode without the key in this session (resolved from the content once, the first time
+    /// the page has no key; the defaults follow refreshMode()); source -1: not resolved yet.
+    NoteMode m_keylessMode = NoteMode::Outline;
+    int m_keylessSource = -1;
 
     // Command bookkeeping.
     int m_commandDepth = 0;

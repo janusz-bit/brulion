@@ -282,6 +282,18 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             // Phones (--touch) tap with a finger, desktops click with the mouse.
             const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
             waitFor([] { return false; }, 300);
+            // The guide's first list block ("Konspekt"), scrolled into view (on a phone it is
+            // below the first screen).
+            {
+                const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
+                const qsizetype blockLine =
+                        guideLines.indexOf(u"- Każdy punkt listy to **blok**. Kliknij go, żeby edytować."_s);
+                int blockRow = -1;
+                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(blockRow), int(blockLine));
+                if (auto *list = editor->property("listView").value<QQuickItem *>(); list && blockRow >= 0)
+                    QMetaObject::invokeMethod(list, "positionViewAtIndex", blockRow, 1 /* ListView.Center */);
+                waitFor([] { return false; }, 200);
+            }
             if (QQuickItem *text = renderedTextContaining(editor, u"Kliknij go"_s)) {
                 // A quick tap (30 ms, shorter than the lists' 90 ms press delay on touch UIs).
                 if (touch)
@@ -366,10 +378,42 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
             check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s), "the edit is saved to the file");
 
+            // The note mode: the guide is a document; the header's toggle (a real click or tap)
+            // makes it an outline, the "Toggle note mode" command a document again — each switch
+            // rewrites only the `brulion:` line of the file.
+            {
+                const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+                QMetaObject::invokeMethod(page, "stopEditing");
+                if (auto *list = editor->property("listView").value<QQuickItem *>())
+                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+                waitFor([] { return false; }, 300);
+                QQuickItem *toggle = nullptr;
+                for (QQuickItem *t : window->findChildren<QQuickItem *>(u"noteModeToggle"_s)) {
+                    if (t->isVisible() && editor->isAncestorOf(t))
+                        toggle = t;
+                }
+                const QString before = app->workspace()->readFile(guide);
+                const auto withKey = [&before](const QString &mode) {
+                    return QString(before).replace(u"\nbrulion: document\n"_s, u"\nbrulion: "_s + mode + u'\n');
+                };
+                check(page->property("mode").toString() == u"document" && toggle != nullptr,
+                      "the guide is a document with a mode toggle in its header");
+                if (toggle) {
+                    tapOrClick(window, toggle->mapToScene(QPointF(toggle->width() / 2, toggle->height() / 2)), touch);
+                    check(waitFor([&] { return page->property("mode").toString() == u"outline"; })
+                                  && app->workspace()->readFile(guide) == withKey(u"outline"_s),
+                          "the header's toggle switches to an outline, writing only the mode");
+                }
+                app->requestUiAction(u"toggleNoteMode"_s);
+                check(waitFor([&] { return page->property("mode").toString() == u"document"; })
+                              && app->workspace()->readFile(guide) == before,
+                      "the \"Toggle note mode\" command switches back");
+            }
+
             // Phones: a block at the bottom of the screen that starts editing is scrolled above
             // the editing toolbar (which sits on the keyboard) instead of staying under it.
             if (window->width() < 900) {
-                const qsizetype lowLine = lines.indexOf(u"- Ctrl+. zwija i rozwija dzieci bloku."_s);
+                const qsizetype lowLine = lines.indexOf(u"- Ctrl+. zwija i rozwija dzieci bloku w konspekcie."_s);
                 int low = -1;
                 QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(low), int(lowLine));
                 auto *list = editor->property("listView").value<QQuickItem *>();

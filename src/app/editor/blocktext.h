@@ -93,8 +93,12 @@ QString plainTextOf(const markdown::BlockEntry &entry, int maxLength = 80);
 QVariantMap queryInfo(QStringView source);
 
 /// `properties` role of frontmatter blocks: [{ key, value }] (YAML frontmatter or `key:: value`
-/// page properties; lists joined with ", ").
+/// page properties; lists joined with ", "). The note mode key `brulion` of YAML frontmatter
+/// (markdown/notemode.h) is left out: the page header's mode toggle shows it.
 QVariantList frontmatterProperties(const QString &body);
+/// The YAML frontmatter `body` (with its `---` lines) holds nothing but the note mode key
+/// `brulion` — a block the editor does not show (BlockListModel `noteModeOnly`).
+bool onlyNoteModeKey(const QString &body);
 
 /// One image or attachment embedded in a block body: `![[photo.png]]`, `![alt](assets/a.png)`.
 struct Embed {
@@ -173,7 +177,8 @@ struct CompletionTrigger {
 ///   date   `📅 `, `⏳ `, `🛫 `, `⏰ `, `⏰! ` + phrase (not a canonical date yet), or `@phrase`
 CompletionTrigger completionTriggerAt(QStringView text, int cursor);
 
-/// VaultConfig from EditorHost::vaultConfig() (missing keys keep the defaults).
+/// VaultConfig from EditorHost::vaultConfig() (missing keys keep the defaults; journalMode /
+/// pageMode as "outline" | "document").
 VaultConfig vaultConfigFromMap(const QVariantMap &map);
 
 // ---------------------------------------------------------------------------------------------

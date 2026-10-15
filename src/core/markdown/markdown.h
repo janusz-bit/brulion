@@ -1,7 +1,8 @@
 // brulion::markdown — the Brulion Markdown dialect (docs/SYNTAX.md is the source of truth):
 // parsing notes into the ParsedNote model of types.h, inline links/tags, metadata tokens, YAML
-// frontmatter, pure content edits, journals, templates, the block editor model (BlockDocument)
-// and the rich-text renderer (InlineRenderer). Include this header to get the whole module.
+// frontmatter, pure content edits, journals, templates, note modes, the block editor model
+// (BlockDocument) and the rich-text renderer (InlineRenderer). Include this header to get the
+// whole module.
 //
 // API overview (namespace brulion::markdown; never reads the clock — callers pass `today`/`now`):
 //
@@ -36,12 +37,19 @@
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}
 //                  ({{date}}, {{date:FORMAT}}, {{time}}, {{title}}, {{weekday}}, {{cursor}})
+//   notemode.h     NoteMode outline / document: resolveNoteMode(content, isJournal, config) ->
+//                  ResolvedNoteMode{mode, source} (frontmatter `brulion:` key, journal default,
+//                  heuristicNoteMode(content), page default); frontmatterNoteMode(content),
+//                  setNoteModeKey(content, mode | nullopt) (pure, only the `brulion` entry
+//                  changes), withNoteModeChoice(content, chosen, isJournal, config) (new notes),
+//                  noteModeName / parseNoteMode ("outline" / "document")
 //   blockdocument.h  BlockDocument — editable list of blocks with lossless round trip:
 //                  at(i) -> BlockEntry{uid, kind, prefix, body, depth, parent, headingLevel,
 //                  lang, taskStatus, blockId, trailing, line}; toString();
 //                  setBody, split, insertAfter, mergeWithPrevious, remove, indent, outdent,
 //                  moveUp, moveDown, toggleTask, setTaskStatus, ensureBlockId(i, isTaken),
-//                  convertToList -> EditResult{changes (Removed/Moved/Inserted/Changed rows),
+//                  convertToList, convertToParagraph (leave a list: the document mode) ->
+//                  EditResult{changes (Removed/Moved/Inserted/Changed rows),
 //                  focus, cursor}; subtreeRange, parent, hasChildren, indexAtLine. Frontmatter /
 //                  page-property blocks at the top are pinned (never moved, nothing goes above).
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, inlineCalc, today,
@@ -58,6 +66,7 @@
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
+#include "markdown/notemode.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "markdown/rename.h"
