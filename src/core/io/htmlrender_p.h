@@ -41,8 +41,10 @@ public:
     QString renderNote(const ParsedNote &note) const;
     /// Blocks `indices` (siblings, in order) of `note` with their children.
     QString renderBlocks(const ParsedNote &note, const QList<int> &indices) const;
-    /// Inline Markdown as HTML (line breaks -> <br>).
-    QString renderInline(QStringView text) const;
+    /// Inline Markdown as HTML (line breaks -> <br>). `insideLink`: the text sits inside a link (a
+    /// link label, a block reference): links show their visible text without an anchor and tags
+    /// are plain text — the parser sees no tags there and anchors must not nest.
+    QString renderInline(QStringView text, bool insideLink = false) const;
 
     /// HTML escaping of text (& < > " ').
     static QString escape(QStringView text);

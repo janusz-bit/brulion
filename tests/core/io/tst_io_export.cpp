@@ -283,6 +283,26 @@ private Q_SLOTS:
         QVERIFY(edn.contains(u":file/name-format :triple-lowbar"_s));
     }
 
+    void logseqKeepsWhatLogseqCannotSay()
+    {
+        ExportInput in;
+        in.files = {iotest::text(
+                u"Strona.md"_s,
+                u"```js\nlet x = 1;\n```\n^kod1\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n^tab1\n\n"
+                "TODO to nie zadanie\n\n[ ] ani to\n\n- [ ] pilne 🔺\n- [ ] kiedyś ⏬\n- [ ] ważne ⏫\n"_s)};
+        const QString page = textOf(readZip(exportWith(u"logseq-zip"_s, in).data), u"Brulion/pages/Strona.md"_s);
+        // The id of a code block or table follows its content (inside, it would be code / break the table).
+        QVERIFY2(page.contains(u"- ```js\n  let x = 1;\n  ```\n  id:: "_s + uuid(u"kod1"_s) + u'\n'), qPrintable(page));
+        QVERIFY(page.contains(u"- | a | b |\n  | --- | --- |\n  | 1 | 2 |\n  id:: "_s + uuid(u"tab1"_s) + u'\n'));
+        // A paragraph that starts like a task stays text: a no-break space after the marker.
+        QVERIFY(page.contains(u"- TODO\u00A0to nie zadanie\n"_s));
+        QVERIFY(page.contains(u"- [ ]\u00A0ani to\n"_s));
+        // Logseq has A/B/C only: highest and lowest keep their emoji, high becomes [#A].
+        QVERIFY(page.contains(u"- TODO pilne 🔺\n"_s));
+        QVERIFY(page.contains(u"- TODO kiedyś ⏬\n"_s));
+        QVERIFY(page.contains(u"- TODO [#A] ważne\n"_s));
+    }
+
     void logseqNamespacesAndAssets()
     {
         ExportInput in;
@@ -390,6 +410,29 @@ private Q_SLOTS:
         QVERIFY(index.contains(u"href=\"tags/dom.html\""_s));
         const QString tag = textOf(entries, root + u"tags/dom.html"_s);
         QVERIFY(tag.contains(u"<a href=\"../Projekty/Dom.html\">Dom</a>"_s));
+    }
+
+    void htmlTagsFollowTheParser()
+    {
+        ExportInput in;
+        in.files = {iotest::text(
+                            u"Strona.md"_s,
+                            u"- #tag #- #_ #٣ (#ok) **#nie** [link #nie](https://x.pl) [[Inna|alias #nie]] ((b1))\n"_s),
+                    iotest::text(u"Inna.md"_s, u"- [[Strona]] i #wewnątrz ^b1\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString page = textOf(entries, u"Brulion/Strona.html"_s);
+        QVERIFY2(page.contains(u">#tag</a>"_s), qPrintable(page));
+        QVERIFY(page.contains(u">#ok</a>"_s));
+        const qsizetype from = page.indexOf(u"<ul><li>"_s);
+        const QString item = page.mid(from, page.indexOf(u"</li></ul>"_s, from) - from);
+        QCOMPARE(item.count(u"class=\"tag\""_s), 2);
+        QVERIFY(item.contains(u"</a> #- #_ #٣ ("_s));
+        QVERIFY(page.contains(u"<p class=\"tags\"><a class=\"tag\" href=\"tags/tag.html\">#tag</a> <a class=\"tag\" "
+                              "href=\"tags/ok.html\">#ok</a></p>"_s));
+        // Link labels and block references never hold links of their own (no nested anchors).
+        QVERIFY(page.contains(u"rel=\"noopener\">link #nie</a>"_s));
+        QVERIFY(page.contains(u">alias #nie</a>"_s));
+        QVERIFY(page.contains(u"<a class=\"block-ref\" href=\"Inna.html#block-b1\">Strona i #wewnątrz</a>"_s));
     }
 
     void htmlSingle()

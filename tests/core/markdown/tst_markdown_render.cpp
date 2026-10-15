@@ -349,6 +349,14 @@ private Q_SLOTS:
                  u"&lt;div onclick=&quot;x&quot;&gt;a&lt;/div&gt;"_s);
         QCOMPARE(r.renderBlock(u"**p**", BlockKind::Paragraph), u"<b>p</b>"_s);
         QCOMPARE(r.renderBlock(u"[ ] t", BlockKind::ListItem), link(u"task:toggle"_s, u"L"_s, u"☐"_s) + u"&nbsp;t"_s);
+        // Only list items are tasks (SYNTAX §5): elsewhere a leading marker is text.
+        QCOMPARE(r.renderBlock(u"[ ] t", BlockKind::Paragraph), u"[ ] t"_s);
+        QCOMPARE(r.renderBlock(u"TODO zadanie?", BlockKind::Paragraph), u"TODO zadanie?"_s);
+        QCOMPARE(r.renderBlock(u"# DONE nagłówek", BlockKind::Heading), u"DONE nagłówek"_s);
+        QCOMPARE(r.renderBlock(u"> [x] cytat", BlockKind::Quote), u"[x] cytat"_s);
+        QCOMPARE(r.renderBlock(u"> [!note] TODO tytuł\n> LATER treść", BlockKind::Callout),
+                 u"<b>TODO tytuł</b><br/>LATER treść"_s);
+        QCOMPARE(r.render(u"TODO t"), link(u"task:toggle"_s, u"L"_s, u"☐"_s) + u"&nbsp;t"_s);
     }
 
     void reminderRangesPointIntoTheBody_data()

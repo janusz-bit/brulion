@@ -180,6 +180,19 @@ void SyncScheduler::syncNow(RunCallback done)
     trigger();
 }
 
+void SyncScheduler::syncNowConfirmingDeletions(RunCallback done)
+{
+    m_confirmDeletions = true;
+    if (m_running) {
+        // The running sync planned without the confirmation: run again once it is done.
+        if (done)
+            m_nextWaiters.append(std::move(done));
+        m_triggerAfterRun = true;
+        return;
+    }
+    syncNow(std::move(done));
+}
+
 void SyncScheduler::start()
 {
     if (m_started)
@@ -274,6 +287,8 @@ void SyncScheduler::trigger()
             m_triggerAfterRun = true;
         return; // joins the running sync
     }
+    // A confirmation is for this run only (never for a later automatic one).
+    const bool confirmDeletions = std::exchange(m_confirmDeletions, false);
     if (!m_runner) {
         notifyWaiters(std::nullopt);
         return;
@@ -299,6 +314,7 @@ void SyncScheduler::trigger()
         s.progress.reset();
     });
     SyncRunOptions options;
+    options.confirmDeletions = confirmDeletions;
     options.onProgress = [guard = QPointer<SyncScheduler>(this)](const SyncProgress &progress) {
         if (guard && guard->m_running)
             guard->updateStatus([&](SyncStatus &s) { s.progress = progress; });
@@ -337,13 +353,18 @@ void SyncScheduler::onRunFinished(const SyncReport &report)
         schedulePeriodic(qMin(m_interval, m_retryBase * (qint64(1) << doublings)));
     } else {
         m_failures = 0;
-        const QString errors = summarizeErrors(report);
+        QString errors = summarizeErrors(report);
+        QString code = errors.isEmpty() ? QString() : u"files"_s;
+        if (report.needsConfirmation) {
+            errors = u"%1 deletion(s) wait for confirmation"_s.arg(report.pendingDeletions.size());
+            code = u"needs-confirmation"_s;
+        }
         updateStatus([&](SyncStatus &s) {
             s.state = errors.isEmpty() ? idleState() : SyncState::Error;
             s.lastSync = report.finished;
             s.lastReport = report;
             s.lastError = errors;
-            s.lastErrorCode = errors.isEmpty() ? QString() : u"files"_s;
+            s.lastErrorCode = code;
             s.progress.reset();
         });
         schedulePeriodic(m_interval);

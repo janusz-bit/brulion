@@ -61,11 +61,11 @@ QString keyword(TaskStatus status)
 QString priorityLetter(Priority p)
 {
     switch (p) {
-    case Priority::Highest:
     case Priority::High: return u"A"_s;
     case Priority::Medium: return u"B"_s;
-    case Priority::Low:
-    case Priority::Lowest: return u"C"_s;
+    case Priority::Low: return u"C"_s;
+    case Priority::Highest:
+    case Priority::Lowest:
     case Priority::None: break;
     }
     return {};
@@ -109,6 +109,22 @@ QString propertyValue(const QVariant &value, bool tags)
         }
     }
     return items.join(u", "_s);
+}
+
+/// First line of a block outside lists written as a bullet: a leading `[ ]` or `TODO` would make
+/// the bullet a task (in Logseq and in Brulion), so the space after the marker becomes a
+/// no-break space — the same text on screen, no task in either app.
+QString withoutTaskMarker(const QString &line)
+{
+    const auto marker = markdown::matchTaskMarker(line, markdown::maskInlineCode(line), 0);
+    if (!marker)
+        return line;
+    QString out = line;
+    if (marker->to < out.size() && (out[marker->to] == u' ' || out[marker->to] == u'\t'))
+        out[marker->to] = QChar(0x00A0);
+    else
+        out.insert(marker->to, QChar(0x00A0));
+    return out;
 }
 
 struct ConvertedLine {
@@ -158,7 +174,8 @@ ConvertedLine convertFirstLine(QString content)
             }
             break;
         case markdown::TokenKind::Priority:
-            if (priority == Priority::None) {
+            // Logseq knows A/B/C only: 🔺 / ⏬ stay as written (shown as text, read back exactly).
+            if (priority == Priority::None && t.priority != Priority::Highest && t.priority != Priority::Lowest) {
                 priority = t.priority;
                 removals.append({t.from, t.to});
             }
@@ -404,12 +421,18 @@ private:
         }
         common = std::max(common, 0);
         const QString indent(depth, u'\t');
-        out.append(indent + u"- "_s + dedent(source.first(), common));
+        out.append(indent + u"- "_s + withoutTaskMarker(dedent(source.first(), common)));
         const QString cont = indent + u"  "_s;
-        if (!id.isEmpty())
+        // The id property follows a title line; inside a code fence, a table, HTML or a quote it
+        // would become content, so there it goes after the block (as Logseq writes it).
+        const bool idAfter = b.kind == BlockKind::Code || b.kind == BlockKind::Table || b.kind == BlockKind::Html
+                             || b.kind == BlockKind::Quote || b.kind == BlockKind::Callout;
+        if (!id.isEmpty() && !idAfter)
             out.append(cont + u"id:: "_s + logseqUuid(id));
         for (qsizetype k = 1; k < source.size(); ++k)
             out.append(source[k].trimmed().isEmpty() ? QString() : cont + dedent(source[k], common));
+        if (!id.isEmpty() && idAfter)
+            out.append(cont + u"id:: "_s + logseqUuid(id));
     }
 
     static QString rewriteLinks(const Context &ctx, const ExportVault::Note &note, const QString &text)

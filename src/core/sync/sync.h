@@ -38,11 +38,15 @@
 //     stateOf(path), mergeBaseOf(path); setClock/setConcurrency/setMaxFileSize/setMaxBaseSize.
 //     SyncReport{uploaded, downloaded, deletedLocal, deletedRemote, merged, conflicts,
 //     conflictCopies, errors, skipped, changes, started, finished, cancelled, remoteError,
-//     syncError}. Pure helpers: planSync(SyncFacts), isSyncablePath, isSyncTextPath,
-//     decodeSyncText, groupByCase, remoteVersion.
+//     syncError, needsConfirmation, pendingDeletions}. Mass-deletion guard: > 25 % and >= 10
+//     files of a side (or all of them) -> no deletion applied, needsConfirmation; confirm with
+//     SyncRunOptions::confirmDeletions. A vault whose folder is missing / on another storage is
+//     refused (SyncErrorCode::VaultUnavailable). Pure helpers: planSync(SyncFacts),
+//     isSyncablePath, isSyncTextPath, decodeSyncText, groupByCase, remoteVersion.
 //
 //   Scheduling                                                             sync/scheduler.h
-//     SyncScheduler(SyncRunner*): start()/stop()/syncNow(cb)/notifyLocalChange()/
+//     SyncScheduler(SyncRunner*): start()/stop()/syncNow(cb)/syncNowConfirmingDeletions(cb)/
+//     notifyLocalChange()/
 //     notifyChanges(vault changes)/networkOnline()/networkOffline()/setAppActive(bool);
 //     status() -> SyncStatus{state Disabled|Idle|Syncing|Error|Offline, lastSync, lastError,
 //     lastErrorCode, lastReport, progress, nextSync}, signal statusChanged(); injectable

@@ -11,7 +11,9 @@
 //                    reminders (⏰, ⏰!, (@…)), block/page properties, frontmatter, headings,
 //                    block ids (^id, id::), journal date
 //                  blockAtLine(note, line) -> block index or -1
-//   inline.h       extractInline(text, baseOffset, line) -> {links, tags}; maskInlineCode(text)
+//   inline.h       extractInline(text, baseOffset, line) -> {links, tags}; findTags(text) ->
+//                  TagSpan{name, from, to} (every occurrence, for renderers/exporters);
+//                  maskInlineCode(text)
 //   tokens.h       tokens::Due "📅", Scheduled "⏳", Start "🛫", Created "➕", Done "✅",
 //                  Cancelled "❌", Recurrence "🔁", Reminder "⏰", Alarm "⏰!", priorityEmoji(p)
 //                  findTokens(masked) -> QList<Token>, stripTokens(text),

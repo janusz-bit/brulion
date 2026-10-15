@@ -70,8 +70,23 @@ bool DiskListing::inListedTree(const VaultPath &path) const
     }
 }
 
+bool DiskListing::withinUnreadable(const VaultPath &path) const
+{
+    if (unreadable.isEmpty())
+        return false;
+    for (VaultPath cur = path;; cur = paths::dirname(cur)) {
+        if (unreadable.contains(cur))
+            return true;
+        if (cur.isEmpty())
+            return false;
+    }
+}
+
 bool DiskListing::coversChildrenOf(const VaultPath &dir) const
 {
+    // What could not be listed is not known to be gone.
+    if (withinUnreadable(dir))
+        return false;
     // A folder inside a listed tree is covered; so is every folder below it, so the trees need
     // checking only once (a batch can hold thousands of new trees, diff() asks for every file).
     if (inListedTree(dir))
@@ -94,7 +109,7 @@ bool DiskListing::coversFile(const VaultPath &path) const
 
 bool DiskListing::coversDir(const VaultPath &dir) const
 {
-    return !dir.isEmpty() && coversChildrenOf(paths::dirname(dir));
+    return !dir.isEmpty() && !withinUnreadable(dir) && coversChildrenOf(paths::dirname(dir));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -103,11 +118,18 @@ bool DiskListing::coversDir(const VaultPath &dir) const
 
 void VaultPrivate::listChildren(const VaultPath &dir, const QString &dirRel, bool recursive, DiskListing &out) const
 {
-    if (out.listedDirs.contains(dir))
+    if (out.listedDirs.contains(dir) || out.unreadable.contains(dir))
         return;
+    const QString absDir = absOfDiskRel(dirRel);
+    // Without read permission the listing comes back empty, without search permission the
+    // entries cannot be stat-ed: neither means that everything inside was deleted.
+    if (const QFileInfo self(absDir); !self.isReadable() || !self.isExecutable()) {
+        out.unreadable.insert(dir);
+        return;
+    }
     out.listedDirs.insert(dir);
     QList<std::pair<VaultPath, QString>> descend; // vault path, on-disk path
-    QDirIterator it(absOfDiskRel(dirRel), QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+    QDirIterator it(absDir, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
     while (it.hasNext()) {
         const QFileInfo info = it.nextFileInfo();
         const QString name = info.fileName();
@@ -420,18 +442,145 @@ QList<VaultChange> VaultPrivate::reconcile(const ScanScope &scope, ChangeSource 
     if (scope.isEmpty() || !isOpen)
         return {};
     // An unmounted SD card or a removed folder must not look like "every note was deleted".
-    if (!isDirOnDisk(QString())) {
-        qCWarning(lcVault).noquote() << "The vault folder is missing; changes are not reconciled:" << root;
+    if (const std::optional<VaultScanStatus> problem = rootProblem(false)) {
+        if (*problem != scanStatus)
+            qCWarning(lcVault).noquote() << "The vault folder is missing; changes are not reconciled:" << root;
+        setScanStatus(*problem);
         return {};
     }
-    const DiskListing listing = collect(scope);
+    DiskListing listing = collect(scope);
+    verifyListing(listing);
     const ScanDiff found = diff(listing);
+    // Before anything known disappears: an empty mount point (the card or share was unmounted
+    // under a vault folder that is itself the mount point) still is a folder, but not ours.
+    if (!found.vanishedFiles.isEmpty() || !found.vanishedDirs.isEmpty()) {
+        if (const std::optional<VaultScanStatus> problem = rootProblem(true)) {
+            if (*problem != scanStatus)
+                qCWarning(lcVault).noquote() << problem->message << "- changes are not reconciled";
+            setScanStatus(*problem);
+            return {};
+        }
+    }
     QHash<VaultPath, QString> hashCache; // content hashes of appeared files (rename detection)
     const QList<RenamePair> renames = pairRenames(found, hashCache);
     const QList<VaultChange> changes = apply(found, renames, hashCache, source);
     adoptSpellings(listing);
     syncConfigFolderWatch();
+    noteListing(listing, scope.trees.contains(QString()));
     return changes;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Scan safety
+// ---------------------------------------------------------------------------------------------
+
+QString VaultPrivate::probeStorage() const
+{
+    return storageProbe ? storageProbe(root) : QString();
+}
+
+std::optional<VaultScanStatus> VaultPrivate::rootProblem(bool checkStorage) const
+{
+    if (!isDirOnDisk(QString())) {
+        return VaultScanStatus{VaultScanStatus::State::RootMissing, {}, u"The vault folder is missing: %1"_s.arg(root)};
+    }
+    if (!checkStorage || storageId.isEmpty())
+        return std::nullopt;
+    const QString current = probeStorage();
+    if (current.isEmpty() || current == storageId)
+        return std::nullopt;
+    return VaultScanStatus{VaultScanStatus::State::StorageChanged,
+                           {},
+                           u"The vault folder %1 is on another storage than when it was opened (%2, was %3)"_s.arg(
+                                   root, current, storageId)};
+}
+
+bool VaultPrivate::requireStorage()
+{
+    constexpr qint64 kRecheckMs = 1000;
+    if (storageChecked.isValid() && storageChecked.elapsed() < kRecheckMs && isDirOnDisk(QString()))
+        return true;
+    if (const std::optional<VaultScanStatus> problem = rootProblem(true)) {
+        storageChecked.invalidate();
+        return fail(
+                problem->state == VaultScanStatus::State::RootMissing
+                        ? Vault::tr("The vault folder is missing (unmounted?): %1").arg(root)
+                        : Vault::tr("The vault folder is on another storage than when it was opened (unmounted?): %1")
+                                  .arg(root));
+    }
+    storageChecked.start();
+    return true;
+}
+
+void VaultPrivate::verifyListing(DiskListing &listing) const
+{
+    // A listing that misses a known entry which a direct stat still finds is incomplete (an I/O
+    // error while reading the folder, a flaky network mount): nothing below that folder counts
+    // as gone. On case-insensitive storage the stat also finds a case variant that the listing
+    // has — that is a rename, not a gap.
+    QSet<QString> listedLower;
+    bool lowerReady = false;
+    const auto caseVariantListed = [&](const VaultPath &path) {
+        if (!lowerReady) {
+            for (auto it = listing.files.cbegin(); it != listing.files.cend(); ++it)
+                listedLower.insert(it.key().toLower());
+            for (auto it = listing.dirs.cbegin(); it != listing.dirs.cend(); ++it)
+                listedLower.insert(it.key().toLower());
+            lowerReady = true;
+        }
+        return listedLower.contains(path.toLower());
+    };
+    for (auto it = dirs.cbegin(); it != dirs.cend(); ++it) {
+        const VaultPath &dir = it.key();
+        if (listing.dirs.contains(dir) || !listing.coversDir(dir))
+            continue;
+        const QFileInfo info(absPath(dir));
+        if (info.isSymLink() && !info.exists())
+            listing.unreadable.insert(dir); // a linked folder whose target is unmounted
+        else if (isDirOnDisk(dir) && !caseVariantListed(dir))
+            listing.unreadable.insert(paths::dirname(dir));
+    }
+    for (auto it = files.cbegin(); it != files.cend(); ++it) {
+        const VaultPath &path = it.key();
+        if (listing.files.contains(path) || !listing.coversFile(path))
+            continue;
+        if (QFileInfo(absPath(path)).isFile() && !caseVariantListed(path))
+            listing.unreadable.insert(paths::dirname(path));
+    }
+}
+
+void VaultPrivate::noteListing(const DiskListing &listing, bool full)
+{
+    QSet<VaultPath> folders = listing.unreadable;
+    if (!full) {
+        // A partial scan vouches only for the folders it listed.
+        for (const VaultPath &folder : std::as_const(scanStatus.unreadableFolders)) {
+            if (!listing.listedDirs.contains(folder) && !listing.inListedTree(folder))
+                folders.insert(folder);
+        }
+    }
+    VaultScanStatus status;
+    if (!folders.isEmpty()) {
+        status.state = VaultScanStatus::State::Unreadable;
+        status.unreadableFolders = QList<VaultPath>(folders.cbegin(), folders.cend());
+        std::sort(status.unreadableFolders.begin(), status.unreadableFolders.end());
+        QStringList shown;
+        for (const VaultPath &folder : std::as_const(status.unreadableFolders))
+            shown.append(folder.isEmpty() ? u"(vault folder)"_s : folder);
+        status.message = u"%1 folder(s) could not be read; their content is kept as it was: %2"_s.arg(
+                QString::number(shown.size()), shown.join(u", "_s));
+        if (status != scanStatus)
+            qCWarning(lcVault).noquote() << status.message;
+    }
+    setScanStatus(std::move(status));
+}
+
+void VaultPrivate::setScanStatus(VaultScanStatus status)
+{
+    if (status == scanStatus)
+        return;
+    scanStatus = std::move(status);
+    Q_EMIT q->scanStatusChanged();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -591,6 +740,21 @@ QList<VaultChange> Vault::rescan()
 void Vault::processPendingEvents()
 {
     d->processPendingEvents();
+}
+
+VaultScanStatus Vault::scanStatus() const
+{
+    return d->scanStatus;
+}
+
+bool Vault::isStorageAvailable() const
+{
+    return d->isOpen && !d->rootProblem(true);
+}
+
+void Vault::setStorageProbe(std::function<QString(const QString &)> probe)
+{
+    d->storageProbe = std::move(probe);
 }
 
 } // namespace brulion

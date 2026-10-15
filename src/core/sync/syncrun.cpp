@@ -45,6 +45,24 @@ bool skipRemoteDir(const VaultPath &path)
     return path != u".brulion"_s && !isSyncablePath(path);
 }
 
+/// The mass-deletion rule: deleting more than MassDeletionRatio of a side's `files` and at least
+/// MassDeletionMinFiles, or every file of the side (at least kEmptySideGuardMin).
+bool tripsMassDeletionGuard(int deletions, int files)
+{
+    if (deletions <= 0)
+        return false;
+    if (deletions >= files && deletions >= kEmptySideGuardMin)
+        return true;
+    return deletions >= SyncEngine::MassDeletionMinFiles && deletions > files * SyncEngine::MassDeletionRatio;
+}
+
+/// Synced files of one side, the vault config not counted.
+template<typename Map>
+int countWithoutConfig(const Map &files)
+{
+    return static_cast<int>(files.size()) - (files.contains(vaultConfigPath()) ? 1 : 0);
+}
+
 } // namespace
 
 SyncRun::Outcome SyncRun::Outcome::fromError(const WebDavError &error)
@@ -126,6 +144,14 @@ void SyncRun::start()
         m_report.syncError = SyncError{SyncErrorCode::NotReady, u"Sync needs an open vault, a WebDAV client and a store"_s};
         if (m_engine)
             detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
+        return;
+    }
+    if (!vault()->isStorageAvailable()) {
+        // An unmounted card or share: the vault's view of the folder cannot be trusted.
+        m_report.syncError =
+                SyncError{SyncErrorCode::VaultUnavailable,
+                          u"The vault folder is missing or on another storage: %1"_s.arg(vault()->rootPath())};
+        detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
         return;
     }
     report(SyncProgress{SyncProgress::Phase::Connecting, 0, 0, {}});
@@ -214,6 +240,7 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         finish();
         return;
     }
+    guardMassDeletion();
     processAll();
 }
 
@@ -270,6 +297,46 @@ bool SyncRun::guardEmptySides()
         return false;
     }
     return true;
+}
+
+void SyncRun::guardMassDeletion()
+{
+    if (m_options.confirmDeletions || m_options.allowEmptySide)
+        return;
+    // Count what planSync() will decide for the paths synced before that are gone on one side:
+    // deleted there unless the other side changed (then the file is restored instead).
+    const qint64 maxSize = m_engine->maxFileSize();
+    int localDeletions = 0;  // gone remotely, unchanged locally -> DeleteLocal
+    int remoteDeletions = 0; // gone locally, unchanged remotely -> DeleteRemote
+    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
+        const VaultPath &path = it.key();
+        if (path == vaultConfigPath())
+            continue;
+        const auto local = m_local.constFind(path);
+        const auto remote = m_remote.constFind(path);
+        const bool hasLocal = local != m_local.cend();
+        const bool hasRemote = remote != m_remote.cend();
+        if (hasLocal == hasRemote)
+            continue;
+        if (hasRemote) {
+            if (remote->size <= maxSize && remoteVersion(*remote) == it->remoteEtag)
+                ++remoteDeletions;
+            continue;
+        }
+        if (local->size > maxSize)
+            continue; // skipped by syncPath()
+        const ReadResult read = readLocal(path, *local, *it);
+        if (read.snap && read.snap->hash == it->localHash)
+            ++localDeletions;
+    }
+    m_holdDeletions = tripsMassDeletionGuard(localDeletions, countWithoutConfig(m_local))
+                      || tripsMassDeletionGuard(remoteDeletions, countWithoutConfig(m_remote));
+    if (m_holdDeletions) {
+        qCInfo(detail::lcSync).noquote()
+                << u"Mass deletion held back for confirmation: %1 local and %2 remote file(s) would be deleted"_s
+                           .arg(localDeletions)
+                           .arg(remoteDeletions);
+    }
 }
 
 void SyncRun::processAll()
@@ -344,6 +411,9 @@ void SyncRun::finish()
     }
     m_report.finished = now();
     m_report.cancelled = m_cancelled;
+    std::sort(m_report.pendingDeletions.begin(), m_report.pendingDeletions.end(),
+              [](const SyncChange &a, const SyncChange &b) { return a.path < b.path; });
+    m_report.needsConfirmation = !m_report.pendingDeletions.isEmpty();
     if (!m_report.failed() && !m_cancelled)
         report(SyncProgress{SyncProgress::Phase::Done, m_done, m_total, {}});
     if (store() && !store()->flush())
@@ -393,7 +463,15 @@ void SyncRun::syncPath(const VaultPath &path, Done done)
     facts.known = ctx.state.has_value();
     facts.localChanged = ctx.snap && (!ctx.state || ctx.snap->hash != ctx.state->localHash);
     facts.remoteChanged = ctx.remote && (!ctx.state || remoteVersion(*ctx.remote) != ctx.state->remoteEtag);
-    switch (planSync(facts)) {
+    const SyncPlan plan = planSync(facts);
+    if (m_holdDeletions && (plan == SyncPlan::DeleteRemote || plan == SyncPlan::DeleteLocal)) {
+        // Held back by the mass-deletion guard; the sync state stays, so the next run plans it again.
+        m_report.pendingDeletions.append(
+                SyncChange{path, plan == SyncPlan::DeleteRemote ? SyncAction::DeleteRemote : SyncAction::DeleteLocal});
+        done(Outcome::done());
+        return;
+    }
+    switch (plan) {
     case SyncPlan::Noop: refreshState(ctx, std::move(done)); return;
     case SyncPlan::Upload: upload(ctx, std::move(done)); return;
     case SyncPlan::Download: download(ctx, std::move(done)); return;

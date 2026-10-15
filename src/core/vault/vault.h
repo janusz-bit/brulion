@@ -21,6 +21,9 @@
 //     trash(), trashInfo(trashPath), restore(trashPath), emptyTrash()
 //     startWatching() / stopWatching() (also before open()), rescan(), processPendingEvents(),
 //     setWatchDelay(ms), setRescanInterval(ms)
+//     scanStatus() -> VaultScanStatus{state Ok|RootMissing|StorageChanged|Unreadable,
+//     unreadableFolders, message} + signal scanStatusChanged(); isStorageAvailable() (live
+//     check), setStorageProbe(fn) (storage identity; default QStorageInfo device + mount root)
 //     history(), store(), setClock(fn)
 //     signal changed(QList<VaultChange>) — once per operation / batch of external changes
 //
@@ -69,7 +72,20 @@
 //    those are compared by size and mtime like binary files (a touch counts as a
 //    modification) and are not kept in History; the content cache holds at most 64 MB, and a
 //    .brulion/config.json over 1 MB is ignored (defaults + warning).
-//  * A missing vault folder (unmounted SD card) is never reported as "everything deleted".
+//  * Scans never turn what they cannot see into deletions (scanStatus() says why):
+//    - the vault folder is missing (unmounted SD card, removed folder): nothing is reconciled
+//      (RootMissing);
+//    - the folder now lies on another storage than at open() — an empty mount point left by an
+//      unmounted card or network share (QStorageInfo device / mount root compared): nothing is
+//      reconciled while known files would vanish (StorageChanged; open() again to adopt it);
+//    - a folder cannot be listed (no read/search permission, or the listing misses entries that
+//      a direct stat still finds — I/O errors, flaky network mounts): nothing below it is
+//      reported as deleted (Unreadable, with the folders); the rest of the vault is reconciled.
+//    Full scans (open(), rescan()) replace the list of unreadable folders; watcher batches add to
+//    it and drop the folders they could list. Writes (writeText, writeBinary, create, createFolder,
+//    saveConfig)
+//    fail while the folder is missing or on another storage, so nothing lands on an empty mount
+//    point to be hidden when the card is mounted again.
 //
 // vault.h declares the metatype of brulion::VaultChange (QList<VaultChange> follows), so
 // changed() works with queued connections, QVariant and QSignalSpy.
@@ -100,6 +116,22 @@ QString changeSourceName(ChangeSource source);
 
 /// ".trash" — the folder that receives deleted files.
 QString vaultTrashFolder();
+
+/// Whether the last scan could see the whole vault (see Vault::scanStatus()).
+struct VaultScanStatus {
+    enum class State {
+        Ok,
+        RootMissing,    ///< the vault folder is gone (unmounted SD card, removed folder)
+        StorageChanged, ///< the folder lies on another storage than at open() (empty mount point)
+        Unreadable,     ///< some folders could not be listed; their content was left alone
+    };
+    State state = State::Ok;
+    QList<VaultPath> unreadableFolders; ///< Unreadable: sorted; "" = the vault folder itself
+    QString message;                    ///< English details for logs ("" when Ok)
+
+    bool isOk() const { return state == State::Ok; }
+    friend bool operator==(const VaultScanStatus &, const VaultScanStatus &) = default;
+};
 
 /// Where a trashed file or folder came from.
 struct TrashInfo {
@@ -205,6 +237,18 @@ public:
     /// watch delay.
     void processPendingEvents();
 
+    /// What the last scan (open(), rescan(), a watcher batch) could not see; see the semantics
+    /// above. Changes are announced by scanStatusChanged().
+    VaultScanStatus scanStatus() const;
+    /// Live check (no scan): the vault is open, its folder exists and lies on the storage it was
+    /// on at open(). Sync and other bulk operations should not run otherwise.
+    bool isStorageAvailable() const;
+    /// Identity of the storage holding an absolute folder path; an empty identity is never
+    /// compared. Default: QStorageInfo device + mount root. Tests and platforms without mount
+    /// information inject their own. Set it before open(): open() records the identity that
+    /// later answers are compared with.
+    void setStorageProbe(std::function<QString(const QString &absolutePath)> probe);
+
     // --- device-local state --------------------------------------------------------------
     /// Version history (nullptr without a device state folder).
     History *history() const;
@@ -219,6 +263,8 @@ Q_SIGNALS:
     void changed(const QList<brulion::VaultChange> &changes);
     /// config() changed (saveConfig, external edit, deletion of the file, reload).
     void configChanged();
+    /// scanStatus() changed.
+    void scanStatusChanged();
 
 private:
     friend class VaultPrivate;

@@ -113,7 +113,8 @@ QString cleanTagBody(QStringView body)
     bool letterOrDigit = false;
     for (qsizetype i = 0; i < name.size();) {
         const CodePoint cp = codePointAt(name, i);
-        if (cp.value < U'0' || cp.value > U'9')
+        // "#1" is no tag (SYNTAX §3) — in any script: "#٣", "#１２" are numbers too.
+        if (QChar::category(cp.value) != QChar::Number_DecimalDigit)
             allDigits = false;
         if (isLetterOrNumber(cp.value))
             letterOrDigit = true;
@@ -702,6 +703,17 @@ QStringList uniqueTags(const QStringList &names)
         seen.insert(key);
         out.append(name);
     }
+    return out;
+}
+
+QList<TagSpan> findTags(QStringView text)
+{
+    const QString masked = maskInline(text);
+    QList<TagSpan> out;
+    lexInline(text, masked, [&out](const InlineItem &item) {
+        if (item.kind == InlineKind::Tag)
+            out.append(TagSpan{item.target, item.from, item.to});
+    });
     return out;
 }
 

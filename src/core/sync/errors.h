@@ -56,10 +56,11 @@ QString errorCodeName(WebDavErrorCode code);
 /// Why the sync engine refused to run, or why a file could not be synced.
 enum class SyncErrorCode {
     None,
-    LocalEmpty,   ///< none of the files synced before exist locally (vault storage lost?)
-    RemoteEmpty,  ///< none of them exist on the server any more (wrong folder? wiped server?)
-    RemoteBusy,   ///< a file kept changing on the server while merging (per file; retried later)
-    NotReady,     ///< no open vault, client or store
+    LocalEmpty,       ///< none of the files synced before exist locally (vault storage lost?)
+    RemoteEmpty,      ///< none of them exist on the server any more (wrong folder? wiped server?)
+    RemoteBusy,       ///< a file kept changing on the server while merging (per file; retried later)
+    NotReady,         ///< no open vault, client or store
+    VaultUnavailable, ///< the vault folder is missing or on another storage (Vault::isStorageAvailable())
 };
 
 /// An engine-level failure. `code == None` means success.
@@ -71,7 +72,7 @@ struct SyncError {
     bool is(SyncErrorCode c) const { return code == c; }
 };
 
-/// "local-empty", "remote-empty", "remote-busy", "not-ready"; "" for None.
+/// "local-empty", "remote-empty", "remote-busy", "not-ready", "vault-unavailable"; "" for None.
 QString errorCodeName(SyncErrorCode code);
 
 } // namespace brulion::sync

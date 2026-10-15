@@ -36,40 +36,12 @@ void blank(QString &s, qsizetype from, qsizetype to)
     }
 }
 
-bool isTagChar(char32_t cp)
-{
-    return cp == u'_' || cp == u'-' || cp == u'/' || text::isWordChar(cp);
-}
-
-/// Blank tags (`#tag`, `#nested/tag`, `#[[tag name]]`) so `#Dom` is not a mention of "Dom".
+/// Blank the tags of a line so `#Dom` is not a mention of "Dom" — exactly the tags the parser
+/// sees (markdown::findTags: `#tag`, `#nested/tag`, `#[[tag name]]`).
 void maskTags(QString &line)
 {
-    const qsizetype n = line.size();
-    for (qsizetype i = 0; i < n;) {
-        const bool start = i == 0 || line[i - 1].isSpace() || line[i - 1] == u'(';
-        if (line[i] != u'#' || !start) {
-            ++i;
-            continue;
-        }
-        if (QStringView(line).sliced(i + 1).startsWith(u"[[")) {
-            const qsizetype close = line.indexOf(u"]]", i + 3);
-            if (close >= 0) {
-                blank(line, i, close + 2);
-                i = close + 2;
-                continue;
-            }
-        }
-        qsizetype j = i + 1;
-        while (j < n) {
-            const auto [cp, len] = codePointAt(line, j);
-            if (!isTagChar(cp))
-                break;
-            j += len;
-        }
-        if (j > i + 1)
-            blank(line, i, j);
-        i = std::max(j, i + 1);
-    }
+    for (const markdown::TagSpan &tag : markdown::findTags(line))
+        blank(line, tag.from, tag.to);
 }
 
 /// Blank every character of `masked` that `mask` (same length) turned into a space.

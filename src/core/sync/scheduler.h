@@ -34,7 +34,9 @@ struct SyncStatus {
     QDateTime lastSync;      ///< finish time of the last successful run (invalid: none yet)
     QString lastError;       ///< message of the last failure; empty after a clean run
     /// errorCodeName() of the last failure ("auth", "network", "remote-empty", …), "files" for
-    /// per-file errors of an otherwise completed run; empty after a clean run.
+    /// per-file errors of an otherwise completed run, "needs-confirmation" when the mass-deletion
+    /// guard held deletions back (lastReport->pendingDeletions; see syncNowConfirmingDeletions());
+    /// empty after a clean run.
     QString lastErrorCode;
     std::optional<SyncReport> lastReport;   ///< report of the last completed run
     std::optional<SyncProgress> progress;   ///< progress of the running sync
@@ -98,6 +100,10 @@ public:
     /// std::nullopt when offline, failed or cancelled (see status().lastError); it may run
     /// synchronously when offline. Joins a running sync.
     void syncNow(RunCallback done = {});
+    /// Sync now applying the deletions the mass-deletion guard held back (the user confirmed
+    /// status().lastReport->pendingDeletions): SyncRunOptions::confirmDeletions for one run.
+    /// While a sync is running, it runs right after it.
+    void syncNowConfirmingDeletions(RunCallback done = {});
 
 public Q_SLOTS:
     /// Start automatic syncing: a first sync right away, then periodically. Idempotent.
@@ -146,6 +152,7 @@ private:
     bool m_cancelling = false;     ///< stop() cancelled the running run
     bool m_rerun = false;          ///< a local change arrived during a run
     bool m_triggerAfterRun = false; ///< restarted while the cancelled run was still finishing
+    bool m_confirmDeletions = false; ///< the next run confirms held-back deletions
     bool m_networkConnected = false;
     bool m_reportedOnline = true; ///< last networkOnline() / networkOffline() (isOnline() fallback)
     int m_periodicTimer = 0;

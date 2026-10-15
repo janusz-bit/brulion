@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QStorageInfo>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -35,6 +36,15 @@ QString withTrailingSlash(const QString &path)
 QDateTime systemNow()
 {
     return QDateTime::currentDateTime();
+}
+
+/// Device and mount root of the file system holding `path` ("" when unknown).
+QString systemStorageIdentity(const QString &path)
+{
+    const QStorageInfo info(path);
+    if (!info.isValid())
+        return {};
+    return QString::fromUtf8(info.device()) + u'|' + info.rootPath();
 }
 
 /// The on-disk spelling of the segments of `rel` after its first `depth` ones, with the leading
@@ -174,6 +184,7 @@ VaultPrivate::VaultPrivate(Vault *owner, const QString &rootPath, const QString 
     , rootPrefix(withTrailingSlash(root))
     , statePath(cleanAbsolute(deviceStatePath))
     , clock(systemNow)
+    , storageProbe(systemStorageIdentity)
 {
     if (!statePath.isEmpty()) {
         history = std::make_unique<History>(statePath + u"/history"_s);
@@ -798,7 +809,7 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
 
 bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText)
 {
-    if (!requireOpen())
+    if (!requireOpen() || !requireStorage())
         return false;
     QList<VaultChange> changes;
     const bool ok = writeFile(path, bytes, source, asText, changes);
@@ -808,7 +819,7 @@ bool VaultPrivate::write(const VaultPath &path, const QByteArray &bytes, ChangeS
 
 VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText)
 {
-    if (!requireOpen())
+    if (!requireOpen() || !requireStorage())
         return {};
     const VaultPath base = paths::normalize(path);
     if (base.isEmpty()) {
@@ -929,6 +940,7 @@ bool Vault::open(QString *error)
     d->stopWatching();
     d->reset();
     d->canonicalRoot = QFileInfo(d->root).canonicalFilePath();
+    d->storageId = d->probeStorage();
     DiskListing listing;
     listing.trees.insert(QString());
     d->listChildren(QString(), QString(), true, listing);
@@ -936,6 +948,7 @@ bool Vault::open(QString *error)
     d->id = idForPath(d->root);
     d->isOpen = true;
     d->error.clear();
+    d->noteListing(listing, true);
     const bool configDiffers = d->loadConfig();
     if (watch)
         d->startWatching();
@@ -1068,7 +1081,7 @@ VaultPath Vault::createBinary(const VaultPath &path, const QByteArray &data, Cha
 
 bool Vault::createFolder(const VaultPath &path)
 {
-    if (!d->requireOpen())
+    if (!d->requireOpen() || !d->requireStorage())
         return false;
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty())

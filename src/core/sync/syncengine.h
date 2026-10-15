@@ -84,7 +84,15 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
 /// file does not abort the others (its error is reported, it is retried next time), but auth,
 /// network and timeout failures stop the run. Up to `concurrency` (4) transfers are in flight.
 /// The engine refuses to mirror a side on which every previously synced file has disappeared
-/// (SyncErrorCode::LocalEmpty / RemoteEmpty) unless SyncRunOptions::allowEmptySide is set.
+/// (SyncErrorCode::LocalEmpty / RemoteEmpty) unless SyncRunOptions::allowEmptySide is set, and
+/// refuses to run while the vault folder is missing or on another storage than at open()
+/// (SyncErrorCode::VaultUnavailable, see Vault::isStorageAvailable()).
+/// Mass-deletion guard (like the Nextcloud client): when a run would delete more than 25 % of
+/// the files of one side and at least 10 of them (MassDeletionRatio, MassDeletionMinFiles), or
+/// every file of a side (at least 2), it applies no deletion at all — the other changes are
+/// synced — and reports SyncReport::needsConfirmation with the pendingDeletions; a run with
+/// SyncRunOptions::confirmDeletions (or allowEmptySide) applies them. The vault config does not
+/// count. Held-back paths keep their sync state, so later runs plan the same deletions.
 /// When the vault, client or store is destroyed during a run, the run ends with
 /// SyncErrorCode::NotReady. Everything runs on the owner's thread; the vault is accessed
 /// synchronously, network I/O is asynchronous.
@@ -95,6 +103,11 @@ public:
     static QString stateKey(const VaultPath &path);
     static QString baseKey(const VaultPath &path);
     static QString metaKey();
+
+    /// Mass-deletion guard: a side loses more than this share of its files ...
+    static constexpr double MassDeletionRatio = 0.25;
+    /// ... and at least this many files.
+    static constexpr int MassDeletionMinFiles = 10;
 
     /// None of the pointers is owned; `device` names this device in conflict copies.
     SyncEngine(Vault *vault, WebDavClient *client, LocalStore *store, const QString &device,

@@ -67,6 +67,7 @@ QString errorCodeName(SyncErrorCode code)
     case SyncErrorCode::RemoteEmpty: return u"remote-empty"_s;
     case SyncErrorCode::RemoteBusy: return u"remote-busy"_s;
     case SyncErrorCode::NotReady: return u"not-ready"_s;
+    case SyncErrorCode::VaultUnavailable: return u"vault-unavailable"_s;
     }
     return {};
 }

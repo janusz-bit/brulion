@@ -157,6 +157,8 @@ struct Fixture {
     TestClock clock;
     std::unique_ptr<Vault> vault;
     std::unique_ptr<QSignalSpy> spy;
+    /// Storage identity probe given to the vault before open() (unset: the system's).
+    std::function<QString(const QString &)> storageProbe;
 
     QString root() const { return tmp.path() + u"/Notatki"_s; }
     QString state() const { return tmp.path() + u"/state"_s; }
@@ -173,6 +175,8 @@ struct Fixture {
         spy.reset();
         vault = std::make_unique<Vault>(root(), withHistory ? state() : QString());
         vault->setClock(clock.fn());
+        if (storageProbe)
+            vault->setStorageProbe(storageProbe);
         QString error;
         if (!vault->open(&error)) {
             qWarning().noquote() << "open failed:" << error;

@@ -335,7 +335,8 @@ qsizetype toBody(const QList<std::pair<qsizetype, qsizetype>> &runs, qsizetype p
 
 } // namespace
 
-QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs) const
+QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs,
+                                     bool taskMarker) const
 {
     if (text.isEmpty())
         return {};
@@ -409,7 +410,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         }
 
         // Leading task marker.
-        if (const auto marker = matchTaskMarker(text, masked, 0)) {
+        if (const auto marker = taskMarker ? matchTaskMarker(text, masked, 0) : std::nullopt) {
             taskStatus = marker->status;
             QString html;
             if (m_ctx.taskCheckbox) {
@@ -611,8 +612,8 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
         return out;
     };
     switch (kind) {
-    case BlockKind::ListItem:
-    case BlockKind::Paragraph: return render(body);
+    case BlockKind::ListItem: return render(body);
+    case BlockKind::Paragraph: return renderInline(body, true, 0, {}, false);
     case BlockKind::Heading: {
         const QString first = lines.first().text;
         if (const auto atx = matchAtxHeading(first)) {
@@ -624,7 +625,7 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
                 --k;
             if (k < e && (k == 0 || isSpaceOrTab(title[k - 1])))
                 title = trimEndBlanks(QStringView(title).first(k)).toString();
-            return renderInline(title, true, 0, {{0, atx->prefixLength}});
+            return renderInline(title, true, 0, {{0, atx->prefixLength}}, false);
         }
         // Setext: the lines above the underline (line breaks normalised to "\n").
         QString text;
@@ -635,12 +636,12 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
             runs.append({text.size(), lines[k].start});
             text += lines[k].text;
         }
-        return runs.isEmpty() ? render(body) : renderInline(text, true, 0, runs);
+        return renderInline(runs.isEmpty() ? body : QStringView(text), true, 0, runs, false);
     }
     case BlockKind::Quote: {
         SourceRuns runs;
         const QString text = stripQuotes(0, runs);
-        return renderInline(text, true, 0, runs);
+        return renderInline(text, true, 0, runs, false);
     }
     case BlockKind::Callout: {
         QStringView first = QStringView(lines.first().text);
@@ -658,8 +659,8 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
         }
         SourceRuns runs;
         const QString rest = stripQuotes(1, runs);
-        const QString restHtml = renderInline(rest, true, 0, runs);
-        QString out = u"<b>"_s + renderInline(title, true, 0, {{0, titleStart}}) + u"</b>"_s;
+        const QString restHtml = renderInline(rest, true, 0, runs, false);
+        QString out = u"<b>"_s + renderInline(title, true, 0, {{0, titleStart}}, false) + u"</b>"_s;
         if (!restHtml.isEmpty())
             out += u"<br/>"_s + restHtml;
         return out;

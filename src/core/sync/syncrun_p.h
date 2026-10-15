@@ -110,6 +110,7 @@ private:
     void listLocal();
     void loadStates();
     bool guardEmptySides();
+    void guardMassDeletion();
     void processAll();
     void runGroup(const QStringList &group, qsizetype index, std::function<void()> groupDone);
     void finish();
@@ -157,6 +158,7 @@ private:
     int m_total = 0;
     bool m_cancelled = false;
     bool m_finished = false;
+    bool m_holdDeletions = false; ///< the mass-deletion guard tripped: no deletions this run
 };
 
 } // namespace brulion::sync

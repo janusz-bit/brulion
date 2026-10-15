@@ -87,6 +87,23 @@ MediaKind mediaKind(const QString &path)
     return MediaKind::Other;
 }
 
+/// What a link shows when it cannot be one (inside another link): its label, else its target.
+QString visibleText(const Link &link, QStringView source)
+{
+    switch (link.kind) {
+    case LinkKind::Wiki:
+    case LinkKind::Embed:
+    case LinkKind::Markdown:
+        if (!link.display.isEmpty())
+            return link.display;
+        return link.target.isEmpty() ? source.toString() : link.target;
+    case LinkKind::BlockRef:
+    case LinkKind::BlockEmbed:
+    case LinkKind::Url: break;
+    }
+    return source.toString();
+}
+
 bool isAttachmentTarget(const QString &target)
 {
     const QString ext = paths::extension(target);
@@ -450,7 +467,7 @@ QString HtmlRenderer::blockAnchor(const QString &id)
     return u"block-"_s + id;
 }
 
-QString HtmlRenderer::renderInline(QStringView text) const
+QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
 {
     if (text.isEmpty())
         return {};
@@ -472,6 +489,10 @@ QString HtmlRenderer::renderInline(QStringView text) const
         if (from < 0 || to > text.size() || from >= to)
             continue;
         const QStringView source = text.sliced(from, to - from);
+        if (insideLink) {
+            atoms.append(Atom{from, to, esc(visibleText(l, source))});
+            continue;
+        }
         QString html;
         switch (l.kind) {
         case LinkKind::Wiki: {
@@ -509,10 +530,10 @@ QString HtmlRenderer::renderInline(QStringView text) const
                 } else if (image) {
                     html = u"<img src="_s + attr(l.target) + u" alt="_s + attr(l.display) + u" loading=\"lazy\">"_s;
                 } else {
-                    QString label = renderInline(l.display);
-                    if (label.isEmpty())
-                        label = esc(l.target);
-                    html = u"<a class=\"external\" href="_s + attr(l.target) + u" rel=\"noopener\">"_s + label
+                    QString shown = renderInline(l.display, true);
+                    if (shown.isEmpty())
+                        shown = esc(l.target);
+                    html = u"<a class=\"external\" href="_s + attr(l.target) + u" rel=\"noopener\">"_s + shown
                            + u"</a>"_s;
                 }
                 break;
@@ -529,10 +550,10 @@ QString HtmlRenderer::renderInline(QStringView text) const
             } else if (image) {
                 html = mediaHtml(*url, l.display, l.target);
             } else {
-                QString label = renderInline(l.display);
-                if (label.isEmpty())
-                    label = esc(l.target);
-                html = u"<a class=\"internal\" href="_s + attr(*url) + u'>' + label + u"</a>"_s;
+                QString shown = renderInline(l.display, true);
+                if (shown.isEmpty())
+                    shown = esc(l.target);
+                html = u"<a class=\"internal\" href="_s + attr(*url) + u'>' + shown + u"</a>"_s;
             }
             break;
         }
@@ -541,7 +562,7 @@ QString HtmlRenderer::renderInline(QStringView text) const
             const auto ref = m_links.block ? m_links.block(l.target) : std::nullopt;
             const QString cls = l.kind == LinkKind::BlockRef ? u"block-ref"_s : u"block-embed"_s;
             html = ref ? QString(u"<a class=\""_s + cls + u"\" href="_s + attr(ref->first) + u'>'
-                                 + renderInline(ref->second) + u"</a>"_s)
+                                 + renderInline(ref->second, true) + u"</a>"_s)
                        : QString(u"<span class=\"missing\">(("_s + esc(l.target) + u"))</span>"_s);
             break;
         }
@@ -557,26 +578,13 @@ QString HtmlRenderer::renderInline(QStringView text) const
         atoms.append(Atom{from, to, html});
     }
 
-    // Tags.
-    static const QRegularExpression tagRe(
-            u"(?<![^\\s(])#(\\[\\[([^\\[\\]|]+)\\]\\]|[\\p{L}\\p{N}\\p{M}_/-]*[\\p{L}\\p{M}_/-][\\p{L}\\p{N}\\p{M}_/-]*)"_s);
-    for (auto it = tagRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        QString name = m.capturedLength(2) > 0
-                               ? text.sliced(m.capturedStart(2), m.capturedLength(2)).toString().trimmed()
-                               : text.sliced(m.capturedStart(1), m.capturedLength(1)).toString();
-        qsizetype end = m.capturedEnd();
-        while (m.capturedLength(2) == 0 && name.endsWith(u'/')) {
-            name.chop(1);
-            --end;
-        }
-        if (name.isEmpty())
-            continue;
-        const QString href = m_links.tag ? m_links.tag(name) : QString();
-        atoms.append(Atom{
-                m.capturedStart(), end,
-                href.isEmpty() ? QString(u"<span class=\"tag\">#"_s + esc(name) + u"</span>"_s)
-                               : QString(u"<a class=\"tag\" href="_s + attr(href) + u">#"_s + esc(name) + u"</a>"_s)});
+    // Tags: exactly the ones the parser sees (SYNTAX §3); none inside link labels.
+    for (const markdown::TagSpan &tag : insideLink ? QList<markdown::TagSpan>() : markdown::findTags(text)) {
+        const QString href = m_links.tag ? m_links.tag(tag.name) : QString();
+        atoms.append(Atom{tag.from, tag.to,
+                          href.isEmpty() ? QString(u"<span class=\"tag\">#"_s + esc(tag.name) + u"</span>"_s)
+                                         : QString(u"<a class=\"tag\" href="_s + attr(href) + u">#"_s + esc(tag.name)
+                                                   + u"</a>"_s)});
     }
 
     // Metadata tokens as chips.

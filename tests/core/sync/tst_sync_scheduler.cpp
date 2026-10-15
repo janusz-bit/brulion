@@ -618,6 +618,65 @@ private Q_SLOTS:
         QTest::qWait(1200);
         QCOMPARE(runner.calls, calls);
     }
+
+    void heldBackDeletionsAskForConfirmation()
+    {
+        Fixture f;
+        f.runner.result = [] {
+            SyncReport r;
+            r.uploaded = 1;
+            r.needsConfirmation = true;
+            r.pendingDeletions = {SyncChange{u"a.md"_s, SyncAction::DeleteLocal},
+                                  SyncChange{u"b.md"_s, SyncAction::DeleteRemote}};
+            return r;
+        };
+        std::optional<SyncReport> result;
+        f.scheduler.syncNow([&](const std::optional<SyncReport> &r) { result = r; });
+        QVERIFY(result); // the run completed; only the deletions wait
+        QCOMPARE(f.scheduler.state(), SyncState::Error);
+        QCOMPARE(f.scheduler.status().lastErrorCode, u"needs-confirmation"_s);
+        QVERIFY(f.scheduler.status().lastError.contains(u"2"_s));
+        QCOMPARE(f.scheduler.status().lastReport->pendingDeletions.size(), 2);
+        QVERIFY(!f.runner.lastOptions.confirmDeletions);
+    }
+
+    void confirmingDeletionsAppliesToOneRunOnly()
+    {
+        Fixture f;
+        f.scheduler.syncNowConfirmingDeletions();
+        QCOMPARE(f.runner.calls, 1);
+        QVERIFY(f.runner.lastOptions.confirmDeletions);
+        QCOMPARE(f.scheduler.state(), SyncState::Disabled);
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 2);
+        QVERIFY(!f.runner.lastOptions.confirmDeletions);
+        // Offline: the confirmation is dropped, never used by a later automatic run.
+        f.online = false;
+        f.scheduler.syncNowConfirmingDeletions();
+        QCOMPARE(f.runner.calls, 2);
+        f.online = true;
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 3);
+        QVERIFY(!f.runner.lastOptions.confirmDeletions);
+    }
+
+    void confirmingDuringARunSyncsAgainAfterIt()
+    {
+        Fixture f;
+        f.runner.autoComplete = false;
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.calls, 1);
+        bool confirmedDone = false;
+        f.scheduler.syncNowConfirmingDeletions(
+                [&](const std::optional<SyncReport> &r) { confirmedDone = r.has_value(); });
+        QCOMPARE(f.runner.calls, 1);
+        f.runner.release();
+        QCOMPARE(f.runner.calls, 2);
+        QVERIFY(f.runner.lastOptions.confirmDeletions);
+        QVERIFY(!confirmedDone);
+        f.runner.release();
+        QVERIFY(confirmedDone);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncScheduler)

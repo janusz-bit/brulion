@@ -10,6 +10,7 @@
 #   scripts/remote-build.sh -n core -t '^tst_dates' tst_dates   # build target(s), run ctest regex
 #   scripts/remote-build.sh -n ui --run 'scripts/screenshots.sh'  # run a command in the dev shell
 #   scripts/remote-build.sh -n ui --pull tests/screenshots   # copy a directory back afterwards
+#   scripts/remote-build.sh -n core -k -t '^tst_core'   # -k: keep going past failing targets
 #   scripts/remote-build.sh -n core -x src/app/shell -x tests/app/shell   # leave out another
 #       agent's unfinished directories (they are not copied, so CMake never sees them)
 #
@@ -17,7 +18,7 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-name="default"; tests=""; run=""; pulls=(); targets=(); excludes=()
+name="default"; tests=""; run=""; pulls=(); targets=(); excludes=(); keep_going=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -n) name="$2"; shift 2 ;;
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --run) run="$2"; shift 2 ;;
     --pull) pulls+=("$2"); shift 2 ;;
     -x) excludes+=("--exclude=/${2#/}"); shift 2 ;;
+    -k) keep_going=1; shift ;;
     *) targets+=("$1"); shift ;;
   esac
 done
@@ -55,7 +57,12 @@ if [[ ! -f ../build/build.ninja ]]; then
   cmake -S . -B ../build -G Ninja -DCMAKE_BUILD_TYPE=${build_type} \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON
 fi
-cmake --build ../build -j ${jobs} ${target_args}
+if [[ ${keep_going} == 1 ]]; then
+  # -k: build as much as possible (other agents' unfinished targets may fail) and go on.
+  cmake --build ../build -j ${jobs} ${target_args} -- -k 0 || echo "remote-build: some targets failed (-k)" >&2
+else
+  cmake --build ../build -j ${jobs} ${target_args}
+fi
 if [[ -n $(printf '%q' "${tests}") ]]; then
   QT_QPA_PLATFORM=offscreen ctest --test-dir ../build --output-on-failure -j 8 -R $(printf '%q' "${tests}")
 fi

@@ -84,6 +84,13 @@ struct SyncReport {
     WebDavError remoteError;       ///< the run stopped on this (auth, network, listing, …)
     SyncError syncError;           ///< the engine refused to run (local-empty, remote-empty, …)
 
+    /// The mass-deletion guard held back every deletion of this run (see SyncEngine): nothing
+    /// was deleted on either side, everything else was synced. Show pendingDeletions to the
+    /// user and sync again with SyncRunOptions::confirmDeletions to apply them.
+    bool needsConfirmation = false;
+    /// The deletions held back (action DeleteLocal / DeleteRemote), sorted by path.
+    QList<SyncChange> pendingDeletions;
+
     /// The run did not complete: cancelled, or stopped by remoteError / syncError.
     bool failed() const { return remoteError.isError() || syncError.isError(); }
     /// Message of remoteError or syncError ("" when the run did not fail).
@@ -110,6 +117,9 @@ struct SyncRunOptions {
     /// Allow a run in which one side is empty although files were synced before (normally
     /// refused with SyncErrorCode::LocalEmpty / RemoteEmpty to protect against accidents).
     bool allowEmptySide = false;
+    /// Apply deletions even when they trip the mass-deletion guard (the user confirmed the list
+    /// from SyncReport::pendingDeletions). allowEmptySide implies it.
+    bool confirmDeletions = false;
     /// Called with every progress update (in addition to SyncEngine::progress).
     std::function<void(const SyncProgress &)> onProgress;
 };

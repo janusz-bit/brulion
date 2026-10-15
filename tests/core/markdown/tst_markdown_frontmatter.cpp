@@ -137,7 +137,12 @@ private Q_SLOTS:
     void unquotedWikiLinksAreNestedLists()
     {
         const QVariantMap r = parseYaml(u"related: [[Strona A]]");
-        QCOMPARE(r.value(u"related"_s).toList(), QVariantList({QVariantList{u"Strona A"_s}}));
+        // One element that is itself a list. (`QVariantList({QVariantList{…}})` would be a copy of the
+        // inner list for Clang but a one-element list for GCC.)
+        const QVariantList inner{u"Strona A"_s};
+        QVariantList expected;
+        expected.append(QVariant(inner));
+        QCOMPARE(r.value(u"related"_s).toList(), expected);
     }
 
     void blockSequences()

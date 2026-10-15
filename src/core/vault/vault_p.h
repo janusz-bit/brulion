@@ -5,6 +5,7 @@
 #include "vault/vault.h"
 #include "vault/vaultutil_p.h"
 
+#include <QElapsedTimer>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QJsonObject>
@@ -40,10 +41,15 @@ struct DiskListing {
     QSet<VaultPath> trees;        ///< roots of recursive listings
     QSet<VaultPath> listedDirs;   ///< folders whose direct children were listed
     QSet<VaultPath> checkedFiles; ///< files stat-ed individually
+    /// Folders that could not be listed (completely): nothing at or below them is covered.
+    QSet<VaultPath> unreadable;
 
     /// True when the listing shows every child of `dir`: the folder was listed, lies in a
-    /// listed tree, or is gone from a folder that was listed.
+    /// listed tree, or is gone from a folder that was listed — and neither it nor a folder
+    /// above it is unreadable.
     bool coversChildrenOf(const VaultPath &dir) const;
+    /// True when `path` is an unreadable folder or lies inside one.
+    bool withinUnreadable(const VaultPath &path) const;
     /// True when `path` lies in one of `trees` (O(depth) set lookups, not O(trees)).
     bool inListedTree(const VaultPath &path) const;
     bool coversFile(const VaultPath &path) const;
@@ -186,6 +192,20 @@ public:
     QList<VaultChange> reconcile(const ScanScope &scope, ChangeSource source);
     void adoptListing(const DiskListing &listing);
 
+    // --- scan safety (vaultscan.cpp)
+    /// RootMissing / StorageChanged when the vault folder cannot be trusted at all; storage
+    /// identities are compared only with `checkStorage` (QStorageInfo reads the mount table).
+    std::optional<VaultScanStatus> rootProblem(bool checkStorage) const;
+    /// Mark folders whose listing misses known entries that a direct stat still finds.
+    void verifyListing(DiskListing &listing) const;
+    /// Status after a scan that could see the vault folder (`full`: the whole vault was listed).
+    void noteListing(const DiskListing &listing, bool full);
+    void setScanStatus(VaultScanStatus status);
+    QString probeStorage() const;
+    /// Writes need the vault folder on the storage it was opened on (an empty mount point
+    /// would swallow them); the storage identity is re-read at most once a second.
+    bool requireStorage();
+
     // --- watching (vaultscan.cpp)
     void startWatching();
     void stopWatching();
@@ -203,9 +223,13 @@ public:
     const QString statePath;
     QString id;
     QString canonicalRoot; ///< root with symlinks resolved (set by open())
+    QString storageId;     ///< storage identity of the root at open() ("" = unknown)
+    VaultScanStatus scanStatus;
+    QElapsedTimer storageChecked; ///< last successful requireStorage() check
     bool isOpen = false;
     QString error;
     std::function<QDateTime()> clock;
+    std::function<QString(const QString &)> storageProbe; ///< see Vault::setStorageProbe()
 
     // Known entries. Every tracked ancestor of a known file is a known folder.
     QHash<VaultPath, FileStat> files;    ///< tracked files (incl. the config file)

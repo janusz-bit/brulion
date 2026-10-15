@@ -91,7 +91,10 @@ public:
 
     /// Render a whole block body of the given kind: heading markers, quote prefixes and the
     /// callout header syntax are removed first (callout title in bold); code, tables, HTML and
-    /// frontmatter are shown as escaped preformatted text; a rule is <hr/>.
+    /// frontmatter are shown as escaped preformatted text; a rule is <hr/>. Only a list item's
+    /// leading `[ ]` / `TODO` is a task marker (SYNTAX §5, like parseNote()); in a paragraph,
+    /// heading, quote or callout it is shown as text. render() always treats it as a marker, so
+    /// paragraphs should go through renderBlock().
     QString renderBlock(QStringView body, BlockKind kind) const;
 
     /// HTML-escape plain text for rich text (& < > " escaped, line breaks as <br/>).
@@ -102,7 +105,9 @@ private:
     /// body} in increasing order (empty: the text is the body). Maps `reminder:` ranges back.
     using SourceRuns = QList<std::pair<qsizetype, qsizetype>>;
 
-    QString renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs = {}) const;
+    /// `taskMarker`: a leading task marker is recognised (list item bodies only).
+    QString renderInline(QStringView text, bool topLevel, int depth, const SourceRuns &runs = {},
+                         bool taskMarker = true) const;
 
     RenderContext m_ctx;
 };

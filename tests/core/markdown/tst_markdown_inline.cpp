@@ -197,6 +197,29 @@ private Q_SLOTS:
         QCOMPARE(tags(u"#spoz\u0307ywcze"_s), QStringList({u"spożywcze"_s}));
         QVERIFY(tags(u"TODO [#A] zadanie"_s).isEmpty());
         QCOMPARE(tags(u"tekst\u00a0#tag"_s), QStringList({u"tag"_s}));
+        // Numbers in any script are no tags; a letter or another digit kind makes one.
+        QVERIFY(tags(u"#٣ #١٢ #１２ #- #_ #/"_s).isEmpty());
+        QCOMPARE(tags(u"#٣a #12_"_s), QStringList({u"٣a"_s, u"12_"_s}));
+    }
+
+    void findTagsGivesRanges()
+    {
+        const QString text = u"a #Łódź i (#x/y/) #[[dwa słowa]] `#kod` [[S#n]] #1"_s;
+        const QList<TagSpan> spans = findTags(text);
+        QCOMPARE(spans.size(), 3);
+        QCOMPARE(spans[0].name, u"Łódź"_s);
+        QCOMPARE(text.mid(spans[0].from, spans[0].to - spans[0].from), u"#Łódź"_s);
+        QCOMPARE(spans[1].name, u"x/y"_s);
+        QCOMPARE(text.mid(spans[1].from, spans[1].to - spans[1].from), u"#x/y"_s);
+        QCOMPARE(spans[2].name, u"dwa słowa"_s);
+        QCOMPARE(text.mid(spans[2].from, spans[2].to - spans[2].from), u"#[[dwa słowa]]"_s);
+        // Same tags as extractInline(), not deduplicated.
+        QStringList names;
+        for (const TagSpan &span : findTags(u"#a #A #b"_s))
+            names.append(span.name);
+        QCOMPARE(names, QStringList({u"a"_s, u"A"_s, u"b"_s}));
+        QCOMPARE(extractInline(u"#a #A #b"_s).tags, QStringList({u"a"_s, u"b"_s}));
+        QVERIFY(findTags(QString()).isEmpty());
     }
 
     void offsetsAndLines()
