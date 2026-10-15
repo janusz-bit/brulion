@@ -92,7 +92,11 @@ QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const
     int offset = 0;
     switch (s.view) {
     case BlockView::Text:
-        html = onlyEmbeds(e.body, true) ? QString() : renderer.render(e.body);
+        // renderBlock(): only a list item's leading "[ ]" / "TODO" is a task marker (SYNTAX §5); a
+        // paragraph starting with one shows it as text.
+        html = onlyEmbeds(e.body, true)         ? QString()
+               : e.kind == BlockKind::Paragraph ? renderer.renderBlock(e.body, BlockKind::Paragraph)
+                                                : renderer.render(e.body);
         break;
     case BlockView::Heading:
         if (e.kind == BlockKind::Heading) {
@@ -103,8 +107,8 @@ QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const
             const qsizetype nl = rest.indexOf(u'\n');
             offset = s.editOffset;
             html = renderer.renderBlock(nl < 0 ? rest : rest.left(nl), BlockKind::Heading);
-            if (nl >= 0)
-                html += u"<br/>"_s + renderer.render(QStringView(rest).sliced(nl + 1));
+            if (nl >= 0) // the lines after the heading are text (a "TODO" there is no task marker)
+                html += u"<br/>"_s + renderer.renderBlock(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph);
         }
         break;
     case BlockView::Quote: html = renderer.renderBlock(e.body, BlockKind::Quote); break;
@@ -693,12 +697,20 @@ QVariantMap BlockListModel::computeTableData(int i) const
             {u"rows"_s, rows}};
 }
 
+const VaultConfig &BlockListModel::vaultConfig() const
+{
+    if (!m_config)
+        m_config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    return *m_config;
+}
+
 markdown::RenderContext BlockListModel::renderContext(int docIndex) const
 {
     markdown::RenderContext ctx;
     ctx.today = m_today;
     ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     ctx.palette = m_palette;
+    ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "wt 13 paź"
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
     const QPointer<EditorHost> host = m_host;
@@ -746,6 +758,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.today = m_today;
     ctx.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     ctx.palette = m_palette;
+    ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today);
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
     const QPointer<EditorHost> host = m_host;
@@ -1025,6 +1038,7 @@ void BlockListModel::setToday(QDate today)
 
 void BlockListModel::invalidateRendering()
 {
+    m_config.reset(); // the journal file format may have changed (links to days)
     for (auto it = m_state.begin(); it != m_state.end(); ++it) {
         it->htmlValid = false;
         it->embedsValid = false;

@@ -13,8 +13,9 @@
 // Saving per platform:
 //   desktop     QML FileDialog (fileMode: SaveFile, selectedFile = suggested name) → saveTo(url)
 //   Android     the same FileDialog opens the system's "Save as" (a content:// document Qt writes
-//               to); saveToExportFolder() writes into the Download folder instead (fallback when
-//               no document provider is available) — the report names the path
+//               to); saveToExportFolder() ("Save to Downloads") puts it into the Download folder
+//               through MediaStore — no storage permission needed (Android 10+; Android 9 writes
+//               the file, with the storage permission) — the report names the file
 //   browser     saveInBrowser(): QFileDialog::saveFileContent (a download)
 #pragma once
 
@@ -56,7 +57,8 @@ class ExportController : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(brulion::shell::Workspace *workspace READ workspace WRITE setWorkspace NOTIFY workspaceChanged FINAL)
-    Q_PROPERTY(QVariantList formats READ formats CONSTANT FINAL)
+    /// Translated: changes with the UI language (formatsChanged).
+    Q_PROPERTY(QVariantList formats READ formats NOTIFY formatsChanged FINAL)
     Q_PROPERTY(QString format READ format WRITE setFormat NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString scope READ scope WRITE setScope NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString folder READ folder WRITE setFolder NOTIFY optionsChanged FINAL)
@@ -133,6 +135,8 @@ public:
 
 Q_SIGNALS:
     void workspaceChanged();
+    /// The UI language changed: `formats` (names, descriptions) read again.
+    void formatsChanged();
     void optionsChanged();
     void foldersChanged();
     void summaryChanged();
@@ -140,6 +144,10 @@ Q_SIGNALS:
     void progressChanged();
     /// The produced file was saved (translated one-line message).
     void saved(const QString &message);
+
+protected:
+    /// QEvent::LanguageChange of the application (a translator was installed or removed).
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setState(const QString &state, const QString &error = {});

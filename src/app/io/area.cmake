@@ -35,6 +35,10 @@ target_include_directories(brulion_ioviews PUBLIC ${_brulion_ioviews_dir})
 target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
     PRIVATE Qt6::Network brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates)
+if(ANDROID)
+    # "Save to Downloads": MediaStore through the platform's Android bridge.
+    target_link_libraries(brulion_ioviews PRIVATE brulion_platform)
+endif()
 if(EMSCRIPTEN)
     # QFileDialog::getOpenFileContent / saveFileContent: the browser's file picker and download.
     find_package(Qt6 REQUIRED COMPONENTS Widgets)

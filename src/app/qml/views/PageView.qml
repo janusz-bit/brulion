@@ -19,7 +19,8 @@ import Brulion
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
 // old name; a page that does not exist yet (a link to a missing page) opens with an empty block
-// to type into and the editor creates the file with its first content; settings (text width,
+// to type into (a day without a note: the journal template) and the editor creates the file with
+// its first change; settings (text width,
 // "open pages as source", Ctrl+E); merged external changes are told with a toast.
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
 // dialog), "unlinked" (the unlinked mentions, scrolled to), "links" | "outline" | "calendar"
@@ -91,8 +92,10 @@ FocusScope {
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
             page.sourceMode = AppSettings.editorSourceMode || root.route.source === true
+            // A page that does not exist yet: something to type into. A day without a note starts
+            // from the journal template, like in the journal stream — written only once changed.
             if (page.loaded && !page.exists && page.blocks.count === 0)
-                editor.startEditing(page.appendEmptyBlock(), -1)
+                editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "") : ""), -1)
         }
         revealTarget()
         openRequested()
@@ -123,7 +126,7 @@ FocusScope {
         else if (route.heading)
             row = headingRow(route.heading)
         if (row >= 0)
-            Qt.callLater(() => editor.revealRow(row))
+            editor.later(() => editor.revealRow(row))
     }
 
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
@@ -136,10 +139,10 @@ FocusScope {
         root._opened = key
         switch (route.open) {
         case "rename":
-            Qt.callLater(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
+            editor.later(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
             break
         case "export":
-            Qt.callLater(() => exportDialog.openFor(page.path))
+            editor.later(() => exportDialog.openFor(page.path))
             break
         case "unlinked":
             refsSection.unlinkedOpen = true

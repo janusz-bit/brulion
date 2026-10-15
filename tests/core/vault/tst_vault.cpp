@@ -555,6 +555,27 @@ private Q_SLOTS:
         QVERIFY(f.vault->create(QString(), u"x"_s).isEmpty());
     }
 
+    void createUsesFoldersAsSpelled()
+    {
+        // A folder existing in another letter case is that folder: case-insensitive storage
+        // (Android shared storage, FAT, macOS) holds one folder for both spellings.
+        Fixture f;
+        f.write(u"Projekty/Dom.md"_s, "dom");
+        f.write(u"Projekty/Łąki/Żółw.md"_s, "żółw");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->create(u"projekty/Ogród.md"_s, u"a"_s), u"Projekty/Ogród.md"_s);
+        QCOMPARE(f.vault->create(u"PROJEKTY/łąki/Nowa.md"_s, u"b"_s), u"Projekty/Łąki/Nowa.md"_s);
+        QCOMPARE(f.vault->create(u"projekty/dom.md"_s, u"c"_s), u"Projekty/dom 2.md"_s); // the file is taken
+        QCOMPARE(f.vault->createBinary(u"projekty/nowy/zdjęcie.png"_s, "\x01"_ba), u"Projekty/nowy/zdjęcie.png"_s);
+        QCOMPARE(diskFiles(f.root()),
+                 (QStringList{u"Projekty/Dom.md"_s, u"Projekty/Ogród.md"_s, u"Projekty/dom 2.md"_s,
+                              u"Projekty/nowy/zdjęcie.png"_s, u"Projekty/Łąki/Nowa.md"_s, u"Projekty/Łąki/Żółw.md"_s}));
+        QCOMPARE(f.vault->existingCase(u"projekty/łąki/żółw.md"_s), u"Projekty/Łąki/Żółw.md"_s);
+        QCOMPARE(f.vault->existingCase(u"projekty/inne/x.md"_s), u"Projekty/inne/x.md"_s);
+        QCOMPARE(f.vault->existingCase(u"Projekty/Dom.md"_s), u"Projekty/Dom.md"_s);
+        QCOMPARE(f.vault->existingCase(QString()), QString());
+    }
+
     void createNeverOverwritesAnUnknownFile()
     {
         Fixture f;
@@ -918,6 +939,22 @@ private Q_SLOTS:
         QCOMPARE(diskFiles(f.root()), (QStringList{u"F/x.md"_s, u"a.md"_s, u"b.md"_s, u"c.md"_s}));
         QCOMPARE(f.text(u"a.md"_s), u"a"_s);
         QVERIFY(f.changes().isEmpty());
+    }
+
+    void renameOntoAnotherSpellingIsRefused()
+    {
+        // "dom.md" next to "Dom.md": one file on case-insensitive storage, one page for links.
+        Fixture f;
+        f.write(u"Dom.md"_s, "dom");
+        f.write(u"Inne.md"_s, "inne");
+        f.write(u"Projekty/a.md"_s, "a");
+        f.write(u"Stare/b.md"_s, "b");
+        QVERIFY(f.open());
+        QVERIFY(!f.vault->rename(u"Inne.md"_s, u"dom.md"_s));
+        QVERIFY2(f.vault->errorString().contains(u"Dom.md"_s), qPrintable(f.vault->errorString()));
+        QVERIFY(!f.vault->rename(u"Stare"_s, u"projekty"_s));
+        QVERIFY(f.vault->rename(u"Inne.md"_s, u"inne.md"_s)); // its own spelling
+        QCOMPARE(diskFiles(f.root()), (QStringList{u"Dom.md"_s, u"Projekty/a.md"_s, u"Stare/b.md"_s, u"inne.md"_s}));
     }
 
     void caseOnlyRenames()

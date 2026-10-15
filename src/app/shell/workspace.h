@@ -171,7 +171,7 @@ public:
     QVariantMap resolveRoute(const QVariantMap &route);
     /// Path a new page named `target` gets ("Projekty/Dom" -> "<newPagesFolder>/Projekty/Dom.md",
     /// "2026-10-20" -> that day's journal page); "" for an empty name.
-    QString newPagePath(const QString &target) const;
+    Q_INVOKABLE QString newPagePath(const QString &target) const;
 
     // ---- Files for QML views ----------------------------------------------------------------
     /// Content of a file ("" when missing).
@@ -188,7 +188,10 @@ public:
 
     // ---- Pages ------------------------------------------------------------------------------
     /// Create an empty page `title` ("Projekty/Dom" creates folders) in `folder` (default: the
-    /// vault's newPagesFolder). Returns the new path ("Dom 2.md" when taken), "" on failure.
+    /// vault's newPagesFolder). Returns the new path ("Dom 2.md" when taken), "" on failure. A
+    /// page differing only in letter case ("dom" next to "Dom.md") is that page: its path is
+    /// returned (noticeOccurred() says so) — case-insensitive storage holds one file for both.
+    /// Folders are used as spelled in the vault ("projekty/Dom" -> "Projekty/Dom.md").
     Q_INVOKABLE QString createPage(const QString &title, const QString &folder = QString());
     Q_INVOKABLE bool createFolder(const QString &path);
     /// Rename a page in place and rewrite links to it in every file. Returns the new path or
@@ -243,9 +246,13 @@ public:
     // ---- Journals ---------------------------------------------------------------------------
     /// Path of the daily note for "YYYY-MM-DD" (whether it exists or not).
     Q_INVOKABLE QString journalPath(const QString &date) const;
-    /// The daily note for `date`, created from the journal template when missing. "" for an
-    /// invalid date or on I/O errors.
+    /// The daily note for `date`, created from the journal template when missing — for edits
+    /// that go into it (quick capture, a task added from the calendar); opening a day uses
+    /// journalFileFor() and never creates the note. "" for an invalid date or on I/O errors.
     Q_INVOKABLE QString ensureJournal(const QString &date);
+    /// The note of the day `date` ("YYYY-MM-DD"): its existing file (also under another name the
+    /// journal folder accepts), else where it will be created — never writes ("" for a bad date).
+    QString journalFileFor(const QString &date) const;
     /// Append `text` as a new block ("- text", further lines indented) to today's journal.
     /// Returns the journal's path ("" when nothing was written).
     Q_INVOKABLE QString captureToJournal(const QString &text);
@@ -307,6 +314,8 @@ Q_SIGNALS:
     void navigationRequested(const QVariantMap &route, bool newPane);
     /// Something failed that the user should know about (translated message).
     void errorOccurred(const QString &message);
+    /// Something the user should know that is not an error (translated; an info toast).
+    void noticeOccurred(const QString &message);
 
 private:
     void onVaultChanged(const QList<brulion::VaultChange> &changes);

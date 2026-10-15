@@ -41,8 +41,9 @@ FocusScope {
     Accessible.role: Accessible.Grouping
     Accessible.name: DatesHelper.formatLong(day.date)
 
-    /// Start writing in an empty day: the journal template first (when the vault has one and the
-    /// note does not exist yet), the caret in its first empty block.
+    /// Start writing in a day: a day without a note starts from the journal template (when the
+    /// vault has one), the caret in its first empty block. Like a day opened on its own (PageView),
+    /// the note is created by the first change, never by starting to write (startNewPage).
     function begin() {
         if (!page.loaded)
             return
@@ -50,19 +51,7 @@ FocusScope {
             editor.startEditing(page.lastVisibleRow(), -1)
             return
         }
-        const tpl = Workspace.config.journalTemplate || ""
-        if (!page.exists && tpl !== "" && Workspace.exists(tpl)) {
-            page.insertTemplate(page.appendEmptyBlock(), tpl)
-            let row = -1
-            for (let i = 0; i < page.blocks.count && row < 0; ++i) {
-                const b = page.blocks.get(i)
-                if (b.view === "text" && String(b.plainText).trim() === "")
-                    row = i
-            }
-            editor.startEditing(row >= 0 ? row : page.lastVisibleRow(), -1)
-            return
-        }
-        editor.startEditing(page.appendEmptyBlock(), -1)
+        editor.startEditing(page.startNewPage(page.exists ? "" : (Workspace.config.journalTemplate || "")), -1)
     }
     function openAsPage(source) {
         page.save()

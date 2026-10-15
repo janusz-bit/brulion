@@ -18,12 +18,24 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTranslator>
 
 using namespace Qt::StringLiterals;
 using brulion::io::InputFile;
 using brulion::ioviews::ImportController;
 
 namespace {
+
+/// A translation that marks every text it translates ("[pl] …"): tells whether texts are read
+/// again after the UI language changed.
+class MarkingTranslator : public QTranslator {
+public:
+    bool isEmpty() const override { return false; }
+    QString translate(const char *, const char *sourceText, const char * = nullptr, int = -1) const override
+    {
+        return u"[pl] "_s + QString::fromUtf8(sourceText);
+    }
+};
 
 bool writeRaw(const QString &file, const QByteArray &bytes)
 {
@@ -195,6 +207,24 @@ private Q_SLOTS:
         QCOMPARE(c.targetFolder(), u"Import/Evernote"_s);
         c.setImporterId(u"nie-ma-takiego"_s);
         QCOMPARE(c.importerId(), QString());
+    }
+
+    void importersFollowTheLanguage()
+    {
+        ImportController c;
+        QSignalSpy importers(&c, &ImportController::importersChanged);
+        QSignalSpy importer(&c, &ImportController::importerChanged);
+        const QString howTo = c.importers().first().toMap().value(u"howTo"_s).toString();
+        QVERIFY(!howTo.startsWith(u"[pl] "_s));
+        MarkingTranslator translation;
+        QVERIFY(QCoreApplication::installTranslator(&translation));
+        QCOMPARE(importers.size(), 1);
+        QCOMPARE(importer.size(), 1); // nameFilters ("All files (*)")
+        QCOMPARE(c.importers().first().toMap().value(u"howTo"_s).toString(), u"[pl] "_s + howTo);
+        QVERIFY(c.nameFilters().last().startsWith(u"[pl] "_s));
+        QVERIFY(QCoreApplication::removeTranslator(&translation));
+        QCOMPARE(importers.size(), 2);
+        QCOMPARE(c.importers().first().toMap().value(u"howTo"_s).toString(), howTo);
     }
 
     // ---- Reading picked files -----------------------------------------------------------------------
@@ -415,6 +445,33 @@ private Q_SLOTS:
         QVERIFY(waitState(c, u"done"_s));
         QVERIFY(ws->exists(u"Archiwum/Stare/Notatka o źdźbłach.md"_s));
         QCOMPARE(c.report().value(u"firstPage"_s).toString().startsWith(u"Archiwum/Stare/"_s), true);
+    }
+
+    void lettersCaseNeverMakesASecondPageOrFolder()
+    {
+        // Case-insensitive storage (Android shared storage, FAT, macOS) holds one "Archiwum" for
+        // "archiwum", one "Dom.md" for "dom.md": the import uses the folder as spelled and gives a
+        // page differing only in case another name (counted in the preview).
+        QString root;
+        auto ws = open({{u"Archiwum/Dom.md"_s, "- mój dom\n"}}, &root);
+        ImportController c;
+        c.setWorkspace(ws.get());
+        c.setInput({text(u"dom.md"_s, u"- importowany dom\n"_s), text(u"Ogród.md"_s, u"- [[dom]]\n"_s)}, u"2 pliki"_s);
+        QVERIFY(waitState(c, u"ready"_s));
+        c.setTargetFolder(u"archiwum"_s);
+        QVERIFY(waitState(c, u"analyzing"_s, 2000) || c.state() == u"ready"_s);
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.preview().value(u"renamed"_s).toInt(), 1);
+        c.startImport();
+        QVERIFY(waitState(c, u"done"_s));
+        QCOMPARE(readRaw(root + u"/Archiwum/Dom.md"_s), QByteArray("- mój dom\n"));
+        QCOMPARE(readRaw(root + u"/Archiwum/dom 2.md"_s), QByteArray("- importowany dom\n"));
+        QVERIFY(QFileInfo::exists(root + u"/Archiwum/Ogród.md"_s));
+        QVERIFY(!QFileInfo::exists(root + u"/archiwum"_s));
+        // The preview counted the taken name; the folder spelling alone is no rename.
+        QCOMPARE(c.report().value(u"renamed"_s).toInt(), 0);
+        for (const QString &w : c.report().value(u"warnings"_s).toStringList())
+            QVERIFY2(!w.contains(u"Ogród"_s), qPrintable(w));
     }
 
     void unrecognisedAndEmpty()

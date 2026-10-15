@@ -252,9 +252,9 @@ Item {
                                             root.finish()
                                         else if (nextRow >= root.rows.length) {
                                             root.block.controller.addTableRow(root.block.index)
-                                            Qt.callLater(() => root.startCell(nextRow, nextColumn))
+                                            Qt.callLater(() => { if (root) root.startCell(nextRow, nextColumn) })
                                         } else
-                                            Qt.callLater(() => root.startCell(nextRow, nextColumn))
+                                            Qt.callLater(() => { if (root) root.startCell(nextRow, nextColumn) })
                                     }
                                     Component.onCompleted: {
                                         text = root.rawText(rowItem.r, cell.c)

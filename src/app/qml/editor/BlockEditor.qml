@@ -181,20 +181,30 @@ FocusScope {
 
     Binding { target: editor.controller; property: "palette"; value: editor.rendererPalette; when: editor.controller !== null }
     Binding { target: editor.controller; property: "locale"; value: DatesHelper.locale; when: editor.controller !== null }
+    // The fixed clock of screenshots and tests. Midnight itself: PageController follows the
+    // DayClock ("jutro 17:30" becomes "dziś 17:30", overdue dates turn red).
     Binding { target: editor.controller; property: "now"; value: DatesHelper.fixedNow; when: editor.controller !== null }
-    // After midnight: "jutro 17:30" becomes "dziś 17:30", overdue dates turn red.
-    Connections {
-        target: DatesHelper
-        function onTodayChanged() {
-            if (editor.controller)
-                editor.controller.refreshToday()
-        }
-    }
 
     Accessible.role: Accessible.Pane
     Accessible.name: controller ? controller.title : ""
     // Scrolled blocks must not draw over what surrounds the editor (the shell's top bar).
     clip: true
+
+    /// False once the editor is being destroyed (see later()).
+    property bool alive: true
+    Component.onDestruction: alive = false
+
+    /// Qt.callLater for the editor's deferred work: `fn` runs once the event loop is idle — unless
+    /// the editor went away meanwhile (a day of the journal stream scrolled out of view, the page
+    /// closed). Qt.callLater does not tie an arrow function to the component that made it: run
+    /// after the editor is gone it met a null `list` (TypeError). Ids (editor, list) read null
+    /// then, so they are what is checked; `fn` should use ids or qualified properties only.
+    function later(fn) {
+        Qt.callLater(() => {
+            if (editor && list && editor.alive)
+                fn()
+        })
+    }
 
     // ---- Editing helpers called by delegates and the inline editors ------------------------------
 
@@ -220,7 +230,7 @@ FocusScope {
         controller.selectedRow = row
         // The header (page title) settling its height must not scroll back to the top.
         list.userMoved = true
-        Qt.callLater(() => list.positionViewAtIndex(row, ListView.Center))
+        later(() => list.positionViewAtIndex(row, ListView.Center))
         list.forceActiveFocus()
     }
 
@@ -251,8 +261,8 @@ FocusScope {
     }
 
     function ensureRowVisible(row) {
-        Qt.callLater(() => {
-            if (!controller || row < 0 || row >= list.count)
+        later(() => {
+            if (!editor.controller || row < 0 || row >= list.count)
                 return
             if (list.itemAtIndex(row) === null)
                 list.positionViewAtIndex(row, ListView.Contain)
@@ -261,7 +271,7 @@ FocusScope {
 
     /// Keep `rect` of `item` (e.g. the caret) inside the visible part of the list.
     function ensureVisible(item, rect) {
-        if (!item)
+        if (!item || !list || !editor.alive)
             return
         const p = item.mapToItem(list.contentItem, rect.x, rect.y)
         const margin = editor.lineHeight
@@ -309,7 +319,7 @@ FocusScope {
             list.forceActiveFocus()
             break
         case "complete":
-            Qt.callLater(() => updateCompletion(activeEditor))
+            later(() => editor.updateCompletion(editor.activeEditor))
             break
         }
     }
@@ -619,11 +629,11 @@ FocusScope {
 
     /// Focus left an inline editor: flush the save when it left the editor entirely.
     function editorFocusLost() {
-        Qt.callLater(() => {
-            if (!controller)
+        later(() => {
+            if (!editor.controller)
                 return
             if (!editor.activeFocus && !suggestions.visible && !dialogs.anyOpen)
-                controller.save()
+                editor.controller.save()
         })
     }
 
@@ -654,7 +664,7 @@ FocusScope {
             if (!editor.controller.loading) {
                 list.userMoved = false
                 // The editor may be gone by then (a day of the journal stream scrolled away).
-                Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
+                editor.later(() => list.positionViewAtBeginning())
             }
         }
         function onSourceModeChanged() {
@@ -820,7 +830,7 @@ FocusScope {
 
         T.ScrollBar.vertical: BScrollBar {}
         // The header (page title) gets its height after the first layout: start at the top.
-        Component.onCompleted: Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
+        Component.onCompleted: editor.later(() => list.positionViewAtBeginning())
     }
 
     // ---- Files dropped on the page: attachments ------------------------------------------------

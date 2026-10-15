@@ -15,12 +15,24 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTranslator>
 
 using namespace Qt::StringLiterals;
 using brulion::FileStat;
 using brulion::ioviews::ExportController;
 
 namespace {
+
+/// A translation that marks every text it translates ("[pl] …"): tells whether texts are read
+/// again after the UI language changed.
+class MarkingTranslator : public QTranslator {
+public:
+    bool isEmpty() const override { return false; }
+    QString translate(const char *, const char *sourceText, const char * = nullptr, int = -1) const override
+    {
+        return u"[pl] "_s + QString::fromUtf8(sourceText);
+    }
+};
 
 bool writeRaw(const QString &file, const QByteArray &bytes)
 {
@@ -182,6 +194,20 @@ private Q_SLOTS:
         c.setScope(u"cokolwiek"_s);
         QCOMPARE(c.scope(), u"vault"_s);
         QCOMPARE(c.summary().value(u"valid"_s).toBool(), false);
+    }
+
+    void formatsFollowTheLanguage()
+    {
+        ExportController c;
+        QSignalSpy formats(&c, &ExportController::formatsChanged);
+        const QString description = c.formats().first().toMap().value(u"description"_s).toString();
+        MarkingTranslator translation;
+        QVERIFY(QCoreApplication::installTranslator(&translation));
+        QCOMPARE(formats.size(), 1);
+        QCOMPARE(c.formats().first().toMap().value(u"description"_s).toString(), u"[pl] "_s + description);
+        QVERIFY(QCoreApplication::removeTranslator(&translation));
+        QCOMPARE(formats.size(), 2);
+        QCOMPARE(c.formats().first().toMap().value(u"description"_s).toString(), description);
     }
 
     void wholeVaultZip()

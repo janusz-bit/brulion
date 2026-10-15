@@ -132,6 +132,16 @@ ponownego uruchomienia. Dlatego:
 To samo zrób dla **Syncthing-Fork**, żeby synchronizował w tle. Szczegóły dla konkretnych
 telefonów: <https://dontkillmyapp.com>.
 
+## Eksport: „Zapisz w Pobranych”
+
+Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
+
+* **Zapisz…** — systemowe okno „Zapisz jako” (dowolne miejsce, także Dysk Google czy karta SD);
+* **Zapisz w Pobranych** — jednym stuknięciem do folderu *Download*. Na Androidzie 10+ idzie to
+  przez `MediaStore` i **nie wymaga żadnego uprawnienia** (także bez „Dostępu do wszystkich
+  plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
+  Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
+
 ## Budowanie APK
 
 Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące

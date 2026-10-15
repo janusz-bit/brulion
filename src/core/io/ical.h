@@ -75,7 +75,8 @@ struct DateTimeValue {
 std::optional<DateTimeValue> parseDateTime(const Property &property);
 
 /// Local wall-clock date(-time) in `zone`: UTC and TZID times are converted, floating times and
-/// dates are kept. An unknown TZID is treated as floating (`unknownZone` is set when given).
+/// dates are kept. An unknown TZID is treated as floating (`unknownZone` is set when given) — so
+/// is every TZID where Qt has no time zone database (`QT_CONFIG(timezone)` off: WebAssembly).
 DateSpec toWallClock(const DateTimeValue &value, const QTimeZone &zone, bool *unknownZone = nullptr);
 
 /// A duration as RFC 5545 3.3.6 counts it: `days` (weeks and days — nominal: the same wall-clock

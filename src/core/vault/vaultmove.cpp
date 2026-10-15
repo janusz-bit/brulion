@@ -25,6 +25,10 @@ bool VaultPrivate::renameTargetFree(const VaultPath &from, const VaultPath &to)
 {
     if (files.contains(to) || dirs.contains(to))
         return fail(Vault::tr("%1 already exists").arg(to));
+    // Another entry spelled differently only in letter case ("dom.md" next to "Dom.md"): one
+    // entry on case-insensitive storage, and links do not tell them apart.
+    if (from.toLower() != to.toLower() && isTakenCaseInsensitive(to))
+        return fail(Vault::tr("%1 already exists").arg(existingCase(to, false)));
     if (!existsOnDisk(to))
         return true;
     // On case-insensitive storage the source itself answers to the new spelling: allowed.

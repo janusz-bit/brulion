@@ -55,6 +55,7 @@ struct SearchIndex::Expansion {
     const QString *term = nullptr;
     const PostingList *postings = nullptr;
     double weight = 0;
+    bool fuzzy = false; ///< reached only by a typo-tolerant match (not exactly / by prefix)
 };
 
 QStringList SearchIndex::tokenize(QStringView text)
@@ -148,25 +149,26 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
 {
     QList<Expansion> out;
     QHash<const QString *, qsizetype> seen;
-    auto add = [&](const std::pair<const QString, PostingList> &entry, double weight) {
+    auto add = [&](const std::pair<const QString, PostingList> &entry, double weight, bool fuzzy) {
         const auto it = seen.constFind(&entry.first);
         if (it != seen.constEnd()) {
             Expansion &e = out[*it];
             e.weight = std::max(e.weight, weight);
+            e.fuzzy = e.fuzzy && fuzzy;
             return;
         }
         seen.insert(&entry.first, out.size());
-        out.append(Expansion{&entry.first, &entry.second, weight});
+        out.append(Expansion{&entry.first, &entry.second, weight, fuzzy});
     };
     const auto len = double(term.size());
     if (const auto exact = m_postings.find(term); exact != m_postings.end())
-        add(*exact, 1.0);
+        add(*exact, 1.0, false);
     if (prefix) {
         for (auto it = m_postings.lower_bound(term); it != m_postings.end() && it->first.startsWith(term); ++it) {
             if (it->first.size() == term.size())
                 continue;
             const double extra = double(it->first.size()) - len;
-            add(*it, PrefixWeight * len / (len + 0.3 * extra));
+            add(*it, PrefixWeight * len / (len + 0.3 * extra), false);
         }
     }
     const int maxDistance = fuzzyDistance(term.size());
@@ -176,7 +178,7 @@ QList<SearchIndex::Expansion> SearchIndex::expand(const QString &term, bool pref
                 continue;
             const int d = boundedEditDistance(term, entry.first, maxDistance);
             if (d >= 1 && d <= maxDistance)
-                add(entry, FuzzyWeight * len / (len + d));
+                add(entry, FuzzyWeight * len / (len + d), true);
         }
     }
     return out;
@@ -214,15 +216,21 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
     const qsizetype docCount = m_docs.size();
     QList<double> total(docCount, 0.0);
     QList<int> matchedTerms(docCount, 0);
+    // Query terms a document contains as typed (exactly or, the last one, as a prefix) — not only
+    // through a typo-tolerant match.
+    QList<int> literalTerms(docCount, 0);
     QList<QList<const QString *>> best(terms.size(), QList<const QString *>(docCount, nullptr));
     for (qsizetype t = 0; t < terms.size(); ++t) {
         const QList<Expansion> expansions = expand(terms[t], t == terms.size() - 1);
         QList<double> termScore(docCount, 0.0);
         QList<double> bestScore(docCount, 0.0);
+        QList<bool> literal(docCount, false);
         for (const Expansion &e : expansions) {
             for (const Posting &p : *e.postings) {
                 const double s = e.weight * fieldScore(p, e.postings->size());
                 termScore[p.doc] += s;
+                if (!e.fuzzy)
+                    literal[p.doc] = true;
                 if (s > bestScore[p.doc]) {
                     bestScore[p.doc] = s;
                     best[t][p.doc] = e.term;
@@ -233,6 +241,8 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
             if (best[t][doc]) {
                 total[doc] += termScore[doc];
                 ++matchedTerms[doc];
+                if (literal[doc])
+                    ++literalTerms[doc];
             }
         }
     }
@@ -248,7 +258,12 @@ QList<SearchIndex::Hit> SearchIndex::search(QStringView query, int limit) const
     QList<int> docs = collect(int(terms.size()));
     if (docs.isEmpty() && terms.size() > 1)
         docs = collect(1);
+    // What the user typed comes first: documents containing more of the query terms as typed
+    // (exactly or as a prefix — "zolw" in "żółwia") rank above those found only through typo
+    // tolerance ("zolw" ~ "żółć"), whatever the relevance score; then by score.
     std::sort(docs.begin(), docs.end(), [&](int a, int b) {
+        if (literalTerms[a] != literalTerms[b])
+            return literalTerms[a] > literalTerms[b];
         if (total[a] != total[b])
             return total[a] > total[b];
         return m_docs[a].id < m_docs[b].id;

@@ -10,6 +10,7 @@ import Brulion
 //   * text typed into today and scrolled away is saved and shown again when scrolled back;
 //   * text typed into an older day and scrolled away at once (before the debounced save, its
 //     delegate destroyed) is in the file, also the word the keyboard was still composing;
+//   * a day scrolled away while its editor has deferred work queued: nothing runs on it then;
 //   * midnight while a day is being edited (the list's today moves on): the new day is listed
 //     first, the edited day keeps its editor and caret, is no longer "today", and what is typed
 //     after midnight lands in its own file — nothing is written to the new day.
@@ -152,6 +153,18 @@ Item {
                 test.check(content.indexOf("Dopisane później ąę") >= 0, "an older day's edit is saved when it scrolls away")
                 test.check(content.indexOf("zażółć") >= 0, "the word being composed is saved too")
             },
+            // ---- A day scrolled away with deferred work queued (no TypeError, ctest) ----------------
+            () => test.list.positionViewAtIndex(30, ListView.Beginning),
+            () => test.dayAt(30) !== null && test.dayAt(30).controller.loaded,
+            () => {
+                const ed = test.dayAt(30).editor
+                ed.revealRow(0)
+                ed.ensureRowVisible(0)
+                ed.editorFocusLost()
+                ed.handleCommandResult(0, { action: "complete" })
+                test.list.positionViewAtBeginning()
+            },
+            () => test.dayAt(30) === null,
             // ---- Midnight while editing --------------------------------------------------------------
             () => test.dayAt(0) !== null && test.dayAt(0).controller.loaded,
             () => {

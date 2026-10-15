@@ -30,5 +30,5 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     set_tests_properties(tst_content_journals_qml PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache"
         FIXTURES_REQUIRED content_journals_home TIMEOUT 120 RUN_SERIAL TRUE
-        FAIL_REGULAR_EXPRESSION "SELFTEST FAIL")
+        FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError")
 endif()

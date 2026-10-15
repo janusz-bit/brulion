@@ -613,6 +613,25 @@ private Q_SLOTS:
         QVERIFY(!journalDateFromPath(u"Projekt.md"_s, root));
     }
 
+    void journalDatesOfLinkTargets()
+    {
+        const VaultConfig def;
+        QCOMPARE(journalDateFromLinkTarget(u"2026-10-14"_s, def), QDate(2026, 10, 14));
+        QCOMPARE(journalDateFromLinkTarget(u" 2026-10-14.md "_s, def), QDate(2026, 10, 14));
+        QCOMPARE(journalDateFromLinkTarget(u"journals/2026-10-14"_s, def), QDate(2026, 10, 14));
+        QCOMPARE(journalDateFromLinkTarget(u"2026_10_14"_s, def), QDate(2026, 10, 14)); // Logseq's names
+        for (const QString &t : {u"Żółw"_s, u"2026-02-30"_s, u"2026-1-5"_s, u"Projekty/2026-10-14"_s, QString(),
+                                 u"2026"_s, u"14.10.2026"_s})
+            QVERIFY2(!journalDateFromLinkTarget(t, def), qPrintable(t));
+        // The vault's own format: links as its daily notes are named.
+        const VaultConfig dots = config(u"dd.MM.yyyy"_s, u"Dziennik"_s);
+        QCOMPARE(journalDateFromLinkTarget(u"14.10.2026"_s, dots), QDate(2026, 10, 14));
+        QCOMPARE(journalDateFromLinkTarget(u"Dziennik/14.10.2026"_s, dots), QDate(2026, 10, 14));
+        QCOMPARE(journalDateFromLinkTarget(u"2026-10-14"_s, dots), QDate(2026, 10, 14)); // ISO always
+        const VaultConfig polish = config(u"d MMMM yyyy"_s);
+        QCOMPARE(journalDateFromLinkTarget(u"4 października 2026"_s, polish), QDate(2026, 10, 4));
+    }
+
     void journalRoundTrip_data()
     {
         QTest::addColumn<QString>("format");

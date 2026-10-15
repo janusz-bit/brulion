@@ -29,7 +29,9 @@ if(TARGET brulion AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     add_test(NAME tst_editor_qml
         COMMAND brulion --editor --editor-script selftest --no-single-instance
             --size 1280x800 --now "2026-10-15 10:00" --locale pl)
+    # A TypeError means QML code ran on something already destroyed (deferred work of a gone
+    # editor): a failure even when every step passed.
     set_tests_properties(tst_editor_qml PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-        TIMEOUT 90)
+        TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError")
 endif()

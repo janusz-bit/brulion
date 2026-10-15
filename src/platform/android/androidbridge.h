@@ -19,6 +19,14 @@ struct ScheduleResult
     QString error;
 };
 
+/// Result of AndroidBridge::saveToDownloads().
+struct DownloadResult {
+    bool ok = false;
+    bool unsupported = false; ///< Android 9: no MediaStore downloads (write the file directly)
+    QString name;             ///< the file's name in Downloads ("Notatki (1).zip" when taken)
+    QString error;
+};
+
 /// A tapped reminder notification: the note to open and the reminder's line in it.
 struct Activation
 {
@@ -75,6 +83,14 @@ public:
     /// The notification tap not delivered through activated() yet (cold start); empty if none.
     /// Each tap is handed out once.
     Activation takeActivation();
+
+    /**
+     * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
+     * API 29): no storage permission is needed — with scoped storage a plain file write there
+     * fails without "All files access". The system adds " (1)" to a taken name (`name` of the
+     * result). Android 9: `unsupported` (the Download folder is written as a file there).
+     */
+    DownloadResult saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data);
 
 Q_SIGNALS:
     /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.

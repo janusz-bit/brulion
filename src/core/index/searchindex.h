@@ -6,8 +6,10 @@
 // query "zolw" finds "Żółw". Scoring is BM25+ per field. Each query term matches exactly, by
 // prefix (the last term only — search as you type) and fuzzily (optimal string alignment edit
 // distance 1 for terms of 4+ characters, 2 for 8+); prefix and fuzzy matches weigh less than
-// exact ones. Every term must match (AND); when that finds nothing for a multi-term query, any
-// term may match (OR). Not thread-safe; incremental (set/remove one document at a time).
+// exact ones, and documents containing more query terms as typed (exactly or by prefix) always
+// rank above those found only through typo tolerance. Every term must match (AND); when that
+// finds nothing for a multi-term query, any term may match (OR). Not thread-safe; incremental
+// (set/remove one document at a time).
 #pragma once
 
 #include <QHash>

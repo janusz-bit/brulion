@@ -3,8 +3,10 @@
 // DatesHelper (natural language, formatting, rules, grids) — with Polish text.
 #include "dateshelper.h"
 #include "diffhelper.h"
+#include "qttranslations.h"
 #include "texthelper.h"
 
+#include <QCoreApplication>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -57,12 +59,54 @@ int editCost(const QList<DiffOp> &ops)
     return int(std::count_if(ops.cbegin(), ops.cend(), [](const DiffOp &op) { return op.kind != DiffOp::Equal; }));
 }
 
+/// A text of one of Qt's own catalogs as the application translates it now (a helper, so that
+/// lupdate does not take these texts into Brulion's translation).
+QString qtText(const char *context, const char *source)
+{
+    return QCoreApplication::translate(context, source);
+}
+
 } // namespace
 
 class TestUiHelpers : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+    // ---- QtTranslations: Qt's own texts in Polish --------------------------------------------
+
+    void qtTranslations()
+    {
+        // The catalogs are bundled (":/i18n/qt/"), so every platform has them.
+        brulion::ui::QtTranslations qt;
+        QCOMPARE(qtText("QPlatformTheme", "Cancel"), u"Cancel"_s);
+        QCOMPARE(qt.setLanguage(u"pl"_s), int(brulion::ui::QtTranslations::catalogs().size()));
+        QVERIFY2(qt.loadedFrom(u"qtbase"_s).startsWith(u":/i18n/qt/"_s), qPrintable(qt.loadedFrom(u"qtbase"_s)));
+        QVERIFY2(qt.loadedFrom(u"qtdeclarative"_s).startsWith(u":/i18n/qt/"_s),
+                 qPrintable(qt.loadedFrom(u"qtdeclarative"_s)));
+        QCOMPARE(qtText("QPlatformTheme", "Cancel"), u"Anuluj"_s);
+        QCOMPARE(qtText("QPlatformTheme", "Open"), u"Otwórz"_s);
+        QCOMPARE(qtText("QFileDialog", "New Folder"), u"Nowy katalog"_s);
+        // Switching back and forth replaces the catalogs (English: Qt's own texts).
+        QCOMPARE(qt.setLanguage(u"en"_s), 0);
+        QCOMPARE(qtText("QPlatformTheme", "Cancel"), u"Cancel"_s);
+        QCOMPARE(qt.setLanguage(u"pl"_s), 2);
+        QCOMPARE(qt.setLanguage(u"pl"_s), 2);
+        QCOMPARE(qtText("QPlatformTheme", "Cancel"), u"Anuluj"_s);
+        {
+            brulion::ui::QtTranslations other; // gone with its object
+        }
+        QCOMPARE(qtText("QPlatformTheme", "Cancel"), u"Anuluj"_s);
+    }
+    void qtTranslationsAreRemovedWithTheirObject()
+    {
+        {
+            brulion::ui::QtTranslations qt;
+            qt.setLanguage(u"pl"_s);
+            QCOMPARE(qtText("QPlatformTheme", "Save"), u"Zachowaj"_s);
+        }
+        QCOMPARE(qtText("QPlatformTheme", "Save"), u"Save"_s);
+    }
+
     // ---- TextHelper ------------------------------------------------------------------------
     void fold()
     {

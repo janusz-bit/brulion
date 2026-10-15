@@ -12,6 +12,7 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "index/vaultindex.h"
 #include "reminders/notifications.h"
 
 #include <QDir>
@@ -146,7 +147,7 @@ private Q_SLOTS:
         const qint64 readyMs = total.elapsed();
         const qint64 indexingStall = probe.worst;
         // After `ready`: the reminders start in the readyChanged handler, and the index builds its
-        // full-text documents in one go once changes pause (300 ms): watch that second too.
+        // full-text documents once changes pause (300 ms), a few ms per turn: watch that second too.
         probe.worst = 0;
         QTest::qWait(1500);
         probe.timer.stop();
@@ -162,6 +163,8 @@ private Q_SLOTS:
         // The point of chunked indexing: no long freeze while the notebook loads.
         QVERIFY2(indexingStall < 1500, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
 
+        // The full-text index was built in the background meanwhile: the first search is fast.
+        QCOMPARE(ws.index()->pendingSearchDocuments(), 0);
         // The first calls of the views after start-up (each one blocks the UI thread).
         QElapsedTimer t;
         t.start();

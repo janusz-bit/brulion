@@ -96,6 +96,8 @@ AppController::AppController(const Options &options, QObject *parent)
             [this](const QVariantMap &route, bool newPane) { navigate(route, newPane); });
     connect(m_workspace.get(), &Workspace::errorOccurred, this,
             [this](const QString &message) { toast(message, u"error"_s); });
+    connect(m_workspace.get(), &Workspace::noticeOccurred, this,
+            [this](const QString &message) { toast(message, u"info"_s); });
     connect(m_workspace.get(), &Workspace::pathRenamed, this, &AppController::onPathRenamed);
     connect(m_workspace.get(), &Workspace::pathRemoved, this, &AppController::onPathRemoved);
 
@@ -331,7 +333,9 @@ void AppController::openJournal(const QString &date)
     const QDate d = QDate::fromString(date, Qt::ISODate);
     if (!d.isValid())
         return;
-    const QString path = m_workspace->ensureJournal(date);
+    // Looking at a day never creates its note: the editor creates it with the first change, from
+    // the journal template (PageController::startNewPage), like the journal stream.
+    const QString path = m_workspace->journalFileFor(date);
     QVariantMap route{ { u"view"_s, u"journal"_s }, { u"date"_s, date } };
     if (!path.isEmpty())
         route.insert(u"path"_s, path);
@@ -595,7 +599,8 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     if (m_startToday) {
         m_startToday = false;
         const QString date = today();
-        m_history.navigate({ { u"view"_s, u"journal"_s }, { u"date"_s, date }, { u"path"_s, m_workspace->ensureJournal(date) } });
+        m_history.navigate(
+                {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
     } else if (!first.isEmpty())
         m_history.navigate(first);
     else if (showWelcome && m_workspace->exists(demoWelcomePage()))

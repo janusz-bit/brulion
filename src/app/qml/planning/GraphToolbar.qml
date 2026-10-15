@@ -6,7 +6,8 @@ import Brulion
 
 // GraphToolbar — the controls floating over the graph: search a page (results list, Enter takes
 // the first), whole graph / local graph around a page with depth 1 or 2, and toggles for tags,
-// pages that do not exist yet and daily notes. On phones the options fold behind a button.
+// pages that do not exist yet, daily notes and templates. On phones the options fold behind a
+// button.
 //
 //   GraphToolbar { model: graphModel; localMode: …; depth: …
 //                  onNodeChosen: (id) => …; onLocalModeRequested: (on) => …; onDepthRequested: (d) => …
@@ -22,6 +23,7 @@ BCard {
     property bool showTags: false
     property bool showMissing: false
     property bool showJournals: true
+    property bool showTemplates: false
     /// Options folded (phones).
     property bool collapsible: Theme.compact
     property bool expanded: !collapsible
@@ -158,6 +160,13 @@ BCard {
                     iconName: "book-open"
                     text: qsTr("Journals")
                     onClicked: root.optionToggled("journals", !root.showJournals)
+                }
+                BChip {
+                    interactive: true
+                    selected: root.showTemplates
+                    iconName: "sparkles"
+                    text: qsTr("Templates")
+                    onClicked: root.optionToggled("templates", !root.showTemplates)
                 }
             }
         }

@@ -131,7 +131,8 @@ struct GraphData {
 /// maps (base names, aliases, reverse links — also unresolved ones, filed by name so they
 /// resolve when the page appears later — block ids, tags) are swapped, and only links whose
 /// resolution the change can affect are re-resolved. The full-text index is updated lazily: in
-/// the background once changes pause (300 ms), or at the latest by the next search().
+/// the background once changes pause (300 ms; a few milliseconds per event-loop turn, so nothing
+/// blocks), or at the latest by the next search().
 ///
 /// changed() is coalesced: emitted once per event-loop turn after any number of changes (zero
 /// timer), or right away by the endBatch() that closes the outermost batch. version() grows
@@ -191,6 +192,10 @@ public:
     /// Build the full-text documents of all changed notes now (otherwise done in the background
     /// or by the next search()).
     void flushSearch();
+    /// Notes whose full-text document is not built yet: the background catches up in steps of a
+    /// few milliseconds per event-loop turn once changes pause (after opening a vault: soon after
+    /// it is indexed), so the first search() is fast. 0 when up to date.
+    qsizetype pendingSearchDocuments() const;
 
     // ---- notes ----------------------------------------------------------------------------------
 

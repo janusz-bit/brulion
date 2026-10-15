@@ -7,9 +7,12 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QCoreApplication>
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QLocale>
+#include <QMimeDatabase>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -18,6 +21,9 @@
 
 #ifdef Q_OS_WASM
 #include <QFileDialog>
+#endif
+#ifdef Q_OS_ANDROID
+#include "android/androidbridge.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -109,9 +115,21 @@ ExportController::ExportController(QObject *parent)
     m_readTimer.setInterval(0);
     connect(&m_readTimer, &QTimer::timeout, this, &ExportController::readStep);
     connect(this, &ExportController::optionsChanged, &m_summaryTimer, qOverload<>(&QTimer::start));
+    // Switching the UI language installs another translator: the translated lists follow.
+    if (QCoreApplication *app = QCoreApplication::instance())
+        app->installEventFilter(this);
 }
 
 ExportController::~ExportController() = default;
+
+bool ExportController::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange && watched == QCoreApplication::instance()) {
+        Q_EMIT formatsChanged();
+        m_summaryTimer.start(); // the summary's texts (sizes, problems)
+    }
+    return QObject::eventFilter(watched, event);
+}
 
 void ExportController::setWorkspace(shell::Workspace *workspace)
 {
@@ -454,6 +472,35 @@ bool ExportController::saveToExportFolder()
 {
     if (m_result.isEmpty())
         return false;
+#ifdef Q_OS_ANDROID
+    // Android 10+: the Download folder through MediaStore. With scoped storage a plain file
+    // written there needs "All files access", which a notebook in the app's storage never asked
+    // for. Android 9 writes the file below (storage permission).
+    {
+        platform::AndroidBridge *bridge = platform::AndroidBridge::instance();
+        const QMimeDatabase mimes;
+        const io::ExportedFile &first = m_result.first();
+        const platform::DownloadResult download = bridge->saveToDownloads(
+                first.name, mimes.mimeTypeForFile(first.name, QMimeDatabase::MatchExtension).name(), first.data);
+        if (!download.unsupported) {
+            if (!download.ok) {
+                setState(u"error"_s, tr("The file could not be saved in Downloads: %1").arg(download.error));
+                return false;
+            }
+            for (qsizetype i = 1; i < m_result.size(); ++i) {
+                const io::ExportedFile &f = m_result.at(i);
+                const platform::DownloadResult more = bridge->saveToDownloads(
+                        f.name, mimes.mimeTypeForFile(f.name, QMimeDatabase::MatchExtension).name(), f.data);
+                if (!more.ok)
+                    m_warnings.append(tr("“%1” could not be saved: %2").arg(f.name, more.error));
+            }
+            m_savedTo = tr("Downloads/%1").arg(download.name);
+            setState(u"saved"_s);
+            Q_EMIT saved(tr("Saved “%1” in Downloads.").arg(download.name));
+            return true;
+        }
+    }
+#endif
     const QString dir = exportFolder();
     QDir().mkpath(dir);
     QString name = m_result.first().name;

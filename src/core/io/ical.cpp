@@ -97,8 +97,13 @@ std::optional<int> weekdayFromCode(QStringView code)
     return std::nullopt;
 }
 
+/// The zone a TZID names, invalid when unknown (toWallClock() then keeps the time as written).
+/// Builds of Qt without the time zone database (`QT_CONFIG(timezone)` off: Qt for WebAssembly)
+/// know no zone by name: every TZID time is taken as a local wall-clock time there — exact for
+/// the usual calendar of one's own zone (and flagged as an unknown zone).
 QTimeZone zoneFromTzid(const QString &tzid)
 {
+#if QT_CONFIG(timezone)
     QString id = tzid.trimmed();
     QTimeZone zone(id.toUtf8());
     if (zone.isValid())
@@ -115,6 +120,10 @@ QTimeZone zoneFromTzid(const QString &tzid)
     if (!iana.isEmpty())
         return QTimeZone(iana);
     return QTimeZone();
+#else
+    Q_UNUSED(tzid);
+    return QTimeZone();
+#endif
 }
 
 } // namespace

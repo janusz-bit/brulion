@@ -3,6 +3,7 @@
 #include "dates/format.h"
 #include "dates/recurrence.h"
 #include "markdown/inline_p.h"
+#include "markdown/journal.h"
 #include "markdown/lines_p.h"
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
@@ -303,12 +304,59 @@ void processEmphasis(QList<Piece> &pieces, const Palette &palette)
     }
 }
 
+bool isOpening(QChar c)
+{
+    const auto cat = c.category();
+    return cat == QChar::Punctuation_Open || cat == QChar::Punctuation_InitialQuote || c == u'"' || c == u'\'';
+}
+
+/// Polish typography: a one-letter word (a, i, o, u, w, z) never ends a line — the space after
+/// it becomes a no-break space when a word follows (a letter, a digit, an opening bracket or
+/// quote, a link or emphasis: "w [[Domu]]", "i **dalej**"; not "a = b"). `i` is the position of
+/// a space in `text`.
+bool joinsNextWord(QStringView text, qsizetype i)
+{
+    if (i < 1 || i + 1 >= text.size() || text[i] != u' ')
+        return false;
+    static const QString letters = QStringLiteral("aiouwzAIOUWZ");
+    if (!letters.contains(text[i - 1]))
+        return false;
+    // A word of its own: at the start, after a space or an opening bracket / quote.
+    if (i >= 2 && !text[i - 2].isSpace() && !isOpening(text[i - 2]))
+        return false;
+    const QChar next = text[i + 1];
+    static const QString markup = QStringLiteral("*_[`!#");
+    return next.isLetterOrNumber() || isOpening(next) || markup.contains(next);
+}
+
+/// Text piece [from, to) of `text`: escaped, line breaks as <br/>, no-break spaces after
+/// one-letter words (joinsNextWord()). `nextShown`: what follows the piece is visible (not
+/// hidden syntax such as an embed shown in a frame), so a space at its end may join it.
+QString textPiece(QStringView text, qsizetype from, qsizetype to, bool nextShown)
+{
+    const QStringView piece = text.sliced(from, to - from);
+    if (!piece.contains(u' '))
+        return escapeText(piece);
+    QString joined = piece.toString();
+    for (qsizetype i = from; i < to; ++i) {
+        if ((i + 1 < to || nextShown) && joinsNextWord(text, i))
+            joined[i - from] = QChar(0x00A0);
+    }
+    return escapeText(joined);
+}
+
 QString assemble(QStringView text, const QList<Piece> &pieces)
 {
     QString out;
-    for (const Piece &p : pieces) {
+    for (qsizetype k = 0; k < pieces.size(); ++k) {
+        const Piece &p = pieces[k];
         switch (p.type) {
-        case Piece::Type::Text: out += escapeText(text.sliced(p.from, p.to - p.from)); break;
+        case Piece::Type::Text: {
+            const bool nextShown =
+                    k + 1 < pieces.size() && !(pieces[k + 1].type == Piece::Type::Html && pieces[k + 1].html.isEmpty());
+            out += textPiece(text, p.from, p.to, nextShown);
+            break;
+        }
         case Piece::Type::Html: out += p.html; break;
         case Piece::Type::Delim: out += p.closeTags + QString(p.remaining, p.ch) + p.openTags; break;
         }
@@ -355,6 +403,20 @@ std::optional<std::pair<dates::RecurrenceRule, qsizetype>> recurrencePrefix(QStr
 }
 
 } // namespace
+
+std::function<std::optional<QString>(const QString &)> journalLinkTitle(const VaultConfig &config,
+                                                                        dates::UiLocale locale, QDate today)
+{
+    const std::optional<int> year = today.isValid() ? std::optional(today.year()) : std::nullopt;
+    return [config, locale, year](const QString &target) -> std::optional<QString> {
+        const auto day = journalDateFromLinkTarget(target, config);
+        if (!day)
+            return std::nullopt;
+        // An invalid `today`: the year is always shown (a year no date has). A date never
+        // breaks across lines: no-break spaces.
+        return dates::formatDateShort(*day, locale, year.value_or(0)).replace(u' ', QChar(0x00A0));
+    };
+}
 
 InlineRenderer::InlineRenderer(RenderContext context) : m_ctx(std::move(context)) { }
 
@@ -470,7 +532,13 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             atoms.append({marker->from, marker->contentStart, html});
         }
 
-        // Links, embeds, block references, URLs, tags.
+        // Links, embeds, block references, URLs, tags. A page link shows its target as written,
+        // or what RenderContext::linkTitle makes of it (daily notes by their date).
+        const auto shownTarget = [this](const QString &target) {
+            if (target.isEmpty() || !m_ctx.linkTitle)
+                return target;
+            return m_ctx.linkTitle(target).value_or(target);
+        };
         lexInline(text, masked, [&](const InlineItem &item) {
             const QStringView source = text.sliced(item.from, item.to - item.from);
             QString html;
@@ -482,7 +550,8 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     const QString frag = !w.heading.isEmpty()   ? w.heading
                                          : !w.blockId.isEmpty() ? u'^' + w.blockId
                                                                 : QString();
-                    label = w.target.isEmpty() ? frag : frag.isEmpty() ? w.target : w.target + u" › "_s + frag;
+                    const QString page = shownTarget(w.target);
+                    label = page.isEmpty() ? frag : frag.isEmpty() ? page : page + u" › "_s + frag;
                 }
                 const bool resolved =
                         w.target.isEmpty() || !m_ctx.resolvePage || m_ctx.resolvePage(w.target).has_value();
@@ -498,7 +567,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 if (!attachment && m_ctx.hideTransclusions
                     && (!w.target.isEmpty() || !w.heading.isEmpty() || !w.blockId.isEmpty()))
                     break; // shown next to the text by the caller
-                QString name = w.target;
+                QString name = attachment ? w.target : shownTarget(w.target);
                 if (!w.heading.isEmpty())
                     name += u" › "_s + w.heading;
                 else if (!w.blockId.isEmpty())

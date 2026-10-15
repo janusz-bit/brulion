@@ -66,6 +66,10 @@ struct RenderContext {
     std::function<std::optional<QString>(const QString &id)> blockText;
     /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;
+    /// Text shown for a wiki link or page embed without an alias, from its target as written
+    /// (`[[2026-10-13]]` -> "wt 13 paź", see journalLinkTitle()); nullopt / unset: the target as
+    /// written. Display only — the link and its `page:` URL keep the target.
+    std::function<std::optional<QString>(const QString &target)> linkTitle;
     QDate today; ///< for "dziś"/"jutro" and overdue due dates (invalid: absolute dates)
     dates::UiLocale locale = dates::UiLocale::Polish;
     Palette palette;
@@ -79,6 +83,13 @@ struct RenderContext {
     bool hideTransclusions = false;
 };
 
+/// A RenderContext::linkTitle for daily notes: a link naming a day (journalDateFromLinkTarget():
+/// `[[2026-10-13]]`, the vault's journalFileFormat) shows that date as dates::formatDateShort()
+/// does — "wt 13 paź" ("Tue, Oct 13"), with the year when it is not `today`'s year ("13 paź
+/// 2025"; an invalid `today`: always). Any other target: nullopt (shown as written).
+std::function<std::optional<QString>(const QString &target)> journalLinkTitle(const VaultConfig &config,
+                                                                              dates::UiLocale locale, QDate today);
+
 class InlineRenderer {
 public:
     InlineRenderer() = default;
@@ -91,7 +102,9 @@ public:
     /// paragraph): **bold**, *italic*, ~~strike~~, ==highlight==, `code`, links, tags, block
     /// references, embeds (placeholders), task tokens as chips, reminders as amber chips,
     /// `key:: value` with a muted key; block ids, `id::`/`collapsed::` lines, Logseq drawers and
-    /// %%comments%% are hidden; line breaks become <br/>.
+    /// %%comments%% are hidden; line breaks become <br/>. Polish typography: the space after a
+    /// one-letter word (a, i, o, u, w, z — "w domu", "i dalej") is a no-break space (U+00A0) in
+    /// the output, so such a word never ends a line (display only; the note keeps its spaces).
     QString render(QStringView text) const;
 
     /// Render a whole block body of the given kind: heading markers, quote prefixes and the

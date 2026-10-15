@@ -9,7 +9,9 @@ przeglądarki.
   dowolny serwer plików statycznych, pod dowolną ścieżką — wszystkie adresy są względne).
 * Ograniczenia wobec aplikacji natywnych: przypomnienia tylko gdy karta/PWA jest otwarta,
   brak dostępu do folderów na dysku (import/eksport plików zamiast tego), synchronizacja z
-  Nextcloud wymaga CORS (niżej), Syncthing niedostępny.
+  Nextcloud wymaga CORS (niżej), Syncthing niedostępny. Qt for WebAssembly nie ma bazy stref
+  czasowych: przy imporcie kalendarza (`.ics`) godziny ze strefą (`TZID`) są brane jako czas
+  lokalny (godziny w UTC przelicza się normalnie).
 
 ## Wersje narzędzi
 

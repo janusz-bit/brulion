@@ -166,6 +166,8 @@ public:
     /// from `path`, `((id))` through the host, inline calculations see the variables of
     /// `content` above `line`; embedded pages / sections / blocks are hidden (shown in frames).
     markdown::RenderContext renderContextFor(const QString &path, const QString &content, int line) const;
+    /// The host's vault configuration (cached until the rendering is invalidated).
+    const VaultConfig &vaultConfig() const;
     void setEnglish(bool english);
     bool english() const { return m_english; }
     void setToday(QDate today);
@@ -239,6 +241,7 @@ private:
     markdown::Palette m_palette;
     bool m_english = false;
     QDate m_today;
+    mutable std::optional<VaultConfig> m_config;
 };
 
 } // namespace brulion::editor

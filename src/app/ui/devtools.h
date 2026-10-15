@@ -33,6 +33,8 @@
 class QJSEngine;
 class QQmlApplicationEngine;
 class QQmlEngine;
+#include "qttranslations.h"
+
 class QTranslator;
 
 namespace brulion::ui {
@@ -78,13 +80,14 @@ public:
     /// --editor, else "Main".
     QString rootComponent() const;
     /// The translator main() installed (brulion_pl.qm, or brulion_en.qm for English plurals);
-    /// setLanguage() reloads it.
+    /// setLanguage() reloads it. Qt's own catalogs (dialog buttons, file dialogs: QtTranslations)
+    /// are installed with it and follow the language too.
     void setTranslator(QTranslator *translator);
     /// Apply --size and schedule --screenshot for the engine's first window.
     void attach(QQmlApplicationEngine *engine);
 
-    /// Switch the UI language at run time ("pl" | "en"): (un)installs the translation and
-    /// retranslates every qsTr() binding.
+    /// Switch the UI language at run time ("pl" | "en"): (un)installs the translation (also Qt's
+    /// own, QtTranslations) and retranslates every qsTr() binding.
     Q_INVOKABLE void setLanguage(const QString &language);
 
 Q_SIGNALS:
@@ -107,6 +110,7 @@ private:
     QPointer<QQmlApplicationEngine> m_engine;
     QTranslator *m_translator = nullptr;
     bool m_translatorInstalled = false;
+    QtTranslations m_qtTranslations;
 };
 
 } // namespace brulion::ui

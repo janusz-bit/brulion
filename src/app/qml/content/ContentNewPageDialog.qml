@@ -5,7 +5,8 @@ import Brulion
 
 // ContentNewPageDialog — "Nowa strona" from AllPagesView: a title (a "/" makes folders:
 // "Projekty/Dom"), created in `folder` (the folder being listed, else the vault's folder for new
-// pages) and opened. A title that is taken gets " 2" (Workspace.createPage).
+// pages) and opened. A title that is taken gets " 2"; one differing only in letter case from a
+// page opens that page (Workspace.createPage).
 //
 //   ContentNewPageDialog { id: newPage }
 //   newPage.openIn("Projekty")

@@ -91,13 +91,15 @@ private Q_SLOTS:
         QTest::addColumn<QString>("input");
         QTest::addColumn<QString>("expected");
         QTest::newRow("plain polish") << u"zwykły tekst ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ"_s << u"zwykły tekst ąćęłńóśźż ĄĆĘŁŃÓŚŹŻ"_s;
-        QTest::newRow("emphasis") << u"**pogrubienie** i *kursywa* oraz _też_"_s
-                                  << u"<b>pogrubienie</b> i <i>kursywa</i> oraz <i>też</i>"_s;
+        QTest::newRow("emphasis")
+                << u"**pogrubienie** i *kursywa* oraz _też_"_s
+                << u"<b>pogrubienie</b> i\u00a0<i>kursywa</i> oraz <i>też</i>"_s; // "i" keeps the next word
         QTest::newRow("strike highlight") << u"~~skreślone~~ ==ważne=="_s
                                           << u"<s>skreślone</s> <span style=\"background-color:H\">ważne</span>"_s;
         QTest::newRow("triple") << u"***oba***"_s << u"<i><b>oba</b></i>"_s;
         QTest::newRow("nested") << u"**bold *it* bold**"_s << u"<b>bold <i>it</i> bold</b>"_s;
-        QTest::newRow("intraword underscore") << u"snake_case_name i 2 * 3 * 4"_s << u"snake_case_name i 2 * 3 * 4"_s;
+        QTest::newRow("intraword underscore")
+                << u"snake_case_name i 2 * 3 * 4"_s << u"snake_case_name i\u00a02 * 3 * 4"_s;
         QTest::newRow("unclosed") << u"**niezamknięte"_s << u"**niezamknięte"_s;
         QTest::newRow("single tilde and equals") << u"~a~ a = b =c="_s << u"~a~ a = b =c="_s;
         QTest::newRow("code") << u"`kod <b>`"_s << Code + u"kod &lt;b&gt;</code>"_s;
@@ -143,7 +145,7 @@ private Q_SLOTS:
         QTest::newRow("label markup") << u"[**pogrubiony** link](https://example.com)"_s
                                       << link(u"ext:https://example.com"_s, u"L"_s, u"<b>pogrubiony</b> link"_s);
         QTest::newRow("label no links") << u"[a [[X]] #t](https://e.pl)"_s
-                                        << link(u"ext:https://e.pl"_s, u"L"_s, u"a [[X]] #t"_s);
+                                        << link(u"ext:https://e.pl"_s, u"L"_s, u"a\u00a0[[X]] #t"_s);
         QTest::newRow("mailto") << u"[x](mailto:jan@example.com)"_s
                                 << link(u"ext:mailto:jan@example.com"_s, u"L"_s, u"x"_s);
         QTest::newRow("relative") << u"[notatka](Folder/Moja%20notatka.md#Sekcja)"_s
@@ -175,6 +177,69 @@ private Q_SLOTS:
         QFETCH(QString, input);
         QFETCH(QString, expected);
         QCOMPARE(render(input), expected);
+    }
+
+    void linkTitles()
+    {
+        // RenderContext::linkTitle changes what a link shows, never where it goes.
+        RenderContext c = context();
+        c.linkTitle = [](const QString &target) -> std::optional<QString> {
+            if (target == u"Strona")
+                return u"Strona <główna>"_s;
+            return std::nullopt;
+        };
+        const InlineRenderer r(c);
+        QCOMPARE(r.render(u"[[Strona]]"_s), link(u"page:Strona"_s, u"L"_s, u"Strona &lt;główna&gt;"_s));
+        QCOMPARE(r.render(u"[[Strona#Plan]]"_s),
+                 link(u"page:Strona#Plan"_s, u"L"_s, u"Strona &lt;główna&gt; › Plan"_s));
+        QCOMPARE(r.render(u"[[Strona|moja]]"_s), link(u"page:Strona"_s, u"L"_s, u"moja"_s)); // an alias wins
+        QCOMPARE(r.render(u"[[Inna]]"_s), link(u"page:Inna"_s, u"L"_s, u"Inna"_s));
+        QCOMPARE(r.render(u"![[Strona]]"_s), link(u"page:Strona"_s, u"L"_s, u"⧉ Strona &lt;główna&gt;"_s));
+
+        // Daily notes by their date, in the UI language; the year when it is not this year's.
+        const QString nb = QString(QChar(0x00A0));
+        c.linkTitle = journalLinkTitle(VaultConfig(), dates::UiLocale::Polish, QDate(2026, 10, 14));
+        const InlineRenderer pl(c);
+        QCOMPARE(pl.render(u"[[2026-10-13]]"_s),
+                 link(u"page:2026-10-13"_s, u"L"_s, u"wt"_s + nb + u"13"_s + nb + u"paź"_s));
+        QCOMPARE(pl.render(u"[[2025-12-31]]"_s),
+                 link(u"page:2025-12-31"_s, u"L"_s, u"31"_s + nb + u"gru"_s + nb + u"2025"_s));
+        QCOMPARE(pl.render(u"[[2026-10-13|wtorek]]"_s), link(u"page:2026-10-13"_s, u"L"_s, u"wtorek"_s));
+        QCOMPARE(pl.render(u"[[Żółw]]"_s), link(u"page:%C5%BB%C3%B3%C5%82w"_s, u"L"_s, u"Żółw"_s));
+        c.linkTitle = journalLinkTitle(VaultConfig(), dates::UiLocale::English, QDate(2026, 10, 14));
+        QCOMPARE(InlineRenderer(c).render(u"[[2026-10-13]]"_s),
+                 link(u"page:2026-10-13"_s, u"L"_s, u"Tue,"_s + nb + u"Oct"_s + nb + u"13"_s));
+        // No "today": always with the year.
+        c.linkTitle = journalLinkTitle(VaultConfig(), dates::UiLocale::Polish, QDate());
+        QCOMPARE(InlineRenderer(c).render(u"[[2026-10-13]]"_s),
+                 link(u"page:2026-10-13"_s, u"L"_s, u"13"_s + nb + u"paź"_s + nb + u"2026"_s));
+    }
+
+    void oneLetterWordsKeepTheNextWord_data()
+    {
+        // Polish typography: "w", "z", "i", "a", "o", "u" never end a line — a no-break space
+        // (U+00A0, written "~" here) joins them to the next word. Display only.
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("words") << u"Spotkanie w domu i z Łucją"_s << u"Spotkanie w~domu i~z~Łucją"_s;
+        QTest::newRow("start") << u"W piątek o 9"_s << u"W~piątek o~9"_s;
+        QTest::newRow("all letters") << u"a b, i c, o d, u e, w f, z g"_s << u"a~b, i~c, o~d, u~e, w~f, z~g"_s;
+        QTest::newRow("capitals") << u"A potem U nas"_s << u"A~potem U~nas"_s;
+        QTest::newRow("brackets and quotes") << u"(w domu) „z ogrodem”"_s << u"(w~domu) „z~ogrodem”"_s;
+        QTest::newRow("not inside words") << u"aw b, ż c, ów d"_s << u"aw b, ż c, ów d"_s;
+        QTest::newRow("before a link") << u"w [[Domu]]"_s << u"w~"_s + link(u"page:Domu"_s, u"L"_s, u"Domu"_s);
+        QTest::newRow("before emphasis") << u"i **dalej**"_s << u"i~<b>dalej</b>"_s;
+        QTest::newRow("line end") << u"jest w\ndomu"_s << u"jest w<br/>domu"_s;
+        QTest::newRow("last word") << u"mam i"_s << u"mam i"_s;
+        QTest::newRow("two spaces") << u"w  domu"_s << u"w  domu"_s;
+        QTest::newRow("code untouched") << u"`w domu` i"_s << Code + u"w domu</code> i"_s;
+        QTest::newRow("after digits") << u"5 z 7"_s << u"5 z~7"_s;
+    }
+    void oneLetterWordsKeepTheNextWord()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input).replace(QChar(0x00A0), u'~'), expected);
     }
 
     void hostileInput_data()

@@ -299,8 +299,17 @@ private Q_SLOTS:
         auto ws = open({ { u"Żółw.md"_s, QString() } });
         QCOMPARE(ws->createPage(u"Notatka"_s), u"Notatka.md"_s);
         QCOMPARE(ws->createPage(u"Notatka"_s), u"Notatka 2.md"_s);
-        QCOMPARE(ws->createPage(u"żółw"_s), u"żółw 2.md"_s); // case-insensitive collision
+        // A name differing only in letter case is the existing page (one file on Android's shared
+        // storage), said in a notice; folders are used as spelled.
+        QSignalSpy notices(ws.get(), &Workspace::noticeOccurred);
+        QCOMPARE(ws->createPage(u"żółw"_s), u"Żółw.md"_s);
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.first().first().toString().contains(u"Żółw"_s));
         QCOMPARE(ws->createPage(u"Projekty/Dom"_s), u"Projekty/Dom.md"_s);
+        QCOMPARE(ws->createPage(u"projekty/DOM"_s), u"Projekty/Dom.md"_s);
+        QCOMPARE(ws->createPage(u"PROJEKTY/Kuchnia"_s), u"Projekty/Kuchnia.md"_s);
+        QCOMPARE(notices.size(), 2);
+        QVERIFY(!ws->exists(u"projekty"_s) && !ws->exists(u"PROJEKTY"_s));
         QCOMPARE(ws->createPage(u"Pomysł: #1?"_s), u"Pomysł 1.md"_s);
         QCOMPARE(ws->createPage(u"W folderze"_s, u"Archiwum"_s), u"Archiwum/W folderze.md"_s);
         QVERIFY(ws->createPage(u"  /  "_s).isEmpty());
@@ -558,6 +567,14 @@ private Q_SLOTS:
         QCOMPARE(ws->newPagePath(u"Żółw.md"_s), u"strony/Żółw.md"_s);
         QVERIFY(!ws->newPagePath(u"a:b?"_s).contains(u'?'));
         QVERIFY(ws->newPagePath(u"  "_s).isEmpty());
+        // Folders as the vault spells them (one folder on case-insensitive storage).
+        QVERIFY(ws->createFolder(u"strony/Projekty"_s));
+        QCOMPARE(ws->newPagePath(u"projekty/Łódź"_s), u"strony/Projekty/Łódź.md"_s);
+        // QML calls it too (GraphView opens a missing page's node at its future path).
+        QString fromQml;
+        QVERIFY(QMetaObject::invokeMethod(ws.get(), "newPagePath", Q_RETURN_ARG(QString, fromQml),
+                                          Q_ARG(QString, u"Ogród zimowy"_s)));
+        QCOMPARE(fromQml, u"strony/Ogród zimowy.md"_s);
         // A date: that day's journal page.
         QCOMPARE(pathOf({ { u"view"_s, u"page"_s }, { u"target"_s, u"2026-10-20"_s } }), u"journals/2026-10-20.md"_s);
         // An existing page (e.g. the editor asked while the index was still being built).

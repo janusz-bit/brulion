@@ -183,6 +183,11 @@ public:
     /// True if a tracked file or folder is known at `path` (also the config file).
     bool exists(const VaultPath &path) const;
     std::optional<FileStat> stat(const VaultPath &path) const;
+    /// `path` spelled like the tracked files and folders it differs from only in letter case,
+    /// segment by segment ("projekty/dom.md" -> "Projekty/Dom.md"; segments without such an
+    /// entry stay as given). Case-insensitive storage (Android shared storage, FAT, macOS) holds
+    /// one entry for both spellings, and links do not tell them apart either.
+    VaultPath existingCase(const VaultPath &path) const;
 
     // --- reading and writing -------------------------------------------------------------
     /// Content of a text file (UTF-8, a leading BOM stripped). `ok` is false when it cannot
@@ -193,15 +198,17 @@ public:
     bool writeText(const VaultPath &path, const QString &content, ChangeSource source = ChangeSource::User);
     bool writeBinary(const VaultPath &path, const QByteArray &data, ChangeSource source = ChangeSource::User);
     /// Write a new file at `path`, or at "Name 2.ext", "Name 3.ext", … when `path` is taken
-    /// (case-insensitively, by files or folders, known or on disk). Returns the path used, or
-    /// an empty path on failure.
+    /// (case-insensitively, by files or folders, known or on disk). Folders that exist in another
+    /// letter case are used as they are spelled ("projekty/Dom.md" goes into "Projekty/"), never
+    /// created a second time. Returns the path used, or an empty path on failure.
     VaultPath create(const VaultPath &path, const QString &content = {}, ChangeSource source = ChangeSource::User);
     VaultPath createBinary(const VaultPath &path, const QByteArray &data, ChangeSource source = ChangeSource::User);
     /// Create a folder (and missing parents).
     bool createFolder(const VaultPath &path);
 
-    /// Rename or move a file or folder. Fails when `to` exists (case-only renames such as
-    /// "notatka.md" -> "Notatka.md" are allowed) or when moving a folder into itself.
+    /// Rename or move a file or folder. Fails when `to` exists, also in another letter case
+    /// ("dom.md" next to "Dom.md"; case-only renames such as "notatka.md" -> "Notatka.md" are
+    /// allowed), or when moving a folder into itself.
     /// Emits one Renamed change per file (Deleted when moved into an ignored folder, Created
     /// for files arriving from one).
     bool rename(const VaultPath &from, const VaultPath &to, ChangeSource source = ChangeSource::User);

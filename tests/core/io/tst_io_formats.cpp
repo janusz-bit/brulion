@@ -503,6 +503,7 @@ private Q_SLOTS:
                                              << u"/mozilla.org/20050126_1/Europe/London"_s << u"2026-10-14 11:00"_s;
         QTest::newRow("tzid windows") << u"20261014T100000"_s << QString() << u"Pacific Standard Time"_s
                                       << u"2026-10-14 19:00"_s;
+        // Also what every TZID gets where Qt has no time zone database (WebAssembly).
         QTest::newRow("unknown tzid -> floating")
                 << u"20261014T100000"_s << QString() << u"Mars/Olympus"_s << u"2026-10-14 10:00"_s;
         QTest::newRow("dashed") << u"2026-10-14T10:00:00Z"_s << QString() << QString() << u"2026-10-14 12:00"_s;

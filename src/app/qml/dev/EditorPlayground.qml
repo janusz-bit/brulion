@@ -40,6 +40,28 @@ ApplicationWindow {
         onUrlOpened: (url) => toasts.show(qsTr("Open in browser: %1").arg(url.toString()), { kind: "info" })
     }
 
+    // Self test: an editor that is destroyed while its deferred work is queued.
+    property Item probe: null
+    readonly property FakeEditorHost probeHost: host
+    Component {
+        id: probeComponent
+        Item {
+            readonly property BlockEditor editor: probeEditor
+            width: 320
+            height: 240
+            PageController {
+                id: probePage
+                host: window.probeHost
+                path: window.probeHost.samplePath
+            }
+            BlockEditor {
+                id: probeEditor
+                anchors.fill: parent
+                controller: probePage
+            }
+        }
+    }
+
     PageController {
         id: page
         onSaveFailed: toasts.show(qsTr("Could not save the page"), { kind: "error" })
@@ -496,7 +518,25 @@ ApplicationWindow {
                       && item.transclusionView.height > 20, "a block embed shows the block in a frame")
                 const section = info(rowOf("Budżet na październik") + 1)
                 check(section.view === "text", "the embedded section's block is a text block")
-            }
+            },
+            // ---- An editor destroyed before its deferred work runs (scrolling to a row, focus
+            // loss, completions, scrolling to the top after loading): nothing touches it then.
+            // A TypeError in the output fails the ctest (tests/app/editor/CMakeLists.txt). -------
+            () => { window.probe = probeComponent.createObject(window) },
+            () => {
+                const ed = window.probe ? window.probe.editor : null
+                check(ed !== null && ed.controller !== null && ed.controller.loaded, "the probe editor is loaded")
+                if (!ed)
+                    return
+                window.probe.destroy() // gone when the event loop runs, before the work below
+                ed.revealRow(1)
+                ed.ensureRowVisible(1)
+                ed.editorFocusLost()
+                ed.handleCommandResult(1, { action: "complete" })
+                ed.controller.load()
+            },
+            () => check(window.probe === null, "the probe editor is gone"),
+            () => check(page.loaded && editor.alive, "the page's own editor still works")
         ]
         stepIndex = 0
         stepTimer.start()

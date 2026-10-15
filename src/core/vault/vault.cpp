@@ -495,6 +495,38 @@ void VaultPrivate::untrackDir(const VaultPath &path)
     diskNames.remove(path);
 }
 
+VaultPath VaultPrivate::existingCase(const VaultPath &path, bool foldersOnly) const
+{
+    if (path.isEmpty() || files.contains(path) || dirs.contains(path))
+        return path; // known as spelled (and so are its folders)
+    QStringList segments = path.split(u'/');
+    QString prefix;
+    for (qsizetype i = 0; i < segments.size(); ++i) {
+        const bool last = i + 1 == segments.size();
+        if (last && foldersOnly)
+            break;
+        const QString candidate = prefix.isEmpty() ? segments[i] : prefix + u'/' + segments[i];
+        if (!files.contains(candidate) && !dirs.contains(candidate) && isTakenCaseInsensitive(candidate)) {
+            const QString lower = candidate.toLower();
+            const auto spelled = [&](const QHash<VaultPath, FileStat> &entries) -> std::optional<QString> {
+                for (auto it = entries.cbegin(); it != entries.cend(); ++it) {
+                    if (it.key().size() == candidate.size() && it.key().toLower() == lower)
+                        return it.key();
+                }
+                return std::nullopt;
+            };
+            // Folders for the parents; the last segment may be a file or a folder.
+            std::optional<QString> found = spelled(dirs);
+            if (!found && last)
+                found = spelled(files);
+            if (found)
+                segments[i] = found->section(u'/', -1);
+        }
+        prefix = prefix.isEmpty() ? segments[i] : prefix + u'/' + segments[i];
+    }
+    return segments.join(u'/');
+}
+
 std::optional<FileStat> VaultPrivate::knownStat(const VaultPath &path) const
 {
     if (const auto it = files.constFind(path); it != files.cend())
@@ -821,7 +853,9 @@ VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, C
 {
     if (!requireOpen() || !requireStorage())
         return {};
-    const VaultPath base = paths::normalize(path);
+    // A folder that exists in another letter case is that folder (one folder on case-insensitive
+    // storage): "projekty/Dom.md" goes into "Projekty/".
+    const VaultPath base = existingCase(paths::normalize(path), true);
     if (base.isEmpty()) {
         fail(Vault::tr("Cannot create a file with an empty name"));
         return {};
@@ -1039,6 +1073,11 @@ bool Vault::exists(const VaultPath &path) const
 std::optional<FileStat> Vault::stat(const VaultPath &path) const
 {
     return d->knownStat(paths::normalize(path));
+}
+
+VaultPath Vault::existingCase(const VaultPath &path) const
+{
+    return d->existingCase(paths::normalize(path), false);
 }
 
 QString Vault::readText(const VaultPath &path, bool *ok)

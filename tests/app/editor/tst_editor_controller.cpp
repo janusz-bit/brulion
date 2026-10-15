@@ -4,6 +4,7 @@
 // Runs with a FakeEditorHost (in-memory files) and a fixed clock.
 #include "blocklistmodel.h"
 #include "blocktext.h"
+#include "dayclock.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 
@@ -181,6 +182,96 @@ private Q_SLOTS:
         const QString themed = f.role(0, "html").toString();
         QVERIFY(themed.contains(u"#112233"_s, Qt::CaseInsensitive));
         QVERIFY(themed.contains(u"#445566"_s, Qt::CaseInsensitive));
+    }
+
+    void onlyListItemsAreTasks()
+    {
+        // SYNTAX §5: a paragraph starting with "TODO" or "[ ]" is text, a list item a task (its
+        // marker is drawn by the delegate, so it is not part of the html).
+        Fixture f(u"TODO zadzwonić do Łucji\n\n[ ] to nie zadanie\n\n- TODO zadanie\n- [ ] kupić żółty ser\n"_s);
+        QCOMPARE(f.count(), 4);
+        QCOMPARE(f.role(0, "taskStatus").toString(), QString());
+        QVERIFY2(f.role(0, "html").toString().startsWith(u"TODO zadzwonić"_s),
+                 qPrintable(f.role(0, "html").toString()));
+        QCOMPARE(f.edit(0), u"TODO zadzwonić do Łucji"_s);
+        QCOMPARE(f.role(1, "taskStatus").toString(), QString());
+        QVERIFY2(f.role(1, "html").toString().startsWith(u"[ ] to nie"_s), qPrintable(f.role(1, "html").toString()));
+        QCOMPARE(f.role(2, "taskStatus").toString(), u"todo"_s);
+        QVERIFY(!f.role(2, "html").toString().contains(u"TODO"_s));
+        QCOMPARE(f.edit(2), u"zadanie"_s);
+        QCOMPARE(f.role(3, "taskStatus").toString(), u"todo"_s);
+        QVERIFY(!f.role(3, "html").toString().contains(u"[ ]"_s));
+        // A heading item's further lines are text as well.
+        Fixture h(u"- # Plan\n  TODO nie zadanie\n"_s);
+        QVERIFY2(h.role(0, "html").toString().contains(u"TODO nie"_s), qPrintable(h.role(0, "html").toString()));
+    }
+
+    void journalLinksShowDates()
+    {
+        // [[2026-10-13]] reads as a date in the editor (the file keeps the ISO date).
+        Fixture f(u"- Wczoraj: [[2026-10-14]], potem [[2026-10-13|wtorek]] i [[Inna]]\n"_s);
+        const QString nb = QString(QChar(0x00A0));
+        const QString html = f.role(0, "html").toString();
+        QVERIFY2(html.contains(u"śr"_s + nb + u"14"_s + nb + u"paź"_s), qPrintable(html));
+        QVERIFY(html.contains(u"page:2026-10-14"_s));
+        QVERIFY(html.contains(u">wtorek<"_s));
+        QVERIFY(!html.contains(u">2026-10-14<"_s));
+        QCOMPARE(f.text(), u"- Wczoraj: [[2026-10-14]], potem [[2026-10-13|wtorek]] i [[Inna]]\n"_s);
+        f.page.setLocale(u"en"_s);
+        QVERIFY2(f.role(0, "html").toString().contains(u"Wed,"_s + nb + u"Oct"_s + nb + u"14"_s),
+                 qPrintable(f.role(0, "html").toString()));
+    }
+
+    void dayClockFollowsMidnight()
+    {
+        DayClock *clock = DayClock::instance();
+        QDateTime now(QDate(2026, 10, 16), QTime(23, 59, 59));
+        clock->setClock([&now] { return now; });
+        QCOMPARE(clock->today(), QDate(2026, 10, 16));
+        QSignalSpy changed(clock, &DayClock::dayChanged);
+        clock->check();
+        QCOMPARE(changed.size(), 0);
+        // The timer is armed for just after midnight (by this clock: 2 s).
+        now = QDateTime(QDate(2026, 10, 17), QTime(0, 0, 1));
+        QTRY_COMPARE_WITH_TIMEOUT(changed.size(), 1, 5000);
+        QCOMPARE(changed.first().first().toDate(), QDate(2026, 10, 17));
+        clock->check();
+        QCOMPARE(changed.size(), 1);
+        // The clock jumps (travel, suspend): noticed at the next check.
+        now = QDateTime(QDate(2026, 10, 15), QTime(12, 0));
+        clock->check();
+        QCOMPARE(changed.size(), 2);
+        clock->setClock({});
+    }
+
+    void midnightRefreshesAnOpenPage()
+    {
+        // The real clock (no fixed `now`): a page rendered yesterday follows the DayClock —
+        // "jutro" becomes "dziś", a task due yesterday turns red, query results run again.
+        const QDate today = QDate::currentDate();
+        const QString due = today.toString(Qt::ISODate);
+        const QString past = today.addDays(-1).toString(Qt::ISODate);
+        FakeEditorHost host;
+        host.setFile(Page, u"- [ ] Zadzwonić 📅 %1\n- [ ] Spóźnione 📅 %2\n"_s.arg(due, past));
+        PageController page;
+        page.setHost(&host);
+        page.setPath(Page);
+        BlockListModel *model = page.blocks();
+        const auto html = [&](int row) { return model->data(model->index(row), BlockListModel::HtmlRole).toString(); };
+        QVERIFY2(html(0).contains(u"dziś"_s), qPrintable(html(0)));
+        model->setToday(today.addDays(-1)); // as rendered before midnight
+        QVERIFY2(html(0).contains(u"jutro"_s), qPrintable(html(0)));
+        QVERIFY(!html(1).contains(markdown::Palette().overdue.foreground, Qt::CaseInsensitive));
+        QSignalSpy todayChanged(&page, &PageController::todayChanged);
+        QSignalSpy dataChanged(model, &QAbstractItemModel::dataChanged);
+        QDateTime fake(today.addDays(1), QTime(0, 0, 1));
+        DayClock::instance()->setClock([&fake] { return fake; }); // "midnight"
+        QCOMPARE(todayChanged.size(), 1);
+        QVERIFY(dataChanged.size() >= 1);
+        QVERIFY2(html(0).contains(u"dziś"_s), qPrintable(html(0)));
+        QVERIFY2(html(1).contains(markdown::Palette().overdue.foreground, Qt::CaseInsensitive), qPrintable(html(1)));
+        DayClock::instance()->setClock({});
+        QCOMPARE(todayChanged.size(), 1); // the same day for the page: nothing again
     }
 
     // --- typing and undo ------------------------------------------------------------------------------
@@ -810,7 +901,8 @@ private Q_SLOTS:
         QVERIFY2(html.contains(u"<b>Płytki</b>"_s) && html.contains(u"href=\"page:Inna\""_s) && html.contains(u"tag:zakupy"_s),
                  qPrintable(html));
         // The visible text measures the column; the raw text stays what the cell editor edits.
-        QCOMPARE(tiles.value(u"plain"_s).toString(), u"Płytki z Inna #zakupy"_s);
+        // "z" keeps the next word on its line (a no-break space, measured as such).
+        QCOMPARE(tiles.value(u"plain"_s).toString(), u"Płytki z\u00a0Inna #zakupy"_s);
         QCOMPARE(tiles.value(u"text"_s).toString(), u"**Płytki** z [[Inna]] #zakupy"_s);
         // Note text that looks like HTML stays text; chips render.
         const QString hostile = rows[1].toList()[0].toMap().value(u"html"_s).toString();
@@ -875,7 +967,13 @@ private Q_SLOTS:
         QCOMPARE(t[0].toMap().value(u"kind"_s).toString(), u"block"_s);
         QCOMPARE(t[0].toMap().value(u"title"_s).toString(), u"Inna"_s);
         QCOMPARE(t[0].toMap().value(u"href"_s).toString(), u"page:Inna#^inny1"_s);
-        QVERIFY(t[0].toMap().value(u"blocks"_s).toList()[0].toMap().value(u"html"_s).toString().contains(u"Blok z innej strony"_s));
+        QVERIFY(t[0].toMap()
+                        .value(u"blocks"_s)
+                        .toList()[0]
+                        .toMap()
+                        .value(u"html"_s)
+                        .toString()
+                        .contains(u"Blok z\u00a0innej strony"_s));
         const QVariantMap contact = t[1].toMap();
         QCOMPARE(contact.value(u"href"_s).toString(), u"block:kont"_s);
         QCOMPARE(contact.value(u"path"_s).toString(), u"Kontakty.md"_s);
@@ -1262,6 +1360,80 @@ private Q_SLOTS:
         QCOMPARE(host.writeCount(), 1);
         QVERIFY(page.exists());
         QCOMPARE(host.file(u"Nowa strona.md"_s), u"- Pierwsza myśl\n"_s);
+    }
+
+    void startNewPageWritesOnlyWhenChanged()
+    {
+        // A day without a note starts from the journal template, filled for that day; the note is
+        // created by the first change, never by looking at the day or starting to write.
+        FakeEditorHost host;
+        host.setFile(u"templates/journal.md"_s, u"## {{date}} — {{weekday}}\n- \n"_s);
+        host.setFile(u"templates/bez punktu.md"_s, u"## Plan dnia"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setSaveDelay(0);
+        page.setHost(&host);
+        const QString day = u"journals/2026-10-13.md"_s;
+        page.setPath(day);
+        QVERIFY(!page.exists());
+        const int row = page.startNewPage(u"templates/journal.md"_s);
+        QCOMPARE(page.text(), u"## 2026-10-13 — wtorek\n- \n"_s);
+        QCOMPARE(row, 1);
+        QVERIFY(!page.dirty());
+        QVERIFY(!page.canUndo());
+        QVERIFY(page.save());
+        QCOMPARE(host.writeCount(), 0); // looked at, started, left: nothing written
+        page.startEditing(row);
+        page.setEditText(row, u"Kupić żółty ser"_s, 15);
+        QCOMPARE(host.writeCount(), 1);
+        QVERIFY(page.exists());
+        QCOMPARE(host.file(day), u"## 2026-10-13 — wtorek\n- Kupić żółty ser\n"_s);
+        // Undo goes back to the template (the starting text), not to an empty page.
+        page.undo();
+        QCOMPARE(page.text(), u"## 2026-10-13 — wtorek\n- \n"_s);
+        page.redo();
+        QCOMPARE(host.file(day), u"## 2026-10-13 — wtorek\n- Kupić żółty ser\n"_s);
+        const int writes = host.writeCount();
+
+        // A template without an empty bullet gets one to type into; leaving writes nothing.
+        page.setPath(u"journals/2026-10-12.md"_s);
+        const int r2 = page.startNewPage(u"templates/bez punktu.md"_s);
+        QVERIFY(r2 >= 1);
+        QVERIFY(page.text().startsWith(u"## Plan dnia"_s));
+        QCOMPARE(page.editingRow(), -1);
+        QVERIFY(!page.dirty());
+        page.setPath(u"journals/2026-10-11.md"_s);
+        QVERIFY(!host.files().contains(u"journals/2026-10-12.md"_s));
+        QCOMPARE(host.writeCount(), writes);
+
+        // No template (or a missing one): an empty bullet, as for any new page.
+        QCOMPARE(page.startNewPage(u"templates/nie ma.md"_s), 0);
+        QCOMPARE(page.startNewPage(QString()), 0);
+        QCOMPARE(page.blocks()->count(), 1);
+        // A page that exists keeps its text: the empty block goes at its end.
+        page.setPath(day);
+        QCOMPARE(page.startNewPage(u"templates/journal.md"_s), 2);
+        QVERIFY(page.text().startsWith(u"## 2026-10-13 — wtorek\n- Kupić żółty ser\n"_s));
+    }
+
+    void startNewPageFollowsANoteCreatedElsewhere()
+    {
+        // Quick capture writes today's note while its day shows the template, untouched: the
+        // editor takes the new file (it exists now) instead of the template.
+        FakeEditorHost host;
+        host.setFile(u"templates/journal.md"_s, u"## Plan\n- \n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setSaveDelay(0);
+        page.setHost(&host);
+        page.setPath(u"journals/2026-10-15.md"_s);
+        page.startNewPage(u"templates/journal.md"_s);
+        QSignalSpy exists(&page, &PageController::existsChanged);
+        host.externalWrite(u"journals/2026-10-15.md"_s, u"- Kupić mleko\n"_s);
+        QCOMPARE(page.text(), u"- Kupić mleko\n"_s);
+        QVERIFY(page.exists());
+        QCOMPARE(exists.size(), 1);
+        QVERIFY(!page.dirty());
     }
 
     void saveOnDestructionAndPathChange()

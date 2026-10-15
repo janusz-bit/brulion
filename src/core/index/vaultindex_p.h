@@ -20,8 +20,9 @@ namespace index_detail {
 
 /// Quiet time after the last change before the search index catches up in the background.
 inline constexpr int SearchIdleMs = 300;
-/// Documents added to the search index per background step.
-inline constexpr int SearchChunk = 100;
+/// Time the search index may take per background step (event loop turn) to catch up: the UI
+/// stays responsive (also single-threaded in the browser); at least one document per step.
+inline constexpr int SearchSliceMs = 8;
 
 /// A path-based link of a note (wiki link, embed, Markdown link to a file) and its resolution.
 struct PathLink {

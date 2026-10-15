@@ -75,6 +75,13 @@ private Q_SLOTS:
         QTest::newRow("logseq keyword") << u"- TODO Zadzwonić\n"_s << 0 << u"text"_s << u"Zadzwonić"_s << 5 << u"todo"_s;
         QTest::newRow("empty task") << u"- [ ] \n"_s << 0 << u"text"_s << QString() << 4 << u"todo"_s;
         QTest::newRow("paragraph") << u"Akapit\ndruga linia\n"_s << 0 << u"text"_s << u"Akapit\ndruga linia"_s << 0 << QString();
+        // Only list items are tasks (SYNTAX §5): a paragraph keeps "TODO" / "[ ]" as its text.
+        QTest::newRow("paragraph TODO") << u"TODO zadzwonić do Łucji\n"_s << 0 << u"text"_s
+                                        << u"TODO zadzwonić do Łucji"_s << 0 << QString();
+        QTest::newRow("paragraph checkbox")
+                << u"[ ] to nie zadanie\n"_s << 0 << u"text"_s << u"[ ] to nie zadanie"_s << 0 << QString();
+        QTest::newRow("paragraph after list")
+                << u"- [ ] zadanie\n\n[x] tekst\n"_s << 1 << u"text"_s << u"[x] tekst"_s << 0 << QString();
         QTest::newRow("heading") << u"## Koszty\n"_s << 0 << u"heading"_s << u"## Koszty"_s << 0 << QString();
         QTest::newRow("list heading") << u"- ## Sekcja\n"_s << 0 << u"heading"_s << u"## Sekcja"_s << 0 << QString();
         QTest::newRow("code") << u"```js\nlet a = 1\n```\n"_s << 0 << u"code"_s << u"let a = 1"_s << 6 << QString();

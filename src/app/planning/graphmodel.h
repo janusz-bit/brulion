@@ -5,7 +5,9 @@
 //   GraphModel { vaultIndex: PlanningContext.vaultIndex; showTags: true; focusPath: route.path; depth: 1 }
 //
 // * Toggles: showTags, showMissing (links to pages that do not exist), showJournals,
-//   showOrphans (nodes without edges).
+//   showOrphans (nodes without edges), showTemplates (pages in the vault's templatesFolder, off by
+//   default: templates link to everything they will be used for; tags and missing pages only
+//   templates link to go with them). The local graph's centre is shown even when it is a template.
 // * Local graph: with `focusPath` set (a node id: a page path) only the nodes within `depth`
 //   (1 or 2) links of it are kept.
 // * `maxNodes` caps the graph (the best connected nodes win, the focus always stays):
@@ -47,6 +49,8 @@ class GraphModel : public QObject {
     Q_PROPERTY(bool showMissing READ showMissing WRITE setShowMissing NOTIFY settingsChanged FINAL)
     Q_PROPERTY(bool showJournals READ showJournals WRITE setShowJournals NOTIFY settingsChanged FINAL)
     Q_PROPERTY(bool showOrphans READ showOrphans WRITE setShowOrphans NOTIFY settingsChanged FINAL)
+    /// Pages in the vault's templates folder (VaultConfig::templatesFolder); default false.
+    Q_PROPERTY(bool showTemplates READ showTemplates WRITE setShowTemplates NOTIFY settingsChanged FINAL)
     /// Local graph centre (a node id — a page path); "" = the whole graph.
     Q_PROPERTY(QString focusPath READ focusPath WRITE setFocusPath NOTIFY settingsChanged FINAL)
     /// Local graph depth (1–3).
@@ -103,6 +107,8 @@ public:
     void setShowJournals(bool on);
     bool showOrphans() const { return m_showOrphans; }
     void setShowOrphans(bool on);
+    bool showTemplates() const { return m_showTemplates; }
+    void setShowTemplates(bool on);
     QString focusPath() const { return m_focus; }
     void setFocusPath(const QString &path);
     int depth() const { return m_depth; }
@@ -192,6 +198,7 @@ private:
     bool m_showMissing = false;
     bool m_showJournals = true;
     bool m_showOrphans = true;
+    bool m_showTemplates = false;
     QString m_focus;
     int m_depth = 1;
     std::uint32_t m_seed = 1;

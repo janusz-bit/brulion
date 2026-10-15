@@ -1,5 +1,5 @@
 # brulion_editor — the C++ side of the block editor (docs/UI.md "The block editor"): BlockListModel,
-# PageController, MarkdownHighlighter, SuggestionModel, EditorInput (TextEdit text and input-method
+# PageController (+ DayClock: the date for every open page), MarkdownHighlighter, SuggestionModel, EditorInput (TextEdit text and input-method
 # helpers), QueryResultModel (live ```query results), the pure helpers of blocktext.h and the
 # in-memory FakeEditorHost (playground, tests; queries run on the real index module).
 # A static library so tests/app/editor links it without the app; the app's QML module "Brulion"
@@ -26,6 +26,7 @@ qt_add_library(brulion_editor STATIC
     queryhost.h
     queryresultmodel.h queryresultmodel.cpp
     pagecontroller.h pagecontroller.cpp
+    dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp

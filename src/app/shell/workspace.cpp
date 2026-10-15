@@ -711,7 +711,8 @@ QString Workspace::newPagePath(const QString &target) const
         return {};
     const QString base = paths::normalize(config.newPagesFolder);
     const QString relative = parts.join(u'/') + u".md"_s;
-    return base.isEmpty() ? relative : paths::join(base, relative);
+    // Folders as the vault spells them: [[projekty/Dom]] next to "Projekty/" is a page in it.
+    return m_vault->existingCase(base.isEmpty() ? relative : paths::join(base, relative));
 }
 
 void Workspace::openUrl(const QUrl &url)
@@ -743,8 +744,17 @@ QString Workspace::createPage(const QString &title, const QString &folder)
     QString base = folder.isNull() ? m_vault->config().newPagesFolder : folder;
     base = paths::normalize(base);
     const QString relative = parts.join(u'/') + u".md"_s;
-    const VaultPath path = m_vault->create(base.isEmpty() ? relative : paths::join(base, relative), QString(),
-                                           ChangeSource::User);
+    const QString wanted = base.isEmpty() ? relative : paths::join(base, relative);
+    // A page whose name differs only in letter case ("dom" next to "Dom"): one file on Android's
+    // shared storage and other case-insensitive folders a synced vault may land in, and one page
+    // for links — that page is opened instead of a second one.
+    const VaultPath spelled = m_vault->existingCase(wanted);
+    if (const auto existing = spelled != wanted ? m_vault->stat(spelled) : std::nullopt; existing && !existing->isDir) {
+        Q_EMIT noticeOccurred(tr("“%1” is the page “%2” (names that differ only in letter case are the same page).")
+                                      .arg(paths::pageTitle(wanted), paths::pageTitle(spelled)));
+        return spelled;
+    }
+    const VaultPath path = m_vault->create(wanted, QString(), ChangeSource::User);
     if (path.isEmpty())
         Q_EMIT errorOccurred(tr("Could not create the page: %1").arg(m_vault->errorString()));
     return path;
@@ -922,7 +932,7 @@ QString Workspace::templateText(const QString &templatePath, const QDateTime &wh
     return markdown::applyTemplate(tpl, vars).text;
 }
 
-QString Workspace::ensureJournal(const QString &date)
+QString Workspace::journalFileFor(const QString &date) const
 {
     if (!m_vault)
         return {};
@@ -935,10 +945,19 @@ QString Workspace::ensureJournal(const QString &date)
         return path;
     // The day may have a note under another name the journal folder accepts: Logseq's
     // "2026_10_14.md", "Journals/" capitalised on another device, the previous file name format.
-    // Never create a second note for the same day next to it.
+    // Never a second note for the same day next to it.
     const QString existing = existingJournal(d);
-    if (!existing.isEmpty())
-        return existing;
+    return existing.isEmpty() ? path : existing;
+}
+
+QString Workspace::ensureJournal(const QString &date)
+{
+    const QString path = journalFileFor(date);
+    if (path.isEmpty())
+        return {};
+    if (m_vault->exists(path) || QFileInfo::exists(m_vault->absolutePath(path)))
+        return path;
+    const QDate d = QDate::fromString(date, Qt::ISODate);
     QString content;
     const QString tpl = paths::normalize(m_vault->config().journalTemplate);
     if (!tpl.isEmpty() && m_vault->exists(tpl))

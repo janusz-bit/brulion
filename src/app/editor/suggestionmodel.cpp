@@ -268,7 +268,8 @@ QVariantList SuggestionModel::slashItems() const
 {
     QVariantList out;
     for (const SlashCommand *c : filterSlashCommands(m_filter)) {
-        QVariantMap it = item(u"command"_s, m_english ? c->nameEn : c->namePl, m_english ? c->namePl : c->nameEn,
+        // Subtitle: what the command writes ("⏰ data godzina"), not the name in the other language.
+        QVariantMap it = item(u"command"_s, m_english ? c->nameEn : c->namePl, m_english ? c->syntaxEn : c->syntaxPl,
                               c->icon, QString());
         it[u"hint"_s] = c->hint;
         it[u"command"_s] = c->id;

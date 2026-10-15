@@ -13,7 +13,8 @@ import Brulion
 //     calendar marking the days with journals). route.date scrolls to that day (or the nearest
 //     earlier one).
 //   route "journal" ({date, path?, source?}): one day as a page (PageView: header with the day
-//     arrows, backlinks, side panel); a day without a note opens empty and is created when typed.
+//     arrows, backlinks, side panel); a day without a note opens with the journal template and
+//     is created by the first change (never just by looking at it).
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (one day: its date), `sidePanel` and `editing`.
 FocusScope {
@@ -108,7 +109,7 @@ FocusScope {
                 onRefreshed: {
                     if (!scrolled && root.route && root.route.date && count > 0) {
                         scrolled = true
-                        Qt.callLater(() => journals.scrollToDate(root.route.date))
+                        Qt.callLater(() => { if (journals && root && root.route) journals.scrollToDate(root.route.date) })
                     }
                 }
             }

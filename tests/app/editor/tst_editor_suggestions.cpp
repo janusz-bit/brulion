@@ -1,6 +1,7 @@
 // SuggestionModel (src/app/editor/suggestionmodel.h): pages, blocks, tags, slash commands, dates
 // and templates — Polish text, diacritic-insensitive filtering, the "create page" item and the
 // natural-language date suggestions with a fixed clock.
+#include "blocktext.h"
 #include "fakeeditorhost.h"
 #include "suggestionmodel.h"
 
@@ -109,12 +110,24 @@ private Q_SLOTS:
         m.setTrigger({{u"mode"_s, u"slash"_s}, {u"filter"_s, u"przyp"_s}, {u"token"_s, u"/"_s}});
         QCOMPARE(m.get(0).value(u"command"_s).toString(), u"reminder"_s);
         QCOMPARE(m.get(0).value(u"title"_s).toString(), u"Przypomnienie…"_s);
-        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"Reminder…"_s);
+        // The subtitle shows what the command writes, not its name in the other language.
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"⏰ data godzina"_s);
         QCOMPARE(m.get(0).value(u"hint"_s).toString(), u"⏰"_s);
         QCOMPARE(m.get(0).value(u"icon"_s).toString(), u"bell"_s);
         m.setLocale(u"en"_s);
         QCOMPARE(m.get(0).value(u"title"_s).toString(), u"Reminder…"_s);
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"⏰ date time"_s);
         m.setLocale(u"pl"_s);
+        m.setFilter(u"zadanie"_s);
+        QCOMPARE(m.get(0).value(u"command"_s).toString(), u"task"_s);
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"- [ ] zadanie"_s);
+        m.setFilter(u"obliczenia"_s);
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"blok ```calc"_s);
+        // Every command has a syntax line in both languages, never the other language's name.
+        for (const SlashCommand &c : slashCommands()) {
+            QVERIFY2(!c.syntaxPl.isEmpty() && !c.syntaxEn.isEmpty(), qPrintable(c.id));
+            QVERIFY2(c.syntaxPl != c.nameEn && c.syntaxEn != c.namePl, qPrintable(c.id));
+        }
         m.setFilter(u"naglowek"_s);
         QCOMPARE(values(m, u"command"_s).mid(0, 3), QStringList({u"h1"_s, u"h2"_s, u"h3"_s}));
         m.setFilter(u"zażółć"_s);

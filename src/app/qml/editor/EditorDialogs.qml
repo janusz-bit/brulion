@@ -48,8 +48,11 @@ Item {
     }
 
     function refocus() {
-        if (controller && controller.editingRow >= 0)
-            Qt.callLater(() => editor.startEditing(controller.editingRow, controller.cursorPosition))
+        if (controller && controller.editingRow >= 0 && editor)
+            editor.later(() => {
+                if (root && root.controller && root.controller.editingRow >= 0)
+                    root.editor.startEditing(root.controller.editingRow, root.controller.cursorPosition)
+            })
     }
 
     function createReminder(r, alarm) {

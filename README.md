@@ -18,6 +18,50 @@
 </p>
 
 <!-- SCREENSHOTS -->
+<p align="center">
+  <img src="docs/images/dziennik.png" width="880" alt="Dziennik w Brulionie: dzisiejsza strona z zadaniem, terminem, przypomnieniem, linkami i tagami, poniżej wczorajsza z blokiem obliczeń wydatków">
+  <br><sub><b>Dziennik</b> — strona na każdy dzień: zadania z terminami, przypomnienia, linki, tagi i obliczenia</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/strona-odnosniki.png" alt="Strona „Remont mieszkania” z tabelą kosztorysu liczoną formułami i blokiem obliczeń; w panelu bocznym odnośniki z dziennika i innych stron">
+      <br><sub><b>Strona i odnośniki</b> — tabela z formułami, blok obliczeń, a z boku wszystko, co linkuje do strony</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/kalendarz.png" alt="Kalendarz miesięczny z zadaniami, terminami, przypomnieniami i alarmem oraz planem wybranego dnia">
+      <br><sub><b>Kalendarz</b> — miesiąc, tydzień albo agenda: terminy, przypomnienia, alarmy i zadania cykliczne</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/przypomnienie.png" alt="Okno nowego przypomnienia: szybkie terminy, kalendarz, godzina, przełącznik alarmu i powtarzanie">
+      <br><sub><b>Przypomnienia i alarmy</b> — szybkie terminy, data po polsku („jutro 9:00”), powtarzanie</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/zadania-ciemny.png" alt="Lista zadań w ciemnym motywie, pogrupowana na jutro, ten tydzień i później, z terminami, priorytetami i przypomnieniami">
+      <br><sub><b>Zadania</b> (motyw ciemny) — wszystkie zadania z notatek, filtry i szybkie dodawanie</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/images/graf-ciemny.png" alt="Graf powiązań między stronami i dniami dziennika w ciemnym motywie">
+      <br><sub><b>Graf</b> (motyw ciemny) — linki między stronami i dniami dziennika; na życzenie także tagi</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/images/synchronizacja.png" alt="Centrum synchronizacji: notatka zmieniona na dwóch urządzeniach i podgląd automatycznego scalenia obu wersji">
+      <br><sub><b>Centrum synchronizacji</b> — konflikt z dwóch urządzeń scalony wiersz po wierszu</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji i przyciskiem szybkiej notatki">
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi nad klawiaturą">
+  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją oraz edycja z paskiem narzędzi nad klawiaturą (motyw ciemny)</sub>
+</p>
 
 ## Dlaczego Brulion?
 
@@ -32,31 +76,37 @@
   zwijanie, przybliżanie bloku, przenoszenie bloków z dziećmi, odwołania do bloków
   `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne.
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
-  powtarzanie `🔁 co tydzień`, alarmy `⏰!` (głośne, aż do wyłączenia — na Androidzie działają
-  także przy zamkniętej aplikacji i po restarcie telefonu), widok kalendarza i listy zadań.
-  Daty wpisujesz po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
+  powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
+  ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
+  widok kalendarza i listy zadań. Przypomnienia, które minęły przy wyłączonym urządzeniu,
+  czekają w dzienniku. Daty wpisujesz po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
-  `#praca` na najbliższy tydzień.
+  `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
+  polsku: `stan:otwarte termin:jutro`).
 * **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Joplin,
   Simplenote, Roam, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar. Eksport do ZIP
-  z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML, JSON, iCalendar, OPML
-  i CSV zadań.
+  z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego pliku HTML,
+  JSON, iCalendar, OPML i CSV zadań.
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
   wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
-* **Historia wersji i kosz.** Każda zmiana jest zapisywana lokalnie; dowolną wcześniejszą
-  wersję możesz porównać i przywrócić.
+* **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
+  do historii na urządzeniu (przy pisaniu najwyżej co 5 minut, zawsze przed zmianami
+  z synchronizacji i importu). Każdą wersję możesz porównać i przywrócić, a usunięte strony
+  odzyskać z kosza.
+* **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
+  żywych przykładach — do klikania, edytowania i psucia.
 
 ## Instalacja
 
 | Platforma | Jak |
 |---|---|
 | **NixOS** | flake + moduł `programs.brulion` (z autostartem w zasobniku) — [docs/NIXOS.md](docs/NIXOS.md) |
-| **Inne Linuksy** | AppImage z [Wydań](https://github.com/janusz-bit/brulion/releases) |
-| **Android** (9+) | plik APK z [Wydań](https://github.com/janusz-bit/brulion/releases) — [docs/ANDROID.md](docs/ANDROID.md) |
-| **Przeglądarka** | <https://janusz-bit.github.io/brulion/> (działa offline po pierwszym otwarciu) — [docs/WEB.md](docs/WEB.md) |
+| **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases) |
+| **Android** (9+) | plik APK (arm64) z [Wydań](https://github.com/janusz-bit/brulion/releases) — [docs/ANDROID.md](docs/ANDROID.md) |
+| **Przeglądarka** | <https://janusz-bit.github.io/brulion/> (działa offline po pierwszym otwarciu) — [docs/WEB.md](docs/WEB.md); na własnym serwerze: `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
 
 ### NixOS w skrócie
 
@@ -79,11 +129,14 @@ aplikacji „Dostęp do wszystkich plików”). Brulion zapisuje pliki atomowo, 
 konfliktów Syncthinga (`*.sync-conflict-*`) i pozwala je scalić. Opcjonalnie pokazuje stan
 synchronizacji z API Syncthinga.
 
-**Nextcloud (WebDAV):** w *Synchronizacja* podaj adres serwera, użytkownika i **hasło
-aplikacji** (Nextcloud → Ustawienia → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz
-folder (domyślnie `Notatki`). Brulion synchronizuje w tle co kilka minut i po zmianach;
-równoległe dopiski w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym
-usuwaniem wstrzymuje synchronizację, jeśli miałaby skasować dużą część notatek.
+**Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →
+Synchronizacja*) podaj adres serwera, użytkownika i **hasło aplikacji** (Nextcloud →
+Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (domyślnie
+`Notatki`); „Testuj połączenie” wyjaśnia ewentualne błędy. Brulion synchronizuje w tle
+(domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
+w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
+kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
+10 plików) — dopóki nie potwierdzisz listy.
 
 ## Skróty klawiszowe
 
@@ -92,14 +145,23 @@ usuwaniem wstrzymuje synchronizację, jeśli miałaby skasować dużą część 
 | `Ctrl+K` | paleta poleceń |
 | `Ctrl+O` | szybkie przejście do strony |
 | `Ctrl+J` | dzisiejszy dziennik |
+| `Ctrl+N` / `Ctrl+Shift+N` | nowa strona / szybka notatka do dziennika |
 | `Ctrl+Shift+F` | wyszukiwanie |
+| `Alt+←` / `Alt+→` | wstecz / dalej |
 | `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
-| `Alt+↑` / `Alt+↓` | przeniesienie bloku |
-| `Ctrl+Enter` | zmiana stanu zadania |
+| `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
+| `Ctrl+Enter` | zmiana stanu zadania (do zrobienia → w toku → zrobione) |
 | `Ctrl+.` | zwiń / rozwiń |
+| `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
-| `/` | menu poleceń (zadanie, przypomnienie, alarm, tabela, obliczenia, zapytanie…) |
+| `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
+| `/` | menu poleceń (zadanie, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
+
+Na telefonie wcięcia, przenoszenie bloków, zadania, linki, tagi, polecenia, terminy,
+przypomnienia i cofanie są w pasku narzędzi nad klawiaturą, a widoki bez własnego przycisku
+(centrum synchronizacji, import i eksport, kosz, ustawienia) — w menu *Więcej* (⋮).
+Wszystkie skróty: [docs/UI.md](docs/UI.md#keyboard-shortcuts-desktop).
 
 ## Dla programistów
 
@@ -109,9 +171,13 @@ biblioteki bez GUI w `src/core`, wspólne dla Linuksa, Androida i WebAssembly.
 
 ```sh
 nix develop                      # Qt, CMake, Ninja, ccache, clang-tools
-scripts/dev-build.sh -t .        # zbuduj i uruchom wszystkie testy
+scripts/dev-build.sh -t .        # zbuduj i uruchom wszystkie testy (JOBS=8 — więcej wątków)
 ./build/src/app/brulion          # uruchom aplikację
+./build/src/app/brulion --demo   # … z przykładowym brulionem
 ```
+
+Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey`, skrypty
+`tests/app/*/screenshots.sh`) — patrz [docs/UI.md](docs/UI.md#dev-tools-screenshots-and-ui-tests).
 
 Dokumentacja: [architektura](docs/ARCHITECTURE.md) · [składnia](docs/SYNTAX.md) ·
 [interfejs](docs/UI.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
@@ -142,5 +208,8 @@ Google Keep, Joplin, Simplenote, Roam, Bear, HTML and iCalendar.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
 
-Install: see the table above. Build: `nix develop`, then `scripts/dev-build.sh -t .`.
-License: AGPL-3.0-or-later.
+The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`).
+Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK, or
+<https://janusz-bit.github.io/brulion/>). Build: `nix develop`, then
+`scripts/dev-build.sh -t .`. Developer docs (in English): [architecture](docs/ARCHITECTURE.md),
+[Markdown dialect](docs/SYNTAX.md), [UI](docs/UI.md). License: AGPL-3.0-or-later.

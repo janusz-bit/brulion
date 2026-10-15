@@ -11,6 +11,7 @@
 #include <QLoggingCategory>
 #include <QPointer>
 
+#include <algorithm>
 #include <atomic>
 #include <iterator>
 
@@ -239,6 +240,137 @@ Activation AndroidBridge::takeActivation()
         return {};
     const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
     return {object.value("path"_L1).toString(), object.value("line"_L1).toInt()};
+}
+
+namespace {
+
+QJniObject stringField(const char *className, const char *field)
+{
+    return QJniObject::getStaticObjectField(className, field, "Ljava/lang/String;");
+}
+
+} // namespace
+
+DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data)
+{
+    DownloadResult result;
+    if (QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT") < 29) {
+        result.unsupported = true;
+        return result;
+    }
+    const QJniObject context = appContext();
+    const QJniObject resolver =
+            context.isValid() ? context.callObjectMethod("getContentResolver", "()Landroid/content/ContentResolver;")
+                              : QJniObject();
+    if (!resolver.isValid()) {
+        result.error = u"no content resolver"_s;
+        return result;
+    }
+    constexpr char kColumns[] = "android/provider/MediaStore$MediaColumns";
+    const QJniObject displayName = stringField(kColumns, "DISPLAY_NAME");
+    const QJniObject pendingKey = stringField(kColumns, "IS_PENDING");
+    const auto putString = [](QJniObject &values, const QJniObject &key, const QString &value) {
+        values.callMethod<void>("put", "(Ljava/lang/String;Ljava/lang/String;)V", key.object<jstring>(),
+                                QJniObject::fromString(value).object<jstring>());
+    };
+    const auto putInt = [](QJniObject &values, const QJniObject &key, int value) {
+        const QJniObject boxed = QJniObject::callStaticObjectMethod("java/lang/Integer", "valueOf",
+                                                                    "(I)Ljava/lang/Integer;", jint(value));
+        values.callMethod<void>("put", "(Ljava/lang/String;Ljava/lang/Integer;)V", key.object<jstring>(),
+                                boxed.object());
+    };
+    // A pending entry first: other apps see the file only once it is complete.
+    QJniObject values("android/content/ContentValues");
+    putString(values, displayName, name);
+    putString(values, stringField(kColumns, "MIME_TYPE"), mimeType);
+    putString(values, stringField(kColumns, "RELATIVE_PATH"),
+              QJniObject::getStaticObjectField("android/os/Environment", "DIRECTORY_DOWNLOADS", "Ljava/lang/String;")
+                      .toString());
+    putInt(values, pendingKey, 1);
+    const QJniObject collection = QJniObject::getStaticObjectField("android/provider/MediaStore$Downloads",
+                                                                   "EXTERNAL_CONTENT_URI", "Landroid/net/Uri;");
+    const QJniObject uri =
+            resolver.callObjectMethod("insert", "(Landroid/net/Uri;Landroid/content/ContentValues;)Landroid/net/Uri;",
+                                      collection.object(), values.object());
+    if (failed("MediaStore insert") || !uri.isValid()) {
+        result.error = u"the Download folder refused the file"_s;
+        return result;
+    }
+    const auto discard = [&] {
+        resolver.callMethod<jint>("delete", "(Landroid/net/Uri;Ljava/lang/String;[Ljava/lang/String;)I", uri.object(),
+                                  jstring(nullptr), jobjectArray(nullptr));
+        failed("MediaStore delete");
+    };
+    const QJniObject out =
+            resolver.callObjectMethod("openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;", uri.object());
+    if (failed("openOutputStream") || !out.isValid()) {
+        discard();
+        result.error = u"cannot write to the Download folder"_s;
+        return result;
+    }
+    // In chunks (an export may be large), through plain JNI: QJniObject's void calls swallow
+    // exceptions, and a failed write (storage full) must not leave a broken file behind.
+    {
+        QJniEnvironment env;
+        const auto threw = [&env] {
+            if (!env->ExceptionCheck())
+                return false;
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+            return true;
+        };
+        const jclass stream = env->GetObjectClass(out.object());
+        const jmethodID write = env->GetMethodID(stream, "write", "([BII)V");
+        const jmethodID close = env->GetMethodID(stream, "close", "()V");
+        constexpr qsizetype Chunk = 1 << 20;
+        const jbyteArray buffer =
+                env->NewByteArray(jsize(std::min<qsizetype>(Chunk, std::max<qsizetype>(1, data.size()))));
+        bool ok = !threw() && write && close && buffer;
+        for (qsizetype offset = 0; ok && offset < data.size(); offset += Chunk) {
+            const jsize n = jsize(std::min<qsizetype>(Chunk, data.size() - offset));
+            env->SetByteArrayRegion(buffer, 0, n, reinterpret_cast<const jbyte *>(data.constData() + offset));
+            env->CallVoidMethod(out.object(), write, buffer, jint(0), n);
+            ok = !threw();
+        }
+        if (buffer)
+            env->DeleteLocalRef(buffer);
+        if (close)
+            env->CallVoidMethod(out.object(), close);
+        ok = !threw() && ok;
+        env->DeleteLocalRef(stream);
+        if (!ok) {
+            discard();
+            result.error = u"writing to the Download folder failed"_s;
+            return result;
+        }
+    }
+    QJniObject done("android/content/ContentValues");
+    putInt(done, pendingKey, 0);
+    resolver.callMethod<jint>(
+            "update", "(Landroid/net/Uri;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I",
+            uri.object(), done.object(), jstring(nullptr), jobjectArray(nullptr));
+    failed("MediaStore update");
+    result.ok = true;
+    result.name = name;
+    // The name the system gave it (" (1)" when taken).
+    QJniEnvironment env;
+    const jobjectArray projection = env->NewObjectArray(1, env.findClass("java/lang/String"), displayName.object());
+    const QJniObject cursor = resolver.callObjectMethod("query",
+                                                        "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/"
+                                                        "lang/String;Ljava/lang/String;)Landroid/database/Cursor;",
+                                                        uri.object(), projection, jstring(nullptr),
+                                                        jobjectArray(nullptr), jstring(nullptr));
+    env->DeleteLocalRef(projection);
+    if (!failed("MediaStore query") && cursor.isValid()) {
+        if (cursor.callMethod<jboolean>("moveToFirst") && !failed("Cursor.moveToFirst")) {
+            const QString shown = cursor.callObjectMethod("getString", "(I)Ljava/lang/String;", jint(0)).toString();
+            if (!failed("Cursor.getString") && !shown.isEmpty())
+                result.name = shown;
+        }
+        cursor.callMethod<void>("close");
+        failed("Cursor.close");
+    }
+    return result;
 }
 
 void AndroidBridge::deliverPendingActivation()

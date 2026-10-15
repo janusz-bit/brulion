@@ -103,6 +103,9 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   mkdirSync(args.profile, { recursive: true });
   rmSync(join(args.profile, 'DevToolsActivePort'), { force: true });
+  // A restarted Chromium (also headless) restores the last session's tabs: a restored Brulion
+  // tab would hold the storage lock and the page driven here would wait ("open in another tab").
+  rmSync(join(args.profile, 'Default', 'Sessions'), { recursive: true, force: true });
 
   const noSandbox = process.env.BRULION_CHROME_NO_SANDBOX === '1' || process.env.CI === 'true';
   const chromeArgs = [

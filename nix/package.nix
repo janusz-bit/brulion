@@ -8,6 +8,7 @@
   qt6,
   appstream,
   desktop-file-utils,
+  tzdata,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -42,15 +43,28 @@ stdenv.mkDerivation (finalAttrs: {
     qt6.qtbase
     qt6.qtdeclarative
     qt6.qtsvg
+    # Qt's own Polish texts (dialog buttons, file dialogs): bundled into the app as resources
+    # (also found by the dev shell, which takes its inputs from here).
+    qt6.qttranslations
   ]
   ++ lib.optionals stdenv.hostPlatform.isLinux [ qt6.qtwayland ];
 
-  cmakeFlags = [ (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck) ];
+  cmakeFlags = [
+    (lib.cmakeBool "BUILD_TESTING" finalAttrs.finalPackage.doCheck)
+    (lib.cmakeFeature "BRULION_QT_TRANSLATIONS_DIR" "${qt6.qttranslations}/translations")
+  ];
+
+  # The QML smoke tests are `#!/usr/bin/env bash` scripts; the build sandbox has no /usr/bin/env.
+  postPatch = ''
+    patchShebangs tests
+  '';
 
   doCheck = true;
   preCheck = ''
     export QT_QPA_PLATFORM=offscreen
     export HOME=$TMPDIR
+    # The sandbox has no time zone database; the import/export tests use Europe/Warsaw.
+    export TZDIR=${tzdata}/share/zoneinfo
   '';
 
   # The installed desktop integration files are valid and consistent with each other

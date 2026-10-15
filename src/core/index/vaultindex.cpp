@@ -415,10 +415,13 @@ void VaultIndex::Private::searchTick()
         searchTimer->start(int(SearchIdleMs - quiet));
         return;
     }
-    int n = 0;
-    for (auto it = searchDirty.begin(); it != searchDirty.end() && n < SearchChunk; ++n) {
+    QElapsedTimer slice;
+    slice.start();
+    for (auto it = searchDirty.begin(); it != searchDirty.end();) {
         indexSearchDoc(*it);
         it = searchDirty.erase(it);
+        if (slice.elapsed() >= SearchSliceMs)
+            break;
     }
     if (!searchDirty.isEmpty())
         searchTimer->start(0);
@@ -574,6 +577,11 @@ int VaultIndex::version() const
 void VaultIndex::flushSearch()
 {
     d->flushSearch();
+}
+
+qsizetype VaultIndex::pendingSearchDocuments() const
+{
+    return d->searchDirty.size();
 }
 
 } // namespace brulion

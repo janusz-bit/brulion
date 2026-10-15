@@ -2,6 +2,9 @@
 // suggestBlocks).
 #include "fixture.h"
 
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -169,6 +172,33 @@ private Q_SLOTS:
         QCOMPARE(ids(s.search(u"kawa mleko"_s, 1)).size(), 1);
     }
 
+    void searchIndexLiteralMatchesBeforeTypos()
+    {
+        // "zolw" is a prefix of "żółwia" in a long note, one letter away from "Żółć" in the title of
+        // a short one — which BM25 alone scores higher. What the user typed comes first.
+        SearchIndex s;
+        QString longDay;
+        for (int i = 0; i < 40; ++i)
+            longDay += u"Spotkanie z ekipą remontową, zakupy, farba do ścian, lista rzeczy nr "_s + QString::number(i)
+                       + u'\n';
+        longDay += u"Nakarmić żółwia Franka\n"_s;
+        s.set(u"dzien"_s, u"2026-10-14"_s, {}, longDay);
+        s.set(u"zolc"_s, u"Żółć"_s, {}, u"Żółć, ćma, źdźbło"_s);
+        s.set(u"zolwie"_s, u"Notatki"_s, {}, u"żółwie lądowe"_s);
+        const QList<SearchIndex::Hit> hits = s.search(u"zolw"_s, 10);
+        QCOMPARE(ids(hits), QStringList({u"zolwie"_s, u"dzien"_s, u"zolc"_s}));
+        QCOMPARE(hits.last().terms, QStringList{u"zolc"_s});
+        // Exact still beats prefix (by score), both beat the typo.
+        s.set(u"exact"_s, u"x"_s, {}, u"zolw"_s);
+        QCOMPARE(ids(s.search(u"zolw"_s, 10)).first(), u"exact"_s);
+        QCOMPARE(ids(s.search(u"zolw"_s, 10)).last(), u"zolc"_s);
+        // Several terms: a document with every term as typed before one needing a typo for one.
+        SearchIndex m;
+        m.set(u"typo"_s, u"Kawa"_s, {}, u"kawa mleka"_s);
+        m.set(u"literal"_s, u"x"_s, {}, u"lista: kawa, herbata, cukier, mleko, chleb, masło"_s);
+        QCOMPARE(ids(m.search(u"kawa mleko"_s, 10)), QStringList({u"literal"_s, u"typo"_s}));
+    }
+
     void searchIndexIsDeterministic()
     {
         SearchIndex s;
@@ -178,6 +208,35 @@ private Q_SLOTS:
     }
 
     // ---- VaultIndex::search ---------------------------------------------------------------------
+
+    void searchIndexWarmsUpInTheBackground()
+    {
+        // After a vault is indexed the full-text documents are built on the event loop — a few
+        // milliseconds per turn — without anyone searching, so the first search is fast.
+        VaultIndex index;
+        QString body;
+        for (int i = 0; i < 120; ++i)
+            body += u"- Zażółć gęślą jaźń, notatka o ogrodzie i remoncie numer %1\n"_s.arg(i);
+        const int notes = 400;
+        for (int i = 0; i < notes; ++i)
+            index.update(u"Notatki/Strona %1.md"_s.arg(i), u"# Żółwie kod%1\n"_s.arg(i) + body);
+        QCOMPARE(index.pendingSearchDocuments(), notes);
+        QSet<qsizetype> seen;
+        QElapsedTimer t;
+        t.start();
+        while (index.pendingSearchDocuments() > 0 && t.elapsed() < 20000) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+            seen.insert(index.pendingSearchDocuments());
+        }
+        QCOMPARE(index.pendingSearchDocuments(), 0);
+        QVERIFY2(seen.size() > 2, qPrintable(u"built in %1 step(s)"_s.arg(seen.size()))); // in steps
+        QCOMPARE(index.search(u"zolwie kod17"_s).first().path, u"Notatki/Strona 17.md"_s);
+        // A change: pending again until the next quiet moment (or a search, which catches up).
+        index.update(u"Notatki/Strona 3.md"_s, u"# Inny tytuł\n"_s);
+        QCOMPARE(index.pendingSearchDocuments(), 1);
+        QCOMPARE(index.search(u"inny tytul"_s).first().path, u"Notatki/Strona 3.md"_s);
+        QCOMPARE(index.pendingSearchDocuments(), 0);
+    }
 
     void searchFindsDiacriticInsensitive()
     {

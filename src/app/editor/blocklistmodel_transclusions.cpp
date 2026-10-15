@@ -274,9 +274,14 @@ private:
         else if (t.kind == Transclusion::Kind::Block)
             fragment = u"#^"_s + encoded(t.blockId);
         r.href = u"page:"_s + encoded(linkTarget) + fragment;
-        const QString pageName = !t.display.isEmpty() ? t.display
-                                 : !path.isEmpty()    ? paths::pageTitle(path)
-                                                      : t.target;
+        // A daily note by its date ("wt 13 paź"), like links to it.
+        const auto dayTitle = markdown::journalLinkTitle(
+                m_model.vaultConfig(), m_model.english() ? dates::UiLocale::English : dates::UiLocale::Polish,
+                m_model.today());
+        const QString shownName = path.isEmpty() ? t.target : paths::pageTitle(path);
+        const QString pageName = !t.display.isEmpty()
+                                         ? t.display
+                                         : dayTitle(path.isEmpty() ? t.target : withoutMd(path)).value_or(shownName);
         r.title = pageName;
         if (t.kind == Transclusion::Kind::Heading)
             r.title = pageName + u" › "_s + t.heading;

@@ -8,6 +8,8 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QLocale>
 #include <QRegularExpression>
 
@@ -161,9 +163,21 @@ ImportController::ImportController(QObject *parent)
             [this](const QList<io::InputFile> &files, const QStringList &warnings, const QString &name, qint64) {
                 setInput(files, name, warnings);
             });
+    // Switching the UI language installs another translator: the translated lists follow.
+    if (QCoreApplication *app = QCoreApplication::instance())
+        app->installEventFilter(this);
 }
 
 ImportController::~ImportController() = default;
+
+bool ImportController::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange && watched == QCoreApplication::instance()) {
+        Q_EMIT importersChanged();
+        Q_EMIT importerChanged(); // effectiveName, nameFilters ("All files (*)")
+    }
+    return QObject::eventFilter(watched, event);
+}
 
 void ImportController::setWorkspace(shell::Workspace *workspace)
 {
@@ -485,7 +499,8 @@ void ImportController::applyPlan(int generation, const io::ImportResult &result,
         const bool appends = f.append && vault->exists(f.path);
         if (!f.append) {
             const QRegularExpressionMatch m = numbered.match(f.path);
-            if (m.hasMatch() && vault->exists(m.captured(1) + m.captured(2)))
+            // Taken also in another letter case ("dom 2.md" next to "Dom.md").
+            if (m.hasMatch() && vault->exists(vault->existingCase(m.captured(1) + m.captured(2))))
                 ++renamed;
         }
         if (kind == u"journal") {
@@ -608,7 +623,8 @@ void ImportController::writeStep()
             fail(f.path);
             continue;
         }
-        if (used != f.path) {
+        // A folder existing in another letter case is used as spelled (Vault::create): no rename.
+        if (used.compare(f.path, Qt::CaseInsensitive) != 0) {
             count(u"renamed"_s);
             m_writeWarnings.append(tr("“%1” already existed; it was saved as “%2”.").arg(f.path, used));
         }

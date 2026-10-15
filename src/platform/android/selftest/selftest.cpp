@@ -3,7 +3,8 @@
 // Self-test of the Android bridge (src/platform/android) on a device or emulator, driven by
 // scripts/android-emulator-test.sh — not part of the app. Writes "SELFTEST ..." lines to
 // logcat: the permission state, two rounds of scheduleReminders() (a reminder in 45 s, an alarm
-// in 75 s ringing 1 minute, one in the past that must be skipped) and every activated() tap.
+// in 75 s ringing 1 minute, one in the past that must be skipped), two files saved to Downloads
+// (saveToDownloads: MediaStore) and every activated() tap.
 
 #include "android/androidbridge.h"
 
@@ -63,6 +64,14 @@ int main(int argc, char *argv[])
         const auto result = bridge->scheduleReminders(items);
         qCWarning(lcSelfTest, "SELFTEST schedule round=%d ok=%d scheduled=%d exact=%d error=%s", round,
                   result.ok, result.scheduled, result.exact, qUtf8Printable(result.error));
+    }
+    // "Save to Downloads" of the export, without any storage permission (MediaStore, Android
+    // 10+): twice, the second one gets another name from the system.
+    for (int round = 1; round <= 2; ++round) {
+        const auto saved = bridge->saveToDownloads(u"Brulion — zażółć.txt"_s, u"text/plain"_s,
+                                                   "Zażółć gęślą jaźń\n"_ba.repeated(1000));
+        qCWarning(lcSelfTest, "SELFTEST download round=%d ok=%d unsupported=%d name=%s error=%s", round, saved.ok,
+                  saved.unsupported, qUtf8Printable(saved.name), qUtf8Printable(saved.error));
     }
     return QGuiApplication::exec();
 }

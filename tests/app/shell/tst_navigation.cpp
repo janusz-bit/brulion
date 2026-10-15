@@ -332,10 +332,18 @@ private Q_SLOTS:
         QCOMPARE(app->currentView(), u"journal"_s);
         QCOMPARE(app->currentRoute().value(u"date"_s).toString(), u"2026-10-14"_s);
         QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"journals/2026-10-14.md"_s);
-        QVERIFY(app->workspace()->exists(u"journals/2026-10-14.md"_s));
+        // Opening a day never creates its note (the editor does, with the first change).
+        QVERIFY(!app->workspace()->exists(u"journals/2026-10-14.md"_s));
         QCOMPARE(app->today(-1), u"2026-10-13"_s);
         app->openJournal(u"bad"_s);
         QCOMPARE(app->currentRoute().value(u"date"_s).toString(), u"2026-10-14"_s);
+        app->openJournal(u"2026-10-10"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"journals/2026-10-10.md"_s);
+        QVERIFY(!app->workspace()->exists(u"journals/2026-10-10.md"_s));
+        // A day with a note under another name opens that note.
+        QVERIFY(app->workspace()->writeFile(u"journals/2026_10_09.md"_s, u"- z Logseqa\n"_s));
+        app->openJournal(u"2026-10-09"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"journals/2026_10_09.md"_s);
 
         const QString p = app->workspace()->createPage(u"Notatka"_s);
         app->openPage(p);

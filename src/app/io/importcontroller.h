@@ -82,7 +82,8 @@ class ImportController : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(brulion::shell::Workspace *workspace READ workspace WRITE setWorkspace NOTIFY workspaceChanged FINAL)
-    Q_PROPERTY(QVariantList importers READ importers CONSTANT FINAL)
+    /// Translated: changes with the UI language (importersChanged).
+    Q_PROPERTY(QVariantList importers READ importers NOTIFY importersChanged FINAL)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged FINAL)
     /// 0…1 while reading / importing, -1 while analysing (indeterminate).
@@ -166,6 +167,8 @@ public:
 
 Q_SIGNALS:
     void workspaceChanged();
+    /// The UI language changed: `importers` (names, how-to steps) and `nameFilters` read again.
+    void importersChanged();
     void stateChanged();
     void progressChanged();
     void importerChanged();
@@ -175,6 +178,10 @@ Q_SIGNALS:
     void reportChanged();
     /// An import finished (also partly); `message` is a translated one-line summary.
     void imported(const QString &message);
+
+protected:
+    /// QEvent::LanguageChange of the application (a translator was installed or removed).
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setState(const QString &state, const QString &error = {});

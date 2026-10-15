@@ -121,4 +121,19 @@ std::optional<QDate> journalDateFromPath(const VaultPath &path, const VaultConfi
     return std::nullopt;
 }
 
+std::optional<QDate> journalDateFromLinkTarget(const QString &target, const VaultConfig &config)
+{
+    const QString t = paths::stripMarkdownExtension(paths::normalize(target.trimmed()));
+    if (t.isEmpty() || !containsDigit(t))
+        return std::nullopt;
+    const QString folder = paths::normalize(config.journalsFolder);
+    // "journals/2026-10-13" names the note with its folder; "2026-10-13" (how links are written)
+    // is a name inside the journals folder.
+    if (!folder.isEmpty() && t.startsWith(folder + u'/', Qt::CaseInsensitive)) {
+        if (const auto d = journalDateFromPath(t + u".md"_s, config))
+            return d;
+    }
+    return journalDateFromPath(paths::join(folder, t + u".md"_s), config);
+}
+
 } // namespace brulion::markdown

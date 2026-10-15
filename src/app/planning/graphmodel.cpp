@@ -4,6 +4,7 @@
 #include "index/vaultindex.h"
 #include "planningutil.h"
 #include "text/text.h"
+#include "util/paths.h"
 
 #include <QSet>
 
@@ -128,6 +129,14 @@ void GraphModel::setShowOrphans(bool on)
     if (m_showOrphans == on)
         return;
     m_showOrphans = on;
+    settingsEdited();
+}
+
+void GraphModel::setShowTemplates(bool on)
+{
+    if (m_showTemplates == on)
+        return;
+    m_showTemplates = on;
     settingsEdited();
 }
 
@@ -455,11 +464,22 @@ void GraphModel::rebuild()
         m_pageCount = int(m_index->paths().size());
     }
 
-    // 1. Candidate nodes (kind, journals filtered).
+    // 1. Candidate nodes (kind, journals and templates filtered).
     QList<Node> all;
     QHash<QString, int> allIndex;
     all.reserve(g.nodes.size());
+    // The templates folder ("templates/…", case-insensitive like the journals folder).
+    const QString templatesPrefix = [this] {
+        const QString folder = m_index ? paths::normalize(m_index->config().templatesFolder) : QString();
+        return folder.isEmpty() ? QString() : folder + u'/';
+    }();
+    QSet<QString> templateIds; ///< template pages left out
     for (const GraphNode &gn : std::as_const(g.nodes)) {
+        if (!m_showTemplates && !templatesPrefix.isEmpty() && !gn.isTag && !gn.isMissing && gn.id != m_focus
+            && gn.id.startsWith(templatesPrefix, Qt::CaseInsensitive)) {
+            templateIds.insert(gn.id);
+            continue;
+        }
         Node n;
         n.id = gn.id;
         n.title = gn.title;
@@ -481,11 +501,16 @@ void GraphModel::rebuild()
     }
     // 2. Undirected edges among them.
     QList<QList<int>> adj(all.size());
+    QList<bool> linkedFromTemplate(all.size(), false);
     {
         QSet<quint64> seen;
         for (const GraphEdge &e : std::as_const(g.edges)) {
             const int a = allIndex.value(e.source, -1);
             const int b = allIndex.value(e.target, -1);
+            if (a >= 0 && b < 0 && templateIds.contains(e.target))
+                linkedFromTemplate[a] = true;
+            if (b >= 0 && a < 0 && templateIds.contains(e.source))
+                linkedFromTemplate[b] = true;
             if (a < 0 || b < 0 || a == b)
                 continue;
             const quint64 key = (quint64(std::min(a, b)) << 32) | quint64(std::max(a, b));
@@ -497,6 +522,13 @@ void GraphModel::rebuild()
         }
     }
     QList<bool> keep(all.size(), true);
+    // Tags and missing pages that only hidden templates link to ("{{title}}", the template's
+    // #tags) go with them.
+    for (int i = 0; i < all.size(); ++i) {
+        const bool tagOrMissing = all.at(i).kind == Kind::Tag || all.at(i).kind == Kind::Missing;
+        if (linkedFromTemplate[i] && adj.at(i).isEmpty() && tagOrMissing)
+            keep[i] = false;
+    }
     // 3. Local graph.
     const int focus = m_focus.isEmpty() ? -1 : allIndex.value(m_focus, -1);
     m_focusMissing = !m_focus.isEmpty() && focus < 0;

@@ -301,7 +301,7 @@
 <context>
     <name>GraphView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="155"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="159"/>
         <source>Link graph: %n pages</source>
         <translation>
             <numerusform>Link graph: %n page</numerusform>
@@ -309,7 +309,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="302"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
         <source>%n nodes</source>
         <translation>
             <numerusform>%n node</numerusform>
@@ -317,7 +317,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="302"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="307"/>
         <source>%n links</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -325,7 +325,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/GraphView.qml" line="304"/>
+        <location filename="../src/app/qml/views/GraphView.qml" line="309"/>
         <source>the %n best connected shown</source>
         <translation>
             <numerusform>the best connected one shown</numerusform>
@@ -474,7 +474,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="183"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="184"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -825,7 +825,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="659"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="675"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -833,7 +833,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="660"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="676"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>

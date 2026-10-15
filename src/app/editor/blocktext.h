@@ -187,6 +187,8 @@ struct SlashCommand {
     QString nameEn;      ///< English name ("Reminder…")
     QString icon;        ///< Lucide icon name
     QString hint;        ///< syntax preview ("⏰", "```calc")
+    QString syntaxPl;    ///< the menu's subtitle: what the command writes, in words ("⏰ data godzina")
+    QString syntaxEn;    ///< the same in English ("⏰ date time")
     QStringList keywords; ///< extra search words (any language, folded when matching)
 };
 

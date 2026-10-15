@@ -1,6 +1,7 @@
 #include "pagecontroller.h"
 
 #include "blocktext.h"
+#include "dayclock.h"
 #include "editorhost.h"
 #include "queryhost.h"
 
@@ -176,6 +177,8 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
     }
     if (QCoreApplication::instance())
         connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &PageController::flush);
+    // Midnight: "jutro 17:30" becomes "dziś 17:30", overdue dates turn red, `today` queries move on.
+    connect(DayClock::instance(), &DayClock::dayChanged, this, &PageController::refreshToday);
 #ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
     m_merge = [](const QString &base, const QString &local, const QString &remote) {
         const sync::MergeResult r = sync::merge3(base, local, remote);
@@ -362,13 +365,20 @@ void PageController::setNow(const QString &now)
     if (m_fixedNow == now)
         return;
     m_fixedNow = now;
+    const QDate before = m_model->today();
     m_model->setToday(today());
     Q_EMIT nowChanged();
+    if (m_model->today() != before)
+        Q_EMIT todayChanged();
 }
 
 void PageController::refreshToday()
 {
-    m_model->setToday(today());
+    const QDate day = today();
+    if (day == m_model->today())
+        return;
+    m_model->setToday(day);
+    Q_EMIT todayChanged();
 }
 
 QDateTime PageController::currentDateTime() const
@@ -583,6 +593,11 @@ void PageController::onFileChanged(const QString &path)
     if (!ok) {
         Q_EMIT fileRemoved();
         return;
+    }
+    if (!m_exists) {
+        // A new page created elsewhere meanwhile (quick capture into today's note, sync).
+        m_exists = true;
+        Q_EMIT existsChanged();
     }
     const QString local = m_sourceMode ? m_sourceText : text();
     // While a conflict is open every later change of the file decides again (it may merge now,
@@ -1257,6 +1272,50 @@ int PageController::insertTemplate(int row, const QString &templatePath)
     vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
     const markdown::TemplateResult filled = markdown::applyTemplate(tpl, vars);
     return insertMarkdown(row, filled.text);
+}
+
+int PageController::startNewPage(const QString &templatePath)
+{
+    if (!m_host || !m_loaded || m_exists || m_sourceMode || m_conflict || m_model->count() > 0 || m_dirty
+        || templatePath.trimmed().isEmpty())
+        return appendEmptyBlock();
+    bool ok = false;
+    const QString tpl = m_host->read(paths::normalize(templatePath), &ok);
+    if (!ok)
+        return appendEmptyBlock();
+    markdown::TemplateVars vars;
+    vars.now = currentDateTime();
+    // A daily note's template is filled for its own day ({{date}} of yesterday's note is yesterday).
+    if (const auto day = markdown::journalDateFromPath(m_path, vaultConfigFromMap(m_host->vaultConfig())))
+        vars.now = QDateTime(*day, vars.now.time());
+    vars.title = title();
+    vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
+    const QString filled = markdown::applyTemplate(tpl, vars).text;
+    if (filled.trimmed().isEmpty())
+        return appendEmptyBlock();
+    // The template is the page's starting text, like the content of a loaded file: no undo step
+    // and nothing to save until the user changes something.
+    m_model->resetContent(filled);
+    int row = -1;
+    for (int r = 0; r < m_model->count() && row < 0; ++r) {
+        if (m_model->document().at(r).kind == BlockKind::ListItem && m_model->shapeAt(r).view == BlockView::Text
+            && m_model->editTextAt(r).trimmed().isEmpty() && m_model->isRowVisible(r))
+            row = r;
+    }
+    if (row < 0) {
+        // No empty block in the template: one to type into at the end (part of the start too).
+        const int last = m_model->count() - 1;
+        const EditResult r = m_model->apply([&](BlockDocument &d) { return d.insertAfter(last, QString(), 0); });
+        row = r.changed() ? focusFromResult(r, last).row : last;
+    }
+    m_savedText = text();
+    m_undo->clear();
+    m_typingOpen = false;
+    m_saveTimer.stop();
+    setDirty(false);
+    updateTitleRow();
+    Q_EMIT foldStateChanged();
+    return row;
 }
 
 // --- Zoom and folding ------------------------------------------------------------------------------

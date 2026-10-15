@@ -135,6 +135,9 @@ T.Popup {
                 required property string hint
                 required property string kind
                 readonly property bool current: index === popup.currentIndex
+                // Slash commands: the syntax line ("⏰ data godzina") under the name of the row in
+                // focus (always on touch screens); the short syntax at the right otherwise.
+                readonly property bool showSubtitle: subtitle !== "" && (!popup.slash || Theme.touchUi || current)
                 width: list.width
                 height: popup.rowHeight
                 radius: Theme.radius
@@ -180,7 +183,7 @@ T.Popup {
                         }
                         Text {
                             width: parent.width
-                            visible: item.subtitle !== "" && (!popup.slash || Theme.touchUi || item.current)
+                            visible: item.showSubtitle
                             text: item.subtitle
                             textFormat: Text.PlainText
                             font.family: Theme.fontUi
@@ -192,7 +195,7 @@ T.Popup {
                 }
                 Text {
                     id: hintText
-                    visible: item.hint !== "" && popup.slash
+                    visible: item.hint !== "" && popup.slash && !item.showSubtitle
                     anchors.right: parent.right
                     anchors.rightMargin: Theme.space3
                     anchors.verticalCenter: parent.verticalCenter

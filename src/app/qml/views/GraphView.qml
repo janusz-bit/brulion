@@ -32,6 +32,8 @@ FocusScope {
     property bool showTags: flag(AppSettings.value("graph/showTags", false))
     property bool showMissing: flag(AppSettings.value("graph/showMissing", false))
     property bool showJournals: flag(AppSettings.value("graph/showJournals", true))
+    /// Pages of the templates folder link to everything they are used for: hidden by default.
+    property bool showTemplates: flag(AppSettings.value("graph/showTemplates", false))
     property bool localMode: false
     property int depth: 1
     property string focusPath
@@ -62,6 +64,7 @@ FocusScope {
         case "tags": showTags = on; AppSettings.setValue("graph/showTags", on); break
         case "missing": showMissing = on; AppSettings.setValue("graph/showMissing", on); break
         case "journals": showJournals = on; AppSettings.setValue("graph/showJournals", on); break
+        case "templates": showTemplates = on; AppSettings.setValue("graph/showTemplates", on); break
         }
         graph.resetView()
     }
@@ -116,6 +119,7 @@ FocusScope {
         showTags: root.showTags
         showMissing: root.showMissing
         showJournals: root.showJournals
+        showTemplates: root.showTemplates
         focusPath: root.localMode ? root.focusPath : ""
         depth: root.depth
         locale: DatesHelper.locale
@@ -209,6 +213,7 @@ FocusScope {
         showTags: root.showTags
         showMissing: root.showMissing
         showJournals: root.showJournals
+        showTemplates: root.showTemplates
         onNodeChosen: (id) => root.choose(id)
         onLocalModeRequested: (on) => root.setLocal(on)
         onDepthRequested: (d) => {

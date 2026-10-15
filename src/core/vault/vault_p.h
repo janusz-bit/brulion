@@ -133,6 +133,8 @@ public:
     void addLower(const VaultPath &path);
     void removeLower(const VaultPath &path);
     bool isTakenCaseInsensitive(const VaultPath &path) const;
+    /// Vault::existingCase(); `folders` only: the last segment is kept as given.
+    VaultPath existingCase(const VaultPath &path, bool foldersOnly) const;
     std::optional<FileStat> knownStat(const VaultPath &path) const;
     std::optional<VaultPath> storedCaseVariant(const VaultPath &path, const FileStat &disk) const;
     QList<VaultChange> forgetTree(const VaultPath &path, ChangeSource source);

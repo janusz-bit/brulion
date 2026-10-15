@@ -218,6 +218,41 @@ private Q_SLOTS:
         QCOMPARE(m.nodeCount(), 8);
     }
 
+    void templatesAreHiddenByDefault()
+    {
+        // Templates link to what they will be used for ([[Zakupy]], #dziennik, pages to write):
+        // left out unless asked for, with the tags and missing pages only they link to.
+        Files files = smallVault();
+        files.append({u"templates/journal.md"_s, u"## Plan dnia\n- [[A]] #dziennik\n- [[Przyszła strona]]\n"_s});
+        files.append({u"Templates/Zakupy.md"_s, u"- [[B]] #zakupy\n"_s}); // another device's capitals
+        files.append({u"Notatki/templates.md"_s, u"- [[E]]\n"_s});        // a page named so, not the folder
+        auto index = makeIndex(files);
+        GraphModel m;
+        m.setActive(false);
+        m.setVaultIndex(index.get());
+        m.setShowTags(true);
+        m.setShowMissing(true);
+        QVERIFY(!m.showTemplates());
+        QVERIFY(m.nodeInfo(u"templates/journal.md"_s).isEmpty());
+        QVERIFY(m.nodeInfo(u"Templates/Zakupy.md"_s).isEmpty());
+        QVERIFY(!m.nodeInfo(u"Notatki/templates.md"_s).isEmpty());
+        QVERIFY(m.nodeInfo(u"#dziennik"_s).isEmpty());
+        QVERIFY(m.nodeInfo(u"#zakupy"_s).isEmpty());
+        QVERIFY(m.nodeInfo(u"Przyszła strona"_s).isEmpty());
+        QCOMPARE(m.nodeInfo(u"A.md"_s).value(u"degree"_s).toInt(), 5); // B, C, journal, Żółw, #projekt
+        m.setShowTemplates(true);
+        QVERIFY(!m.nodeInfo(u"templates/journal.md"_s).isEmpty());
+        QVERIFY(!m.nodeInfo(u"Templates/Zakupy.md"_s).isEmpty());
+        QVERIFY(!m.nodeInfo(u"#dziennik"_s).isEmpty());
+        QCOMPARE(m.nodeInfo(u"A.md"_s).value(u"degree"_s).toInt(), 6);
+        // The local graph of a template shows it, whatever the toggle.
+        m.setShowTemplates(false);
+        m.setFocusPath(u"templates/journal.md"_s);
+        QVERIFY(!m.focusMissing());
+        QVERIFY(!m.nodeInfo(u"templates/journal.md"_s).isEmpty());
+        QVERIFY(!m.nodeInfo(u"A.md"_s).isEmpty());
+    }
+
     void localGraph()
     {
         auto index = makeIndex(smallVault());

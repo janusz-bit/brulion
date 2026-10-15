@@ -173,10 +173,11 @@ public:
     QDateTime currentDateTime() const;
 
     // --- Loading and saving ------------------------------------------------------------------------
-    /// (Re)load the page from the host (discards unsaved changes: save() first).
-    /// The day changed (midnight; DatesHelper.todayChanged): "dziś"/"jutro" chips and overdue
-    /// colours are rendered again for the new date. Nothing happens on the same day.
+    /// The day changed (midnight: DayClock, connected by the constructor): "dziś"/"jutro" chips
+    /// and overdue colours are rendered again for the new date and todayChanged() tells the
+    /// ```query results. Nothing happens on the same day.
     Q_INVOKABLE void refreshToday();
+    /// (Re)load the page from the host (discards unsaved changes: save() first).
     Q_INVOKABLE void load();
     /// Write now when dirty (also flushes a pending debounced save). False when the write failed.
     Q_INVOKABLE bool save();
@@ -227,6 +228,14 @@ public:
     /// Make sure the page ends with an empty block to type into (click below the last block).
     /// Returns its row.
     Q_INVOKABLE int appendEmptyBlock();
+    /// Start writing in a page that does not exist yet (a day without a note): the template at
+    /// vault path `templatePath` (filled for this page — a daily note for its own day; "" or
+    /// unreadable: none) becomes the page's starting text. That is no edit: the file is created
+    /// by the first change, with the template, and a page left untouched writes nothing — never
+    /// a note just for looking at a day. Returns the row to edit: the template's first empty
+    /// bullet, else an empty one added at the end. A page that exists or has text:
+    /// appendEmptyBlock().
+    Q_INVOKABLE int startNewPage(const QString &templatePath);
 
     // --- Zoom and folding -------------------------------------------------------------------------
     Q_INVOKABLE void zoomInto(int row);
@@ -384,6 +393,8 @@ Q_SIGNALS:
     void paletteChanged();
     void localeChanged();
     void nowChanged();
+    /// The date the page is rendered for changed (midnight, or a new fixed clock `now`).
+    void todayChanged();
     void saveDelayChanged();
     void foldStateChanged();
     void titleRowChanged();

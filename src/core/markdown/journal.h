@@ -23,4 +23,9 @@ VaultPath journalPathForDate(QDate date, const VaultConfig &config, const QLocal
 /// "yyyy_MM_dd". Day and month names may be English or Polish.
 std::optional<QDate> journalDateFromPath(const VaultPath &path, const VaultConfig &config);
 
+/// The day a wiki-link target names, or nullopt: a daily note's name as journalDateFromPath()
+/// reads it ("2026-10-13", the vault's journalFileFormat such as "13.10.2026"), also with the
+/// journals folder or ".md" ("journals/2026-10-13.md"). Display only: the link stays as written.
+std::optional<QDate> journalDateFromLinkTarget(const QString &target, const VaultConfig &config);
+
 } // namespace brulion::markdown

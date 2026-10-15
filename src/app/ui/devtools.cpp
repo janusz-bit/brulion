@@ -129,6 +129,7 @@ void DevTools::setTranslator(QTranslator *translator)
 {
     m_translator = translator;
     m_translatorInstalled = translator && !translator->isEmpty();
+    m_qtTranslations.setLanguage(m_language);
 }
 
 QString DevTools::rootComponent() const
@@ -186,6 +187,7 @@ void DevTools::setLanguage(const QString &language)
         if (m_translator->load(u":/i18n/brulion_"_s + lang + u".qm"_s))
             m_translatorInstalled = QCoreApplication::installTranslator(m_translator);
     }
+    m_qtTranslations.setLanguage(lang); // "Anuluj", "Otwórz" of Qt's own dialogs and buttons
     if (m_engine)
         m_engine->retranslate();
     Q_EMIT languageChanged();
