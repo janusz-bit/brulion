@@ -9,7 +9,7 @@ One C++/QML code base, three targets, all built against **Qt 6.11.2**:
 | Target | How | Vault storage | Reminders |
 |---|---|---|---|
 | **NixOS / Linux desktop** | Qt from nixpkgs, Nix flake package + NixOS module | a folder (e.g. a Syncthing folder) | tray app + freedesktop notifications (D-Bus) |
-| **Android** | Qt for Android (aqt prebuilt, CI), APK via `androiddeployqt` | folder on shared storage (Syncthing-Fork) or app storage + Nextcloud | native `AlarmManager` alarms (Java/Kotlin via JNI) — fire when closed, survive reboot |
+| **Android** (9+, API 28–36) | Qt for Android (aqt prebuilt, CI), APK via `androiddeployqt` | folder on shared storage (Syncthing-Fork) or app storage + Nextcloud | native `AlarmManager` alarms (Java/Kotlin via JNI) — fire when closed, survive reboot |
 | **Browser** | Qt for WebAssembly (single-threaded, aqt prebuilt + emsdk, CI) → GitHub Pages | Emscripten IDBFS (IndexedDB) + import/export of files, Nextcloud sync | browser Notification API while the page is open |
 
 ## Layers
@@ -72,7 +72,7 @@ Implementations selected at compile time:
   activity over the lock screen, auto-stop, snooze) — ported from the v1 Kotlin plugin
   (branch `archive/web-v1`, `src-tauri/plugins/brulion-android`).
 * `WasmNotifier`: browser Notification API via Emscripten `EM_JS`.
-Also: `StorageAccess` (Android "All files access" check/request), `WasmPersistence` (mount
+Also: `StorageAccess` (Android "All files access" check/request), `WasmStorage` (mount
 IDBFS at the vault path, `FS.syncfs` after writes), `FileExchange` (pick/save files — native
 dialogs on desktop/Android, `QFileDialog::getOpenFileContent`/`saveFileContent` on WASM).
 
