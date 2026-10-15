@@ -34,6 +34,12 @@ Agroturystyka „Pod Smerekiem” w Wetlinie: trzy noce, śniadania w cenie. Zal
 - [ ] Czołówki i zapasowe baterie
 - Termos — ten duży, litrowy: w schroniskach herbata kończy się szybko, a na połoninach wieje tak, że po godzinie marszu każdy marzy o czymś ciepłym.
 
+Co jeszcze zostało:
+
+```query
+type:tasks status:open page:this
+```
+
 ## Koszty
 
 | Pozycja | Cena | Osoby | Razem |
@@ -57,6 +63,16 @@ nocleg + paliwo + bilety + jedzenie
 
 Z Wołosatego niebieskim szlakiem na przełęcz, dalej żółtym na sam szczyt. Na górze krzyż i widok aż po Ukrainę.
 
+> Na połoninach pogoda zmienia się w kwadrans — ubierz się na cebulkę.
+
+Parking w Wołosatem (komunikaty: https://www.bdpn.pl/index.php/komunikaty-dla-turystow):
+
+```text
+49.0640 N, 22.6830 E
+```
+
 ![[bieszczady-trasa.svg]]
+
+---
 
 Po powrocie zdjęcia trafią do albumu, a wrażenia do dziennika z [[2026-11-01]].

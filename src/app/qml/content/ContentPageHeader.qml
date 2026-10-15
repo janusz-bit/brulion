@@ -103,6 +103,8 @@ Item {
                 visible: header.loaded
                 iconName: header.documentMode ? "file-text" : "list"
                 label: header.documentMode ? qsTr("Document mode") : qsTr("Outline mode")
+                // The name says the current mode; screen readers also hear what a press does.
+                Accessible.description: header.documentMode ? qsTr("Switch to outline") : qsTr("Switch to document")
                 size: "small"
                 onClicked: header.modeToggleRequested()
             }

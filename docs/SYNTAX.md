@@ -135,10 +135,10 @@ brulion: document   # or: outline
 1. the frontmatter key `brulion` (lower-case key) with the value `document` or `outline`
    (case-insensitive, may be quoted); any other value is ignored;
 2. daily notes → `journalMode` of `.brulion/config.json` (default `outline`);
-3. other pages → their content: the top-level blocks of this section (YAML frontmatter and
-   Logseq page properties do not count; headings, code, tables, quotes… count as non-list
-   blocks; nested list items are part of their top-level item). With **at least two** such
-   blocks: **≥ 70 %** list items → outline, **≤ 30 %** → document;
+3. other pages → their content: the note's top-level blocks as defined above (YAML
+   frontmatter and Logseq page properties do not count; headings, code, tables, quotes… count
+   as non-list blocks; nested list items are part of their top-level item). With **at least
+   two** such blocks: **≥ 70 %** list items → outline, **≤ 30 %** → document;
 4. otherwise (empty, a single block, more than 30 % but less than 70 % list items) →
    `pageMode` (default `document`).
 
@@ -153,10 +153,11 @@ a missing one is appended before the closing `---`, and a note without frontmatt
 `---` / `brulion: …` / `---` in front (after a BOM, with the note's line ending). Other keys,
 comments, their order, line endings and the body stay byte-for-byte. Removing the key (no UI
 offers it) also removes a frontmatter block that holds nothing else afterwards. Frontmatter that
-cannot be edited safely (malformed YAML, or a `brulion` key that is not on a line of its own at
-the start of the line, e.g. in an indented mapping) is left unchanged — a second `brulion` entry
-is never added, because other YAML readers refuse duplicate keys. Obsidian and Logseq show
-`brulion` as an ordinary page property.
+cannot be edited safely (malformed YAML, a `brulion` key that is not on a line of its own at
+the start of the line, e.g. in an indented mapping, or YAML that is no mapping at all — a list,
+a single value, or plain text between a first `---` and a later one used as horizontal rules) is
+left unchanged — a second `brulion` entry is never added, because other YAML readers refuse
+duplicate keys. Obsidian and Logseq show `brulion` as an ordinary page property.
 
 ## 5. Tasks (Obsidian Tasks compatible)
 

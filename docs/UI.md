@@ -168,7 +168,7 @@ inline editor; only the layout and a few keys differ.
   Clicking a paragraph, heading or list item edits its raw Markdown in place, exactly like the
   block editor's inline editing (rendered text everywhere else, no layout jump). Tables, calc,
   code, callouts, embeds, queries and the frontmatter properties work as in outline mode. No
-  bullet zoom; folding by headings at most.
+  bullet zoom and no folding (folds made in the outline are kept and come back there).
 
 Keys in document mode (the rest as in the block editor table):
 
@@ -183,8 +183,9 @@ Keys in document mode (the rest as in the block editor table):
 
 Source mode (Ctrl+E) is the same in both modes. A click below the last block adds an empty
 paragraph (outline: a list item); typing `- `, `1. ` or `- [ ] ` at the start of a paragraph
-makes it a list item, as in Markdown. On touch UIs the editing toolbar gets a list button
-(paragraph ↔ list item) and its indent buttons act on list items only.
+makes it a list item, as in Markdown. On touch UIs the editing toolbar leads with the writing
+tools — a list button (paragraph ↔ list item), Zadanie, Link do strony, Tag, Polecenia — and
+puts indent / outdent (list items only) and moving after them.
 
 How it is built: `PageController.mode` ("outline" | "document", with `modeSource`
 "frontmatter" | "journal" | "heuristic" | "default") is resolved when the page is loaded and
@@ -197,14 +198,16 @@ change of them (`refreshMode()`; the content is never resolved again while the p
 key as one undo step and save at once; `leaveList()` and `toggleList()` are the document's list
 commands (`BlockDocument::convertToParagraph`). In the document mode the model ignores folds
 (`BlockListModel::setFoldingEnabled(false)`; they come back in the outline) and there is no
-zoom. `BlockEditor.documentMode` switches the delegates' layout: `gutter` 0, a marker column of
-`listIndent` per list level (bullets drawn as disc / circle / square by depth, numbers from the
-`listMarker` role, task checkboxes in place of the bullet), heading sizes relative to the text
-size, and spacing from the `prevKind` role (paragraph gaps, tight list items, air above
-headings). Rendered text and the inline editor have the same line boxes (the rendered height is
-counted in whole fixed-height lines), so starting to edit moves nothing. A frontmatter that
-holds nothing but the mode key (`noteModeOnly`) is not shown — the header's toggle stands for
-it — and the "Właściwości" panel never lists the key.
+zoom. `BlockEditor.documentMode` switches the delegates' layout: `gutter` = `documentInset` (0
+on pages), a marker column of `listIndent` per list level (bullets drawn as disc / circle /
+square by depth, numbers from the `listMarker` role, task checkboxes in place of the bullet),
+heading sizes relative to the text size, and spacing from the `prevKind` role (paragraph gaps,
+tight list items, air above headings, a little more above a frame right under a heading).
+Rendered text and the inline editor have the same line boxes (the rendered height is counted in
+whole fixed-height lines), so starting to edit moves nothing. A frontmatter that
+holds nothing but the mode key — one `brulion: …` line, blank lines aside (`noteModeOnly`) — is
+not shown: the header's toggle stands for it. A comment or any other text in it keeps the block
+visible. The "Właściwości" panel never lists the key.
 
 Choosing and switching the mode:
 
@@ -221,9 +224,13 @@ Choosing and switching the mode:
   the day being written in). A switch always writes the key (`markdown::setNoteModeKey`) and
   changes nothing else in the file; frontmatter that cannot be edited safely is left alone and a
   toast says so.
-* **Settings → Notatnik**: "Domyślny tryb nowych stron" (dokument / konspekt) and "Tryb
-  dziennika" (konspekt / dokument) — `pageMode` / `journalMode` in `.brulion/config.json`, synced.
+* **Settings → Notatnik**: "Domyślny tryb nowych stron" and "Tryb dziennika" (both: Dokument |
+  Konspekt; defaults dokument and konspekt) — `pageMode` / `journalMode` in
+  `.brulion/config.json`, synced.
 * The **journal stream** shows each day in its own resolved mode (journals default to outline).
+  A day switched to a document among outline days keeps their left edge (the date, the text:
+  `BlockEditor.documentInset` = the outline's gutter); with `journalMode` document the days use
+  the full width.
 
 ## Shared components (`qml/components/`)
 
@@ -294,7 +301,7 @@ Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appco
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
-| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`, …) |
+| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `mode-tooltip`, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
@@ -312,8 +319,12 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 * `tests/app/shell/screenshots.sh` — the real app: onboarding, journals, the guide page and
   its editor states (`page-editing`, `page-slash`, `page-reminder`, `page-doc-paragraph`,
   `page-doc-list`, `page-doc-heading`, `page-doc-outline`, …), the page menu (`page-menu`), the
-  renovation project as an outline (`page-project`), settings, palette, switcher, new page (with
-  the mode choice), capture, drawer.
+  renovation project as an outline (`page-project`), the document mode on a long Obsidian-like
+  note (`tests/app/shell/notemode/`: `doc-long`, editing a paragraph / list item / task / heading
+  / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
+  outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,
+  `doc-journal-mixed`: one document day among outlines), settings, palette, switcher, new page
+  (with the mode choice), capture, drawer.
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks.

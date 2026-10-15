@@ -291,6 +291,31 @@ private Q_SLOTS:
         QVERIFY(!f.page.setMode(u"kanban"_s));
     }
 
+    void setModeWhileEditingTheFrontmatter()
+    {
+        // The properties block is being edited (raw YAML in the inline editor) when the header's
+        // toggle is used: the editor must get the new text, or its next keystroke writes the old
+        // key back (a silent switch back, and the user's choice lost).
+        // (The edited block changed, so editing it ends: the inactive editor shows the model's
+        // text again — InlineEditor.onModelTextChanged.)
+        const QString content = u"---\nbrulion: outline\nautor: Łucja\n---\n- a\n- b\n"_s;
+        Fixture f(content);
+        f.page.startEditing(0, 3);
+        QCOMPARE(f.page.editingRow(), 0);
+        QVERIFY(f.page.setMode(u"document"_s));
+        QCOMPARE(f.text(), u"---\nbrulion: document\nautor: Łucja\n---\n- a\n- b\n"_s);
+        QCOMPARE(f.page.editingRow(), -1);
+        f.page.startEditing(0, -1);
+        QVERIFY(f.edit(0).contains(u"brulion: document"_s));
+        f.page.setEditText(0, f.edit(0) + u"\nźródło: x"_s, -1);
+        QCOMPARE(f.page.mode(), u"document"_s);
+        QCOMPARE(markdown::frontmatterNoteMode(f.text()), NoteMode::Document);
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QCOMPARE(f.page.mode(), u"outline"_s);
+    }
+
     void setModeInSourceMode()
     {
         Fixture f(u"- a\n- b\n"_s);
@@ -480,6 +505,88 @@ private Q_SLOTS:
         // Not a list item: nothing.
         QCOMPARE(f.page.leaveList(1).value(u"row"_s).toInt(), -1);
         QCOMPARE(f.page.leaveList(99).value(u"row"_s).toInt(), -1);
+    }
+
+    void backspaceLeavesNumberedListsAndKeepsEveryLine()
+    {
+        // A numbered item with nested children and a continuation line loses its marker: no
+        // line of text is lost, the children stay a (renumbered) list after it.
+        const QString content =
+                DocKey + u"Wstęp\n\n1. pierwszy\n2. drugi ąę\n   ciąg dalszy\n   1. a\n   2. b\n3. trzeci\n"_s;
+        Fixture f(content);
+        QCOMPARE(f.edit(3), u"drugi ąę\nciąg dalszy"_s);
+        f.page.startEditing(3, 0);
+        const QVariantMap r = f.page.leaveList(3);
+        QCOMPARE(r.value(u"row"_s).toInt(), 3);
+        QCOMPARE(f.kind(3), u"paragraph"_s);
+        QCOMPARE(f.edit(3), u"drugi ąę\nciąg dalszy"_s);
+        const QString out = f.text();
+        for (const QString &word :
+             {u"Wstęp"_s, u"pierwszy"_s, u"drugi ąę"_s, u"ciąg dalszy"_s, u"a"_s, u"b"_s, u"trzeci"_s})
+            QVERIFY2(out.contains(word), qPrintable(out));
+        // The text reads back as the same blocks (the model and the file agree).
+        markdown::BlockDocument reread(out);
+        QCOMPARE(reread.count(), f.count());
+        for (int i = 0; i < reread.count(); ++i) {
+            QCOMPARE(reread.at(i).kind, f.page.blocks()->document().at(i).kind);
+            QCOMPARE(reread.at(i).body, f.page.blocks()->document().at(i).body);
+        }
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
+    void enterOnEmptyItemWithChildren()
+    {
+        // An empty top-level item with children: Enter leaves the list, the children stay.
+        const QString content = DocKey + u"Akapit\n\n- \n\t- dziecko żółte\n- dalej\n"_s;
+        Fixture f(content);
+        f.page.startEditing(2, 0);
+        const QVariantMap r = f.page.split(2, 0);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(f.kind(2), u"paragraph"_s);
+        QVERIFY2(f.text().contains(u"- dziecko żółte\n- dalej\n"_s), qPrintable(f.text()));
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
+    void backspaceOnTheFirstItemAfterHiddenFrontmatter()
+    {
+        // The first block is a list item under a hidden mode-only frontmatter: Backspace makes it
+        // a paragraph and the frontmatter stays as it is (hidden, unchanged).
+        Fixture f(DocKey + u"- jedyny żółw\n"_s);
+        f.page.startEditing(1, 0);
+        QCOMPARE(f.page.leaveList(1).value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.text(), DocKey + u"jedyny żółw\n"_s);
+        QVERIFY(!f.role(0, "visible").toBool());
+        QCOMPARE(f.page.mergeWithPrevious(1).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.text(), DocKey + u"jedyny żółw\n"_s);
+    }
+
+    void frontmatterWithMoreThanTheModeIsShown()
+    {
+        // A comment or text next to the key is the user's: the block stays visible.
+        for (const QString &content : {u"---\n# wybrane ręcznie\nbrulion: document\n---\nTreść\n"_s,
+                                       u"---\nWstęp — zażółć gęślą jaźń.\nbrulion: document\n---\nTreść\n"_s}) {
+            Fixture f(content);
+            QCOMPARE(f.page.mode(), u"document"_s);
+            QVERIFY(!f.role(0, "noteModeOnly").toBool());
+            QVERIFY(f.role(0, "visible").toBool());
+            QCOMPARE(f.model()->visibleCount(), 2);
+        }
+    }
+
+    void tabIndentsNoListItemAfterAParagraph()
+    {
+        // The first item of a list right after a paragraph has no item to go under: Tab must not
+        // turn the paragraph into a list item (or the item into an indented code block).
+        const QString content = DocKey + u"Akapit\n\n- a\n- b\n"_s;
+        Fixture f(content);
+        f.page.indent(2);
+        QCOMPARE(f.text(), content);
+        QCOMPARE(f.kind(1), u"paragraph"_s);
+        // Shift+Tab on a paragraph does nothing either.
+        QVERIFY(!f.page.outdent(1));
+        QCOMPARE(f.text(), content);
     }
 
     void tabOnlyIndentsListItems()

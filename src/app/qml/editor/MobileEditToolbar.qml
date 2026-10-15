@@ -5,9 +5,11 @@ import Brulion
 // MobileEditToolbar — the editing toolbar of touch UIs, sitting right above the virtual
 // keyboard (Qt.inputMethod.keyboardRectangle; at the bottom when the window is resized for the
 // keyboard): outdent, indent, move up/down, task, [[, #, /, date, reminder, picture, undo, redo,
-// hide keyboard. In the document mode a list button (paragraph ↔ list item) comes first and the
-// indent buttons work on list items only. Buttons never take focus, so the caret stays in the block being edited. Scrolls
-// sideways when the window is narrower than the buttons.
+// hide keyboard. In the document mode the writing tools come first — a list button (paragraph ↔
+// list item), task, [[, #, / — then outdent / indent (list items only) and move up/down, so a
+// phone's first screen of buttons holds no outline tools that are disabled in a paragraph.
+// Buttons never take focus, so the caret stays in the block being edited. Scrolls sideways when
+// the window is narrower than the buttons.
 Rectangle {
     id: bar
 
@@ -60,9 +62,66 @@ Rectangle {
     }
 
     component ToolButton: BIconButton {
+        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         focusPolicy: Qt.NoFocus
         size: "small"
         enabled: bar.row >= 0
+    }
+    component Separator: Rectangle {
+        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        width: 1
+        height: bar.height * 0.5
+        color: Theme.border
+    }
+    /// Indent, outdent, move: the outline's first tools; in a document after the writing tools.
+    component StructureTools: Row {
+        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        ToolButton {
+            iconName: "list-indent-decrease"
+            label: qsTr("Outdent")
+            enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
+            onClicked: { bar.commitComposition(); bar.controller.outdent(bar.row) }
+        }
+        ToolButton {
+            iconName: "list-indent-increase"
+            label: qsTr("Indent")
+            enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
+            onClicked: { bar.commitComposition(); bar.controller.indent(bar.row) }
+        }
+        ToolButton {
+            iconName: "move-up"
+            label: qsTr("Move up")
+            onClicked: { bar.commitComposition(); bar.controller.moveUp(bar.row) }
+        }
+        ToolButton {
+            iconName: "move-down"
+            label: qsTr("Move down")
+            onClicked: { bar.commitComposition(); bar.controller.moveDown(bar.row) }
+        }
+    }
+    /// Task, [[, #, /.
+    component WritingTools: Row {
+        anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+        ToolButton {
+            iconName: "square-check-big"
+            label: qsTr("Task")
+            onClicked: { bar.commitComposition(); bar.controller.cycleTask(bar.row) }
+        }
+        ToolButton {
+            iconName: "link"
+            label: qsTr("Link to page")
+            onClicked: bar.insertText("[[")
+        }
+        ToolButton {
+            iconName: "hash"
+            label: qsTr("Tag")
+            onClicked: bar.insertText("#")
+        }
+        ToolButton {
+            iconName: "slash"
+            label: qsTr("Commands")
+            onClicked: bar.insertText("/")
+        }
     }
 
     Flickable {
@@ -83,79 +142,32 @@ Rectangle {
             rightPadding: Theme.space1
             spacing: 0
 
+            // Document: list, task, [[, #, / | outdent, indent, up, down | …
+            // Outline:  outdent, indent, up, down | task, [[, #, / …
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
+                objectName: "toolbarList"
                 visible: bar.documentMode
                 iconName: "list"
                 label: qsTr("Bulleted list")
                 checked: bar.listItem // not checkable: the block's kind says it
                 onClicked: { bar.commitComposition(); bar.controller.toggleList(bar.row) }
             }
+            WritingTools { objectName: "toolbarWritingDocument"; visible: bar.documentMode }
+            Separator { visible: bar.documentMode }
+            StructureTools { objectName: "toolbarStructure" }
+            Separator {}
+            WritingTools { objectName: "toolbarWriting"; visible: !bar.documentMode }
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "list-indent-decrease"
-                label: qsTr("Outdent")
-                enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
-                onClicked: { bar.commitComposition(); bar.controller.outdent(bar.row) }
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "list-indent-increase"
-                label: qsTr("Indent")
-                enabled: bar.row >= 0 && (!bar.documentMode || bar.listItem)
-                onClicked: { bar.commitComposition(); bar.controller.indent(bar.row) }
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "move-up"
-                label: qsTr("Move up")
-                onClicked: { bar.commitComposition(); bar.controller.moveUp(bar.row) }
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "move-down"
-                label: qsTr("Move down")
-                onClicked: { bar.commitComposition(); bar.controller.moveDown(bar.row) }
-            }
-            Rectangle { width: 1; height: parent.height * 0.5; anchors.verticalCenter: parent.verticalCenter; color: Theme.border }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "square-check-big"
-                label: qsTr("Task")
-                onClicked: { bar.commitComposition(); bar.controller.cycleTask(bar.row) }
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "link"
-                label: qsTr("Link to page")
-                onClicked: bar.insertText("[[")
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "hash"
-                label: qsTr("Tag")
-                onClicked: bar.insertText("#")
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
-                iconName: "slash"
-                label: qsTr("Commands")
-                onClicked: bar.insertText("/")
-            }
-            ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "calendar"
                 label: qsTr("Due date")
                 onClicked: { bar.commitComposition(); bar.editor.dialogs.pickDate(bar.row, "due") }
             }
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "bell"
                 label: qsTr("Reminder")
                 onClicked: { bar.commitComposition(); bar.editor.dialogs.createReminder(bar.row, false) }
             }
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "image"
                 label: qsTr("Insert picture")
                 onClicked: {
@@ -163,23 +175,20 @@ Rectangle {
                     bar.editor.dialogs.pickImage(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
                 }
             }
-            Rectangle { width: 1; height: parent.height * 0.5; anchors.verticalCenter: parent.verticalCenter; color: Theme.border }
+            Separator {}
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "undo-2"
                 label: qsTr("Undo")
                 enabled: bar.controller !== null && bar.controller.canUndo
                 onClicked: { bar.commitComposition(); bar.controller.undo() }
             }
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "redo-2"
                 label: qsTr("Redo")
                 enabled: bar.controller !== null && bar.controller.canRedo
                 onClicked: { bar.commitComposition(); bar.controller.redo() }
             }
             ToolButton {
-                anchors.verticalCenter: parent.verticalCenter
                 iconName: "keyboard-off"
                 label: qsTr("Hide keyboard")
                 onClicked: {

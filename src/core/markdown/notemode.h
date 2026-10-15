@@ -72,10 +72,11 @@ ResolvedNoteMode resolveNoteMode(QStringView content, bool isJournal, const Vaul
 /// Every other byte — other keys, comments, order, line endings, BOM, the body — is preserved, so
 /// removing the key again restores the original of a note whose frontmatter had other content.
 /// Each edit is verified (the other keys must parse to the same values and the body must be
-/// identical); frontmatter that cannot be edited safely (malformed YAML, or a key that is not on
+/// identical); frontmatter that cannot be edited safely (malformed YAML, a key that is not on
 /// a line of its own at column 0, as in an indented root mapping — a second key would make the
-/// YAML invalid for other tools) gives the unchanged content — callers can check
-/// frontmatterNoteMode(result).
+/// YAML invalid for other tools — or YAML that is no mapping: a root sequence or scalar, or plain
+/// text between a first `---` and a later one used as horizontal rules) gives the unchanged
+/// content — callers can check frontmatterNoteMode(result).
 QString setNoteModeKey(QStringView content, std::optional<NoteMode> mode);
 
 /// The initial content of a new note for which the user chose `chosen` (new-page dialog): the

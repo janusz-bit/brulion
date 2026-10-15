@@ -554,6 +554,38 @@ private Q_SLOTS:
         }
     }
 
+    void nonMappingFrontmatterIsLeftAlone_data()
+    {
+        QTest::addColumn<QString>("content");
+        // A note that starts with a horizontal rule and has another one further down: the lines
+        // between them are the frontmatter for Brulion (and Obsidian), but they are text, not a
+        // mapping. A `brulion:` line among them would turn the user's paragraph into a hidden
+        // "mode only" block and the YAML into something no YAML parser reads.
+        QTest::newRow("rule at the top")
+                << u"---\n\nWstęp do notatki — zażółć gęślą jaźń.\n\n---\n\nDalej zwykły tekst.\n"_s;
+        QTest::newRow("rule at the top, crlf") << u"---\r\nWstęp\r\n---\r\nTreść\r\n"_s;
+        QTest::newRow("plain text") << u"---\nto nie jest yaml\n---\nTreść\n"_s;
+        QTest::newRow("plain text and comment") << u"---\n# komentarz\nżółw\n---\n"_s;
+        QTest::newRow("root sequence") << u"---\n- a\n- b\n---\nTreść\n"_s;
+        QTest::newRow("root scalar") << u"---\n\"tylko napis\"\n---\nTreść\n"_s;
+        QTest::newRow("root flow mapping") << u"---\n{}\n---\nTreść\n"_s;
+        QTest::newRow("root flow sequence") << u"---\n[a, b]\n---\nTreść\n"_s;
+        QTest::newRow("code fence at the top") << u"---\n```\nkod\n```\n---\n"_s;
+    }
+    void nonMappingFrontmatterIsLeftAlone()
+    {
+        // Setting the key needs a YAML mapping (or an empty block) to add it to; anything else
+        // stays as it is (callers see that through frontmatterNoteMode()).
+        QFETCH(QString, content);
+        QVERIFY(findFrontmatter(content));
+        for (int mode : {Outline, Document, None})
+            QCOMPARE(setNoteModeKey(content, modeOf(mode)), content);
+        // An empty block or one with only comments is a mapping without keys: the key goes in.
+        QCOMPARE(setNoteModeKey(u"---\n# tylko komentarz\n\n---\nTreść\n"_s, NoteMode::Outline),
+                 u"---\n# tylko komentarz\n\nbrulion: outline\n---\nTreść\n"_s);
+        QCOMPARE(setNoteModeKey(u"---\n\n---\n"_s, NoteMode::Document), u"---\n\nbrulion: document\n---\n"_s);
+    }
+
     // ---- new notes -----------------------------------------------------------------------
     void choiceForNewNote_data()
     {

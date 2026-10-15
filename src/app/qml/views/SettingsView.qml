@@ -384,9 +384,11 @@ Item {
                 BSegmented {
                     objectName: "journalModeSetting"
                     accessibleName: qsTr("Journal mode")
+                    // The same order as the row above (and the new-page dialog): the two choices
+                    // line up, whichever is selected.
                     model: [
-                        { value: "outline", text: qsTr("Outline"), icon: "list" },
-                        { value: "document", text: qsTr("Document"), icon: "file-text" }
+                        { value: "document", text: qsTr("Document"), icon: "file-text" },
+                        { value: "outline", text: qsTr("Outline"), icon: "list" }
                     ]
                     currentValue: Workspace.config.journalMode
                     onActivated: (value) => Workspace.setConfig({ journalMode: value })

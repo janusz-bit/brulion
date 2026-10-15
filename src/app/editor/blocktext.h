@@ -97,7 +97,8 @@ QVariantMap queryInfo(QStringView source);
 /// (markdown/notemode.h) is left out: the page header's mode toggle shows it.
 QVariantList frontmatterProperties(const QString &body);
 /// The YAML frontmatter `body` (with its `---` lines) holds nothing but the note mode key
-/// `brulion` — a block the editor does not show (BlockListModel `noteModeOnly`).
+/// `brulion` — one line at column 0, blank lines aside (a comment or other text keeps the block
+/// visible) — a block the editor does not show (BlockListModel `noteModeOnly`).
 bool onlyNoteModeKey(const QString &body);
 
 /// One image or attachment embedded in a block body: `![[photo.png]]`, `![alt](assets/a.png)`.

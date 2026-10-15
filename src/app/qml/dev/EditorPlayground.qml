@@ -314,6 +314,19 @@ ApplicationWindow {
         return editor.handleEditorKey({ key: k, modifiers: modifiers || Qt.NoModifier }, edit)
     }
     function info(row) { return page.blocks.get(row) }
+    /// The item named `name` under `item` (depth first), or null.
+    function findItem(item, name) {
+        if (!item)
+            return null
+        if (item.objectName === name)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findItem(item.children[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
     /// A real key press (through the window, Keys handlers and TextEdit) to the focused item.
     function realKey(k, modifiers, text) {
         EditorInput.sendKey(editor.activeEditor ? editor.activeEditor : editor, k, modifiers || 0, text || "")
@@ -633,6 +646,61 @@ ApplicationWindow {
                       && capped[1] < capped[0] && capped[2] <= capped[1] && capped[3] <= capped[2]
                       && capped[3] >= editor.fontSize && capped.every((s, i) => s <= plain[i]),
                       "a heading cap shrinks the document's headings, keeping their order: " + plain + " → " + capped)
+            },
+            // A frame right under a heading gets a little more air than text there (its edge sat
+            // a few pixels under the heading's descenders).
+            () => editor.listView.positionViewAtIndex(rowOf("Pierwszego dnia"), ListView.Center),
+            () => {
+                const para = editor.listView.itemAtIndex(rowOf("Pierwszego dnia")) as BlockDelegate
+                check(para !== null && para.topPad === editor.headingGapBelow, "a paragraph sits close under its heading")
+                window.countBefore = page.blocks.count
+                window.realRow = page.insertMarkdown(rowOf("Plan"), "```\nmapa-trasy.gpx\n```")
+                page.stopEditing()
+            },
+            () => editor.listView.positionViewAtIndex(window.realRow, ListView.Center),
+            () => {
+                const code = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const para = editor.listView.itemAtIndex(rowOf("Pierwszego dnia")) as BlockDelegate
+                check(code !== null && code.view === "code" && code.prevKind === "heading"
+                      && code.topPad === editor.headingGapBelow + Theme.space2,
+                      "a code block under a heading gets more air than text: " + (code ? code.topPad : -1))
+                check(para !== null && para.topPad === editor.paragraphGap, "the paragraph after the frame keeps a paragraph gap")
+                page.undo()
+            },
+            () => check(page.blocks.count === window.countBefore && info(rowOf("Pierwszego dnia") - 1).view === "heading",
+                        "undo takes the code block out again"),
+            // The touch toolbar of a document leads with the writing tools (list, task, [[, #, /),
+            // indentation after them (off in a paragraph); an outline keeps indentation first.
+            () => { Theme.forceTouch = true; editor.startEditing(rowOf("Pierwszego dnia"), 0) },
+            () => {
+                const list = window.findItem(editor, "toolbarList")
+                const writing = window.findItem(editor, "toolbarWritingDocument")
+                const structure = window.findItem(editor, "toolbarStructure")
+                check(editor.toolbarVisible && list !== null && writing !== null && structure !== null
+                      && list.visible && writing.visible && list.x < writing.x && writing.x < structure.x,
+                      "document toolbar: list and writing tools first, indentation after them")
+                check(structure !== null && !structure.children[0].enabled && !structure.children[1].enabled,
+                      "document toolbar: no indentation for a paragraph")
+            },
+            () => editor.startEditing(rowOf("Sobota"), 0),
+            () => {
+                const structure = window.findItem(editor, "toolbarStructure")
+                check(structure !== null && structure.children[0].enabled && structure.children[1].enabled,
+                      "document toolbar: list items indent")
+                page.stopEditing()
+                page.setMode("outline")
+            },
+            () => editor.startEditing(rowOf("Pierwszego dnia"), 0),
+            () => {
+                const list = window.findItem(editor, "toolbarList")
+                const writing = window.findItem(editor, "toolbarWriting")
+                const structure = window.findItem(editor, "toolbarStructure")
+                check(page.mode === "outline" && list !== null && !list.visible && writing !== null && structure !== null
+                      && writing.visible && structure.x < writing.x && structure.children[0].enabled,
+                      "outline toolbar: indentation first, no list button")
+                page.stopEditing()
+                page.setMode("document")
+                Theme.forceTouch = false
             },
             // ---- An editor destroyed before its deferred work runs (scrolling to a row, focus
             // loss, completions, scrolling to the top after loading): nothing touches it then.

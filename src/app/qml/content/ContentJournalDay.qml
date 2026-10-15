@@ -17,7 +17,8 @@ import Brulion
 // Ctrl+E (Markdown source) opens the day as a page in source mode instead of a source editor
 // inside the list. Fold state is kept per day like in PageView. Each day is shown in its own note
 // mode (its `brulion:` key, else the notebook's journal mode — outline by default): a day switched
-// to a document reads like one in the stream too.
+// to a document reads like one in the stream too, on the outline days' left edge (its editor's
+// documentInset) unless the journal is a document by default.
 FocusScope {
     id: day
 
@@ -271,6 +272,9 @@ FocusScope {
             bottomSpace: Theme.space3
             // Document days: headings stay below the date (the size of other days' dates).
             headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
+            // A day switched to a document among outline days keeps their left edge (date, text);
+            // when the journal is a document by default, its days use the full width.
+            documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
         }
     }
 

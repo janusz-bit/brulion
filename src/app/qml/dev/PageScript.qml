@@ -24,12 +24,28 @@ import Brulion
 //   edit:<text>[@<caret>]  any page (--route): edit the block whose text starts with <text>
 //             (one word: the screenshot scripts split arguments at spaces), caret at the end or
 //             at <caret>
+//   select:<text>  any page: the block whose text starts with <text> selected (as after Esc)
+//   mode-tooltip   the tooltip of the page header's note mode toggle
 Item {
     id: script
 
     property BlockEditor editor
     property PageController controller
     property string scenario: DevTools.editorScript
+
+    /// The item named `name` under `item` (depth first), or null.
+    function findItem(item, name) {
+        if (!item)
+            return null
+        if (item.objectName === name)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findItem(item.children[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
 
     function rowOf(prefix) {
         const blocks = controller.blocks
@@ -112,8 +128,18 @@ Item {
                     AppController.openPage("Pusta strona.md", -1, false)
                 }
                 break
+            case "mode-tooltip": {
+                // Shown as by a long press: it stays up without a hovering mouse.
+                const toggle = script.findItem(script.editor, "noteModeToggle")
+                if (toggle)
+                    toggle._touchTip = true
+                break
+            }
             default:
-                if (script.scenario.indexOf("edit:") === 0) {
+                if (script.scenario.indexOf("select:") === 0) {
+                    const row = script.rowOf(script.scenario.substring(7))
+                    script.editor.revealRow(row)
+                } else if (script.scenario.indexOf("edit:") === 0) {
                     const spec = script.scenario.substring(5).split("@")
                     const row = script.rowOf(spec[0])
                     script.editor.startEditing(row, spec.length > 1 ? parseInt(spec[1]) : -1)

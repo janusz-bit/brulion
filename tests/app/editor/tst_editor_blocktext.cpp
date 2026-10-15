@@ -219,7 +219,14 @@ private Q_SLOTS:
         QTest::newRow("empty yaml") << u"---\n---"_s << false;
         QTest::newRow("other key only") << u"---\nautor: Łucja\n---"_s << false;
         QTest::newRow("logseq property") << u"brulion:: document"_s << false;
-        QTest::newRow("comment and key") << u"---\n# tryb notatki\nbrulion: document\n---"_s << true;
+        // Anything else the user wrote in the block keeps it visible (a hidden block hides it).
+        QTest::newRow("comment and key") << u"---\n# tryb notatki\nbrulion: document\n---"_s << false;
+        QTest::newRow("text and key") << u"---\nWstęp do notatki: zażółć\n\nbrulion: document\n---"_s << false;
+        QTest::newRow("text that is no key") << u"---\nżółw\nbrulion: document\n---"_s << false;
+        QTest::newRow("blank lines around the key") << u"---\n\nbrulion: outline\n\n---"_s << true;
+        QTest::newRow("comment after the value") << u"---\nbrulion: outline # ręcznie\n---"_s << true;
+        QTest::newRow("nested value") << u"---\nbrulion:\n  tryb: document\n---"_s << false;
+        QTest::newRow("indented key") << u"---\n  brulion: document\n---"_s << false;
     }
 
     void onlyNoteModeKey()

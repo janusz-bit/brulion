@@ -70,23 +70,33 @@ declare -A shot_args=(
   [page-project]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
   # The document mode on a long Obsidian-like note (tests/app/shell/notemode/, added to the
   # sample notebook): reading, editing a paragraph, a nested list item, a wrapped nested task, the
-  # same note switched to an outline; the journal stream with the notebook's journal mode "document".
+  # same note switched to an outline, a heading and a numbered item being edited, a selected task, the
+  # header's mode toggle with its tooltip; the journal stream with the notebook's journal mode "document".
   [doc-long]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"}"
   [doc-long-paragraph]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Pierwszy@60"
   [doc-long-list]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Bilety"
   [doc-long-task]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Plastry"
   [doc-long-outline]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script doc-outline"
+  [doc-long-heading]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Plan"
+  [doc-long-number]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script edit:Piątek"
+  [doc-long-select]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script select:Kurtki"
+  [doc-long-toggle]="--route {\"view\":\"page\",\"path\":\"Wyprawa\u0020w\u0020Bieszczady.md\"} --editor-script mode-tooltip"
   [doc-journal]="--route journals"
+  [doc-journal-mixed]="--route journals"
 )
 # Shots on a notebook of their own: the sample notebook seeded by a first run, then the files of
 # tests/app/shell/notemode/ added ("journal": today's journal replaced by a document-like day and
-# the notebook's journal mode set to "document").
+# the notebook's journal mode set to "document"; "journal-mixed": that day switched to a document
+# by its own `brulion:` key, the other days outlines).
 declare -A shot_notemode=(
-  [doc-long]=page [doc-long-paragraph]=page [doc-long-list]=page [doc-long-task]=page [doc-long-outline]=page [doc-journal]=journal
+  [doc-long]=page [doc-long-paragraph]=page [doc-long-list]=page [doc-long-task]=page [doc-long-outline]=page
+  [doc-long-heading]=page [doc-long-number]=page [doc-long-select]=page [doc-long-toggle]=page [doc-journal]=journal
+  [doc-journal-mixed]=journal-mixed
 )
 all_shots=(onboarding journals page page-editing page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
-  page-menu page-project doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline doc-journal settings settings-editor settings-vault settings-reminders settings-app
+  page-menu page-project doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
+  doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
@@ -138,6 +148,10 @@ for shot in "${shots[@]}"; do
           cp "$fixtures/journal-document.md" "$vault/journals/${now%% *}.md"
           mkdir -p "$vault/.brulion"
           printf '{\n  "journalMode": "document"\n}\n' > "$vault/.brulion/config.json"
+        elif [[ "${shot_notemode[$shot]}" == journal-mixed ]]; then
+          # Only today is a document (its own key); the other days stay outlines.
+          { printf -- '---\nbrulion: document\n---\n'; cat "$fixtures/journal-document.md"; } \
+            > "$vault/journals/${now%% *}.md"
         fi
         vault_args=(--vault "$vault")
       fi

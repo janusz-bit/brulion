@@ -7,6 +7,7 @@
 #include "io/ical.h"
 #include "io/messages_p.h"
 #include "markdown/inline.h"
+#include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
 #include "markdown/tokens.h"
@@ -150,6 +151,8 @@ private:
         o.insert(u"journalTemplate"_s, c.journalTemplate);
         o.insert(u"defaultReminderTime"_s, c.defaultReminderTime.toString(u"HH:mm"_s));
         o.insert(u"weekStartsOn"_s, int(c.weekStartsOn));
+        o.insert(u"journalMode"_s, markdown::noteModeName(c.journalMode));
+        o.insert(u"pageMode"_s, markdown::noteModeName(c.pageMode));
         return o;
     }
 

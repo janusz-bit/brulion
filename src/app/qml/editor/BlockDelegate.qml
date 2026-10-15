@@ -44,9 +44,10 @@ Item {
     readonly property bool ordered: listItem && listMarker.length > 0 && listMarker.charAt(0) >= "0" && listMarker.charAt(0) <= "9"
 
     // Horizontal geometry. Outline: the text column of this depth, the bullet centred left of it.
-    // Document: paragraphs at the text column; a list item one marker column in per level, its
-    // marker (bullet, number, checkbox) in the column before its text.
-    readonly property real levelX: doc ? editor.contentX + (listItem ? (depth + 1) * editor.listIndent : 0)
+    // Document: paragraphs at the text column (after the editor's documentInset, its gutter); a
+    // list item one marker column in per level, its marker (bullet, number, checkbox) in the
+    // column before its text.
+    readonly property real levelX: doc ? editor.contentX + editor.gutter + (listItem ? (depth + 1) * editor.listIndent : 0)
                                        : editor.contentX + editor.gutter + depth * editor.indentStep
     readonly property real bulletX: doc ? levelX - Math.round(editor.listIndent * 0.55) : levelX - editor.bulletColumn / 2
     readonly property real contentLeft: levelX + (isTask && !doc ? editor.taskBoxWidth : 0)
@@ -75,8 +76,12 @@ Item {
             return 0
         if (headingLevel > 0 && !listItem)
             return editor.headingGapAbove(headingLevel)
+        // A frame (table, code, callout, …), a quote's bar or a picture right under a heading:
+        // their edges sat a few pixels under its descenders, a paragraph's text does not need it.
+        // (Not `onlyPictures`: it changes with editing, the gap must not.)
         if (prevKind === "heading")
-            return editor.headingGapBelow
+            return framed || view === "quote" || (hasEmbeds && model.onlyEmbeds && !listItem)
+                   ? editor.headingGapBelow + Theme.space2 : editor.headingGapBelow
         if (prevKind === "frontmatter")
             return Theme.space3
         if (listItem && prevKind === "listItem")

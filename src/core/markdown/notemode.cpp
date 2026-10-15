@@ -105,6 +105,22 @@ QString rebuild(const QList<text::Line> &lines, const QList<Entry> &entries, int
     return out;
 }
 
+/// The frontmatter is a YAML mapping a key can be added to: it has top-level keys, or nothing but
+/// blank lines and comments. A root sequence, scalar or flow collection is not one — nor plain
+/// text between a note's first `---` and a later one (horizontal rules): a `brulion:` line added
+/// there would leave YAML no parser reads (and a block that looks like the mode alone).
+bool isMapping(QStringView yaml)
+{
+    if (!parseYaml(yaml).isEmpty())
+        return true;
+    for (const text::Line &l : text::splitLines(yaml)) {
+        const QStringView t = l.text.trimmed();
+        if (!t.isEmpty() && !t.startsWith(u'#'))
+            return false;
+    }
+    return true;
+}
+
 /// The frontmatter mapping without the mode key, in a canonical form (stringifyYaml) so that
 /// values compare reliably (also NaN or nested lists).
 QString otherKeys(QStringView yaml)
@@ -225,7 +241,8 @@ QString setNoteModeKey(QStringView content, std::optional<NoteMode> mode)
             // above it (always terminated) — only while the mapping has no `brulion` key: a
             // second one (a key the line scan cannot place, e.g. in an indented root mapping)
             // would leave YAML that other tools refuse (duplicate keys, mixed indentation).
-            if (parseYaml(fm->yaml).contains(NoteModeKey.toString()))
+            // Nor into frontmatter that is no mapping (isMapping()).
+            if (parseYaml(fm->yaml).contains(NoteModeKey.toString()) || !isMapping(fm->yaml))
                 return content.toString();
             edited = rebuild(lines, {}, fm->endLine, line + lines[fm->endLine - 1].eol);
         }

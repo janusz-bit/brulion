@@ -447,8 +447,21 @@ bool onlyNoteModeKey(const QString &body)
     QString content = body;
     if (!content.endsWith(u'\n'))
         content += u'\n';
-    const markdown::FrontmatterResult fm = markdown::parseFrontmatter(content);
-    return fm.keys == QStringList{markdown::NoteModeKey.toString()};
+    const auto fm = markdown::findFrontmatter(content);
+    if (!fm)
+        return false;
+    // One line `brulion: …` at column 0 and blank lines: a comment, a nested value or text the
+    // YAML parser skips is the user's and keeps the block visible.
+    int lines = 0;
+    for (const text::Line &l : text::splitLines(fm->yaml)) {
+        if (l.text.trimmed().isEmpty())
+            continue;
+        if (++lines > 1 || l.text.front().isSpace())
+            return false;
+    }
+    QStringList keys;
+    markdown::parseYaml(fm->yaml, &keys);
+    return keys == QStringList{markdown::NoteModeKey.toString()};
 }
 
 QList<Embed> embedsOf(QStringView body)

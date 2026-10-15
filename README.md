@@ -163,6 +163,10 @@ kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (pona
 | `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
 | `/` | menu poleceń (zadanie, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
 
+W trybie dokumentu `Tab` / `Shift+Tab` działa tylko na punktach listy, `Enter` na pustym
+punkcie kończy listę (w liście zagnieżdżonej: wysuwa punkt o poziom), a `Backspace` na początku
+punktu usuwa znacznik listy, jak w Obsidianie.
+
 Na telefonie wcięcia, przenoszenie bloków, zadania, linki, tagi, polecenia, terminy,
 przypomnienia i cofanie są w pasku narzędzi nad klawiaturą, a widoki bez własnego przycisku
 (centrum synchronizacji, import i eksport, kosz, ustawienia) — w menu *Więcej* (⋮).
@@ -211,6 +215,11 @@ Google Keep, Joplin, Simplenote, Roam, Bear, HTML and iCalendar.
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard).
+* Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
+  lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
+  a page is created and switchable at any time; stored in the note as `brulion: document` /
+  `brulion: outline` frontmatter, and notes from Obsidian or Logseq open in the right mode
+  without it.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
 

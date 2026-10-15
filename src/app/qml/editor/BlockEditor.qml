@@ -61,8 +61,13 @@ FocusScope {
     /// Bullet column (the bullet is centred in it) and the fold arrow column left of it.
     readonly property real bulletColumn: Theme.touchUi ? 22 : 20
     readonly property real arrowColumn: Theme.touchUi ? 18 : 16
-    /// Room left of the text column: the outline's fold arrows and bullets; none in a document.
-    readonly property real gutter: documentMode ? 0 : arrowColumn + bulletColumn
+    /// Room left of the text column: the outline's fold arrows and bullets; in a document
+    /// `documentInset` (none on a page).
+    readonly property real gutter: documentMode ? documentInset : outlineGutter
+    readonly property real outlineGutter: arrowColumn + bulletColumn
+    /// Document mode: room left of the text column. The journal stream gives a document day the
+    /// outline's gutter when its other days are outlines, so all days share one left edge.
+    property real documentInset: 0
     // Document mode: the marker column of a list level (bullet, number or checkbox) — the text
     // of a list item starts one column in per level — and the vertical rhythm of a page of text.
     readonly property real listIndent: Math.round(fontSize * (Theme.compact ? 1.5 : 1.7))

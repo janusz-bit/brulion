@@ -8,6 +8,8 @@ import Brulion
 // its own editor (PageController) inside a lazy ListView, so a day being edited is destroyed when
 // it scrolls far enough away. Checked with real key and input-method events:
 //   * text typed into today and scrolled away is saved and shown again when scrolled back;
+//   * a day switched to a document keeps the outline days' left edge (unless the journal's
+//     default mode is document);
 //   * text typed into an older day and scrolled away at once (before the debounced save, its
 //     delegate destroyed) is in the file, also the word the keyboard was still composing;
 //   * a day scrolled away while its editor has deferred work queued: nothing runs on it then;
@@ -129,6 +131,23 @@ Item {
                 test.check(found, "scrolled back, today shows the text")
                 c.stopEditing()
             },
+            // ---- Note modes: a day switched to a document keeps the outline days' left edge --------
+            () => test.check(test.dayAt(0).controller.setMode("document"), "today switches to a document"),
+            () => test.dayAt(0) !== null && test.dayAt(0).controller.documentMode,
+            () => {
+                const ed = test.dayAt(0).editor
+                test.check(ed.documentMode && ed.gutter === ed.outlineGutter && ed.gutter > 0,
+                           "a document day among outline days keeps their left edge: " + ed.gutter)
+                Workspace.setConfig({ journalMode: "document" })
+            },
+            () => Workspace.config.journalMode === "document",
+            () => {
+                const ed = test.dayAt(0).editor
+                test.check(ed.documentMode && ed.gutter === 0, "with documents by default, days use the full width")
+                Workspace.setConfig({ journalMode: "outline" })
+                test.dayAt(0).controller.setMode("outline")
+            },
+            () => Workspace.config.journalMode === "outline" && !test.dayAt(0).controller.documentMode,
             // ---- An older day: typed, composing, scrolled away before the save --------------------
             () => test.list.positionViewAtIndex(20, ListView.Beginning),
             () => test.dayAt(20) !== null && test.dayAt(20).controller.loaded,
