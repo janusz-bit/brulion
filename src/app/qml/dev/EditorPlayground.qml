@@ -671,14 +671,20 @@ ApplicationWindow {
                         "undo takes the code block out again"),
             // The touch toolbar of a document leads with the writing tools (list, task, [[, #, /),
             // indentation after them (off in a paragraph); an outline keeps indentation first.
-            () => { Theme.forceTouch = true; editor.startEditing(rowOf("Pierwszego dnia"), 0) },
+            () => { Theme.forceTouch = true; editor.startEditing(rowOf("Pierwszego dnia"), 0); window.waits = 0 },
             () => {
                 const list = window.findItem(editor, "toolbarList")
                 const writing = window.findItem(editor, "toolbarWritingDocument")
                 const structure = window.findItem(editor, "toolbarStructure")
-                check(editor.toolbarVisible && list !== null && writing !== null && structure !== null
-                      && list.visible && writing.visible && list.x < writing.x && writing.x < structure.x,
-                      "document toolbar: list and writing tools first, indentation after them")
+                const ordered = editor.toolbarVisible && list !== null && writing !== null && structure !== null
+                      && list.visible && writing.visible && list.x < writing.x && writing.x < structure.x
+                // The toolbar is laid out asynchronously (slow under sanitizers): repeat this step
+                // until it is (or 6 s passed).
+                if (!ordered && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                check(ordered, "document toolbar: list and writing tools first, indentation after them")
                 check(structure !== null && !structure.children[0].enabled && !structure.children[1].enabled,
                       "document toolbar: no indentation for a paragraph")
             },
