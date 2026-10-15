@@ -14,3 +14,14 @@ Keywords[pl]=notatki;markdown;konspekt;dziennik;kalendarz;przypomnienia;zadania;
 StartupWMClass=brulion
 SingleMainWindow=true
 X-GNOME-UsesNotifications=true
+Actions=capture;today;
+
+[Desktop Action capture]
+Name=Quick note
+Name[pl]=Szybka notatka
+Exec=brulion --capture
+
+[Desktop Action today]
+Name=Today's journal
+Name[pl]=Dzisiejszy dziennik
+Exec=brulion --today

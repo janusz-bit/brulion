@@ -1,0 +1,1428 @@
+// PageController + BlockListModel (src/app/editor): loading, every editing command, undo/redo,
+// byte-for-byte round trip of untouched blocks, CRLF, zoom and folding, tokens, completions,
+// slash commands, tables, links, debounced saving and changes made outside the editor.
+// Runs with a FakeEditorHost (in-memory files) and a fixed clock.
+#include "blocklistmodel.h"
+#include "blocktext.h"
+#include "fakeeditorhost.h"
+#include "pagecontroller.h"
+
+#include <QAbstractItemModelTester>
+#include <QClipboard>
+#include <QElapsedTimer>
+#include <QGuiApplication>
+#include <QSignalSpy>
+#include <QTest>
+#include <QTimer>
+
+using namespace brulion;
+using namespace brulion::editor;
+using namespace Qt::StringLiterals;
+
+namespace {
+
+const QString Page = u"Notatki/Strona.md"_s;
+const QString Now = u"2026-10-15 10:00"_s;
+
+/// A controller on `content` (with a model tester watching every signal).
+struct Fixture {
+    FakeEditorHost host;
+    PageController page;
+    std::unique_ptr<QAbstractItemModelTester> tester;
+
+    explicit Fixture(const QString &content, int saveDelay = 0)
+    {
+        host.setFile(Page, content);
+        host.setFile(u"Inna.md"_s, u"- Blok z innej strony #inne ^inny1\n- Drugi blok\n"_s);
+        page.setNow(Now);
+        page.setSaveDelay(saveDelay);
+        page.setHost(&host);
+        page.setPath(Page);
+        tester = std::make_unique<QAbstractItemModelTester>(page.blocks(), QAbstractItemModelTester::FailureReportingMode::QtTest);
+    }
+
+    BlockListModel *model() const { return page.blocks(); }
+    QVariant role(int row, const char *name) const
+    {
+        const QHash<int, QByteArray> roles = model()->roleNames();
+        return model()->data(model()->index(row), roles.key(name));
+    }
+    QString edit(int row) const { return role(row, "editText").toString(); }
+    QString text() const { return page.text(); }
+    int count() const { return model()->rowCount(); }
+    QList<bool> visible() const
+    {
+        QList<bool> out;
+        for (int r = 0; r < count(); ++r)
+            out.append(role(r, "visible").toBool());
+        return out;
+    }
+};
+
+} // namespace
+
+class TestPageController : public QObject {
+    Q_OBJECT
+
+private Q_SLOTS:
+    // --- loading and roles --------------------------------------------------------------------------
+
+    void loadsAndRoundTrips_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::newRow("sample") << FakeEditorHost::sampleNote();
+        QTest::newRow("crlf") << u"- a\r\n\t- b\r\n\r\nAkapit\r\n"_s;
+        QTest::newRow("no final newline") << u"- jeden\n- dwa"_s;
+        QTest::newRow("empty") << QString();
+        QTest::newRow("bom") << u"﻿# Tytuł\n\nTreść ąćęłńóśźż\n"_s;
+        QTest::newRow("mixed") << u"1. a\n2. b\n   1) c\n+ d\n* e\n\n```\nkod\n```\n"_s;
+    }
+
+    void loadsAndRoundTrips()
+    {
+        QFETCH(QString, content);
+        Fixture f(content);
+        QVERIFY(f.page.loaded());
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(f.page.title(), u"Strona"_s);
+        QCOMPARE(f.count(), f.model()->document().count());
+        // Reading every role of every row never crashes and is stable.
+        for (int r = 0; r < f.count(); ++r) {
+            for (const QByteArray &name : f.model()->roleNames())
+                (void)f.role(r, name.constData());
+        }
+        QCOMPARE(f.text(), content);
+    }
+
+    void sampleRoles()
+    {
+        Fixture f(FakeEditorHost::sampleNote());
+        QCOMPARE(f.host.saveAttachment(u"łazienka-szkic.png"_s, QByteArray("\x89PNG")), u"assets/łazienka-szkic.png"_s);
+        f.model()->invalidateRendering();
+        QHash<QString, int> views;
+        for (int r = 0; r < f.count(); ++r)
+            views[f.role(r, "view").toString()] += 1;
+        for (const char *v : {"frontmatter", "text", "heading", "calc", "table", "callout", "query", "rule", "quote"})
+            QVERIFY2(views.value(QString::fromLatin1(v)) > 0, v);
+        // get() (for QML: the page view finds "# Title" and [[Page#Heading]] targets) carries
+        // the heading level.
+        for (int r = 0; r < f.count(); ++r) {
+            const QVariantMap info = f.model()->get(r);
+            QCOMPARE(info.value(u"headingLevel"_s).toInt(), f.role(r, "headingLevel").toInt());
+            if (info.value(u"view"_s).toString() == u"heading")
+                QVERIFY(info.value(u"headingLevel"_s).toInt() > 0);
+        }
+        // Tasks, depth and children.
+        int kup = -1;
+        for (int r = 0; r < f.count(); ++r) {
+            if (f.edit(r).startsWith(u"Kupić płytki"_s))
+                kup = r;
+        }
+        QVERIFY(kup > 0);
+        QCOMPARE(f.role(kup, "taskStatus").toString(), u"todo"_s);
+        QCOMPARE(f.role(kup, "depth").toInt(), 1);
+        QVERIFY(f.role(kup, "hasChildren").toBool());
+        const QString html = f.role(kup, "html").toString();
+        QVERIFY(html.contains(u"tag:zakupy"_s));
+        QVERIFY(html.contains(u"📅"_s));
+        QVERIFY(!html.contains(u"[ ]"_s)); // the delegate draws the checkbox
+        // Calc results, table formulas, query and embeds.
+        for (int r = 0; r < f.count(); ++r) {
+            const QString view = f.role(r, "view").toString();
+            if (view == u"calc") {
+                const QVariantList results = f.role(r, "calcResults").toList();
+                QCOMPARE(results.size(), f.edit(r).count(u'\n') + 1);
+                QCOMPARE(results.last().toMap().value(u"value"_s).toString(), u"3558,50 zł"_s);
+            } else if (view == u"table") {
+                const QVariantMap table = f.role(r, "tableData").toMap();
+                QCOMPARE(table.value(u"header"_s).toStringList().size(), 4);
+                const QVariantList rows = table.value(u"rows"_s).toList();
+                QCOMPARE(rows.size(), 4);
+                QCOMPARE(rows[0].toList()[3].toMap().value(u"display"_s).toString(), u"578,5"_s);
+                QCOMPARE(rows[3].toList()[3].toMap().value(u"display"_s).toString(), u"834,5"_s);
+                QVERIFY(rows[3].toList()[3].toMap().value(u"formula"_s).toBool());
+            } else if (view == u"query") {
+                QCOMPARE(f.role(r, "query").toMap().value(u"filters"_s).toList().size(), 4);
+            } else if (view == u"frontmatter") {
+                QCOMPARE(f.role(r, "properties").toList().size(), 4);
+            } else if (f.role(r, "onlyEmbeds").toBool()) {
+                const QVariantList embeds = f.role(r, "embeds").toList();
+                QCOMPARE(embeds.size(), 1);
+                QVERIFY(embeds[0].toMap().value(u"url"_s).toUrl().isLocalFile());
+                QVERIFY(f.role(r, "html").toString().isEmpty());
+            }
+        }
+        // Inline calculation with frontmatter and calc-block variables.
+        bool inlineFound = false;
+        for (int r = 0; r < f.count(); ++r) {
+            if (f.edit(r).startsWith(u"Zostaje z budżetu"_s)) {
+                QVERIFY2(f.role(r, "html").toString().contains(u"8441,5"_s), qPrintable(f.role(r, "html").toString()));
+                inlineFound = true;
+            }
+        }
+        QVERIFY(inlineFound);
+    }
+
+    void unresolvedLinksAndPalette()
+    {
+        Fixture f(u"- [[Inna]] i [[Nie istnieje]]\n"_s);
+        const QString html = f.role(0, "html").toString();
+        QVERIFY(html.contains(u"#2c6aa3"_s, Qt::CaseInsensitive));
+        QVERIFY(html.contains(u"#7a5ea3"_s, Qt::CaseInsensitive));
+        f.page.setPalette({{u"link"_s, u"#112233"_s}, {u"unresolved"_s, QColor(u"#445566"_s)}});
+        const QString themed = f.role(0, "html").toString();
+        QVERIFY(themed.contains(u"#112233"_s, Qt::CaseInsensitive));
+        QVERIFY(themed.contains(u"#445566"_s, Qt::CaseInsensitive));
+    }
+
+    // --- typing and undo ------------------------------------------------------------------------------
+
+    void typingIsOneUndoStepPerBlock()
+    {
+        const QString content = u"- pierwszy\n- drugi\n"_s;
+        Fixture f(content);
+        f.page.startEditing(0, 9);
+        f.page.setEditText(0, u"pierwszy!"_s, 9);
+        f.page.setEditText(0, u"pierwszy!!"_s, 10);
+        f.page.setEditText(0, u"pierwszy!!!"_s, 11);
+        QCOMPARE(f.text(), u"- pierwszy!!!\n- drugi\n"_s);
+        f.page.startEditing(1, 5);
+        f.page.setEditText(1, u"drugi?"_s, 6);
+        QCOMPARE(f.text(), u"- pierwszy!!!\n- drugi?\n"_s);
+        QVERIFY(f.page.canUndo());
+        f.page.undo();
+        QCOMPARE(f.text(), u"- pierwszy!!!\n- drugi\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        QCOMPARE(f.page.editingRow(), 0);
+        f.page.redo();
+        QCOMPARE(f.text(), u"- pierwszy!!!\n- drugi\n"_s);
+        f.page.redo();
+        QCOMPARE(f.text(), u"- pierwszy!!!\n- drugi?\n"_s);
+        QVERIFY(!f.page.canRedo());
+    }
+
+    void undoKeepsRowsAndSendsEditTextReset()
+    {
+        Fixture f(u"- a\n- b\n- c\n"_s);
+        QSignalSpy resets(f.model(), &QAbstractItemModel::modelReset);
+        QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        f.page.startEditing(1, 1);
+        f.page.setEditText(1, u"bę"_s, 2);
+        f.page.undo();
+        QCOMPARE(resets.size(), 0); // rows of unchanged blocks survive undo
+        QVERIFY(!textResets.isEmpty());
+        QCOMPARE(textResets.last().at(0).toInt(), 1);
+        QCOMPARE(textResets.last().at(1).toString(), u"b"_s);
+    }
+
+    void typingTaskMarkerBecomesCheckbox()
+    {
+        Fixture f(u"- zwykły\n"_s);
+        QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        f.page.startEditing(0, 0);
+        f.page.setEditText(0, u"[ ] zwykły"_s, 4);
+        QCOMPARE(f.text(), u"- [ ] zwykły\n"_s);
+        QCOMPARE(f.role(0, "taskStatus").toString(), u"todo"_s);
+        QCOMPARE(f.edit(0), u"zwykły"_s);
+        QCOMPARE(textResets.size(), 1);
+        QCOMPARE(textResets[0].at(1).toString(), u"zwykły"_s);
+        QCOMPARE(textResets[0].at(2).toInt(), 0);
+        // Typing inside a task keeps the marker.
+        f.page.setEditText(0, u"zwykły tekst"_s, 12);
+        QCOMPARE(f.text(), u"- [ ] zwykły tekst\n"_s);
+    }
+
+    void crlfIsPreserved()
+    {
+        Fixture f(u"- a\r\n- b\r\n\r\nKoniec\r\n"_s);
+        f.page.startEditing(0, 1);
+        f.page.setEditText(0, u"ała\ndruga linia"_s, 3);
+        QCOMPARE(f.text(), u"- ała\r\n  druga linia\r\n- b\r\n\r\nKoniec\r\n"_s);
+        f.page.split(1, 1);
+        QCOMPARE(f.text(), u"- ała\r\n  druga linia\r\n- b\r\n- \r\n\r\nKoniec\r\n"_s);
+    }
+
+    // --- structure commands ------------------------------------------------------------------------
+
+    void splitCommands()
+    {
+        Fixture f(u"- [ ] Kup mleko\n- abc\n"_s);
+        f.page.startEditing(0, 9);
+        QVariantMap r = f.page.split(0, 9);
+        QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0); // after the hidden marker
+        QCOMPARE(f.page.editingRow(), 1);
+        f.page.startEditing(2, 1);
+        r = f.page.split(2, 1);
+        QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- a\n- bc\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 3);
+        QCOMPARE(f.role(3, "isEditing").toBool(), true);
+        QCOMPARE(f.role(2, "isEditing").toBool(), false);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
+        QCOMPARE(f.page.editingRow(), 2);
+        QCOMPARE(f.page.cursorPosition(), 1);
+    }
+
+    void splitSpecialCases()
+    {
+        // "```calc" + Enter opens a code block.
+        Fixture fence(u"- ```calc\n"_s);
+        const QVariantMap r = fence.page.split(0, 7);
+        QCOMPARE(fence.text(), u"- ```calc\n\n  ```\n"_s);
+        QCOMPARE(fence.role(0, "view").toString(), u"calc"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        // Enter on an empty nested item outdents it.
+        Fixture nested(u"- a\n\t- \n"_s);
+        nested.page.startEditing(1, 0);
+        nested.page.split(1, 0);
+        QCOMPARE(nested.text(), u"- a\n- \n"_s);
+        // Code blocks do not split.
+        Fixture code(u"```\nx\n```\n"_s);
+        QCOMPARE(code.page.split(0, 1).value(u"row"_s).toInt(), 0);
+        QCOMPARE(code.text(), u"```\nx\n```\n"_s);
+    }
+
+    void mergeCommands()
+    {
+        Fixture f(u"- ab\n- cd\n\t- dziecko\n- \n"_s);
+        QVariantMap r = f.page.mergeWithPrevious(1);
+        QCOMPARE(f.text(), u"- abcd\n\t- dziecko\n- \n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 2);
+        r = f.page.mergeWithPrevious(2); // empty block: removed
+        QCOMPARE(f.text(), u"- abcd\n\t- dziecko\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.page.mergeWithPrevious(0).value(u"row"_s).toInt(), -1);
+        // Delete at the end merges the next block in.
+        Fixture next(u"- ab\n- cd\n"_s);
+        r = next.page.mergeNext(0);
+        QCOMPARE(next.text(), u"- abcd\n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 2);
+        // Previous block is code: nothing merges, the caret moves there.
+        Fixture code(u"```\nx\n```\n- a\n"_s);
+        r = code.page.mergeWithPrevious(1);
+        QCOMPARE(code.text(), u"```\nx\n```\n- a\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+    }
+
+    void mergeUnfoldsHiddenPrevious()
+    {
+        Fixture f(u"- a\n\t- ukryty\n- b\n"_s);
+        f.page.setFolded(0, true);
+        QCOMPARE(f.visible(), QList<bool>({true, false, true}));
+        f.page.mergeWithPrevious(2);
+        QCOMPARE(f.text(), u"- a\n\t- ukrytyb\n"_s);
+        QCOMPARE(f.visible(), QList<bool>({true, true}));
+    }
+
+    void indentOutdentMove()
+    {
+        const QString content = u"Wstęp  \n\n- a\n- b\n\t- b1\n- c\n\nKoniec ąę\n"_s;
+        Fixture f(content);
+        QVERIFY(f.page.indent(2));
+        QCOMPARE(f.text(), u"Wstęp  \n\n- a\n\t- b\n\t\t- b1\n- c\n\nKoniec ąę\n"_s);
+        QVERIFY(f.page.outdent(2));
+        QCOMPARE(f.text(), content);
+        QVERIFY(f.page.moveDown(2));
+        QCOMPARE(f.text(), u"Wstęp  \n\n- a\n- c\n- b\n\t- b1\n\nKoniec ąę\n"_s);
+        QVERIFY(f.page.moveUp(3));
+        QCOMPARE(f.text(), content);
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        Fixture first(u"- a\n- b\n"_s);
+        QVERIFY(!first.page.indent(0)); // no previous sibling
+        QVERIFY(!first.page.outdent(0));
+    }
+
+    void movingKeepsEditingBlock()
+    {
+        Fixture f(u"- a\n- b\n- c\n"_s);
+        f.page.startEditing(2, 1);
+        f.page.moveUp(2);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.edit(1), u"c"_s);
+    }
+
+    void tasks()
+    {
+        Fixture f(u"- Zadanie\n"_s);
+        f.page.cycleTask(0);
+        QCOMPARE(f.text(), u"- [ ] Zadanie\n"_s);
+        f.page.cycleTask(0);
+        QCOMPARE(f.text(), u"- [/] Zadanie\n"_s);
+        f.page.cycleTask(0);
+        QCOMPARE(f.text(), u"- [x] Zadanie ✅ 2026-10-15\n"_s);
+        f.page.cycleTask(0);
+        QCOMPARE(f.text(), u"- Zadanie\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [x] Zadanie ✅ 2026-10-15\n"_s);
+        f.page.toggleTask(0);
+        QCOMPARE(f.text(), u"- [ ] Zadanie\n"_s);
+        f.page.setTaskStatus(0, u"cancelled"_s);
+        QCOMPARE(f.text(), u"- [-] Zadanie ❌ 2026-10-15\n"_s);
+        f.page.removeTaskMarker(0);
+        QCOMPARE(f.text(), u"- Zadanie\n"_s);
+    }
+
+    void recurringTaskInsertsNextOccurrence()
+    {
+        Fixture f(u"- [ ] Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s);
+        f.page.startEditing(0, 3);
+        f.page.toggleTask(0);
+        QCOMPARE(f.count(), 2);
+        QVERIFY(f.text().startsWith(u"- [ ] Podlać kwiaty 📅 2026-10-22"_s));
+        QVERIFY(f.text().contains(u"- [x] Podlać kwiaty 📅 2026-10-15 🔁 every week ✅ 2026-10-15"_s));
+        QCOMPARE(f.page.editingRow(), 1); // still the completed block
+    }
+
+    void deleteAndInsert()
+    {
+        Fixture f(u"- a\n\t- a1\n- b\n"_s);
+        f.page.startEditing(0, 0);
+        const int focus = f.page.deleteBlock(0);
+        QCOMPARE(f.text(), u"- b\n"_s);
+        QCOMPARE(focus, 0);
+        const int row = f.page.insertBlockAfter(0, u"nowy ż"_s);
+        QCOMPARE(row, 1);
+        QCOMPARE(f.text(), u"- b\n- nowy ż\n"_s);
+        QCOMPARE(f.page.editingRow(), 1);
+        // A trailing empty block is reused.
+        Fixture empty(u"- a\n- \n"_s);
+        QCOMPARE(empty.page.appendEmptyBlock(), 1);
+        QCOMPARE(empty.text(), u"- a\n- \n"_s);
+        Fixture para(u"Akapit\n"_s);
+        QCOMPARE(para.page.appendEmptyBlock(), 1);
+        QCOMPARE(para.model()->document().at(1).kind, BlockKind::ListItem);
+        Fixture none{QString()};
+        QCOMPARE(none.page.appendEmptyBlock(), 0);
+        QCOMPARE(none.count(), 1);
+    }
+
+    void insertMarkdownAndTemplates()
+    {
+        Fixture f(u"- a\n\t- a1\n- \n"_s);
+        int row = f.page.insertMarkdown(2, u"- [ ] x\n- [ ] y"_s);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n- [ ] x\n- [ ] y\n"_s);
+        QCOMPARE(row, 2);
+        row = f.page.insertMarkdown(1, u"## Sekcja"_s);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\n## Sekcja\n\n- [ ] x\n- [ ] y\n"_s);
+        QCOMPARE(f.model()->document().at(row).kind, BlockKind::Heading);
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a\n\t- a1\n- \n"_s);
+        // Templates are filled ({{date}}, {{title}}).
+        f.host.setFile(u"templates/T.md"_s, u"- Notatka {{date}} — {{title}}\n"_s);
+        f.page.insertTemplate(2, u"templates/T.md"_s);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n- Notatka 2026-10-15 — Strona\n"_s);
+    }
+
+    // --- zoom and folding ----------------------------------------------------------------------------
+
+    void zoom()
+    {
+        Fixture f(u"- a\n\t- a1\n\t\t- a11\n\t- a2\n- b\n"_s);
+        QSignalSpy zoomSpy(&f.page, &PageController::zoomChanged);
+        f.page.zoomInto(1);
+        QCOMPARE(f.page.zoomBlock(), 1);
+        QCOMPARE(f.visible(), QList<bool>({false, true, true, false, false}));
+        QCOMPARE(f.role(1, "depth").toInt(), 0);
+        QCOMPARE(f.role(2, "depth").toInt(), 1);
+        QCOMPARE(f.role(2, "docDepth").toInt(), 2);
+        QVERIFY(f.role(1, "isZoomRoot").toBool());
+        const QVariantList crumbs = f.page.breadcrumb();
+        QCOMPARE(crumbs.size(), 2);
+        QCOMPARE(crumbs[0].toMap().value(u"title"_s).toString(), u"a"_s);
+        QCOMPARE(crumbs[1].toMap().value(u"row"_s).toInt(), 1);
+        // Enter at the end of the zoomed block adds a first child inside the zoom.
+        f.page.startEditing(1, 2);
+        const QVariantMap r = f.page.split(1, 2);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QVERIFY(f.role(2, "visible").toBool());
+        // The zoom root cannot be moved or outdented; its children cannot leave it.
+        QVERIFY(!f.page.moveUp(1));
+        QVERIFY(!f.page.outdent(2));
+        f.page.zoomOut();
+        QCOMPARE(f.page.zoomBlock(), 0);
+        f.page.zoomOut();
+        QCOMPARE(f.page.zoomBlock(), -1);
+        QCOMPARE(f.visible(), QList<bool>(6, true));
+        QVERIFY(zoomSpy.size() >= 3);
+    }
+
+    void zoomFollowsUndo()
+    {
+        Fixture f(u"- a\n\t- a1\n- b\n"_s);
+        f.page.zoomInto(0);
+        f.page.setEditText(1, u"a1 zmienione"_s, 12);
+        f.page.undo();
+        QCOMPARE(f.page.zoomBlock(), 0);
+        QCOMPARE(f.visible(), QList<bool>({true, true, false}));
+    }
+
+    void folding()
+    {
+        Fixture f(u"- a\n\t- a1\n\t\t- a11\n- b\n\t- b1\n"_s);
+        QSignalSpy foldSpy(&f.page, &PageController::foldStateChanged);
+        f.page.startEditing(2, 1);
+        f.page.toggleFold(0);
+        QCOMPARE(f.visible(), QList<bool>({true, false, false, true, true}));
+        QVERIFY(f.role(0, "collapsed").toBool());
+        QCOMPARE(f.page.editingRow(), 0); // the caret moved out of the folded subtree
+        QCOMPARE(f.page.foldState(), QVariantList({0}));
+        QCOMPARE(f.page.nextVisibleRow(0), 3);
+        QCOMPARE(f.page.previousVisibleRow(3), 0);
+        f.page.toggleFold(1); // hidden but has children: folds too
+        f.page.toggleFold(0);
+        QCOMPARE(f.visible(), QList<bool>({true, true, false, true, true}));
+        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        f.page.toggleFold(4); // no children: nothing
+        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        f.page.foldAll(true);
+        QCOMPARE(f.visible(), QList<bool>({true, false, false, true, false}));
+        f.page.foldAll(false);
+        QCOMPARE(f.visible(), QList<bool>(5, true));
+        f.page.setFoldState({3, 99});
+        QCOMPARE(f.visible(), QList<bool>({true, true, true, true, false}));
+        QVERIFY(foldSpy.size() >= 5);
+        // Editing a hidden block unfolds it.
+        f.page.startEditing(4, 0);
+        QCOMPARE(f.visible(), QList<bool>(5, true));
+        // Split of a folded block puts the new block after its subtree.
+        f.page.setFolded(0, true);
+        f.page.split(0, 1);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- a11\n- \n- b\n\t- b1\n"_s);
+    }
+
+    void revealAndLookups()
+    {
+        Fixture f(u"- a ^ida\n\t- a1\n\t\t- a11 ^deep\n- b\n"_s);
+        QCOMPARE(f.page.rowOfBlockId(u"deep"_s), 2);
+        QCOMPARE(f.page.rowOfBlockId(u"nope"_s), -1);
+        QCOMPARE(f.page.rowOfLine(3), 3);
+        QCOMPARE(f.page.rowOfLine(99), -1);
+        f.page.setFolded(0, true);
+        f.page.setFolded(1, true);
+        f.page.zoomInto(3);
+        QVERIFY(!f.role(2, "visible").toBool());
+        f.page.reveal(2);
+        QVERIFY(f.role(2, "visible").toBool());
+        QCOMPARE(f.page.zoomBlock(), -1);
+        QCOMPARE(f.page.foldState(), QVariantList());
+    }
+
+    void collapsedPropertyFoldsInitially()
+    {
+        Fixture f(u"- a\n  collapsed:: true\n\t- a1\n- b\n"_s);
+        QCOMPARE(f.visible(), QList<bool>({true, false, true}));
+        QVERIFY(!f.role(0, "html").toString().contains(u"collapsed"_s));
+    }
+
+    // --- tokens ---------------------------------------------------------------------------------------
+
+    void tokenCommands()
+    {
+        Fixture f(u"- [ ] Zadzwonić do mamy ^m1\n"_s);
+        f.page.startEditing(0, 4);
+        f.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰ 2026-10-16 18:00 ^m1\n"_s);
+        QCOMPARE(f.page.cursorPosition(), 4);
+        // Edit the reminder through its chip range (body coordinates).
+        const QString body = f.model()->document().at(0).body;
+        const int from = int(body.indexOf(u"⏰"_s));
+        const int to = from + int(u"⏰ 2026-10-16 18:00"_s.size());
+        const QVariantMap reminder = f.page.reminderAt(0, from, to);
+        QCOMPARE(reminder.value(u"at"_s).toString(), u"2026-10-16 18:00"_s);
+        QCOMPARE(reminder.value(u"alarm"_s).toBool(), false);
+        QCOMPARE(reminder.value(u"context"_s).toString(), u"Zadzwonić do mamy"_s);
+        f.page.setReminder(0, u"2026-10-17 07:30"_s, true, u"co tydzień w sobotę"_s, from, to);
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 🔁 every week on Saturday ^m1\n"_s);
+        QCOMPARE(f.page.blockDates(0).value(u"recurrence"_s).toString(), u"every week on Saturday"_s);
+        // Removing the recurrence while editing the reminder.
+        const QString body2 = f.model()->document().at(0).body;
+        const int from2 = int(body2.indexOf(u"⏰"_s));
+        f.page.setReminder(0, u"2026-10-17 07:30"_s, true, QString(), from2, from2 + int(u"⏰! 2026-10-17 07:30"_s.size()));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 ^m1\n"_s);
+        f.page.setDateToken(0, u"due"_s, u"2026-10-20"_s);
+        f.page.setDateToken(0, u"scheduled"_s, u"2026-10-18 09:00"_s);
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 📅 2026-10-20 ⏳ 2026-10-18 09:00 ^m1\n"_s);
+        QCOMPARE(f.page.blockDates(0).value(u"due"_s).toString(), u"2026-10-20"_s);
+        f.page.setDateToken(0, u"due"_s, QString());
+        f.page.setRecurrence(0, u"codziennie"_s);
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 ⏳ 2026-10-18 09:00 🔁 every day ^m1\n"_s);
+        f.page.setDateToken(0, u"nonsense"_s, u"2026-10-20"_s);
+        f.page.setDateToken(0, u"due"_s, u"jutro"_s); // not a canonical spec: ignored
+        f.page.setReminder(0, u"zła data"_s, false, QString());
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 ⏳ 2026-10-18 09:00 🔁 every day ^m1\n"_s);
+        const QString body3 = f.model()->document().at(0).body;
+        const int from3 = int(body3.indexOf(u"⏳"_s));
+        f.page.removeToken(0, from3, from3 + int(u"⏳ 2026-10-18 09:00"_s.size()));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do mamy ⏰! 2026-10-17 07:30 🔁 every day ^m1\n"_s);
+        // insertToken / replaceRange in edit-text coordinates.
+        Fixture g(u"- [ ] Kupić\n"_s);
+        QCOMPARE(g.page.insertToken(0, 5, u"⏫"_s), 8);
+        QCOMPARE(g.text(), u"- [ ] Kupić ⏫ \n"_s);
+        QCOMPARE(g.page.replaceRange(0, 0, 5, u"Sprzedać"_s), 8);
+        QCOMPARE(g.text(), u"- [ ] Sprzedać ⏫ \n"_s);
+    }
+
+    void reminderWithoutTimeUsesDefault()
+    {
+        Fixture f(u"- x ⏰ 2026-10-16\n"_s);
+        const QString body = f.model()->document().at(0).body;
+        QCOMPARE(f.page.reminderAt(0, 2, int(body.size())).value(u"at"_s).toString(), u"2026-10-16 09:00"_s);
+        QVERIFY(f.page.reminderAt(0, 0, 1).isEmpty());
+    }
+
+    void blockRefs()
+    {
+        Fixture f(u"- cel\n- inny\n"_s);
+        const QString id = f.page.ensureBlockRef(0);
+        QCOMPARE(id.size(), 6);
+        QCOMPARE(f.text(), u"- cel ^"_s + id + u"\n- inny\n"_s);
+        QCOMPARE(f.page.ensureBlockRef(0), id); // stable
+        QCOMPARE(f.page.copyBlockRef(0), id);
+        QCOMPARE(QGuiApplication::clipboard()->text(), u"(("_s + id + u"))"_s);
+        QCOMPARE(f.page.journalLink(u"2026-10-15"_s), u"[[2026-10-15]]"_s);
+    }
+
+    // --- completions and slash commands ------------------------------------------------------------
+
+    void completions()
+    {
+        Fixture f(u"- zobacz [[Inn\n"_s);
+        f.page.startEditing(0, 12);
+        QVariantMap trigger = completionTriggerAt(f.edit(0), 12).toMap();
+        QVariantMap r = f.page.applyCompletion(0, trigger, {{u"insertText"_s, u"Inna"_s}, {u"kind"_s, u"page"_s}});
+        QCOMPARE(f.text(), u"- zobacz [[Inna]]\n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 15);
+        // Existing closing brackets are reused.
+        Fixture closed(u"- [[In]] x\n"_s);
+        trigger = completionTriggerAt(closed.edit(0), 4).toMap();
+        r = closed.page.applyCompletion(0, trigger, {{u"insertText"_s, u"Inna"_s}});
+        QCOMPARE(closed.text(), u"- [[Inna]] x\n"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 8);
+        // Tags with spaces become #[[…]].
+        Fixture tag(u"- #zak\n"_s);
+        tag.page.applyCompletion(0, completionTriggerAt(tag.edit(0), 4).toMap(), {{u"insertText"_s, u"zakupy domowe"_s}});
+        QCOMPARE(tag.text(), u"- #[[zakupy domowe]] \n"_s);
+        // Block refs: a block of this page gets an id; another page's through the host.
+        Fixture refs(u"- cel\n- ((ce\n"_s);
+        refs.page.startEditing(1, 4);
+        refs.page.applyCompletion(1, completionTriggerAt(refs.edit(1), 4).toMap(),
+                                  {{u"path"_s, Page}, {u"line"_s, 0}, {u"blockId"_s, QString()}});
+        const QString id = refs.model()->document().at(0).blockId;
+        QCOMPARE(id.size(), 6);
+        QCOMPARE(refs.text(), u"- cel ^"_s + id + u"\n- (("_s + id + u"))\n"_s);
+        refs.page.setEditText(1, u"(("_s, 2);
+        refs.page.applyCompletion(1, completionTriggerAt(u"(("_s, 2).toMap(),
+                                  {{u"path"_s, u"Inna.md"_s}, {u"line"_s, 1}, {u"blockId"_s, QString()}});
+        const QString other = refs.host.file(u"Inna.md"_s);
+        QVERIFY(other.contains(u"- Drugi blok ^"_s));
+        QVERIFY(refs.edit(1).startsWith(u"(("_s) && refs.edit(1).endsWith(u"))"_s));
+        // Dates.
+        Fixture date(u"- Zadzwonić ⏰ jutro o 9\n"_s);
+        date.page.applyCompletion(0, completionTriggerAt(date.edit(0), int(date.edit(0).size())).toMap(),
+                                  {{u"insertText"_s, u"2026-10-16 09:00"_s}, {u"kind"_s, u"date"_s}});
+        QCOMPARE(date.text(), u"- Zadzwonić ⏰ 2026-10-16 09:00 \n"_s);
+        Fixture at(u"- spotkanie @jutro\n"_s);
+        at.page.applyCompletion(0, completionTriggerAt(at.edit(0), int(at.edit(0).size())).toMap(),
+                                {{u"insertText"_s, u"[[2026-10-16]]"_s}, {u"kind"_s, u"journal"_s}});
+        QCOMPARE(at.text(), u"- spotkanie [[2026-10-16]] \n"_s);
+    }
+
+    void slashCommands()
+    {
+        Fixture f(u"- Zrobić /zad\n"_s);
+        f.page.startEditing(0, 11);
+        QVariantMap r = f.page.applySlashCommand(0, 7, 11, u"task"_s);
+        QCOMPARE(f.text(), u"- [ ] Zrobić \n"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), QString());
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Zrobić /zad\n"_s); // one undo step
+        // Headings.
+        Fixture h(u"- Sekcja /h2\n"_s);
+        h.page.applySlashCommand(0, 7, 10, u"h2"_s);
+        QCOMPARE(h.text(), u"- ## Sekcja \n"_s);
+        QCOMPARE(h.role(0, "view").toString(), u"heading"_s);
+        Fixture hp(u"Akapit /h1\n"_s);
+        hp.page.applySlashCommand(0, 7, 10, u"h1"_s);
+        QCOMPARE(hp.text(), u"# Akapit \n"_s);
+        // Blocks from templates replace an empty block.
+        Fixture calc(u"- /obl\n"_s);
+        calc.page.startEditing(0, 4);
+        r = calc.page.applySlashCommand(0, 0, 4, u"calc"_s);
+        QCOMPARE(calc.text(), u"- ```calc\n\n  ```\n"_s);
+        QCOMPARE(calc.role(0, "view").toString(), u"calc"_s);
+        QCOMPARE(calc.page.editingRow(), 0);
+        QCOMPARE(calc.page.cursorPosition(), 0);
+        Fixture table(u"Tekst /tab\n"_s);
+        r = table.page.applySlashCommand(0, 6, 10, u"table"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"table"_s);
+        QCOMPARE(table.count(), 2);
+        QCOMPARE(table.role(1, "view").toString(), u"table"_s);
+        QCOMPARE(table.edit(0), u"Tekst "_s);
+        // Dialog commands just remove the trigger and report the action.
+        Fixture rem(u"- Zadzwonić /przyp\n"_s);
+        r = rem.page.applySlashCommand(0, 10, 16, u"reminder"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"reminder"_s);
+        QCOMPARE(rem.text(), u"- Zadzwonić \n"_s);
+        // Journal links and embeds.
+        Fixture today(u"- spotkanie /dzi\n"_s);
+        today.page.applySlashCommand(0, 10, 14, u"tomorrow"_s);
+        QCOMPARE(today.text(), u"- spotkanie [[2026-10-16]]\n"_s);
+        Fixture embed(u"- /osa\n"_s);
+        r = embed.page.applySlashCommand(0, 0, 4, u"embed"_s);
+        QCOMPARE(embed.text(), u"- ![[\n"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"complete"_s);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 3);
+        // Divider replaces the empty block with a top-level rule.
+        Fixture rule(u"- a\n- /lin\n"_s);
+        rule.page.applySlashCommand(1, 0, 4, u"rule"_s);
+        QCOMPARE(rule.text(), u"- a\n---\n"_s);
+        QCOMPARE(rule.role(1, "view").toString(), u"rule"_s);
+        rule.page.undo();
+        QCOMPARE(rule.text(), u"- a\n- /lin\n"_s);
+    }
+
+    void pasting()
+    {
+        // A list pasted into an empty block becomes blocks, nesting kept.
+        Fixture f(u"- a\n- \n- z\n"_s);
+        f.page.startEditing(1, 0);
+        QVariantMap r = f.page.pasteText(1, 0, 0, u"- [ ] mleko\n- chleb\n\t- żytni\n"_s);
+        QCOMPARE(f.text(), u"- a\n- [ ] mleko\n- chleb\n\t- żytni\n- z\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 3);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 5);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a\n- \n- z\n"_s);
+        // Text before the caret joins the first pasted block, text after it ends the last one.
+        Fixture mid(u"- początek|koniec\n"_s);
+        r = mid.page.pasteText(0, 8, 9, u"- jeden\n- dwa"_s);
+        QCOMPARE(mid.text(), u"- początekjeden\n- dwakoniec\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 3);
+        // Paragraphs separated by blank lines become blocks too; one paragraph stays one block.
+        Fixture para(u"- x\n"_s);
+        para.page.pasteText(0, 1, 1, u" pierwszy\ndruga linia"_s);
+        QCOMPARE(para.text(), u"- x pierwszy\n  druga linia\n"_s);
+        Fixture two(u"- \n"_s);
+        two.page.pasteText(0, 0, 0, u"Akapit pierwszy\n\nAkapit drugi"_s);
+        QCOMPARE(two.count(), 2);
+        QCOMPARE(two.edit(1), u"Akapit drugi"_s);
+        // Code blocks keep pasted text as it is.
+        Fixture code(u"```\nx\n```\n"_s);
+        code.page.pasteText(0, 1, 1, u"\n- a\n- b"_s);
+        QCOMPARE(code.text(), u"```\nx\n- a\n- b\n```\n"_s);
+    }
+
+    void pastingCodeBlocksMidText()
+    {
+        // A pasted code block (or table, quote…) is never glued to the text around the caret:
+        // "a```js" / "```bc" would no longer be a fence.
+        Fixture f(u"- abc\n- z\n"_s);
+        f.page.startEditing(0, 1);
+        const QVariantMap r = f.page.pasteText(0, 1, 1, u"```js\nkod ąę\n```\npo"_s);
+        QCOMPARE(f.edit(0), u"a"_s);
+        QCOMPARE(f.role(1, "view").toString(), u"code"_s);
+        QCOMPARE(f.edit(1), u"kod ąę"_s);
+        QCOMPARE(f.edit(2), u"pobc"_s);
+        QCOMPARE(f.edit(3), u"z"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 2);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- abc\n- z\n"_s);
+        // Ending with a code block: the text after the caret becomes a block of its own.
+        f.page.pasteText(0, 1, 1, u"x\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"_s);
+        QCOMPARE(f.edit(0), u"ax"_s);
+        QCOMPARE(f.role(1, "view").toString(), u"table"_s);
+        QCOMPARE(f.edit(2), u"bc"_s);
+        f.page.undo();
+        // Only a code block, pasted mid-text: it still becomes a block between the two halves.
+        f.page.pasteText(0, 1, 1, u"```\nkod\n```"_s);
+        QCOMPARE(f.edit(0), u"a"_s);
+        QCOMPARE(f.role(1, "view").toString(), u"code"_s);
+        QCOMPARE(f.edit(1), u"kod"_s);
+        QCOMPARE(f.edit(2), u"bc"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- abc\n- z\n"_s);
+        // Into an empty block: the code block takes its place.
+        Fixture e(u"- \n"_s);
+        e.page.pasteText(0, 0, 0, u"```\nkod\n```\n\ntekst"_s);
+        QCOMPARE(e.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(e.edit(1), u"tekst"_s);
+        QCOMPARE(e.count(), 2);
+    }
+
+    // --- tables ----------------------------------------------------------------------------------------
+
+    void tables()
+    {
+        Fixture f(u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
+        QCOMPARE(f.role(1, "view").toString(), u"table"_s);
+        QVariantList rows = f.role(1, "tableData").toMap().value(u"rows"_s).toList();
+        QCOMPARE(rows[1].toList()[1].toMap().value(u"display"_s).toString(), u"89"_s);
+        f.page.setTableCell(1, 0, 1, u"100"_s);
+        rows = f.role(1, "tableData").toMap().value(u"rows"_s).toList();
+        QCOMPARE(rows[1].toList()[1].toMap().value(u"display"_s).toString(), u"100"_s);
+        QVERIFY(f.text().startsWith(u"Przed\n\n"_s));
+        QVERIFY(f.text().endsWith(u"\n\nPo\n"_s));
+        f.page.addTableRow(1);
+        f.page.addTableColumn(1);
+        const QVariantMap data = f.role(1, "tableData").toMap();
+        QCOMPARE(data.value(u"header"_s).toStringList(), QStringList({u"Pozycja"_s, u"Cena"_s, u"Kolumna 3"_s}));
+        QCOMPARE(data.value(u"rows"_s).toList().size(), 3);
+        f.page.setTableCell(1, -1, 0, u"Rzecz"_s);
+        QCOMPARE(f.role(1, "tableData").toMap().value(u"header"_s).toStringList().first(), u"Rzecz"_s);
+        f.page.removeTableRow(1, 2);
+        QCOMPARE(f.role(1, "tableData").toMap().value(u"rows"_s).toList().size(), 2);
+        f.page.setTableCell(1, 99, 0, u"x"_s); // out of range: nothing
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"Przed\n\n| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n| Suma | =sum(above) |\n\nPo\n"_s);
+    }
+
+    void tableCellTypingIsSavedAndOneUndoStep()
+    {
+        // A cell being typed in reaches the document (and the debounced save) at once — an app
+        // suspended or closed with the cell still open loses nothing — and its typing is one
+        // undo step per cell.
+        const QString content = u"| Pozycja | Cena |\n| --- | ---: |\n| Płytki | 89 |\n"_s;
+        Fixture f(content, 0);
+        f.page.setTableCell(0, 0, 0, u"Ł"_s, true);
+        f.page.setTableCell(0, 0, 0, u"Łą"_s, true);
+        f.page.setTableCell(0, 0, 0, u"Łąka"_s, true);
+        QVERIFY(f.host.file(Page).contains(u"Łąka"_s));
+        f.page.setTableCell(0, 0, 1, u"90"_s, true); // another cell: another step
+        f.page.setTableCell(0, 0, 1, u"901"_s, true);
+        QVERIFY(f.host.file(Page).contains(u"901"_s));
+        f.page.undo();
+        QVERIFY(f.text().contains(u"Łąka"_s));
+        QVERIFY(f.text().contains(u"89"_s));
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        QVERIFY(!f.page.canUndo());
+        // Esc: the cell's typing is undone exactly (the table is reformatted by typing).
+        f.page.setTableCell(0, -1, 1, u"Cena zł"_s, true);
+        f.page.setTableCell(0, 0, 1, u"9"_s, true);
+        f.page.setTableCell(0, 0, 1, u"99"_s, true);
+        f.page.cancelTableCell(0, 0, 1);
+        QVERIFY(f.text().contains(u"Cena zł"_s));
+        QVERIFY(f.text().contains(u"89 |"_s) && !f.text().contains(u"99"_s));
+        f.page.cancelTableCell(0, 0, 1); // nothing typed in this cell any more: no undo
+        f.page.cancelTableCell(0, -1, 0);
+        QVERIFY(f.text().contains(u"Cena zł"_s));
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
+    void calcResultsFollowEdits()
+    {
+        Fixture f(u"```calc\na = 2\nb = a * 3\n```\n\n```calc\nb + 1\n```\n"_s);
+        QCOMPARE(f.role(1, "calcResults").toList()[0].toMap().value(u"value"_s).toString(), u"7"_s);
+        f.page.setEditText(0, u"a = 5\nb = a * 3"_s, 5);
+        QCOMPARE(f.role(0, "calcResults").toList()[1].toMap().value(u"value"_s).toString(), u"15"_s);
+        QCOMPARE(f.role(1, "calcResults").toList()[0].toMap().value(u"value"_s).toString(), u"16"_s);
+        QCOMPARE(f.text(), u"```calc\na = 5\nb = a * 3\n```\n\n```calc\nb + 1\n```\n"_s);
+    }
+
+    // --- links --------------------------------------------------------------------------------------------
+
+    void links()
+    {
+        Fixture f(u"- [ ] zadanie ⏰ 2026-10-16 09:00 ^c1\n- [[Inna#^inny1]] ((c1))\n"_s);
+        QSignalSpy nav(&f.host, &FakeEditorHost::navigated);
+        QSignalSpy urls(&f.host, &FakeEditorHost::urlOpened);
+        f.page.activateLink(1, u"page:Inna#%5Einny1"_s);
+        QCOMPARE(nav.size(), 1);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Inna.md"_s);
+        QCOMPARE(f.host.lastRoute().value(u"blockId"_s).toString(), u"inny1"_s);
+        f.page.activateLink(1, u"page:Nowa%20strona"_s);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), QString());
+        QCOMPARE(f.host.lastRoute().value(u"target"_s).toString(), u"Nowa strona"_s);
+        f.page.activateLink(0, u"tag:%C5%BC%C3%B3%C5%82w"_s);
+        QCOMPARE(f.host.lastRoute().value(u"tag"_s).toString(), u"żółw"_s);
+        f.page.activateLink(0, u"ext:https://example.com/a"_s);
+        QCOMPARE(urls.size(), 1);
+        QVariantMap r = f.page.activateLink(1, u"block:c1"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"scrollTo"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        r = f.page.activateLink(0, u"reminder:10-30"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"reminder"_s);
+        QCOMPARE(r.value(u"from"_s).toInt(), 10);
+        f.page.activateLink(0, u"task:toggle"_s);
+        QVERIFY(f.text().startsWith(u"- [x] zadanie"_s));
+        // The rendered reminder chip links to the token's range in the body.
+        const QString html = f.role(0, "html").toString();
+        const qsizetype k = html.indexOf(u"reminder:"_s);
+        QVERIFY(k > 0);
+        const QString range = html.mid(k + 9, html.indexOf(u'"', k) - k - 9);
+        const QStringList parts = range.split(u'-');
+        const QString body = f.model()->document().at(0).body;
+        QCOMPARE(body.mid(parts[0].toInt(), parts[1].toInt() - parts[0].toInt()), u"⏰ 2026-10-16 09:00"_s);
+    }
+
+    // --- saving -------------------------------------------------------------------------------------------
+
+    void debouncedSave()
+    {
+        Fixture f(u"- a\n"_s, 60);
+        QSignalSpy saved(&f.page, &PageController::saved);
+        f.page.setEditText(0, u"ab"_s, 2);
+        f.page.setEditText(0, u"abc"_s, 3);
+        QVERIFY(f.page.dirty());
+        QCOMPARE(f.host.writeCount(), 0);
+        QTRY_COMPARE(f.host.writeCount(), 1);
+        QCOMPARE(f.host.file(Page), u"- abc\n"_s);
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(saved.size(), 1);
+        // save() flushes at once.
+        f.page.setEditText(0, u"abcd"_s, 4);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.writeCount(), 2);
+        QTest::qWait(100);
+        QCOMPARE(f.host.writeCount(), 2);
+        // Undo back to the saved text is not dirty.
+        f.page.cycleTask(0);
+        QVERIFY(f.page.dirty());
+        f.page.undo();
+        QVERIFY(!f.page.dirty());
+    }
+
+    void failedSaveStaysDirty()
+    {
+        Fixture f(u"- a\n"_s, 0);
+        QSignalSpy failed(&f.page, &PageController::saveFailed);
+        f.host.setFailWrites(true);
+        f.page.setEditText(0, u"b"_s, 1);
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(f.page.dirty());
+        f.host.setFailWrites(false);
+        QVERIFY(f.page.save());
+        QVERIFY(!f.page.dirty());
+        QCOMPARE(f.host.file(Page), u"- b\n"_s);
+    }
+
+    void newPageIsCreatedByContent()
+    {
+        FakeEditorHost host;
+        PageController page;
+        page.setSaveDelay(0);
+        page.setHost(&host);
+        page.setPath(u"Nowa strona.md"_s);
+        QVERIFY(page.loaded());
+        QVERIFY(!page.exists());
+        QCOMPARE(page.appendEmptyBlock(), 0);
+        QVERIFY(!page.dirty());
+        QCOMPARE(host.writeCount(), 0); // a lone empty bullet creates no file
+        page.setEditText(0, u"Pierwsza myśl"_s, 13);
+        QCOMPARE(host.writeCount(), 1);
+        QVERIFY(page.exists());
+        QCOMPARE(host.file(u"Nowa strona.md"_s), u"- Pierwsza myśl\n"_s);
+    }
+
+    void saveOnDestructionAndPathChange()
+    {
+        FakeEditorHost host;
+        host.setFile(Page, u"- a\n"_s);
+        host.setFile(u"B.md"_s, u"- b\n"_s);
+        {
+            PageController page;
+            page.setSaveDelay(10000);
+            page.setHost(&host);
+            page.setPath(Page);
+            page.setEditText(0, u"zmiana"_s, 6);
+            QCOMPARE(host.file(Page), u"- a\n"_s);
+            page.setPath(u"B.md"_s);
+            QCOMPARE(host.file(Page), u"- zmiana\n"_s);
+            QCOMPARE(page.text(), u"- b\n"_s);
+            page.setEditText(0, u"bb"_s, 2);
+        }
+        QCOMPARE(host.file(u"B.md"_s), u"- bb\n"_s);
+    }
+
+    // --- external changes ---------------------------------------------------------------------------
+
+    void externalChangeReloadsWhenClean()
+    {
+        Fixture f(u"- a\n- b\n- c\n"_s);
+        QSignalSpy resets(f.model(), &QAbstractItemModel::modelReset);
+        QSignalSpy changed(&f.page, &PageController::externallyChanged);
+        f.page.startEditing(2, 1);
+        f.host.externalWrite(Page, u"- a\n- b zmienione przez Syncthing\n- c\n"_s);
+        QCOMPARE(f.text(), u"- a\n- b zmienione przez Syncthing\n- c\n"_s);
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(f.page.editingRow(), 2);
+        QVERIFY(!f.page.dirty());
+        QVERIFY(!f.page.canUndo());
+        // Our own write coming back is ignored.
+        f.page.setEditText(2, u"c!"_s, 2);
+        f.page.save();
+        f.host.externalWrite(Page, f.host.file(Page));
+        QCOMPARE(changed.size(), 1);
+    }
+
+    void externalChangeMergesWhenDirty()
+    {
+        Fixture f(u"- a\n- b\n- c\n"_s, 10000);
+        f.page.setMergeFunction([](const QString &base, const QString &local, const QString &remote) {
+            // Test merge: the remote added a line at the end, the local changed the first line.
+            Q_UNUSED(base);
+            if (remote == u"- a\n- b\n- c\n- d\n"_s)
+                return MergeOutcome{local + u"- d\n"_s, true};
+            return MergeOutcome{local, false};
+        });
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        QVERIFY(f.page.dirty());
+        f.host.externalWrite(Page, u"- a\n- b\n- c\n- d\n"_s);
+        QCOMPARE(f.text(), u"- a lokalnie\n- b\n- c\n- d\n"_s);
+        QVERIFY(f.page.dirty());
+        QVERIFY(!f.page.conflict());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b\n- c\n- d\n"_s);
+        // A conflict keeps the local text and blocks saving until resolved.
+        f.page.setEditText(1, u"b lokalnie"_s, 10);
+        f.host.externalWrite(Page, u"- a zdalnie\n- b\n- c\n- d\n"_s);
+        QVERIFY(f.page.conflict());
+        QCOMPARE(f.page.conflictText(), u"- a zdalnie\n- b\n- c\n- d\n"_s);
+        QCOMPARE(f.text(), u"- a lokalnie\n- b lokalnie\n- c\n- d\n"_s);
+        QVERIFY(!f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a zdalnie\n- b\n- c\n- d\n"_s);
+        f.page.resolveConflict(u"- a obie\n- b lokalnie\n- c\n- d\n"_s);
+        QVERIFY(!f.page.conflict());
+        QCOMPARE(f.host.file(Page), u"- a obie\n- b lokalnie\n- c\n- d\n"_s);
+        QCOMPARE(f.text(), u"- a obie\n- b lokalnie\n- c\n- d\n"_s);
+    }
+
+    void defaultMergeIsThreeWay()
+    {
+        Fixture f(u"- a\n- b\n- c\n"_s, 10000);
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        f.host.externalWrite(Page, u"- a\n- b\n- c zdalnie\n"_s);
+#ifdef BRULION_TEST_NO_SYNC
+        QVERIFY(f.page.conflict());
+#else
+        if (f.page.conflict())
+            QSKIP("sync::merge3 is not part of this build");
+        QCOMPARE(f.text(), u"- a lokalnie\n- b\n- c zdalnie\n"_s);
+#endif
+    }
+
+    void conflictCopyOnDestruction()
+    {
+        FakeEditorHost host;
+        host.setFile(Page, u"- a\n"_s);
+        {
+            PageController page;
+            page.setSaveDelay(10000);
+            page.setMergeFunction([](const QString &, const QString &local, const QString &) {
+                return MergeOutcome{local, false};
+            });
+            page.setHost(&host);
+            page.setPath(Page);
+            page.setEditText(0, u"lokalnie"_s, 8);
+            host.externalWrite(Page, u"- zdalnie\n"_s);
+            QVERIFY(page.conflict());
+        }
+        QCOMPARE(host.file(Page), u"- zdalnie\n"_s);
+        bool copied = false;
+        for (const QString &p : host.files()) {
+            if (p.contains(u".conflict-"_s)) {
+                QCOMPARE(host.file(p), u"- lokalnie\n"_s);
+                copied = true;
+            }
+        }
+        QVERIFY(copied);
+    }
+
+    void conflictFollowsLaterChanges()
+    {
+        // A conflict is not frozen: when the other side changes again and the change now merges
+        // (or equals the local text, or goes back to the base), the conflict is over — and
+        // "Use the other version" never writes an outdated remote text over a newer file.
+        Fixture f(u"- a\n- b\n- c\n"_s, 10000);
+        f.page.setMergeFunction([](const QString &base, const QString &local, const QString &remote) {
+            Q_UNUSED(base);
+            if (remote.endsWith(u"- d\n"_s) && remote.startsWith(u"- a\n"_s))
+                return MergeOutcome{local + u"- d\n"_s, true};
+            return MergeOutcome{local, false};
+        });
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        f.host.externalWrite(Page, u"- a zdalnie\n- b\n- c\n"_s);
+        QVERIFY(f.page.conflict());
+        // The other device reverts its change and adds a line: merges cleanly now.
+        f.host.externalWrite(Page, u"- a\n- b\n- c\n- d\n"_s);
+        QVERIFY(!f.page.conflict());
+        QCOMPARE(f.text(), u"- a lokalnie\n- b\n- c\n- d\n"_s);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b\n- c\n- d\n"_s);
+
+        // Conflict, then the other side writes exactly our text: nothing to resolve.
+        f.page.setEditText(1, u"b lokalnie"_s, 10);
+        f.host.externalWrite(Page, u"- a lokalnie\n- b zdalnie\n- c\n- d\n"_s);
+        QVERIFY(f.page.conflict());
+        f.host.externalWrite(Page, u"- a lokalnie\n- b lokalnie\n- c\n- d\n"_s);
+        QVERIFY(!f.page.conflict());
+        QVERIFY(!f.page.dirty());
+
+        // Conflict, then the other side goes back to the common base: ours can be saved.
+        f.page.setEditText(2, u"c lokalnie"_s, 10);
+        const QString base = f.host.file(Page);
+        f.host.externalWrite(Page, u"- inne\n"_s);
+        QVERIFY(f.page.conflict());
+        f.host.externalWrite(Page, base);
+        QVERIFY(!f.page.conflict());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b lokalnie\n- c lokalnie\n- d\n"_s);
+
+        // A second conflicting change replaces the other version shown in the merge view.
+        f.page.setEditText(0, u"a jeszcze raz"_s, 13);
+        f.host.externalWrite(Page, u"- x\n"_s);
+        f.host.externalWrite(Page, u"- y\n"_s);
+        QVERIFY(f.page.conflict());
+        QCOMPARE(f.page.conflictText(), u"- y\n"_s);
+        f.page.takeRemote();
+        QCOMPARE(f.host.file(Page), u"- y\n"_s);
+        QCOMPARE(f.text(), u"- y\n"_s);
+        QVERIFY(!f.page.dirty());
+
+        // The other side emptied the page and we take that version: the file stays empty.
+        f.page.setEditText(0, u"y lokalnie"_s, 10);
+        f.host.externalWrite(Page, QString());
+        QVERIFY(f.page.conflict());
+        f.page.takeRemote();
+        QCOMPARE(f.host.file(Page), QString());
+        QCOMPARE(f.text(), QString());
+        QVERIFY(!f.page.dirty());
+    }
+
+    void rawHtmlIsNeverRendered_data()
+    {
+        QTest::addColumn<QString>("content");
+        const QString evil = u"<img src=\"https://tracker.example/p.png\"> <b>pogrubione</b> <a href=\"javascript:alert(1)\">x</a>"_s;
+        QTest::newRow("list item") << u"- "_s + evil + u"\n"_s;
+        QTest::newRow("task") << u"- [ ] "_s + evil + u"\n"_s;
+        QTest::newRow("paragraph") << evil + u"\n"_s;
+        QTest::newRow("heading") << u"# "_s + evil + u"\n"_s;
+        QTest::newRow("heading item") << u"- ## "_s + evil + u"\n  druga linia "_s + evil + u"\n"_s;
+        QTest::newRow("quote") << u"> "_s + evil + u"\n"_s;
+        QTest::newRow("callout") << u"> [!warning] "_s + evil + u"\n> "_s + evil + u"\n"_s;
+        QTest::newRow("html block") << u"<div>\n"_s + evil + u"\n</div>\n"_s;
+        QTest::newRow("link text") << u"- [<img src=x onerror=alert(1)>](https://example.com) [[<b>strona</b>]]\n"_s;
+    }
+
+    void rawHtmlIsNeverRendered()
+    {
+        // Notes come from anywhere: markup in a note is shown as text, never interpreted by Text.
+        QFETCH(QString, content);
+        Fixture f(content);
+        for (int r = 0; r < f.count(); ++r) {
+            const QString html = f.role(r, "html").toString();
+            QVERIFY2(!html.contains(u"<img"_s, Qt::CaseInsensitive), qPrintable(html));
+            QVERIFY2(!html.contains(u"<b>pogrubione"_s), qPrintable(html));
+            QVERIFY2(!html.contains(u"<div"_s, Qt::CaseInsensitive), qPrintable(html));
+            QVERIFY2(!html.contains(u"javascript:"_s, Qt::CaseInsensitive) || html.contains(u"&lt;a href=&quot;javascript:"_s),
+                     qPrintable(html));
+            QVERIFY2(!html.contains(u"onerror=alert"_s) || html.contains(u"&lt;img"_s), qPrintable(html));
+        }
+    }
+
+    void cursorsNeverSplitSurrogatePairs()
+    {
+        // UTF-16: a caret position between the two halves of an emoji (a stale position after the
+        // text changed, a computed one) must never cut it into invalid text.
+        Fixture f(u"- a😀b\n- 📅 jutro\n"_s);
+        const QString edit = f.edit(0);
+        QCOMPARE(edit.size(), 4); // a, high, low, b
+        f.page.split(0, 2); // inside the pair
+        QVERIFY2(f.text() == u"- a😀\n- b\n- 📅 jutro\n"_s || f.text() == u"- a\n- 😀b\n- 📅 jutro\n"_s,
+                 qPrintable(f.text()));
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a😀b\n- 📅 jutro\n"_s);
+        f.page.replaceRange(0, 2, 2, u"X"_s);
+        QVERIFY2(f.text().startsWith(u"- a😀X"_s) || f.text().startsWith(u"- aX😀"_s), qPrintable(f.text()));
+        f.page.undo();
+        f.page.insertToken(1, 1, u"⏰ 2026-10-16 09:00"_s);
+        QVERIFY2(f.text().contains(u"📅"_s), qPrintable(f.text()));
+        f.page.undo();
+        const QVariantMap pasted = f.page.pasteText(0, 2, 2, u"x\ny"_s);
+        Q_UNUSED(pasted);
+        QVERIFY2(f.text().contains(u"😀"_s), qPrintable(f.text()));
+        f.page.undo();
+        f.page.startEditing(0, 2);
+        QVERIFY(f.page.cursorPosition() == 1 || f.page.cursorPosition() == 3);
+        // Every row's text is valid UTF-16.
+        for (int r = 0; r < f.count(); ++r) {
+            const QString t = f.edit(r);
+            for (qsizetype i = 0; i < t.size(); ++i) {
+                if (t[i].isHighSurrogate())
+                    QVERIFY(i + 1 < t.size() && t[i + 1].isLowSurrogate());
+                if (t[i].isLowSurrogate())
+                    QVERIFY(i > 0 && t[i - 1].isHighSurrogate());
+            }
+        }
+    }
+
+    void trackedBlocksFollowChanges()
+    {
+        // A dialog opened for a block acts on that block even when the page changed meanwhile.
+        Fixture f(u"- a\n- b ąę\n- c\n"_s, 10000);
+        const int handle = f.page.trackBlock(1);
+        QVERIFY(handle > 0);
+        QCOMPARE(f.page.trackedRow(handle), 1);
+        f.host.externalWrite(Page, u"- nowy z telefonu\n- a\n- b ąę\n- c\n"_s); // reload (not dirty)
+        QCOMPARE(f.page.trackedRow(handle), 2);
+        f.page.split(0, -1);
+        QCOMPARE(f.page.trackedRow(handle), 3);
+        f.page.undo();
+        QCOMPARE(f.page.trackedRow(handle), 2);
+        f.host.externalWrite(Page, u"- nowy z telefonu\n- a\n- c\n"_s); // the block is gone
+        QCOMPARE(f.page.trackedRow(handle), -1);
+        const int other = f.page.trackBlock(2);
+        QCOMPARE(f.page.trackedRow(other), 2);
+        f.page.setPath(u"Inna.md"_s);
+        QCOMPARE(f.page.trackedRow(other), -1);
+        f.page.untrack(other);
+        QCOMPARE(f.page.trackedRow(other), -1);
+        QCOMPARE(f.page.trackBlock(99), 0);
+    }
+
+    void conflictCopyWhenSuspended()
+    {
+        // Android may kill a suspended app without running destructors: an unresolved conflict
+        // keeps the local text only in memory, so suspending writes it to a conflict copy (one
+        // file per conflict, updated, never a new one per suspend).
+        FakeEditorHost host;
+        host.setFile(Page, u"- a\n"_s);
+        PageController page;
+        page.setSaveDelay(10000);
+        page.setMergeFunction([](const QString &, const QString &local, const QString &) {
+            return MergeOutcome{local, false};
+        });
+        page.setHost(&host);
+        page.setPath(Page);
+        page.setEditText(0, u"lokalnie"_s, 8);
+        host.externalWrite(Page, u"- zdalnie\n"_s);
+        QVERIFY(page.conflict());
+        const auto copies = [&] {
+            QStringList out;
+            for (const QString &p : host.files()) {
+                if (p.contains(u".conflict-"_s))
+                    out.append(p);
+            }
+            return out;
+        };
+        Q_EMIT qGuiApp->applicationStateChanged(Qt::ApplicationSuspended);
+        QCOMPARE(copies().size(), 1);
+        QCOMPARE(host.file(copies().first()), u"- lokalnie\n"_s);
+        QCOMPARE(host.file(Page), u"- zdalnie\n"_s); // the other version is not overwritten
+        page.setEditText(0, u"lokalnie 2"_s, 10);
+        Q_EMIT qGuiApp->applicationStateChanged(Qt::ApplicationSuspended);
+        Q_EMIT qGuiApp->applicationStateChanged(Qt::ApplicationActive);
+        QCOMPARE(copies().size(), 1);
+        QCOMPARE(host.file(copies().first()), u"- lokalnie 2\n"_s);
+        // Resolving ends the conflict; a later conflict gets a copy of its own.
+        page.keepLocal();
+        QCOMPARE(host.file(Page), u"- lokalnie 2\n"_s);
+    }
+
+    void followsRenames()
+    {
+        // The page is renamed (shell dialog, sync) while it has unsaved edits: they go to the new
+        // path; the old path is never written again (it would come back as a duplicate page).
+        Fixture f(u"- a\n- b\n"_s, 10000);
+        f.page.startEditing(1, 1);
+        f.page.setEditText(1, u"b zmienione"_s, 11);
+        QVERIFY(f.page.dirty());
+        const QString renamed = u"Notatki/Nowa nazwa.md"_s;
+        f.host.setFile(renamed, f.host.file(Page)); // what the vault's rename did
+        f.host.removeFile(Page);
+        f.page.followRename(Page, renamed);
+        QCOMPARE(f.page.path(), renamed);
+        QCOMPARE(f.page.title(), u"Nowa nazwa"_s);
+        QCOMPARE(f.page.editingRow(), 1); // still editing, undo kept
+        QVERIFY(f.page.canUndo());
+        f.page.setPath(renamed); // the route follows too: no effect
+        QVERIFY(f.page.save());
+        QVERIFY(!f.host.files().contains(Page));
+        QCOMPARE(f.host.file(renamed), u"- a\n- b zmienione\n"_s);
+        // Other renames are not ours.
+        f.page.followRename(u"Inna.md"_s, u"Inna2.md"_s);
+        QCOMPARE(f.page.path(), renamed);
+        // Renamed while clean, and the new file differs (sync): it is loaded.
+        f.host.setFile(u"C.md"_s, u"- a\n- b zmienione\n- c z telefonu\n"_s);
+        f.host.removeFile(renamed);
+        f.page.followRename(renamed, u"C.md"_s);
+        QCOMPARE(f.text(), u"- a\n- b zmienione\n- c z telefonu\n"_s);
+        QVERIFY(!f.page.dirty());
+    }
+
+    void removedFileKeepsText()
+    {
+        Fixture f(u"- a\n"_s);
+        QSignalSpy removed(&f.page, &PageController::fileRemoved);
+        f.host.removeFile(Page);
+        QCOMPARE(removed.size(), 1);
+        QCOMPARE(f.text(), u"- a\n"_s);
+    }
+
+    // --- source mode ----------------------------------------------------------------------------------
+
+    void sourceMode()
+    {
+        Fixture f(u"- a\n- b\n"_s, 0);
+        f.page.startEditing(0, 0);
+        f.page.setSourceMode(true);
+        QCOMPARE(f.page.editingRow(), -1);
+        QCOMPARE(f.page.sourceText(), u"- a\n- b\n"_s);
+        f.page.setSourceText(u"- a\n- b\n- c ąę\n"_s);
+        QCOMPARE(f.host.file(Page), u"- a\n- b\n- c ąę\n"_s); // saved while in source mode
+        QCOMPARE(f.count(), 2); // blocks follow when leaving
+        f.page.setSourceMode(false);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(f.text(), u"- a\n- b\n- c ąę\n"_s);
+        QVERIFY(!f.page.dirty());
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a\n- b\n"_s);
+    }
+
+    void sourceModeKeepsLineEndings()
+    {
+        // The source editor's TextEdit reports "\n" for every line break: an edit there must not
+        // rewrite a CRLF file (or lone "\r" lines) into LF.
+        const QString content = u"---\r\ntytuł: Zażółć\r\n---\r\n- a\r\n- b\r\n\r\nKoniec\r\n"_s;
+        Fixture f(content, 0);
+        f.page.setSourceMode(true);
+        QString shown = content;
+        shown.replace(u"\r\n"_s, u"\n"_s);
+        // What a TextEdit hands back when nothing changed: the file is untouched.
+        f.page.setSourceText(shown);
+        QCOMPARE(f.page.sourceText(), content);
+        QVERIFY(!f.page.dirty());
+        // A typed character and a new line.
+        shown.replace(u"- b\n"_s, u"- bę\n- nowa\n"_s);
+        f.page.setSourceText(shown);
+        const QString expected = u"---\r\ntytuł: Zażółć\r\n---\r\n- a\r\n- bę\r\n- nowa\r\n\r\nKoniec\r\n"_s;
+        QCOMPARE(f.page.sourceText(), expected);
+        QCOMPARE(f.host.file(Page), expected);
+        f.page.setSourceMode(false);
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(f.count(), 5);
+    }
+
+    // --- large pages ------------------------------------------------------------------------------
+
+    void undoStoresChangesNotPages()
+    {
+        // Every undo step used to keep two copies of the whole page: on a long page (an imported
+        // journal) a few hundred commands held hundreds of megabytes. Steps store the change.
+        QString content;
+        for (int i = 0; i < 3000; ++i)
+            content += u"- Blok numer %1 z tekstem zażółć gęślą jaźń\n"_s.arg(i);
+        Fixture f(content, 100000);
+        for (int k = 0; k < 60; ++k) {
+            f.page.startEditing(k * 10, -1);
+            f.page.split(k * 10, -1);
+            f.page.setEditText(k * 10 + 1, u"nowy %1"_s.arg(k), 6);
+        }
+        QVERIFY(f.page.canUndo());
+        QVERIFY2(f.page.undoHistorySize() < content.size() / 4,
+                 qPrintable(u"undo history holds %1 characters for a %2 character page"_s.arg(f.page.undoHistorySize()).arg(content.size())));
+        while (f.page.canUndo())
+            f.page.undo();
+        QCOMPARE(f.text(), content);
+        while (f.page.canRedo())
+            f.page.redo();
+        QVERIFY(f.text().contains(u"- nowy 59\n"_s));
+        QCOMPARE(f.count(), 3000 + 60);
+    }
+
+    void largePageTouchesOneRow()
+    {
+        // 5000 blocks (with calc and table blocks and inline calculations that depend on the
+        // page): typing in one block changes only that row — no resets, no inserts/removes, no
+        // dataChanged for other rows — and stays fast.
+        QString content = u"# Dziennik budowy\n\n"_s;
+        for (int i = 0; i < 5000; ++i) {
+            if (i % 1000 == 500)
+                content += u"- ```calc\n  cena = %1 zł\n  cena * 2\n  ```\n"_s.arg(i);
+            else if (i % 1000 == 700)
+                content += u"- Koszt `= cena * 3` łącznie #budowa\n"_s;
+            else
+                content += u"- Wpis %1: zażółć gęślą jaźń [[Strona %2]] #tag%3 📅 2026-10-%4\n"_s.arg(i).arg(i % 50).arg(i % 7).arg(10 + i % 18);
+        }
+        QElapsedTimer load;
+        load.start();
+        Fixture f(content, 100000);
+        const qint64 loadMs = load.elapsed();
+        const int row = 2500;
+        QVERIFY(f.edit(row).startsWith(u"Wpis"_s));
+        f.page.startEditing(row, -1);
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        QSignalSpy reset(f.model(), &QAbstractItemModel::modelReset);
+        QSignalSpy inserted(f.model(), &QAbstractItemModel::rowsInserted);
+        QSignalSpy removed(f.model(), &QAbstractItemModel::rowsRemoved);
+        QElapsedTimer typing;
+        typing.start();
+        QString text = f.edit(row);
+        for (int k = 0; k < 50; ++k) {
+            text += QChar(u"ąćęłńóśźż"_s.at(k % 9));
+            f.page.setEditText(row, text, int(text.size()));
+        }
+        const qint64 typingMs = typing.elapsed();
+        QCOMPARE(reset.size(), 0);
+        QCOMPARE(inserted.size(), 0);
+        QCOMPARE(removed.size(), 0);
+        for (const QList<QVariant> &args : std::as_const(changed)) {
+            const QModelIndex from = args.at(0).toModelIndex();
+            const QModelIndex to = args.at(1).toModelIndex();
+            QCOMPARE(from.row(), row);
+            QCOMPARE(to.row(), row);
+        }
+        QElapsedTimer ops;
+        ops.start();
+        f.page.split(row, -1);
+        f.page.indent(row + 1);
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        const qint64 opsMs = ops.elapsed();
+        QCOMPARE(reset.size(), 0);
+        qInfo("5000 blocks: load %lld ms, 50 keystrokes %lld ms, split+indent+3 undo %lld ms", loadMs, typingMs, opsMs);
+        QVERIFY2(typingMs < 50 * 40, "typing on a 5000-block page is too slow");
+    }
+
+    // Last: runs the application's event loop to quit it.
+    void savesWhenTheApplicationQuits()
+    {
+        // A page still open when the app quits is saved even before QML tears it down.
+        auto *host = new FakeEditorHost;
+        host->setFile(Page, u"- a\n"_s);
+        auto *page = new PageController;
+        page->setSaveDelay(100000);
+        page->setHost(host);
+        page->setPath(Page);
+        page->setEditText(0, u"zapisz mnie"_s, 11);
+        QCOMPARE(host->file(Page), u"- a\n"_s);
+        QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        QCoreApplication::exec();
+        QCOMPARE(host->file(Page), u"- zapisz mnie\n"_s);
+        delete page;
+        delete host;
+    }
+};
+
+QTEST_MAIN(TestPageController)
+#include "tst_editor_controller.moc"

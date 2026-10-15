@@ -3,6 +3,9 @@
 //
 //   --gallery              load the component gallery instead of Main.qml
 //   --section <id>         gallery: show only this section (popups in it open by themselves)
+//   --editor               load the block editor playground (qml/dev/EditorPlayground.qml)
+//   --editor-script <name> playground: put the editor into a state for screenshots (editing,
+//                          suggest, slash, date, zoom, source, reminder, …; see the playground)
 //   --screenshot <file>    after loading (+ --delay ms, default 800) save the window as an
 //                          image and quit (exit code 0 = saved, 1 = failed)
 //   --delay <ms>           see --screenshot
@@ -41,6 +44,8 @@ class DevTools : public QObject {
 
     Q_PROPERTY(bool gallery READ gallery CONSTANT FINAL)
     Q_PROPERTY(QString section READ section CONSTANT FINAL)
+    Q_PROPERTY(bool editor READ editor CONSTANT FINAL)
+    Q_PROPERTY(QString editorScript READ editorScript CONSTANT FINAL)
     Q_PROPERTY(QString theme READ theme CONSTANT FINAL)
     Q_PROPERTY(QString language READ language NOTIFY languageChanged FINAL)
     Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
@@ -60,6 +65,8 @@ public:
 
     bool gallery() const { return m_gallery; }
     QString section() const { return m_section; }
+    bool editor() const { return m_editor; }
+    QString editorScript() const { return m_editorScript; }
     QString theme() const { return m_theme; }
     /// "pl" or "en": --locale, else English when the system locale is English, else Polish.
     QString language() const { return m_language; }
@@ -67,7 +74,8 @@ public:
     bool reducedMotion() const { return m_reducedMotion; }
     bool screenshotMode() const { return !m_screenshot.isEmpty(); }
 
-    /// QML type to load from module Brulion: "Gallery" with --gallery, else "Main".
+    /// QML type to load from module Brulion: "Gallery" with --gallery, "EditorPlayground" with
+    /// --editor, else "Main".
     QString rootComponent() const;
     /// The translator main() installed (brulion_pl.qm, or brulion_en.qm for English plurals);
     /// setLanguage() reloads it.
@@ -87,6 +95,8 @@ private:
 
     bool m_gallery = false;
     QString m_section;
+    bool m_editor = false;
+    QString m_editorScript;
     QString m_theme;
     QString m_language;
     QString m_screenshot;

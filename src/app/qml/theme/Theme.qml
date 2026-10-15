@@ -19,6 +19,7 @@ import Brulion
 //   forceTouch     touch sizes on any device (gallery --touch)
 //   windowWidth/Height  the main window's size (bind it: Binding { target: Theme; ... })
 //   editorFont     "serif" | "sans";  fontScale  user font size factor
+//   editorFontSize the editor's base size in px (setting; touch UIs add one, fontScale applies)
 //
 // Derived: dark, narrow (< 900 px: drawer + bottom navigation, dialogs as bottom sheets),
 // compact (< 600 px), touchUi (Android, or narrow window on a touch screen, or forceTouch).
@@ -33,6 +34,7 @@ QtObject {
     property real windowHeight: 800
     property string editorFont: "serif"
     property real fontScale: 1.0
+    property int editorFontSize: 16
 
     // ---- Derived state -------------------------------------------------------------------
     readonly property bool dark: mode === "dark" || (mode === "system" && Application.styleHints.colorScheme === Qt.ColorScheme.Dark)
@@ -186,7 +188,7 @@ QtObject {
     readonly property int textXl: Math.round((touchUi ? 21 : 20) * fontScale)
     readonly property int text2xl: Math.round((touchUi ? 25 : 24) * fontScale)
     readonly property int text3xl: Math.round((touchUi ? 31 : 30) * fontScale)
-    readonly property int textEditor: Math.round((touchUi ? 17 : 16) * fontScale)
+    readonly property int textEditor: Math.round((editorFontSize + (touchUi ? 1 : 0)) * fontScale)
     // Line heights as multiples of the font size. Fonts differ a lot in their own line spacing
     // (DejaVu/Roboto ≈ 1.17 em, Noto/Segoe ≈ 1.36 em), so a proportional Text.lineHeight looks
     // cramped on one system and airy on another: apply these as fixed pixel heights —

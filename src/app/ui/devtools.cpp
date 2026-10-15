@@ -64,6 +64,8 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
 {
     m_gallery = arguments.contains(u"--gallery"_s);
     m_section = valueAfter(arguments, u"--section"_s);
+    m_editor = arguments.contains(u"--editor"_s);
+    m_editorScript = valueAfter(arguments, u"--editor-script"_s);
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
     m_touch = arguments.contains(u"--touch"_s);
     m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
@@ -122,6 +124,8 @@ void DevTools::setTranslator(QTranslator *translator)
 
 QString DevTools::rootComponent() const
 {
+    if (m_editor)
+        return u"EditorPlayground"_s;
     return m_gallery ? u"Gallery"_s : u"Main"_s;
 }
 

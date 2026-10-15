@@ -72,6 +72,12 @@ T.TextField {
         }
     }
 
+    // Long values (a folder path, a server address) set while the field is not being edited
+    // show their beginning, not their end where the caret would be.
+    onTextChanged: if (!activeFocus) cursorPosition = 0
+    onActiveFocusChanged: if (!activeFocus) cursorPosition = 0
+    Component.onCompleted: if (!activeFocus) cursorPosition = 0
+
     onTrailingItemChanged: {
         if (trailingItem) {
             trailingItem.parent = trailingSlot

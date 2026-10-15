@@ -1,0 +1,88 @@
+# The app shell (docs/UI.md: window layout, navigation, onboarding, settings, command palette,
+# quick switcher, toasts, shortcuts, tray). Included by src/app/CMakeLists.txt in its scope, so
+# relative paths below are relative to src/app.
+#
+# C++: the static library brulion_shell (QtCore, QtGui, QtNetwork + core modules; unit-tested by
+# tests/app/shell without the app): AppController, AppSettings, Workspace (implements the
+# editor's EditorHost), CommandModel, FolderTreeModel, the sample vault, SingleInstance
+# (desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
+# shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
+# qmlcachegen their full API).
+# Desktop Linux only: the system tray (QSystemTrayIcon needs Qt Widgets, so main.cpp creates a
+# QApplication there and BRULION_DESKTOP_INTEGRATION is defined for it) and the QML self-test
+# (--selftest-shell, run by ctest as tst_shell_qml).
+# QML: qml/Main.qml (listed by src/app/CMakeLists.txt), qml/shell/*, and the views
+# (shell/views.cmake).
+
+set(_brulion_shell_dir ${CMAKE_CURRENT_LIST_DIR})
+
+# EditorHost (editor/editorhost.h) is a header-only QObject interface: its moc output must be
+# compiled exactly once. The shell's Workspace implements it, so this tiny library provides it
+# unless an area included earlier (the editor) already defined the target. Areas that need the
+# interface link brulion_editorhost instead of moc-ing the header themselves.
+if(NOT TARGET brulion_editorhost)
+    qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editor/editorhost.h)
+    set_target_properties(brulion_editorhost PROPERTIES LINKER_LANGUAGE CXX)
+    target_include_directories(brulion_editorhost PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/editor)
+    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core)
+    qt_extract_metatypes(brulion_editorhost)
+    brulion_set_warnings(brulion_editorhost)
+endif()
+
+qt_add_library(brulion_shell STATIC
+    ${_brulion_shell_dir}/appcontroller.h ${_brulion_shell_dir}/appcontroller.cpp
+    ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
+    ${_brulion_shell_dir}/commandmodel.h ${_brulion_shell_dir}/commandmodel.cpp
+    ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
+    ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
+    ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
+    ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
+)
+if(NOT ANDROID AND NOT EMSCRIPTEN)
+    target_sources(brulion_shell PRIVATE
+        ${_brulion_shell_dir}/singleinstance.h ${_brulion_shell_dir}/singleinstance.cpp)
+endif()
+target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
+target_link_libraries(brulion_shell
+    PUBLIC Qt6::Core Qt6::Gui brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
+    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_dates)
+if(ANDROID OR EMSCRIPTEN)
+    # AndroidBridge (permissions, test notification) / WasmStorage + WasmNotifier.
+    target_link_libraries(brulion_shell PRIVATE brulion_platform)
+endif()
+target_compile_definitions(brulion_shell PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
+qt_extract_metatypes(brulion_shell)
+brulion_set_warnings(brulion_shell)
+
+# --- The app: QML registration, desktop integration, QML files ------------------------------
+target_sources(brulion PRIVATE shell/shellqml.h)
+# The generated QML type registration includes the shell headers by file name.
+target_include_directories(brulion PRIVATE ${_brulion_shell_dir})
+target_link_libraries(brulion PRIVATE brulion_shell)
+
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
+        shell/shellselftest.h shell/shellselftest.cpp)
+    target_link_libraries(brulion PRIVATE Qt6::Widgets)
+    target_compile_definitions(brulion PRIVATE BRULION_DESKTOP_INTEGRATION=1)
+endif()
+
+qt_target_qml_sources(brulion QML_FILES
+    qml/shell/AppShell.qml
+    qml/shell/ShellAboutDialog.qml
+    qml/shell/ShellBottomNav.qml
+    qml/shell/ShellCaptureButton.qml
+    qml/shell/ShellNewPageDialog.qml
+    qml/shell/ShellQuickCapture.qml
+    qml/shell/ShellRenameDialog.qml
+    qml/shell/ShellRouteView.qml
+    qml/shell/ShellSettingRow.qml
+    qml/shell/ShellSidePanel.qml
+    qml/shell/ShellSidebar.qml
+    qml/shell/ShellSplash.qml
+    qml/shell/ShellSyncFooter.qml
+    qml/shell/ShellTopBar.qml
+)
+
+include(${_brulion_shell_dir}/views.cmake)

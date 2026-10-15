@@ -1,0 +1,806 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Templates as T
+import Brulion
+
+// BlockEditor — one page as a Logseq-like outline of blocks (docs/UI.md "The block editor").
+//
+//   PageController { id: page; host: Workspace; path: "Projekty/Dom.md" }
+//   BlockEditor { anchors.fill: parent; controller: page; header: Component { PageTitle {} } }
+//
+// A ListView over controller.blocks (BlockListModel): unfocused blocks show rendered rich text
+// (core InlineRenderer, links page:/tag:/block:/ext:/task:/reminder:), the block being edited a
+// TextEdit with the raw Markdown and MarkdownHighlighter. The editing row and caret live in the
+// controller, so delegates may be destroyed and recreated by the ListView at any time.
+//
+// Keys (inline editor): Enter split · Shift+Enter line break · Backspace at start merge (a task
+// first loses its checkbox) · Delete at end merge next · Tab / Shift+Tab indent / outdent ·
+// Alt+Up/Down move · Up/Down at the first/last line go to the previous/next block · Ctrl+Enter
+// cycle task · Ctrl+. fold · Esc stop editing (select block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+// undo/redo · Ctrl+E source mode. Selected block (after Esc): Up/Down select, Enter edit,
+// Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter, Ctrl+., Esc clear.
+// Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
+// that need input open EditorDialogs; on touch UIs MobileEditToolbar sits above the keyboard.
+// Input methods: a word still being composed (preedit — Android keyboards compose every word)
+// counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
+// toolbar actions and when the app is left. Keys typed while the edited block's delegate is
+// scrolled away bring it back and go to it.
+FocusScope {
+    id: editor
+
+    property PageController controller
+    /// Shown above the blocks (e.g. the page title); scrolls with them.
+    property Component header: null
+    /// Maximum width of the text column (centred when the editor is wider).
+    property real maxTextWidth: Theme.measure
+    property real horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
+    /// Extra space below the last block (click there to add a block).
+    property real bottomSpace: Theme.space16 * 2
+
+    // ---- Geometry shared by the delegates ---------------------------------------------------
+    readonly property int fontSize: Theme.textEditor
+    readonly property int lineHeight: Theme.lineHeightPx(fontSize, Theme.lineHeightLoose)
+    readonly property real indentStep: Theme.compact ? 20 : 26
+    /// Bullet column (the bullet is centred in it) and the fold arrow column left of it.
+    readonly property real bulletColumn: Theme.touchUi ? 22 : 20
+    readonly property real arrowColumn: Theme.touchUi ? 18 : 16
+    readonly property real gutter: arrowColumn + bulletColumn
+    readonly property real taskBoxWidth: Theme.touchUi ? 26 : 24
+    readonly property real contentX: Math.max(horizontalPadding, (width - maxTextWidth) / 2)
+    readonly property real contentWidth: Math.max(120, Math.min(maxTextWidth, width - 2 * horizontalPadding))
+    /// Where the caret/selection lives: the inline editor (TextEdit) being typed in.
+    property InlineEditor activeEditor: null
+    readonly property bool touch: Theme.touchUi
+    readonly property bool toolbarVisible: touch && controller !== null && controller.editingRow >= 0
+                                           && !controller.sourceMode
+    readonly property real toolbarHeight: toolbar.height
+    /// Top of the mobile toolbar (it sits on the virtual keyboard): text below it is hidden.
+    readonly property real toolbarTop: toolbarVisible ? toolbar.y : height
+
+    // Navigation between blocks with Up/Down keeps the caret's x position.
+    property real navigationX: -1
+    property string navigationEdge: ""
+    // A click on rendered text: where the caret should go once the inline editor exists.
+    property int pendingClickRow: -1
+    property point pendingClick: Qt.point(0, 0)
+
+    // Fonts of the block kinds: body text and headings (level 1-3; deeper levels use the body
+    // size in bold). Fixed pixel line heights, see Theme.lineHeightPx.
+    function headingSize(level) {
+        return level === 1 ? Theme.text2xl : level === 2 ? Theme.textXl : level === 3 ? Theme.textLg : fontSize
+    }
+    function headingLineHeight(level) {
+        return level >= 1 && level <= 3 ? Theme.lineHeightPx(headingSize(level), 1.4) : lineHeight
+    }
+    /// Baseline of the first line (from the top of a text item) for a heading level (0 = body);
+    /// measured on hidden probes laid out exactly like the blocks, so bullets, checkboxes and
+    /// fold arrows sit on the first line with any font.
+    function firstBaseline(level) {
+        switch (level) {
+        case 1: return probeH1.firstBaselineY
+        case 2: return probeH2.firstBaselineY
+        case 3: return probeH3.firstBaselineY
+        default: return probeBody.firstBaselineY
+        }
+    }
+    function xHeight(level) {
+        switch (level) {
+        case 1: return probeH1.xHeight
+        case 2: return probeH2.xHeight
+        case 3: return probeH3.xHeight
+        default: return probeBody.xHeight
+        }
+    }
+    /// Vertical centre of the x-height of the first line: where bullets and checkboxes go.
+    function firstLineCenter(level) {
+        return firstBaseline(level) - xHeight(level) / 2
+    }
+
+    component LineProbe: TextEdit {
+        id: probe
+        property int level: 0
+        readonly property real firstBaselineY: { void probe.contentHeight; void probe.font; return probe.positionToRectangle(0).y + probeMetrics.ascent }
+        readonly property real xHeight: probeMetrics.xHeight
+        visible: false
+        enabled: false
+        text: "x"
+        textFormat: TextEdit.PlainText
+        font.family: Theme.fontEditor
+        font.pixelSize: editor.headingSize(level)
+        font.weight: level > 0 ? Theme.weightSemiBold : Theme.weightNormal
+        FontMetrics { id: probeMetrics; font: probe.font }
+        MarkdownHighlighter { textDocument: probe.textDocument; mode: "code"; lineHeight: editor.headingLineHeight(probe.level) }
+    }
+    LineProbe { id: probeBody; level: 0 }
+    LineProbe { id: probeH1; level: 1 }
+    LineProbe { id: probeH2; level: 2 }
+    LineProbe { id: probeH3; level: 3 }
+
+    readonly property var rendererPalette: ({
+        link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
+        codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
+        tagFg: Theme.tagFg, tagBg: Theme.tagBg,
+        dueFg: Theme.chipDueFg, dueBg: Theme.chipDueBg,
+        overdueFg: Theme.chipOverdueFg, overdueBg: Theme.chipOverdueBg,
+        scheduledFg: Theme.chipScheduledFg, scheduledBg: Theme.chipScheduledBg,
+        reminderFg: Theme.chipReminderFg, reminderBg: Theme.chipReminderBg,
+        alarmFg: Theme.chipAlarmFg, alarmBg: Theme.chipAlarmBg,
+        recurrenceFg: Theme.chipRecurrenceFg, recurrenceBg: Theme.chipRecurrenceBg,
+        doneFg: Theme.chipDoneFg, doneBg: Theme.chipDoneBg,
+        neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
+    })
+    readonly property var highlighterPalette: ({
+        heading: Theme.fg, marker: Theme.fgFaint, link: Theme.link, url: Theme.link, tag: Theme.tagFg,
+        code: Theme.fg, codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
+        muted: Theme.fgMuted, faint: Theme.fgFaint, due: Theme.chipDueFg, scheduled: Theme.chipScheduledFg,
+        reminder: Theme.chipReminderFg, alarm: Theme.warningText, recurrence: Theme.chipRecurrenceFg,
+        done: Theme.fgFaint, priority: Theme.dangerText
+    })
+
+    Binding { target: editor.controller; property: "palette"; value: editor.rendererPalette; when: editor.controller !== null }
+    Binding { target: editor.controller; property: "locale"; value: DatesHelper.locale; when: editor.controller !== null }
+    Binding { target: editor.controller; property: "now"; value: DatesHelper.fixedNow; when: editor.controller !== null }
+
+    Accessible.role: Accessible.Pane
+    Accessible.name: controller ? controller.title : ""
+    // Scrolled blocks must not draw over what surrounds the editor (the shell's top bar).
+    clip: true
+
+    // ---- Editing helpers called by delegates and the inline editors ------------------------------
+
+    /// Start editing `row` at `cursor` (-1 = end) and give it the keyboard.
+    function startEditing(row, cursor) {
+        if (!controller || row < 0)
+            return
+        suggestions.close()
+        const again = controller.editingRow === row
+        controller.startEditing(row, cursor === undefined ? -1 : cursor)
+        if (again && activeEditor && activeEditor.row === row)
+            activeEditor.ensureFocus()
+        ensureRowVisible(row)
+    }
+
+    /// Scroll to `row` (unfolding / leaving a zoom as needed) and select it — for routes with
+    /// `line` / `blockId`: revealRow(controller.rowOfBlockId(route.blockId)).
+    function revealRow(row) {
+        if (!controller || row < 0)
+            return
+        controller.reveal(row)
+        controller.stopEditing()
+        controller.selectedRow = row
+        // The header (page title) settling its height must not scroll back to the top.
+        list.userMoved = true
+        Qt.callLater(() => list.positionViewAtIndex(row, ListView.Center))
+        list.forceActiveFocus()
+    }
+
+    /// A click on the rendered text of `row` at (x, y) in that text's coordinates.
+    function editAt(row, x, y) {
+        pendingClickRow = row
+        pendingClick = Qt.point(x, y)
+        startEditing(row, -1)
+    }
+
+    function stopEditing(select) {
+        if (!controller)
+            return
+        const row = controller.editingRow
+        suggestions.close()
+        controller.stopEditing()
+        if (select && row >= 0)
+            controller.selectedRow = row
+        list.forceActiveFocus()
+    }
+
+    function toggleSourceMode() {
+        if (!controller)
+            return
+        suggestions.close()
+        controller.save()
+        controller.sourceMode = !controller.sourceMode
+    }
+
+    function ensureRowVisible(row) {
+        Qt.callLater(() => {
+            if (!controller || row < 0 || row >= list.count)
+                return
+            if (list.itemAtIndex(row) === null)
+                list.positionViewAtIndex(row, ListView.Contain)
+        })
+    }
+
+    /// Keep `rect` of `item` (e.g. the caret) inside the visible part of the list.
+    function ensureVisible(item, rect) {
+        if (!item)
+            return
+        const p = item.mapToItem(list.contentItem, rect.x, rect.y)
+        const margin = editor.lineHeight
+        const bottomLimit = list.height - list.bottomMargin
+        if (p.y - list.contentY < margin)
+            list.contentY = Math.max(list.originY - list.topMargin, p.y - margin)
+        else if (p.y + rect.height - list.contentY > bottomLimit - margin)
+            list.contentY = Math.min(p.y + rect.height - bottomLimit + margin,
+                                     Math.max(list.originY, list.contentHeight + list.originY - list.height + list.bottomMargin))
+    }
+
+    /// Keep the caret of an inline editor visible (called after layout settled).
+    function ensureCaretVisible(edit) {
+        if (edit && edit.activeFocus)
+            ensureVisible(edit, edit.cursorRectangle)
+    }
+
+    function activateLink(row, link) {
+        if (!controller)
+            return
+        const r = controller.activateLink(row, link, false)
+        if (!r || !r.action)
+            return
+        if (r.action === "reminder") {
+            dialogs.editReminder(row, r.from, r.to)
+        } else if (r.action === "scrollTo") {
+            revealRow(r.row)
+        }
+    }
+
+    /// Run the result of PageController.applySlashCommand / applyCompletion.
+    function handleCommandResult(row, result) {
+        if (!result)
+            return
+        switch (result.action) {
+        case "reminder": dialogs.createReminder(row, false); break
+        case "alarm": dialogs.createReminder(row, true); break
+        case "due": dialogs.pickDate(row, "due"); break
+        case "scheduled": dialogs.pickDate(row, "scheduled"); break
+        case "recurrence": dialogs.pickRecurrence(row); break
+        case "date": dialogs.pickJournalDate(row, result.cursor); break
+        case "template": dialogs.pickTemplate(row); break
+        case "table":
+            list.forceActiveFocus()
+            break
+        case "complete":
+            Qt.callLater(() => updateCompletion(activeEditor))
+            break
+        }
+    }
+
+    // ---- Autocomplete ------------------------------------------------------------------------
+
+    /// Re-detect the completion trigger at the caret of `edit` (InlineEditor). A word being
+    /// composed by the input method (Android keyboards compose every word) counts as typed.
+    function updateCompletion(edit) {
+        if (!edit || !edit.activeFocus || edit.readOnly || !edit.completions) {
+            suggestions.close()
+            return
+        }
+        const plain = edit.plain()
+        const caret = edit.cursorPosition
+        const pre = edit.preeditText
+        const trigger = pre === "" ? suggestionModel.detect(plain, caret)
+                                   : suggestionModel.detect(plain.slice(0, caret) + pre + plain.slice(caret), caret + pre.length)
+        if (trigger.mode === "") {
+            suggestions.close()
+            return
+        }
+        suggestionModel.setTrigger(trigger)
+        suggestions.trigger = trigger
+        suggestions.row = edit.row
+        suggestions.target = edit
+        if (suggestionModel.count > 0)
+            suggestions.show()
+        else
+            suggestions.close()
+    }
+
+    function acceptSuggestion(index) {
+        const edit = suggestions.target
+        if (!controller || !edit || index < 0 || index >= suggestionModel.count)
+            return
+        // The trigger counted the composed word: make it text before replacing it.
+        const item = suggestionModel.get(index)
+        if (EditorInput.commitPreedit(edit))
+            updateCompletion(edit)
+        const trigger = suggestions.trigger
+        const row = suggestions.row
+        suggestions.close()
+        const result = controller.applyCompletion(row, trigger, item)
+        handleCommandResult(row, result)
+    }
+
+    // ---- Keyboard -----------------------------------------------------------------------------
+
+    function isFirstLine(edit) {
+        return edit.cursorRectangle.y < edit.lineHeightPx / 2
+    }
+    function isLastLine(edit) {
+        return edit.cursorRectangle.y + edit.cursorRectangle.height > edit.contentHeight - edit.lineHeightPx / 2
+    }
+
+    function goToRow(row, edge, x) {
+        if (row < 0)
+            return
+        if (controller.blocks.get(row).view === "table") {
+            controller.stopEditing()
+            controller.selectedRow = row
+            list.forceActiveFocus()
+            ensureRowVisible(row)
+            return
+        }
+        navigationX = x
+        navigationEdge = edge
+        startEditing(row, edge === "top" ? 0 : -1)
+    }
+
+    /// Keys the editor handles itself (structure, navigation, shortcuts): a word the input
+    /// method is still composing is committed before them, so Enter splits after it, Backspace
+    /// at the "start" does not merge blocks while a word is being typed, and nothing is lost.
+    function isCommandKey(event) {
+        if ((event.modifiers & (Qt.ControlModifier | Qt.AltModifier)) !== 0)
+            return true
+        switch (event.key) {
+        case Qt.Key_Return: case Qt.Key_Enter: case Qt.Key_Backspace: case Qt.Key_Delete:
+        case Qt.Key_Tab: case Qt.Key_Backtab: case Qt.Key_Up: case Qt.Key_Down: case Qt.Key_Escape:
+            return true
+        }
+        return false
+    }
+
+    /// Keys of an inline editor (InlineEditor.qml). Returns true when handled.
+    function handleEditorKey(event, edit) {
+        if (edit.preeditText !== "" && isCommandKey(event))
+            EditorInput.commitPreedit(edit)
+        const row = edit.row
+        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        const alt = (event.modifiers & Qt.AltModifier) !== 0
+        const multiline = edit.multiline
+
+        // Suggestion popup navigation.
+        if (suggestions.visible) {
+            switch (event.key) {
+            case Qt.Key_Up: suggestions.move(-1); return true
+            case Qt.Key_Down: suggestions.move(1); return true
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+            case Qt.Key_Tab:
+                if (!ctrl && !shift) {
+                    acceptSuggestion(suggestions.currentIndex)
+                    return true
+                }
+                break
+            case Qt.Key_Escape: suggestions.close(); return true
+            }
+        }
+
+        if (ctrl && !alt) {
+            switch (event.key) {
+            case Qt.Key_Z:
+                if (shift) controller.redo(); else controller.undo()
+                return true
+            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_E: toggleSourceMode(); return true
+            case Qt.Key_Period: controller.toggleFold(row); return true
+            case Qt.Key_Return:
+            case Qt.Key_Enter:
+                controller.cycleTask(row)
+                return true
+            }
+            return false
+        }
+        if (alt && !ctrl) {
+            if (event.key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.editingRow); return true }
+            if (event.key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.editingRow); return true }
+            return false
+        }
+
+        switch (event.key) {
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (shift || multiline) {
+                edit.insertLineBreak()
+                return true
+            }
+            if (edit.selectedText !== "")
+                edit.remove(edit.selectionStart, edit.selectionEnd)
+            controller.split(row, edit.cursorPosition)
+            ensureRowVisible(controller.editingRow)
+            return true
+        case Qt.Key_Backspace:
+            if (edit.cursorPosition === 0 && edit.selectedText === "") {
+                if (multiline) {
+                    if (edit.text === "") {
+                        const focus = controller.deleteBlock(row)
+                        if (focus >= 0)
+                            startEditing(focus, -1)
+                    }
+                    return true
+                }
+                const info = controller.blocks.get(row)
+                if (info.taskStatus !== "" && info.kind === "listItem") {
+                    controller.removeTaskMarker(row)
+                    return true
+                }
+                const r = controller.mergeWithPrevious(row)
+                if (r.row >= 0)
+                    ensureRowVisible(r.row)
+                return true
+            }
+            return false
+        case Qt.Key_Delete:
+            if (!multiline && edit.cursorPosition === edit.length && edit.selectedText === "") {
+                controller.mergeNext(row)
+                return true
+            }
+            return false
+        case Qt.Key_Tab:
+            if (multiline && !shift) {
+                edit.insert(edit.cursorPosition, "\t")
+                return true
+            }
+            controller.indent(row)
+            return true
+        case Qt.Key_Backtab:
+            controller.outdent(row)
+            return true
+        case Qt.Key_Up:
+            if (!shift && isFirstLine(edit)) {
+                goToRow(controller.previousVisibleRow(row), "bottom", edit.cursorRectangle.x)
+                return true
+            }
+            return false
+        case Qt.Key_Down:
+            if (!shift && isLastLine(edit)) {
+                goToRow(controller.nextVisibleRow(row), "top", edit.cursorRectangle.x)
+                return true
+            }
+            return false
+        case Qt.Key_Escape:
+            stopEditing(true)
+            return true
+        }
+        return false
+    }
+
+    /// A key reached the list while a block is being edited: its delegate was destroyed (scrolled
+    /// far away). Bring the block back and give it the key, so typing is never silently lost.
+    function forwardToEditingRow(event) {
+        if (!controller || controller.editingRow < 0 || controller.sourceMode)
+            return false
+        if (activeEditor && activeEditor.activeFocus)
+            return false
+        // Typed text and keys that edit or move the caret; a lone modifier, PageUp/PageDown…
+        // must not pull the view back.
+        const printable = event.text !== "" && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127
+        const editing = [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_Tab, Qt.Key_Backtab,
+                         Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].indexOf(event.key) >= 0
+        if (!printable && !editing)
+            return false
+        const row = controller.editingRow
+        list.positionViewAtIndex(row, ListView.Contain)
+        list.forceLayout()
+        const target = activeEditor
+        if (!target || !target.activeFocus || target.row !== row)
+            return false
+        EditorInput.sendKey(target, event.key, event.modifiers, event.text)
+        return true
+    }
+
+    /// Text for a design-system component that shows it with Text.AutoText (BChip, BBreadcrumb,
+    /// BDialog subtitle, BToolTip): such text is rendered as styled text — images loaded, tags
+    /// applied — when it looks like markup. Note text containing "<" is escaped, which AutoText
+    /// then shows exactly as written.
+    function autoTextSafe(s) {
+        return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
+    }
+
+    /// Keys while a block is selected (not editing).
+    function handleSelectionKey(event) {
+        if (!controller)
+            return false
+        const row = controller.selectedRow
+        const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
+        const shift = (event.modifiers & Qt.ShiftModifier) !== 0
+        const alt = (event.modifiers & Qt.AltModifier) !== 0
+        if (ctrl) {
+            switch (event.key) {
+            case Qt.Key_Z: if (shift) controller.redo(); else controller.undo(); return true
+            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_E: toggleSourceMode(); return true
+            case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
+            case Qt.Key_Return:
+            case Qt.Key_Enter: if (row >= 0) controller.cycleTask(row); return true
+            }
+            return false
+        }
+        if (row < 0) {
+            if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                const first = event.key === Qt.Key_Down ? controller.nextVisibleRow(-1) : controller.lastVisibleRow()
+                controller.selectedRow = first
+                ensureRowVisible(first)
+                return true
+            }
+            return false
+        }
+        if (alt) {
+            if (event.key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.selectedRow); return true }
+            if (event.key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.selectedRow); return true }
+            return false
+        }
+        switch (event.key) {
+        case Qt.Key_Up: {
+            const prev = controller.previousVisibleRow(row)
+            if (prev >= 0) { controller.selectedRow = prev; ensureRowVisible(prev) }
+            return true
+        }
+        case Qt.Key_Down: {
+            const next = controller.nextVisibleRow(row)
+            if (next >= 0) { controller.selectedRow = next; ensureRowVisible(next) }
+            return true
+        }
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (controller.blocks.get(row).view === "table") {
+                const item = list.itemAtIndex(row) as BlockDelegate
+                if (item)
+                    item.focusContent()
+                return true
+            }
+            startEditing(row, -1)
+            return true
+        case Qt.Key_Delete:
+        case Qt.Key_Backspace: {
+            const focus = controller.deleteBlock(row)
+            controller.selectedRow = focus
+            return true
+        }
+        case Qt.Key_Tab: controller.indent(row); return true
+        case Qt.Key_Backtab: controller.outdent(row); return true
+        case Qt.Key_Escape: controller.selectedRow = -1; return true
+        }
+        return false
+    }
+
+    /// Focus left an inline editor: flush the save when it left the editor entirely.
+    function editorFocusLost() {
+        Qt.callLater(() => {
+            if (!controller)
+                return
+            if (!editor.activeFocus && !suggestions.visible && !dialogs.anyOpen)
+                controller.save()
+        })
+    }
+
+    onActiveFocusChanged: if (!activeFocus) editorFocusLost()
+
+    // Leaving the app (Android may kill it in the background): a word the keyboard is still
+    // composing becomes text and is saved with the page (PageController saves on suspend too,
+    // possibly before this runs).
+    Connections {
+        target: Application
+        function onStateChanged() {
+            if (Application.state === Qt.ApplicationActive || !editor.activeEditor)
+                return
+            if (EditorInput.commitPreedit(editor.activeEditor) && editor.controller)
+                editor.controller.save()
+        }
+    }
+
+    Connections {
+        target: editor.controller
+        function onEditingRowChanged() {
+            if (editor.controller.editingRow < 0)
+                suggestions.close()
+            else
+                editor.ensureRowVisible(editor.controller.editingRow)
+        }
+        function onLoadingChanged() {
+            if (!editor.controller.loading) {
+                list.userMoved = false
+                Qt.callLater(() => list.positionViewAtBeginning())
+            }
+        }
+        function onSourceModeChanged() {
+            if (!editor.controller.sourceMode)
+                list.forceActiveFocus()
+        }
+    }
+
+    // ---- The blocks --------------------------------------------------------------------------
+
+    // ---- Conflict with changes made elsewhere ------------------------------------------------
+    Loader {
+        id: conflictBanner
+        anchors.top: parent.top
+        anchors.topMargin: active ? Theme.space2 : 0
+        x: Math.max(Theme.space2, editor.contentX - Theme.space3)
+        width: Math.min(editor.width - 2 * Theme.space2, editor.contentWidth + 2 * Theme.space3)
+        active: editor.controller !== null && editor.controller.conflict
+        height: active && item ? (item as Item).implicitHeight : 0
+        sourceComponent: BCard {
+            tone: "warning"
+            padding: Theme.space3
+            accessibleName: qsTr("Conflicting changes")
+            contentItem: ColumnLayout {
+                spacing: Theme.space2
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BIcon { name: "triangle-alert"; size: Theme.iconSize; color: Theme.warningText; Layout.alignment: Qt.AlignTop }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("This page was also changed elsewhere and the changes could not be merged automatically. Your version is kept and not saved until you decide.")
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textSm
+                        color: Theme.fg
+                        wrapMode: Text.Wrap
+                    }
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BButton {
+                        size: "small"
+                        variant: "primary"
+                        iconName: "git-merge"
+                        text: qsTr("Compare and merge…")
+                        onClicked: mergeDialog.open()
+                    }
+                    BButton {
+                        size: "small"
+                        text: qsTr("Keep mine")
+                        onClicked: editor.controller.keepLocal()
+                    }
+                    BButton {
+                        size: "small"
+                        text: qsTr("Use the other version")
+                        onClicked: editor.controller.takeRemote()
+                    }
+                }
+            }
+        }
+    }
+
+    BDialog {
+        id: mergeDialog
+        parent: T.Overlay.overlay
+        title: qsTr("Merge changes")
+        iconName: "git-merge"
+        preferredWidth: Theme.dialogWidthLg
+        showFooter: false
+        BMergeView {
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(560, editor.height * 0.7)
+            ours: mergeDialog.opened && editor.controller ? editor.controller.sourceText : ""
+            theirs: mergeDialog.opened && editor.controller ? editor.controller.conflictText : ""
+            oursLabel: qsTr("This device")
+            theirsLabel: qsTr("Other version")
+            onResolved: (text) => {
+                editor.controller.resolveConflict(text)
+                mergeDialog.close()
+            }
+        }
+    }
+
+    ListView {
+        id: list
+        anchors.top: conflictBanner.bottom
+        anchors.topMargin: conflictBanner.active ? Theme.space2 : 0
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: !editor.controller || !editor.controller.sourceMode
+        focus: true
+        model: editor.controller ? editor.controller.blocks : null
+        reuseItems: false
+        cacheBuffer: 1600
+        boundsBehavior: Flickable.StopAtBounds
+        keyNavigationEnabled: false
+        // The toolbar and the keyboard under it cover the bottom of the list.
+        bottomMargin: Math.max(0, editor.height - editor.toolbarTop)
+        // A block starting to be edited near the bottom must not stay hidden under them.
+        onBottomMarginChanged: {
+            if (editor.activeEditor && editor.activeEditor.activeFocus)
+                Qt.callLater(editor.ensureCaretVisible, editor.activeEditor)
+        }
+        pressDelay: Theme.touchUi ? 90 : 0
+        Accessible.role: Accessible.List
+        Accessible.name: editor.controller ? editor.controller.title : ""
+
+        /// The user scrolled: header size changes no longer move the view to the top.
+        property bool userMoved: false
+        onMovementStarted: userMoved = true
+
+        header: Column {
+            width: list.width
+            // The header (page title) gets its final height after the first layout.
+            onHeightChanged: if (!list.userMoved) list.positionViewAtBeginning()
+            Loader {
+                width: parent.width
+                active: editor.header !== null
+                sourceComponent: editor.header
+            }
+            ZoomBreadcrumb {
+                x: editor.contentX
+                width: editor.contentWidth
+                controller: editor.controller
+                editor: editor
+                visible: editor.controller !== null && editor.controller.zoomBlock >= 0
+                height: visible ? implicitHeight : 0
+            }
+        }
+
+        delegate: BlockDelegate {
+            editor: editor
+        }
+
+        footer: Item {
+            width: list.width
+            height: editor.bottomSpace
+            TapHandler {
+                onTapped: {
+                    if (!editor.controller)
+                        return
+                    const row = editor.controller.appendEmptyBlock()
+                    editor.startEditing(row, -1)
+                }
+            }
+            HoverHandler { cursorShape: Qt.IBeamCursor }
+        }
+
+        Keys.onPressed: (event) => {
+            if (editor.forwardToEditingRow(event) || editor.handleSelectionKey(event))
+                event.accepted = true
+        }
+
+        T.ScrollBar.vertical: BScrollBar {}
+        // The header (page title) gets its height after the first layout: start at the top.
+        Component.onCompleted: Qt.callLater(() => list.positionViewAtBeginning())
+    }
+
+    Loader {
+        id: sourceLoader
+        anchors.fill: parent
+        active: editor.controller !== null && editor.controller.sourceMode
+        sourceComponent: SourceEditor {
+            editor: editor
+            controller: editor.controller
+        }
+        onLoaded: (item as SourceEditor).focusEditor()
+    }
+
+    // ---- Popups, dialogs, toolbar ------------------------------------------------------------
+
+    SuggestionModel {
+        id: suggestionModel
+        host: editor.controller ? editor.controller.host : null
+        locale: DatesHelper.locale
+        now: DatesHelper.fixedNow
+        currentPath: editor.controller ? editor.controller.path : ""
+        limit: 12
+    }
+
+    SuggestionPopup {
+        id: suggestions
+        editor: editor
+        model: suggestionModel
+        onActivated: (index) => editor.acceptSuggestion(index)
+    }
+
+    EditorDialogs {
+        id: dialogs
+        editor: editor
+        controller: editor.controller
+    }
+
+    MobileEditToolbar {
+        id: toolbar
+        editor: editor
+        visible: editor.toolbarVisible
+        width: parent.width
+    }
+
+    /// The dialogs (for tests and the playground's scripted states).
+    readonly property alias dialogs: dialogs
+    readonly property alias suggestions: suggestions
+    readonly property alias listView: list
+}

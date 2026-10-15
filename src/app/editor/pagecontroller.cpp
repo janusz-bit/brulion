@@ -1,0 +1,2121 @@
+#include "pagecontroller.h"
+
+#include "blocktext.h"
+#include "editorhost.h"
+
+#include "calc/table.h"
+#include "dates/local.h"
+#include "dates/recurrence.h"
+#include "markdown/inline.h"
+#include "markdown/journal.h"
+#include "markdown/templates.h"
+#include "markdown/tokens.h"
+#include "text/text.h"
+#include "util/paths.h"
+
+#ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
+#include "sync/conflicts.h"
+#include "sync/merge.h"
+#endif
+
+#include <QClipboard>
+#include <QColor>
+#include <QGuiApplication>
+#include <QRegularExpression>
+#include <QSysInfo>
+#include <QUndoCommand>
+#include <QUndoStack>
+#include <QUrl>
+
+#include <algorithm>
+
+using namespace Qt::StringLiterals;
+
+namespace brulion::editor {
+
+using markdown::BlockDocument;
+using markdown::EditResult;
+
+/// One undo step: the change of the document text (TextDelta: the replaced range only — two
+/// snapshots of a long page per step added up to hundreds of megabytes over an editing session)
+/// plus where the caret was. Undo/redo rebuild the other version from the current text and
+/// restore it through BlockListModel::replaceContent (rows of unchanged blocks stay). Every text
+/// change goes through a command or clears the stack, so the current text is always the version
+/// a step expects; a mismatch is refused, never patched. Typing commands (typingUid != 0) merge
+/// while the user keeps typing in the same block.
+class EditCommand : public QUndoCommand {
+public:
+    EditCommand(PageController *controller, const QString &before, const QString &after,
+                PageController::Focus focusBefore, PageController::Focus focusAfter, quint64 typingUid)
+        : m_controller(controller), m_delta(TextDelta::between(before, after)), m_focusBefore(focusBefore),
+          m_focusAfter(focusAfter), m_typingUid(typingUid)
+    {
+    }
+
+    void undo() override
+    {
+        if (const std::optional<QString> before = m_delta.revert(m_controller->text()))
+            m_controller->restore(*before, m_focusBefore);
+        else
+            qWarning("PageController: undo step does not match the text, ignored");
+    }
+    void redo() override
+    {
+        if (m_first) {
+            m_first = false; // the edit was already done when the command was pushed
+            return;
+        }
+        if (const std::optional<QString> after = m_delta.apply(m_controller->text()))
+            m_controller->restore(*after, m_focusAfter);
+        else
+            qWarning("PageController: redo step does not match the text, ignored");
+    }
+    int id() const override { return m_typingUid ? 1 : -1; }
+    bool mergeWith(const QUndoCommand *other) override
+    {
+        const auto *o = static_cast<const EditCommand *>(other);
+        if (!m_typingUid || o->m_typingUid != m_typingUid || !o->m_mergeable)
+            return false;
+        // QUndoStack merges right after `o`'s edit: the current text is its result.
+        const std::optional<QString> middle = o->m_delta.revert(m_controller->text());
+        const std::optional<TextDelta> merged = middle ? TextDelta::compose(m_delta, o->m_delta, *middle) : std::nullopt;
+        if (!merged)
+            return false;
+        m_delta = *merged;
+        m_focusAfter = o->m_focusAfter;
+        return true;
+    }
+    void setMergeable(bool mergeable) { m_mergeable = mergeable; }
+    /// Characters held by the step.
+    qsizetype size() const { return m_delta.size(); }
+
+private:
+    PageController *m_controller;
+    TextDelta m_delta;
+    PageController::Focus m_focusBefore;
+    PageController::Focus m_focusAfter;
+    quint64 m_typingUid = 0;
+    bool m_first = true;
+    bool m_mergeable = false;
+};
+
+namespace {
+
+QString colorString(const QVariant &v, const QString &fallback)
+{
+    if (!v.isValid())
+        return fallback;
+    QColor c;
+    if (v.metaType() == QMetaType::fromType<QColor>())
+        c = v.value<QColor>();
+    else
+        c = QColor::fromString(v.toString());
+    if (!c.isValid())
+        return fallback;
+    return c.alpha() == 255 ? c.name(QColor::HexRgb) : c.name(QColor::HexArgb);
+}
+
+int lineCount(const QString &s)
+{
+    return int(text::splitLines(s).size());
+}
+
+bool isFenceOpener(const QString &s)
+{
+    static const QRegularExpression re(u"^(```|~~~)[A-Za-z0-9_+-]*$"_s);
+    return re.match(s).hasMatch();
+}
+
+/// Markdown of a heading level `n` for an edit text that may already start with one.
+QString withHeading(const QString &text, int level)
+{
+    static const QRegularExpression re(u"^\\s{0,3}#{1,6}(\\s+|$)"_s);
+    QString rest = text;
+    rest.remove(re);
+    return QString(level, u'#') + u' ' + rest;
+}
+
+} // namespace
+
+PageController::PageController(QObject *parent) : QObject(parent), m_model(new BlockListModel(this)), m_undo(new QUndoStack(this))
+{
+    m_saveTimer.setSingleShot(true);
+    m_saveTimer.setInterval(400);
+    connect(&m_saveTimer, &QTimer::timeout, this, [this] { save(); });
+    connect(m_undo, &QUndoStack::canUndoChanged, this, &PageController::undoStateChanged);
+    connect(m_undo, &QUndoStack::canRedoChanged, this, &PageController::undoStateChanged);
+    // Leaving the foreground (Android may then kill the process without running destructors)
+    // and quitting flush the page; the QML tear-down after the event loop may come too late
+    // (hosts owned elsewhere can be gone by then).
+    if (qGuiApp) {
+        connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+            if (state != Qt::ApplicationActive)
+                flush();
+        });
+    }
+    if (QCoreApplication::instance())
+        connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &PageController::flush);
+#ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
+    m_merge = [](const QString &base, const QString &local, const QString &remote) {
+        const sync::MergeResult r = sync::merge3(base, local, remote);
+        return MergeOutcome{r.text, r.clean};
+    };
+#endif
+    rebuildPalette();
+}
+
+PageController::~PageController()
+{
+    flush();
+}
+
+void PageController::flush()
+{
+    // An unresolved conflict keeps the local text in memory only: it goes to a conflict copy
+    // (never over the other version in the file).
+    if (m_conflict)
+        writeConflictCopy();
+    else
+        save();
+}
+
+// --- Properties ---------------------------------------------------------------------------------
+
+void PageController::setHost(EditorHost *host)
+{
+    if (m_host == host)
+        return;
+    save();
+    if (m_host)
+        disconnect(m_host, nullptr, this, nullptr);
+    m_host = host;
+    m_model->setHost(host);
+    if (m_host) {
+        connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
+        connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
+        connect(m_host, &QObject::destroyed, this, [this] { m_host = nullptr; });
+    }
+    Q_EMIT hostChanged();
+    if (m_host && !m_path.isEmpty())
+        load();
+}
+
+void PageController::setPath(const QString &path)
+{
+    if (m_path == path)
+        return;
+    flush();
+    m_path = path;
+    m_model->setPath(path);
+    Q_EMIT pathChanged();
+    if (m_host && !m_path.isEmpty())
+        load();
+}
+
+QString PageController::title() const
+{
+    return paths::pageTitle(m_path);
+}
+
+int PageController::zoomBlock() const
+{
+    return m_model->zoomUid() ? m_model->rowOfUid(m_model->zoomUid()) : -1;
+}
+
+QVariantList PageController::breadcrumb() const
+{
+    QVariantList out;
+    const int zoom = zoomBlock();
+    if (zoom < 0)
+        return out;
+    QList<int> chain;
+    for (int i = zoom; i >= 0; i = m_model->document().parent(i))
+        chain.prepend(i);
+    for (const int i : std::as_const(chain))
+        out.append(QVariantMap{{u"row"_s, i}, {u"title"_s, plainTextOf(m_model->document().at(i), 40)}});
+    return out;
+}
+
+int PageController::editingRow() const
+{
+    return m_editingUid ? m_model->rowOfUid(m_editingUid) : -1;
+}
+
+void PageController::setEditingRow(int row)
+{
+    if (row < 0)
+        stopEditing();
+    else
+        startEditing(row, m_cursor);
+}
+
+void PageController::setCursorPosition(int cursor)
+{
+    if (m_cursor == cursor)
+        return;
+    m_cursor = cursor;
+    Q_EMIT cursorPositionChanged();
+}
+
+int PageController::selectedRow() const
+{
+    return m_selectedUid ? m_model->rowOfUid(m_selectedUid) : -1;
+}
+
+void PageController::setSelectedRow(int row)
+{
+    const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
+    if (uid == m_selectedUid)
+        return;
+    m_selectedUid = uid;
+    m_model->setSelectedUid(uid);
+    Q_EMIT selectedRowChanged();
+}
+
+qsizetype PageController::undoHistorySize() const
+{
+    qsizetype size = 0;
+    for (int i = 0; i < m_undo->count(); ++i)
+        size += static_cast<const EditCommand *>(m_undo->command(i))->size();
+    return size;
+}
+
+bool PageController::canUndo() const
+{
+    return m_undo->canUndo();
+}
+
+bool PageController::canRedo() const
+{
+    return m_undo->canRedo();
+}
+
+void PageController::setPalette(const QVariantMap &palette)
+{
+    if (m_palette == palette)
+        return;
+    m_palette = palette;
+    rebuildPalette();
+    Q_EMIT paletteChanged();
+}
+
+void PageController::rebuildPalette()
+{
+    markdown::Palette p;
+    const auto get = [this](const char *key, const QString &fallback) {
+        return colorString(m_palette.value(QString::fromLatin1(key)), fallback);
+    };
+    p.link = get("link", p.link);
+    p.unresolved = get("unresolved", p.unresolved);
+    p.muted = get("muted", p.muted);
+    p.codeBackground = get("codeBackground", p.codeBackground);
+    p.highlightBackground = get("highlightBackground", p.highlightBackground);
+    const auto chip = [&](const char *name, markdown::ChipColors &c) {
+        c.foreground = get(QByteArray(QByteArray(name) + "Fg").constData(), c.foreground);
+        c.background = get(QByteArray(QByteArray(name) + "Bg").constData(), c.background);
+    };
+    chip("tag", p.tag);
+    chip("due", p.due);
+    chip("overdue", p.overdue);
+    chip("scheduled", p.scheduled);
+    chip("reminder", p.reminder);
+    chip("alarm", p.alarm);
+    chip("recurrence", p.recurrence);
+    chip("done", p.done);
+    chip("neutral", p.neutral);
+    m_model->setPalette(p);
+}
+
+void PageController::setLocale(const QString &locale)
+{
+    const bool english = locale == u"en";
+    if (english == m_english)
+        return;
+    m_english = english;
+    m_model->setEnglish(english);
+    Q_EMIT localeChanged();
+}
+
+void PageController::setNow(const QString &now)
+{
+    if (m_fixedNow == now)
+        return;
+    m_fixedNow = now;
+    m_model->setToday(today());
+    Q_EMIT nowChanged();
+}
+
+QDateTime PageController::currentDateTime() const
+{
+    if (!m_fixedNow.isEmpty()) {
+        if (const auto spec = dates::parseDateSpec(m_fixedNow))
+            return spec->toLocalDateTime();
+    }
+    return QDateTime::currentDateTime();
+}
+
+QDate PageController::today() const
+{
+    return currentDateTime().date();
+}
+
+void PageController::setSaveDelay(int ms)
+{
+    ms = std::max(0, ms);
+    if (ms == m_saveTimer.interval())
+        return;
+    m_saveTimer.setInterval(ms);
+    Q_EMIT saveDelayChanged();
+}
+
+QVariantList PageController::foldState() const
+{
+    QList<int> lines;
+    for (const quint64 uid : m_model->collapsedUids()) {
+        const int row = m_model->rowOfUid(uid);
+        if (row >= 0)
+            lines.append(m_model->document().at(row).line);
+    }
+    std::sort(lines.begin(), lines.end());
+    QVariantList out;
+    for (const int l : std::as_const(lines))
+        out.append(l);
+    return out;
+}
+
+// --- Loading and saving ------------------------------------------------------------------------------
+
+void PageController::load()
+{
+    if (!m_host || m_path.isEmpty())
+        return;
+    m_saveTimer.stop();
+    m_loading = true;
+    Q_EMIT loadingChanged();
+    bool ok = false;
+    const QString content = m_host->read(m_path, &ok);
+    const bool hadZoom = m_model->zoomUid() != 0;
+    m_model->setToday(today());
+    m_model->resetContent(ok ? content : QString());
+    m_savedText = ok ? content : QString();
+    m_undo->clear();
+    m_typingOpen = false;
+    m_editingUid = 0;
+    m_selectedUid = 0;
+    for (auto it = m_tracked.begin(); it != m_tracked.end(); ++it)
+        it.value() = 0; // another file (or a reload): tracked blocks are gone
+    m_cursor = -1;
+    setConflict(false);
+    setDirty(false);
+    if (m_sourceMode) {
+        m_sourceText = m_savedText;
+        Q_EMIT sourceTextChanged();
+    }
+    // Logseq's `collapsed:: true` property folds a block initially (device-local afterwards).
+    QSet<quint64> folded;
+    static const QRegularExpression collapsedRe(u"(^|\\n)\\s*collapsed::\\s*true\\s*($|\\n)"_s,
+                                                QRegularExpression::CaseInsensitiveOption);
+    const BlockDocument &doc = m_model->document();
+    for (int i = 0; i < doc.count(); ++i) {
+        if (doc.hasChildren(i) && collapsedRe.match(doc.at(i).body).hasMatch())
+            folded.insert(doc.at(i).uid);
+    }
+    if (!folded.isEmpty())
+        m_model->setCollapsedUids(folded);
+    m_loaded = true;
+    if (m_exists != ok) {
+        m_exists = ok;
+        Q_EMIT existsChanged();
+    }
+    m_loading = false;
+    Q_EMIT loadingChanged();
+    Q_EMIT editingRowChanged();
+    Q_EMIT selectedRowChanged();
+    if (hadZoom)
+        Q_EMIT zoomChanged();
+    Q_EMIT foldStateChanged();
+}
+
+bool PageController::save()
+{
+    m_saveTimer.stop();
+    if (!m_host || m_path.isEmpty() || !m_loaded)
+        return false;
+    if (m_conflict)
+        return false; // never overwrite the other version before the conflict is resolved
+    if (!m_dirty)
+        return true;
+    const QString content = m_sourceMode ? m_sourceText : text();
+    if (!m_exists) {
+        // A new page: an empty page or a lone empty bullet is no reason to create a file.
+        static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
+        if (blank.match(content).hasMatch()) {
+            setDirty(false);
+            return true;
+        }
+    }
+    if (!m_host->write(m_path, content)) {
+        Q_EMIT saveFailed();
+        return false;
+    }
+    m_savedText = content;
+    if (!m_exists) {
+        m_exists = true;
+        Q_EMIT existsChanged();
+    }
+    setDirty(false);
+    Q_EMIT saved();
+    return true;
+}
+
+void PageController::followRename(const QString &oldPath, const QString &newPath)
+{
+    if (oldPath.isEmpty() || oldPath != m_path || newPath.isEmpty() || newPath == m_path)
+        return;
+    m_path = newPath;
+    m_model->setPath(newPath);
+    m_conflictCopyPath.clear();
+    Q_EMIT pathChanged();
+    if (!m_host || !m_loaded)
+        return;
+    // The renamed file normally holds what we last saved; anything else is an external change.
+    bool ok = false;
+    const QString content = m_host->read(newPath, &ok);
+    if (ok && !m_exists) {
+        m_exists = true;
+        Q_EMIT existsChanged();
+    }
+    if (ok && content != m_savedText)
+        onFileChanged(newPath);
+    else if (m_dirty && !m_conflict)
+        m_saveTimer.start();
+}
+
+void PageController::markDirty()
+{
+    const QString current = m_sourceMode ? m_sourceText : text();
+    setDirty(current != m_savedText);
+    if (m_dirty && !m_conflict) {
+        if (m_saveTimer.interval() == 0)
+            save();
+        else
+            m_saveTimer.start();
+    } else if (!m_dirty) {
+        m_saveTimer.stop();
+    }
+}
+
+void PageController::setDirty(bool dirty)
+{
+    if (m_dirty == dirty)
+        return;
+    m_dirty = dirty;
+    Q_EMIT dirtyChanged();
+}
+
+void PageController::setConflict(bool conflict, const QString &remote)
+{
+    if (!conflict) {
+        // The next conflict gets a copy of its own.
+        m_conflictCopyPath.clear();
+        m_conflictCopyText.clear();
+    }
+    if (m_conflict == conflict && m_conflictText == remote)
+        return;
+    m_conflict = conflict;
+    m_conflictText = conflict ? remote : QString();
+    Q_EMIT conflictChanged();
+}
+
+void PageController::writeConflictCopy()
+{
+    if (!m_host || m_path.isEmpty() || !m_conflict)
+        return;
+    const QString local = m_sourceMode ? m_sourceText : text();
+    // One copy per conflict, rewritten when the local text changed (suspend, quit, close).
+    if (!m_conflictCopyPath.isEmpty() && local == m_conflictCopyText)
+        return;
+    if (m_conflictCopyPath.isEmpty()) {
+#ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
+        m_conflictCopyPath = sync::conflictCopyPath(m_path, QSysInfo::machineHostName(), QDateTime::currentDateTime());
+#else
+        const QString ext = paths::extension(m_path);
+        m_conflictCopyPath = paths::stripMarkdownExtension(m_path) + u".conflict-local-"_s
+                             + QDateTime::currentDateTime().toString(u"yyyyMMdd-HHmmss"_s) + (ext.isEmpty() ? u".md"_s : ext);
+#endif
+    }
+    if (m_host->write(m_conflictCopyPath, local))
+        m_conflictCopyText = local;
+}
+
+void PageController::onFileChanged(const QString &path)
+{
+    if (path != m_path || !m_host || !m_loaded)
+        return;
+    bool ok = false;
+    const QString remote = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT fileRemoved();
+        return;
+    }
+    const QString local = m_sourceMode ? m_sourceText : text();
+    // While a conflict is open every later change of the file decides again (it may merge now,
+    // equal ours, or go back to the base): the conflict state and the "other version" offered by
+    // takeRemote() never go stale.
+    if (remote == m_savedText) {
+        // Our own write coming back, or nothing new — or, during a conflict, the other side went
+        // back to the common base: the local text can simply be saved.
+        if (m_conflict) {
+            setConflict(false);
+            markDirty();
+        }
+        return;
+    }
+    if (remote == local) {
+        setConflict(false);
+        m_savedText = remote;
+        setDirty(false);
+        m_saveTimer.stop();
+        return;
+    }
+    const auto applyRemoteText = [&](const QString &newText) {
+        if (m_sourceMode) {
+            m_sourceText = newText;
+            Q_EMIT sourceTextChanged();
+        }
+        const int row = editingRow();
+        const bool editing = row >= 0;
+        m_restoring = true;
+        const QHash<quint64, quint64> mapping = m_model->replaceContent(newText);
+        m_restoring = false;
+        remapBlocks(mapping);
+        if (editing && !m_editingUid && m_model->count() > 0)
+            m_editingUid = m_model->uidAt(std::clamp(row, 0, m_model->count() - 1));
+        m_model->setEditingUid(m_editingUid);
+        m_model->setSelectedUid(m_selectedUid);
+        m_undo->clear();
+        m_typingOpen = false;
+        Q_EMIT editingRowChanged();
+        Q_EMIT selectedRowChanged();
+        Q_EMIT zoomChanged();
+        Q_EMIT foldStateChanged();
+        emitEditTextReset();
+    };
+    if (!m_dirty) {
+        setConflict(false);
+        applyRemoteText(remote);
+        m_savedText = remote;
+        setDirty(false);
+        Q_EMIT externallyChanged(false);
+        return;
+    }
+    if (m_merge) {
+        // Base: the text last read/written (also during a conflict: both sides derive from it).
+        const MergeOutcome merged = m_merge(m_savedText, local, remote);
+        if (merged.clean) {
+            setConflict(false);
+            applyRemoteText(merged.text);
+            m_savedText = remote;
+            markDirty();
+            Q_EMIT externallyChanged(true);
+            return;
+        }
+    }
+    m_saveTimer.stop();
+    setConflict(true, remote);
+}
+
+void PageController::resolveConflict(const QString &text)
+{
+    // A copy: `text` may be m_conflictText itself (takeRemote), which setConflict() clears —
+    // "use the other version" used to save an empty page.
+    const QString resolved = text;
+    const QString remote = m_conflictText;
+    const bool wasConflict = m_conflict;
+    setConflict(false);
+    if (wasConflict)
+        m_savedText = remote; // the file holds the other version now (possibly empty)
+    if (resolved != this->text())
+        applyText(resolved, currentFocus());
+    if (m_sourceMode) {
+        m_sourceText = resolved;
+        Q_EMIT sourceTextChanged();
+    }
+    markDirty();
+    save();
+}
+
+void PageController::keepLocal()
+{
+    resolveConflict(m_sourceMode ? m_sourceText : text());
+}
+
+void PageController::takeRemote()
+{
+    const QString remote = m_conflictText;
+    resolveConflict(remote);
+}
+
+// --- Command machinery ------------------------------------------------------------------------------
+
+bool PageController::validRow(int row) const
+{
+    return row >= 0 && row < m_model->count();
+}
+
+PageController::Focus PageController::currentFocus() const
+{
+    return {editingRow(), m_cursor};
+}
+
+void PageController::beginCommand()
+{
+    if (m_commandDepth++ == 0) {
+        m_commandBefore = text();
+        m_commandFocusBefore = currentFocus();
+        m_typingOpen = false;
+    }
+}
+
+void PageController::endCommand(const Focus &after)
+{
+    if (--m_commandDepth > 0)
+        return;
+    const QString now = text();
+    if (now != m_commandBefore) {
+        m_undo->push(new EditCommand(this, m_commandBefore, now, m_commandFocusBefore, after, 0));
+        markDirty();
+    }
+    m_commandBefore.clear();
+}
+
+EditResult PageController::applyOp(const std::function<EditResult(BlockDocument &)> &op)
+{
+    return m_model->apply(op);
+}
+
+void PageController::restore(const QString &snapshot, const Focus &focus)
+{
+    m_restoring = true;
+    m_typingOpen = false;
+    const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot);
+    m_restoring = false;
+    remapBlocks(mapping);
+    m_model->setSelectedUid(m_selectedUid);
+    if (focus.row >= 0 && validRow(focus.row)) {
+        setFocus(focus, true);
+    } else {
+        m_model->setEditingUid(m_editingUid);
+        Q_EMIT editingRowChanged();
+        emitEditTextReset();
+    }
+    Q_EMIT zoomChanged();
+    Q_EMIT foldStateChanged();
+    markDirty();
+}
+
+PageController::Focus PageController::focusFromResult(const EditResult &r, int fallbackRow) const
+{
+    Focus f;
+    f.row = r.focus >= 0 ? r.focus : fallbackRow;
+    if (!validRow(f.row))
+        return {-1, -1};
+    const QString edit = m_model->editTextAt(f.row);
+    f.cursor = r.cursor >= 0 ? toEditCursor(f.row, r.cursor) : int(edit.size());
+    return f;
+}
+
+void PageController::setFocus(const Focus &focus, bool resetText)
+{
+    if (!validRow(focus.row)) {
+        stopEditing();
+        return;
+    }
+    const quint64 uid = m_model->uidAt(focus.row);
+    const bool rowChanged = uid != m_editingUid;
+    if (rowChanged)
+        m_typingOpen = false;
+    m_editingUid = uid;
+    const int len = int(m_model->editTextAt(focus.row).size());
+    m_cursor = focus.cursor < 0 ? len : snapToCharacter(m_model->editTextAt(focus.row), focus.cursor);
+    m_model->setEditingUid(uid);
+    if (m_selectedUid) {
+        m_selectedUid = 0;
+        m_model->setSelectedUid(0);
+        Q_EMIT selectedRowChanged();
+    }
+    Q_EMIT editingRowChanged();
+    Q_EMIT cursorPositionChanged();
+    if (resetText)
+        emitEditTextReset();
+}
+
+void PageController::emitEditTextReset()
+{
+    const int row = editingRow();
+    if (row < 0)
+        return;
+    const QString edit = m_model->editTextAt(row);
+    m_cursor = m_cursor < 0 ? int(edit.size()) : snapToCharacter(edit, m_cursor);
+    Q_EMIT editTextReset(row, edit, m_cursor);
+}
+
+int PageController::toBodyCursor(int row, int editCursor) const
+{
+    const BlockShape s = m_model->shapeAt(row);
+    return s.editOffset + std::clamp(editCursor < 0 ? int(s.editText.size()) : editCursor, 0, int(s.editText.size()));
+}
+
+int PageController::toEditCursor(int row, int bodyCursor) const
+{
+    const BlockShape s = m_model->shapeAt(row);
+    return std::clamp(bodyCursor - s.editOffset, 0, int(s.editText.size()));
+}
+
+void PageController::editBody(int row, const QString &body, int focusCursor)
+{
+    if (!validRow(row) || m_model->document().at(row).body == body)
+        return;
+    const bool editingThis = editingRow() == row;
+    const int oldLen = int(m_model->editTextAt(row).size());
+    beginCommand();
+    applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (editingThis) {
+        const int newLen = int(m_model->editTextAt(row).size());
+        if (focusCursor >= -1)
+            m_cursor = focusCursor;
+        else if (m_cursor >= oldLen)
+            m_cursor = newLen; // the caret was at the end: keep it there
+    }
+    endCommand(currentFocus());
+    if (editingThis)
+        emitEditTextReset();
+}
+
+void PageController::applyText(const QString &newText, const Focus &after)
+{
+    if (newText == text())
+        return;
+    beginCommand();
+    m_restoring = true;
+    const QHash<quint64, quint64> mapping = m_model->replaceContent(newText);
+    m_restoring = false;
+    remapBlocks(mapping);
+    m_model->setEditingUid(m_editingUid);
+    m_model->setSelectedUid(m_selectedUid);
+    endCommand(after);
+    if (after.row >= 0)
+        setFocus(after, true);
+    else
+        Q_EMIT editingRowChanged();
+}
+
+// --- Editing commands --------------------------------------------------------------------------------
+
+void PageController::startEditing(int row, int cursor)
+{
+    if (!validRow(row))
+        return;
+    reveal(row);
+    setFocus({row, cursor}, false);
+}
+
+void PageController::stopEditing()
+{
+    if (!m_editingUid)
+        return;
+    m_editingUid = 0;
+    m_typingOpen = false;
+    m_model->setEditingUid(0);
+    Q_EMIT editingRowChanged();
+}
+
+void PageController::setBody(int row, const QString &body)
+{
+    editBody(row, body);
+}
+
+void PageController::setEditText(int row, const QString &edit, int cursor)
+{
+    if (!validRow(row))
+        return;
+    if (cursor >= 0 && editingRow() == row)
+        m_cursor = cursor;
+    if (edit == m_model->editTextAt(row))
+        return;
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    const quint64 uid = entry.uid;
+    const QString body = bodyWithEditText(entry, edit);
+    const QString before = text();
+    const Focus focusBefore = currentFocus();
+    const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo()
+                                && !m_undo->canRedo();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (!r.changed())
+        return;
+    auto *cmd = new EditCommand(this, before, text(), focusBefore, Focus{row, cursor}, uid);
+    cmd->setMergeable(continueTyping);
+    m_undo->push(cmd);
+    m_typingOpen = true;
+    m_typingUid = uid;
+    m_typingCell = QPoint(-1, -2);
+    markDirty();
+    // Normalisation: "[ ] " typed at the start turns into a checkbox, etc.
+    const QString now = m_model->editTextAt(row);
+    if (now != edit && editingRow() == row) {
+        const int delta = int(edit.size() - now.size());
+        m_cursor = std::clamp((cursor >= 0 ? cursor : int(edit.size())) - delta, 0, int(now.size()));
+        Q_EMIT editTextReset(row, now, m_cursor);
+    }
+}
+
+QVariantMap PageController::split(int row, int cursor)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row))
+        return result(-1, -1);
+    const BlockShape shape = m_model->shapeAt(row);
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    if (shape.view != BlockView::Text && shape.view != BlockView::Heading)
+        return result(row, cursor);
+    const int len = int(shape.editText.size());
+    cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
+
+    // "```calc" + Enter opens a code block.
+    if (cursor == len && isFenceOpener(shape.editText.trimmed())) {
+        const QString fence = shape.editText.trimmed().left(3);
+        beginCommand();
+        applyOp([&](BlockDocument &d) {
+            return d.setBody(row, bodyWithEditText(entry, shape.editText.trimmed() + u"\n\n"_s + fence));
+        });
+        const Focus f{row, 0};
+        endCommand(f);
+        setFocus(f, true);
+        return result(f.row, f.cursor);
+    }
+
+    // Enter on an empty nested item outdents it (common outliner behaviour).
+    const int zoom = zoomBlock();
+    if (len == 0 && !shape.task && entry.kind == BlockKind::ListItem && entry.depth > 0
+        && (zoom < 0 || entry.parent != zoom)) {
+        if (outdent(row))
+            return result(editingRow(), 0);
+    }
+
+    beginCommand();
+    EditResult r;
+    if (row == zoom && cursor == len) {
+        // The zoomed block: a new first child keeps the caret inside the zoom.
+        r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, QString(), entry.depth + 1); });
+    } else {
+        const bool collapsed = m_model->isCollapsed(row);
+        const int bodyCursor = toBodyCursor(row, cursor);
+        r = applyOp([&](BlockDocument &d) { return d.split(row, bodyCursor, collapsed); });
+    }
+    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    endCommand(f);
+    setFocus(f, true);
+    return result(f.row, f.cursor);
+}
+
+QVariantMap PageController::mergeWithPrevious(int row)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row) || row == zoomBlock())
+        return result(-1, -1);
+    const int prev = m_model->previousVisibleRow(row);
+    if (prev < 0)
+        return result(-1, -1);
+    const BlockDocument &doc = m_model->document();
+    if (prev != row - 1) {
+        // The previous block in the file is folded away: unfold it first.
+        for (int p = doc.parent(row - 1); p >= 0; p = doc.parent(p)) {
+            if (m_model->isCollapsed(p))
+                m_model->setCollapsed(p, false);
+        }
+        Q_EMIT foldStateChanged();
+    }
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(row); });
+    Focus f;
+    if (r.changed()) {
+        f = focusFromResult(r, row - 1);
+    } else {
+        // The previous block is not a text block (code, table…): move the caret there.
+        f = {r.focus >= 0 ? r.focus : row - 1, -1};
+    }
+    endCommand(f);
+    setFocus(f, true);
+    return result(f.row, f.cursor);
+}
+
+QVariantMap PageController::mergeNext(int row)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row))
+        return result(-1, -1);
+    const int next = m_model->nextVisibleRow(row);
+    if (next != row + 1)
+        return result(-1, -1);
+    const BlockView nextView = m_model->shapeAt(next).view;
+    if (nextView != BlockView::Text && nextView != BlockView::Heading)
+        return result(-1, -1);
+    const int cursor = int(m_model->editTextAt(row).size());
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(next); });
+    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    endCommand(f);
+    setFocus(f, true);
+    return result(f.row, f.cursor);
+}
+
+bool PageController::indent(int row)
+{
+    if (!validRow(row) || row == zoomBlock())
+        return false;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.indent(row); });
+    // The new parent must show its new child.
+    const int parent = m_model->document().parent(m_model->rowOfUid(m_model->uidAt(row)));
+    if (r.changed() && parent >= 0 && m_model->isCollapsed(parent)) {
+        m_model->setCollapsed(parent, false);
+        Q_EMIT foldStateChanged();
+    }
+    endCommand(currentFocus());
+    if (r.changed())
+        emitEditTextReset();
+    return r.changed();
+}
+
+bool PageController::outdent(int row)
+{
+    if (!validRow(row) || row == zoomBlock())
+        return false;
+    const BlockDocument &doc = m_model->document();
+    const int zoom = zoomBlock();
+    if (zoom >= 0 && doc.parent(row) == zoom)
+        return false; // would leave the zoomed subtree
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.outdent(row); });
+    endCommand(currentFocus());
+    if (r.changed())
+        emitEditTextReset();
+    return r.changed();
+}
+
+bool PageController::moveUp(int row)
+{
+    if (!validRow(row) || row == zoomBlock())
+        return false;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.moveUp(row); });
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    return r.changed();
+}
+
+bool PageController::moveDown(int row)
+{
+    if (!validRow(row) || row == zoomBlock())
+        return false;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.moveDown(row); });
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    return r.changed();
+}
+
+void PageController::toggleTask(int row)
+{
+    if (!validRow(row))
+        return;
+    const QDate day = today();
+    beginCommand();
+    applyOp([&](BlockDocument &d) { return d.toggleTask(row, day); });
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    emitEditTextReset();
+}
+
+void PageController::cycleTask(int row)
+{
+    if (!validRow(row))
+        return;
+    const std::optional<TaskStatus> status = m_model->shapeAt(row).task;
+    if (!status)
+        setTaskStatus(row, u"todo"_s);
+    else if (*status == TaskStatus::Todo)
+        setTaskStatus(row, u"doing"_s);
+    else if (*status == TaskStatus::Doing)
+        setTaskStatus(row, u"done"_s);
+    else
+        setTaskStatus(row, QString());
+}
+
+void PageController::setTaskStatus(int row, const QString &status)
+{
+    if (!validRow(row))
+        return;
+    const QDate day = today();
+    const quint64 uid = m_model->uidAt(row);
+    beginCommand();
+    if (status.isEmpty()) {
+        // Back to a plain block: reopen first (removes ✅/❌ dates), then drop the marker.
+        if (m_model->shapeAt(row).task) {
+            applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, TaskStatus::Todo, day); });
+            const int r = m_model->rowOfUid(uid);
+            if (r >= 0) {
+                const QString body = withoutTaskMarker(m_model->document().at(r));
+                applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
+            }
+        }
+    } else if (const auto s = taskStatusFromName(status)) {
+        applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, *s, day); });
+    }
+    endCommand(currentFocus());
+    Q_EMIT editingRowChanged();
+    emitEditTextReset();
+}
+
+void PageController::removeTaskMarker(int row)
+{
+    if (validRow(row) && m_model->shapeAt(row).task)
+        setTaskStatus(row, QString());
+}
+
+int PageController::deleteBlock(int row)
+{
+    if (!validRow(row))
+        return -1;
+    const bool wasZoom = row == zoomBlock();
+    const int prev = m_model->previousVisibleRow(row);
+    const bool editingThis = editingRow() == row;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.remove(row, true); });
+    int focusRow = -1;
+    if (r.changed()) {
+        focusRow = prev >= 0 ? prev : (r.focus >= 0 && validRow(r.focus) ? r.focus : -1);
+        if (focusRow >= 0 && !m_model->isRowVisible(focusRow))
+            focusRow = m_model->firstVisibleRow();
+    }
+    const Focus f{focusRow, -1};
+    endCommand(editingThis ? f : currentFocus());
+    if (wasZoom)
+        zoomTo(-1);
+    if (editingThis) {
+        if (focusRow >= 0)
+            setFocus(f, true);
+        else
+            stopEditing();
+    }
+    if (m_selectedUid && editingRow() < 0) {
+        m_selectedUid = 0;
+        setSelectedRow(focusRow);
+    }
+    return focusRow;
+}
+
+int PageController::insertBlockAfter(int row, const QString &body)
+{
+    const BlockDocument &doc = m_model->document();
+    int depth = 0;
+    if (validRow(row))
+        depth = doc.at(row).depth;
+    else
+        row = -1;
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, body, depth); });
+    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, -1};
+    endCommand(f);
+    if (r.changed())
+        setFocus(f, true);
+    return f.row;
+}
+
+int PageController::appendEmptyBlock()
+{
+    const BlockDocument &doc = m_model->document();
+    const int zoom = zoomBlock();
+    if (zoom >= 0) {
+        const markdown::RowRange range = doc.subtreeRange(zoom);
+        const int last = range.last();
+        if (last != zoom && m_model->editTextAt(last).isEmpty() && doc.at(last).kind == BlockKind::ListItem) {
+            setFocus({last, 0}, true);
+            return last;
+        }
+        beginCommand();
+        const EditResult r = applyOp(
+                [&](BlockDocument &d) { return d.insertAfter(last, QString(), doc.at(zoom).depth + 1); });
+        const Focus f = focusFromResult(r, last);
+        endCommand(f);
+        setFocus(f, true);
+        return f.row;
+    }
+    const int last = m_model->count() - 1;
+    if (last >= 0 && doc.at(last).kind == BlockKind::ListItem && doc.at(last).depth == 0
+        && m_model->editTextAt(last).isEmpty() && m_model->isRowVisible(last)) {
+        setFocus({last, 0}, true);
+        return last;
+    }
+    beginCommand();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, QString(), 0); });
+    const Focus f = r.changed() ? focusFromResult(r, last) : Focus{last, -1};
+    endCommand(f);
+    setFocus(f, true);
+    return f.row;
+}
+
+int PageController::insertMarkdown(int row, const QString &markdown)
+{
+    QString md = markdown;
+    md.replace(u"\r\n"_s, u"\n"_s);
+    while (md.endsWith(u'\n'))
+        md.chop(1);
+    if (md.isEmpty())
+        return -1;
+    const BlockDocument &doc = m_model->document();
+    const QString eol = doc.eol();
+    const QString content = text();
+    QList<text::Line> lines = text::splitLines(content);
+    const QString mdEol = QString(md).replace(u"\n"_s, eol);
+    int firstLine = 0;
+    QString result;
+    const auto join = [&](qsizetype from, qsizetype to) {
+        QString s;
+        for (qsizetype k = from; k < to && k < lines.size(); ++k)
+            s += lines[k].text + lines[k].eol;
+        return s;
+    };
+    if (validRow(row) && m_model->editTextAt(row).trimmed().isEmpty()) {
+        // Replace the empty block.
+        const int start = doc.at(row).line;
+        const int end = start + lineCount(doc.blockSource(row));
+        const QString lastEol = end - 1 < lines.size() ? lines[end - 1].eol : QString();
+        result = join(0, start) + mdEol + lastEol + join(end, lines.size());
+        firstLine = start;
+    } else {
+        int top = validRow(row) ? row : m_model->count() - 1;
+        while (top >= 0 && doc.parent(top) >= 0)
+            top = doc.parent(top);
+        const int last = top >= 0 ? doc.subtreeRange(top).last() : -1;
+        const int insertLine = last + 1 < doc.count() ? doc.at(last + 1).line : int(lines.size());
+        QString before = join(0, insertLine);
+        if (insertLine >= lines.size() && !lines.isEmpty() && !lines.last().text.isEmpty())
+            before = content; // no final newline: everything
+        if (!before.isEmpty() && !before.endsWith(u'\n') && !before.endsWith(u'\r'))
+            before += eol;
+        const bool listAfterList = md.startsWith(u"- "_s) && last >= 0 && doc.at(last).kind == BlockKind::ListItem;
+        if (!before.isEmpty() && !listAfterList && !before.endsWith(eol + eol))
+            before += eol;
+        QString after = join(insertLine, lines.size());
+        result = before + mdEol + eol + (after.isEmpty() || after.startsWith(eol) || listAfterList ? QString() : eol) + after;
+        firstLine = lineCount(before) - (before.endsWith(u'\n') ? 1 : 0);
+    }
+    const BlockDocument preview(result);
+    const int focusRow = std::max(0, preview.indexAtLine(firstLine));
+    applyText(result, Focus{focusRow, -1});
+    return focusRow;
+}
+
+int PageController::insertTemplate(int row, const QString &templatePath)
+{
+    if (!m_host)
+        return -1;
+    bool ok = false;
+    const QString tpl = m_host->read(templatePath, &ok);
+    if (!ok)
+        return -1;
+    markdown::TemplateVars vars;
+    vars.now = currentDateTime();
+    vars.title = title();
+    vars.locale = m_english ? dates::UiLocale::English : dates::UiLocale::Polish;
+    const markdown::TemplateResult filled = markdown::applyTemplate(tpl, vars);
+    return insertMarkdown(row, filled.text);
+}
+
+// --- Zoom and folding ------------------------------------------------------------------------------
+
+void PageController::zoomInto(int row)
+{
+    if (!validRow(row))
+        return;
+    m_model->setZoomUid(m_model->uidAt(row));
+    const int editing = editingRow();
+    if (editing >= 0 && !m_model->isRowVisible(editing))
+        stopEditing();
+    Q_EMIT zoomChanged();
+}
+
+void PageController::zoomOut()
+{
+    const int zoom = zoomBlock();
+    if (zoom < 0)
+        return;
+    zoomTo(m_model->document().parent(zoom));
+}
+
+void PageController::zoomTo(int row)
+{
+    m_model->setZoomUid(validRow(row) ? m_model->uidAt(row) : 0);
+    Q_EMIT zoomChanged();
+}
+
+void PageController::toggleFold(int row)
+{
+    if (!validRow(row))
+        return;
+    setFolded(row, !m_model->isCollapsed(row));
+}
+
+void PageController::setFolded(int row, bool folded)
+{
+    if (!validRow(row) || !m_model->document().hasChildren(row) || m_model->isCollapsed(row) == folded)
+        return;
+    m_model->setCollapsed(row, folded);
+    const int editing = editingRow();
+    if (folded && editing >= 0 && !m_model->isRowVisible(editing))
+        setFocus({row, -1}, true);
+    Q_EMIT foldStateChanged();
+}
+
+void PageController::foldAll(bool folded)
+{
+    QSet<quint64> uids;
+    const BlockDocument &doc = m_model->document();
+    if (folded) {
+        for (int i = 0; i < doc.count(); ++i) {
+            if (doc.hasChildren(i))
+                uids.insert(doc.at(i).uid);
+        }
+    }
+    m_model->setCollapsedUids(uids);
+    const int editing = editingRow();
+    if (editing >= 0 && !m_model->isRowVisible(editing))
+        stopEditing();
+    Q_EMIT foldStateChanged();
+}
+
+void PageController::setFoldState(const QVariantList &lines)
+{
+    QSet<quint64> uids;
+    const BlockDocument &doc = m_model->document();
+    for (const QVariant &v : lines) {
+        const int i = doc.indexAtLine(v.toInt());
+        if (i >= 0 && doc.at(i).line == v.toInt() && doc.hasChildren(i))
+            uids.insert(doc.at(i).uid);
+    }
+    m_model->setCollapsedUids(uids);
+    Q_EMIT foldStateChanged();
+}
+
+void PageController::reveal(int row)
+{
+    if (!validRow(row) || m_model->isRowVisible(row))
+        return;
+    const BlockDocument &doc = m_model->document();
+    const int zoom = zoomBlock();
+    if (zoom >= 0) {
+        const markdown::RowRange range = doc.subtreeRange(zoom);
+        if (row < range.first || row > range.last())
+            zoomTo(-1);
+    }
+    for (int p = doc.parent(row); p >= 0; p = doc.parent(p)) {
+        if (m_model->isCollapsed(p))
+            m_model->setCollapsed(p, false);
+    }
+    Q_EMIT foldStateChanged();
+}
+
+int PageController::rowOfLine(int line) const
+{
+    return m_model->document().indexAtLine(line);
+}
+
+int PageController::rowOfBlockId(const QString &blockId) const
+{
+    if (blockId.isEmpty())
+        return -1;
+    const BlockDocument &doc = m_model->document();
+    for (int i = 0; i < doc.count(); ++i) {
+        if (doc.at(i).blockId == blockId)
+            return i;
+    }
+    return -1;
+}
+
+int PageController::trackBlock(int row)
+{
+    if (!validRow(row))
+        return 0;
+    const int handle = m_nextTrackHandle++;
+    m_tracked.insert(handle, m_model->uidAt(row));
+    return handle;
+}
+
+int PageController::trackedRow(int handle) const
+{
+    const quint64 uid = m_tracked.value(handle, 0);
+    return uid ? m_model->rowOfUid(uid) : -1;
+}
+
+void PageController::untrack(int handle)
+{
+    m_tracked.remove(handle);
+}
+
+void PageController::remapBlocks(const QHash<quint64, quint64> &mapping)
+{
+    m_editingUid = mapping.value(m_editingUid, 0);
+    m_selectedUid = mapping.value(m_selectedUid, 0);
+    for (auto it = m_tracked.begin(); it != m_tracked.end(); ++it)
+        it.value() = mapping.value(it.value(), 0);
+}
+
+int PageController::nextVisibleRow(int row) const
+{
+    return m_model->nextVisibleRow(row);
+}
+
+int PageController::previousVisibleRow(int row) const
+{
+    return m_model->previousVisibleRow(row);
+}
+
+int PageController::lastVisibleRow() const
+{
+    return m_model->lastVisibleRow();
+}
+
+// --- Inline insertions ---------------------------------------------------------------------------------
+
+int PageController::insertToken(int row, int cursor, const QString &token)
+{
+    if (!validRow(row))
+        return cursor;
+    const QString edit = m_model->editTextAt(row);
+    int newCursor = cursor;
+    const QString updated = insertTokenAt(edit, cursor < 0 ? int(edit.size()) : snapToCharacter(edit, cursor), token, &newCursor);
+    editBody(row, bodyWithEditText(m_model->document().at(row), updated), newCursor);
+    return newCursor;
+}
+
+int PageController::replaceRange(int row, int from, int to, const QString &replacement)
+{
+    if (!validRow(row))
+        return from;
+    const QString edit = m_model->editTextAt(row);
+    from = snapToCharacter(edit, from);
+    to = std::max(from, snapToCharacter(edit, to));
+    const QString updated = edit.left(from) + replacement + edit.mid(to);
+    const int cursor = from + int(replacement.size());
+    editBody(row, bodyWithEditText(m_model->document().at(row), updated), cursor);
+    return cursor;
+}
+
+QVariantMap PageController::pasteText(int row, int from, int to, const QString &pasted)
+{
+    const auto result = [](int r, int c) { return QVariantMap{{u"row"_s, r}, {u"cursor"_s, c}}; };
+    if (!validRow(row))
+        return result(-1, -1);
+    QString text = pasted;
+    text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    const BlockShape shape = m_model->shapeAt(row);
+    const QString edit = shape.editText;
+    from = snapToCharacter(edit, from);
+    to = std::max(from, snapToCharacter(edit, to));
+    const bool textBlock = shape.view == BlockView::Text || shape.view == BlockView::Heading;
+    QString markdown = text;
+    while (markdown.endsWith(u'\n'))
+        markdown.chop(1);
+    const BlockDocument pasteDoc(markdown);
+    // One block goes in as text — unless it is a code block, table… pasted between other text.
+    const bool oneTextBlock = pasteDoc.count() < 2
+                              && (pasteDoc.isEmpty() || shapeOf(pasteDoc.at(0)).view == BlockView::Text
+                                  || (from == 0 && to == edit.size()));
+    if (!markdown.contains(u'\n') || !textBlock || oneTextBlock) {
+        if (textBlock)
+            text = markdown; // no trailing line breaks inside a text block
+        const int cursor = replaceRange(row, from, to, text);
+        if (editingRow() == row)
+            setFocus({row, cursor}, true);
+        return result(row, cursor);
+    }
+    const QString prefix = edit.left(from);
+    const QString suffix = edit.mid(to);
+    const quint64 uid = m_model->uidAt(row);
+    // Only plain text joins the text around the caret: a code block, table, quote… glued to it
+    // ("a```js", "```bc") would no longer be one.
+    const auto isPlainText = [](const markdown::BlockEntry &e) { return shapeOf(e).view == BlockView::Text; };
+    const bool joinFirst = prefix.isEmpty() || isPlainText(pasteDoc.at(0));
+    beginCommand();
+    applyOp([&](BlockDocument &d) {
+        return d.setBody(row, bodyWithEditText(d.at(row), joinFirst ? prefix + pasteDoc.at(0).body : prefix));
+    });
+    int current = m_model->rowOfUid(uid);
+    const markdown::BlockEntry &anchor = m_model->document().at(current);
+    const int baseDepth = anchor.depth;
+    const bool intoList = anchor.kind == BlockKind::ListItem;
+    const int firstDepth = pasteDoc.at(0).depth;
+    int last = current;
+    for (int k = joinFirst ? 1 : 0; k < pasteDoc.count(); ++k) {
+        const markdown::BlockEntry &e = pasteDoc.at(k);
+        const int depth = baseDepth + std::max(0, e.depth - firstDepth);
+        const bool listItem = intoList || e.kind == BlockKind::ListItem;
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, e.body, depth, listItem); });
+        if (r.focus >= 0)
+            last = r.focus;
+    }
+    int cursor = int(m_model->editTextAt(last).size());
+    if (!suffix.isEmpty()) {
+        const int target = last;
+        if (isPlainText(m_model->document().at(target))) {
+            const QString lastEdit = m_model->editTextAt(target);
+            applyOp([&](BlockDocument &d) { return d.setBody(target, bodyWithEditText(d.at(target), lastEdit + suffix)); });
+        } else {
+            const int depth = m_model->document().at(target).depth;
+            const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(target, suffix, depth, intoList); });
+            if (r.focus >= 0) {
+                last = r.focus;
+                cursor = 0;
+            }
+        }
+    }
+    const Focus f{last, cursor};
+    endCommand(f);
+    setFocus(f, true);
+    return result(f.row, f.cursor);
+}
+
+QString PageController::ensureBlockRef(int row)
+{
+    if (!validRow(row))
+        return {};
+    const QString existing = m_model->document().at(row).blockId;
+    if (!existing.isEmpty())
+        return existing;
+    const QPointer<EditorHost> host = m_host;
+    QString id;
+    beginCommand();
+    applyOp([&](BlockDocument &d) {
+        const markdown::BlockIdResult res = d.ensureBlockId(row, [host](const QString &candidate) {
+            return host && !host->blockText(candidate).isEmpty();
+        });
+        id = res.id;
+        return res.edit;
+    });
+    endCommand(currentFocus());
+    if (editingRow() == row)
+        emitEditTextReset();
+    return id;
+}
+
+QString PageController::copyBlockRef(int row)
+{
+    const QString id = ensureBlockRef(row);
+    if (!id.isEmpty() && qGuiApp && QGuiApplication::clipboard())
+        QGuiApplication::clipboard()->setText(u"(("_s + id + u"))"_s);
+    return id;
+}
+
+void PageController::setReminder(int row, const QString &at, bool alarm, const QString &recurrence, int from, int to)
+{
+    if (!validRow(row))
+        return;
+    const auto spec = dates::parseDateSpec(at.trimmed());
+    if (!spec)
+        return;
+    const QString token = markdown::formatReminderToken(*spec, alarm);
+    QString body = m_model->document().at(row).body;
+    const bool editingExisting = from >= 0 && to > from;
+    if (editingExisting)
+        body = replaceTokenRange(body, from, to, token);
+    else
+        body = setFirstLineToken(body, markdown::TokenKind::Reminder, token, true);
+    if (!recurrence.trimmed().isEmpty()) {
+        QString rule = dates::canonicalRecurrence(recurrence);
+        if (rule.isEmpty())
+            rule = recurrence.trimmed();
+        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, u"🔁 "_s + rule);
+    } else if (editingExisting) {
+        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, QString());
+    }
+    editBody(row, body);
+}
+
+void PageController::removeToken(int row, int from, int to)
+{
+    if (!validRow(row))
+        return;
+    editBody(row, replaceTokenRange(m_model->document().at(row).body, from, to, QString()));
+}
+
+void PageController::setDateToken(int row, const QString &field, const QString &spec)
+{
+    if (!validRow(row))
+        return;
+    markdown::TokenKind kind = markdown::TokenKind::Due;
+    QStringView emoji = markdown::tokens::Due;
+    if (field == u"scheduled") {
+        kind = markdown::TokenKind::Scheduled;
+        emoji = markdown::tokens::Scheduled;
+    } else if (field == u"start") {
+        kind = markdown::TokenKind::Start;
+        emoji = markdown::tokens::Start;
+    } else if (field != u"due") {
+        return;
+    }
+    QString token;
+    if (!spec.trimmed().isEmpty()) {
+        const auto parsed = dates::parseDateSpec(spec.trimmed());
+        if (!parsed)
+            return;
+        token = emoji.toString() + u' ' + parsed->toString();
+    }
+    editBody(row, setFirstLineToken(m_model->document().at(row).body, kind, token));
+}
+
+void PageController::setRecurrence(int row, const QString &rule)
+{
+    if (!validRow(row))
+        return;
+    QString token;
+    if (!rule.trimmed().isEmpty()) {
+        QString canonical = dates::canonicalRecurrence(rule);
+        if (canonical.isEmpty())
+            canonical = rule.trimmed();
+        token = u"🔁 "_s + canonical;
+    }
+    editBody(row, setFirstLineToken(m_model->document().at(row).body, markdown::TokenKind::Recurrence, token));
+}
+
+QVariantMap PageController::reminderAt(int row, int from, int to) const
+{
+    if (!validRow(row))
+        return {};
+    const QString body = m_model->document().at(row).body;
+    if (from < 0 || to > body.size() || to <= from)
+        return {};
+    const QString part = body.mid(from, to - from);
+    const QList<markdown::Token> toks = markdown::findTokens(part);
+    for (const markdown::Token &t : toks) {
+        if (t.kind != markdown::TokenKind::Reminder && t.kind != markdown::TokenKind::ReminderCompat)
+            continue;
+        DateSpec spec = t.spec();
+        if (!spec.time) {
+            const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+            spec.time = config.defaultReminderTime;
+        }
+        const QString recurrence = blockDates(row).value(u"recurrence"_s).toString();
+        return {{u"at"_s, spec.toString()},
+                {u"alarm"_s, t.alarm},
+                {u"recurrence"_s, recurrence},
+                {u"context"_s, blockContext(row)}};
+    }
+    return {};
+}
+
+QString PageController::blockContext(int row) const
+{
+    return validRow(row) ? plainTextOf(m_model->document().at(row), 120) : QString();
+}
+
+QVariantMap PageController::blockDates(int row) const
+{
+    QVariantMap out{{u"due"_s, QString()}, {u"scheduled"_s, QString()}, {u"start"_s, QString()}, {u"recurrence"_s, QString()}};
+    if (!validRow(row))
+        return out;
+    const QString body = m_model->document().at(row).body;
+    const qsizetype nl = body.indexOf(u'\n');
+    const QString first = nl < 0 ? body : body.left(nl);
+    for (const markdown::Token &t : markdown::findTokens(markdown::maskInlineCode(first))) {
+        switch (t.kind) {
+        case markdown::TokenKind::Due: out[u"due"_s] = t.spec().toString(); break;
+        case markdown::TokenKind::Scheduled: out[u"scheduled"_s] = t.spec().toString(); break;
+        case markdown::TokenKind::Start: out[u"start"_s] = t.spec().toString(); break;
+        case markdown::TokenKind::Recurrence: out[u"recurrence"_s] = markdown::recurrenceOf(t); break;
+        default: break;
+        }
+    }
+    return out;
+}
+
+QString PageController::journalLink(const QString &date) const
+{
+    const QDate d = QDate::fromString(date.left(10), u"yyyy-MM-dd"_s);
+    if (!d.isValid())
+        return {};
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    return u"[["_s + paths::pageTitle(markdown::journalPathForDate(d, config)) + u"]]"_s;
+}
+
+QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerMap, const QVariantMap &item)
+{
+    QVariantMap out{{u"cursor"_s, m_cursor}, {u"action"_s, QString()}};
+    if (!validRow(row))
+        return out;
+    const CompletionTrigger t = CompletionTrigger::fromMap(triggerMap);
+    if (t.mode == u"slash")
+        return applySlashCommand(row, t.from, t.to, item.value(u"command"_s).toString());
+    QString edit = m_model->editTextAt(row);
+    int from = snapToCharacter(edit, t.from);
+    int to = std::max(from, snapToCharacter(edit, t.to));
+    const QString insert = item.value(u"insertText"_s).toString();
+    QString replacement;
+    int cursorAfter = 0;
+    beginCommand();
+    if (t.mode == u"pages") {
+        replacement = insert;
+        if (t.closing == u"]]")
+            cursorAfter = from + int(replacement.size()) + 2;
+        else if (t.closing == u"|")
+            cursorAfter = from + int(replacement.size());
+        else {
+            replacement += u"]]"_s;
+            cursorAfter = from + int(replacement.size());
+        }
+    } else if (t.mode == u"blocks") {
+        QString id = item.value(u"blockId"_s).toString();
+        const QString path = item.value(u"path"_s).toString();
+        const int line = item.value(u"line"_s, -1).toInt();
+        if (id.isEmpty() && (path.isEmpty() || path == m_path)) {
+            const int target = m_model->document().indexAtLine(line);
+            if (target >= 0) {
+                const quint64 uid = m_model->uidAt(row);
+                const int oldLen = int(edit.size());
+                const int firstLineEnd = int(edit.indexOf(u'\n') < 0 ? edit.size() : edit.indexOf(u'\n'));
+                id = ensureBlockRef(target);
+                row = m_model->rowOfUid(uid);
+                const QString updated = m_model->editTextAt(row);
+                if (target == row && firstLineEnd <= from) {
+                    from += int(updated.size()) - oldLen;
+                    to += int(updated.size()) - oldLen;
+                }
+                edit = updated;
+            }
+        } else if (id.isEmpty() && m_host) {
+            id = m_host->ensureBlockId(path, line);
+        }
+        if (id.isEmpty()) {
+            endCommand(currentFocus());
+            return out;
+        }
+        replacement = id;
+        if (t.closing == u"))")
+            cursorAfter = from + int(replacement.size()) + 2;
+        else {
+            replacement += u"))"_s;
+            cursorAfter = from + int(replacement.size());
+        }
+    } else if (t.mode == u"tags") {
+        replacement = insert;
+        if (replacement.contains(u' ') && !replacement.startsWith(u"[["_s))
+            replacement = u"[["_s + replacement + u"]]"_s;
+        if (to >= edit.size() || !edit[to].isSpace())
+            replacement += u' ';
+        cursorAfter = from + int(replacement.size());
+    } else if (t.mode == u"date") {
+        replacement = insert;
+        if (to >= edit.size() || !edit[to].isSpace())
+            replacement += u' ';
+        cursorAfter = from + int(replacement.size());
+    } else {
+        endCommand(currentFocus());
+        return out;
+    }
+    const QString updated = edit.left(from) + replacement + edit.mid(to);
+    if (editingRow() == row)
+        m_cursor = cursorAfter;
+    applyOp([&](BlockDocument &d) { return d.setBody(row, bodyWithEditText(m_model->document().at(row), updated)); });
+    endCommand(Focus{row, cursorAfter});
+    if (editingRow() == row)
+        emitEditTextReset();
+    out[u"cursor"_s] = cursorAfter;
+    return out;
+}
+
+QVariantMap PageController::applySlashCommand(int row, int from, int to, const QString &command)
+{
+    QVariantMap out{{u"cursor"_s, m_cursor}, {u"action"_s, QString()}, {u"row"_s, row}};
+    if (!validRow(row))
+        return out;
+    const quint64 uid = m_model->uidAt(row);
+    QString edit = m_model->editTextAt(row);
+    from = snapToCharacter(edit, from);
+    to = std::max(from, snapToCharacter(edit, to));
+    edit = edit.left(from) + edit.mid(to);
+    int cursor = from;
+    const auto currentRow = [&] { return m_model->rowOfUid(uid); };
+    const auto setEdit = [&](const QString &e) {
+        const int r = currentRow();
+        applyOp([&](BlockDocument &d) { return d.setBody(r, bodyWithEditText(m_model->document().at(r), e)); });
+    };
+    const auto insertAt = [&](const QString &s) {
+        edit = edit.left(cursor) + s + edit.mid(cursor);
+        cursor += int(s.size());
+    };
+
+    beginCommand();
+    setEdit(edit);
+    QString action;
+    Focus focus{currentRow(), cursor};
+    const markdown::BlockEntry &entry = m_model->document().at(currentRow());
+    const bool listItem = entry.kind == BlockKind::ListItem;
+    const QString cmd = command;
+    if (cmd == u"task") {
+        if (!m_model->shapeAt(currentRow()).task) {
+            const int r = currentRow();
+            const int before = int(m_model->editTextAt(r).size());
+            applyOp([&](BlockDocument &d) { return d.setTaskStatus(r, TaskStatus::Todo, today()); });
+            const int r2 = currentRow();
+            focus = {r2, std::max(0, cursor + int(m_model->editTextAt(r2).size()) - before)};
+        }
+    } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled"
+               || cmd == u"recurrence" || cmd == u"date" || cmd == u"template") {
+        action = cmd;
+    } else if (cmd == u"today" || cmd == u"tomorrow") {
+        insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
+        setEdit(edit);
+        focus = {currentRow(), cursor};
+    } else if (cmd == u"time") {
+        insertAt(currentDateTime().toString(u"HH:mm"_s));
+        setEdit(edit);
+        focus = {currentRow(), cursor};
+    } else if (cmd == u"priorityHigh" || cmd == u"priorityLow") {
+        const QString emoji = (cmd == u"priorityHigh" ? markdown::tokens::PriorityHigh : markdown::tokens::PriorityLow).toString();
+        const int r = currentRow();
+        const int before = int(m_model->editTextAt(r).size());
+        applyOp([&](BlockDocument &d) {
+            return d.setBody(r, setFirstLineToken(d.at(r).body, markdown::TokenKind::Priority, emoji));
+        });
+        focus = {r, cursor + (cursor >= before ? int(m_model->editTextAt(r).size()) - before : 0)};
+    } else if (cmd == u"h1" || cmd == u"h2" || cmd == u"h3") {
+        const int level = cmd.back().digitValue();
+        const int r = currentRow();
+        const markdown::BlockEntry &e = m_model->document().at(r);
+        if (e.kind == BlockKind::ListItem) {
+            const QString updated = withHeading(edit, level);
+            focus = {r, cursor + int(updated.size() - edit.size())};
+            setEdit(updated);
+        } else {
+            const QString updated = withHeading(e.body, level);
+            applyOp([&](BlockDocument &d) { return d.setBody(r, updated); });
+            focus = {currentRow(), cursor + int(updated.size() - e.body.size())};
+        }
+    } else if (cmd == u"quote" || cmd == u"callout") {
+        const QString prefix = cmd == u"quote" ? u"> "_s : u"> [!note] "_s;
+        const int r = currentRow();
+        if (listItem) {
+            setEdit(prefix + edit);
+        } else {
+            const QString body = m_model->document().at(r).body;
+            applyOp([&](BlockDocument &d) { return d.setBody(r, prefix + body); });
+        }
+        focus = {currentRow(), cursor + int(prefix.size())};
+        // Quote/callout views edit the raw body.
+        focus.cursor = std::clamp(focus.cursor, 0, int(m_model->editTextAt(focus.row).size()));
+    } else if (cmd == u"table" || cmd == u"calc" || cmd == u"query" || cmd == u"code" || cmd == u"rule") {
+        int templateCursor = 0;
+        const QString tpl = slashTemplate(cmd, m_english, &templateCursor);
+        const int r = currentRow();
+        if (cmd == u"rule") {
+            const int nr = insertMarkdown(r, tpl); // nested: part of this undo step
+            endCommand(Focus{-1, -1});
+            stopEditing();
+            out[u"row"_s] = nr;
+            out[u"cursor"_s] = 0;
+            return out;
+        }
+        int target = r;
+        if (edit.trimmed().isEmpty()) {
+            if (listItem)
+                setEdit(tpl);
+            else
+                applyOp([&](BlockDocument &d) { return d.setBody(r, tpl); });
+        } else {
+            const EditResult ins = applyOp(
+                    [&](BlockDocument &d) { return d.insertAfter(r, tpl, d.at(r).depth, listItem); });
+            target = ins.focus >= 0 ? ins.focus : r;
+        }
+        const BlockShape shape = m_model->shapeAt(target);
+        if (shape.view == BlockView::Table) {
+            focus = {-1, -1};
+            endCommand(focus);
+            stopEditing();
+            setSelectedRow(target);
+            out[u"row"_s] = target;
+            out[u"action"_s] = u"table"_s;
+            return out;
+        }
+        focus = {target, cmd == u"query" ? int(shape.editText.size()) : 0};
+    } else if (cmd == u"embed") {
+        insertAt(u"![["_s);
+        setEdit(edit);
+        focus = {currentRow(), cursor};
+        action = u"complete"_s;
+    } else if (cmd == u"blockRef") {
+        insertAt(u"(("_s);
+        setEdit(edit);
+        focus = {currentRow(), cursor};
+        action = u"complete"_s;
+    }
+    endCommand(focus);
+    if (focus.row >= 0)
+        setFocus(focus, true);
+    out[u"row"_s] = focus.row;
+    out[u"cursor"_s] = m_cursor;
+    out[u"action"_s] = action;
+    return out;
+}
+
+// --- Tables ---------------------------------------------------------------------------------------------
+
+void PageController::setTableCell(int row, int tableRow, int column, const QString &value, bool typing)
+{
+    if (!validRow(row) || column < 0)
+        return;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    if (!model || column >= model->header.size())
+        return;
+    QString cell = value;
+    cell.replace(u"\r\n"_s, u"\n"_s);
+    if (tableRow < 0) {
+        model->header[column] = cell;
+    } else {
+        if (tableRow >= model->rows.size())
+            return;
+        QStringList &r = model->rows[tableRow];
+        while (r.size() <= column)
+            r.append(QString());
+        r[column] = cell;
+    }
+    const QString body = calc::serializeTable(*model);
+    if (!typing) {
+        editBody(row, body);
+        return;
+    }
+    if (body == m_model->document().at(row).body)
+        return;
+    // Typing in a cell: one undo step per cell, like typing in a block.
+    const quint64 uid = m_model->uidAt(row);
+    const QPoint where(column, tableRow);
+    const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell == where && m_undo->canUndo()
+                                && !m_undo->canRedo();
+    const QString before = text();
+    const Focus focus = currentFocus();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (!r.changed())
+        return;
+    auto *cmd = new EditCommand(this, before, text(), focus, focus, uid);
+    cmd->setMergeable(continueTyping);
+    m_undo->push(cmd);
+    m_typingOpen = true;
+    m_typingUid = uid;
+    m_typingCell = where;
+    markDirty();
+}
+
+void PageController::cancelTableCell(int row, int tableRow, int column)
+{
+    if (!validRow(row))
+        return;
+    // The open typing session of exactly this cell is the step on top of the stack.
+    if (m_typingOpen && m_typingUid == m_model->uidAt(row) && m_typingCell == QPoint(column, tableRow)
+        && m_undo->canUndo() && !m_undo->canRedo())
+        undo();
+}
+
+void PageController::addTableRow(int row)
+{
+    if (!validRow(row))
+        return;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    if (!model)
+        return;
+    QStringList cells;
+    for (qsizetype c = 0; c < model->header.size(); ++c)
+        cells.append(QString());
+    model->rows.append(cells);
+    editBody(row, calc::serializeTable(*model));
+}
+
+void PageController::addTableColumn(int row)
+{
+    if (!validRow(row))
+        return;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    if (!model)
+        return;
+    model->header.append((m_english ? u"Column %1"_s : u"Kolumna %1"_s).arg(model->header.size() + 1));
+    model->aligns.append(calc::TableAlign::None);
+    for (QStringList &r : model->rows)
+        r.append(QString());
+    editBody(row, calc::serializeTable(*model));
+}
+
+void PageController::removeTableRow(int row, int tableRow)
+{
+    if (!validRow(row))
+        return;
+    auto model = calc::parseTable(m_model->document().at(row).body);
+    if (!model || tableRow < 0 || tableRow >= model->rows.size())
+        return;
+    model->rows.removeAt(tableRow);
+    editBody(row, calc::serializeTable(*model));
+}
+
+// --- Links ------------------------------------------------------------------------------------------------
+
+QVariantMap PageController::activateLink(int row, const QString &url, bool newPane)
+{
+    QVariantMap out;
+    const qsizetype colon = url.indexOf(u':');
+    if (colon <= 0)
+        return out;
+    const QString scheme = url.left(colon);
+    const QString rest = url.mid(colon + 1);
+    if (scheme == u"task") {
+        if (validRow(row))
+            toggleTask(row);
+        return out;
+    }
+    if (scheme == u"reminder") {
+        static const QRegularExpression range(u"^(\\d+)-(\\d+)$"_s);
+        const auto m = range.match(rest);
+        if (m.hasMatch() && validRow(row)) {
+            const int offset = m_model->renderOffsetAt(row);
+            out[u"action"_s] = u"reminder"_s;
+            out[u"from"_s] = m.captured(1).toInt() + offset;
+            out[u"to"_s] = m.captured(2).toInt() + offset;
+        }
+        return out;
+    }
+    if (scheme == u"ext") {
+        if (m_host)
+            m_host->openUrl(QUrl(rest));
+        return out;
+    }
+    if (scheme == u"tag") {
+        if (m_host)
+            m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}}, newPane);
+        return out;
+    }
+    if (scheme == u"block") {
+        const BlockDocument &doc = m_model->document();
+        for (int i = 0; i < doc.count(); ++i) {
+            if (doc.at(i).blockId == rest) {
+                out[u"action"_s] = u"scrollTo"_s;
+                out[u"row"_s] = i;
+                return out;
+            }
+        }
+        if (m_host)
+            m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
+        return out;
+    }
+    if (scheme == u"page") {
+        QString target = rest;
+        QString fragment;
+        const qsizetype hash = rest.indexOf(u'#');
+        if (hash >= 0) {
+            target = rest.left(hash);
+            fragment = QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
+        }
+        target = QUrl::fromPercentEncoding(target.toUtf8());
+        QVariantMap route{{u"view"_s, u"page"_s}};
+        if (target.isEmpty()) {
+            route[u"path"_s] = m_path;
+        } else {
+            const QString resolved = m_host ? m_host->resolveLink(target, m_path) : QString();
+            route[u"path"_s] = resolved;
+            route[u"target"_s] = target;
+        }
+        if (fragment.startsWith(u'^')) {
+            const QString id = fragment.mid(1);
+            route[u"blockId"_s] = id;
+            if (target.isEmpty()) {
+                const BlockDocument &doc = m_model->document();
+                for (int i = 0; i < doc.count(); ++i) {
+                    if (doc.at(i).blockId == id)
+                        return {{u"action"_s, u"scrollTo"_s}, {u"row"_s, i}};
+                }
+            }
+        } else if (!fragment.isEmpty()) {
+            route[u"heading"_s] = fragment;
+        }
+        if (m_host)
+            m_host->navigate(route, newPane);
+        return out;
+    }
+    return out;
+}
+
+// --- Undo -----------------------------------------------------------------------------------------------
+
+void PageController::undo()
+{
+    if (m_sourceMode)
+        return;
+    m_typingOpen = false;
+    m_undo->undo();
+}
+
+void PageController::redo()
+{
+    if (m_sourceMode)
+        return;
+    m_typingOpen = false;
+    m_undo->redo();
+}
+
+// --- Source mode ------------------------------------------------------------------------------------------
+
+QString PageController::sourceText() const
+{
+    return m_sourceMode ? m_sourceText : text();
+}
+
+void PageController::setSourceText(const QString &edited)
+{
+    // A TextEdit reports every line break as "\n": text without any "\r" gets the file's line
+    // terminators back (untouched lines keep theirs, new ones get the document's).
+    const QString current = m_sourceMode ? m_sourceText : text();
+    const QString sourceText = edited.contains(u'\r')
+            ? edited
+            : restoreLineEndings(current, edited, m_model->document().eol());
+    if (!m_sourceMode) {
+        // Outside source mode this replaces the document as one undo step.
+        applyText(sourceText, currentFocus());
+        Q_EMIT sourceTextChanged();
+        return;
+    }
+    if (m_sourceText == sourceText)
+        return;
+    m_sourceText = sourceText;
+    m_sourceEdited = true;
+    markDirty();
+    Q_EMIT sourceTextChanged();
+}
+
+void PageController::setSourceMode(bool on)
+{
+    if (m_sourceMode == on)
+        return;
+    if (on) {
+        stopEditing();
+        m_sourceText = text();
+        m_sourceBefore = m_sourceText;
+        m_sourceEdited = false;
+        m_sourceMode = true;
+    } else {
+        m_sourceMode = false;
+        const QString edited = m_sourceText;
+        m_sourceText.clear();
+        if (m_sourceEdited && edited != text())
+            applyText(edited, Focus{-1, -1});
+        markDirty();
+    }
+    Q_EMIT sourceModeChanged();
+    Q_EMIT sourceTextChanged();
+}
+
+} // namespace brulion::editor
