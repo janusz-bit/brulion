@@ -133,11 +133,14 @@ if [[ $do_build == 1 ]]; then
     fi
   done
 
+  # emsdk_env.sh unsets every exported EMSDK_* variable it does not set itself (the Web workflow
+  # exports EMSDK_VERSION), so the wanted version is kept under another name.
+  wanted_emcc=$EMSDK_VERSION
   # shellcheck disable=SC1091
   EMSDK_QUIET=1 source "$EMSDK/emsdk_env.sh" >/dev/null
   emcc_version=$(emcc -dumpversion)
-  if [[ "$emcc_version" != "$EMSDK_VERSION" ]]; then
-    die "emcc $emcc_version found, Qt $QT_VERSION needs $EMSDK_VERSION (emsdk activate $EMSDK_VERSION)"
+  if [[ "$emcc_version" != "$wanted_emcc" ]]; then
+    die "emcc $emcc_version found, Qt $QT_VERSION needs $wanted_emcc (emsdk activate $wanted_emcc)"
   fi
 
   if [[ $do_clean == 1 ]]; then

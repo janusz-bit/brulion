@@ -180,7 +180,14 @@ if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake ]]; then
   [[ $QT_DIR == "$QT_ROOT/$QT_VERSION/$qt_subdir" ]] || die "QT_DIR=$QT_DIR has no lib/cmake/Qt6"
   info "Installing Qt $QT_VERSION $aqt_arch (aqt $AQT_VERSION) into $QT_ROOT"
   mkdir -p "$QT_ROOT"
-  aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT"
+  # Qt mirrors occasionally serve a truncated archive ("Bad offset for central directory"):
+  # retry a few times before giving up.
+  for attempt in 1 2 3; do
+    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" && break
+    ((attempt < 3)) || die "aqt failed to install Qt $QT_VERSION $aqt_arch"
+    info "aqt failed (attempt $attempt), retrying in 20 s"
+    sleep 20
+  done
 fi
 [[ -x $QT_DIR/bin/qmake ]] || die "$QT_DIR/bin/qmake missing"
 echo "Qt: $QT_DIR"
