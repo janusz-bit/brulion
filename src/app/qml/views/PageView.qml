@@ -1,29 +1,33 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Templates as T
 import Brulion
 
-// TEMPORARY — the block editor for route.path, so the app can be used end to end until the
-// views agent writes the real PageView (page title editing, backlinks/outline side panel, page
-// menu, history…). Replace this whole file then; JournalsView (also temporary) reuses it for
-// a single day. What it shows the next PageView has to keep doing:
-//   * PageController { host: Workspace } + BlockEditor; the route's path is applied one event
-//     loop turn late (see applyRoute) and Workspace.pathRenamed goes to followRename(), so a
-//     rename never saves unsaved edits under the old name (a duplicate page)
-//   * route.blockId / route.line / route.heading scroll to that block after loading
-//   * a page that does not exist yet (a link to a missing page) opens with an empty block to
-//     type into; the editor creates the file with its first content
-//   * settings: text width (AppSettings.editorWidth), "open pages as source", Ctrl+E
-//   * merged external changes are told with a toast (save failures: Workspace.errorOccurred)
+// PageView — route "page" ({path, line?, blockId?, heading?, source?, open?}): one note in the
+// block editor (docs/UI.md "The block editor"), with
+//   * the page header (qml/content/ContentPageHeader.qml): folder breadcrumb, the title edited in
+//     place (renaming rewrites links everywhere — a confirmation says how many when other notes
+//     link here), favourite star, page menu (Historia wersji, Kopiuj odnośnik, Eksportuj stronę,
+//     panel boczny, tekst źródłowy, Przenieś do kosza), previous / next day for daily notes and the
+//     page's properties (aliases, tags, frontmatter values) as chips;
+//   * the blocks (route line / blockId / heading scroll there and select the block; the zoom
+//     breadcrumb is the editor's), fold state kept per device (Workspace.foldState);
+//   * the references below the blocks (ContentBacklinks: linked references grouped by page,
+//     unlinked mentions with "Połącz"), scrolling with the page;
+//   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz).
+// Kept from the first version (and checked by the shell's self-test, objectNames "pageController"
+// and "pageEditor"): the route's path is applied one event-loop turn late and
+// Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
+// old name; a page that does not exist yet (a link to a missing page) opens with an empty block
+// to type into and the editor creates the file with its first content; settings (text width,
+// "open pages as source", Ctrl+E); merged external changes are told with a toast.
+// route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
+// dialog), "unlinked" (the unlinked mentions, scrolled to), "links" | "outline" | "calendar"
+// (the side panel on that tab). route.source opens in source mode.
 //
-// PageView — route "page" ({path, line?, blockId?, heading?}): the block editor for one note.
-// Contract with the shell (qml/shell/ShellRouteView.qml): the view fills its area and gets
-//   property var route            the route it shows (QVariantMap, see src/app/shell/navigation.h)
-// and may offer
-//   property string title         the top bar title (default: derived from the route)
-//   property Component sidePanel  content for the side panel (backlinks, outline, mini calendar)
-//   property bool editing         text is being edited (the shell hides its capture button)
-// and gets `inSidePanel` (true in the side panel). `--editor-script <state>` drives the editor
-// for screenshots through qml/dev/PageScript.qml.
+// Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
+// (daily notes by their date), `sidePanel` and `editing`. `--editor-script <state>` drives the
+// editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
 
@@ -37,14 +41,24 @@ FocusScope {
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
     /// A block (or the source) is being edited: the shell hides its floating capture button.
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode
+    readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     readonly property alias controller: page
     readonly property alias editor: editor
 
     readonly property string routePath: route && route.path ? route.path : ""
     property string _revealed: ""
+    property string _opened: ""
     property bool _openedMissing: false
-    /// The page starts with its own "# Title" (after the properties): no second title above it.
+    /// Fold state is stored for this path once it was restored after loading.
+    property string _foldsFor: ""
+    /// The first block repeats the title as "# Title" (after the properties): no second title.
     property bool startsWithTitle: false
+    /// The header in the editor (created by the editor's list; null until then).
+    property ContentPageHeader pageHeader: null
+    /// Space between the last block and the references (a tap there adds a block).
+    readonly property int refsGap: Theme.space12
+
+    focus: true
 
     function updateStartsWithTitle() {
         let first = null
@@ -56,35 +70,41 @@ FocusScope {
         startsWithTitle = first !== null && first.view === "heading" && first.headingLevel === 1
                           && TextHelper.fold(first.plainText.trim()) === TextHelper.fold(page.title.trim())
     }
-    Connections {
-        target: page.blocks
-        function onModelReset() { root.updateStartsWithTitle() }
-        function onRowsInserted() { root.updateStartsWithTitle() }
-        function onRowsRemoved() { root.updateStartsWithTitle() }
-        function onDataChanged() { root.updateStartsWithTitle() }
-    }
-
-    focus: true
 
     // One event-loop turn late: on a rename the shell rewrites its routes before
     // Workspace.pathRenamed reaches followRename() below; setting the new path first would save
     // unsaved edits under the old name and bring that page back as a duplicate.
     onRouteChanged: Qt.callLater(root.applyRoute)
     Component.onCompleted: applyRoute()
+    // The editor's delegates go first, while the editor still exists (they read its geometry).
+    Component.onDestruction: editor.controller = null
 
     function applyRoute() {
         if (root.routePath === "")
             return
         if (page.path !== root.routePath) {
             root._revealed = ""
+            root._opened = ""
+            root._foldsFor = ""
             page.path = root.routePath // saves the previous page, loads this one
+            root.restoreFolds()
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
-            page.sourceMode = AppSettings.editorSourceMode
+            page.sourceMode = AppSettings.editorSourceMode || root.route.source === true
             if (page.loaded && !page.exists && page.blocks.count === 0)
                 editor.startEditing(page.appendEmptyBlock(), -1)
         }
         revealTarget()
+        openRequested()
+    }
+
+    function restoreFolds() {
+        if (!page.loaded || root._foldsFor === page.path)
+            return
+        const folds = Workspace.foldState(page.path)
+        if (folds.length > 0)
+            page.setFoldState(folds)
+        root._foldsFor = page.path
     }
 
     /// Scroll to the block the route names (once per route).
@@ -106,6 +126,35 @@ FocusScope {
             Qt.callLater(() => editor.revealRow(row))
     }
 
+    /// route.open: a dialog or section opened right away (screenshots, smoke tests).
+    function openRequested() {
+        if (!page.loaded || !route || !route.open)
+            return
+        const key = page.path + "\n" + route.open
+        if (key === root._opened)
+            return
+        root._opened = key
+        switch (route.open) {
+        case "rename":
+            Qt.callLater(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
+            break
+        case "export":
+            Qt.callLater(() => exportDialog.openFor(page.path))
+            break
+        case "unlinked":
+            refsSection.unlinkedOpen = true
+            scrollToEnd.restart()
+            break
+        case "links":
+        case "outline":
+        case "calendar":
+            // The side panel's context on this tab (wide windows).
+            AppSettings.setValue("ui/sidePanel/tab", route.open)
+            AppController.sidePanelVisible = true
+            break
+        }
+    }
+
     /// Row of the heading `name` ([[Page#Heading]]), -1 when there is none.
     function headingRow(name) {
         const wanted = TextHelper.fold(String(name).trim())
@@ -115,6 +164,27 @@ FocusScope {
                 return i
         }
         return -1
+    }
+
+    /// The title was edited: rename, confirming first when other notes link here.
+    function rename(newTitle) {
+        page.save()
+        const impact = tools.renameImpact(page.path)
+        if (impact.links > 0) {
+            renameDialog.openFor(page.path, newTitle, impact)
+        } else {
+            renameDialog.path = page.path
+            renameDialog.newTitle = newTitle
+            renameDialog.notes = 0
+            renameDialog.links = 0
+            renameDialog.rename()
+        }
+    }
+
+    function copyLink() {
+        const link = tools.wikiLink(page.path)
+        if (tools.copyText(link))
+            AppController.toast(qsTr("Copied %1").arg(link), "success")
     }
 
     PageController {
@@ -132,15 +202,51 @@ FocusScope {
             if (merged)
                 AppController.toast(qsTr("Merged changes made elsewhere into this page"), "info")
         }
+        // Folds are device-local: remembered per page (they follow renames in the Workspace).
+        onFoldStateChanged: {
+            if (page.loaded && !page.loading && root._foldsFor === page.path)
+                Workspace.setFoldState(page.path, page.foldState)
+        }
+        onLoadingChanged: {
+            if (page.loaded && !page.loading) {
+                root.restoreFolds()
+                root.revealTarget()
+                root.openRequested()
+            }
+        }
+    }
+
+    PageTools { id: tools; workspace: Workspace }
+
+    // route.open "unlinked": once the editor settled (it scrolls to the top after loading).
+    Timer {
+        id: scrollToEnd
+        interval: 400
+        onTriggered: {
+            editor.listView.userMoved = true
+            editor.listView.positionViewAtEnd()
+        }
+    }
+
+    Connections {
+        target: page.blocks
+        function onModelReset() { root.updateStartsWithTitle() }
+        function onRowsInserted() { root.updateStartsWithTitle() }
+        function onRowsRemoved() { root.updateStartsWithTitle() }
+        function onDataChanged() { root.updateStartsWithTitle() }
     }
 
     Connections {
         target: Workspace
         function onPathRenamed(oldPath, newPath) {
-            if (page.path === oldPath)
+            if (page.path === oldPath) {
                 page.followRename(oldPath, newPath)
-            else if (page.path.startsWith(oldPath + "/"))
-                page.followRename(page.path, newPath + page.path.slice(oldPath.length))
+                root._foldsFor = newPath
+            } else if (page.path.startsWith(oldPath + "/")) {
+                const moved = newPath + page.path.slice(oldPath.length)
+                page.followRename(page.path, moved)
+                root._foldsFor = moved
+            }
         }
     }
 
@@ -153,53 +259,133 @@ FocusScope {
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // The side panel is narrow: phone-like margins there.
         horizontalPadding: Theme.compact || root.inSidePanel ? Theme.space3 : Theme.space8
+        bottomSpace: refsSection.visible ? root.refsGap + refsSection.height + Theme.space16 : Theme.space16 * 2
         header: Component {
-            Item {
-                id: titleHeader
+            ContentPageHeader {
+                id: pageHeader
                 width: editor.width
-                readonly property bool small: Theme.compact || root.inSidePanel
-                implicitHeight: (titleText.visible ? titleText.implicitHeight + (small ? Theme.space3 : Theme.space6) : 0)
-                                + (small ? Theme.space4 : Theme.space8)
-                                + (page.loaded && page.blocks.count === 0 ? Theme.controlHeight + Theme.space3 : 0)
-                Text {
-                    id: titleText
-                    visible: !root.startsWithTitle || root.journalDate !== ""
-                    x: editor.contentX + editor.gutter
-                    y: titleHeader.small ? Theme.space4 : Theme.space8
-                    width: editor.contentWidth - editor.gutter
-                    text: root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title
-                    textFormat: Text.PlainText
-                    font.family: Theme.fontEditor
-                    font.pixelSize: titleHeader.small ? Theme.text2xl : Theme.text3xl
-                    font.weight: Theme.weightSemiBold
-                    lineHeightMode: Text.FixedHeight
-                    lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightTight)
-                    color: Theme.fg
-                    wrapMode: Text.Wrap
-                    Accessible.role: Accessible.Heading
-                    Accessible.name: text
-                }
-                // An empty page (e.g. today's journal without a template): say where to type.
-                BButton {
-                    visible: page.loaded && page.blocks.count === 0
-                    x: editor.contentX + editor.gutter - Theme.space3
-                    anchors.top: titleText.visible ? titleText.bottom : undefined
-                    anchors.topMargin: Theme.space3
-                    y: titleHeader.small ? Theme.space4 : Theme.space8
-                    variant: "ghost"
-                    iconName: "square-pen"
-                    text: qsTr("Start writing")
-                    onClicked: editor.startEditing(page.appendEmptyBlock(), -1)
-                }
+                controller: page
+                editor: editor
+                tools: tools
+                journalDate: root.journalDate
+                startsWithTitle: root.startsWithTitle
+                inSidePanel: root.inSidePanel
+                onRenameRequested: (newTitle) => root.rename(newTitle)
+                onMenuRequested: (anchor) => pageMenu.popup(anchor, anchor.width - pageMenu.width, anchor.height)
+                Component.onCompleted: root.pageHeader = pageHeader
+                Component.onDestruction: if (root.pageHeader === pageHeader) root.pageHeader = null
             }
         }
     }
 
-    Connections {
-        target: page
-        function onLoadingChanged() {
-            if (page.loaded && !page.loading)
-                root.revealTarget()
+    // The references live in the editor's scrolling content, right under the blocks (in the
+    // space the editor's footer keeps free: bottomSpace).
+    ContentBacklinks {
+        id: refsSection
+        parent: editor.listView.contentItem
+        visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== ""
+        x: editor.contentX + (root.inSidePanel || Theme.compact ? 0 : editor.arrowColumn)
+        y: (editor.listView.footerItem ? editor.listView.footerItem.y : 0) + root.refsGap
+        width: editor.contentWidth - (root.inSidePanel || Theme.compact ? 0 : editor.arrowColumn)
+        path: page.path
+        rendererPalette: editor.rendererPalette
+        compact: Theme.compact || root.inSidePanel
+        showUnlinked: !root.inSidePanel
+
+        Rectangle {
+            // A rule between the page and its references.
+            y: -Theme.space4
+            width: parent.width
+            height: 1
+            color: Theme.borderSubtle
+        }
+        MouseArea {
+            // Taps between the references must not reach the editor's "add a block" area.
+            anchors.fill: parent
+            z: -1
+        }
+    }
+
+    BMenu {
+        id: pageMenu
+
+        BMenuItem {
+            text: qsTr("Version history")
+            iconName: "history"
+            enabled: page.exists
+            onTriggered: AppController.navigate({ view: "history", path: page.path })
+        }
+        BMenuItem {
+            text: qsTr("Copy link %1").arg(editor.autoTextSafe(tools.wikiLink(page.path)))
+            iconName: "link"
+            onTriggered: root.copyLink()
+        }
+        BMenuItem {
+            text: qsTr("Export page…")
+            iconName: "share"
+            enabled: page.exists
+            onTriggered: exportDialog.openFor(page.path)
+        }
+        BMenuItem {
+            visible: root.journalDate === "" && page.exists
+            height: visible ? implicitHeight : 0
+            text: qsTr("Rename…")
+            iconName: "pencil"
+            onTriggered: if (root.pageHeader) root.pageHeader.startTitleEdit()
+        }
+        BMenuItem {
+            visible: !Theme.narrow && !root.inSidePanel
+            height: visible ? implicitHeight : 0
+            text: qsTr("Open in side panel")
+            iconName: "panel-right"
+            onTriggered: AppController.openPage(page.path, -1, true)
+        }
+        BMenuItem {
+            text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
+            iconName: "code"
+            shortcut: root.inSidePanel ? "" : "Ctrl+E"
+            onTriggered: editor.toggleSourceMode()
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            text: qsTr("Move to trash")
+            iconName: "trash-2"
+            danger: true
+            enabled: page.exists
+            onTriggered: deleteDialog.open()
+        }
+    }
+
+    ContentRenameDialog {
+        id: renameDialog
+        parent: T.Overlay.overlay
+    }
+    ContentExportDialog {
+        id: exportDialog
+        parent: T.Overlay.overlay
+        tools: tools
+    }
+    BConfirmDialog {
+        id: deleteDialog
+        parent: T.Overlay.overlay
+        title: qsTr("Move to trash?")
+        message: qsTr("“%1” will be moved to the trash. You can restore it from there.")
+                 .arg(root.journalDate !== "" ? DatesHelper.formatLong(root.journalDate) : page.title)
+        confirmText: qsTr("Move to trash")
+        destructive: true
+        onAccepted: {
+            page.save()
+            if (Workspace.deletePage(page.path) !== "")
+                AppController.toast(qsTr("Moved to trash"), "info")
+        }
+    }
+
+    Component {
+        id: sidePanelComponent
+        ContentSidePanel {
+            path: page.path
+            controller: page
+            editor: editor
         }
     }
 

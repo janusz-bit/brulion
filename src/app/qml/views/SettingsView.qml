@@ -8,8 +8,8 @@ import Brulion
 // motion), Edytor (font, size, width, source mode), Notatnik (the vault's shared settings in
 // .brulion/config.json: journal folder and file names, attachments, templates, default reminder
 // time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
-// browser, snooze, alarm length, test notification), Synchronizacja (status, link to the sync
-// center), Aplikacja (close to tray, version, licence, source code).
+// browser, snooze, alarm length, test notification), Synchronizacja (qml/io/SyncSettings: status,
+// the sync center, the Nextcloud account), Aplikacja (close to tray, version, licence, source code).
 //
 // Wide windows: section list on the left, one section on the right. Narrow: all sections in
 // one scrolling column.
@@ -513,44 +513,9 @@ Item {
 
     Component {
         id: syncSection
-        SettingsGroup {
-            heading: qsTr("Sync")
-
-            ShellSettingRow {
-                visible: !AppController.isWasm
-                title: "Syncthing"
-                description: Workspace.syncthingFolder
-                             ? qsTr("This notebook folder is shared with Syncthing.")
-                             : qsTr("Share the notebook folder with Syncthing to keep it the same on all devices. Brulion notices changes from other devices by itself.")
-                BBadge {
-                    visible: Workspace.syncthingFolder
-                    text: qsTr("Active")
-                    variant: "success"
-                }
-            }
-            ShellSettingRow {
-                title: "Nextcloud"
-                description: AppSettings.nextcloudEnabled && AppSettings.nextcloudUrl !== ""
-                             ? qsTr("%1 as %2, folder “%3”.").arg(AppSettings.nextcloudUrl).arg(AppSettings.nextcloudUser)
-                                   .arg(AppSettings.nextcloudFolder)
-                             : qsTr("Not set up. Sync over WebDAV with your own Nextcloud server.")
-                BBadge {
-                    visible: AppSettings.nextcloudEnabled
-                    text: qsTr("On")
-                    variant: "success"
-                }
-            }
-            ShellSettingRow {
-                title: qsTr("Sync center")
-                description: qsTr("Server settings, status, conflicts and merging.")
-                BButton {
-                    text: qsTr("Open")
-                    iconName: "folder-sync"
-                    variant: "primary"
-                    onClicked: AppController.navigate({ view: "sync" })
-                }
-            }
-        }
+        // The sync area's section (qml/io/SyncSettings.qml): status of both ways, the sync
+        // center, the Nextcloud account form.
+        SyncSettings {}
     }
 
     Component {
