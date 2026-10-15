@@ -18,6 +18,11 @@ FocusScope {
 
     property var route: ({})
     readonly property string path: route && route.path ? route.path : ""
+    /// Daily notes by their date, other pages by their title.
+    readonly property string pageLabel: {
+        const day = path !== "" ? Workspace.journalDate(path) : ""
+        return day !== "" ? DatesHelper.formatLong(day) : Workspace.pageTitle(path)
+    }
     readonly property bool wide: width >= 820
     /// Row of the version shown (-1: none).
     property int selected: -1
@@ -79,7 +84,7 @@ FocusScope {
                 spacing: 0
                 BText {
                     Layout.fillWidth: true
-                    text: Workspace.pageTitle(root.path)
+                    text: root.pageLabel
                     variant: "heading"
                     elide: Text.ElideRight
                     Accessible.role: Accessible.Heading
@@ -109,16 +114,19 @@ FocusScope {
             color: Theme.borderSubtle
         }
 
-        BEmptyState {
+        // The empty state takes the rest of the height (an item with a maximum height of its own
+        // left the column's spare room to the header, which grew a large empty band).
+        Item {
             visible: history.count === 0
-            Layout.alignment: Qt.AlignCenter
+            Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.maximumWidth: 460
-            Layout.leftMargin: Theme.space4
-            Layout.rightMargin: Theme.space4
-            iconName: "history"
-            title: history.exists ? qsTr("No earlier versions yet") : qsTr("No versions of this page")
-            description: qsTr("When a page changes — by you, by sync or by another program — Brulion keeps the previous text on this device (while you type, at most one version every few minutes).")
+            BEmptyState {
+                anchors.centerIn: parent
+                maximumWidth: 460
+                iconName: "history"
+                title: history.exists ? qsTr("No earlier versions yet") : qsTr("No versions of this page")
+                description: qsTr("When a page changes — by you, by sync or by another program — Brulion keeps the previous text on this device (while you type, at most one version every few minutes).")
+            }
         }
 
         RowLayout {
@@ -264,7 +272,7 @@ FocusScope {
         id: restoreDialog
         parent: T.Overlay.overlay
         title: qsTr("Restore this version?")
-        message: qsTr("“%1” gets the text from %2 back.").arg(Workspace.pageTitle(root.path)).arg(root.version.when || "")
+        message: qsTr("“%1” gets the text from %2 back.").arg(root.pageLabel).arg(root.version.when || "")
         detail: qsTr("The current text is kept as a version, so you can go back to it.")
         confirmText: qsTr("Restore")
         onAccepted: {

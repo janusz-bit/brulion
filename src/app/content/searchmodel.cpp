@@ -107,6 +107,11 @@ void SearchResultModel::refresh()
             next.append(h);
         }
     }
+    // Hits whose title or excerpt really contains the words typed (also as a prefix, diacritics
+    // ignored: "zolw" in "żółwia") go before the index's typo-tolerant ones ("zolw" ~ "żółć"),
+    // whatever their relevance score: what the user typed should come first.
+    std::stable_partition(next.begin(), next.end(),
+                          [](const Hit &h) { return !h.titleMatches.isEmpty() || !h.excerptMatches.isEmpty(); });
     applyRows(m_rows, next, [](const Hit &h) { return h.path; }, [](const Hit &a, const Hit &b) { return a == b; });
 
     QVariantList folders;

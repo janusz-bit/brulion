@@ -69,6 +69,7 @@ bool JournalListModel::todayExists() const
 void JournalListModel::workspaceReset()
 {
     m_shown.clear();
+    m_lastToday = QDate();
 }
 
 void JournalListModel::refresh()
@@ -106,6 +107,12 @@ void JournalListModel::refresh()
     applyRows(
         m_rows, next, [](const Day &d) { return d.date; },
         [](const Day &a, const Day &b) { return a.path == b.path && a.exists == b.exists; });
+    // Midnight while the app runs: the kept days' isToday / daysAgo are relative to today (the
+    // rows themselves stay, so a day being edited keeps its delegate).
+    const QDate today = effectiveToday();
+    if (m_lastToday.isValid() && today != m_lastToday && !m_rows.isEmpty())
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), { IsTodayRole, DaysAgoRole });
+    m_lastToday = today;
 
     const QString path = todayPath();
     const bool exists = todayExists();

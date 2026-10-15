@@ -9,6 +9,7 @@
 #include "appsettings.h"
 #include "fakewebdavserver.h"
 #include "workspace.h"
+#include "workspaceintegration.h"
 
 #include "sync/syncthing.h"
 #include "vault/vault.h"
@@ -16,6 +17,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -208,6 +210,25 @@ private Q_SLOTS:
         QVERIFY(form.configured());
         QVERIFY(!form.dirty());
         QVERIFY(form.valid()); // the stored password counts
+        QVERIFY(form.storedPasswordApplies());
+
+        // The stored password belongs to this server and user: another address (a typo, a
+        // look-alike host) or another user needs the password typed again.
+        form.setUrl(u"https://chmura.example.pl/"_s); // same server ("https://" assumed, slash)
+        QVERIFY(form.storedPasswordApplies());
+        form.setUrl(u"https://chmura.example.pl.evil.example"_s);
+        QVERIFY(!form.storedPasswordApplies());
+        QVERIFY(!form.valid());
+        QVERIFY(!form.save());
+        QVERIFY(!form.passwordError().isEmpty()); // shown after the save attempt
+        QCOMPARE(s->nextcloudUrl(), u"chmura.example.pl"_s);
+        form.setUrl(u"http://chmura.example.pl"_s); // a downgrade to plain http is another server
+        QVERIFY(!form.storedPasswordApplies());
+        form.setUrl(u"chmura.example.pl"_s);
+        form.setUser(u"Jan"_s);
+        QVERIFY(!form.storedPasswordApplies());
+        form.reload();
+        QVERIFY(form.storedPasswordApplies());
 
         // A second form shows the saved values (the folder as saved, not the suggestion).
         s->setNextcloudFolder(u"Dokumenty/Brulion"_s);
@@ -231,6 +252,52 @@ private Q_SLOTS:
         QVERIFY(!s->hasNextcloudPassword());
         QCOMPARE(s->nextcloudUrl(), u"chmura.example.pl"_s);
         QVERIFY(!again.configured());
+    }
+
+    void storedPasswordNotSentElsewhere()
+    {
+        // Saved account at chmura.example.pl; the form now names another server and leaves the
+        // password field empty: the connection test must not send the stored password there.
+        auto s = settings();
+        s->setNextcloudUrl(u"https://chmura.example.pl"_s);
+        s->setNextcloudUser(u"jan"_s);
+        QVERIFY(s->setNextcloudPassword(u"hasło-źdźbło"_s));
+        FakeWebDavServer server;
+        server.mkdir(u"Notatki"_s);
+        NextcloudSetup form;
+        form.setTransport(&server);
+        form.setSettings(s.get());
+        form.setEnabled(true);
+        form.setUrl(u"https://inna-chmura.example.pl"_s);
+        form.testConnection();
+        QCOMPARE(form.testResult().value(u"code"_s).toString(), u"invalid"_s);
+        form.createFolder();
+        QTest::qWait(20);
+        QVERIFY(server.requests().isEmpty());
+
+        // Saving the other server while switched off forgets the old account's password.
+        form.setEnabled(false);
+        QVERIFY(form.save());
+        QVERIFY(!s->hasNextcloudPassword());
+
+        // Workspace.sync.testConnection follows the same rule.
+        brulion::shell::WorkspaceSync sync;
+        sync.setTransport(&server);
+        brulion::shell::NextcloudSettings n;
+        n.enabled = true;
+        n.url = u"https://chmura.example.pl"_s;
+        n.user = u"jan"_s;
+        n.password = u"hasło-źdźbło"_s;
+        sync.setNextcloud(n);
+        QSignalSpy tested(&sync, &brulion::shell::WorkspaceSync::connectionTested);
+        sync.testConnection(u"https://inna-chmura.example.pl"_s, u"jan"_s, QString(), u"Notatki"_s);
+        QCOMPARE(tested.size(), 1);
+        QVERIFY(!tested.first().at(0).toBool());
+        QVERIFY(server.requests().isEmpty());
+        sync.testConnection(u"https://chmura.example.pl/"_s, u"jan"_s, QString(), u"Notatki"_s);
+        QVERIFY(tested.wait(5000));
+        QVERIFY(tested.last().at(0).toBool());
+        QVERIFY(!server.requests().isEmpty());
     }
 
     void unencryptedWarning()
@@ -426,9 +493,33 @@ private Q_SLOTS:
         st.setUrl(u"http://127.0.0.1:8385"_s);
         QVERIFY(st.dirty());
         QVERIFY(st.save());
-        QCOMPARE(s->value(u"sync/syncthingApiKey"_s, QString()).toString(), u"klucz-źródłowy"_s);
+        // The key is a secret (it controls Syncthing): an owner-only file, not the QSettings file.
+        QCOMPARE(brulion::shell::syncthingApiKey(s.get()), u"klucz-źródłowy"_s);
+        QVERIFY(s->value(u"sync/syncthingApiKey"_s, QString()).toString().isEmpty());
+        s->sync();
+        {
+            QFile ini(s->fileName());
+            QVERIFY(ini.open(QIODevice::ReadOnly));
+            QVERIFY(!QString::fromUtf8(ini.readAll()).contains(u"klucz"_s));
+        }
+        const QString keyFile = QFileInfo(s->passwordFile()).absolutePath() + u"/syncthing-api-key"_s;
+        QVERIFY(QFileInfo::exists(keyFile));
+#ifdef Q_OS_UNIX
+        QCOMPARE(QFileInfo(keyFile).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther), QFileDevice::Permissions());
+#endif
         QCOMPARE(s->value(u"sync/syncthingUrl"_s, QString()).toString(), u"http://127.0.0.1:8385"_s);
         QVERIFY(!st.dirty());
+        // A key left in QSettings by an older version moves into the file on the first read.
+        s->setValue(u"sync/syncthingApiKey"_s, u"stary-klucz"_s);
+        QCOMPARE(brulion::shell::syncthingApiKey(s.get()), u"stary-klucz"_s);
+        QVERIFY(s->value(u"sync/syncthingApiKey"_s, QString()).toString().isEmpty());
+        QCOMPARE(brulion::shell::syncthingApiKey(s.get()), u"stary-klucz"_s);
+        // Forgetting it removes the file.
+        st.reload();
+        st.setApiKey(QString());
+        QVERIFY(st.save());
+        QVERIFY(!QFileInfo::exists(keyFile));
+        QVERIFY(brulion::shell::syncthingApiKey(s.get()).isEmpty());
 
         ws->close();
         QCOMPARE(st.stignoreState(), u"unavailable"_s);

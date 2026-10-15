@@ -11,9 +11,18 @@
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
+#include <qtestsupport_gui.h>
 
 #include <cstdio>
 #include <functional>
+
+QT_BEGIN_NAMESPACE
+// QtGui's entry point for synthetic mouse input (what QtTest's mouse functions call): the click
+// goes through QGuiApplication and the delivery agent like a real one.
+Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
+                                      Qt::MouseButtons state, Qt::MouseButton button, QEvent::Type type,
+                                      Qt::KeyboardModifiers mods, int timestamp);
+QT_END_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
@@ -55,6 +64,97 @@ bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt
     QCoreApplication::sendEvent(window, &release);
     waitFor([] { return false; }, 50); // let bindings, transitions and queued calls settle
     return press.isAccepted() || release.isAccepted();
+}
+
+/// A tap with one finger at `scenePos`, as a touch screen sends it (press, `holdMs`, release).
+void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
+{
+    // QTouchEventSequence's constructor is protected; QtTest's touchEvent() is a subclass too.
+    struct Sequence : QTest::QTouchEventSequence {
+        Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) {}
+    };
+    static QPointingDevice *device = QTest::createTouchDevice();
+    Sequence sequence(window, device);
+    sequence.press(0, scenePos.toPoint(), window).commit();
+    waitFor([] { return false; }, holdMs);
+    sequence.release(0, scenePos.toPoint(), window).commit();
+    waitFor([] { return false; }, 100);
+}
+
+/// A finger dragged from `from` by `delta` (scene coordinates) in small steps, then lifted.
+void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
+{
+    struct Sequence : QTest::QTouchEventSequence {
+        Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) {}
+    };
+    static QPointingDevice *device = QTest::createTouchDevice();
+    Sequence sequence(window, device);
+    sequence.press(0, from.toPoint(), window).commit();
+    for (int step = 1; step <= 12; ++step) {
+        waitFor([] { return false; }, 16);
+        sequence.move(0, (from + delta * step / 12.0).toPoint(), window).commit();
+    }
+    sequence.release(0, (from + delta).toPoint(), window).commit();
+    waitFor([] { return false; }, 300);
+}
+
+/// A tap on touch UIs (the phone run), a left click otherwise.
+void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch);
+
+/// A left click at `scenePos` of the window, as a real mouse sends it.
+void mouseClick(QQuickWindow *window, QPointF scenePos)
+{
+    static int timestamp = 0;
+    timestamp += 1000; // never a double click
+    const QPointF global = window->mapToGlobal(scenePos);
+    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
+                        timestamp);
+    qt_handleMouseEvent(window, scenePos, global, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress,
+                        Qt::NoModifier, timestamp += 20);
+    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease,
+                        Qt::NoModifier, timestamp += 80);
+    waitFor([] { return false; }, 100);
+}
+
+void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
+{
+    if (touch)
+        touchTap(window, scenePos);
+    else
+        mouseClick(window, scenePos);
+}
+
+/// The visible rendered text (a Text with linkAt()) under `root` whose text contains `needle`
+/// and whose middle is on screen inside `root` (lists keep delegates beyond their edges too).
+QQuickItem *renderedTextContaining(QQuickItem *root, const QString &needle)
+{
+    const QRectF area = root->mapRectToScene(QRectF(0, 0, root->width(), root->height()));
+    QList<QQuickItem *> stack{ root };
+    while (!stack.isEmpty()) {
+        QQuickItem *item = stack.takeLast();
+        if (!item->isVisible())
+            continue;
+        if (item->metaObject()->indexOfMethod("linkAt(double,double)") >= 0
+            && item->property("text").toString().contains(needle)
+            && area.contains(item->mapToScene(QPointF(item->width() / 2, item->height() / 2))))
+            return item;
+        stack.append(item->childItems());
+    }
+    return nullptr;
+}
+
+/// A point of `text` (scene coordinates) on its link whose URL contains `url`; (-1, -1) if none.
+QPointF linkPoint(QQuickItem *text, const QString &url)
+{
+    for (qreal y = 2; y < text->height(); y += 3) {
+        for (qreal x = 2; x < text->width(); x += 4) {
+            QString link;
+            QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), x, y);
+            if (link.contains(url))
+                return text->mapToScene(QPointF(x + 4, y + 4));
+        }
+    }
+    return { -1, -1 };
 }
 
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
@@ -175,6 +275,68 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
               }),
               "the guide page opens in the editor");
         QQuickItem *editor = page ? editorOf(page) : nullptr;
+        if (page && editor) {
+            // Mouse clicks on a block's rendered rich text: a click on words starts editing that
+            // block, a click on a link follows it. (A TapHandler on the rich Text itself lost every
+            // mouse press to the editor's ListView: nothing happened on click.)
+            // Phones (--touch) tap with a finger, desktops click with the mouse.
+            const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+            waitFor([] { return false; }, 300);
+            if (QQuickItem *text = renderedTextContaining(editor, u"Kliknij go"_s)) {
+                // A quick tap (30 ms, shorter than the lists' 90 ms press delay on touch UIs).
+                if (touch)
+                    touchTap(window, text->mapToScene(QPointF(8, text->height() / 2)), 30);
+                else
+                    mouseClick(window, text->mapToScene(QPointF(8, text->height() / 2)));
+                check(waitFor([&] { return page->property("editingRow").toInt() >= 0; }) && editorFocused(),
+                      "a click or tap on a block's text starts editing it");
+                QMetaObject::invokeMethod(page, "stopEditing");
+                waitFor([] { return false; }, 100);
+                // Scrolling with a finger that starts on text scrolls and never starts editing.
+                if (touch) {
+                    auto *list = editor->property("listView").value<QQuickItem *>();
+                    const qreal before = list ? list->property("contentY").toReal() : 0;
+                    touchDrag(window, text->mapToScene(QPointF(text->width() / 2, text->height() / 2)), QPointF(0, -160));
+                    check(list && list->property("contentY").toReal() > before + 40
+                              && page->property("editingRow").toInt() < 0,
+                          "a finger dragged over block text scrolls the page and does not start editing");
+                    QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+                    waitFor([] { return false; }, 200);
+                }
+            } else {
+                check(false, "the guide shows its first outline block");
+            }
+            // The guide's "Link do strony: [[Remont mieszkania]]" block, scrolled to the middle.
+            {
+                const QStringList guideLines = app->workspace()->readFile(guide).split(u'\n');
+                qsizetype linkLine = -1;
+                for (qsizetype i = 0; i < guideLines.size() && linkLine < 0; ++i) {
+                    if (guideLines.at(i).startsWith(u"- Link do strony:"_s))
+                        linkLine = i;
+                }
+                int linkRow = -1;
+                QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(linkLine));
+                if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
+                    QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
+                waitFor([] { return false; }, 200);
+            }
+            if (QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s)) {
+                const QPointF at = linkPoint(text, u"page:Remont"_s);
+                check(at.x() >= 0, "the guide shows a link to the renovation project");
+                tapOrClick(window, at, touch);
+                check(waitFor([app] { return app->currentRoute().value(u"path"_s).toString() == u"Projekty/Remont mieszkania.md"; }),
+                      "a click or tap on a link opens the linked page");
+                app->back();
+                waitFor([&] {
+                    page = controllerFor(guide);
+                    return app->currentRoute().value(u"path"_s).toString() == guide && page
+                           && page->property("loaded").toBool();
+                });
+                editor = page ? editorOf(page) : nullptr;
+            } else {
+                check(false, "the guide shows its link to the renovation project");
+            }
+        }
         if (page && editor) {
             const QStringList lines = app->workspace()->readFile(guide).split(u'\n');
             const qsizetype line = lines.indexOf(u"- Każdy punkt listy to **blok**. Kliknij go, żeby edytować."_s);

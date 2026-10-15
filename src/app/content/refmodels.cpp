@@ -176,6 +176,21 @@ GroupedRefsModel::Ref GroupedRefsModel::refForBlock(const QString &path, int blo
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
     if (!note || blockIndex < 0 || blockIndex >= note->blocks.size())
         return r;
+    r.line = note->blocks.at(blockIndex).line;
+    r.pendingBlock = blockIndex;
+    return r;
+}
+
+void GroupedRefsModel::fillRef(Ref &r, const QString &path) const
+{
+    if (r.pendingBlock < 0)
+        return;
+    const int blockIndex = r.pendingBlock;
+    r.pendingBlock = -1;
+    const VaultIndex *idx = vaultIndex();
+    const ParsedNote *note = idx ? idx->note(path) : nullptr;
+    if (!note || blockIndex >= note->blocks.size())
+        return;
     const Block &block = note->blocks.at(blockIndex);
     r.line = block.line;
     r.text = oneLine(plainText(block.text, idx), 240);
@@ -194,12 +209,13 @@ GroupedRefsModel::Ref GroupedRefsModel::refForBlock(const QString &path, int blo
     const int i = doc->indexAtLine(block.line);
     if (i >= 0) {
         const markdown::BlockEntry &entry = doc->at(i);
-        const markdown::RenderContext ctx = renderContext(idx, path, effectiveToday(), uiLocaleValue(), m_palette);
+        markdown::RenderContext ctx = renderContext(idx, path, effectiveToday(), uiLocaleValue(), m_palette);
+        // The row draws the editor's checkbox for tasks (ContentRefRow), not a text glyph.
+        ctx.taskCheckbox = false;
         r.html = markdown::InlineRenderer(ctx).renderBlock(entry.body, entry.kind);
     }
     if (r.html.isEmpty())
         r.html = markdown::InlineRenderer::escape(r.text);
-    return r;
 }
 
 GroupedRefsModel::Ref GroupedRefsModel::refForLine(const QString &path, int line) const
@@ -220,7 +236,7 @@ void GroupedRefsModel::refresh()
     QList<Group> groups;
     if (workspace() && vaultIndex() && workspace()->isOpen())
         groups = collect();
-    m_docs.clear();
+    const auto dropDocs = qScopeGuard([this] { m_docs.clear(); });
 
     QList<Row> next;
     QSet<QString> keys;
@@ -265,6 +281,7 @@ void GroupedRefsModel::refresh()
             row.folder = g.folder;
             row.journalDate = g.journalDate;
             row.ref = r;
+            fillRef(row.ref, g.path); // only the listed rows are rendered
             row.key = u"r\n"_s + g.path + u'\n' + QString::number(r.line);
             for (int n = 2; keys.contains(row.key); ++n)
                 row.key = u"r\n"_s + g.path + u'\n' + QString::number(r.line) + u'#' + QString::number(n);

@@ -173,13 +173,13 @@ QVariant TaskListModel::data(const QModelIndex &index, int role) const
         return {};
     const Row &row = m_rows.at(index.row());
     if (row.header)
-        return headerData(row.section, role);
+        return sectionRowData(row.section, role);
     if (row.item < 0 || row.item >= m_items.size())
         return {};
-    return itemData(m_items.at(row.item), role);
+    return taskRowData(m_items.at(row.item), role);
 }
 
-QVariant TaskListModel::headerData(const QString &section, int role) const
+QVariant TaskListModel::sectionRowData(const QString &section, int role) const
 {
     switch (role) {
     case RowTypeRole: return u"header"_s;
@@ -217,7 +217,7 @@ QVariant TaskListModel::headerData(const QString &section, int role) const
     }
 }
 
-QVariant TaskListModel::itemData(const Item &item, int role) const
+QVariant TaskListModel::taskRowData(const Item &item, int role) const
 {
     const Task &t = item.ref.task;
     const QDate today = currentDay();

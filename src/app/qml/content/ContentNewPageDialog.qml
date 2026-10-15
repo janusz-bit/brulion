@@ -39,7 +39,7 @@ BDialog {
     BTextField {
         id: nameField
         Layout.fillWidth: true
-        placeholderText: qsTr("Page title, e.g. Wakacje w Zakopanem")
+        placeholderText: qsTr("Page title, e.g. Holiday in Zakopane")
         accessibleName: qsTr("Page title")
         onAccepted: dialog.tryAccept()
     }

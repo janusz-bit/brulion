@@ -16,6 +16,7 @@
 #ifdef BRULION_DESKTOP_INTEGRATION
 // Linux desktop: system tray (Qt Widgets, hence QApplication) and one instance per session.
 #include "desktop/desktoptray.h"
+#include "shelljourney.h"
 #include "shellselftest.h"
 #include "singleinstance.h"
 #include <QApplication>
@@ -173,6 +174,9 @@ int main(int argc, char *argv[])
         // Key routing and focus of the real shell, headless (tests/app/shell: tst_shell_qml).
         if (mainUi && args.contains(u"--selftest-shell"_s))
             brulion::shell::startShellSelfTest(&engine, controller.get());
+        // A first-time user's walk through the app with a screenshot per step (shelljourney.h).
+        if (const QString journey = argValue(args, u"--journey"_s); mainUi && !journey.isEmpty())
+            brulion::shell::startShellJourney(&engine, controller.get(), journey);
 #endif
     };
 

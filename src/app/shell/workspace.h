@@ -60,6 +60,14 @@ struct QueryItem;
 
 namespace brulion::shell {
 
+/// Write `content` to `path` so that the text it replaces is kept in the vault's version history
+/// even when an ordinary snapshot of the path was taken minutes ago (History's 5-minute throttle
+/// would skip it): restoring a version, resolving a sync conflict — changes after which the user
+/// is told "your previous version is in the history". False on I/O errors
+/// (vault.errorString()).
+bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &content,
+                             ChangeSource source = ChangeSource::User);
+
 class Workspace : public EditorHost, public QueryHost {
     Q_OBJECT
     Q_INTERFACES(brulion::QueryHost)

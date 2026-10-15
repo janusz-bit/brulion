@@ -24,4 +24,5 @@ qt_target_qml_sources(brulion
         qml/content/ContentExportDialog.qml
         qml/content/ContentNewPageDialog.qml
         qml/content/ContentHighlightText.qml
+        qml/content/ContentJournalsSelfTest.qml
 )

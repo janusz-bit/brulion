@@ -38,6 +38,31 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE)
     endforeach()
+
+    # A first-time user's journey through the real app with real clicks, taps and keys
+    # (`brulion --journey <dir>`, src/app/shell/shelljourney.h): onboarding, the sample notebook,
+    # writing in today's journal (outline, [[link]], a task with a reminder from the slash menu),
+    # calendar, tasks, a page through a link, search "zolw", graph, sync, import/export, history,
+    # settings. Exit code = failed steps. The phone run taps (touch events) through the drawer and
+    # the bottom bar; the desktop run clicks through the sidebar and menus. Screenshots land in
+    # the build dir (tests/app/shell/journey.sh makes the reviewed set).
+    set(_journey_homes ${CMAKE_CURRENT_BINARY_DIR}/journey-home-phone ${CMAKE_CURRENT_BINARY_DIR}/journey-home-desktop)
+    add_test(NAME tst_shell_journey_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_journey_homes})
+    set_tests_properties(tst_shell_journey_homes PROPERTIES FIXTURES_SETUP shell_journey_homes)
+    add_test(NAME tst_shell_journey
+        COMMAND brulion --journey ${CMAKE_CURRENT_BINARY_DIR}/journey-phone --journey-theme light
+            --no-single-instance --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
+    add_test(NAME tst_shell_journey_desktop
+        COMMAND brulion --journey ${CMAKE_CURRENT_BINARY_DIR}/journey-desktop --journey-theme dark
+            --no-single-instance --size 1280x800 --now "2026-10-14 10:00" --locale pl)
+    foreach(_pair "tst_shell_journey;phone" "tst_shell_journey_desktop;desktop")
+        list(GET _pair 0 _test)
+        list(GET _pair 1 _kind)
+        set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
+        set_tests_properties(${_test} PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
+            FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow)
+    endforeach()
 endif()
 
 # The Workspace wired to the real core (workspace*.cpp): indexing progress, quick capture,
@@ -51,3 +76,10 @@ if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
         LIBS brulion_shell brulion_sync_testsupport)
 endif()
+
+# Start-up of a 3000-note notebook (Workspace::open, chunked indexing on the event loop, the
+# first view queries): open() time, the longest UI-thread stall, time until `ready`. Prints the
+# measurements ("perf: …"); BRULION_PERF_NOTES=<n> changes the size.
+brulion_add_test(tst_shell_workspace_perf SOURCES tst_workspace_perf.cpp
+    LIBS brulion_shell brulion_core_reminders)
+set_tests_properties(tst_shell_workspace_perf PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

@@ -26,10 +26,19 @@ Rectangle {
     signal aboutRequested()
 
     readonly property var route: AppController.currentRoute
-    readonly property bool onPage: route.view === "page"
+    /// A daily note opened as a page ("journal" route) whose file exists: it gets the page
+    /// actions too (favorite, history, side panel, trash), but not Rename (its name is its date).
+    readonly property string journalPagePath: {
+        void Workspace.revision
+        if (route.view !== "journal" || !route.date)
+            return ""
+        const path = route.path || Workspace.journalPath(route.date)
+        return Workspace.exists(path) ? path : ""
+    }
+    readonly property bool onPage: route.view === "page" || journalPagePath !== ""
     /// The view shows a page in the editor (a page or a daily note).
     readonly property bool inEditor: onPage || route.view === "journal" || route.view === "journals"
-    readonly property string pagePath: onPage ? route.path : ""
+    readonly property string pagePath: route.view === "page" ? route.path : journalPagePath
     readonly property bool favorite: onPage && Workspace.favorites.some(f => f.path === bar.pagePath)
 
     implicitHeight: topInset + (Theme.touchUi ? 56 : 46)
@@ -156,7 +165,7 @@ Rectangle {
             onTriggered: Workspace.toggleFavorite(bar.pagePath)
         }
         BMenuItem {
-            visible: bar.onPage
+            visible: bar.onPage && bar.route.view === "page"
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
@@ -208,6 +217,24 @@ Rectangle {
             iconName: "command"
             shortcut: "Ctrl+K"
             onTriggered: bar.paletteRequested()
+        }
+        BMenuSeparator {}
+        // Places without a button of their own: on phones this menu is the only way there
+        // besides the command palette.
+        BMenuItem {
+            text: qsTr("Sync center")
+            iconName: "folder-sync"
+            onTriggered: AppController.navigate({ view: "sync" })
+        }
+        BMenuItem {
+            text: qsTr("Import and export")
+            iconName: "import"
+            onTriggered: AppController.navigate({ view: "importExport" })
+        }
+        BMenuItem {
+            text: Workspace.trashCount > 0 ? qsTr("Trash (%1)").arg(Workspace.trashCount) : qsTr("Trash")
+            iconName: "trash-2"
+            onTriggered: AppController.navigate({ view: "trash" })
         }
         BMenuItem {
             text: qsTr("Settings")

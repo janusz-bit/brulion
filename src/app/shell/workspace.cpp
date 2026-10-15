@@ -785,6 +785,17 @@ QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
         Q_EMIT errorOccurred(tr("A page named “%1” already exists here.").arg(newName));
         return {};
     }
+    // A name differing only in case from another page ("dom" next to "Dom"): one file on
+    // Android's shared storage and other case-insensitive folders a synced vault may land in, and
+    // links do not tell them apart (the in-page rename refuses it too: PageTools.validateTitle).
+    if (!caseOnly && m_index) {
+        for (const VaultPath &other : m_index->paths()) {
+            if (other.compare(newPath, Qt::CaseInsensitive) == 0 && other.compare(path, Qt::CaseInsensitive) != 0) {
+                Q_EMIT errorOccurred(tr("A page named “%1” already exists here.").arg(paths::pageTitle(other)));
+                return {};
+            }
+        }
+    }
     // Files to rewrite, asked before the index learns about the rename.
     const QList<VaultPath> linking = m_index ? m_index->linksTo(path) : QList<VaultPath>();
     if (!m_vault->rename(path, newPath, ChangeSource::User)) {

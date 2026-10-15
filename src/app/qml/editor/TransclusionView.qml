@@ -241,6 +241,12 @@ Column {
                                 enabled: !Theme.touchUi
                                 cursorShape: body.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
                             }
+                        }
+                        // Clicks go to an item above the rich text, not to the Text (which would
+                        // pass mouse presses on to the editor's ListView: see BlockText.qml).
+                        Item {
+                            anchors.fill: body
+                            visible: body.visible
                             TapHandler {
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 onTapped: (eventPoint) => {

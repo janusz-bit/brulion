@@ -64,7 +64,10 @@ FocusScope {
         pages.descending = saved[1] === "desc" || (saved.length === 1 && (saved[0] === "modified" || saved[0] === "backlinks"))
         pages.includeJournals = AppSettings.value("allPages/journals", false) === true
                                 || AppSettings.value("allPages/journals", false) === "true"
-        filterField.forceActiveFocus()
+        // Keyboard users can type to filter at once; on touch screens that would pop up the
+        // on-screen keyboard over the list the user came to browse.
+        if (!Theme.touchUi)
+            filterField.forceActiveFocus()
     }
 
     PageListModel {

@@ -33,6 +33,21 @@ QString humanOf(const QDateTime &time, const QString &language, QDate today)
 
 // ---- History ------------------------------------------------------------------------------------
 
+bool writeTextKeepingHistory(Vault &vault, const QString &path, const QString &content, ChangeSource source)
+{
+    History *h = vault.history();
+    if (!h)
+        return vault.writeText(path, content, source);
+    // No throttle for this one write: the text being replaced is always recorded.
+    const HistoryPolicy policy = h->policy();
+    HistoryPolicy unthrottled = policy;
+    unthrottled.throttleSeconds = 0;
+    h->setPolicy(unthrottled);
+    const bool written = vault.writeText(path, content, source);
+    h->setPolicy(policy);
+    return written;
+}
+
 QVariantList Workspace::history(const QString &path) const
 {
     QVariantList out;
@@ -66,14 +81,7 @@ bool Workspace::restoreVersion(const QString &rawPath, const QString &id)
     const QString text = h->read(id, &ok);
     if (!ok)
         return false;
-    // The text being replaced must stay in the history even when an ordinary snapshot was
-    // taken minutes ago (the 5-minute throttle would skip it): no throttle for this write.
-    const HistoryPolicy policy = h->policy();
-    HistoryPolicy unthrottled = policy;
-    unthrottled.throttleSeconds = 0;
-    h->setPolicy(unthrottled);
-    const bool written = m_vault->writeText(path, text, ChangeSource::User);
-    h->setPolicy(policy);
+    const bool written = writeTextKeepingHistory(*m_vault, path, text);
     if (!written)
         Q_EMIT errorOccurred(tr("Could not restore the version: %1").arg(m_vault->errorString()));
     return written;

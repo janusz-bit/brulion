@@ -72,19 +72,25 @@ FocusScope {
         anchors.rightMargin: Theme.space2
         spacing: Theme.space2
 
-        // A bullet like the editor's; tasks bring their own checkbox in the text.
+        // A bullet like the editor's, or for tasks the editor's checkbox (same column).
         Item {
             Layout.alignment: Qt.AlignTop
-            Layout.preferredWidth: 14
+            Layout.preferredWidth: 14 // the checkbox (16 px) overhangs a little, the text stays aligned
             Layout.preferredHeight: textItem.lineHeight
             Layout.topMargin: crumb.visible ? crumb.height + 2 : 0
-            visible: row.taskStatus === ""
             Rectangle {
+                visible: row.taskStatus === ""
                 anchors.centerIn: parent
                 width: 6
                 height: 6
                 radius: 3
                 color: Theme.fgFaint
+            }
+            TaskBox {
+                visible: row.taskStatus !== ""
+                anchors.centerIn: parent
+                status: row.taskStatus || "todo"
+                onToggled: row.taskToggled()
             }
         }
 

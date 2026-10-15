@@ -49,8 +49,16 @@ Item {
             enabled: !Theme.touchUi
             cursorShape: rendered.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
         }
+    }
+    // Clicks on the rendered text: on an item of their own above it, not on the Text itself. A
+    // rich-text Text accepts the left mouse button and un-accepts every press it does not take
+    // for a connected linkActivated, which handed the press to the editor's ListView: with a
+    // mouse, clicks on text never started editing and links never opened (touch was not
+    // affected). The overlay takes the press first, so the Text never sees it.
+    Item {
+        anchors.fill: rendered
+        visible: !root.editing
         TapHandler {
-            enabled: !root.editing
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint, button) => {
                 const p = eventPoint.position

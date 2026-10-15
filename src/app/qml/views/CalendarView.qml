@@ -331,5 +331,7 @@ FocusScope {
         id: toasts
         anchors.fill: parent
         z: 100
+        // Phones: above the floating quick-capture button (56 px at the view's bottom edge).
+        bottomMargin: Theme.space4 + (Theme.narrow ? 56 + Theme.space4 : 0)
     }
 }

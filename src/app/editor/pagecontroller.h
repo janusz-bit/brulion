@@ -174,6 +174,9 @@ public:
 
     // --- Loading and saving ------------------------------------------------------------------------
     /// (Re)load the page from the host (discards unsaved changes: save() first).
+    /// The day changed (midnight; DatesHelper.todayChanged): "dziś"/"jutro" chips and overdue
+    /// colours are rendered again for the new date. Nothing happens on the same day.
+    Q_INVOKABLE void refreshToday();
     Q_INVOKABLE void load();
     /// Write now when dirty (also flushes a pending debounced save). False when the write failed.
     Q_INVOKABLE bool save();

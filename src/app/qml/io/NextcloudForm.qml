@@ -105,7 +105,7 @@ IoCard {
                 id: urlField
                 Layout.fillWidth: true
                 text: form.setup.url
-                placeholderText: "https://chmura.example.pl"
+                placeholderText: qsTr("https://cloud.example.com")
                 accessibleName: qsTr("Server address")
                 leadingIcon: "server"
                 inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
@@ -140,7 +140,7 @@ IoCard {
                 Layout.fillWidth: true
                 text: form.setup.password
                 echoMode: form.showPassword ? TextInput.Normal : TextInput.Password
-                placeholderText: form.setup.hasStoredPassword ? qsTr("Saved – type to replace") : qsTr("xxxxx-xxxxx-xxxxx-xxxxx-xxxxx")
+                placeholderText: form.setup.storedPasswordApplies ? qsTr("Saved – type to replace") : qsTr("xxxxx-xxxxx-xxxxx-xxxxx-xxxxx")
                 accessibleName: qsTr("App password")
                 leadingIcon: "lock"
                 inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhHiddenText

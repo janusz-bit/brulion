@@ -262,6 +262,7 @@ FocusScope {
                                       + (editor.toolbarVisible ? editor.toolbarHeight : 0)
             controller: page
             focus: true
+            onNotice: (text, kind) => AppController.toast(text, kind)
             listView.interactive: false
             maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
             horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8

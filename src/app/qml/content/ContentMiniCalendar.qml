@@ -15,11 +15,13 @@ Item {
 
     property string selectedDate: DatesHelper.today
 
-    // Dots for the six weeks shown: journals + calendar entries (Workspace.revision: follows edits).
+    // Dots for the six weeks shown: journals + calendar entries (Workspace.revision: follows edits;
+    // only while the tab is shown — the side panel keeps it while another tab is open, and every
+    // save while typing bumps the revision).
     readonly property var marks: {
         void Workspace.revision
         const cells = picker.cells
-        if (!cells || cells.length === 0)
+        if (!root.visible || !cells || cells.length === 0)
             return ({})
         const from = cells[0].date
         const to = cells[cells.length - 1].date
@@ -40,11 +42,13 @@ Item {
     }
     readonly property var dayItems: {
         void Workspace.revision
+        if (!root.visible)
+            return []
         return Workspace.calendarItems(root.selectedDate, root.selectedDate).filter(i => i.kind !== "journal")
     }
     readonly property bool hasJournal: {
         void Workspace.revision
-        return Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
+        return root.visible && Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
     }
 
     Flickable {

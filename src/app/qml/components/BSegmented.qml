@@ -43,6 +43,16 @@ T.Control {
                 return i
         return -1
     }
+    /// Sum of the segments' natural widths (for `fill`).
+    readonly property real _implicitSum: {
+        let sum = 0
+        for (let i = 0; i < repeater.count; ++i) {
+            const segment = repeater.itemAt(i)
+            if (segment)
+                sum += segment.implicitWidth
+        }
+        return sum
+    }
     readonly property int visualHeight: size === "small" ? Theme.controlHeightSm : Theme.controlHeight
     readonly property int hitHeight: Math.max(visualHeight, Theme.touchUi ? Theme.touchTarget : 0)
 
@@ -134,8 +144,13 @@ T.Control {
                     readonly property bool isCurrent: index === control.currentIndex
 
                     height: row.height
+                    // Filling the width: every segment gets its own width plus an equal share of
+                    // what is left (or minus an equal share when they do not fit), so a long label
+                    // ("Cały notatnik") is not cut while short ones have room to spare.
                     width: control.fill && control.items.length > 0
-                           ? (control.availableWidth) / control.items.length
+                           ? (control._implicitSum > 0
+                              ? Math.max(0, implicitWidth + (control.availableWidth - control._implicitSum) / control.items.length)
+                              : control.availableWidth / control.items.length)
                            : implicitWidth
                     // At least a touch target wide on touch UIs (icon-only and short labels).
                     implicitWidth: Math.max(Theme.touchUi ? Theme.touchTarget : 0,

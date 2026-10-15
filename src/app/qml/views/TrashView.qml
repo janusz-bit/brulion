@@ -35,8 +35,9 @@ FocusScope {
             AppController.toast(qsTr("“%1” could not be restored.").arg(item.title), "error")
             return
         }
-        AppController.toast(qsTr("“%1” is back in %2").arg(item.title)
-                            .arg(Workspace.folderOf(path) !== "" ? Workspace.folderOf(path) : qsTr("the notebook")), "success")
+        const folder = Workspace.folderOf(path)
+        AppController.toast(folder !== "" ? qsTr("“%1” is back in the folder %2").arg(item.title).arg(folder)
+                                          : qsTr("“%1” is back in the notebook").arg(item.title), "success")
     }
 
     focus: true

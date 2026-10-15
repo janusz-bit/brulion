@@ -131,6 +131,9 @@ ColumnLayout {
                             Layout.fillWidth: true
                             text: tile.modelData.name
                             variant: "label"
+                            // Phones: two lines rather than "HTML website (…" (Polish names are longer).
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
                             elide: Text.ElideRight
                         }
                         BText {

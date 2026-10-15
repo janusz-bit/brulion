@@ -62,6 +62,7 @@ Rectangle {
     }
 
     Flickable {
+        id: flick
         anchors.fill: parent
         anchors.topMargin: 1
         contentWidth: buttons.width
@@ -174,5 +175,48 @@ Rectangle {
                 }
             }
         }
+    }
+
+    // More buttons beyond the edge (a phone shows about nine of the fourteen): a chevron over a
+    // fade says so, and tapping it scrolls there — the row otherwise ended at a random button with
+    // no hint that reminder, undo or "hide keyboard" exist.
+    component EdgeMore: Rectangle {
+        id: more
+        property bool atEnd: true
+        signal activated()
+        width: Theme.touchUi ? Theme.touchTarget : 32
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0; color: Theme.alpha(Theme.bgElevated, more.atEnd ? 0 : 1) }
+            GradientStop { position: 0.45; color: Theme.bgElevated }
+            GradientStop { position: 1; color: Theme.alpha(Theme.bgElevated, more.atEnd ? 1 : 0) }
+        }
+        BIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: more.atEnd ? parent.right : undefined
+            anchors.left: more.atEnd ? undefined : parent.left
+            anchors.margins: 4
+            name: more.atEnd ? "chevron-right" : "chevron-left"
+            size: Theme.iconSizeSm
+            color: Theme.fgMuted
+        }
+        TapHandler { onTapped: more.activated() }
+        Accessible.role: Accessible.Button
+        Accessible.name: more.atEnd ? qsTr("More editing tools") : qsTr("First editing tools")
+    }
+    EdgeMore {
+        anchors.top: flick.top
+        anchors.bottom: flick.bottom
+        anchors.right: flick.right
+        visible: flick.interactive && flick.contentX + flick.width < flick.contentWidth - 1
+        onActivated: flick.contentX = flick.contentWidth - flick.width
+    }
+    EdgeMore {
+        anchors.top: flick.top
+        anchors.bottom: flick.bottom
+        anchors.left: flick.left
+        atEnd: false
+        visible: flick.interactive && flick.contentX > 1
+        onActivated: flick.contentX = 0
     }
 }

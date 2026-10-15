@@ -56,6 +56,6 @@ Item {
         compact: true
         iconName: "heading"
         title: qsTr("No headings yet")
-        description: qsTr("Headings of the page (“# Plan”, “## Zakupy”) show up here for quick jumps.")
+        description: qsTr("Headings of the page (“# Plan”, “## Shopping”) show up here for quick jumps.")
     }
 }

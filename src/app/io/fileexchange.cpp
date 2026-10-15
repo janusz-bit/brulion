@@ -142,6 +142,14 @@ void FileGatherer::collect(const QUrl &url)
         QString fsPath;
         QString relative;
     };
+    // A symlinked file is read only when it stays inside the picked folder: a downloaded "vault"
+    // with "Notatka.md -> ~/.ssh/id_rsa" must not copy the key into the notebook (and on to the
+    // sync server).
+    const QString canonicalRoot = rootInfo.canonicalFilePath();
+    const auto insideRoot = [&canonicalRoot](const QFileInfo &entry) {
+        const QString target = entry.canonicalFilePath();
+        return !canonicalRoot.isEmpty() && !target.isEmpty() && target.startsWith(canonicalRoot + u'/');
+    };
     QList<Dir> stack{ Dir{ root, displayNameOf(url) } };
     bool tooMany = false;
     while (!stack.isEmpty() && !tooMany) {
@@ -153,6 +161,13 @@ void FileGatherer::collect(const QUrl &url)
             if (entry.isDir()) {
                 if (!entry.isSymLink() && !isSkippedFolder(entry.fileName()))
                     stack.append(Dir{ entry.filePath(), relative });
+                continue;
+            }
+            // Pipes, sockets and devices hold no notes (reading a pipe would block forever).
+            if (!entry.isFile())
+                continue;
+            if (entry.isSymLink() && !insideRoot(entry)) {
+                m_warnings.append(tr("“%1” is a link to a file outside the chosen folder and was skipped.").arg(relative));
                 continue;
             }
             if (m_pending.size() >= m_limits.maxFiles) {

@@ -79,6 +79,10 @@ class NextcloudSetup : public QObject {
     Q_PROPERTY(QString deviceName READ deviceName WRITE setDeviceName NOTIFY draftChanged FINAL)
     /// An app password is stored (the draft may stay empty).
     Q_PROPERTY(bool hasStoredPassword READ hasStoredPassword NOTIFY settingsChanged FINAL)
+    /// The stored app password is used for the draft: it is stored and the draft names the same
+    /// server and user it was saved for. Another server or user needs the password typed again
+    /// (the stored one is never sent to an address it was not saved for).
+    Q_PROPERTY(bool storedPasswordApplies READ storedPasswordApplies NOTIFY draftChanged FINAL)
     /// The saved settings describe a complete, enabled account.
     Q_PROPERTY(bool configured READ configured NOTIFY settingsChanged FINAL)
     Q_PROPERTY(bool dirty READ dirty NOTIFY draftChanged FINAL)
@@ -123,6 +127,7 @@ public:
     QString deviceName() const { return m_deviceName; }
     void setDeviceName(const QString &name);
     bool hasStoredPassword() const;
+    bool storedPasswordApplies() const;
     bool configured() const;
     bool dirty() const;
     bool showErrors() const { return m_showErrors; }

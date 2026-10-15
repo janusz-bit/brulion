@@ -21,6 +21,8 @@
 #include <QTimer>
 #include <QUrlQuery>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 using brulion::shell::NextcloudSettings;
 using brulion::shell::SyncthingSettings;
@@ -341,12 +343,51 @@ private Q_SLOTS:
         QCOMPARE(sync->statusText(), u"11 file(s) would be deleted. Confirm in the sync center."_s);
         QCOMPARE(server.files(u"Brulion"_s).size(), 12); // nothing deleted yet
 
+        // The confirmation names the list the user saw: another list confirms nothing.
+        QStringList shown;
+        for (const QVariant &d : sync->pendingDeletions())
+            shown.append(d.toMap().value(u"path"_s).toString());
+        QSignalSpy errors(sync, &WorkspaceSync::errorOccurred);
+        sync->confirmDeletions(shown.mid(1));
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(!sync->scheduler()->isRunning());
+        QVERIFY(sync->needsConfirmation());
+        QCOMPARE(server.files(u"Brulion"_s).size(), 12);
+
         bool done = false;
         connect(sync->scheduler(), &brulion::sync::SyncScheduler::synced, this, [&done] { done = true; });
-        sync->confirmDeletions();
+        std::reverse(shown.begin(), shown.end()); // order does not matter
+        sync->confirmDeletions(shown);
         QVERIFY(synctest::waitFor([&] { return done; }));
         QCOMPARE(server.files(u"Brulion"_s).size(), 1);
         QVERIFY(!sync->needsConfirmation());
+    }
+
+    void cancelMidSync()
+    {
+        // A long first sync (slow uploads) stopped with cancelSync(): what is done stays synced,
+        // the state is idle (not an error), and the next run finishes the rest.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        server.setLatency("PUT", 40);
+        QMap<QString, QString> files;
+        for (int i = 0; i < 30; ++i)
+            files.insert(u"Notatki/Notatka %1 — zażółć.md"_s.arg(i), u"- treść %1\n"_s.arg(i));
+        auto ws = open(&server, files);
+        WorkspaceSync *sync = ws->sync();
+        sync->setNextcloud(account(server));
+        sync->cancelSync(); // idle: nothing to cancel
+        sync->syncNow();
+        QVERIFY(synctest::waitFor([&] { return !server.requests("PUT").isEmpty(); }));
+        QCOMPARE(sync->state(), u"syncing"_s);
+        sync->cancelSync();
+        QVERIFY(synctest::waitFor([&] { return !sync->scheduler()->isRunning(); }));
+        QCOMPARE(sync->state(), u"idle"_s);
+        QVERIFY(sync->lastError().isEmpty());
+        const qsizetype uploaded = server.files(u"Brulion"_s).size();
+        QVERIFY2(uploaded > 0 && uploaded < 30, qPrintable(QString::number(uploaded)));
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(server.files(u"Brulion"_s).size(), 30);
+        QCOMPARE(sync->state(), u"idle"_s);
     }
 
     void syncthingStatus()

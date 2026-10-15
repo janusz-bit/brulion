@@ -234,10 +234,13 @@ FocusScope {
         visible: root.cardId !== "" && graphModel.indexOf(root.cardId) >= 0
         actions: true
         info: root.cardId !== "" ? graphModel.nodeInfo(root.cardId) : ({})
-        width: Theme.compact ? root.width - 2 * Theme.space3 : implicitWidth
+        // Phones: left of the zoom controls, level with their bottom (never over them).
+        width: Theme.compact ? root.width - 2 * Theme.space3 - (zoomControls.visible ? zoomControls.width + Theme.space2 : 0)
+                             : implicitWidth
         x: Theme.compact ? Theme.space3
                          : Math.max(Theme.space2, Math.min(root.width - width - Theme.space2, graph.highlightedPosition.x + 18))
-        y: Theme.compact ? root.height - height - zoomControls.height - Theme.space6
+        y: Theme.compact ? Math.max(Theme.space2, (zoomControls.visible ? zoomControls.y + zoomControls.height
+                                                                        : root.height - Theme.space16 - Theme.space8) - height)
                          : Math.max(Theme.space2, Math.min(root.height - height - Theme.space2, graph.highlightedPosition.y + 18))
         z: 6
         onOpenRequested: root.openNode(root.cardId)

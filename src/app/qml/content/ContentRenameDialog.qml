@@ -54,7 +54,9 @@ BDialog {
         BIcon { name: "link"; size: Theme.iconSize; color: Theme.fgMuted; Layout.alignment: Qt.AlignTop }
         BText {
             Layout.fillWidth: true
-            text: qsTr("%n link(s)", "", dialog.links) + " " + qsTr("in %n note(s) will be updated to the new name.", "", dialog.notes)
+            // One sentence (the verb agrees with the number of links in Polish); %1 = "in %n note(s)".
+            text: qsTr("%n link(s) %1 will be updated to the new name.", "", dialog.links)
+                  .arg(qsTr("in %n note(s)", "", dialog.notes))
             variant: "muted"
             wrapMode: Text.Wrap
         }

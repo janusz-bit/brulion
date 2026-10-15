@@ -37,6 +37,14 @@ QString valueAfter(const QStringList &args, const QString &option)
     return {};
 }
 
+/// Number, size and text formatting (QLocale(), Qt.locale()) follows the UI language, not the
+/// system locale: "1,5 MB" and "1 234" in Polish, "1.5 MB" in English.
+void applyDefaultLocale(const QString &language)
+{
+    QLocale::setDefault(language == u"en" ? QLocale(QLocale::English, QLocale::UnitedStates)
+                                          : QLocale(QLocale::Polish, QLocale::Poland));
+}
+
 } // namespace
 
 void DevTools::applyEarlyArguments(int argc, char **argv)
@@ -79,6 +87,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
         m_language = locale;
     else
         m_language = QLocale().name().startsWith(u"en") ? u"en"_s : u"pl"_s;
+    applyDefaultLocale(m_language);
 
     bool ok = false;
     const int delay = valueAfter(arguments, u"--delay"_s).toInt(&ok);
@@ -167,6 +176,7 @@ void DevTools::setLanguage(const QString &language)
     if (lang == m_language)
         return;
     m_language = lang;
+    applyDefaultLocale(lang);
     if (m_translator) {
         // brulion_pl.qm (translation) or brulion_en.qm (plural forms of the English sources).
         if (m_translatorInstalled) {

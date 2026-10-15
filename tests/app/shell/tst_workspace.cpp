@@ -367,6 +367,13 @@ private Q_SLOTS:
         QVERIFY(ws->renamePage(u"Dziennik.md"_s, u"Inne"_s).isEmpty()); // exists
         QVERIFY(ws->renamePage(u"nie ma.md"_s, u"x"_s).isEmpty());
         QCOMPARE(ws->renamePage(u"Obcy.md"_s, u"obcy"_s), u"obcy.md"_s); // case only
+        // A name that differs only in case from another page is refused (one file on Android).
+        QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
+        QVERIFY(ws->renamePage(u"obcy.md"_s, u"dziennik"_s).isEmpty());
+        QVERIFY(ws->renamePage(u"obcy.md"_s, u"INNE"_s).isEmpty());
+        QCOMPARE(errors.size(), 2);
+        QVERIFY(ws->exists(u"obcy.md"_s));
+        QVERIFY(ws->renamePage(u"Projekty/Mieszkanie.md"_s, u"ŻÓŁW"_s) == u"Projekty/ŻÓŁW.md"_s); // other folder: fine
     }
 
     void renameFolderRewritesPathLinks()

@@ -313,7 +313,7 @@ Item {
                     accessibleName: qsTr("Text width")
                     model: [
                         { value: 640, text: qsTr("Narrow") },
-                        { value: 760, text: qsTr("Normal") },
+                        { value: 760, text: qsTr("Normal", "text width") },
                         { value: 960, text: qsTr("Wide") },
                         { value: 0, text: qsTr("Full") }
                     ]

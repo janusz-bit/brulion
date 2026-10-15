@@ -111,6 +111,9 @@ Q_SIGNALS:
 protected:
     struct Ref {
         int line = 0;
+        /// Block of the indexed note still to be rendered (refForBlock() leaves the text for
+        /// fillRef(): only the rows shown are rendered); -1 = filled in.
+        int pendingBlock = -1;
         QString html;
         QString text;
         QString blockId;
@@ -138,9 +141,12 @@ protected:
     const markdown::Palette &rendererPalette() const { return m_palette; }
     /// A group for `path` with title, folder and journal date filled in.
     Group groupFor(const QString &path) const;
-    /// A ref row for block `blockIndex` of the indexed note `path` (its own text rendered the
-    /// way the editor shows it).
+    /// A ref row for block `blockIndex` of the indexed note `path`: its line now, its text
+    /// (rendered the way the editor shows it) when the row is listed (fillRef()) — a busy page
+    /// has thousands of references, of which `limit` are shown.
     Ref refForBlock(const QString &path, int blockIndex) const;
+    /// Render a ref of refForBlock() (no-op for filled ones).
+    void fillRef(Ref &ref, const QString &path) const;
     /// A ref row for line `line` of `path` that is not inside a block (e.g. frontmatter).
     Ref refForLine(const QString &path, int line) const;
 

@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -228,6 +229,39 @@ private Q_SLOTS:
         QVERIFY(progress.size() >= 3); // chunks of one file
         QVERIFY(brulion::io::detectImporter(files));
         QCOMPARE(brulion::io::detectImporter(files)->id(), u"obsidian"_s);
+    }
+
+    void gatherSkipsLinksOutsideAndSpecialFiles()
+    {
+#ifdef Q_OS_UNIX
+        // A downloaded "vault" with links pointing out of it (a private key, the user's own
+        // notes) and a named pipe: only what lies inside the chosen folder is read.
+        const QString secret = m_tmp.filePath(u"poza/klucz prywatny"_s);
+        writeRaw(secret, "-----BEGIN OPENSSH PRIVATE KEY-----\n");
+        const QString dir = m_tmp.filePath(u"Pobrany sejf"_s);
+        writeRaw(dir + u"/Notatki/Źródło.md"_s, "- treść\n");
+        QVERIFY(QFile::link(secret, dir + u"/Notatki/klucz.md"_s));
+        QVERIFY(QFile::link(dir + u"/Notatki/Źródło.md"_s, dir + u"/Skrót.md"_s)); // inside: fine
+        QVERIFY(QFile::link(m_tmp.filePath(u"poza"_s), dir + u"/folder-poza"_s)); // folder links: never
+        QVERIFY(QProcess::execute(u"mkfifo"_s, { dir + u"/rura"_s }) == 0);
+        brulion::ioviews::FileGatherer g;
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start({ QUrl::fromLocalFile(dir) });
+        QVERIFY(finished.wait(5000));
+        const auto files = finished.first().at(0).value<QList<InputFile>>();
+        QStringList paths;
+        for (const InputFile &f : files) {
+            paths.append(f.path);
+            QVERIFY(!f.data.contains("PRIVATE KEY"));
+        }
+        paths.sort();
+        QCOMPARE(paths, QStringList({ u"Pobrany sejf/Notatki/Źródło.md"_s, u"Pobrany sejf/Skrót.md"_s }));
+        const QStringList warnings = finished.first().at(1).toStringList();
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY(warnings.first().contains(u"klucz.md"_s));
+#else
+        QSKIP("symlinks and pipes: Unix only");
+#endif
     }
 
     void gatherLimits()

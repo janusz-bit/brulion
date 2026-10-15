@@ -406,6 +406,34 @@ private Q_SLOTS:
 
     // ---- Reminders ----------------------------------------------------------------------------------
 
+    void snoozeFollowsTheReminderNotItsOldLine()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        auto ws = open({ { u"Dom.md"_s, u"- [ ] Podlać kwiaty ⏰ 2026-10-14 14:00\n- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n"_s } },
+                       nullptr, &sink);
+        QVERIFY(ws->reminders()->isRunning());
+        const ScheduledNotification shown = ws->reminders()->scheduler()->upcoming().first();
+        QCOMPARE(shown.title, u"Podlać kwiaty"_s);
+        QCOMPARE(shown.line, 0);
+
+        // A line inserted above: the same reminder is found on its new line.
+        QVERIFY(ws->write(u"Dom.md"_s, u"- nowa linia\n- [ ] Podlać kwiaty ⏰ 2026-10-14 14:00\n"
+                                       u"- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n"_s));
+        QVERIFY(ws->reminders()->snoozeNotification(shown, 10));
+        QCOMPARE(ws->readFile(u"Dom.md"_s), u"- nowa linia\n- [ ] Podlać kwiaty ⏰ 2026-10-14 13:10\n"
+                                            u"- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n"_s);
+
+        // The reminder's text was edited and another reminder now sits on its old line: nothing
+        // is moved (the other one must not be snoozed instead).
+        const ScheduledNotification later = ws->reminders()->scheduler()->upcoming().first();
+        QVERIFY(ws->write(u"Dom.md"_s, u"- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n- [ ] Podlać storczyki ⏰ 2026-10-14 13:10\n"_s));
+        QSignalSpy errors(ws->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        QVERIFY(!ws->reminders()->snoozeNotification(later, 10));
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(ws->readFile(u"Dom.md"_s), u"- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n- [ ] Podlać storczyki ⏰ 2026-10-14 13:10\n"_s);
+    }
+
     void remindersThroughTheSink()
     {
         const QString note = u"- [ ] Odebrać paczkę ⏰ 2026-10-14 07:00\n"

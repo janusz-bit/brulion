@@ -173,6 +173,59 @@ private Q_SLOTS:
         QCOMPARE(value(model, 0, "exists").toBool(), true);
     }
 
+    void journalsMidnightRollover()
+    {
+        // The app runs over midnight (JournalsView binds today: DatesHelper.today, which changes
+        // at 00:00): yesterday's row must stop saying "today" (the "Dziś" badge, the heading's
+        // relative day, daysAgo), the new day comes first without rebuilding the kept rows (a day
+        // being edited keeps its delegate and editor).
+        auto ws = open({ { u"journals/2026-10-14.md"_s, u"- piszę o północy: zażółć\n"_s },
+                         { u"journals/2026-10-13.md"_s, u"- wtorek\n"_s } });
+        JournalListModel model;
+        model.setWorkspace(ws.get());
+        model.setToday(u"2026-10-14"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "date"), (QStringList{ u"2026-10-14"_s, u"2026-10-13"_s }));
+        QCOMPARE(value(model, 0, "isToday").toBool(), true);
+
+        QSignalSpy resets(&model, &QAbstractItemModel::modelReset);
+        QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
+        QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+        QSignalSpy pathSpy(&model, &JournalListModel::todayPathChanged);
+        model.setToday(u"2026-10-15"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "date"), (QStringList{ u"2026-10-15"_s, u"2026-10-14"_s, u"2026-10-13"_s }));
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(removed.size(), 0);
+        QCOMPARE(value(model, 0, "isToday").toBool(), true);
+        QCOMPARE(value(model, 0, "exists").toBool(), false);
+        QCOMPARE(value(model, 1, "isToday").toBool(), false);
+        QCOMPARE(value(model, 1, "daysAgo").toInt(), 1);
+        QCOMPARE(value(model, 2, "daysAgo").toInt(), 2);
+        // The views learn about it: the kept rows' isToday / daysAgo changed.
+        bool keptRowsChanged = false;
+        for (const QList<QVariant> &args : std::as_const(changed)) {
+            const QModelIndex from = args.at(0).value<QModelIndex>();
+            const QModelIndex to = args.at(1).value<QModelIndex>();
+            if (from.row() <= 1 && to.row() >= 2)
+                keptRowsChanged = true;
+        }
+        QVERIFY2(keptRowsChanged, "no dataChanged for the days kept over midnight");
+        QCOMPARE(pathSpy.size(), 1);
+        QCOMPARE(model.todayPath(), u"journals/2026-10-15.md"_s);
+        QVERIFY(!model.todayExists());
+        QVERIFY(!ws->exists(u"journals/2026-10-15.md"_s));
+
+        // Yesterday's note had nothing in it when midnight came: it stays listed (it may be the
+        // day being edited) while its file exists.
+        QVERIFY(ws->writeFile(u"journals/2026-10-15.md"_s, u"- \n"_s));
+        model.setToday(u"2026-10-16"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "date"),
+                 (QStringList{ u"2026-10-16"_s, u"2026-10-15"_s, u"2026-10-14"_s, u"2026-10-13"_s }));
+        QCOMPARE(value(model, 1, "isToday").toBool(), false);
+    }
+
     void journalsAlternativeNamesAndClose()
     {
         auto ws = open({ { u"journals/2026_10_13.md"_s, u"- Logseq\n"_s }, { u"journals/2026-10-13.md"_s, u"- Brulion\n"_s } });
@@ -223,7 +276,8 @@ private Q_SLOTS:
         QCOMPARE(task.value(u"taskStatus"_s).toString(), u"todo"_s);
         const QString html = task.value(u"html"_s).toString();
         QVERIFY2(html.contains(u"page:Remont%20mieszkania"_s), qPrintable(html));
-        QVERIFY2(html.contains(u"task:toggle"_s), qPrintable(html));
+        // The checkbox is the row's own (ContentRefRow's TaskBox), not a glyph in the text.
+        QVERIFY2(!html.contains(u"task:toggle"_s) && !html.contains(u"[ ]"_s) && html.contains(u"farba"_s), qPrintable(html));
         QVERIFY2(!html.contains(u"<b>tanio"_s) && html.contains(u"&lt;b&gt;tanio"_s), qPrintable(html)); // escaped
         QCOMPARE(model.get(7).value(u"blockId"_s).toString(), u"xyz"_s);
         QCOMPARE(model.get(7).value(u"folder"_s).toString(), u"Notatki"_s);
@@ -455,6 +509,33 @@ private Q_SLOTS:
         QCOMPARE(model.rowCount(), 0);
     }
 
+    void searchRealMatchesBeforeTypos()
+    {
+        // The sample notebook: "zolw" is a prefix of "żółwia" in a long day, and one letter away
+        // from "Żółć" in a short one, which the index's BM25 score ranks higher.
+        auto ws = open({
+                { u"journals/2026-10-07.md"_s,
+                  u"- Początek remontu! #projekt/dom\n- [x] Wybrać kolor ścian w salonie\n"
+                  u"- Skończona „Ferdydurke” — [[Książki 2026]]\n- Żółć, ćma, źdźbło, łąka — Brulion lubi polskie znaki.\n"_s },
+                { u"journals/2026-10-14.md"_s,
+                  u"- Pierwszy dzień z [[Witaj w Brulionie|Brulionem]] #przewodnik\n"
+                  u"- [ ] Przejrzeć [[Remont mieszkania]] i zamówić farbę 📅 2026-10-16\n"
+                  u"- Spotkanie z ekipą remontową ⏰ 2026-10-15 17:30\n"
+                  u"- Przeczytane dziś: 40 stron „Lalki” — [[Książki 2026]]\n"
+                  u"- Pomysł na obiad: [[Przepisy#Pierogi ruskie|pierogi ruskie]] #pomysł\n"
+                  u"  - albo żurek, jeśli będzie zakwas\n"
+                  u"- Szybkie notatki z telefonu (przycisk „+”) trafiają właśnie tutaj.\n"
+                  u"- Plan na wieczór\n  - Nakarmić żółwia Franka\n"_s },
+        });
+        SearchResultModel model;
+        model.setWorkspace(ws.get());
+        model.setQuery(u"zolw"_s);
+        model.refreshNow();
+        QCOMPARE(column(model, "path"), (QStringList{ u"journals/2026-10-14.md"_s, u"journals/2026-10-07.md"_s }));
+        QCOMPARE(markedText(value(model, 0, "excerpt").toString(), value(model, 0, "excerptMatches").toList()), u"żółw"_s);
+        QVERIFY(value(model, 1, "excerptMatches").toList().isEmpty()); // the typo-tolerant hit, last
+    }
+
     // ---- History ---------------------------------------------------------------------------------
 
     void historyList()
@@ -596,6 +677,75 @@ private Q_SLOTS:
         QVERIFY2(timer.elapsed() < 20000, "the lists take far too long");
     }
 
+    void backlinksOfABusyPage()
+    {
+        // Two years of daily notes, each a dozen blocks that mention [[Praca]] here and there: the
+        // page's references (50 shown) are refreshed after every save anywhere in the notebook
+        // (the editor saves while typing), so a refresh must not render every reference.
+        QHash<QString, QString> files;
+        files.insert(u"Praca.md"_s, u"# Praca\n- projekty\n"_s);
+        files.insert(u"Inna.md"_s, u"- coś innego\n"_s);
+        for (int d = 0; d < 730; ++d) {
+            QString day;
+            for (int b = 0; b < 12; ++b) {
+                day += (b % 4 == 0) ? u"- [ ] Spotkanie w [[Praca]] o **budżecie** ⏰ 2026-10-20 09:00 #praca żółć %1\n"_s.arg(b)
+                                    : u"- Notatka %1 z dnia: zażółć gęślą jaźń [[Inna]] `kod` ~~skreślone~~\n"_s.arg(b);
+                day += u"  - podpunkt z [link](https://example.com) i ((abc))\n"_s;
+            }
+            files.insert(u"journals/%1.md"_s.arg(QDate(2026, 10, 14).addDays(-d).toString(Qt::ISODate)), day);
+        }
+        auto ws = open(files);
+        BacklinksModel refs;
+        refs.setWorkspace(ws.get());
+        refs.setPath(u"Praca.md"_s);
+        refs.setLimit(50);
+        QElapsedTimer timer;
+        timer.start();
+        refs.refreshNow();
+        const qint64 first = timer.elapsed();
+        QCOMPARE(refs.refCount(), 730 * 3);
+        QCOMPARE(refs.hiddenCount(), 730 * 3 - 50);
+        QVERIFY(refs.get(1).value(u"html"_s).toString().contains(u"<b>budżecie</b>"_s));
+
+        // A save in an unrelated note (typing elsewhere): the rows stay, the refresh is cheap.
+        QSignalSpy resets(&refs, &QAbstractItemModel::modelReset);
+        QSignalSpy changed(&refs, &QAbstractItemModel::dataChanged);
+        QVERIFY(ws->writeFile(u"Inna.md"_s, u"- coś innego, dopisane\n"_s));
+        timer.restart();
+        refs.refreshNow();
+        const qint64 again = timer.elapsed();
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(changed.size(), 0);
+        QCOMPARE(refs.refCount(), 730 * 3);
+        qInfo() << "references of a busy page:" << first << "ms, after an unrelated save" << again << "ms";
+
+        // Editing a referencing block updates its row.
+        const QString path = refs.get(1).value(u"path"_s).toString();
+        QString content = ws->readFile(path);
+        content.replace(u"**budżecie**"_s, u"*planie*"_s);
+        QVERIFY(ws->writeFile(path, content));
+        refs.refreshNow();
+        QVERIFY2(refs.get(1).value(u"html"_s).toString().contains(u"<i>planie</i>"_s), qPrintable(refs.get(1).value(u"html"_s).toString()));
+        QCOMPARE(resets.size(), 0);
+
+        // Shown rows are rendered; showing more renders the next ones.
+        refs.setLimit(100);
+        refs.refreshNow();
+        int refRows = 0;
+        int rendered = 0;
+        for (int i = 0; i < refs.rowCount(); ++i) {
+            if (refs.get(i).value(u"rowType"_s) != u"ref"_s)
+                continue;
+            ++refRows;
+            if (refs.get(i).value(u"html"_s).toString().contains(u"href=\"page:Praca\""_s))
+                ++rendered;
+        }
+        QCOMPARE(refRows, 100);
+        QCOMPARE(rendered, 100);
+        // Debug build on the laptop: ~110 ms when every reference was rendered, ~5 ms now.
+        QVERIFY2(again < 40, "an unrelated save re-renders every reference");
+    }
+
     // ---- Page tools ---------------------------------------------------------------------------------
 
     void pageTools()
@@ -607,6 +757,7 @@ private Q_SLOTS:
                 { u"A.md"_s, u"- [[Projekty/Dom]] i [[Projekty/Dom|dom]]\n"_s },
                 { u"B.md"_s, u"- ![[Projekty/Dom]] ((zzz))\n"_s },
                 { u"Projekty/Inne.md"_s, u"- tu [[Dom]] #remont\n"_s },
+                { u"Projekty/żółw.md"_s, u"- zwierzę\n"_s },
                 { u"assets/plan.png"_s, u"\x89PNG"_s },
                 { u"journals/2026_10_13.md"_s, u"- z Logseqa\n"_s },
         });
@@ -622,6 +773,11 @@ private Q_SLOTS:
         QVERIFY(!tools.validateTitle(u"Projekty/Dom.md"_s, u"Inne"_s).isEmpty());
         QCOMPARE(tools.validateTitle(u"Projekty/Dom.md"_s, u"dom"_s), QString()); // only the case changes
         QCOMPARE(tools.validateTitle(u"Projekty/Dom.md"_s, u"Dom/Inne"_s), QString()); // "/" becomes a space
+        // Another page's name in another case: one file on case-insensitive storage (Android).
+        QVERIFY(!tools.validateTitle(u"Projekty/Dom.md"_s, u"inne"_s).isEmpty());
+        QVERIFY(!tools.validateTitle(u"Projekty/Dom.md"_s, u"ŻÓŁW"_s).isEmpty());
+        QCOMPARE(tools.validateTitle(u"Projekty/Dom.md"_s, u"Żółwie"_s), QString());
+        QCOMPARE(tools.validateTitle(u"Projekty/Inne.md"_s, u"INNE"_s), QString()); // its own name
 
         const QVariantMap s = tools.summary(u"Projekty/Dom.md"_s);
         QCOMPARE(s.value(u"aliases"_s).toStringList(), (QStringList{ u"Domek"_s, u"Chata"_s }));

@@ -136,12 +136,21 @@ FocusScope {
                 model: days
                 reuseItems: false
                 cacheBuffer: 900
+                // No current item: ListView gives its current item the focus whenever rows are
+                // inserted or removed before it (a new day at midnight), which took the caret out
+                // of the day being edited (tst_content_journals_qml).
+                currentIndex: -1
                 boundsBehavior: Flickable.StopAtBounds
                 // Room for the floating capture button on phones.
                 bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space12
                 spacing: 0
                 keyNavigationEnabled: false
-                pressDelay: Theme.touchUi ? 90 : 0
+                // No press delay: a Flickable that delays presses replays them on release without the
+                // release for pointer handlers (Qt sends it only when an item grabbed the replayed press),
+                // so a quick tap (< 90 ms) on block text, a link, a bullet or a fold arrow did nothing on
+                // touch screens. Taps act on release anyway, and TextEdit moves the caret on release for
+                // touch, so scrolling still never edits.
+                pressDelay: 0
                 T.ScrollBar.vertical: BScrollBar {}
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Journals")
@@ -191,6 +200,8 @@ FocusScope {
                 delegate: Item {
                     id: dayItem
                     required property int index
+                    /// The day's editor (ContentJournalsSelfTest finds it through itemAtIndex()).
+                    readonly property ContentJournalDay day: dayView
                     required property string date
                     required property string path
                     required property bool exists
@@ -248,8 +259,20 @@ FocusScope {
                         compact: true
                         iconName: "book-open"
                         title: qsTr("Your journal starts today")
-                        description: qsTr("Every day gets its own page. Write what happened, plans, tasks (- [ ] …) and reminders (⏰ jutro 9:00); earlier days appear below.")
+                        // No-break spaces (and a word joiner after the hyphen, a break opportunity otherwise) keep
+                        // "- [ ] …" and "⏰ jutro 9:00" on one line.
+                        description: qsTr("Every day gets its own page. Write what happened, plans, tasks (-\u2060\u00a0[\u00a0]\u00a0…) and reminders (⏰\u00a0tomorrow\u00a09:00); earlier days appear below.")
                     }
+                }
+            }
+
+            // Dev: the journal stream's data-safety self-test (tests/app/content, ctest
+            // tst_content_journals_qml).
+            Loader {
+                active: DevTools.editorScript === "journals-selftest"
+                sourceComponent: ContentJournalsSelfTest {
+                    list: list
+                    days: days
                 }
             }
 
@@ -288,7 +311,7 @@ FocusScope {
                 }
                 BText {
                     Layout.fillWidth: true
-                    text: qsTr("Days with a dot have a journal. Type a date like “wtorek” or “12 października”.")
+                    text: qsTr("Days with a dot have a journal. Type a date like “Tuesday” or “October 12”.")
                     variant: "muted"
                     wrapMode: Text.Wrap
                 }

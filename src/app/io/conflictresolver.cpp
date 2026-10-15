@@ -281,6 +281,21 @@ bool ConflictResolver::keepMine()
     return ok;
 }
 
+bool ConflictResolver::textsUnchanged()
+{
+    // The decision was made on the texts loaded earlier. When either file changed since (an edit
+    // in another pane, a sync, Syncthing), writing now would silently drop that change: show the
+    // conflict again instead.
+    const QVariantMap current = m_workspace->sync()->conflictDetails(m_copy);
+    if (!current.isEmpty() && current.value(u"ours"_s).toString() == m_ours
+        && current.value(u"theirs"_s).toString() == m_theirs)
+        return true;
+    const QString title = m_conflict.value(u"title"_s).toString();
+    reload();
+    Q_EMIT failed(tr("“%1” has changed in the meantime. Look at both versions again before deciding.").arg(title));
+    return false;
+}
+
 bool ConflictResolver::keepCopy()
 {
     if (!loaded())
@@ -289,21 +304,34 @@ bool ConflictResolver::keepCopy()
     const QString title = m_conflict.value(u"title"_s).toString();
     bool ok = false;
     if (isText()) {
+        if (!textsUnchanged())
+            return false;
         ok = m_workspace->sync()->resolveConflict(original, m_copy, m_theirs);
-    } else if (Vault *vault = m_workspace->vault()) {
-        bool read = false;
-        const QByteArray data = vault->readBinary(m_copy, &read);
-        ok = read && vault->writeBinary(original, data, ChangeSource::User)
-            && m_workspace->sync()->discardConflictCopy(m_copy);
+        finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
+                      : tr("The copy could not be applied."));
+        return ok;
     }
-    finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the history.").arg(title)
-                  : tr("The copy could not be applied."));
+    // A picture or another binary file: History keeps text only, so the original goes to the
+    // trash (restorable) and the copy takes its place.
+    Vault *vault = m_workspace->vault();
+    QString error;
+    if (vault) {
+        const bool hadOriginal = vault->exists(original);
+        ok = (!hadOriginal || vault->remove(original, ChangeSource::User))
+            && vault->rename(m_copy, original, ChangeSource::User);
+        if (!ok)
+            error = vault->errorString();
+    }
+    finish(ok, ok ? tr("“%1” now has the copy's content. Your previous version is in the trash.").arg(title)
+                  : tr("The copy could not be applied: %1").arg(error));
     return ok;
 }
 
 bool ConflictResolver::applyMerged(const QString &text)
 {
     if (!loaded() || !isText())
+        return false;
+    if (!textsUnchanged())
         return false;
     const QString original = m_conflict.value(u"original"_s).toString();
     const QString title = m_conflict.value(u"title"_s).toString();

@@ -1,5 +1,7 @@
 #include "workspacesync.h"
 
+#include "workspace.h"
+
 #include "dates/dates.h"
 #include "sync/sync.h"
 #include "util/paths.h"
@@ -11,9 +13,11 @@
 #include <QGuiApplication>
 #include <QLoggingCategory>
 #include <QSysInfo>
+#include <QUrl>
 #include <QXmlStreamReader>
 
 #include <algorithm>
+#include <tuple>
 
 using namespace Qt::StringLiterals;
 
@@ -37,6 +41,24 @@ QString defaultFolder(const QString &folder)
 }
 
 } // namespace
+
+bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser)
+{
+    if (user.trimmed() != otherUser.trimmed())
+        return false;
+    const auto server = [](const QString &address) {
+        QUrl u(address.trimmed());
+        if (u.scheme().isEmpty() && !address.trimmed().isEmpty())
+            u = QUrl(u"https://"_s + address.trimmed());
+        u = u.adjusted(QUrl::NormalizePathSegments | QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment);
+        QString path = u.path();
+        while (path.endsWith(u'/'))
+            path.chop(1);
+        const QString scheme = u.scheme().toLower();
+        return std::tuple(scheme, u.host().toLower(), u.port(scheme == u"http" ? 80 : 443), path);
+    };
+    return !url.trimmed().isEmpty() && server(url) == server(otherUrl);
+}
 
 bool NextcloudSettings::isComplete() const
 {
@@ -529,10 +551,31 @@ void WorkspaceSync::syncNow()
     m_scheduler->syncNow();
 }
 
-void WorkspaceSync::confirmDeletions()
+void WorkspaceSync::confirmDeletions(const QStringList &expectedPaths)
 {
-    if (m_scheduler)
-        m_scheduler->syncNowConfirmingDeletions();
+    if (!m_scheduler || !needsConfirmation())
+        return;
+    // The list may have changed since the user looked at it (another run planned other
+    // deletions while the dialog was open): never confirm what was not shown.
+    const sync::SyncStatus status = m_scheduler->status();
+    QStringList pending;
+    for (const sync::SyncChange &c : status.lastReport->pendingDeletions)
+        pending.append(c.path);
+    QStringList expected = expectedPaths;
+    pending.sort();
+    expected.sort();
+    if (!expectedPaths.isEmpty() && pending != expected) {
+        Q_EMIT errorOccurred(tr("The list of files to delete has changed. Check it again."));
+        Q_EMIT statusChanged();
+        return;
+    }
+    m_scheduler->syncNowConfirmingDeletions();
+}
+
+void WorkspaceSync::cancelSync()
+{
+    if (m_engine && m_engine->isSyncing())
+        m_engine->cancel(); // stops between files; what is done stays synced
 }
 
 void WorkspaceSync::testConnection(const QString &url, const QString &user, const QString &password,
@@ -543,7 +586,10 @@ void WorkspaceSync::testConnection(const QString &url, const QString &user, cons
         Q_EMIT connectionTested(false, tr("Enter the server address and the user name."));
         return;
     }
-    const QString secret = password.isEmpty() ? m_nextcloud.password : password;
+    // The stored app password belongs to the saved server and user: it is never sent to another
+    // address typed into the form (a typo, a look-alike host).
+    const bool sameAccount = sameNextcloudAccount(url, user, m_nextcloud.url, m_nextcloud.user);
+    const QString secret = !password.isEmpty() ? password : sameAccount ? m_nextcloud.password : QString();
     if (secret.isEmpty()) {
         Q_EMIT connectionTested(false, tr("Enter an app password."));
         return;
@@ -739,7 +785,9 @@ bool WorkspaceSync::resolveConflict(const QString &original, const QString &copy
         return false;
     bool ok = false;
     const QString current = m_vault->readText(o, &ok);
-    if ((!ok || current != mergedText) && !m_vault->writeText(o, mergedText, ChangeSource::User)) {
+    // The text being replaced stays in the history (the user is told so), also when the note
+    // was edited minutes ago.
+    if ((!ok || current != mergedText) && !writeTextKeepingHistory(*m_vault, o, mergedText)) {
         Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(paths::pageTitle(o), m_vault->errorString()));
         return false;
     }

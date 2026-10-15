@@ -96,13 +96,19 @@ IoCard {
 
     BConfirmDialog {
         id: confirm
-        title: qsTr("Delete %n file(s)?", "", guard.deletions.length)
+        // The list the user is confirming, as it was when the dialog opened: a run that plans
+        // other deletions meanwhile makes the confirmation fail instead of deleting unseen files.
+        property var shownPaths: []
+        title: qsTr("Delete %n file(s)?", "", shownPaths.length)
         message: qsTr("The files listed will be deleted on the other side as well. Files deleted on this device go to the trash; files deleted on the server go to its deleted files.")
         checkText: qsTr("Yes, these files should be deleted")
         confirmText: qsTr("Delete")
         destructive: true
         acceptEnabled: checked
-        onAboutToShow: checked = false
-        onAccepted: guard.sync.confirmDeletions()
+        onAboutToShow: {
+            checked = false
+            shownPaths = guard.deletions.map(d => d.path)
+        }
+        onAccepted: guard.sync.confirmDeletions(shownPaths)
     }
 }

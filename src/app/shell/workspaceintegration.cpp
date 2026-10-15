@@ -10,13 +10,46 @@
 #include "notifier.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QPointer>
+#include <QSaveFile>
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
 namespace {
+
+const QString kSyncthingKeyLegacy = u"sync/syncthingApiKey"_s;
+const QString kSyncthingKeyRevision = u"sync/syncthingApiKeyRevision"_s;
+
+QString syncthingKeyFile(const AppSettings *settings)
+{
+    return QFileInfo(settings->passwordFile()).absolutePath() + u"/syncthing-api-key"_s;
+}
+
+/// Owner-only secret file (as AppSettings stores the Nextcloud app password); "" removes it.
+bool writeSecretFile(const QString &file, const QString &value)
+{
+    if (value.isEmpty())
+        return !QFileInfo::exists(file) || QFile::remove(file);
+    const QString dir = QFileInfo(file).absolutePath();
+    if (!QDir().mkpath(dir))
+        return false;
+    QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QSaveFile out(file);
+    if (!out.open(QIODevice::WriteOnly))
+        return false;
+    // Restricted before the secret is written; the rename keeps the permissions.
+    out.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    out.write(value.toUtf8());
+    if (!out.commit())
+        return false;
+    QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return true;
+}
 
 void wireReminders(AppController *app)
 {
@@ -125,7 +158,7 @@ void wireSync(AppController *app)
     };
     const auto applySyncthing = [settings, sync] {
         SyncthingSettings s;
-        s.apiKey = settings->value(u"sync/syncthingApiKey"_s, QString()).toString().trimmed();
+        s.apiKey = syncthingApiKey(settings);
         s.url = settings->value(u"sync/syncthingUrl"_s, QString()).toString().trimmed();
         sync->setSyncthing(s);
     };
@@ -164,6 +197,38 @@ void integrateWorkspace(AppController *app)
 {
     wireReminders(app);
     wireSync(app);
+}
+
+QString syncthingApiKey(AppSettings *settings)
+{
+    if (!settings)
+        return {};
+    const QString file = syncthingKeyFile(settings);
+    const QString legacy = settings->value(kSyncthingKeyLegacy, QString()).toString().trimmed();
+    if (!legacy.isEmpty()) {
+        // Stored in plain QSettings by an older version: move it into the owner-only file.
+        if (!writeSecretFile(file, legacy))
+            return legacy;
+        settings->setValue(kSyncthingKeyLegacy, QString());
+        return legacy;
+    }
+    QFile in(file);
+    if (!in.open(QIODevice::ReadOnly))
+        return {};
+    return QString::fromUtf8(in.readAll()).trimmed();
+}
+
+bool setSyncthingApiKey(AppSettings *settings, const QString &key)
+{
+    if (!settings)
+        return false;
+    const QString clean = key.trimmed();
+    if (clean == syncthingApiKey(settings))
+        return true;
+    if (!writeSecretFile(syncthingKeyFile(settings), clean))
+        return false;
+    settings->setValue(kSyncthingKeyRevision, settings->value(kSyncthingKeyRevision, 0).toInt() + 1);
+    return true;
 }
 
 } // namespace brulion::shell

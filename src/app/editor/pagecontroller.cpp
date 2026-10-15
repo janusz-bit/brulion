@@ -366,6 +366,11 @@ void PageController::setNow(const QString &now)
     Q_EMIT nowChanged();
 }
 
+void PageController::refreshToday()
+{
+    m_model->setToday(today());
+}
+
 QDateTime PageController::currentDateTime() const
 {
     if (!m_fixedNow.isEmpty()) {

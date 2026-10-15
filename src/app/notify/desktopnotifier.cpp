@@ -66,8 +66,11 @@ DesktopNotifier::DesktopNotifier(NotificationBus *bus, QObject *parent) : Notifi
         bus->setParent(this);
         connect(bus, &NotificationBus::actionInvoked, this, &DesktopNotifier::onActionInvoked);
         connect(bus, &NotificationBus::notificationClosed, this, &DesktopNotifier::onClosed);
-        connect(bus, &NotificationBus::activationTokenReceived, this,
-                [this](uint, const QString &token) { m_activationToken = token.toUtf8(); });
+        // The server broadcasts the token of every program's notification: keep only ours.
+        connect(bus, &NotificationBus::activationTokenReceived, this, [this](uint id, const QString &token) {
+            if (m_shown.contains(id))
+                m_activationToken = token.toUtf8();
+        });
     }
     m_ringTimer.setInterval(DefaultRingIntervalMs);
     connect(&m_ringTimer, &QTimer::timeout, this, &DesktopNotifier::ring);

@@ -14,9 +14,12 @@
 //                      change in it is already contained in "mine"
 //
 //   keepMine()         the original stays, the copy goes to the trash
-//   keepCopy()         the copy's content replaces the original (binary files too), the copy goes
+//   keepCopy()         the copy's content replaces the original, the copy goes (binary files: the
+//                      original goes to the trash and the copy is renamed into its place)
 //   applyMerged(text)  `text` replaces the original, the copy goes
-// The replaced text of the original stays in the version history (Workspace.sync.resolveConflict).
+// The replaced text of the original stays in the version history (Workspace.sync.resolveConflict,
+// unthrottled). keepCopy() and applyMerged() refuse (failed(), reload()) when the original or the
+// copy changed after they were loaded: the decision was made on the texts shown.
 #pragma once
 
 #include "workspace.h"
@@ -109,6 +112,8 @@ Q_SIGNALS:
 
 private:
     void finish(bool ok, const QString &message);
+    /// Both files still hold the texts the user decided on; otherwise reload() and failed().
+    bool textsUnchanged();
 
     QPointer<shell::Workspace> m_workspace;
     QString m_copy;

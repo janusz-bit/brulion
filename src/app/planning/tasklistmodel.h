@@ -238,8 +238,8 @@ private:
     void rebuild();
     void rebuildRows();
     void filtersEdited();
-    QVariant itemData(const Item &item, int role) const;
-    QVariant headerData(const QString &section, int role) const;
+    QVariant taskRowData(const Item &item, int role) const;
+    QVariant sectionRowData(const QString &section, int role) const;
     QString pageQueryValue(const QString &path) const;
 
     QPointer<VaultIndex> m_index;

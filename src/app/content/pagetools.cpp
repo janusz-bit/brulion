@@ -102,6 +102,15 @@ QString PageTools::validateTitle(const QString &rawPath, const QString &rawTitle
     const QString target = folder.isEmpty() ? name + u".md"_s : paths::join(folder, name + u".md"_s);
     if (target.compare(path, Qt::CaseInsensitive) != 0 && m_workspace->exists(target))
         return tr("A page named “%1” already exists in this folder.").arg(name);
+    // Names differing only in case ("Dom" next to "dom") are one file on Android's shared
+    // storage and in other case-insensitive folders a synced vault may land in; links do not
+    // tell them apart either.
+    if (const VaultIndex *idx = m_workspace->index()) {
+        for (const VaultPath &other : idx->paths()) {
+            if (other.compare(path, Qt::CaseInsensitive) != 0 && other.compare(target, Qt::CaseInsensitive) == 0)
+                return tr("A page named “%1” already exists in this folder.").arg(paths::pageTitle(other));
+        }
+    }
     return {};
 }
 

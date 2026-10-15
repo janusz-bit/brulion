@@ -250,6 +250,13 @@ private Q_SLOTS:
         bus->invoke(bus->nextId, u"default"_s);
         QCOMPARE(QString::fromUtf8(qgetenv("XDG_ACTIVATION_TOKEN")), u"token-źdźbło"_s);
         qunsetenv("XDG_ACTIVATION_TOKEN");
+
+        // Tokens of other programs' notifications (the signal is broadcast) are not ours to use.
+        notifier.showNow(reminder());
+        bus->token(4711, u"token-innego-programu"_s);
+        bus->invoke(4711, u"default"_s);
+        bus->invoke(bus->nextId, u"default"_s);
+        QVERIFY(qgetenv("XDG_ACTIVATION_TOKEN").isEmpty());
     }
 
     void androidPayload()

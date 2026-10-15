@@ -13,7 +13,10 @@
 //              polled every minute while the app is in the foreground.
 //   Conflicts  Syncthing ".sync-conflict-" and Brulion ".conflict-" copies (sync::findConflicts),
 //              kept up to date on vault changes; resolveConflict() writes the merged text into
-//              the original (its old text stays in History) and moves the copy to the trash.
+//              the original (its old text stays in History, also within History's throttle) and
+//              moves the copy to the trash.
+//   Secrets    the stored app password is only ever sent to the server and user it was saved
+//              for (sameNextcloudAccount()); nothing here logs URLs with credentials or keys.
 //
 // QML values (all plain data):
 //   state        "disabled" | "idle" | "syncing" | "error" | "offline" (not set up: "disabled")
@@ -79,6 +82,11 @@ struct SyncthingSettings {
     QString url;    ///< empty: http://127.0.0.1:8384
     friend bool operator==(const SyncthingSettings &, const SyncthingSettings &) = default;
 };
+
+/// Both describe the same Nextcloud account: the same user on the same server (scheme, host,
+/// port and path compared; "https://" is assumed without a scheme). A stored app password is only
+/// ever sent to the account it was saved for.
+bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser);
 
 /// The GUI address and API key of a Syncthing config.xml; std::nullopt without an API key.
 /// "0.0.0.0:8384" / "[::]:8384" mean this machine; tls="true" gives https.
@@ -191,10 +199,16 @@ public:
     // ---- actions ------------------------------------------------------------------------
     /// Sync now (also between automatic runs; joins a running sync).
     Q_INVOKABLE void syncNow();
-    /// Sync now applying the deletions the mass-deletion guard held back.
-    Q_INVOKABLE void confirmDeletions();
+    /// Sync now applying the deletions the mass-deletion guard held back. `expectedPaths`: the
+    /// pendingDeletions paths the user confirmed — when the list has changed meanwhile nothing
+    /// is confirmed (errorOccurred; the guard shows the new list). Empty: no check.
+    Q_INVOKABLE void confirmDeletions(const QStringList &expectedPaths = {});
+    /// Stop a running sync between two files (what is done stays synced; the rest follows with
+    /// the next run).
+    Q_INVOKABLE void cancelSync();
     /// Check a server, user, app password and folder without saving them (an empty password
-    /// uses the stored one). Answers with connectionTested().
+    /// uses the stored one, but only for the saved server and user). Answers with
+    /// connectionTested().
     Q_INVOKABLE void testConnection(const QString &url, const QString &user, const QString &password,
                                     const QString &folder);
     /// The WebDAV address for these settings ("" when the server or user is missing).

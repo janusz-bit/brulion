@@ -1,5 +1,7 @@
 #include "syncsetup.h"
 
+#include "workspaceintegration.h"
+
 #include "sync/http.h"
 #include "sync/syncthing.h"
 #include "sync/url.h"
@@ -388,6 +390,12 @@ bool NextcloudSetup::hasStoredPassword() const
     return m_settings && m_settings->hasNextcloudPassword();
 }
 
+bool NextcloudSetup::storedPasswordApplies() const
+{
+    return hasStoredPassword()
+        && shell::sameNextcloudAccount(m_url, m_user, m_settings->nextcloudUrl(), m_settings->nextcloudUser());
+}
+
 bool NextcloudSetup::configured() const
 {
     return m_settings && m_settings->nextcloudEnabled() && !m_settings->nextcloudUrl().isEmpty()
@@ -426,8 +434,10 @@ QString NextcloudSetup::userError() const
 
 QString NextcloudSetup::passwordError() const
 {
-    if (!m_showErrors || !m_password.isEmpty() || hasStoredPassword())
+    if (!m_showErrors || !m_password.isEmpty() || storedPasswordApplies())
         return {};
+    if (hasStoredPassword())
+        return tr("The server or user has changed: enter the app password of this account.");
     return tr("Enter an app password (Nextcloud: Settings → Security).");
 }
 
@@ -439,7 +449,7 @@ QString NextcloudSetup::folderError() const
 bool NextcloudSetup::valid() const
 {
     return validateServerUrl(m_url).isEmpty() && validateUserName(m_user).isEmpty()
-        && validateServerFolder(m_folder).isEmpty() && (!m_password.isEmpty() || hasStoredPassword());
+        && validateServerFolder(m_folder).isEmpty() && (!m_password.isEmpty() || storedPasswordApplies());
 }
 
 QString NextcloudSetup::davUrl() const
@@ -475,6 +485,11 @@ bool NextcloudSetup::save()
         return false;
     if (!m_password.isEmpty() && !m_settings->setNextcloudPassword(m_password))
         return false;
+    // Another server or user without a new password (only possible while switched off): the
+    // stored one belonged to the old account and must not reach the new one later.
+    if (m_password.isEmpty() && hasStoredPassword() && !storedPasswordApplies()
+        && !m_settings->setNextcloudPassword(QString()))
+        return false;
     m_password.clear();
     m_settings->setNextcloudUrl(m_url.trimmed());
     m_settings->setNextcloudUser(m_user.trimmed());
@@ -508,7 +523,10 @@ sync::HttpTransport *NextcloudSetup::transport()
 
 QString NextcloudSetup::effectivePassword() const
 {
-    return !m_password.isEmpty() ? m_password : (m_settings ? m_settings->nextcloudPassword() : QString());
+    if (!m_password.isEmpty())
+        return m_password;
+    // The stored password only for the server and user it was saved for.
+    return storedPasswordApplies() ? m_settings->nextcloudPassword() : QString();
 }
 
 void NextcloudSetup::clearTestResult()
@@ -673,7 +691,7 @@ void SyncthingSetup::setWorkspace(shell::Workspace *workspace)
 void SyncthingSetup::reload()
 {
     if (m_settings) {
-        m_apiKey = m_settings->value(u"sync/syncthingApiKey"_s, QString()).toString();
+        m_apiKey = shell::syncthingApiKey(m_settings); // owner-only file, not QSettings
         m_url = m_settings->value(u"sync/syncthingUrl"_s, QString()).toString();
     }
     Q_EMIT draftChanged();
@@ -710,7 +728,7 @@ bool SyncthingSetup::dirty() const
 {
     if (!m_settings)
         return false;
-    return m_apiKey.trimmed() != m_settings->value(u"sync/syncthingApiKey"_s, QString()).toString()
+    return m_apiKey.trimmed() != shell::syncthingApiKey(m_settings)
         || m_url.trimmed() != m_settings->value(u"sync/syncthingUrl"_s, QString()).toString();
 }
 
@@ -723,7 +741,10 @@ bool SyncthingSetup::save()
 {
     if (!m_settings || !urlError().isEmpty())
         return false;
-    m_settings->setValue(u"sync/syncthingApiKey"_s, m_apiKey.trimmed());
+    if (!shell::setSyncthingApiKey(m_settings, m_apiKey)) {
+        Q_EMIT errorOccurred(tr("The API key could not be saved."));
+        return false;
+    }
     m_settings->setValue(u"sync/syncthingUrl"_s, m_url.trimmed());
     reload();
     return true;

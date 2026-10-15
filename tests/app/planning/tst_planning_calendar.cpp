@@ -5,6 +5,7 @@
 #include "calendarmodel.h"
 #include "planningtest.h"
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -420,6 +421,74 @@ private Q_SLOTS:
         m.setClock([] { return QDate(2030, 5, 20); });
         QCOMPARE(m.anchorDate(), u"2030-05-20"_s);
         QCOMPARE(m.title(), u"Maj 2030"_s);
+    }
+
+    void manyEntries()
+    {
+        // Two years of daily notes and thousands of tasks (some recurring every day, reminders):
+        // the month, week and agenda build quickly, the counts add up, and a refresh after an
+        // edit (the index changes while the user types elsewhere) stays cheap.
+        brulion::planning::test::Files files;
+        const QDate today(2026, 10, 15);
+        for (int d = 0; d < 730; ++d)
+            files.append({u"journals/%1.md"_s.arg(today.addDays(-d).toString(Qt::ISODate)), u"- dzień %1\n"_s.arg(d)});
+        int recurring = 0;
+        for (int p = 0; p < 300; ++p) {
+            QString content;
+            for (int t = 0; t < 15; ++t) {
+                const QDate due = QDate(2026, 9, 1).addDays((p * 15 + t) % 120);
+                QString line = u"- [ ] Zadanie %1 na stronie %2 📅 %3"_s.arg(t).arg(p).arg(due.toString(Qt::ISODate));
+                if (t == 7 && p % 4 == 0) {
+                    line += u" 🔁 every day"_s;
+                    if (due <= today)
+                        ++recurring; // a series from its due date on
+                }
+                if (t == 3)
+                    line += u" ⏰ %1 09:30"_s.arg(due.toString(Qt::ISODate));
+                content += line + u'\n';
+            }
+            files.append({u"Strony/Strona %1.md"_s.arg(p), content});
+        }
+        auto index = makeIndex(files);
+        CalendarModel m;
+        m.setToday(today.toString(Qt::ISODate));
+        QElapsedTimer t;
+        t.start();
+        m.setVaultIndex(index.get());
+        const qint64 month = t.elapsed();
+        QCOMPARE(m.rowCount(), 42);
+        QVERIFY(m.overdueCount() > 1000);
+        QCOMPARE(m.overdue().size(), CalendarModel::MaxOverdue);
+        // Every day of the grid has its journal (up to today) and the daily series.
+        const int todayRow = m.rowForDate(today.toString(Qt::ISODate));
+        QVERIFY(todayRow >= 0);
+        QVERIFY(role(m, todayRow, CalendarModel::HasJournalRole).toBool());
+        int seriesToday = 0;
+        for (const QVariant &v : role(m, todayRow, CalendarModel::ItemsRole).toList())
+            seriesToday += v.toMap().value(u"recurring"_s).toBool() ? 1 : 0;
+        QCOMPARE(seriesToday, recurring);
+
+        t.restart();
+        index->update(u"Strony/Strona 1.md"_s, u"- [ ] Nowe zadanie 📅 2026-10-16\n"_s);
+        m.refresh();
+        const qint64 again = t.elapsed();
+
+        t.restart();
+        m.setMode(u"week"_s);
+        const qint64 week = t.elapsed();
+        QCOMPARE(m.rowCount(), 7);
+        t.restart();
+        m.setMode(u"agenda"_s);
+        const qint64 agenda = t.elapsed();
+        QCOMPARE(m.rowCount(), 28);
+        t.restart();
+        const QVariantMap marks = m.marks(u"2026-01-01"_s, u"2026-12-31"_s);
+        const qint64 marksMs = t.elapsed();
+        QVERIFY(marks.size() > 300);
+        qInfo("4500 tasks + 730 journals: month %lld ms, refresh %lld ms, week %lld ms, agenda %lld ms, year marks %lld ms",
+              static_cast<long long>(month), static_cast<long long>(again), static_cast<long long>(week),
+              static_cast<long long>(agenda), static_cast<long long>(marksMs));
+        QVERIFY2(again < 1000, "a refresh of the month takes far too long");
     }
 };
 

@@ -40,12 +40,19 @@ FocusScope {
         return value === true || value === "true"
     }
 
+    /// A page's title as people read it: daily notes by their date ("środa, 14 października
+    /// 2026"), not by their file name ("2026-10-14").
+    function pageLabel(path) {
+        const day = path ? Workspace.journalDate(path) : ""
+        return day !== "" ? DatesHelper.formatLong(day) : Workspace.pageTitle(path)
+    }
+
     /// Human title of a route (top bar, side panel header).
     function routeTitle(r) {
         switch (r.view) {
         case "journals": return qsTr("Journals")
         case "journal": return DatesHelper.formatLong(r.date)
-        case "page": return Workspace.pageTitle(r.path)
+        case "page": return pageLabel(r.path)
         case "calendar": return qsTr("Calendar")
         case "tasks": return qsTr("Tasks")
         case "graph": return qsTr("Graph")
@@ -55,7 +62,7 @@ FocusScope {
         case "tag": return "#" + r.tag
         case "sync": return qsTr("Sync")
         case "importExport": return qsTr("Import and export")
-        case "history": return qsTr("History of %1").arg(Workspace.pageTitle(r.path))
+        case "history": return qsTr("History of %1").arg(pageLabel(r.path))
         case "trash": return qsTr("Trash")
         case "settings": return qsTr("Settings")
         }
@@ -182,8 +189,12 @@ FocusScope {
     }
 
     ShellCaptureButton {
-        // Not while a view edits text: it would cover the editor's toolbar (and the caret).
+        // Not while a view edits text: it would cover the editor's toolbar (and the caret). Nor
+        // on views of forms and tools (settings, sync, import/export, history, trash, the graph
+        // with its zoom buttons): there it covered their buttons and fields, and capturing a note
+        // is not what they are for.
         visible: Theme.narrow && !routeView.viewEditing
+                 && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.rightMargin: Theme.space4 + shell.safe.right

@@ -59,7 +59,9 @@ FocusScope {
             focus: true
             Component.onCompleted: {
                 tags.sortKey = String(AppSettings.value("tags/sort", "count"))
-                filterField.forceActiveFocus()
+                // Not on touch screens: the on-screen keyboard would cover the tags.
+                if (!Theme.touchUi)
+                    filterField.forceActiveFocus()
             }
 
             TagListModel {

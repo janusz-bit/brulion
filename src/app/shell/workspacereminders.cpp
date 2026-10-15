@@ -366,14 +366,23 @@ bool WorkspaceReminders::snoozeNotification(const ScheduledNotification &notific
         return false;
     const int length = minutes > 0 ? std::min(minutes, 24 * 60) : m_snoozeMinutes;
     // The note may have changed since the notification was made: find the occurrence again
-    // (same id = same text and time) for its current line.
+    // (same id = same text and time) for its current line. Not found: the reminder was edited,
+    // moved to another time, completed or deleted meanwhile — its old line may now hold another
+    // reminder, which must not be moved instead.
     ScheduledNotification target = notification;
     if (notification.at.isValid()) {
+        bool found = false;
         for (const ScheduledNotification &n : notificationsBetween(*m_index, notification.at, notification.at)) {
             if (n.id == notification.id) {
                 target = n;
+                found = true;
                 break;
             }
+        }
+        if (!found) {
+            qCInfo(lcReminders) << "Not snoozed: the reminder changed in" << notification.path;
+            Q_EMIT errorOccurred(tr("“%1” has changed in the note meanwhile and was not snoozed.").arg(notification.title));
+            return false;
         }
     }
     bool ok = false;

@@ -338,7 +338,9 @@ ColumnLayout {
     BConfirmDialog {
         id: keepCopyDialog
         title: qsTr("Keep the copy?")
-        message: qsTr("“%1” gets the content of the copy. Your current version stays in the note's history.").arg(view.conflict.title || "")
+        message: view.conflict.text === false
+                 ? qsTr("“%1” gets the content of the copy. Your current version goes to the trash.").arg(view.conflict.title || "")
+                 : qsTr("“%1” gets the content of the copy. Your current version stays in the note's history.").arg(view.conflict.title || "")
         confirmText: qsTr("Keep the copy")
         onAccepted: resolverObject.keepCopy()
     }

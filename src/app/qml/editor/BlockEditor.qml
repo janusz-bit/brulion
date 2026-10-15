@@ -182,6 +182,14 @@ FocusScope {
     Binding { target: editor.controller; property: "palette"; value: editor.rendererPalette; when: editor.controller !== null }
     Binding { target: editor.controller; property: "locale"; value: DatesHelper.locale; when: editor.controller !== null }
     Binding { target: editor.controller; property: "now"; value: DatesHelper.fixedNow; when: editor.controller !== null }
+    // After midnight: "jutro 17:30" becomes "dziś 17:30", overdue dates turn red.
+    Connections {
+        target: DatesHelper
+        function onTodayChanged() {
+            if (editor.controller)
+                editor.controller.refreshToday()
+        }
+    }
 
     Accessible.role: Accessible.Pane
     Accessible.name: controller ? controller.title : ""
@@ -645,7 +653,8 @@ FocusScope {
         function onLoadingChanged() {
             if (!editor.controller.loading) {
                 list.userMoved = false
-                Qt.callLater(() => list.positionViewAtBeginning())
+                // The editor may be gone by then (a day of the journal stream scrolled away).
+                Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
             }
         }
         function onSourceModeChanged() {
@@ -754,7 +763,12 @@ FocusScope {
             if (editor.activeEditor && editor.activeEditor.activeFocus)
                 Qt.callLater(editor.ensureCaretVisible, editor.activeEditor)
         }
-        pressDelay: Theme.touchUi ? 90 : 0
+        // No press delay: a Flickable that delays presses replays them on release without the
+        // release for pointer handlers (Qt sends it only when an item grabbed the replayed press),
+        // so a quick tap (< 90 ms) on block text, a link, a bullet or a fold arrow did nothing on
+        // touch screens. Taps act on release anyway, and TextEdit moves the caret on release for
+        // touch, so scrolling still never edits.
+        pressDelay: 0
         Accessible.role: Accessible.List
         Accessible.name: editor.controller ? editor.controller.title : ""
 
@@ -806,7 +820,7 @@ FocusScope {
 
         T.ScrollBar.vertical: BScrollBar {}
         // The header (page title) gets its height after the first layout: start at the top.
-        Component.onCompleted: Qt.callLater(() => list.positionViewAtBeginning())
+        Component.onCompleted: Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
     }
 
     // ---- Files dropped on the page: attachments ------------------------------------------------

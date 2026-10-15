@@ -261,6 +261,66 @@ private Q_SLOTS:
         QVERIFY(r.keepCopy());
         QCOMPARE(ws->vault()->readBinary(photo), QByteArray("\x89PNG-ich!", 9));
         QVERIFY(!ws->exists(photoCopy));
+        // History keeps text only: the replaced picture is in the trash, restorable.
+        bool trashed = false;
+        for (const QVariant &v : ws->trashItems()) {
+            const QVariantMap item = v.toMap();
+            if (item.value(u"original"_s).toString() == photo) {
+                trashed = true;
+                QCOMPARE(ws->vault()->readBinary(item.value(u"trashPath"_s).toString()), QByteArray("\x89PNG-moje", 9));
+            }
+        }
+        QVERIFY(trashed);
+    }
+
+    void replacedTextKeptWithinHistoryThrottle()
+    {
+        // The note was edited twice within History's 5-minute throttle: the second version has no
+        // snapshot yet. Resolving the conflict replaces it — it must still land in the history.
+        auto ws = conflict(u"- mleko\n"_s, u"- mleko\n- chleb\n"_s, u"- mleko\n- ser\n"_s);
+        m_now = m_now.addSecs(60);
+        QVERIFY(ws->write(u"Zakupy.md"_s, u"- mleko\n- chleb\n- ostatnia zmiana żółtego sera\n"_s));
+        QTRY_COMPARE(ws->sync()->conflictCount(), 1);
+        m_now = m_now.addSecs(60);
+        ConflictResolver r;
+        r.setWorkspace(ws.get());
+        r.setCopy(Copy);
+        QVERIFY(r.keepCopy());
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s), u"- mleko\n- ser\n"_s);
+        const QVariantList versions = ws->history(u"Zakupy.md"_s);
+        QVERIFY(!versions.isEmpty());
+        QCOMPARE(ws->historyText(versions.first().toMap().value(u"id"_s).toString()),
+                 u"- mleko\n- chleb\n- ostatnia zmiana żółtego sera\n"_s);
+    }
+
+    void staleDecisionRefused()
+    {
+        // The resolver shows the texts of a moment ago; the note changes meanwhile (another
+        // pane, a sync). Applying the old decision would drop that change: refused, reloaded.
+        auto ws = conflict(u"- mleko\n- chleb\n- masło\n"_s, u"- mleko\n- chleb\n- masło\n- jajka\n"_s,
+                           u"- mleko\n- chleb razowy\n- masło\n"_s);
+        QTRY_COMPARE(ws->sync()->conflictCount(), 1);
+        ConflictResolver r;
+        r.setWorkspace(ws.get());
+        r.setCopy(Copy);
+        QVERIFY(r.clean());
+        const QString merged = r.mergedText();
+        QVERIFY(ws->write(u"Zakupy.md"_s, u"- mleko\n- chleb\n- masło\n- jajka\n- nowa linia z drugiego okna\n"_s));
+        QSignalSpy failed(&r, &ConflictResolver::failed);
+        QVERIFY(!r.applyMerged(merged));
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s), u"- mleko\n- chleb\n- masło\n- jajka\n- nowa linia z drugiego okna\n"_s);
+        QVERIFY(ws->exists(Copy));
+        // Reloaded: the decision is made again on the current texts.
+        QCOMPARE(r.ours(), u"- mleko\n- chleb\n- masło\n- jajka\n- nowa linia z drugiego okna\n"_s);
+        // "Keep the copy" on a copy that changed after it was shown (Syncthing updated it).
+        QVERIFY(ws->vault()->writeText(Copy, u"- mleko\n- chleb razowy\n- masło\n- miód\n"_s, brulion::ChangeSource::External));
+        QVERIFY(!r.keepCopy());
+        QCOMPARE(failed.size(), 2);
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s), u"- mleko\n- chleb\n- masło\n- jajka\n- nowa linia z drugiego okna\n"_s);
+        QCOMPARE(r.theirs(), u"- mleko\n- chleb razowy\n- masło\n- miód\n"_s);
+        QVERIFY(r.applyMerged(r.clean() ? r.mergedText() : r.ours()));
+        QVERIFY(!ws->exists(Copy));
     }
 
     void resolvedElsewhere()

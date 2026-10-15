@@ -54,11 +54,22 @@ IoCard {
     ]
 
     // ---- Now ---------------------------------------------------------------------------------
-    BProgressBar {
+    RowLayout {
         Layout.fillWidth: true
         visible: panel.syncing
-        indeterminate: !panel.sync || panel.sync.progress < 0
-        value: panel.sync && panel.sync.progress >= 0 ? panel.sync.progress : 0
+        spacing: Theme.space3
+        BProgressBar {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            indeterminate: !panel.sync || panel.sync.progress < 0
+            value: panel.sync && panel.sync.progress >= 0 ? panel.sync.progress : 0
+        }
+        // A long first sync over mobile data can be stopped: what is done stays synced.
+        BButton {
+            text: qsTr("Stop")
+            iconName: "x"
+            onClicked: panel.sync.cancelSync()
+        }
     }
 
     Rectangle {

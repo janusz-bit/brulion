@@ -12,8 +12,9 @@
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
 # qmlcachegen their full API).
 # Desktop Linux only: the system tray (QSystemTrayIcon needs Qt Widgets, so main.cpp creates a
-# QApplication there and BRULION_DESKTOP_INTEGRATION is defined for it) and the QML self-test
-# (--selftest-shell, run by ctest as tst_shell_qml).
+# QApplication there and BRULION_DESKTOP_INTEGRATION is defined for it), the QML self-test
+# (--selftest-shell, run by ctest as tst_shell_qml) and the user journey with screenshots
+# (--journey <dir>, shelljourney.h; ctest tst_shell_journey, tests/app/shell/journey.sh).
 # QML: qml/Main.qml (listed by src/app/CMakeLists.txt), qml/shell/*, and the views
 # (shell/views.cmake).
 
@@ -73,7 +74,7 @@ target_link_libraries(brulion PRIVATE brulion_shell)
 if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
-        shell/shellselftest.h shell/shellselftest.cpp)
+        shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp)
     target_link_libraries(brulion PRIVATE Qt6::Widgets)
     target_compile_definitions(brulion PRIVATE BRULION_DESKTOP_INTEGRATION=1)
 endif()

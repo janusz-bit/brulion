@@ -80,6 +80,8 @@ private:
     bool m_includeEmpty = false;
     /// Days already listed (they stay while their file exists).
     QSet<QDate> m_shown;
+    /// Today at the last refresh (the rows' isToday / daysAgo follow a new day).
+    QDate m_lastToday;
     QString m_lastTodayPath;
     bool m_lastTodayExists = false;
 };

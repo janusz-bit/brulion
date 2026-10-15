@@ -87,8 +87,10 @@ AppController::AppController(const Options &options, QObject *parent)
     m_syncStatus = { { u"state"_s, u"disabled"_s }, { u"text"_s, QString() }, { u"lastSync"_s, QString() } };
 
     connect(m_settings.get(), &AppSettings::languageChanged, this, [this] {
-        m_workspace->setUiLanguage(m_settings->language());
+        // First the translation (main.cpp: DevTools::setLanguage swaps the translator), then the
+        // workspace, whose texts (sync status, reminders) are rebuilt with tr() in the new language.
         Q_EMIT languageChanged(m_settings->language());
+        m_workspace->setUiLanguage(m_settings->language());
     });
     connect(m_workspace.get(), &Workspace::navigationRequested, this,
             [this](const QVariantMap &route, bool newPane) { navigate(route, newPane); });

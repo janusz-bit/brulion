@@ -100,10 +100,17 @@ Rectangle {
             keyNavigationEnabled: true
             reuseItems: true
             T.ScrollBar.vertical: BScrollBar {}
+            /// The user scrolled down into the list (a flick or drag that did not end at the top).
+            property bool userScrolled: false
+            onMovementEnded: userScrolled = !atYBeginning
 
             header: Column {
                 width: list.width - list.leftMargin - list.rightMargin
                 spacing: 0
+                // A ListView keeps its rows in place when the header grows (a page added to
+                // Recent), which scrolled the navigation up out of sight: the drawer then opened
+                // on "Tasks" with "Journals" and "Calendar" hidden. Stay at the top instead.
+                onHeightChanged: if (!list.userScrolled) Qt.callLater(() => { if (list) list.positionViewAtBeginning() })
 
                 // ---- Navigation --------------------------------------------------------
                 Column {
