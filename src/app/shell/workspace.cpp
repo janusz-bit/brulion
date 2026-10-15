@@ -1,5 +1,10 @@
 #include "workspace.h"
 
+#include "workspacecapture.h"
+#include "workspacereminders.h"
+#include "workspacesync.h"
+
+#include "dates/dates.h"
 #include "index/vaultindex.h"
 #include "markdown/markdown.h"
 #include "text/text.h"
@@ -28,6 +33,12 @@ namespace {
 
 constexpr auto kFavorites = "ui/favorites";
 constexpr auto kRecentPages = "ui/recentPages";
+
+/// LocalStore key of a page's folded blocks.
+QString foldStateKey(const QString &path)
+{
+    return u"ui/folds/"_s + path;
+}
 
 /// Files indexed per event-loop turn while building the index in the background.
 constexpr qint64 kIndexBudgetMs = 12;
@@ -63,10 +74,23 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
 #endif
     m_indexTimer.setInterval(0);
     connect(&m_indexTimer, &QTimer::timeout, this, &Workspace::indexChunk);
+
+    m_reminders = new WorkspaceReminders([this] { return now(); }, this);
+    connect(m_reminders, &WorkspaceReminders::navigationRequested, this,
+            [this](const QVariantMap &route) { navigate(route); });
+    connect(m_reminders, &WorkspaceReminders::errorOccurred, this, &Workspace::errorOccurred);
+    m_sync = new WorkspaceSync(this);
+    m_sync->setClock([this] { return now(); });
+    connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
 }
 
 Workspace::~Workspace()
 {
+    // Nobody may react to a workspace that is going away (the app's controller is half
+    // destroyed by now): close quietly.
+    m_sync->blockSignals(true);
+    m_reminders->blockSignals(true);
+    blockSignals(true);
     close();
 }
 
@@ -81,6 +105,8 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
         return false;
     }
     m_vault = std::move(vault);
+    if (m_clock)
+        m_vault->setClock(m_clock);
     m_index = std::make_unique<VaultIndex>(m_vault->config());
     connect(m_vault.get(), &Vault::changed, this, &Workspace::onVaultChanged);
     connect(m_vault.get(), &Vault::configChanged, this, [this] {
@@ -98,6 +124,10 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
 
     for (const FileStat &f : m_vault->files())
         m_indexQueue.append(f.path);
+    m_indexTotal = m_indexQueue.size();
+    m_trashCount = -1;
+    m_reminders->attach(m_vault.get(), m_index.get());
+    m_sync->attach(m_vault.get());
     if (!m_indexQueue.isEmpty())
         m_indexTimer.start();
 
@@ -108,6 +138,10 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     Q_EMIT favoritesChanged();
     Q_EMIT recentPagesChanged();
     Q_EMIT indexingChanged();
+    Q_EMIT indexProgressChanged();
+    Q_EMIT trashChanged();
+    if (m_indexQueue.isEmpty())
+        indexingFinished();
     return true;
 }
 
@@ -115,9 +149,16 @@ void Workspace::close()
 {
     if (!m_vault)
         return;
+    const bool wasReady = ready();
+    // Reminders and sync let go of the vault and the index first (a running sync is abandoned:
+    // what it finished stays synced, the rest is synced next time).
+    m_reminders->detach();
+    m_sync->detach();
     m_indexTimer.stop();
     const bool wasIndexing = !m_indexQueue.isEmpty();
     m_indexQueue.clear();
+    m_indexTotal = 0;
+    m_trashCount = -1;
     m_dataUrls.clear();
     m_vault->stopWatching();
     disconnect(m_vault.get(), nullptr, this, nullptr);
@@ -130,8 +171,12 @@ void Workspace::close()
     Q_EMIT revisionChanged();
     Q_EMIT favoritesChanged();
     Q_EMIT recentPagesChanged();
-    if (wasIndexing)
+    Q_EMIT trashChanged();
+    if (wasIndexing) {
         Q_EMIT indexingChanged();
+        Q_EMIT indexProgressChanged();
+    }
+    setReady(wasReady);
 }
 
 bool Workspace::isOpen() const
@@ -162,6 +207,9 @@ int Workspace::pageCount() const
 void Workspace::setClock(std::function<QDateTime()> clock)
 {
     m_clock = std::move(clock);
+    // Trash stamps and version history follow the same clock (tests, screenshots).
+    if (m_vault)
+        m_vault->setClock(m_clock);
 }
 
 QDateTime Workspace::now() const
@@ -172,6 +220,8 @@ QDateTime Workspace::now() const
 void Workspace::setUiLanguage(const QString &language)
 {
     m_language = language == u"en" ? u"en"_s : u"pl"_s;
+    m_reminders->setLanguage(m_language);
+    m_sync->setLanguage(m_language);
 }
 
 void Workspace::setDataUrlAssets(bool on)
@@ -209,9 +259,11 @@ void Workspace::indexChunk()
         while (!m_indexQueue.isEmpty() && timer.elapsed() < kIndexBudgetMs)
             indexFile(m_indexQueue.takeFirst());
     }
+    Q_EMIT indexProgressChanged();
     if (m_indexQueue.isEmpty()) {
         m_indexTimer.stop();
         Q_EMIT indexingChanged();
+        indexingFinished();
     }
 }
 
@@ -226,6 +278,29 @@ void Workspace::finishIndexing()
     }
     m_indexTimer.stop();
     Q_EMIT indexingChanged();
+    Q_EMIT indexProgressChanged();
+    indexingFinished();
+}
+
+void Workspace::indexingFinished()
+{
+    // Every note is known now: reminders may fire and missed ones be recorded (a half-built
+    // index would make reminders look deleted).
+    m_reminders->start();
+    setReady(false);
+}
+
+void Workspace::setReady(bool wasReady)
+{
+    if (wasReady != ready())
+        Q_EMIT readyChanged();
+}
+
+qreal Workspace::indexProgress() const
+{
+    if (!m_vault || m_indexTotal <= 0 || m_indexQueue.isEmpty())
+        return 1.0;
+    return std::clamp(1.0 - qreal(m_indexQueue.size()) / qreal(m_indexTotal), 0.0, 1.0);
 }
 
 void Workspace::onVaultChanged(const QList<VaultChange> &changes)
@@ -245,6 +320,7 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
             case ChangeType::Deleted:
                 m_index->remove(c.path);
                 m_indexQueue.removeAll(c.path);
+                m_vault->store()->remove(foldStateKey(c.path));
                 break;
             case ChangeType::Renamed: {
                 QString content;
@@ -267,6 +343,13 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
     }
     ++m_revision;
     Q_EMIT revisionChanged();
+    // Deletions and restores move files through the trash (.trash is not tracked itself).
+    if (std::any_of(changes.cbegin(), changes.cend(), [](const VaultChange &c) {
+            return c.type == ChangeType::Deleted || c.type == ChangeType::Created || c.type == ChangeType::Renamed;
+        })) {
+        m_trashCount = -1;
+        Q_EMIT trashChanged();
+    }
     for (const VaultChange &c : changes) {
         if (c.type == ChangeType::Renamed)
             Q_EMIT pathRenamed(c.oldPath, c.path);
@@ -877,13 +960,53 @@ QString Workspace::existingJournal(QDate date) const
 QString Workspace::captureToJournal(const QString &text)
 {
     static const QRegularExpression listMarker(u"^([-*+]|\\d+[.)])\\s"_s);
-    static const QRegularExpression emptyBullet(u"^\\s*[-*+]\\s*$"_s);
     QStringList lines = QString(text).remove(u'\r').split(u'\n');
     while (!lines.isEmpty() && lines.first().trimmed().isEmpty())
         lines.removeFirst();
     while (!lines.isEmpty() && lines.last().trimmed().isEmpty())
         lines.removeLast();
     if (lines.isEmpty() || !m_vault)
+        return {};
+    QString first = lines.first().trimmed();
+    if (!listMarker.match(first).hasMatch())
+        first.prepend(u"- "_s);
+    QString block = first;
+    for (qsizetype i = 1; i < lines.size(); ++i)
+        block += u"\n  "_s + lines.at(i).trimmed();
+    return appendToTodaysJournal(block);
+}
+
+QString Workspace::quickCapture(const QString &text)
+{
+    if (!m_vault)
+        return {};
+    const CaptureLine line = buildCaptureLine(text, now(), m_vault->config().weekStartsOn,
+                                              m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
+    if (line.kind == CaptureLine::Kind::Empty)
+        return {};
+    return appendToTodaysJournal(line.block);
+}
+
+QVariantMap Workspace::quickCapturePreview(const QString &text) const
+{
+    const dates::UiLocale locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    const QDateTime current = now();
+    const CaptureLine line = buildCaptureLine(text, current, m_vault ? m_vault->config().weekStartsOn : Qt::Monday, locale);
+    const bool dated = line.when.isValid();
+    return {
+        { u"kind"_s, captureKindName(line.kind) },
+        { u"text"_s, line.text },
+        { u"date"_s, dated ? line.when.date.toString(Qt::ISODate) : QString() },
+        { u"time"_s, dated && line.when.time ? line.when.time->toString(u"HH:mm"_s) : QString() },
+        { u"when"_s, dated ? dates::formatHuman(line.when, locale, current.date()) : QString() },
+        { u"line"_s, line.block.section(u'\n', 0, 0) },
+    };
+}
+
+QString Workspace::appendToTodaysJournal(const QString &block)
+{
+    static const QRegularExpression emptyBullet(u"^\\s*[-*+]\\s*$"_s);
+    if (!m_vault || block.trimmed().isEmpty())
         return {};
     const QString path = ensureJournal(now().date().toString(Qt::ISODate));
     if (path.isEmpty())
@@ -900,14 +1023,7 @@ QString Workspace::captureToJournal(const QString &text)
     content = text::joinLines(existing);
     if (!content.isEmpty() && !content.endsWith(u'\n'))
         content += eol;
-
-    QString first = lines.first().trimmed();
-    if (!listMarker.match(first).hasMatch())
-        first.prepend(u"- "_s);
-    QString block = first;
-    for (qsizetype i = 1; i < lines.size(); ++i)
-        block += eol + u"  "_s + lines.at(i).trimmed();
-    content += block + eol;
+    content += QString(block).replace(u'\n', eol) + eol;
     return writeFile(path, content) ? path : QString();
 }
 
@@ -988,9 +1104,48 @@ void Workspace::notePageOpened(const QString &rawPath)
     Q_EMIT recentPagesChanged();
 }
 
+QVariantList Workspace::foldState(const QString &path) const
+{
+    QVariantList out;
+    if (!m_vault)
+        return out;
+    for (const QJsonValue &v : m_vault->store()->get(foldStateKey(paths::normalize(path))).toArray()) {
+        if (v.isDouble() && v.toInt() >= 0)
+            out.append(v.toInt());
+    }
+    return out;
+}
+
+void Workspace::setFoldState(const QString &rawPath, const QVariantList &lines)
+{
+    const QString path = paths::normalize(rawPath);
+    if (!m_vault || path.isEmpty())
+        return;
+    QList<int> sorted;
+    for (const QVariant &v : lines) {
+        bool ok = false;
+        const int line = v.toInt(&ok);
+        if (ok && line >= 0 && !sorted.contains(line))
+            sorted.append(line);
+    }
+    std::sort(sorted.begin(), sorted.end());
+    if (sorted.isEmpty()) {
+        m_vault->store()->remove(foldStateKey(path));
+        return;
+    }
+    QJsonArray array;
+    for (int line : std::as_const(sorted))
+        array.append(line);
+    m_vault->store()->set(foldStateKey(path), array);
+}
+
 void Workspace::forgetPath(const QString &path)
 {
     const QString prefix = path + u'/';
+    if (m_vault) {
+        m_vault->store()->remove(foldStateKey(path));
+        m_vault->store()->removePrefix(foldStateKey(prefix));
+    }
     for (const char *key : { kFavorites, kRecentPages }) {
         const QString k = QString::fromLatin1(key);
         QStringList list = storedList(k);
@@ -1008,6 +1163,14 @@ void Workspace::forgetPath(const QString &path)
 
 void Workspace::renamePathInLists(const QString &oldPath, const QString &newPath)
 {
+    if (m_vault) {
+        LocalStore *store = m_vault->store();
+        const QJsonValue folds = store->get(foldStateKey(oldPath));
+        if (!folds.isUndefined()) {
+            store->remove(foldStateKey(oldPath));
+            store->set(foldStateKey(newPath), folds);
+        }
+    }
     for (const char *key : { kFavorites, kRecentPages }) {
         const QString k = QString::fromLatin1(key);
         QStringList list = storedList(k);

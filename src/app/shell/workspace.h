@@ -1,18 +1,30 @@
 // Workspace — the open vault as the app sees it (QML singleton `Workspace`): owns the Vault (with
-// its device-local History and LocalStore) and the VaultIndex, and implements EditorHost — the
-// contract the block editor talks to (src/app/editor/editorhost.h).
+// its device-local History and LocalStore), the VaultIndex, the reminders (`reminders`:
+// ReminderScheduler + the platform's notifier) and sync (`sync`: Nextcloud engine + scheduler,
+// Syncthing status, conflict copies), and implements EditorHost — the contract the block editor
+// talks to (src/app/editor/editorhost.h) — plus its optional QueryHost (editor/queryhost.h).
 //
 //   open(rootPath, deviceStatePath)   vault folder + its AppData folder (History, LocalStore);
-//                                      starts watching for external changes and builds the
-//                                      index in the background (`indexing`)
+//                                      starts watching for external changes, builds the index
+//                                      in chunks on the event loop (`indexing`, `indexProgress`,
+//                                      then `ready`: the reminders start), attaches sync
 //   EditorHost                         read/write (atomic, History via Vault), suggestions,
 //                                      link resolution, block ids, templates, assets,
 //                                      attachments, vault config, navigation
+//   QueryHost                          runQuery(source, currentPath) for ```query blocks and
+//                                      views (tasks lists), setTaskStatus(path, line, status)
+//   index queries                      search, backlinks, unlinkedReferences, tagList, journals,
+//                                      journalDates, calendarItems (plain QVariant data; C++
+//                                      models use index() directly)
 //   pages                              createPage, renamePage (rewrites links in every file
-//                                      linking to it), deletePage (-> .trash/), restore
+//                                      linking to it), deletePage (-> .trash/), restore,
+//                                      trashItems, deleteForever, emptyTrash
+//   history                            history(path), historyText(id), restoreVersion(path, id)
 //   journals                           journalPath(date), ensureJournal(date) (creates the daily
-//                                      note from the journal template), captureToJournal(text)
-//   sidebar state                      favorites, recentPages (device-local LocalStore)
+//                                      note from the journal template), quickCapture(text)
+//                                      ("Kupić mleko jutro o 18" -> a task with ⏰ in today's
+//                                      journal, workspacecapture.h), captureToJournal(text)
+//   device-local state                 favorites, recentPages, foldState(path) (LocalStore)
 //
 // Changes: every Vault change (own writes, other views, Syncthing/Nextcloud, other programs)
 // updates the index and bumps `revision`; fileChanged(path) is emitted for every changed file,
@@ -23,7 +35,10 @@
 #pragma once
 
 #include "editorhost.h"
+#include "queryhost.h"
 #include "types.h"
+#include "workspacereminders.h"
+#include "workspacesync.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -40,12 +55,14 @@
 namespace brulion {
 class Vault;
 class VaultIndex;
+struct QueryItem;
 } // namespace brulion
 
 namespace brulion::shell {
 
-class Workspace : public EditorHost {
+class Workspace : public EditorHost, public QueryHost {
     Q_OBJECT
+    Q_INTERFACES(brulion::QueryHost)
 
     /// A vault is open.
     Q_PROPERTY(bool isOpen READ isOpen NOTIFY openChanged FINAL)
@@ -59,6 +76,18 @@ class Workspace : public EditorHost {
     Q_PROPERTY(bool indexAvailable READ indexAvailable CONSTANT FINAL)
     /// The index is still being built after open().
     Q_PROPERTY(bool indexing READ indexing NOTIFY indexingChanged FINAL)
+    /// Share of the files indexed since open(), 0…1 (1 when done or closed).
+    Q_PROPERTY(qreal indexProgress READ indexProgress NOTIFY indexProgressChanged FINAL)
+    /// A vault is open and its index holds every file (lists, queries and reminders are complete).
+    Q_PROPERTY(bool ready READ ready NOTIFY readyChanged FINAL)
+    /// Reminders of the open vault (missed reminders, upcoming, snooze): workspacereminders.h.
+    Q_PROPERTY(brulion::shell::WorkspaceReminders *reminders READ reminders CONSTANT FINAL)
+    /// Nextcloud sync, Syncthing status and conflict copies: workspacesync.h.
+    Q_PROPERTY(brulion::shell::WorkspaceSync *sync READ sync CONSTANT FINAL)
+    /// Number of daily notes (grows while the index is built).
+    Q_PROPERTY(int journalCount READ journalCount NOTIFY indexChanged FINAL)
+    /// Number of items in the trash (a deleted folder counts once).
+    Q_PROPERTY(int trashCount READ trashCount NOTIFY trashChanged FINAL)
     /// Grows with every change of the vault's files (bind lists to it to refresh them).
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
     /// Number of Markdown pages.
@@ -87,6 +116,12 @@ public:
     bool isSyncthingFolder() const;
     bool indexAvailable() const { return true; }
     bool indexing() const { return !m_indexQueue.isEmpty(); }
+    qreal indexProgress() const;
+    bool ready() const { return isOpen() && !indexing(); }
+    WorkspaceReminders *reminders() const { return m_reminders; }
+    WorkspaceSync *sync() const { return m_sync; }
+    int journalCount() const;
+    int trashCount() const;
     int revision() const { return m_revision; }
     int pageCount() const;
 
@@ -98,7 +133,8 @@ public:
     /// Clock for journals, templates and attachment names (default: current local time).
     void setClock(std::function<QDateTime()> clock);
     QDateTime now() const;
-    /// UI language for templates ({{weekday}}, {{date:dddd}}): "pl" (default) or "en".
+    /// UI language for templates ({{weekday}}, {{date:dddd}}), quick capture dates, reminder
+    /// texts and sync messages: "pl" (default) or "en".
     void setUiLanguage(const QString &language);
     /// Serve assets as data: URLs (WebAssembly, where file:// URLs do not reach the vault).
     /// Default: true on WebAssembly, else false.
@@ -156,6 +192,45 @@ public:
     Q_INVOKABLE QString deletePage(const QString &path);
     /// Restore a trashed file; returns the path it was restored to ("" on failure).
     Q_INVOKABLE QString restore(const QString &trashPath);
+    /// The trash, most recently deleted first: [{ trashPath, original, title, folder (it was a
+    /// folder), files, size, deletedAt ("YYYY-MM-DDTHH:mm:ss" or ""), when (human) }].
+    Q_INVOKABLE QVariantList trashItems() const;
+    /// Delete one trashed item (a trashPath from trashItems()) permanently.
+    Q_INVOKABLE bool deleteForever(const QString &trashPath);
+    /// Delete everything in the trash permanently.
+    Q_INVOKABLE bool emptyTrash();
+
+    // ---- Version history (device-local, vault/history.h) ------------------------------------
+    /// Versions of `path`, newest first: [{ id, time ("YYYY-MM-DDTHH:mm:ss"), when (human), size,
+    /// reason: what replaced that text — "user" | "external" | "sync" | "import" | "system" }].
+    Q_INVOKABLE QVariantList history(const QString &path) const;
+    /// Text of a version ("" when unknown).
+    Q_INVOKABLE QString historyText(const QString &id) const;
+    /// Write version `id` back to `path` (also a deleted page); the current text is kept in the
+    /// history first. False when the version is unknown or the file cannot be written.
+    Q_INVOKABLE bool restoreVersion(const QString &path, const QString &id);
+    /// Paths with a history (also deleted ones), sorted.
+    Q_INVOKABLE QStringList historyPaths() const;
+
+    // ---- Index queries for views (plain data; C++ models use index()) ------------------------
+    /// Full-text search: [{ path, title, folder, line (-1: title only), excerpt (plain text),
+    /// score, journal ("YYYY-MM-DD" for daily notes) }], best first.
+    Q_INVOKABLE QVariantList search(const QString &query, int limit = 50) const;
+    /// Links to `path` from other notes: [{ path, title, line, text (plain text of the linking
+    /// block), blockId?, journal }], journals newest first, then by path.
+    Q_INVOKABLE QVariantList backlinks(const QString &path) const;
+    /// Plain-text mentions of the page in other notes: [{ path, title, line, excerpt }].
+    Q_INVOKABLE QVariantList unlinkedReferences(const QString &path) const;
+    /// Every tag, most used first: [{ tag, display, count }].
+    Q_INVOKABLE QVariantList tagList() const;
+    /// Calendar entries within [from, to] ("YYYY-MM-DD", at most 400 days): [{ date, time ("HH:mm"
+    /// or ""), kind ("journal" | "due" | "scheduled" | "start" | "reminder" | "done"), title,
+    /// path, line, status ("" or a task status), recurring, alarm }].
+    Q_INVOKABLE QVariantList calendarItems(const QString &from, const QString &to) const;
+
+    // ---- QueryHost ----------------------------------------------------------------------------
+    Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath = QString()) override;
+    Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
 
     // ---- Journals ---------------------------------------------------------------------------
     /// Path of the daily note for "YYYY-MM-DD" (whether it exists or not).
@@ -166,6 +241,19 @@ public:
     /// Append `text` as a new block ("- text", further lines indented) to today's journal.
     /// Returns the journal's path ("" when nothing was written).
     Q_INVOKABLE QString captureToJournal(const QString &text);
+    /// Quick capture: like captureToJournal(), but a date in the first line makes it a task with
+    /// a reminder (with a time: "Kupić mleko jutro o 18" -> "- [ ] Kupić mleko ⏰ 2026-10-15
+    /// 18:00") or a due date (without one: "📅 2026-10-16"); see workspacecapture.h.
+    /// Returns the journal's path ("" when nothing was written).
+    Q_INVOKABLE QString quickCapture(const QString &text);
+    /// What quickCapture(text) would write: { kind: "note" | "reminder" | "due" | "", text (without
+    /// the date), date ("YYYY-MM-DD" or ""), time ("HH:mm" or ""), when (human: "jutro 18:00"),
+    /// line (the first line written) } — for a live preview in the capture dialog.
+    Q_INVOKABLE QVariantMap quickCapturePreview(const QString &text) const;
+    /// Daily notes, newest first: [{ date, path, title }] from `offset`, at most `limit`.
+    Q_INVOKABLE QVariantList journals(int offset = 0, int limit = 50) const;
+    /// Days "YYYY-MM-DD" within [from, to] that have a daily note (calendar dots).
+    Q_INVOKABLE QStringList journalDates(const QString &from, const QString &to) const;
 
     // ---- Configuration ----------------------------------------------------------------------
     /// Save .brulion/config.json from a map with the keys of vaultConfig() (missing keys keep
@@ -185,10 +273,18 @@ public:
     Q_INVOKABLE void toggleFavorite(const QString &path) { setFavorite(path, !isFavorite(path)); }
     /// Remember that a page was opened (recentPages).
     Q_INVOKABLE void notePageOpened(const QString &path);
+    /// Folded blocks of a page on this device (the editor's PageController.foldState: lines of
+    /// folded blocks); follows renames, forgotten when the page is deleted.
+    Q_INVOKABLE QVariantList foldState(const QString &path) const;
+    /// Remember PageController.foldState for `path` (an empty list forgets it).
+    Q_INVOKABLE void setFoldState(const QString &path, const QVariantList &lines);
 
 Q_SIGNALS:
     void openChanged();
     void indexingChanged();
+    void indexProgressChanged();
+    void readyChanged();
+    void trashChanged();
     void revisionChanged();
     void configChanged();
     void favoritesChanged();
@@ -215,12 +311,22 @@ private:
     QString templateText(const QString &templatePath, const QDateTime &when, const QString &title) const;
     /// A daily note of `date` under any name journalDateFromPath() accepts ("" when none).
     QString existingJournal(QDate date) const;
+    /// Append a block (lines joined with "\n") to today's journal; returns its path.
+    QString appendToTodaysJournal(const QString &block);
+    void indexingFinished();
+    void setReady(bool wasReady);
+    QVariantMap queryItem(const brulion::QueryItem &item) const;
 
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;
     QStringList m_indexQueue;
+    qsizetype m_indexTotal = 0;
     QTimer m_indexTimer;
     int m_revision = 0;
+    mutable int m_trashCount = -1;
+    // Children of this object (parented: QML never takes them over); detached by close().
+    WorkspaceReminders *m_reminders = nullptr;
+    WorkspaceSync *m_sync = nullptr;
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;

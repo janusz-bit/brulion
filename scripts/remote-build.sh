@@ -38,7 +38,7 @@ build_type="${BUILD_TYPE:-Debug}"
 remote_root="work/brulion-${name}"
 
 ssh -o BatchMode=yes "${host}" "mkdir -p ${remote_root}/src ${remote_root}/build"
-rsync -a --delete \
+rsync -a --delete --delete-excluded \
   --exclude='/build*/' --exclude='/.git/' --exclude='/result*' --exclude='/.direnv/' \
   --exclude='/tests/screenshots/' --exclude='/dist-*/' --exclude='*.o' \
   ${excludes[@]+"${excludes[@]}"} \

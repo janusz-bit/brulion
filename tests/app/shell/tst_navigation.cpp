@@ -59,7 +59,13 @@ private:
     int m_counter = 0;
 
 private Q_SLOTS:
-    void initTestCase() { QVERIFY(m_tmp.isValid()); }
+    void initTestCase()
+    {
+        QVERIFY(m_tmp.isValid());
+        // No desktop notification service in these tests (whatever the machine has): the
+        // reminders integration then falls back to the tray, deterministically.
+        qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/brulion-test-bus");
+    }
 
     // ---- routes ---------------------------------------------------------------------------
 
@@ -486,8 +492,9 @@ private Q_SLOTS:
     void testNotificationHandler()
     {
         auto app = makeApp();
-        // Without a reminders integration: the desktop shows it through the tray; without a
-        // tray it says why nothing appears.
+        // The reminders integration delivers it through the platform's notifier; without a
+        // notification service the desktop shows it in the tray, and without a tray it says
+        // why nothing appears.
         QSignalSpy shown(app.get(), &AppController::notificationRequested);
         QSignalSpy toasts(app.get(), &AppController::toastRequested);
         app->sendTestNotification();
@@ -496,7 +503,8 @@ private Q_SLOTS:
         QCOMPARE(toasts.first().at(1).toString(), u"warning"_s);
         app->setTrayAvailable(true);
         app->sendTestNotification();
-        QCOMPARE(shown.size(), 1);
+        QTRY_COMPARE(shown.size(), 1);
+        QCOMPARE(shown.first().at(1).toString(), u"Reminders work. This is how they will look."_s);
         // With one, the integration delivers it (on Android it must add it to the armed set,
         // which a separate scheduleReminders() call would replace).
         QStringList titles;

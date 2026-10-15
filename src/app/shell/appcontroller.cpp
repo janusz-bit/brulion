@@ -4,6 +4,7 @@
 #include "commandmodel.h"
 #include "demovault.h"
 #include "workspace.h"
+#include "workspaceintegration.h"
 
 #include "vault/vault.h"
 
@@ -133,6 +134,10 @@ AppController::AppController(const Options &options, QObject *parent)
                     openNotification(path, line);
             });
 #endif
+
+    // Reminders (the platform's notifier) and sync (Nextcloud, Syncthing) of the Workspace,
+    // configured from the settings; fills the sync seam below (workspaceintegration.h).
+    integrateWorkspace(this);
 }
 
 AppController::~AppController()
@@ -769,7 +774,8 @@ bool AppController::capture(const QString &text)
 {
     if (!m_workspace->isOpen())
         return false;
-    return !m_workspace->captureToJournal(text).isEmpty();
+    // A date in the text makes it a task with a reminder / due date (workspacecapture.h).
+    return !m_workspace->quickCapture(text).isEmpty();
 }
 
 void AppController::showWindow()

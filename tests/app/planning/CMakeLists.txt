@@ -1,0 +1,26 @@
+# Planning views' C++ (library brulion_planning, src/app/planning): CalendarModel (month / week /
+# agenda grids, week starts, DST months, recurring entries, overdue), TaskListModel (sections,
+# filters, the equivalent query, sorting, incremental updates), PlanningActions (task toggles,
+# undo, journal appends, quick add) and the graph (ForceLayout determinism and convergence,
+# GraphModel toggles / local graph / cap, GraphItem hit-testing, camera and painting with 2000
+# nodes). Offscreen (QGuiApplication: GraphItem is a Qt Quick item).
+brulion_add_test(tst_planning_calendar SOURCES tst_planning_calendar.cpp planningtest.h LIBS brulion_planning)
+brulion_add_test(tst_planning_tasks SOURCES tst_planning_tasks.cpp planningtest.h LIBS brulion_planning)
+brulion_add_test(tst_planning_graph SOURCES tst_planning_graph.cpp planningtest.h LIBS brulion_planning)
+if(TARGET brulion_editor)
+    # FakeEditorHost (the editor's in-memory EditorHost) stands in for the Workspace.
+    brulion_add_test(tst_planning_actions SOURCES tst_planning_actions.cpp planningtest.h
+        LIBS brulion_planning brulion_editor)
+endif()
+
+# The views in their real QML (qml-smoke.sh): every planning view and its dialogs at desktop and
+# phone sizes with the sample notebook; QML warnings from the planning files fail the test.
+# Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
+get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
+    add_test(NAME tst_planning_qml
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
+    set_tests_properties(tst_planning_qml PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        TIMEOUT 240 RUN_SERIAL TRUE)
+endif()

@@ -238,7 +238,8 @@ public:
     /// Open the quick capture dialog (also from the tray / a launcher shortcut); while the
     /// notebook is still opening, once it is ready.
     Q_INVOKABLE void quickCapture();
-    /// Append `text` to today's journal; false when nothing was saved.
+    /// Append `text` to today's journal (Workspace::quickCapture: a date in it makes a task with
+    /// a ⏰ reminder or 📅 due date); false when nothing was saved.
     Q_INVOKABLE bool capture(const QString &text);
     /// Bring the main window to the front (tray, second launch, notification tap).
     Q_INVOKABLE void showWindow();

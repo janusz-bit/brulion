@@ -39,3 +39,15 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE)
     endforeach()
 endif()
+
+# The Workspace wired to the real core (workspace*.cpp): indexing progress, quick capture,
+# index queries and the QueryHost, trash, history, fold state, reminders through a fake sink,
+# conflict copies and the AppController integration; and Workspace.sync against the core's
+# in-memory Nextcloud server and a fake Syncthing REST API.
+brulion_add_test(tst_shell_workspace_wiring SOURCES tst_workspace_wiring.cpp
+    LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_reminders
+         brulion_core_dates)
+if(TARGET brulion_sync_testsupport)
+    brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
+        LIBS brulion_shell brulion_sync_testsupport)
+endif()
