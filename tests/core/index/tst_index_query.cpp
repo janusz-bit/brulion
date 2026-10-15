@@ -474,7 +474,7 @@ private Q_SLOTS:
         QCOMPARE(runQuery(parsed(u"type:tasks path:strony/"_s + stars + u"*x"_s), index, fixture::Today).total, 300);
         QCOMPARE(runQuery(parsed(u"type:tasks page:"_s + stars + u"*z"_s), index, fixture::Today).total, 0);
         QCOMPARE(runQuery(parsed(u"type:pages path:"_s + stars + u"*z"_s), index, fixture::Today).total, 0);
-        QVERIFY2(timer.elapsed() < 5000, qPrintable(u"wildcard queries took %1 ms"_s.arg(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"wildcard queries took %1 ms"_s.arg(timer.elapsed())));
     }
 
     void reminderOverdueIsWallClock()

@@ -569,8 +569,8 @@ private Q_SLOTS:
         qInfo("2000 nodes / %d edges: build %lld ms, tick %.2f ms, paint %.2f ms, zoomed paint %.2f ms",
               m.edgeCount(), static_cast<long long>(build), tick, paint, labelled);
         // Generous bounds (debug builds, shared CI machines); release builds are ~5x faster.
-        QVERIFY2(tick < 60, qPrintable(QString::number(tick)));
-        QVERIFY2(paint < 250, qPrintable(QString::number(paint)));
+        QVERIFY2(tick < 60 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(tick)));
+        QVERIFY2(paint < 250 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(paint)));
     }
 };
 

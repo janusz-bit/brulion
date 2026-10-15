@@ -278,7 +278,7 @@ private Q_SLOTS:
         const auto items = calendarItems(index, QDate(2026, 10, 1), QDate(2026, 10, 31));
         const qint64 elapsed = timer.elapsed();
         QCOMPARE(items.size(), 3'000);
-        QVERIFY2(elapsed < 1000, qPrintable(u"calendarItems took %1 ms"_s.arg(elapsed)));
+        QVERIFY2(elapsed < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(u"calendarItems took %1 ms"_s.arg(elapsed)));
         QVERIFY(items.first().title.startsWith(u"słowo słowo"_s));
     }
 

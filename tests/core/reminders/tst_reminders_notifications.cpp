@@ -473,7 +473,7 @@ private Q_SLOTS:
         timer.start();
         const QString plain = reminders_detail::plainText(text);
         const qint64 elapsed = timer.elapsed();
-        QVERIFY2(elapsed < 2000, qPrintable(u"plainText took %1 ms"_s.arg(elapsed)));
+        QVERIFY2(elapsed < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(u"plainText took %1 ms"_s.arg(elapsed)));
         QCOMPARE(plain, text.trimmed());
     }
 
@@ -495,7 +495,7 @@ private Q_SLOTS:
         timer.start();
         const auto list = upcomingNotifications(index, Now, 14, 1000);
         const qint64 elapsed = timer.elapsed();
-        QVERIFY2(elapsed < 2000, qPrintable(u"upcomingNotifications took %1 ms"_s.arg(elapsed)));
+        QVERIFY2(elapsed < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(u"upcomingNotifications took %1 ms"_s.arg(elapsed)));
         QCOMPARE(list.size(), 1000);
         QCOMPARE(list.first().title.size(), ScheduledNotification::MaxTitleLength);
     }

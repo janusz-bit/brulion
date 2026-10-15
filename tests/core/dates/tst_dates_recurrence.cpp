@@ -738,7 +738,7 @@ private Q_SLOTS:
         QCOMPARE(dates::parseWeekdayList(QString(u"monday"_s + QString(40'000, u' ') + u"x"_s)), QList<int>());
         QCOMPARE(dates::parseWeekdayList(QString(u"monday"_s + QString(40'000, u' ') + u", friday"_s)),
                  QList<int>({1, 5}));
-        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 };
 

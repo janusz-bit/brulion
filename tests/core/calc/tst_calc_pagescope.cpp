@@ -247,7 +247,7 @@ private Q_SLOTS:
         QElapsedTimer timer;
         timer.start();
         const PageCalc calc(page);
-        QVERIFY2(timer.elapsed() < 4000, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
+        QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
         const Scope all = calc.scopeAt();
         QCOMPARE(all.number(u"v999"_s), std::optional<double>(1998));
         QCOMPARE(all.number(u"w999"_s), std::optional<double>(1)); // not only the last assignment

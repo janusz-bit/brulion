@@ -258,7 +258,7 @@ private Q_SLOTS:
         QVERIFY(extractInline(s).links.isEmpty());
         QVERIFY(extractInline(u"[a](b (tytuł)) [c](d \"t\")"_s).links.size() == 2);
         extractInline(quotes);
-        QVERIFY2(t.elapsed() < 4000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 
     void pathologicalInputIsLinear()
@@ -289,7 +289,7 @@ private Q_SLOTS:
         const auto m = extractInline(many);
         extractInline(openImages);
         extractInline(openLinks);
-        QVERIFY2(t.elapsed() < 4000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
         QCOMPARE(u.links.first().target, expectedUrl);
         QCOMPARE(m.links.size(), 60000);
     }

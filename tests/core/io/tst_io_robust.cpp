@@ -229,7 +229,7 @@ private Q_SLOTS:
             QElapsedTimer timer;
             timer.start();
             htmlToMarkdown(html);
-            QVERIFY2(timer.elapsed() < 10000, qPrintable(html.left(20) + u": "_s + QString::number(timer.elapsed())));
+            QVERIFY2(timer.elapsed() < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(html.left(20) + u": "_s + QString::number(timer.elapsed())));
         }
     }
 

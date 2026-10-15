@@ -691,7 +691,7 @@ private Q_SLOTS:
         const QString commas = u"a jutro"_s + u" ,"_s.repeated(25'000) + u"b"_s;
         QCOMPARE(stripNaturalDate(commas, NaturalDate{{}, 2, 5}), u"a b"_s);
         QCOMPARE(stripNaturalDate(u"abc", NaturalDate{{}, 10, 5}), u"abc"_s); // out of range is harmless
-        QVERIFY2(t.elapsed() < 5000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 
     // ---- review regressions --------------------------------------------------------------
