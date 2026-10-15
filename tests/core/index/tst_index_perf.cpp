@@ -74,13 +74,14 @@ private Q_SLOTS:
         }
         const qint64 indexing = timer.elapsed();
         QCOMPARE(index.paths().size(), total);
-        QVERIFY2(indexing < 20000, qPrintable(u"indexing took %1 ms"_s.arg(indexing)));
+        QVERIFY2(indexing < 20000 * BRULION_TEST_SLOWDOWN, qPrintable(u"indexing took %1 ms"_s.arg(indexing)));
 
         timer.restart();
         const QList<SearchHit> hits = index.search(u"zolw"_s);
         const qint64 firstSearch = timer.elapsed();
         QVERIFY(!hits.isEmpty());
-        QVERIFY2(firstSearch < 20000, qPrintable(u"first search took %1 ms"_s.arg(firstSearch)));
+        QVERIFY2(firstSearch < 20000 * BRULION_TEST_SLOWDOWN,
+                 qPrintable(u"first search took %1 ms"_s.arg(firstSearch)));
 
         timer.restart();
         QVERIFY(!index.search(u"spotkanie raport"_s).isEmpty());
@@ -118,7 +119,7 @@ private Q_SLOTS:
         QVERIFY(graph.nodes.size() > total);
         QVERIFY(result.total > 0);
         QVERIFY(text.total > 0);
-        QVERIFY2(queries < 10000, qPrintable(u"queries took %1 ms"_s.arg(queries)));
+        QVERIFY2(queries < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(u"queries took %1 ms"_s.arg(queries)));
 
         // Incremental edits stay cheap.
         timer.restart();
@@ -129,7 +130,7 @@ private Q_SLOTS:
         QVERIFY(!index.search(u"edycja"_s).isEmpty());
         const qint64 edits = timer.elapsed();
         QCOMPARE(index.paths().size(), total - 1);
-        QVERIFY2(edits < 5000, qPrintable(u"edits took %1 ms"_s.arg(edits)));
+        QVERIFY2(edits < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"edits took %1 ms"_s.arg(edits)));
 
         qInfo("[perf] index %d notes: %lld ms; first search (builds the search index): %lld ms; "
               "other queries: %lld ms; 52 edits + search: %lld ms",

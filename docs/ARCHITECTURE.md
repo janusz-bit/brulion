@@ -143,7 +143,9 @@ app; these guards keep data from being lost:
   `tests/app/<area>` (`QT_QPA_PLATFORM=offscreen`), plus headless QML checks of the real app:
   `tst_shell_qml` (`--selftest-shell`), `tst_shell_journey*` (`--journey`), `tst_*_qml` smoke
   tests. Development builds: `scripts/remote-build.sh` (x86_64 laptop) or
-  `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md.
+  `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
+  `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
+  and worker-thread stack sizes by it (1 otherwise).
 * Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
   `nix build .#brulion` (builds, runs ctest, validates the desktop file and AppStream
   metainfo); NixOS module `programs.brulion` (+ autostart hidden in the tray) and

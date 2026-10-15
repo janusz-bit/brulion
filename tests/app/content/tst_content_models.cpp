@@ -743,7 +743,7 @@ private Q_SLOTS:
         QCOMPARE(refRows, 100);
         QCOMPARE(rendered, 100);
         // Debug build on the laptop: ~110 ms when every reference was rendered, ~5 ms now.
-        QVERIFY2(again < 40, "an unrelated save re-renders every reference");
+        QVERIFY2(again < 40 * BRULION_TEST_SLOWDOWN, "an unrelated save re-renders every reference");
     }
 
     // ---- Page tools ---------------------------------------------------------------------------------

@@ -140,8 +140,9 @@ WorkspaceSync::WorkspaceSync(QObject *parent) : QObject(parent)
         if (m_scheduler && m_automatic)
             m_scheduler->start(); // the first sync right away, then periodically
     });
-    if (qGuiApp) {
-        connect(qGuiApp, &QGuiApplication::applicationStateChanged, this,
+    // qobject_cast, not qGuiApp: tests run without a QGuiApplication.
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        connect(app, &QGuiApplication::applicationStateChanged, this,
                 [this](Qt::ApplicationState s) { setAppActive(s == Qt::ApplicationActive); });
     }
     m_syncthingStatus = { { u"enabled"_s, false }, { u"folder"_s, false } };

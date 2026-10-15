@@ -19,3 +19,4 @@ keystore.properties
 /tests/screenshots/
 /dist-appimage/
 /dist-source/
+aqtinstall.log

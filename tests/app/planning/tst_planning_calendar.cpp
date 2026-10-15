@@ -488,7 +488,7 @@ private Q_SLOTS:
         qInfo("4500 tasks + 730 journals: month %lld ms, refresh %lld ms, week %lld ms, agenda %lld ms, year marks %lld ms",
               static_cast<long long>(month), static_cast<long long>(again), static_cast<long long>(week),
               static_cast<long long>(agenda), static_cast<long long>(marksMs));
-        QVERIFY2(again < 1000, "a refresh of the month takes far too long");
+        QVERIFY2(again < 1000 * BRULION_TEST_SLOWDOWN, "a refresh of the month takes far too long");
     }
 };
 

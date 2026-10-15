@@ -513,14 +513,14 @@ private Q_SLOTS:
         };
         QString shownSum;
         QString recursive;
-        QVERIFY(runWithStack(512 * 1024, [&] {
+        QVERIFY(runWithStack(512 * 1024 * BRULION_TEST_SLOWDOWN, [&] {
             shownSum = inl(sum);
             recursive = last(u"f(n) = n < 1 ? 0 : 1 + f(n - 1)\nf(99)"_s);
         }));
         QCOMPARE(shownSum, u"2000"_s);
         QCOMPARE(recursive, u"99"_s);
         QString deepest;
-        QVERIFY(runWithStack(2 * 1024 * 1024, [&] { deepest = last(hostile); }));
+        QVERIFY(runWithStack(2 * 1024 * 1024 * BRULION_TEST_SLOWDOWN, [&] { deepest = last(hostile); }));
         QCOMPARE(deepest, u"!Zbyt głęboka rekurencja"_s);
     }
 

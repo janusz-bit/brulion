@@ -44,7 +44,12 @@ MarkdownHighlighter::MarkdownHighlighter(QObject *parent) : QSyntaxHighlighter(p
     rebuildFormats();
 }
 
-MarkdownHighlighter::~MarkdownHighlighter() = default;
+MarkdownHighlighter::~MarkdownHighlighter()
+{
+    // ~QSyntaxHighlighter() detaches from the document, which edits it (contentsChange): by then
+    // this object is only a QSyntaxHighlighter, so the line-height handler must be gone first.
+    disconnect(m_contentsConnection);
+}
 
 QStringList MarkdownHighlighter::formatNames()
 {

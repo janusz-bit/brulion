@@ -290,7 +290,7 @@ private Q_SLOTS:
         QElapsedTimer timer;
         timer.start();
         const auto lines = evaluateCalc(block, scope);
-        QVERIFY2(timer.elapsed() < 20000, "aggregates must be charged to the work budget");
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, "aggregates must be charged to the work budget");
         QCOMPARE(lines[1].value, u"1"_s);
         QCOMPARE(lines[199].value, u"100"_s);
         QCOMPARE(lines[lines.size() - 2].error, u"Obliczenie jest zbyt złożone"_s);

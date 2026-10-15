@@ -1905,7 +1905,7 @@ private Q_SLOTS:
         const qint64 opsMs = ops.elapsed();
         QCOMPARE(reset.size(), 0);
         qInfo("5000 blocks: load %lld ms, 50 keystrokes %lld ms, split+indent+3 undo %lld ms", loadMs, typingMs, opsMs);
-        QVERIFY2(typingMs < 50 * 40, "typing on a 5000-block page is too slow");
+        QVERIFY2(typingMs < 50 * 40 * BRULION_TEST_SLOWDOWN, "typing on a 5000-block page is too slow");
     }
 
     // Last: runs the application's event loop to quit it.

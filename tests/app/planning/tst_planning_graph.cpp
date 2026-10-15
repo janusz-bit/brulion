@@ -372,6 +372,8 @@ private Q_SLOTS:
         t.start();
         m.setVaultIndex(index.get());
         qInfo("reduced motion: settled in %lld ms", static_cast<long long>(t.elapsed()));
+        if (BRULION_TEST_SLOWDOWN > 1)
+            QSKIP("settling has a 150 ms budget, which sanitizer builds cannot meet");
         QVERIFY(m.alpha() < 0.01 || !m.layout().running());
     }
 

@@ -144,6 +144,14 @@ aqt() {
   else
     tools_venv
     [[ -x $TOOLS_VENV/bin/aqt ]] || "$TOOLS_VENV/bin/pip" install --quiet "aqtinstall==$AQT_VERSION"
+    # aqtinstall tries each archive as ZIP before 7z, and before Python 3.14 zipfile.is_zipfile()
+    # takes some .7z files for ZIP (Qt 6.11.2's linux_arm64 qttools: "Bad offset for central
+    # directory", on every mirror). A .pth line, run by every interpreter of the venv (also aqt's
+    # spawned workers), keeps .7z files out of ZIP detection.
+    local site
+    site=$("$TOOLS_VENV/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+    printf '%s\n' "import zipfile; _is_zip = zipfile.is_zipfile; zipfile.is_zipfile = lambda f: not str(getattr(f, 'name', f)).lower().endswith('.7z') and _is_zip(f)" \
+      >"$site/brulion-7z-not-zip.pth"
     "$TOOLS_VENV/bin/aqt" "$@"
   fi
 }
