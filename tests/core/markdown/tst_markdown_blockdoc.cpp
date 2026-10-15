@@ -939,7 +939,7 @@ private Q_SLOTS:
             doc.split(2 + 4 * k, 3);
             doc.indent(5 + 4 * k);
         }
-        QVERIFY2(t.elapsed() < 10000, qPrintable(QString::number(t.elapsed())));
+        QVERIFY2(t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
     }
 
     // --- untouched blocks stay byte-identical ----------------------------------------------------

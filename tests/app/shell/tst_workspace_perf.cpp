@@ -151,6 +151,10 @@ private Q_SLOTS:
         probe.worst = 0;
         QTest::qWait(1500);
         probe.timer.stop();
+        // Under sanitizers everything runs ~25x slower: give the background search indexing the
+        // same head start in relative terms before checking it finished.
+        if (BRULION_TEST_SLOWDOWN > 1)
+            QTRY_COMPARE_WITH_TIMEOUT(ws.index()->pendingSearchDocuments(), 0, 1500 * BRULION_TEST_SLOWDOWN);
         const qint64 afterReadyStall = probe.worst;
 
         qDebug("perf: %lld pages, open() blocked %lld ms, ready after %lld ms, longest UI stall while "
@@ -159,9 +163,9 @@ private Q_SLOTS:
         QVERIFY(ws.ready());
         QVERIFY(ws.reminders()->isRunning());
         QVERIFY(sink.scheduledCount > 0);
-        QVERIFY2(openMs < 15000, qPrintable(u"open() took %1 ms"_s.arg(openMs)));
+        QVERIFY2(openMs < 15000 * BRULION_TEST_SLOWDOWN, qPrintable(u"open() took %1 ms"_s.arg(openMs)));
         // The point of chunked indexing: no long freeze while the notebook loads.
-        QVERIFY2(indexingStall < 1500, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
+        QVERIFY2(indexingStall < 1500 * BRULION_TEST_SLOWDOWN, qPrintable(u"the UI thread stalled for %1 ms"_s.arg(indexingStall)));
 
         // The full-text index was built in the background meanwhile: the first search is fast.
         QCOMPARE(ws.index()->pendingSearchDocuments(), 0);
