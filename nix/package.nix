@@ -65,6 +65,18 @@ stdenv.mkDerivation (finalAttrs: {
     export HOME=$TMPDIR
     # The sandbox has no time zone database; the import/export tests use Europe/Warsaw.
     export TZDIR=${tzdata}/share/zoneinfo
+    # The QML self-tests run the unwrapped binary: point Qt at the plugins (SVG image format,
+    # platform plugins) and QML modules that wrapQtAppsHook only adds to the installed wrapper.
+    export QT_PLUGIN_PATH=${
+      lib.makeSearchPath qt6.qtbase.qtPluginPrefix [
+        qt6.qtbase
+        qt6.qtsvg
+        qt6.qtdeclarative
+      ]
+    }''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}
+    export QML_IMPORT_PATH=${
+      lib.makeSearchPath qt6.qtbase.qtQmlPrefix [ qt6.qtdeclarative ]
+    }''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}
   '';
 
   # The installed desktop integration files are valid and consistent with each other
