@@ -35,6 +35,8 @@ FocusScope {
     readonly property bool editing: page.editingRow >= 0
     readonly property bool empty: page.loaded && page.blocks.count === 0
     property bool _foldsRestored: false
+    /// The editor has had its width (see its `controller`); stays true.
+    property bool _editorSized: false
 
     implicitHeight: column.implicitHeight
 
@@ -249,7 +251,13 @@ FocusScope {
             Layout.preferredHeight: day.empty && page.editingRow < 0 ? 0
                                     : editor.listView.contentHeight + editor.listView.y
                                       + (editor.toolbarVisible ? editor.toolbarHeight : 0)
-            controller: page
+            // The blocks only once the editor has its width: a day created by the journal list gets
+            // its width after its children, and blocks laid out at the editor's minimum width made
+            // the day several times too tall until the next layout, so the list could release and
+            // re-create it without end (scrolled to the end on touch UIs, tst_content_journals_qml).
+            controller: day._editorSized ? page : null
+            onWidthChanged: if (width > 0) day._editorSized = true
+            Component.onCompleted: if (width > 0) day._editorSized = true
             focus: true
             onNotice: (text, kind) => AppController.toast(text, kind)
             listView.interactive: false

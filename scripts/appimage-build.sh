@@ -182,10 +182,14 @@ if [[ ! -f $QT_DIR/lib/cmake/Qt6/Qt6Config.cmake ]]; then
   mkdir -p "$QT_ROOT"
   # Qt mirrors occasionally serve a truncated archive ("Bad offset for central directory"):
   # retry a few times before giving up.
+  # Later attempts go to other official mirrors (a bad mirror keeps serving the same file).
+  mirrors=("" "https://ftp.fau.de/qtproject/" "https://mirrors.ocf.berkeley.edu/qt/")
   for attempt in 1 2 3; do
-    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" && break
+    base=()
+    [[ -n ${mirrors[attempt - 1]} ]] && base=(--base "${mirrors[attempt - 1]}")
+    aqt install-qt "$aqt_host" desktop "$QT_VERSION" "$aqt_arch" -O "$QT_ROOT" "${base[@]}" && break
     ((attempt < 3)) || die "aqt failed to install Qt $QT_VERSION $aqt_arch"
-    info "aqt failed (attempt $attempt), retrying in 20 s"
+    info "aqt failed (attempt $attempt), retrying with another mirror in 20 s"
     sleep 20
   done
 fi
