@@ -564,8 +564,15 @@ void AppController::openVault(const QString &rawPath)
     QTimer::singleShot(0, this, [this, path] { finishOpening(path, false); });
 }
 
+void AppController::openVaultAt(const QString &path, const QVariantMap &route)
+{
+    m_routeAfterOpen = normalizeRoute(route);
+    openVault(path);
+}
+
 void AppController::openDemoVault()
 {
+    m_routeAfterOpen.clear(); // the sample notebook opens on its welcome page
     setStatus(u"loading"_s);
     QTimer::singleShot(0, this, [this] { finishOpening(demoVaultPath(), true); });
 }
@@ -577,6 +584,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QString error;
     if (!m_workspace->open(path, deviceStatePath(path), &error)) {
+        m_routeAfterOpen.clear();
         m_failedPath = path;
         m_failedSeedDemo = seedDemo;
         setStatus(u"error"_s, tr("Could not open the notebook %1: %2").arg(QDir::toNativeSeparators(path), error));
@@ -596,7 +604,10 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
 
     // The first route before "ready": the shell is built then and shows it right away.
     const QVariantMap first = initialRoute();
-    if (m_startToday) {
+    if (const QVariantMap after = std::exchange(m_routeAfterOpen, {}); !after.isEmpty()) {
+        m_startToday = false;
+        m_history.navigate(after);
+    } else if (m_startToday) {
         m_startToday = false;
         const QString date = today();
         m_history.navigate(

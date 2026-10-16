@@ -208,6 +208,9 @@ public:
     /// Open (or create) the vault folder `path` (a local path or a file:// URL). Asynchronous:
     /// status becomes "loading", then "ready" or "error".
     Q_INVOKABLE void openVault(const QString &path);
+    /// openVault(), then show `route` instead of the home view (onboarding's "Import notes":
+    /// the import screen of the new notebook). Kept while Android asks for "All files access".
+    Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);
     /// Create (first time) and open "Przykładowy brulion" with the sample notes.
     Q_INVOKABLE void openDemoVault();
     /// Show onboarding and close the vault (a moment later: the shell's editors save first).
@@ -334,6 +337,7 @@ private:
     QString m_devPopup;
     bool m_startCapture = false;
     bool m_startToday = false;
+    QVariantMap m_routeAfterOpen; ///< openVaultAt()
 #ifdef Q_OS_WASM
     platform::WasmNotifier *m_wasmNotifier = nullptr;
 #endif

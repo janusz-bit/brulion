@@ -8,7 +8,8 @@ import Brulion
 // motion), Edytor (font, size, width, source mode), Notatnik (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
-// browser, snooze, alarm length, test notification), Synchronizacja (qml/io/SyncSettings: status,
+// browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
+// length, test notification), Synchronizacja (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Aplikacja (close to tray, version, licence, source code).
 //
 // Wide windows: section list on the left, one section on the right. Narrow: all sections in
@@ -501,6 +502,31 @@ Item {
                 name: "fullScreenAlarms"
                 title: qsTr("Alarms over the lock screen")
                 description: qsTr("Lets an alarm show its full screen like a clock app.")
+            }
+            ReminderSoundSetting {
+                kind: "reminder"
+                title: qsTr("Reminder sound")
+            }
+            ReminderSoundSetting {
+                kind: "alarm"
+                title: qsTr("Alarm sound")
+            }
+            ShellSettingRow {
+                visible: ReminderSounds.systemSettings
+                title: qsTr("System notification settings")
+                description: qsTr("Sound, vibration and Do Not Disturb of Brulion's notifications in Android — when a sound does not play as chosen here.")
+                BButton {
+                    objectName: "reminderSystemSettings"
+                    size: "small"
+                    text: qsTr("Reminders")
+                    onClicked: ReminderSounds.openSystemSettings("reminder")
+                }
+                BButton {
+                    objectName: "alarmSystemSettings"
+                    size: "small"
+                    text: qsTr("Alarms")
+                    onClicked: ReminderSounds.openSystemSettings("alarm")
+                }
             }
             ShellSettingRow {
                 title: qsTr("Snooze")

@@ -12,8 +12,11 @@ brulion_add_test(tst_shell_singleinstance SOURCES tst_singleinstance.cpp LIBS br
 
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the
-# history, back at home left to the system), the block editor inside the shell (real keys, source
-# mode, a link to a missing page) and closing the notebook from the UI. Exit code = failures.
+# history, back at home left to the system), rows with context menus with real input (the phone
+# run: touch taps and long presses in the drawer opened from the bottom bar and the top bar, All
+# pages, tasks, editor bullets; the desktop run: left and right clicks), the block editor inside
+# the shell (real keys, source mode, a link to a missing page) and closing the notebook from the
+# UI. Exit code = failures.
 # A private XDG home keeps the sample notebook and settings out of the user's own.
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
@@ -35,7 +38,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE)
     endforeach()
 
@@ -60,7 +63,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
             FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow)
     endforeach()
 endif()

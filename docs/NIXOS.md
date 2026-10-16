@@ -109,6 +109,14 @@ nix run github:janusz-bit/brulion
   i włączenie go w aplikacji „Rozszerzenia”.
 * Powiadomienia pokazuje demon powiadomień pulpitu (w środowiskach graficznych jest zawsze; przy
   samym menedżerze okien np. `mako` albo `dunst`).
+* **Dźwięki** (*Ustawienia → Przypomnienia → Dźwięk przypomnień / Dźwięk alarmów*): „Domyślny”
+  (przypomnienia — jak inne powiadomienia pulpitu, alarmy — `alarm-clock-elapsed`), „Dzwonek”
+  (**Wybierz dzwonek…**: dźwięk z motywu dźwiękowego — `message-new-instant`, `bell`,
+  `complete`, `alarm-clock-elapsed`, `phone-incoming-call` — albo własny plik `.oga`/`.ogg`/`.wav`)
+  i „Cisza”. Brulion przekazuje je w powiadomieniu jako podpowiedzi `sound-name`, `sound-file`
+  albo `suppress-sound`; dźwięk odtwarza demon powiadomień (GNOME Shell, KDE Plasma — z pakietem
+  motywu dźwięków, np. `sound-theme-freedesktop`). Demony bez dźwięków (`mako`, `dunst`) je
+  pomijają. **Odtwórz próbkę** wysyła krótkie powiadomienie próbne z wybranym dźwiękiem.
 * Pliki integracji z pulpitem: `share/applications/io.github.januszbit.brulion.desktop`,
   `share/metainfo/io.github.januszbit.brulion.metainfo.xml`, ikona
   `share/icons/hicolor/{scalable,256x256}/apps/io.github.januszbit.brulion.{svg,png}`.

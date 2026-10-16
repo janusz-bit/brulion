@@ -157,7 +157,7 @@ ImportController::ImportController(QObject *parent)
 
     connect(&m_gatherer, &FileGatherer::progress, this, [this](int done, int total) {
         setProgress(total > 0 ? qreal(done) / qreal(total) : -1,
-                    total > 0 ? tr("Reading %1 of %2 files…").arg(done).arg(total) : tr("Reading…"));
+                    total > 0 ? tr("Reading %1 of %2 files…").arg(done).arg(total) : tr("Looking for the files…"));
     });
     connect(&m_gatherer, &FileGatherer::finished, this,
             [this](const QList<io::InputFile> &files, const QStringList &warnings, const QString &name, qint64) {
@@ -197,12 +197,13 @@ QVariantList ImportController::importers() const
     for (const io::Importer *importer : io::importers()) {
         const ImporterInfo info = importerInfo(importer->id());
         out.append(QVariantMap{
-                { u"id"_s, importer->id() },
-                { u"name"_s, importer->name() },
-                { u"howTo"_s, info.howTo },
-                { u"pick"_s, info.pick },
-                { u"icon"_s, info.icon },
-                { u"fileTypes"_s, importer->fileTypes() },
+                {u"id"_s, importer->id()},
+                {u"name"_s, importer->name()},
+                {u"howTo"_s, info.howTo},
+                {u"phoneHowTo"_s, info.phoneHowTo},
+                {u"pick"_s, info.pick},
+                {u"icon"_s, info.icon},
+                {u"fileTypes"_s, importer->fileTypes()},
         });
     }
     return out;
@@ -343,8 +344,8 @@ void ImportController::addPaths(const QStringList &paths)
 {
     QList<QUrl> urls;
     for (const QString &p : paths) {
-        if (!p.trimmed().isEmpty())
-            urls.append(QUrl::fromLocalFile(p.trimmed()));
+        if (const QUrl url = urlFromUserInput(p); !url.isEmpty())
+            urls.append(url);
     }
     addUrls(urls);
 }

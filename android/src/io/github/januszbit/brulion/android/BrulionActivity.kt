@@ -8,8 +8,8 @@ import org.qtproject.qt.android.bindings.QtActivity
 
 /**
  * Brulion's main activity: Qt's activity plus the hooks [BrulionAndroid] needs — the note a
- * tapped notification points at (launch intent or `onNewIntent`, launch mode singleTop) and
- * the answers of runtime permission dialogs.
+ * tapped notification points at (launch intent or `onNewIntent`, launch mode singleTop), the
+ * answers of runtime permission dialogs and of the ringtone pickers.
  */
 class BrulionActivity : QtActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,6 +22,12 @@ class BrulionActivity : QtActivity() {
     // getIntent() returns the newest intent from now on (QtActivity does not do this).
     setIntent(intent)
     BrulionAndroid.onActivityIntent(this, intent)
+  }
+
+  // Qt's own results (file dialogs) are dispatched by super; the ringtone pickers are ours.
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    BrulionAndroid.onActivityResult(this, requestCode, resultCode, data)
   }
 
   override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {

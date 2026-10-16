@@ -268,6 +268,7 @@ FocusScope {
                     height: days.count <= 1 && Workspace.ready ? emptyHint.implicitHeight + Theme.space12 : Theme.space8
                     BEmptyState {
                         id: emptyHint
+                        objectName: "journalsEmptyHint"
                         visible: days.count <= 1 && Workspace.ready
                         anchors.horizontalCenter: parent.horizontalCenter
                         y: Theme.space8
@@ -277,6 +278,10 @@ FocusScope {
                         // No-break spaces (and a word joiner after the hyphen, a break opportunity otherwise) keep
                         // "- [ ] …" and "⏰ jutro 9:00" on one line.
                         description: qsTr("Every day gets its own page. Write what happened, plans, tasks (-\u2060\u00a0[\u00a0]\u00a0…) and reminders (⏰\u00a0tomorrow\u00a09:00); earlier days appear below.")
+                        // A new notebook (at most today's note): notes from another app are one tap away.
+                        actionText: Workspace.pageCount <= 1 ? qsTr("Import notes") : ""
+                        actionIcon: "download"
+                        onActionTriggered: AppController.navigate({ view: "importExport", tab: "import" })
                     }
                 }
             }

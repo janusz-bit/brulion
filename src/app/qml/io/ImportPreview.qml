@@ -8,7 +8,7 @@ import Brulion
 // (with "Importuj jako…" to override), where the pages go, what will be written (pages, daily notes
 // — appended under "## Import (…)" when the day exists —, attachments, renamed files, warnings and
 // the first files), progress while reading / checking / writing, and the report with "Otwórz
-// folder". Shown once something was picked.
+// zaimportowany folder". Shown once something was picked.
 //
 //   ImportPreview { importer: importController; onPickAgain: … }
 ColumnLayout {
@@ -349,6 +349,7 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
             BButton {
+                objectName: "importStartButton"
                 text: qsTr("Import %n file(s)", "", preview.p.fileCount || 0)
                 iconName: "download"
                 variant: "primary"
@@ -426,9 +427,10 @@ ColumnLayout {
             Layout.fillWidth: true
             spacing: Theme.space2
             BButton {
+                objectName: "importOpenFolder"
                 visible: (preview.r.folder || "") !== "" || (preview.r.firstPage || "") !== ""
-                //: Polish: "Otwórz folder"
-                text: (preview.r.folder || "") !== "" ? qsTr("Open the folder") : qsTr("Open the first page")
+                //: Polish: "Otwórz zaimportowany folder"
+                text: (preview.r.folder || "") !== "" ? qsTr("Open the imported folder") : qsTr("Open the first page")
                 iconName: "folder-open"
                 variant: "primary"
                 onClicked: preview.importer.openTarget()

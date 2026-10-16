@@ -8,7 +8,9 @@ import Brulion
 // shows how to get the notes out of it and what to pick (a file / a folder). Without a choice
 // Brulion recognises the files by itself.
 //
-//   ImportSourcePicker { importer: importController; onPickFiles: …; onPickFolder: … }
+//   ImportSourcePicker { importer: importController; phone: true; onPickFiles: …; onPickFolder: … }
+//
+// `phone`: also the chosen app's steps on a phone (phoneHowTo) and how the system's picker works.
 ColumnLayout {
     id: picker
 
@@ -22,6 +24,7 @@ ColumnLayout {
     }
     readonly property string pick: current ? current.pick : "both"
     readonly property bool collapsed: Theme.compact && current !== null
+    property bool phone: false
 
     signal pickFiles()
     signal pickFolder()
@@ -116,10 +119,31 @@ ColumnLayout {
         subtitle: picker.current ? picker.current.howTo
                   : qsTr("Choose the exported files or the folder – Brulion recognises Obsidian, Logseq, Notion, Evernote and the others by itself. Nothing is written before you see what will be imported.")
 
+        // On the phone: where that app's notes are and what to pick.
+        RowLayout {
+            objectName: "importPhoneHowTo"
+            Layout.fillWidth: true
+            visible: picker.phone && picker.current !== null && picker.current.phoneHowTo !== ""
+            spacing: Theme.space2
+            BIcon {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: 2
+                name: "smartphone"
+                size: Theme.iconSizeSm
+                color: Theme.fgMuted
+            }
+            BText {
+                Layout.fillWidth: true
+                text: picker.current ? picker.current.phoneHowTo : ""
+                wrapMode: Text.Wrap
+            }
+        }
+
         Flow {
             Layout.fillWidth: true
             spacing: Theme.space2
             BButton {
+                objectName: "importChooseFiles"
                 visible: picker.pick !== "folder"
                 text: picker.current && picker.pick === "files" && picker.current.fileTypes.length === 1
                       ? qsTr("Choose the %1 file…").arg(picker.current.fileTypes[0].replace("*", ""))
@@ -129,6 +153,7 @@ ColumnLayout {
                 onClicked: picker.pickFiles()
             }
             BButton {
+                objectName: "importChooseFolder"
                 visible: picker.pick !== "files" && !AppController.isWasm
                 text: qsTr("Choose a folder…")
                 iconName: "folder-open"
@@ -140,6 +165,17 @@ ColumnLayout {
             Layout.fillWidth: true
             visible: AppController.isWasm && picker.pick !== "files"
             text: qsTr("In the browser choose a ZIP of the folder.")
+            variant: "small"
+            color: Theme.fgMuted
+            wrapMode: Text.Wrap
+        }
+        // The system's picker, briefly: where the places are, what Android refuses.
+        BText {
+            Layout.fillWidth: true
+            visible: picker.phone
+            text: picker.pick === "files"
+                  ? qsTr("The system's picker opens: ☰ switches between Downloads, the phone's storage, Google Drive and other apps; a long press selects several files.")
+                  : qsTr("The system's picker opens: ☰ switches between Downloads, the phone's storage, Google Drive and other apps. Android does not let apps take the whole Downloads folder or the top of the storage – choose a folder inside it, or type its path below.")
             variant: "small"
             color: Theme.fgMuted
             wrapMode: Text.Wrap

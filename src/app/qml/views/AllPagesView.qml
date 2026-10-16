@@ -273,6 +273,9 @@ FocusScope {
                 onClicked: root.open(row.index, false)
                 onPressAndHold: rowMenu.openFor(row.index, row)
                 TapHandler {
+                    // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so on
+                    // a phone a tap opened the (modal) menu instead of the page.
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
                     onTapped: rowMenu.openFor(row.index, row)
                 }

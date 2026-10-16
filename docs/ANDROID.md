@@ -74,8 +74,9 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
   Naraz planowanych jest najwyżej 400 najbliższych przypomnień.
 * **Kanały powiadomień**: „Przypomnienia” (wysoki priorytet, dźwięk powiadomienia), „Alarmy”
   (dźwięk budzika na strumieniu alarmu, wibracje, dzwoni aż do reakcji, widoczne na ekranie
-  blokady) i „Przegapione alarmy” (ciche). Dźwięk i wibracje każdego kanału zmienisz
-  w *Ustawienia → Aplikacje → Brulion → Powiadomienia*.
+  blokady) i „Przegapione alarmy” (ciche). Dźwięk przypomnień i alarmów wybierzesz w samym
+  Brulionie (niżej: [Dźwięki](#dźwięki-przypomnień-i-alarmów)); ustawienia systemowe kanałów
+  są w *Ustawienia → Aplikacje → Brulion → Powiadomienia*.
 * **Alarm bez reakcji** przestaje dzwonić sam po **10 minutach** (aplikacja może ustawić inny
   czas dla danego alarmu, od 1 do 60 minut) — także przy zamkniętej aplikacji. Zamienia się
   wtedy w ciche powiadomienie **„Przegapiony alarm”**, a ekran alarmu się zamyka; stuknięcie
@@ -90,6 +91,41 @@ dzwoni jak budzik. Składnia: `docs/SYNTAX.md`.
   (do 24 godzin wstecz), pojawią się od razu jako „Przegapione”.
 * **Zmiana strefy czasowej**: przypomnienia trzymają się czasu lokalnego — „09:00” zostaje
   o 09:00 w nowej strefie (drzemki nie są przesuwane).
+
+### Dźwięki przypomnień i alarmów
+
+*Ustawienia → Przypomnienia → Dźwięk przypomnień* i *Dźwięk alarmów* (osobno dla `⏰` i `⏰!`):
+
+* **Domyślny** — dźwięk powiadomień telefonu (przypomnienia) albo jego dźwięk alarmu (alarmy);
+* **Dzwonek** — **Wybierz dzwonek…** otwiera systemowe okno wyboru dzwonka (dla przypomnień
+  dźwięki powiadomień, dla alarmów dźwięki alarmów; widać też własne dzwonki dodane
+  w telefonie). Wybrany dzwonek Brulion pamięta: po przełączeniu na „Cisza” i z powrotem na
+  „Dzwonek” wraca ten sam;
+* **Wibracja** — tylko wibracje, bez dźwięku;
+* **Cisza** — ani dźwięku, ani wibracji (alarm nadal pokazuje swój ekran nad ekranem blokady).
+
+**Odtwórz próbkę** gra wybrany dźwięk przez około 3 sekundy (dźwięk alarmu na strumieniu
+alarmu — z głośnością budzika; „Wibracja” — wibruje). Alarm gra wybrany dźwięk w pętli
+(`FLAG_INSISTENT`) aż do reakcji („OK”, „Drzemka 10 min”, stuknięcie) albo do końca czasu
+dzwonienia. Przycisk **Ustawienia powiadomień systemowych** (Przypomnienia / Alarmy) otwiera
+ustawienia kanału w Androidzie — dla wyjątków: tryb „Nie przeszkadzać”, wibracje na zegarku,
+dźwięk zmieniony przez producenta telefonu.
+
+Jak to działa: dźwięku kanału powiadomień nie da się zmienić po jego utworzeniu (Android
+zapamiętuje ustawienia kanału, także usuniętego i utworzonego ponownie z tym samym id). Dlatego
+każdy nowy dźwięk dostaje **nową wersję kanału**: `reminders` / `alarms` (wersja 0 — kanał
+z poprzednich wersji Brulionu, z domyślnym dźwiękiem i tym, co ustawiono dla niego
+w systemie), potem `reminders-v1`, `alarms-v2`… z dźwiękiem (`AudioAttributes`
+`USAGE_NOTIFICATION_EVENT` dla przypomnień, `USAGE_ALARM` dla alarmów) i wibracjami;
+poprzednia wersja jest usuwana (w ustawieniach systemowych Brulionu widać wtedy liczbę
+„usuniętych kategorii”). Wybór i wersje zapisuje część natywna w `SharedPreferences`
+(`…android.sounds`), bo alarmy dzwonią przy zamkniętej aplikacji: każde powiadomienie
+(zaplanowane, po restarcie, przegapione, po drzemce) trafia do bieżącego kanału — zmiana
+dźwięku i wysłanie powiadomienia idą pod wspólną blokadą, więc powiadomienie nigdy nie trafi do
+kanału, który właśnie usunięto (Android by je odrzucił). Ustawienia
+dźwięku są **lokalne dla urządzenia** (dzwonek z jednego telefonu nie istnieje na innym) —
+nie synchronizują się z notatnikiem. Zmiana dźwięku w czasie, gdy alarm dzwoni, zamyka jego
+powiadomienie (kanał jest usuwany).
 
 Ograniczenie: Brulion planuje przypomnienia na podstawie notatek, które przeczytał. Przypomnienie
 dodane albo zmienione na innym urządzeniu (i zsynchronizowane, gdy Brulion był zamknięty) zostanie
@@ -131,6 +167,47 @@ ponownego uruchomienia. Dlatego:
 
 To samo zrób dla **Syncthing-Fork**, żeby synchronizował w tle. Szczegóły dla konkretnych
 telefonów: <https://dontkillmyapp.com>.
+
+## Import notatek (Obsidian, Logseq, Notion…)
+
+Gdzie: **Więcej (⋮) → Importuj notatki**, **☰ → Importuj notatki** (szuflada), przycisk
+**Importuj notatki** pod pustym dziennikiem nowego notatnika i karta „Notatki w innej aplikacji?”
+na ekranie powitalnym (otwiera wybrany notatnik od razu na ekranie importu). Na ekranie importu
+wybierz aplikację, z której pochodzą notatki — pod jej opisem są kroki **na telefonie** (gdzie
+leżą pliki, co wybrać) — albo od razu wybierz pliki: Brulion sam rozpozna format.
+
+* **Wybierz pliki…** — systemowe okno wyboru plików (Storage Access Framework): ☰ przełącza
+  między Pobranymi, pamięcią telefonu, Dyskiem Google i innymi aplikacjami; **długie
+  przytrzymanie zaznacza kilka plików**. Okno nie filtruje typów plików (dostawcy różnie je
+  nazywają i filtr wyszarzałby np. ZIP z Notion na Dysku albo plik .md w Pobranych) — format
+  rozpoznaje Brulion po zawartości. Działają `.md`, `.txt`, `.html`, `.enex`, `.json`, `.zip`
+  (cały eksport Obsidian / Logseq / Notion / Google Keep), `.jex`, `.ics` i inne.
+* **Wybierz folder…** — folder skarbca Obsidian, grafu Logseq albo folder z plikami `.md`:
+  otwórz go w oknie systemowym, stuknij **„Użyj tego folderu”** i zezwól na dostęp (tylko do
+  odczytu, tylko ten folder). Android **nie pozwala** wybrać całego folderu *Pobrane*, katalogu
+  głównego pamięci ani `Android/data` — wybierz folder wewnątrz (np. *Pobrane/Obsidian*) albo
+  wpisz ścieżkę.
+* **Albo wpisz ścieżkę** — plik lub folder w systemie plików, np.
+  `/storage/emulated/0/Download/Obsidian`. Poza prywatnym katalogiem Brulionu wymaga to
+  „Dostępu do wszystkich plików” (karta pokazuje przycisk do ustawień systemowych); wybór przez
+  okno systemowe żadnego uprawnienia nie potrzebuje.
+
+Przed zapisem Brulion pokazuje, co zaimportuje (strony, notatki dzienne, załączniki, zmienione
+nazwy, ostrzeżenia), potem postęp i raport z przyciskiem **„Otwórz zaimportowany folder”**
+(domyślnie `Import/<aplikacja>`; notatki dzienne trafiają do dziennika).
+
+Jak to działa: okno systemowe zwraca adresy `content://` — pojedynczy dokument albo **drzewo
+dokumentów** (wybrany folder). Brulion przechodzi drzewo folder po folderze przez
+`DocumentsContract` (`Documents.kt`, jedno zapytanie `ContentResolver` na folder; most JNI
+`documentInfo` / `listDocuments`), a pliki czyta przez `QFile` na adresie `content://` (deskryptor
+pliku z `ContentResolver`). Listowanie i czytanie idą poza wątkiem interfejsu, więc duży folder
+albo wolny dostawca (Dysk Google) nie zawiesza aplikacji. Gdy wywołanie JNI zawiedzie, Brulion
+korzysta z obsługi adresów `content://` w samym Qt (`QDir`/`QFileInfo`; wolniejsze — wiele zapytań
+na każdy plik). Pliki istniejące tylko w sieci (np. dokumenty Google) są pomijane z ostrzeżeniem.
+
+Do zrobienia: **„Udostępnij → Brulion”** (pliku `.md`/`.txt` z innej aplikacji do dziennika albo
+nowej strony) — wymaga filtra `ACTION_SEND` w manifeście i obsługi intencji w `BrulionActivity`,
+której jeszcze nie ma.
 
 ## Eksport: „Zapisz w Pobranych”
 
@@ -310,7 +387,7 @@ i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
 |---|---|
 | `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, ikony |
 | `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity` |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
@@ -341,14 +418,32 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
 | `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
 | `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
+| `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` albo `{"error":…}` |
+| `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` albo `{"error":…}` |
+| `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` albo `{"error":…}` |
+| `bool pickSound(int kind, const QJsonObject &current)` | `pickSound(Context, Int, String): Boolean` — otwiera okno wyboru dzwonka (`startActivityForResult`) |
+| `bool previewSound(const QJsonObject &)` | `previewSound(Context, String): Boolean` — próbka ~3 s |
+| `void openSoundSettings(int kind)` | `openSoundSettings(Context, Int)` — `ACTION_CHANNEL_NOTIFICATION_SETTINGS` |
 | sygnał `activated(QString path, int line)` | natywna `nativeActivated(String, Int)` |
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
+| sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
   ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int}`.
   `id` musi być stały między wywołaniami (ponowne nastawienie tego samego `id` zastępuje budzik).
   Wywołanie zastępuje cały zbiór; drzemki z powiadomienia zostają, dopóki aplikacja nie przyśle
   tego samego `id`. Błędny JSON nie kasuje nastawionych budzików.
+* Dźwięki (`ReminderSounds.kt`, C++: `src/app/notify/androidpayload.h`): `kind` 0 = przypomnienia,
+  1 = alarmy; wybór to `{mode: "default" | "custom" | "vibrate" | "silent", uri, title}`
+  (`uri` — dzwonek z okna wyboru, `content://…`), `setReminderSounds` dostaje
+  `{reminder: {…}, alarm: {…}}` przy starcie aplikacji i po każdej zmianie w ustawieniach.
+  Okno wyboru zwraca przez `nativeSoundPicked` wybór albo `{"error": …}` (brak okna wyboru);
+  anulowanie nie wysyła nic. Pozycja „Domyślny” okna wyboru daje `mode: "default"`.
+* `documentInfo` / `listDocuments` (import): statyczne, wołane z wątku roboczego (JNI dołącza
+  wątek sam), bez instancji mostu. Adres drzewa (`…/tree/<id>`, wynik `ACTION_OPEN_DOCUMENT_TREE`)
+  jest zamieniany na dokument jego korzenia; dzieci folderu dają adresy `…/tree/<id>/document/<id
+  dziecka>`, które otwiera `QFile`. `bridgeFailed` w wyniku (brak metody, wyjątek) = użyj silnika
+  plików Qt.
 * Metody przyjmują `Context` (to, co zwraca `QNativeInterface::QAndroidApplication::context()`,
   zwykle aktywność); okna dialogowe uprawnień korzystają z bieżącej `BrulionActivity`.
   Prośby (`request*`) tylko wysyłają okno/ekran ustawień do głównego wątku Androida i wracają od
@@ -369,7 +464,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 ### Testy i diagnostyka
 
 * Testy jednostkowe Kotlina (czysta logika: przesuwanie czasu ściennego między strefami, czas
-  dzwonienia, JSON przypomnień — z polskimi znakami):
+  dzwonienia, JSON przypomnień, dźwięki — wybór z C++, odpowiedź okna wyboru dzwonka, wersje
+  kanałów i usuwanie starych — z polskimi znakami):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
   `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
   projekcie Gradle).

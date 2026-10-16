@@ -9,14 +9,21 @@ import Brulion
 // ImportController.
 //
 // Picking: desktop and Android use QtQuick.Dialogs (asynchronous FileDialog / FolderDialog; on
-// Android these are the system's document pickers, giving content:// URLs Qt reads directly); the
-// browser uses its own file picker (ImportController.pickInBrowser()). `preset` (route
-// parameters) can choose an importer and local files up front: { importer, files: "a|b" }.
+// Android these are the system's document pickers: several files at once, or a folder as a
+// document tree — content:// URLs the controller reads through Android's document provider); the
+// browser uses its own file picker (ImportController.pickInBrowser()). On Android the file picker
+// gets no type filter: providers name types differently (a Notion ZIP in Drive, a .md file in
+// Downloads), and a filtered picker greys such files out — the files are recognised by their
+// content instead. ImportPathCard reads a typed path (all platforms but the browser). `phone`
+// (Android, or the phone emulation of --touch) adds the phone's steps per app and picker tips.
+// `preset` (route parameters) can choose an importer and files up front: { importer, files: "a|b" }
+// (paths or file:// / content:// URLs).
 ColumnLayout {
     id: panel
 
     property var preset: ({})
     readonly property alias importer: importerObject
+    readonly property bool phone: AppController.isAndroid || DevTools.touch
 
     function pickFiles() {
         if (AppController.isWasm)
@@ -44,6 +51,7 @@ ColumnLayout {
 
     ImportController {
         id: importerObject
+        objectName: "importController"
         workspace: Workspace
         onImported: (message) => AppController.toast(message, "success")
     }
@@ -60,8 +68,15 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: importerObject.state === "empty"
         importer: importerObject
+        phone: panel.phone
         onPickFiles: panel.pickFiles()
         onPickFolder: panel.pickFolder()
+    }
+
+    ImportPathCard {
+        Layout.fillWidth: true
+        visible: importerObject.state === "empty" && !AppController.isWasm
+        importer: importerObject
     }
 
     ImportPreview {
@@ -79,7 +94,7 @@ ColumnLayout {
         id: fileDialog
         title: qsTr("Choose the files to import")
         fileMode: FileDialog.OpenFiles
-        nameFilters: importerObject.nameFilters
+        nameFilters: AppController.isAndroid ? [] : importerObject.nameFilters
         onAccepted: importerObject.addUrls(selectedFiles)
     }
     FolderDialog {

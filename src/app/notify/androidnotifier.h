@@ -8,6 +8,11 @@
 // together with the current set — scheduleReminders() replaces the armed set, so it must never
 // go alone. A tapped notification arrives as AndroidBridge::activated() and is forwarded as
 // activated() (main.cpp also hands it to AppController::openNotification()).
+//
+// Sounds: every mode (default, a ringtone from the system picker, vibration only, silent);
+// setSounds() goes to AndroidBridge::setReminderSounds() — the Kotlin side recreates the
+// notification channel of a kind whose sound changed (a channel's sound is fixed once created)
+// and keeps the choice for alarms that ring while Brulion is closed.
 #pragma once
 
 #include "notifier.h"
@@ -26,6 +31,16 @@ public:
     bool firesWhenClosed() const override { return true; }
     void schedule(const QList<ScheduledNotification> &notifications) override;
     void showNow(const ScheduledNotification &notification) override;
+
+    QList<SoundChoice::Mode> soundModes() const override;
+    bool hasSystemSoundPicker() const override { return true; }
+    bool hasSystemSoundSettings() const override { return true; }
+    bool pickSound(SoundKind kind) override;
+    bool previewSound(SoundKind kind, const SoundChoice &choice) override;
+    bool openSystemSoundSettings(SoundKind kind) override;
+
+protected:
+    void soundsChanged() override;
 
 private:
     void arm(const QList<ScheduledNotification> &notifications);

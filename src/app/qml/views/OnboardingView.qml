@@ -7,7 +7,8 @@ import Brulion
 
 // OnboardingView — first run and "Open another notebook": what Brulion is, how syncing works
 // (Syncthing folder or Nextcloud), choosing or creating the notebook folder for this platform,
-// the sample notebook ("Przykładowy brulion") and the recently used notebooks.
+// "Import notes" (opens the chosen notebook on its import screen), the sample notebook
+// ("Przykładowy brulion") and the recently used notebooks.
 //
 // Per platform: desktop — a path field with a folder picker (QtQuick.Dialogs FolderDialog,
 // asynchronous); Android — a path on the phone's storage (default /storage/emulated/0/Brulion,
@@ -25,6 +26,11 @@ Rectangle {
 
     function openChosen() {
         AppController.openVault(AppController.isWasm ? AppController.defaultVaultPath : pathField.text)
+    }
+    /// Open the chosen notebook on its import screen (notes from another app).
+    function openChosenForImport() {
+        AppController.openVaultAt(AppController.isWasm ? AppController.defaultVaultPath : pathField.text,
+                                  { view: "importExport", tab: "import" })
     }
 
     Flickable {
@@ -169,6 +175,7 @@ Rectangle {
 
                         BTextField {
                             id: pathField
+                            objectName: "onboardingVaultPath"
                             Layout.fillWidth: true
                             text: AppSettings.currentVault !== "" ? AppSettings.currentVault : AppController.defaultVaultPath
                             leadingIcon: "folder"
@@ -233,6 +240,56 @@ Rectangle {
                             text: qsTr("Use app storage")
                             iconName: "smartphone"
                             onClicked: AppController.openVault(AppController.appStorageVaultPath)
+                        }
+                    }
+                }
+            }
+
+            // ---- Notes in another app: import them into the chosen notebook ------------------
+            BCard {
+                Layout.fillWidth: true
+                padding: Theme.compact ? Theme.space4 : Theme.space5
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: Theme.space4
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignTop
+                        implicitWidth: 44
+                        implicitHeight: 44
+                        radius: 22
+                        color: Theme.bgSunken
+                        BIcon {
+                            anchors.centerIn: parent
+                            name: "download"
+                            size: Theme.iconSizeLg
+                            color: Theme.fgMuted
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.space2
+                        BText {
+                            Layout.fillWidth: true
+                            text: qsTr("Notes in another app?")
+                            variant: "label"
+                            font.pixelSize: Theme.textMd
+                            wrapMode: Text.Wrap
+                        }
+                        BText {
+                            Layout.fillWidth: true
+                            text: qsTr("Brulion imports Obsidian vaults, Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others. The notebook above opens on its import screen.")
+                            variant: "muted"
+                            font.pixelSize: Theme.textSm
+                            wrapMode: Text.Wrap
+                        }
+                        BButton {
+                            objectName: "onboardingImport"
+                            text: qsTr("Import notes")
+                            iconName: "download"
+                            enabled: AppController.isWasm || pathField.text.trim() !== ""
+                            onClicked: root.openChosenForImport()
                         }
                     }
                 }

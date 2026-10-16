@@ -33,4 +33,35 @@ QJsonArray androidReminderPayload(const QList<ScheduledNotification> &notificati
     return out;
 }
 
+QJsonObject androidSoundItem(const SoundChoice &choice)
+{
+    return QJsonObject::fromVariantMap(soundToVariant(normalizedSound(choice)));
+}
+
+QJsonObject androidSoundSettings(const SoundChoice &reminder, const SoundChoice &alarm)
+{
+    return QJsonObject{
+            {u"reminder"_s, androidSoundItem(reminder)},
+            {u"alarm"_s, androidSoundItem(alarm)},
+    };
+}
+
+QJsonObject androidSoundPreview(SoundKind kind, const SoundChoice &choice)
+{
+    QJsonObject item = androidSoundItem(choice);
+    item.insert(u"kind"_s, soundKindKey(kind));
+    return item;
+}
+
+SoundChoice androidPickedSound(const QJsonObject &answer, bool *ok)
+{
+    SoundChoice::Mode mode = SoundChoice::Mode::Default;
+    const bool valid = !answer.contains(u"error"_s) && soundModeFromKey(answer.value(u"mode"_s).toString(), &mode);
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return {};
+    return soundFromVariant(answer.toVariantMap());
+}
+
 } // namespace brulion::notify

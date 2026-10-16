@@ -3,6 +3,11 @@
 // may not). Browsers deliver nothing once the page is closed: firesWhenClosed() is false and the
 // ReminderScheduler calls showNow() when a reminder is due. Clicks arrive as activated() (the
 // AppController's own WasmNotifier also opens the note).
+//
+// Sounds: Default or Silent (the browser picks the notification sound itself). An alarm with the
+// default sound also beeps in the page for a few seconds (WasmNotifier::playTone(); only after
+// the user interacted with the page — browsers block audio before that); Silent notifications
+// are shown with the Notification API's `silent`.
 #pragma once
 
 #include "notifier.h"
@@ -24,6 +29,8 @@ public:
 
     bool firesWhenClosed() const override { return false; }
     void showNow(const ScheduledNotification &notification) override;
+
+    bool previewSound(SoundKind kind, const SoundChoice &choice) override;
 
 private:
     platform::WasmNotifier *m_notifier = nullptr;

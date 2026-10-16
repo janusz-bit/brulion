@@ -7,7 +7,9 @@
 //               follow AppSettings; "Snooze" in a notification writes the new time into the
 //               note; a click opens it (desktop — Android and the browser deliver taps through
 //               main.cpp / AppController themselves); the settings page's test notification goes
-//               through the same notifier; closing a notebook cancels what it armed
+//               through the same notifier; the sounds of reminders and alarms
+//               (notify::ReminderSounds, stored in AppSettings) reach it too; closing a notebook
+//               cancels what it armed
 //   sync        Nextcloud settings and the app password (AppSettings), the device name
 //               ("sync/deviceName"), the Syncthing address ("sync/syncthingUrl") and API key (an
 //               owner-only file, syncthingApiKey() below) configure Workspace.sync; its status feeds the

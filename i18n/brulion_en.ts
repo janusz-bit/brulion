@@ -20,7 +20,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="369"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="372"/>
         <source>%n link(s)</source>
         <translation>
             <numerusform>%n link</numerusform>
@@ -388,7 +388,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/qml/io/ImportPreview.qml" line="268"/>
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="407"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="408"/>
         <source>%n warning(s)</source>
         <translation>
             <numerusform>%n warning</numerusform>
@@ -404,7 +404,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="352"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="353"/>
         <source>Import %n file(s)</source>
         <translation>
             <numerusform>Import %n file</numerusform>
@@ -412,7 +412,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="377"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="378"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -420,7 +420,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="379"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="380"/>
         <source>%n daily note(s) (%1 added to existing ones)</source>
         <translation>
             <numerusform>%n daily note (%1 added to existing ones)</numerusform>
@@ -428,7 +428,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="380"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="381"/>
         <source>%n daily note(s)</source>
         <translation>
             <numerusform>%n daily note</numerusform>
@@ -436,7 +436,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="382"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="383"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>
@@ -444,7 +444,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ImportPreview.qml" line="389"/>
+        <location filename="../src/app/qml/io/ImportPreview.qml" line="390"/>
         <source>%n file(s) got a new name because the name was taken.</source>
         <translation>
             <numerusform>%n file got a new name because the name was taken.</numerusform>
@@ -806,7 +806,7 @@
 <context>
     <name>brulion::ioviews::FileGatherer</name>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="111"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="329"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
@@ -814,7 +814,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/fileexchange.cpp" line="174"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="431"/>
+        <location filename="../src/app/io/fileexchange.cpp" line="503"/>
         <source>The folder has more than %n file(s); only the first ones were read.</source>
         <translation>
             <numerusform>The folder has more than %n file; only the first ones were read.</numerusform>
@@ -825,7 +826,7 @@
 <context>
     <name>brulion::ioviews::ImportController</name>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="675"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="676"/>
         <source>Import stopped: %n file(s) saved.</source>
         <translation>
             <numerusform>Import stopped: %n file saved.</numerusform>
@@ -833,7 +834,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/importcontroller.cpp" line="676"/>
+        <location filename="../src/app/io/importcontroller.cpp" line="677"/>
         <source>Import finished: %n file(s) saved.</source>
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>
@@ -874,7 +875,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="186"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="193"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>

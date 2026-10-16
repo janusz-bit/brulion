@@ -3,12 +3,16 @@
 // user-typed target folders, reading a picked folder (skipped folders, limits), recognising the
 // source with an override, the dry-run preview, writing with unique names for taken paths, the
 // report, cancelling and the error states — against real Workspaces over temporary vaults.
+// Android's picked documents (content:// URIs: files, a ZIP, a folder as a document tree) go
+// through FakeDocuments, an in-memory DocumentProvider: the same walk, limits and warnings as on
+// the phone, where the provider asks Android's DocumentsContract instead.
 #include "fileexchange.h"
 #include "importcontroller.h"
 #include "iobackground.h"
 #include "workspace.h"
 
 #include "io/importer.h"
+#include "io/zip.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -18,7 +22,12 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
+#include <QTimer>
 #include <QTranslator>
+
+#include <atomic>
+#include <memory>
 
 using namespace Qt::StringLiterals;
 using brulion::io::InputFile;
@@ -68,6 +77,135 @@ QList<InputFile> logseqGraph()
         text(u"graf/pages/Pomysły.md"_s, u"- [[Zakupy]] na święta\n"_s),
         InputFile{ u"graf/assets/paragon.png"_s, QByteArray("\x89PNG\r\n\x1a\n", 8) },
     };
+}
+
+/// Android's document provider in memory: picked documents and document trees by URI, like the
+/// Storage Access Framework hands them out. Read-only after setup (the gatherer asks it from a
+/// worker thread); counts its listings.
+class FakeDocuments final : public brulion::ioviews::DocumentProvider {
+public:
+    struct Node {
+        QString name;
+        bool dir = false;
+        QByteArray data;
+        QStringList children; ///< URIs
+        bool isVirtual = false;
+        bool unreadable = false;
+        bool sizeUnknown = false;
+    };
+
+    /// A picked tree: `treeUri` (as the picker returns it) names the root document `rootUri`.
+    void addTree(const QString &treeUri, const QString &rootUri, const QString &name)
+    {
+        trees.insert(treeUri, rootUri);
+        nodes.insert(rootUri, Node{name, true, {}, {}, false, false, false});
+    }
+    QString addFolder(const QString &parentUri, const QString &name)
+    {
+        const QString uri = parentUri + u"%2F"_s + QString::fromLatin1(QUrl::toPercentEncoding(name));
+        nodes.insert(uri, Node{name, true, {}, {}, false, false, false});
+        nodes[parentUri].children.append(uri);
+        return uri;
+    }
+    QString addFile(const QString &parentUri, const QString &name, const QByteArray &data)
+    {
+        const QString uri = parentUri + u"%2F"_s + QString::fromLatin1(QUrl::toPercentEncoding(name));
+        nodes.insert(uri, Node{name, false, data, {}, false, false, false});
+        if (!parentUri.isEmpty())
+            nodes[parentUri].children.append(uri);
+        return uri;
+    }
+    /// A picked single document (FileDialog), not in any tree.
+    void addDocument(const QString &uri, const QString &name, const QByteArray &data)
+    {
+        nodes.insert(uri, Node{name, false, data, {}, false, false, false});
+    }
+
+    std::optional<Entry> stat(const QUrl &url, QString *error) const override
+    {
+        ++stats;
+        QString uri = brulion::ioviews::fileSystemPathOf(url);
+        uri = trees.value(uri, uri);
+        const auto it = nodes.constFind(uri);
+        if (it == nodes.cend()) {
+            *error = u"no such document"_s;
+            return std::nullopt;
+        }
+        return entry(uri, *it);
+    }
+    std::optional<QList<Entry>> children(const Entry &folder, QString *error) const override
+    {
+        ++listings;
+        if (delayMs > 0)
+            QThread::msleep(delayMs);
+        const auto it = nodes.constFind(folder.uri);
+        if (it == nodes.cend() || !it->dir) {
+            *error = u"not a folder"_s;
+            return std::nullopt;
+        }
+        QList<Entry> out;
+        for (const QString &child : it->children)
+            out.append(entry(child, nodes.value(child)));
+        return out;
+    }
+    std::optional<QByteArray> read(const Entry &file, qint64 maxBytes, QString *error) const override
+    {
+        ++reads;
+        const Node node = nodes.value(file.uri);
+        if (node.unreadable || node.dir) {
+            *error = u"permission denied"_s;
+            return std::nullopt;
+        }
+        return node.data.left(maxBytes + 1);
+    }
+
+    QHash<QString, Node> nodes;
+    QHash<QString, QString> trees;
+    int delayMs = 0;
+    mutable std::atomic<int> stats{0};
+    mutable std::atomic<int> listings{0};
+    mutable std::atomic<int> reads{0};
+
+private:
+    static Entry entry(const QString &uri, const Node &node)
+    {
+        return Entry{uri, node.name, node.dir, node.dir || node.sizeUnknown ? -1 : node.data.size(), node.isVirtual};
+    }
+};
+
+// The URIs Android's pickers hand out (ExternalStorageProvider trees, the Downloads provider).
+const QString kTree = u"content://com.android.externalstorage.documents/tree/primary%3ADownload%2FSejf"_s;
+const QString kTreeRoot =
+        u"content://com.android.externalstorage.documents/tree/primary%3ADownload%2FSejf/document/primary%3ADownload%2FSejf"_s;
+
+/// An Obsidian vault picked as a folder (FolderDialog → a document tree): notes with Polish
+/// names, a picture, the vault's settings, a .git folder (skipped) and a Google Docs file that
+/// exists only online (skipped with a warning).
+std::shared_ptr<FakeDocuments> obsidianTree()
+{
+    auto docs = std::make_shared<FakeDocuments>();
+    docs->addTree(kTree, kTreeRoot, u"Sejf"_s);
+    const QString settings = docs->addFolder(kTreeRoot, u".obsidian"_s);
+    docs->addFile(settings, u"app.json"_s, "{}");
+    const QString notes = docs->addFolder(kTreeRoot, u"Notatki"_s);
+    docs->addFile(notes, u"Zażółć gęślą jaźń.md"_s,
+                  QStringLiteral("# Jaźń\n\nZobacz [[Łódź]] ![[zdjęcie.png]]\n").toUtf8());
+    docs->addFile(notes, u"Łódź.md"_s, QStringLiteral("- Piotrkowska\n").toUtf8());
+    docs->addFile(kTreeRoot, u"zdjęcie.png"_s, QByteArray("\x89PNG\r\n\x1a\n", 8));
+    const QString git = docs->addFolder(kTreeRoot, u".git"_s);
+    docs->addFile(git, u"HEAD"_s, "ref: refs/heads/main\n");
+    const QString online = docs->addFile(kTreeRoot, u"Plan podróży"_s, {});
+    docs->nodes[online].isVirtual = true;
+    return docs;
+}
+
+QStringList pathsOf(const QList<InputFile> &files)
+{
+    QStringList paths;
+    for (const InputFile &f : files)
+        paths.append(f.path);
+    paths.sort();
+    return paths;
 }
 
 } // namespace
@@ -197,6 +335,8 @@ private Q_SLOTS:
             const QVariantMap m = v.toMap();
             ids.append(m.value(u"id"_s).toString());
             QVERIFY2(!m.value(u"howTo"_s).toString().isEmpty(), qPrintable(m.value(u"id"_s).toString()));
+            // The phone's steps (Android): every app says where its notes are and what to pick.
+            QVERIFY2(!m.value(u"phoneHowTo"_s).toString().isEmpty(), qPrintable(m.value(u"id"_s).toString()));
             QVERIFY(QStringList({ u"files"_s, u"folder"_s, u"both"_s }).contains(m.value(u"pick"_s).toString()));
             QVERIFY(!m.value(u"fileTypes"_s).toStringList().isEmpty());
         }
@@ -516,6 +656,236 @@ private Q_SLOTS:
         c.startImport();
         QVERIFY(waitState(c, u"done"_s));
         QVERIFY(ws->exists(u"Import/Simplenote/Zakupy.md"_s));
+    }
+
+    // ---- Android documents (content:// URIs) and typed paths ---------------------------------------
+
+    void contentUrls()
+    {
+        using brulion::ioviews::displayNameOf;
+        using brulion::ioviews::fileSystemPathOf;
+        using brulion::ioviews::isDocumentUrl;
+        using brulion::ioviews::urlFromUserInput;
+        // As the system's picker encodes them: the document id must reach Android unchanged.
+        const QUrl tree(kTree);
+        QVERIFY(isDocumentUrl(tree));
+        QCOMPARE(fileSystemPathOf(tree), kTree);
+        QCOMPARE(fileSystemPathOf(QUrl(kTreeRoot)), kTreeRoot);
+        QCOMPARE(displayNameOf(tree), u"Sejf"_s); // until the provider names it
+        const QUrl download(u"content://com.android.providers.downloads.documents/document/msf%3A1000012345"_s);
+        QCOMPARE(fileSystemPathOf(download), download.toString(QUrl::FullyEncoded));
+        QCOMPARE(displayNameOf(download), u"1000012345"_s);
+        QVERIFY(!isDocumentUrl(QUrl::fromLocalFile(u"/tmp/x.md"_s)));
+        // Typed paths and URLs (the path field, route parameters).
+        QCOMPARE(urlFromUserInput(u"  /storage/emulated/0/Download/Obsidian "_s),
+                 QUrl::fromLocalFile(u"/storage/emulated/0/Download/Obsidian"_s));
+        QCOMPARE(urlFromUserInput(u"/home/łucja/Zażółć.md"_s).toLocalFile(), u"/home/łucja/Zażółć.md"_s);
+        QCOMPARE(urlFromUserInput(u"file:///tmp/Notatki"_s).toLocalFile(), u"/tmp/Notatki"_s);
+        QVERIFY(isDocumentUrl(urlFromUserInput(kTree)));
+        QCOMPARE(fileSystemPathOf(urlFromUserInput(kTree)), kTree);
+        QVERIFY(urlFromUserInput(u"   "_s).isEmpty());
+    }
+
+    void gatherDocumentTree()
+    {
+        // A folder picked on Android: walked folder by folder through the provider (one listing
+        // per folder entered; skipped folders are never listed), names as the provider gives them.
+        auto docs = obsidianTree();
+        brulion::ioviews::FileGatherer g;
+        g.setDocumentProvider(docs);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start({QUrl(kTree)});
+        QVERIFY(finished.wait(5000));
+        const auto files = finished.first().at(0).value<QList<InputFile>>();
+        QCOMPARE(pathsOf(files), QStringList({u"Sejf/.obsidian/app.json"_s, u"Sejf/Notatki/Zażółć gęślą jaźń.md"_s,
+                                              u"Sejf/Notatki/Łódź.md"_s, u"Sejf/zdjęcie.png"_s}));
+        QCOMPARE(finished.first().at(2).toString(), u"Sejf"_s);
+        const QStringList warnings = finished.first().at(1).toStringList();
+        QCOMPARE(warnings.size(), 1);
+        QVERIFY2(warnings.first().contains(u"Plan podróży"_s), qPrintable(warnings.first()));
+        QCOMPARE(docs->listings.load(), 3); // Sejf, .obsidian, Notatki — not .git
+        QCOMPARE(docs->reads.load(), 4);
+        for (const InputFile &f : files) {
+            if (f.path.endsWith(u"jaźń.md"_s))
+                QVERIFY(QString::fromUtf8(f.data).contains(u"[[Łódź]]"_s));
+        }
+        QVERIFY(brulion::io::detectImporter(files));
+        QCOMPARE(brulion::io::detectImporter(files)->id(), u"obsidian"_s);
+    }
+
+    void gatherDocumentsWithLocalFiles()
+    {
+        // Several files picked at once (documents) plus a local file: same names stay apart,
+        // an unreadable document and one bigger than the limit (its size unknown to the
+        // provider, so found out by reading) give warnings, the rest is read.
+        auto docs = std::make_shared<FakeDocuments>();
+        const QString a = u"content://com.android.providers.downloads.documents/document/msf%3A11"_s;
+        const QString b = u"content://com.android.providers.downloads.documents/document/msf%3A12"_s;
+        const QString locked = u"content://com.google.android.apps.docs.storage/document/acc%3D1%3Bdoc%3D7"_s;
+        const QString huge = u"content://com.android.providers.downloads.documents/document/msf%3A13"_s;
+        docs->addDocument(a, u"Notatka.md"_s, "- z telefonu\n");
+        docs->addDocument(b, u"Zakupy.txt"_s, "mleko\n");
+        docs->addDocument(locked, u"Tajne.md"_s, "x");
+        docs->nodes[locked].unreadable = true;
+        docs->addDocument(huge, u"Wielki.md"_s, QByteArray(5000, 'a'));
+        docs->nodes[huge].sizeUnknown = true;
+        const QString local = m_tmp.filePath(u"lokalne/Notatka.md"_s);
+        writeRaw(local, "- z komputera\n");
+        brulion::ioviews::FileGatherer g;
+        g.setDocumentProvider(docs);
+        brulion::ioviews::GatherLimits limits;
+        limits.maxFileBytes = 4000;
+        g.setLimits(limits);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        g.start({QUrl(a), QUrl(b), QUrl(locked), QUrl(huge), QUrl::fromLocalFile(local)});
+        QVERIFY(finished.wait(5000));
+        const auto files = finished.first().at(0).value<QList<InputFile>>();
+        QCOMPARE(pathsOf(files), QStringList({u"Notatka 2.md"_s, u"Notatka.md"_s, u"Zakupy.txt"_s}));
+        QCOMPARE(finished.first().at(2).toString(), u"5 file(s)"_s);
+        const QStringList warnings = finished.first().at(1).toStringList();
+        QCOMPARE(warnings.size(), 2);
+        QVERIFY(warnings.join(u'\n').contains(u"Tajne.md"_s));
+        QVERIFY(warnings.join(u'\n').contains(u"Wielki.md"_s));
+        // A document that is gone (permission revoked, deleted) is a warning, not a crash.
+        g.start({QUrl(u"content://com.android.providers.downloads.documents/document/msf%3A99"_s)});
+        QVERIFY(finished.wait(5000));
+        QVERIFY(finished.last().at(0).value<QList<InputFile>>().isEmpty());
+        QCOMPARE(finished.last().at(1).toStringList().size(), 1);
+    }
+
+    void gatherListsOffTheGuiThread()
+    {
+        // A slow provider (Google Drive, an SD card): listing and reading never block the event
+        // loop — on Android a blocked GUI thread is an "app not responding" dialog.
+        auto docs = obsidianTree();
+        docs->delayMs = 120;
+        brulion::ioviews::FileGatherer g;
+        g.setDocumentProvider(docs);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        QSignalSpy progress(&g, &brulion::ioviews::FileGatherer::progress);
+        int ticks = 0;
+        QTimer ticker;
+        ticker.setInterval(10);
+        connect(&ticker, &QTimer::timeout, &g, [&ticks] { ++ticks; });
+        ticker.start();
+        QElapsedTimer started;
+        started.start();
+        g.start({QUrl(kTree)});
+        QVERIFY2(started.elapsed() < 100, qPrintable(QString::number(started.elapsed())));
+        QCOMPARE(progress.first().at(1).toInt(), 0); // "looking for the files"
+        QVERIFY(finished.wait(10000 * BRULION_TEST_SLOWDOWN));
+        QVERIFY2(ticks >= 10, qPrintable(QString::number(ticks))); // ≥ 360 ms of listing
+        QCOMPARE(finished.first().at(0).value<QList<InputFile>>().size(), 4);
+    }
+
+    void gatherDocumentTreeCancelled()
+    {
+        auto docs = obsidianTree();
+        docs->delayMs = 50;
+        brulion::ioviews::FileGatherer g;
+        g.setDocumentProvider(docs);
+        QSignalSpy finished(&g, &brulion::ioviews::FileGatherer::finished);
+        QSignalSpy cancelled(&g, &brulion::ioviews::FileGatherer::cancelled);
+        g.start({QUrl(kTree)});
+        QTest::qWait(20);
+        g.cancel(); // while the listing runs on its thread
+        QCOMPARE(cancelled.size(), 1);
+        QTest::qWait(400);
+        QCOMPARE(finished.size(), 0); // the listing's late result is dropped
+        QVERIFY(!g.isRunning());
+        // And a new pick right after works.
+        docs->delayMs = 0;
+        g.start({QUrl(kTree)});
+        QVERIFY(finished.wait(5000));
+        QCOMPARE(finished.first().at(0).value<QList<InputFile>>().size(), 4);
+    }
+
+    void importFolderPickedOnAndroid()
+    {
+        // FolderDialog on the phone → a tree URI → preview → import, through the controller.
+        QString root;
+        auto ws = open({}, &root);
+        auto docs = obsidianTree();
+        ImportController c;
+        c.setWorkspace(ws.get());
+        c.gatherer()->setDocumentProvider(docs);
+        c.addFolder(QUrl(kTree));
+        QCOMPARE(c.state(), u"reading"_s);
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.sourceName(), u"Sejf"_s);
+        QCOMPARE(c.effectiveId(), u"obsidian"_s);
+        QCOMPARE(c.preview().value(u"pages"_s).toInt(), 2);
+        QCOMPARE(c.preview().value(u"attachments"_s).toInt(), 1);
+        QVERIFY(c.readWarnings().join(u'\n').contains(u"Plan podróży"_s));
+        QVERIFY(!QFileInfo::exists(root + u"/Import/Obsidian"_s)); // nothing written yet
+        c.startImport();
+        QVERIFY(waitState(c, u"done"_s));
+        QCOMPARE(c.report().value(u"pages"_s).toInt(), 2);
+        QVERIFY(ws->exists(u"Import/Obsidian/Notatki/Zażółć gęślą jaźń.md"_s));
+        QVERIFY(ws->exists(u"Import/Obsidian/Notatki/Łódź.md"_s));
+        QVERIFY(c.report().value(u"warnings"_s).toStringList().join(u'\n').contains(u"Plan podróży"_s));
+        // "Otwórz zaimportowany folder": All pages in the folder.
+        QSignalSpy navigation(ws.get(), &brulion::shell::Workspace::navigationRequested);
+        c.openTarget();
+        QCOMPARE(navigation.size(), 1);
+        const QVariantMap route = navigation.first().at(0).toMap();
+        QCOMPARE(route.value(u"view"_s).toString(), u"allPages"_s);
+        QCOMPARE(route.value(u"path"_s).toString(), u"Import/Obsidian"_s);
+    }
+
+    void importZipPickedOnAndroid()
+    {
+        // A Logseq graph exported as a ZIP and picked from Downloads: the document's id is
+        // opaque ("msf:42"), its name comes from the provider; the ZIP is unpacked.
+        QString root;
+        auto ws = open({}, &root);
+        auto docs = std::make_shared<FakeDocuments>();
+        const QString zip = u"content://com.android.providers.downloads.documents/document/msf%3A42"_s;
+        docs->addDocument(zip, u"Logseq — kopia.zip"_s, brulion::io::writeZip(logseqGraph()));
+        ImportController c;
+        c.setWorkspace(ws.get());
+        c.gatherer()->setDocumentProvider(docs);
+        c.addUrls({QUrl(zip)});
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.sourceName(), u"Logseq — kopia.zip"_s);
+        QCOMPARE(c.effectiveId(), u"logseq"_s);
+        QCOMPARE(c.preview().value(u"pages"_s).toInt(), 2);
+        QCOMPARE(c.preview().value(u"journals"_s).toInt(), 1);
+        c.startImport();
+        QVERIFY(waitState(c, u"done"_s));
+        QVERIFY(ws->exists(u"Import/Logseq/Pomysły.md"_s));
+        QVERIFY(QString::fromUtf8(readRaw(root + u"/journals/2026-10-14.md"_s)).contains(u"Łucją"_s));
+    }
+
+    void importSeveralLocalFilesAndPaths()
+    {
+        // Desktop FileDialog (file:// URLs, several at once) and the typed path field.
+        const QString dir = m_tmp.filePath(u"pobrane"_s);
+        writeRaw(dir + u"/Przepisy.md"_s, "# Przepisy\n\n- [[Żurek]]\n");
+        writeRaw(dir + u"/Żurek.md"_s, "- zakwas, kiełbasa\n");
+        writeRaw(dir + u"/Zakupy.txt"_s, "chleb\n");
+        auto ws = open();
+        ImportController c;
+        c.setWorkspace(ws.get());
+        c.addUrls({QUrl::fromLocalFile(dir + u"/Przepisy.md"_s), QUrl::fromLocalFile(dir + u"/Żurek.md"_s),
+                   QUrl::fromLocalFile(dir + u"/Zakupy.txt"_s)});
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.inputCount(), 3);
+        QCOMPARE(c.effectiveId(), u"markdown"_s);
+        QCOMPARE(c.preview().value(u"pages"_s).toInt(), 3);
+        // The typed path takes a folder, also as a file:// URL; a missing path says so.
+        c.addPaths({u"file://"_s + QUrl::fromLocalFile(dir).path()});
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(c.sourceName(), u"pobrane"_s);
+        QCOMPARE(c.inputCount(), 3);
+        c.addPaths({m_tmp.filePath(u"nie ma mnie"_s)});
+        QVERIFY(waitState(c, u"error"_s));
+        QVERIFY2(c.errorText().contains(u"nie ma mnie"_s), qPrintable(c.errorText()));
+        c.addPaths({dir});
+        QVERIFY(waitState(c, u"ready"_s));
+        c.startImport();
+        QVERIFY(waitState(c, u"done"_s));
+        QVERIFY(ws->exists(u"Import/Markdown/pobrane/Żurek.md"_s) || ws->exists(u"Import/Markdown/Żurek.md"_s));
     }
 
     void inlineBackgroundAndCancel()

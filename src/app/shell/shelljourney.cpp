@@ -34,8 +34,24 @@ namespace brulion::shell {
 
 namespace {
 
+/// Let the event loop run for `ms` (gestures, transitions, queued calls). Not scaled by
+/// BRULION_TEST_SLOWDOWN: these are real input timings (a longer pause turns a tap into a
+/// long press), unlike waitFor()'s deadlines.
+void settle(int ms)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < ms) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        QThread::msleep(2);
+    }
+}
+
 bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000)
 {
+    // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
+    static const int slowdown = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
+    timeoutMs *= slowdown;
     QElapsedTimer timer;
     timer.start();
     while (!condition()) {
@@ -45,11 +61,6 @@ bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000)
         QThread::msleep(5);
     }
     return true;
-}
-
-void settle(int ms)
-{
-    waitFor([] { return false; }, ms);
 }
 
 /// The text a QML file shows for `source` (qsTr() in <context>.qml), in the current language.

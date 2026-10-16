@@ -4,9 +4,16 @@
 //   { id: nativeId (positive 31-bit, stable per occurrence), title, body,
 //     at: epoch ms of the local wall-clock time, alarm: bool, ringMinutes: 1–60 (alarms),
 //     path: vault-relative note, line: 0-based line of the reminder }
+//
+// The sounds (AndroidBridge::setReminderSounds(), previewSound(), pickSound()):
+//
+//   { reminder: {mode, uri, title}, alarm: {mode, uri, title} }   mode: default | custom |
+//   vibrate | silent; uri: the ringtone (content://…) of a custom sound. The Kotlin side
+//   (ReminderSounds.kt) gives a kind whose sound changed a new notification channel.
 #pragma once
 
 #include "reminders/notifications.h"
+#include "soundchoice.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -19,5 +26,15 @@ QJsonObject androidReminderItem(const ScheduledNotification &notification);
 
 /// All reminders, in order; entries without a valid time are left out.
 QJsonArray androidReminderPayload(const QList<ScheduledNotification> &notifications);
+
+/// One sound: {mode, uri, title} (normalised: a custom sound without a uri is the default).
+QJsonObject androidSoundItem(const SoundChoice &choice);
+/// Both sounds: {reminder: {…}, alarm: {…}}.
+QJsonObject androidSoundSettings(const SoundChoice &reminder, const SoundChoice &alarm);
+/// A sound to preview: {kind: "reminder" | "alarm", mode, uri, title}.
+QJsonObject androidSoundPreview(SoundKind kind, const SoundChoice &choice);
+/// The sound the system picker answered with ({mode, uri, title} from Kotlin); `ok` false for
+/// an error answer ({error: …}) or nonsense.
+SoundChoice androidPickedSound(const QJsonObject &answer, bool *ok = nullptr);
 
 } // namespace brulion::notify

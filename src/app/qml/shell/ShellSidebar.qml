@@ -90,6 +90,7 @@ Rectangle {
 
         ListView {
             id: list
+            objectName: "sidebarTree"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -142,6 +143,20 @@ Rectangle {
                     }
                 }
 
+                // ---- Import (the drawer on phones: notes from other apps, docs/UI.md) --
+                BListItem {
+                    objectName: "drawerImportNotes"
+                    visible: Theme.narrow
+                    width: parent.width
+                    height: visible ? implicitHeight : 0
+                    dense: true
+                    text: qsTr("Import notes")
+                    iconName: "download"
+                    selected: sidebar.route.view === "importExport"
+                    selectionBar: true
+                    onClicked: sidebar.go({ view: "importExport", tab: "import" })
+                }
+
                 // ---- Favourites --------------------------------------------------------
                 BSectionHeader {
                     width: parent.width
@@ -181,6 +196,8 @@ Rectangle {
                             onClicked: sidebar.openPage(modelData.path)
                             onPressAndHold: sidebar.showContextMenu(favoriteItem, modelData.path, false)
                             TapHandler {
+                                // Right-click only (see the tree rows below): never a finger.
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                                 acceptedButtons: Qt.RightButton
                                 onTapped: sidebar.showContextMenu(favoriteItem, favoriteItem.modelData.path, false)
                             }
@@ -251,7 +268,9 @@ Rectangle {
                 dense: true
                 leftPadding: (Theme.touchUi ? 14 : 10) + depth * (Theme.touchUi ? 18 : 14)
                 text: title
-                iconName: isDir ? (hasChildren ? (expanded ? "chevron-down" : "chevron-right") : "folder") : fileIcon
+                // An empty folder opens too (folder-open) and says why nothing appears under it.
+                subtitle: isDir && expanded && !hasChildren ? qsTr("Empty folder") : ""
+                iconName: isDir && hasChildren ? (expanded ? "chevron-down" : "chevron-right") : fileIcon
                 iconColor: Theme.fgFaint
                 selected: !isDir && sidebar.route.view === "page" && sidebar.route.path === path
                 Accessible.description: isDir ? (expanded ? qsTr("expanded folder") : qsTr("collapsed folder")) : ""
@@ -266,7 +285,12 @@ Rectangle {
                 Keys.onRightPressed: if (isDir && !expanded) tree.toggle(index)
                 Keys.onLeftPressed: if (isDir && expanded) tree.toggle(index)
                 Keys.onMenuPressed: sidebar.showContextMenu(row, path, isDir)
+                // The context menu on a right-click. Only for devices with buttons: a finger has
+                // none, so Qt hands touch points to a TapHandler whatever its acceptedButtons —
+                // every tap on a phone opened the (modal) menu, which then swallowed the release,
+                // and the folder never expanded nor the page opened. Touch has press-and-hold.
                 TapHandler {
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                     acceptedButtons: Qt.RightButton
                     onTapped: sidebar.showContextMenu(row, row.path, row.isDir)
                 }
@@ -296,6 +320,7 @@ Rectangle {
 
     BMenu {
         id: contextMenu
+        objectName: "sidebarContextMenu"
 
         property string path
         property bool isDir: false

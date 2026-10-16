@@ -47,6 +47,7 @@ Rectangle {
                 readonly property bool current: modelData.id === nav.view
                                                 || (modelData.id === "journals" && nav.view === "journal")
 
+                objectName: "bottomNav_" + modelData.id
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 focusPolicy: Qt.StrongFocus

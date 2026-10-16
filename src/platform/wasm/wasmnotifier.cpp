@@ -135,7 +135,7 @@ EM_JS(void, brulion_notifier_request, (), {
 
 EM_JS(int, brulion_notifier_show,
       (const char *idUtf8, const char *titleUtf8, const char *bodyUtf8, const char *pathUtf8,
-       int line, int alarm),
+       int line, int alarm, int silent),
       {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return 0;
     var id = UTF8ToString(idUtf8);
@@ -151,7 +151,8 @@ EM_JS(int, brulion_notifier_show,
         lang: (typeof document !== "undefined" && document.documentElement.lang) || "pl",
         data: { brulion: true, id: id, path: path, line: line }
     };
-    if (alarm) options.vibrate = [400, 200, 400, 200, 800];
+    if (silent) options.silent = true;
+    else if (alarm) options.vibrate = [400, 200, 400, 200, 800];
     var store = Module["brulionNotifications"] || (Module["brulionNotifications"] = {});
     try {
         var n = new Notification(title, options);
@@ -180,6 +181,35 @@ EM_JS(int, brulion_notifier_show,
             console.error("Brulion: cannot show a notification", err);
         });
         return 1;
+    }
+});
+
+// A beeping tone through Web Audio (one AudioContext for the page, resumed when suspended).
+EM_JS(void, brulion_notifier_tone, (int alarm), {
+    try {
+        var Ctx = globalThis["AudioContext"] || globalThis["webkitAudioContext"];
+        if (!Ctx) return;
+        var ctx = Module["brulionAudio"] || (Module["brulionAudio"] = new Ctx());
+        if (ctx.state === "suspended" && ctx.resume) ctx.resume();
+        var start = ctx.currentTime + 0.05;
+        var beeps = alarm ? 12 : 2;
+        var step = alarm ? 0.5 : 0.3;
+        for (var i = 0; i < beeps; i++) {
+            var t = start + i * step;
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = "sine";
+            osc.frequency.value = (alarm && (i % 2) === 1) ? 660 : 880;
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.25);
+        }
+    } catch (e) {
+        console.error("Brulion: cannot play the tone", e);
     }
 });
 
@@ -272,11 +302,11 @@ void WasmNotifier::requestPermission()
 }
 
 bool WasmNotifier::showNow(const QString &id, const QString &title, const QString &body,
-                           const QString &path, int line, bool alarm)
+                           const QString &path, int line, bool alarm, bool silent)
 {
     const bool shown = brulion_notifier_show(id.toUtf8().constData(), title.toUtf8().constData(),
                                              body.toUtf8().constData(), path.toUtf8().constData(),
-                                             line, alarm ? 1 : 0)
+                                             line, alarm ? 1 : 0, silent ? 1 : 0)
         != 0;
     if (!shown)
         qCWarning(lcWasmNotifier) << "notification not shown (no permission):" << id;
@@ -286,6 +316,11 @@ bool WasmNotifier::showNow(const QString &id, const QString &title, const QStrin
 void WasmNotifier::close(const QString &id)
 {
     brulion_notifier_close(id.toUtf8().constData());
+}
+
+void WasmNotifier::playTone(bool alarm)
+{
+    brulion_notifier_tone(alarm ? 1 : 0);
 }
 
 } // namespace brulion::platform

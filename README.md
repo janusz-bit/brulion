@@ -92,7 +92,9 @@
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
 * **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Joplin,
-  Simplenote, Roam, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar. Eksport do ZIP
+  Simplenote, Roam, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na telefonie
+  (*Więcej → Importuj notatki*: pliki, ZIP albo cały folder skarbca, z podglądem przed zapisem;
+  [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)). Eksport do ZIP
   z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego pliku HTML,
   JSON, iCalendar, OPML i CSV zadań.
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::

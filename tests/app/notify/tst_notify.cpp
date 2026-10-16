@@ -1,10 +1,12 @@
 // Notifier adapters: the freedesktop Notify message of a reminder or alarm, DesktopNotifier
 // against a fake notification bus (snooze / open / OK actions, foreign notifications, replacing,
-// ringing alarms, the tray fallback, Wayland activation tokens), the JSON for Android's alarm
-// scheduler and the platform factory.
+// ringing alarms, the tray fallback, Wayland activation tokens), the sounds (freedesktop hints of
+// every choice, the sample notification), the JSON for Android's alarm scheduler and sound
+// channels, and the platform factory.
 #include "androidpayload.h"
 #include "desktopnotifier.h"
 #include "notifier.h"
+#include "soundchoice.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -289,6 +291,237 @@ private Q_SLOTS:
         QVERIFY(androidReminderPayload({}).isEmpty());
     }
 
+    void soundChoiceKeys()
+    {
+        using Mode = SoundChoice::Mode;
+        for (Mode mode : {Mode::Default, Mode::Custom, Mode::VibrateOnly, Mode::Silent}) {
+            Mode parsed = Mode::Silent;
+            QVERIFY(soundModeFromKey(soundModeKey(mode), &parsed));
+            QCOMPARE(parsed, mode);
+        }
+        Mode parsed = Mode::Silent;
+        QVERIFY(!soundModeFromKey(u"głośno"_s, &parsed));
+        QCOMPARE(parsed, Mode::Default);
+        QVERIFY(!soundModeFromKey(QString(), nullptr));
+
+        SoundKind kind = SoundKind::Reminder;
+        QVERIFY(soundKindFromKey(u"alarm"_s, &kind));
+        QCOMPARE(kind, SoundKind::Alarm);
+        QCOMPARE(soundKindKey(SoundKind::Reminder), u"reminder"_s);
+        QVERIFY(!soundKindFromKey(u"budzik"_s, &kind));
+
+        // Normalised: trimmed, a custom sound without a uri is the default; another mode keeps
+        // the remembered custom sound.
+        const SoundChoice padded{Mode::Custom, u"  bell \n"_s, u"  Dzwonek   szkolny "_s};
+        QCOMPARE(normalizedSound(padded), (SoundChoice{Mode::Custom, u"bell"_s, u"Dzwonek szkolny"_s}));
+        QCOMPARE(normalizedSound(SoundChoice{Mode::Custom, u"   "_s, {}}).mode, Mode::Default);
+        const SoundChoice remembered{Mode::Silent, u"content://media/27"_s, u"Żuraw"_s};
+        QCOMPARE(normalizedSound(remembered), remembered);
+        QVERIFY(!remembered.isCustom());
+        QCOMPARE(soundFromVariant(soundToVariant(remembered)), remembered);
+        QCOMPARE(soundFromVariant({{u"mode"_s, u"nonsense"_s}}), SoundChoice());
+        QCOMPARE(soundFromVariant({}), SoundChoice());
+    }
+
+    void soundFiles()
+    {
+        QVERIFY(isSoundFile(u"file:///home/ja/D%C5%BAwi%C4%99ki/%C4%87ma.oga"_s));
+        QVERIFY(isSoundFile(u"/usr/share/sounds/freedesktop/stereo/bell.oga"_s));
+        QVERIFY(!isSoundFile(u"bell"_s));
+        QVERIFY(!isSoundFile(u"content://media/internal/audio/media/27"_s));
+        QCOMPARE(soundFilePath(u"file:///home/ja/D%C5%BAwi%C4%99ki/%C4%87ma%20nocna.oga"_s),
+                 u"/home/ja/Dźwięki/ćma nocna.oga"_s);
+        QCOMPARE(soundFilePath(u"/home/ja/./Dźwięki//dzwonek.wav"_s), u"/home/ja/Dźwięki/dzwonek.wav"_s);
+        QCOMPARE(soundFilePath(u"bell"_s), QString());
+        QVERIFY(desktopThemeSounds().contains(defaultAlarmThemeSound()));
+        QCOMPARE(desktopThemeSounds().size(), 5);
+    }
+
+    void desktopSoundHints_data()
+    {
+        QTest::addColumn<bool>("isAlarm");
+        QTest::addColumn<int>("mode");
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<QString>("soundName");
+        QTest::addColumn<QString>("soundFile");
+        QTest::addColumn<bool>("suppress");
+
+        using Mode = SoundChoice::Mode;
+        const QString file = u"file:///home/ja/D%C5%BAwi%C4%99ki/%C5%BCuraw.oga"_s;
+        const QString path = u"/home/ja/Dźwięki/żuraw.oga"_s;
+        // Reminders: the desktop's own default (no hint), or the chosen sound.
+        QTest::newRow("reminder default")
+                << false << int(Mode::Default) << QString() << QString() << QString() << false;
+        QTest::newRow("reminder theme") << false << int(Mode::Custom) << u"message-new-instant"_s
+                                        << u"message-new-instant"_s << QString() << false;
+        QTest::newRow("reminder file") << false << int(Mode::Custom) << file << QString() << path << false;
+        QTest::newRow("reminder silent") << false << int(Mode::Silent) << u"bell"_s << QString() << QString() << true;
+        QTest::newRow("reminder vibrate")
+                << false << int(Mode::VibrateOnly) << QString() << QString() << QString() << true;
+        // Alarms: an alarm clock by default.
+        QTest::newRow("alarm default") << true << int(Mode::Default) << QString() << u"alarm-clock-elapsed"_s
+                                       << QString() << false;
+        QTest::newRow("alarm theme") << true << int(Mode::Custom) << u"phone-incoming-call"_s
+                                     << u"phone-incoming-call"_s << QString() << false;
+        QTest::newRow("alarm file") << true << int(Mode::Custom) << path << QString() << path << false;
+        QTest::newRow("alarm custom without uri")
+                << true << int(Mode::Custom) << QString() << u"alarm-clock-elapsed"_s << QString() << false;
+        QTest::newRow("alarm silent") << true << int(Mode::Silent) << QString() << QString() << QString() << true;
+    }
+
+    void desktopSoundHints()
+    {
+        QFETCH(bool, isAlarm);
+        QFETCH(int, mode);
+        QFETCH(QString, uri);
+        QFETCH(QString, soundName);
+        QFETCH(QString, soundFile);
+        QFETCH(bool, suppress);
+
+        const ScheduledNotification n = isAlarm ? alarm() : reminder();
+        const SoundChoice sound{SoundChoice::Mode(mode), uri, {}};
+        const DesktopNotification d = buildDesktopNotification(n, {u"actions"_s, u"sound"_s}, 10, 0, sound);
+        QCOMPARE(d.hints.value(u"sound-name"_s).toString(), soundName);
+        QCOMPARE(d.hints.contains(u"sound-name"_s), !soundName.isEmpty());
+        QCOMPARE(d.hints.value(u"sound-file"_s).toString(), soundFile);
+        QCOMPARE(d.hints.contains(u"sound-file"_s), !soundFile.isEmpty());
+        QCOMPARE(d.hints.value(u"suppress-sound"_s).toBool(), suppress);
+        QCOMPARE(d.hints.contains(u"suppress-sound"_s), suppress);
+        // The rest of the message does not depend on the sound.
+        QCOMPARE(d.hints.value(u"urgency"_s).value<uchar>(), uchar(isAlarm ? 2 : 1));
+        QCOMPARE(d.hints.value(u"resident"_s).toBool(), isAlarm);
+        QCOMPARE(d.expireTimeout, isAlarm ? 0 : -1);
+        QCOMPARE(d.actions.size(), 6);
+
+        // The sample of "Play sample" sounds the same, but passes and offers nothing.
+        const DesktopNotification sample =
+                buildSoundPreview(isAlarm ? SoundKind::Alarm : SoundKind::Reminder, sound, 7);
+        QCOMPARE(sample.hints.value(u"sound-name"_s).toString(), soundName);
+        QCOMPARE(sample.hints.value(u"sound-file"_s).toString(), soundFile);
+        QCOMPARE(sample.hints.value(u"suppress-sound"_s).toBool(), suppress);
+        QCOMPARE(sample.hints.value(u"urgency"_s).value<uchar>(), uchar(1));
+        QCOMPARE(sample.hints.value(u"transient"_s).toBool(), true);
+        QVERIFY(!sample.hints.contains(u"resident"_s));
+        QVERIFY(sample.actions.isEmpty());
+        QCOMPARE(sample.replacesId, 7u);
+        QVERIFY(sample.expireTimeout > 0);
+        QCOMPARE(sample.summary, isAlarm ? u"⏰ Alarm sound"_s : u"Reminder sound"_s);
+    }
+
+    void desktopNotifierPlaysTheChosenSounds()
+    {
+        auto *bus = new FakeBus;
+        DesktopNotifier notifier(bus);
+        QCOMPARE(notifier.soundModes(), (QList<SoundChoice::Mode>{SoundChoice::Mode::Default, SoundChoice::Mode::Custom,
+                                                                  SoundChoice::Mode::Silent}));
+        QVERIFY(notifier.supportsSoundFiles());
+        QVERIFY(!notifier.hasSystemSoundPicker());
+        QVERIFY(!notifier.hasSystemSoundSettings());
+        QCOMPARE(notifier.themeSounds(), desktopThemeSounds());
+        QVERIFY(!notifier.pickSound(SoundKind::Alarm));
+        QVERIFY(!notifier.openSystemSoundSettings(SoundKind::Alarm));
+
+        QDateTime now(QDate(2026, 10, 14), QTime(6, 30));
+        notifier.setClock([&now] { return now; });
+        notifier.setRingInterval(20);
+        notifier.setSounds({SoundChoice::Mode::Silent, u"bell"_s, {}},
+                           {SoundChoice::Mode::Custom, u"file:///home/ja/budzik%20%C5%BC.oga"_s, u"budzik ż.oga"_s});
+        QCOMPARE(notifier.sound(SoundKind::Reminder).mode, SoundChoice::Mode::Silent);
+
+        notifier.showNow(reminder());
+        QCOMPARE(bus->sent.last().hints.value(u"suppress-sound"_s).toBool(), true);
+        QVERIFY(!bus->sent.last().hints.contains(u"sound-name"_s));
+
+        notifier.showNow(alarm());
+        QCOMPARE(bus->sent.last().hints.value(u"sound-file"_s).toString(), u"/home/ja/budzik ż.oga"_s);
+        QVERIFY(!bus->sent.last().hints.contains(u"sound-name"_s));
+        // Ringing again plays the chosen sound again, not the default alarm clock.
+        const qsizetype before = bus->sent.size();
+        QTRY_VERIFY(bus->sent.size() >= before + 2);
+        QCOMPARE(bus->sent.last().hints.value(u"sound-file"_s).toString(), u"/home/ja/budzik ż.oga"_s);
+        QVERIFY(!bus->sent.last().hints.contains(u"sound-name"_s));
+        now = now.addSecs(120);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+    }
+
+    void desktopSoundPreview()
+    {
+        auto *bus = new FakeBus;
+        DesktopNotifier notifier(bus);
+        QSignalSpy errors(&notifier, &Notifier::errorOccurred);
+        QSignalSpy activated(&notifier, &Notifier::activated);
+        QSignalSpy snoozed(&notifier, &Notifier::snoozeRequested);
+
+        QVERIFY(notifier.previewSound(SoundKind::Reminder, {SoundChoice::Mode::Custom, u"bell"_s, {}}));
+        QCOMPARE(bus->sent.size(), 1);
+        QCOMPARE(bus->sent.last().hints.value(u"sound-name"_s).toString(), u"bell"_s);
+        QCOMPARE(bus->sent.last().replacesId, 0u);
+        const uint sample = bus->nextId;
+        // The next sample replaces the first one; samples are no reminders.
+        QVERIFY(notifier.previewSound(SoundKind::Alarm, {}));
+        QCOMPARE(bus->sent.last().replacesId, sample);
+        QCOMPARE(bus->sent.last().hints.value(u"sound-name"_s).toString(), u"alarm-clock-elapsed"_s);
+        QCOMPARE(notifier.shownCount(), 0);
+        QCOMPARE(notifier.ringingCount(), 0);
+        bus->invoke(sample, u"default"_s);
+        QCOMPARE(activated.size(), 0);
+        QCOMPARE(snoozed.size(), 0);
+        QCOMPARE(errors.size(), 0);
+
+        // The service refuses: say so.
+        bus->fail = true;
+        QVERIFY(notifier.previewSound(SoundKind::Alarm, {}));
+        QCOMPARE(errors.size(), 1);
+
+        // No notification service at all: nothing to play the sound.
+        DesktopNotifier trayOnly(nullptr);
+        QSignalSpy trayErrors(&trayOnly, &Notifier::errorOccurred);
+        QVERIFY(!trayOnly.previewSound(SoundKind::Reminder, {}));
+        QCOMPARE(trayErrors.size(), 1);
+        QVERIFY(!trayErrors.first().at(0).toString().isEmpty());
+    }
+
+    void androidSoundPayload()
+    {
+        using Mode = SoundChoice::Mode;
+        const SoundChoice ringtone{Mode::Custom, u" content://media/internal/audio/media/27 "_s, u"Żółta łódź"_s};
+        const SoundChoice vibrate{Mode::VibrateOnly, u"content://media/internal/audio/media/5"_s, u"Stary"_s};
+        const QJsonObject settings = androidSoundSettings(ringtone, vibrate);
+        QCOMPARE(settings.keys(), (QStringList{u"alarm"_s, u"reminder"_s}));
+        const QJsonObject r = settings.value(u"reminder"_s).toObject();
+        QCOMPARE(r.value(u"mode"_s).toString(), u"custom"_s);
+        QCOMPARE(r.value(u"uri"_s).toString(), u"content://media/internal/audio/media/27"_s);
+        QCOMPARE(r.value(u"title"_s).toString(), u"Żółta łódź"_s);
+        const QJsonObject a = settings.value(u"alarm"_s).toObject();
+        QCOMPARE(a.value(u"mode"_s).toString(), u"vibrate"_s);
+        // A custom sound without a ringtone is sent as the default.
+        QCOMPARE(androidSoundItem({Mode::Custom, {}, {}}).value(u"mode"_s).toString(), u"default"_s);
+        QCOMPARE(androidSoundItem({Mode::Silent, {}, {}}).value(u"mode"_s).toString(), u"silent"_s);
+
+        const QJsonObject preview = androidSoundPreview(SoundKind::Alarm, ringtone);
+        QCOMPARE(preview.value(u"kind"_s).toString(), u"alarm"_s);
+        QCOMPARE(preview.value(u"mode"_s).toString(), u"custom"_s);
+        QCOMPARE(androidSoundPreview(SoundKind::Reminder, {}).value(u"kind"_s).toString(), u"reminder"_s);
+
+        // The picker's answers (ReminderSounds.kt: SoundChoice.toJson / an error).
+        bool ok = false;
+        const SoundChoice picked =
+                androidPickedSound(QJsonObject{{u"mode"_s, u"custom"_s},
+                                               {u"uri"_s, u"content://media/external/audio/media/9"_s},
+                                               {u"title"_s, u"Kukułka ąę"_s}},
+                                   &ok);
+        QVERIFY(ok);
+        QCOMPARE(picked, (SoundChoice{Mode::Custom, u"content://media/external/audio/media/9"_s, u"Kukułka ąę"_s}));
+        QCOMPARE(androidPickedSound(QJsonObject{{u"mode"_s, u"default"_s}, {u"uri"_s, u""_s}}, &ok), SoundChoice());
+        QVERIFY(ok);
+        androidPickedSound(QJsonObject{{u"error"_s, u"no ringtone picker"_s}}, &ok);
+        QVERIFY(!ok);
+        androidPickedSound(QJsonObject{}, &ok);
+        QVERIFY(!ok);
+        androidPickedSound(QJsonObject{{u"mode"_s, u"głośny"_s}}, &ok);
+        QVERIFY(!ok);
+    }
+
     void platformFactory()
     {
         QObject parent;
@@ -306,6 +539,12 @@ private Q_SLOTS:
         QCOMPARE(notifier->scheduled().size(), 2);
         notifier->schedule({});
         QVERIFY(notifier->scheduled().isEmpty());
+        // A desktop build: no vibration, a theme sound or a file.
+        QVERIFY(!notifier->soundModes().contains(SoundChoice::Mode::VibrateOnly));
+        QVERIFY(notifier->soundModes().contains(SoundChoice::Mode::Custom));
+        notifier->setSounds({SoundChoice::Mode::Custom, {}, {}}, {SoundChoice::Mode::Silent, {}, {}});
+        QCOMPARE(notifier->sound(SoundKind::Reminder).mode, SoundChoice::Mode::Default); // normalised
+        QCOMPARE(notifier->sound(SoundKind::Alarm).mode, SoundChoice::Mode::Silent);
     }
 };
 

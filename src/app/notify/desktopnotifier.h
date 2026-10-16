@@ -9,14 +9,17 @@
 //     (escaped when the server interprets markup — note text never becomes markup);
 //   * actions (when the server supports them): "default" (a click: open the note), "snooze"
 //     ("Snooze 10 min"), "ok";
-//   * hints: urgency normal / critical (alarms), alarms also "sound-name" alarm-clock-elapsed and
-//     "resident" (they stay until acted upon, expire timeout 0); "desktop-entry" so the server
-//     shows Brulion's name and icon.
+//   * hints: urgency normal / critical (alarms), alarms also "resident" (they stay until acted
+//     upon, expire timeout 0); "desktop-entry" so the server shows Brulion's name and icon; the
+//     sound chosen in the settings (applyDesktopSoundHints(): "sound-name" — alarm-clock-elapsed
+//     for alarms by default —, "sound-file", "suppress-sound"). The server plays it (GNOME
+//     Shell, KDE Plasma); servers without sounds ignore the hints.
 //
 // An alarm rings: it is sent again (same id, sound again) every ringInterval until the user acts
-// on it, closes it, or its ringMinutes are over. Without a notification service (no session
-// bus, no daemon, or a failed Notify call) the notification goes to the tray instead
-// (trayMessageRequested(), shown by the shell's DesktopTray).
+// on it, closes it, or its ringMinutes are over. previewSound() sends a short-lived sample
+// notification with a sound (Settings → Reminders, "Play sample"). Without a notification
+// service (no session bus, no daemon, or a failed Notify call) the notification goes to the tray
+// instead (trayMessageRequested(), shown by the shell's DesktopTray).
 #pragma once
 
 #include "notifier.h"
@@ -49,9 +52,14 @@ QString desktopAppId();
 
 /// The Notify call for `notification`. `capabilities` are the server's (GetCapabilities):
 /// "actions" adds the actions, "body-markup" escapes the body. `snoozeMinutes` names the snooze
-/// action ("Snooze 10 min"). Labels are translated (context "brulion::notify::DesktopNotifier").
+/// action ("Snooze 10 min"); `sound` is the sound of its kind (reminder or alarm). Labels are
+/// translated (context "brulion::notify::DesktopNotifier").
 DesktopNotification buildDesktopNotification(const ScheduledNotification &notification, const QStringList &capabilities,
-                                             int snoozeMinutes, uint replacesId = 0);
+                                             int snoozeMinutes, uint replacesId = 0, const SoundChoice &sound = {});
+
+/// The sample notification of "Play sample": `choice` as `kind` sounds, no actions, transient,
+/// gone after a few seconds (replacing the sample `replacesId`).
+DesktopNotification buildSoundPreview(SoundKind kind, const SoundChoice &choice, uint replacesId = 0);
 
 /// The notification service as DesktopNotifier sees it.
 class NotificationBus : public QObject {
@@ -96,6 +104,12 @@ public:
     bool firesWhenClosed() const override { return false; }
     void showNow(const ScheduledNotification &notification) override;
 
+    // Sounds: the default, a theme sound or a sound file, or none (desktops do not vibrate).
+    QList<SoundChoice::Mode> soundModes() const override;
+    bool supportsSoundFiles() const override { return true; }
+    QStringList themeSounds() const override;
+    bool previewSound(SoundKind kind, const SoundChoice &choice) override;
+
     /// A tray icon exists for the fallback (the shell's DesktopTray).
     void setTrayAvailable(bool available);
     /// How often a ringing alarm is sent again (default 30 s; tests use short ones).
@@ -131,6 +145,7 @@ private:
     QTimer m_ringTimer;
     std::function<QDateTime()> m_clock;
     QByteArray m_activationToken;
+    uint m_previewId = 0; ///< the sample notification shown last (replaced by the next one)
 };
 
 } // namespace brulion::notify

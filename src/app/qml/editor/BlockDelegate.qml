@@ -256,6 +256,9 @@ Item {
             onLongPressed: blockMenu.popup(bullet, bullet.width / 2, bullet.height)
         }
         TapHandler {
+            // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
+            // a phone zoomed in and opened the menu at once. Touch: the long press above.
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
             acceptedButtons: Qt.RightButton
             onTapped: blockMenu.popup(bullet, bullet.width / 2, bullet.height)
         }
@@ -283,6 +286,7 @@ Item {
             onLongPressed: blockMenu.popup(parent, 0, parent.height)
         }
         TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
             acceptedButtons: Qt.RightButton
             onTapped: blockMenu.popup(parent, 0, parent.height)
         }

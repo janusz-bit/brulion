@@ -57,9 +57,15 @@ public Q_SLOTS:
 
     /// Shows a notification now. `id` identifies it (a newer one with the same id replaces it);
     /// `path`/`line` locate the reminder and come back with `activated()`. Alarms stay on
-    /// screen until dismissed and vibrate where supported. Returns false when not permitted.
-    bool showNow(const QString &id, const QString &title, const QString &body,
-                 const QString &path = QString(), int line = -1, bool alarm = false);
+    /// screen until dismissed and vibrate where supported. `silent`: no sound and no vibration
+    /// (the Notification API's `silent`). Returns false when not permitted.
+    bool showNow(const QString &id, const QString &title, const QString &body, const QString &path = QString(),
+                 int line = -1, bool alarm = false, bool silent = false);
+
+    /// Plays a short tone in the page (Web Audio): an alarm's beeping (about six seconds) or a
+    /// short double beep. Only while the page is open, and only after the user interacted with
+    /// it once (the browsers' autoplay rules); nothing happens otherwise.
+    void playTone(bool alarm);
 
     /// Closes the notification with this id if it is still shown.
     void close(const QString &id);

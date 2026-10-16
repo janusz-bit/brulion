@@ -5,6 +5,7 @@
 // android/src/io/github/januszbit/brulion/android/BrulionAndroid.kt, see docs/ANDROID.md.
 
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 
@@ -25,6 +26,26 @@ struct DownloadResult {
     bool unsupported = false; ///< Android 9: no MediaStore downloads (write the file directly)
     QString name;             ///< the file's name in Downloads ("Notatki (1).zip" when taken)
     QString error;
+};
+
+/// A document picked through the system's picker (Storage Access Framework), for imports.
+struct DocumentInfo {
+    QString uri;  ///< document URI (a picked tree: the URI of its root document)
+    QString name; ///< display name
+    bool isDir = false;
+    qint64 size = -1;       ///< -1 = unknown
+    bool isVirtual = false; ///< no bytes of its own (Google Docs in Drive)
+};
+
+/// Result of AndroidBridge::documentInfo() / listDocuments().
+struct DocumentsResult {
+    bool ok = false;
+    /// The JNI call itself failed (no context, the Kotlin method missing or throwing): the
+    /// caller may fall back to Qt's content file engine. `ok` false without it: Android
+    /// answered with an error (`error`: permission gone, document deleted…).
+    bool bridgeFailed = false;
+    QString error;
+    QList<DocumentInfo> documents; ///< documentInfo(): one; listDocuments(): the folder's entries
 };
 
 /// A tapped reminder notification: the note to open and the reminder's line in it.
@@ -92,11 +113,43 @@ public:
      */
     DownloadResult saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data);
 
+    // Documents picked with the system's picker (content:// URIs) for imports: one
+    // ContentResolver query per call. Static and thread-safe — import listings run on worker
+    // threads (JNI attaches them); no bridge instance is needed. The bytes are read with QFile
+    // on the URI (Qt's content file engine).
+
+    /// Name, kind and size of a picked document, a picked tree (answered with its root
+    /// document) or any openable content URI.
+    static DocumentsResult documentInfo(const QString &uri);
+    /// The entries of a folder document of a picked tree (one level).
+    static DocumentsResult listDocuments(const QString &folderUri);
+
+    // Sounds of reminders (kind 0) and alarms (kind 1): ReminderSounds.kt. A choice is
+    // `{mode: "default" | "custom" | "vibrate" | "silent", uri, title}` (src/app/notify/
+    // androidpayload.h); the Kotlin side keeps them in SharedPreferences (alarms ring while the
+    // app is closed) and gives a kind whose sound changed a new notification channel.
+
+    /// Applies `{reminder: choice, alarm: choice}`. Returns the kinds' channel ids now
+    /// (`{"reminderChannel", "alarmChannel"}`), or `{"error": …}`; an empty object when the
+    /// call failed.
+    QJsonObject setReminderSounds(const QJsonObject &sounds);
+    /// Opens the system's ringtone picker for `kind` showing `current`; the answer arrives as
+    /// soundPicked() (nothing when cancelled). False when it could not be asked for.
+    bool pickSound(int kind, const QJsonObject &current);
+    /// Plays `{kind: "reminder" | "alarm", mode, uri}` for about three seconds (vibrates for
+    /// "vibrate"). False when there is nothing to play.
+    bool previewSound(const QJsonObject &choice);
+    /// Opens the system's settings of the notification channel of `kind`.
+    void openSoundSettings(int kind);
+
 Q_SIGNALS:
     /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
     /// A permission may have changed (dialog answered, or the app returned to the front).
     void permissionsChanged();
+    /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
+    /// `{"error": …}` (no picker on this phone).
+    void soundPicked(int kind, const QJsonObject &choice);
 
 private:
     explicit AndroidBridge(QObject *parent);

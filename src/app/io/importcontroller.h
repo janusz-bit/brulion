@@ -10,9 +10,10 @@
 //               "done"      `report` describes what was written
 //               "error"     `errorText` (nothing recognised, nothing to import, no notebook)
 //
-//   importers   [{ id, name, howTo (translated steps: where to export in that app), pick:
-//                 "files" | "folder" | "both", fileTypes ["*.zip", …], icon }] in the order of
-//                 io::importers()
+//   importers   [{ id, name, howTo (translated steps: where to export in that app), phoneHowTo
+//                 (the same on an Android phone: where the files are, what to pick in the
+//                 system's picker), pick: "files" | "folder" | "both", fileTypes ["*.zip", …],
+//                 icon }] in the order of io::importers()
 //   importerId  the user's choice ("" = recognise the files: detectedId); effectiveId is what runs
 //   targetFolder  pages go there (default "Import/<App>"; daily notes always go to the journal)
 //   preview     { pages, journals, journalsAppended, attachments, renamed (taken names: " 2"),
@@ -75,6 +76,9 @@ struct ImporterInfo {
     QString howTo;
     QString pick; ///< "files" | "folder" | "both"
     QString icon;
+    /// On a phone (Android): where that app's notes or export are and what to pick in the
+    /// system's picker.
+    QString phoneHowTo;
 };
 ImporterInfo importerInfo(const QString &id);
 
@@ -141,7 +145,9 @@ public:
     Q_INVOKABLE void addUrls(const QList<QUrl> &urls);
     /// Read a picked folder (QML FolderDialog.selectedFolder) recursively.
     Q_INVOKABLE void addFolder(const QUrl &url);
-    /// Local paths (route parameter, drag and drop, tests).
+    /// Typed paths or URLs (route parameter, the "path on this device" field, drag and drop,
+    /// tests): local files or folders ("/storage/emulated/0/Download/Obsidian"), file:// or
+    /// content:// URLs.
     Q_INVOKABLE void addPaths(const QStringList &paths);
     /// Browser (WebAssembly): the browser's file picker (QFileDialog::getOpenFileContent).
     /// Elsewhere: nothing (use the QML dialogs).

@@ -59,6 +59,7 @@ Rectangle {
         spacing: Theme.narrow ? 0 : 2
 
         BIconButton {
+            objectName: "topBarMenu"
             visible: Theme.narrow
             iconName: "menu"
             label: qsTr("Menu")
@@ -234,6 +235,13 @@ Rectangle {
             text: qsTr("Sync center")
             iconName: "folder-sync"
             onTriggered: AppController.navigate({ view: "sync" })
+        }
+        BMenuItem {
+            // Straight to the import tab: notes from Obsidian, Logseq, Notion… (docs/UI.md).
+            objectName: "menuImportNotes"
+            text: qsTr("Import notes")
+            iconName: "download"
+            onTriggered: AppController.navigate({ view: "importExport", tab: "import" })
         }
         BMenuItem {
             text: qsTr("Import and export")

@@ -109,6 +109,19 @@ void JNICALL nativePermissionsChanged(JNIEnv *, jclass)
         bridge, [bridge] { Q_EMIT bridge->permissionsChanged(); }, Qt::QueuedConnection);
 }
 
+/// The ringtone picker answered (BrulionAndroid.onActivityResult): `json` is the choice.
+void JNICALL nativeSoundPicked(JNIEnv *env, jclass, jint kind, jstring json)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    const int soundKind = static_cast<int>(kind);
+    const QJsonObject choice = QJsonDocument::fromJson(fromJString(env, json).toUtf8()).object();
+    QMetaObject::invokeMethod(
+            bridge, [bridge, soundKind, choice] { Q_EMIT bridge->soundPicked(soundKind, choice); },
+            Qt::QueuedConnection);
+}
+
 } // namespace
 
 AndroidBridge *AndroidBridge::instance()
@@ -127,8 +140,9 @@ AndroidBridge::AndroidBridge(QObject *parent)
     s_bridge.store(this);
 
     const JNINativeMethod methods[] = {
-        {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
-        {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
+            {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
+            {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
+            {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
     };
     QJniEnvironment env;
     if (env.registerNativeMethods(kClass, methods, int(std::size(methods))))
@@ -371,6 +385,130 @@ DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString
         failed("Cursor.close");
     }
     return result;
+}
+
+namespace {
+
+/// BrulionAndroid.documentInfo / listDocuments: `(Context, String uri): String` answering
+/// `{uri, name, dir, size, virtual}`, `{"documents": [those]}` or `{"error": "…"}`. Any thread.
+DocumentsResult documentsCall(const char *method, const QString &uri)
+{
+    DocumentsResult result;
+    const QJniObject context = appContext();
+    if (!context.isValid()) {
+        result.bridgeFailed = true;
+        result.error = u"no Android context"_s;
+        return result;
+    }
+    const QJniObject javaUri = QJniObject::fromString(uri);
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, method, "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;", context.object(),
+            javaUri.object<jstring>());
+    if (failed(method) || !answer.isValid()) {
+        result.bridgeFailed = true;
+        result.error = QString::fromLatin1(method) + u" failed"_s;
+        return result;
+    }
+    const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+    if (object.isEmpty() || object.contains("error"_L1)) {
+        result.error = object.value("error"_L1).toString(u"no answer"_s);
+        qCWarning(lcAndroid) << method << result.error;
+        return result;
+    }
+    const auto document = [](const QJsonObject &o) {
+        DocumentInfo d;
+        d.uri = o.value("uri"_L1).toString();
+        d.name = o.value("name"_L1).toString();
+        d.isDir = o.value("dir"_L1).toBool();
+        d.size = o.value("size"_L1).toInteger(-1);
+        d.isVirtual = o.value("virtual"_L1).toBool();
+        return d;
+    };
+    if (object.contains("documents"_L1)) {
+        const QJsonArray documents = object.value("documents"_L1).toArray();
+        result.documents.reserve(documents.size());
+        for (const QJsonValue &value : documents) {
+            const DocumentInfo d = document(value.toObject());
+            if (!d.uri.isEmpty())
+                result.documents.append(d);
+        }
+    } else {
+        result.documents.append(document(object));
+    }
+    result.ok = true;
+    return result;
+}
+
+} // namespace
+
+DocumentsResult AndroidBridge::documentInfo(const QString &uri)
+{
+    return documentsCall("documentInfo", uri);
+}
+
+DocumentsResult AndroidBridge::listDocuments(const QString &folderUri)
+{
+    return documentsCall("listDocuments", folderUri);
+}
+
+namespace {
+
+QJniObject jsonString(const QJsonObject &object)
+{
+    return QJniObject::fromString(QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)));
+}
+
+} // namespace
+
+QJsonObject AndroidBridge::setReminderSounds(const QJsonObject &sounds)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject json = jsonString(sounds);
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "setReminderSounds", "(Landroid/content/Context;Ljava/lang/String;)Ljava/lang/String;",
+            context.object(), json.object<jstring>());
+    if (failed("setReminderSounds") || !answer.isValid())
+        return {};
+    const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
+    if (object.contains("error"_L1))
+        qCWarning(lcAndroid) << "setReminderSounds:" << object.value("error"_L1).toString();
+    return object;
+}
+
+bool AndroidBridge::pickSound(int kind, const QJsonObject &current)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const QJniObject json = jsonString(current);
+    const jboolean asked = QJniObject::callStaticMethod<jboolean>(kClass, "pickSound",
+                                                                  "(Landroid/content/Context;ILjava/lang/String;)Z",
+                                                                  context.object(), jint(kind), json.object<jstring>());
+    return !failed("pickSound") && asked != JNI_FALSE;
+}
+
+bool AndroidBridge::previewSound(const QJsonObject &choice)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const QJniObject json = jsonString(choice);
+    const jboolean played = QJniObject::callStaticMethod<jboolean>(kClass, "previewSound",
+                                                                   "(Landroid/content/Context;Ljava/lang/String;)Z",
+                                                                   context.object(), json.object<jstring>());
+    return !failed("previewSound") && played != JNI_FALSE;
+}
+
+void AndroidBridge::openSoundSettings(int kind)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return;
+    QJniObject::callStaticMethod<void>(kClass, "openSoundSettings", "(Landroid/content/Context;I)V", context.object(),
+                                       jint(kind));
+    failed("openSoundSettings");
 }
 
 void AndroidBridge::deliverPendingActivation()

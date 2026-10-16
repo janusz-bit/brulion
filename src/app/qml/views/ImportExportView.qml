@@ -11,7 +11,9 @@ import Brulion
 // notebook, a folder or a page).
 //
 // Route parameters: tab ("import" | "export"); import: importer (an importer id), files (local
-// paths separated by "|"); export: format, scope, folder, path (the page to export).
+// paths or file:// / content:// URLs separated by "|"); export: format, scope, folder, path (the
+// page to export). Ways here: Więcej → "Importuj notatki" / "Import i eksport", the drawer's
+// "Importuj notatki" (phones), the empty journal's button, onboarding's import card.
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `title`.
 FocusScope {

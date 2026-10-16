@@ -8,6 +8,7 @@
 
 #include "desktopnotifier.h"
 #include "notifier.h"
+#include "remindersounds.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -83,6 +84,12 @@ void wireReminders(AppController *app)
                      });
     QObject::connect(notifier, &notify::Notifier::errorOccurred, app,
                      [app](const QString &message) { app->toast(message, u"error"_s); });
+    // The sounds of reminders and alarms (Settings → Reminders, QML ReminderSounds): device-local,
+    // kept in AppSettings ("reminders/sound/…"), played by the notifier.
+    auto *sounds = new notify::ReminderSounds(app);
+    sounds->setStorage([settings](const QString &key) { return settings->value(key, QString()); },
+                       [settings](const QString &key, const QVariant &value) { settings->setValue(key, value); });
+    sounds->setNotifier(notifier);
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_WASM)
     // Android taps reach AppController through main.cpp (AndroidBridge::activated), browser
     // clicks through its own WasmNotifier: only the desktop notifier opens notes from here.

@@ -248,9 +248,14 @@ Uwagi:
 
 * `permission()`, `requestPermission()` — przeglądarki pokazują pytanie o zgodę tylko w
   odpowiedzi na działanie użytkownika (kliknięcie przycisku w UI),
-* `showNow(id, tytuł, treść, ścieżka, linia, alarm)` — alarmy zostają na ekranie do
-  zamknięcia (`requireInteraction`) i wibrują, gdzie to możliwe; ten sam `id` zastępuje
-  poprzednie powiadomienie,
+* `showNow(id, tytuł, treść, ścieżka, linia, alarm, cicho)` — alarmy zostają na ekranie do
+  zamknięcia (`requireInteraction`) i wibrują, gdzie to możliwe; `cicho` — opcja `silent`
+  (bez dźwięku i wibracji); ten sam `id` zastępuje poprzednie powiadomienie,
+* `playTone(alarm)` — sygnał w samej stronie (Web Audio): alarm z dźwiękiem „Domyślny” pika
+  przez kilka sekund. Dźwięk powiadomienia wybiera przeglądarka/system, więc w przeglądarce
+  *Ustawienia → Przypomnienia* oferują tylko „Domyślny” i „Cisza”. Ograniczenia: tylko przy
+  otwartej karcie i dopiero po pierwszej interakcji użytkownika ze stroną (zasady autoodtwarzania
+  przeglądarek) — inaczej sygnału nie słychać,
 * `activated(id, ścieżka, linia)` po kliknięciu (strona dostaje fokus),
 * `firesWhenClosed()` = false: przeglądarka nie powiadomi o niczym przy zamkniętej karcie —
   terminy odmierza rdzeń (`ReminderScheduler`) w otwartej aplikacji.

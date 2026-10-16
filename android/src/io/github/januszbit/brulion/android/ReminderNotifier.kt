@@ -11,23 +11,30 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.net.Uri
 import android.os.Build
 import android.text.format.DateFormat
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import io.github.januszbit.brulion.R
 import java.util.Date
 
-/** Builds and posts reminder notifications. */
+/**
+ * Builds and posts reminder notifications.
+ *
+ * The sound of reminders and alarms is chosen in Brulion's settings ([ReminderSounds]); a channel's
+ * sound is fixed once it exists, so each sound has its own channel version ([SoundChannel]) and
+ * every notification goes to the current one ([SoundStore]).
+ */
 internal object ReminderNotifier {
-  /** Regular reminders: heads-up, default sound. */
+  /** Regular reminders: heads-up, the chosen sound (default: the notification sound) — version 0's id. */
   const val CHANNEL_REMINDERS = "reminders"
 
-  /** Alarms: alarm sound on the alarm stream, rings until a reaction or the ring time, full screen. */
+  /**
+   * Alarms: the chosen sound (default: the alarm sound) on the alarm stream, rings until a reaction
+   * or the ring time, full screen — version 0's id.
+   */
   const val CHANNEL_ALARMS = "alarms"
 
   /** Alarms that rang out with no reaction ("Przegapiony alarm"): silent. */
@@ -41,44 +48,30 @@ internal object ReminderNotifier {
 
   /** Brulion's amber (reminders and alarms, docs/UI.md). */
   private const val ACCENT = 0xFFF2B33D.toInt()
-  private val ALARM_VIBRATION = longArrayOf(0, 800, 400, 800, 400, 800)
-  private val REMINDER_VIBRATION = longArrayOf(0, 250, 150, 250)
+  val ALARM_VIBRATION = longArrayOf(0, 800, 400, 800, 400, 800)
+  val REMINDER_VIBRATION = longArrayOf(0, 250, 150, 250)
 
   /**
-   * Creates the channels (updates names and descriptions when they exist). The channels decide
-   * sound, vibration and importance (Android 8+; Brulion needs Android 9).
+   * Creates the channels (updates names and descriptions when they exist): the current versions
+   * of the reminder and alarm channels with their sounds, and the missed-alarm one; deletes
+   * earlier versions. The channels decide sound, vibration and importance (Android 8+; Brulion
+   * needs Android 9). Returns the ids of the reminder and alarm channels (empty without a
+   * notification manager). Under [ReminderSounds.lock], like changing a sound.
    */
-  fun ensureChannels(context: Context) {
-    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+  fun ensureChannels(context: Context): Map<SoundKind, String> =
+    synchronized(ReminderSounds.lock) { createChannels(context) }
 
-    val reminders =
-      NotificationChannel(
-        CHANNEL_REMINDERS,
-        context.getString(R.string.brulion_channel_reminders),
-        NotificationManager.IMPORTANCE_HIGH
-      )
+  private fun createChannels(context: Context): Map<SoundKind, String> {
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return emptyMap()
+    val sounds = SoundStore(context)
+
+    val reminders = soundChannel(context, sounds.channel(SoundKind.REMINDER))
     reminders.description = context.getString(R.string.brulion_channel_reminders_description)
-    reminders.enableVibration(true)
-    reminders.vibrationPattern = REMINDER_VIBRATION
 
     // IMPORTANCE_MAX is documented as unused for channels; HIGH is the loudest level, the
     // alarm behaviour comes from the sound, CATEGORY_ALARM and FLAG_INSISTENT.
-    val alarms =
-      NotificationChannel(
-        CHANNEL_ALARMS,
-        context.getString(R.string.brulion_channel_alarms),
-        NotificationManager.IMPORTANCE_HIGH
-      )
+    val alarms = soundChannel(context, sounds.channel(SoundKind.ALARM))
     alarms.description = context.getString(R.string.brulion_channel_alarms_description)
-    alarms.setSound(
-      alarmSound(),
-      AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ALARM)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .build()
-    )
-    alarms.enableVibration(true)
-    alarms.vibrationPattern = ALARM_VIBRATION
     alarms.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
 
     // Default importance keeps it among the alerting notifications, without sound or vibration.
@@ -93,7 +86,46 @@ internal object ReminderNotifier {
     missedAlarms.enableVibration(false)
 
     manager.createNotificationChannels(listOf(reminders, alarms, missedAlarms))
+
+    // Another sound was chosen: the channels of the earlier ones go (Android lists them as
+    // deleted categories; their settings would come back with the same id).
+    try {
+      for (id in SoundChannel.stale(manager.notificationChannels.map { it.id }, listOf(reminders.id, alarms.id))) {
+        manager.deleteNotificationChannel(id)
+      }
+    } catch (e: RuntimeException) {
+      Log.w(TAG, "cannot delete earlier notification channels", e)
+    }
+    return mapOf(SoundKind.REMINDER to reminders.id, SoundKind.ALARM to alarms.id)
   }
+
+  /**
+   * The channel of [channel]'s kind with its sound: the system's default (alarms: the alarm sound
+   * on the alarm stream), a ringtone, vibration only or nothing at all.
+   */
+  private fun soundChannel(context: Context, channel: SoundChannel): NotificationChannel {
+    val alarm = channel.kind == SoundKind.ALARM
+    val result =
+      NotificationChannel(
+        channel.id,
+        context.getString(if (alarm) R.string.brulion_channel_alarms else R.string.brulion_channel_reminders),
+        NotificationManager.IMPORTANCE_HIGH
+      )
+    val choice = channel.choice
+    when {
+      // Reminders with the default sound: the channel's default (the notification sound).
+      choice.mode == SoundChoice.DEFAULT && !alarm -> Unit
+      choice.hasSound ->
+        result.setSound(ReminderSounds.soundUri(channel.kind, choice), ReminderSounds.audioAttributes(channel.kind))
+      else -> result.setSound(null, null)
+    }
+    result.enableVibration(choice.vibrates)
+    if (choice.vibrates) result.vibrationPattern = if (alarm) ALARM_VIBRATION else REMINDER_VIBRATION
+    return result
+  }
+
+  /** The channel notifications of [kind] go to now. */
+  fun channelId(context: Context, kind: SoundKind): String = ReminderSounds.channelId(context, kind)
 
   /**
    * Can alarms open the full-screen alarm screen? Android 14+ lets the user revoke it ("Full
@@ -124,9 +156,9 @@ internal object ReminderNotifier {
   @SuppressLint("MissingPermission")
   fun show(context: Context, reminder: Reminder, missed: Boolean = false) {
     if (!canPost(context)) return
-    ensureChannels(context)
 
     val ringing = reminder.alarm && !missed
+    val kind = if (ringing) SoundKind.ALARM else SoundKind.REMINDER
     val time = DateFormat.getTimeFormat(context).format(Date(reminder.at))
     val title = reminder.title.ifBlank { context.getString(R.string.brulion_reminder_default_title) }
     val details = reminder.body.ifBlank { time }
@@ -139,7 +171,8 @@ internal object ReminderNotifier {
       }
 
     val builder =
-      NotificationCompat.Builder(context, if (ringing) CHANNEL_ALARMS else CHANNEL_REMINDERS)
+      // The channel is set when posting (below).
+      NotificationCompat.Builder(context, kind.baseChannel)
         .setSmallIcon(R.drawable.ic_stat_brulion)
         .setColor(ACCENT)
         .setContentTitle(title)
@@ -171,12 +204,18 @@ internal object ReminderNotifier {
       builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
     }
 
-    val notification = builder.build()
-    if (ringing) {
-      // Repeat the sound until the user reacts.
-      notification.flags = notification.flags or Notification.FLAG_INSISTENT
+    // The current channel version, created and posted to under the sounds' lock: a sound changed
+    // meanwhile on Qt's thread (ReminderSounds.apply) deletes the earlier version, and Android
+    // drops a notification posted to a deleted channel.
+    synchronized(ReminderSounds.lock) {
+      builder.setChannelId(ensureChannels(context)[kind] ?: channelId(context, kind))
+      val notification = builder.build()
+      if (ringing) {
+        // Repeat the sound until the user reacts.
+        notification.flags = notification.flags or Notification.FLAG_INSISTENT
+      }
+      NotificationManagerCompat.from(context).notify(reminder.id, notification)
     }
-    NotificationManagerCompat.from(context).notify(reminder.id, notification)
   }
 
   /**
@@ -284,7 +323,5 @@ internal object ReminderNotifier {
     )
   }
 
-  private fun alarmSound(): Uri? =
-    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-      ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+  private const val TAG = "BrulionAndroid"
 }

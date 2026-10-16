@@ -2,9 +2,11 @@
 # relative paths are relative to src/app): the static library brulion_ioviews — the C++ side of
 # SyncView, ImportExportView and the "Synchronizacja" section of the settings — and its QML.
 #
-#   ImportController   importers with how-to texts, reading picked files / folders (desktop and
-#                      Android: QML FileDialog / FolderDialog; browser: QFileDialog::
-#                      getOpenFileContent), io::detectImporter with an override, the target
+#   ImportController   importers with how-to texts (also the phone's steps), reading picked files /
+#                      folders (desktop and Android: QML FileDialog / FolderDialog — on Android
+#                      content:// documents and document trees through FileGatherer's
+#                      DocumentProvider and the platform bridge; a typed path; browser:
+#                      QFileDialog::getOpenFileContent), io::detectImporter with an override, the target
 #                      folder, a dry-run preview, writing with the collision policy (existing
 #                      daily note: appended under "## Import (<source>)"; other files: unique
 #                      names), progress and the report
@@ -53,6 +55,12 @@ target_sources(brulion PRIVATE io/ioqml.h)
 target_include_directories(brulion PRIVATE ${_brulion_ioviews_dir})
 target_link_libraries(brulion PRIVATE brulion_ioviews)
 
+# Desktop builds: the import self-test of the real app (`--selftest-import`, ioselftest.h; ctest
+# tst_appio_import_qml*), started by main.cpp like the shell's self-test.
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    target_sources(brulion PRIVATE ${_brulion_ioviews_dir}/ioselftest.h ${_brulion_ioviews_dir}/ioselftest.cpp)
+endif()
+
 # SyncView.qml and ImportExportView.qml are registered with the other views (shell/views.cmake).
 qt_target_qml_sources(brulion QML_FILES
     qml/io/IoCard.qml
@@ -67,6 +75,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/ImportPanel.qml
     qml/io/ImportSourcePicker.qml
     qml/io/ImportPreview.qml
+    qml/io/ImportPathCard.qml
     qml/io/ExportPanel.qml
     qml/io/IoPathPickerDialog.qml
 )

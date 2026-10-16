@@ -70,6 +70,9 @@ T.ItemDelegate {
     Keys.onMenuPressed: menu.popup(control, Theme.space8, control.height)
 
     TapHandler {
+        // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so on a phone a
+        // tap opened the (modal) menu, which swallowed the release: the task never opened.
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         acceptedButtons: Qt.RightButton
         onTapped: (eventPoint) => menu.popup(eventPoint.position.x, eventPoint.position.y)
     }

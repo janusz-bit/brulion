@@ -27,7 +27,8 @@ components — no Material/Fusion look, so all targets look identical.
   * Sidebar (`ShellSidebar`): the notebook's name and a new-page button; navigation Dziennik,
     Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
     folder tree, lazy, with a context menu: new page / folder here, open in side panel,
-    favourite, rename, history, trash); a sync status footer (opens the sync center).
+    favourite, rename, history, trash; an empty folder opens to "Pusty folder"); a sync status
+    footer (opens the sync center).
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
@@ -37,13 +38,17 @@ components — no Material/Fusion look, so all targets look identical.
   the ☰ button); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
   a **bottom navigation** bar (Dziennik, Kalendarz, Szukaj, Zadania, Menu → drawer); a floating
   quick-capture button (hidden while editing). The Android back key / gesture walks back
-  through the history; the app closes only from the home view.
+  through the history; the app closes only from the home view. The drawer also lists
+  **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2, pages only), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza; always — Nowa strona (Ctrl+N), Paleta
-  poleceń (Ctrl+K), **Centrum synchronizacji, Import i eksport, Kosz (n), Ustawienia (Ctrl+,),
-  O Brulionie**. These destinations have no button of their own: on phones this menu (and the
-  command palette) is the way to them.
+  poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
+  Kosz (n), Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
+  phones this menu (and the command palette) is the way to them. A new notebook (at most one
+  note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
+  "Importuj notatki" card that opens the chosen notebook on its import tab
+  (`AppController.openVaultAt`).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
   new page, capture, theme, language, sync, panels, settings, about), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
@@ -277,6 +282,10 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   hit areas are ≥ 44 px (visuals stay compact via insets) and hover effects are off;
   dialogs/popups are asynchronous (signals, never `exec()`); note text is never rendered
   as rich text unless escaped (`TextHelper.markMatches`, `DiffHelper.segmentsHtml`).
+  Context menus open with a right-click and, on touch, a long press (`onPressAndHold` /
+  `onLongPressed`); a right-click `TapHandler` also sets `acceptedDevices: PointerDevice.Mouse |
+  PointerDevice.TouchPad | PointerDevice.Stylus` — Qt hands finger touches (no buttons) to a
+  TapHandler whatever its `acceptedButtons`, so without it every tap opened the menu.
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers
@@ -305,7 +314,9 @@ Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appco
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell (ctest `tst_shell_qml`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
+| `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--hidden`, `--capture`, `--today`, `--no-single-instance` | start in the tray / open quick capture / today's journal (a second launch asks the running instance) / allow a second instance |
 
 Scripts (inside `nix develop`; one GUI instance at a time via a lock; a fixed clock `NOW`;

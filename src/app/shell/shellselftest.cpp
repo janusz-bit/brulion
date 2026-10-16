@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QInputDevice>
 #include <QKeyEvent>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
@@ -30,8 +31,24 @@ namespace brulion::shell {
 
 namespace {
 
+/// Let the event loop run for `ms` (gestures, transitions, queued calls). Not scaled by
+/// BRULION_TEST_SLOWDOWN: these are real input timings (a longer pause turns a tap into a
+/// long press), unlike waitFor()'s deadlines.
+void settle(int ms)
+{
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < ms) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        QThread::msleep(2);
+    }
+}
+
 bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000)
 {
+    // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
+    static const int slowdown = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
+    timeoutMs *= slowdown;
     QElapsedTimer timer;
     timer.start();
     while (!condition()) {
@@ -62,7 +79,7 @@ bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt
     QKeyEvent release(QEvent::KeyRelease, key, modifiers, text);
     release.ignore();
     QCoreApplication::sendEvent(window, &release);
-    waitFor([] { return false; }, 50); // let bindings, transitions and queued calls settle
+    settle(50); // let bindings, transitions and queued calls settle
     return press.isAccepted() || release.isAccepted();
 }
 
@@ -76,9 +93,9 @@ void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
     static QPointingDevice *device = QTest::createTouchDevice();
     Sequence sequence(window, device);
     sequence.press(0, scenePos.toPoint(), window).commit();
-    waitFor([] { return false; }, holdMs);
+    settle(holdMs);
     sequence.release(0, scenePos.toPoint(), window).commit();
-    waitFor([] { return false; }, 100);
+    settle(100);
 }
 
 /// A finger dragged from `from` by `delta` (scene coordinates) in small steps, then lifted.
@@ -91,29 +108,29 @@ void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
     Sequence sequence(window, device);
     sequence.press(0, from.toPoint(), window).commit();
     for (int step = 1; step <= 12; ++step) {
-        waitFor([] { return false; }, 16);
+        settle(16);
         sequence.move(0, (from + delta * step / 12.0).toPoint(), window).commit();
     }
     sequence.release(0, (from + delta).toPoint(), window).commit();
-    waitFor([] { return false; }, 300);
+    settle(300);
 }
 
 /// A tap on touch UIs (the phone run), a left click otherwise.
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch);
 
-/// A left click at `scenePos` of the window, as a real mouse sends it.
-void mouseClick(QQuickWindow *window, QPointF scenePos)
+/// A click (left by default) at `scenePos` of the window, as a real mouse sends it.
+void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton)
 {
     static int timestamp = 0;
     timestamp += 1000; // never a double click
     const QPointF global = window->mapToGlobal(scenePos);
     qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
                         timestamp);
-    qt_handleMouseEvent(window, scenePos, global, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress,
-                        Qt::NoModifier, timestamp += 20);
-    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease,
-                        Qt::NoModifier, timestamp += 80);
-    waitFor([] { return false; }, 100);
+    qt_handleMouseEvent(window, scenePos, global, button, button, QEvent::MouseButtonPress, Qt::NoModifier,
+                        timestamp += 20);
+    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, button, QEvent::MouseButtonRelease, Qt::NoModifier,
+                        timestamp += 80);
+    settle(100);
 }
 
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
@@ -155,6 +172,388 @@ QPointF linkPoint(QQuickItem *text, const QString &url)
         }
     }
     return { -1, -1 };
+}
+
+/// True when the item's QML type (or one it is based on) is `prefix` ("TasksRow" matches the
+/// class "TasksRow_QMLTYPE_12").
+bool isA(const QObject *object, const char *prefix)
+{
+    for (const QMetaObject *m = object->metaObject(); m; m = m->superClass()) {
+        if (QByteArray(m->className()).startsWith(prefix))
+            return true;
+    }
+    return false;
+}
+
+/// The item and all its ancestors are visible.
+bool shown(const QQuickItem *item)
+{
+    for (const QQuickItem *p = item; p; p = p->parentItem()) {
+        if (!p->isVisible() || p->opacity() <= 0.01)
+            return false;
+    }
+    return item->width() >= 1 && item->height() >= 1;
+}
+
+QPointF pointIn(const QQuickItem *item, qreal fx = 0.5, qreal fy = 0.5)
+{
+    return item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
+}
+
+/// The first shown item under `root` (depth first, in child order) for which `pred` holds and
+/// whose middle lies inside `root` (lists keep delegates beyond their edges, pools hide some).
+QQuickItem *findShown(QQuickItem *root, const std::function<bool(QQuickItem *)> &pred)
+{
+    if (!root)
+        return nullptr;
+    const QRectF area = root->mapRectToScene(QRectF(0, 0, root->width(), root->height()));
+    std::function<QQuickItem *(QQuickItem *)> visit = [&](QQuickItem *item) -> QQuickItem * {
+        if (!item->isVisible())
+            return nullptr;
+        if (pred(item) && shown(item) && area.contains(pointIn(item)))
+            return item;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children) {
+            if (QQuickItem *found = visit(child))
+                return found;
+        }
+        return nullptr;
+    };
+    return visit(root);
+}
+
+/// The menus (BMenu) open in the window: their popup items in the overlay (the visual tree also
+/// reaches menus inside list delegates, which the QObject tree of the window does not).
+int openMenus(QQuickWindow *window)
+{
+    int open = 0;
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickMenu"))
+            ++open;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children)
+            visit(child);
+    };
+    visit(window->contentItem());
+    return open;
+}
+
+/// Close the menus open in the window (a failed check must not leave a modal menu behind).
+void closeMenus(QQuickWindow *window)
+{
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickMenu"))
+            QMetaObject::invokeMethod(item->parent(), "close");
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children)
+            visit(child);
+    };
+    visit(window->contentItem());
+    waitFor([window] { return openMenus(window) == 0; });
+}
+
+/// Right-click TapHandlers on screen that a finger triggers too: Qt hands touch points (they have
+/// no buttons) to a TapHandler whatever its acceptedButtons, so unless acceptedDevices leaves the
+/// touchscreen out, every tap also does the right-click's job. Only items a finger can reach
+/// (lists also hold pooled delegates and ones still being created, whose bindings have not run).
+QStringList fingerRightClickHandlers(QQuickWindow *window)
+{
+    QStringList found;
+    const QRectF screen(0, 0, window->width(), window->height());
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        const QObjectList children = item->children();
+        for (const QObject *child : children) {
+            if (!child->inherits("QQuickTapHandler") || !shown(item) || !screen.contains(pointIn(item)))
+                continue;
+            const auto buttons = child->property("acceptedButtons").value<Qt::MouseButtons>();
+            const auto devices = child->property("acceptedDevices").value<QInputDevice::DeviceTypes>();
+            if (buttons.testFlag(Qt::RightButton) && !buttons.testFlag(Qt::LeftButton)
+                && devices.testFlag(QInputDevice::DeviceType::TouchScreen))
+                found.append(QString::fromLatin1(item->metaObject()->className()) + u" (\""_s
+                             + item->property("text").toString().left(30) + u"\")"_s);
+        }
+        const QList<QQuickItem *> items = item->childItems();
+        for (QQuickItem *childItem : items)
+            visit(childItem);
+    };
+    visit(window->contentItem());
+    return found;
+}
+
+using Check = std::function<void(bool, const char *)>;
+
+/// 3b. Rows with a context menu, with the input people really use: a finger on phones (--touch:
+///     real touch events through the window), the mouse on desktops. A tap or a left click does
+///     what the row says — expands the folder, opens the page, zooms into the block — and never
+///     opens the menu; a long press or a right-click opens it. Regression (Android, the drawer):
+///     the rows' right-click TapHandlers took every finger tap too (touch points carry no
+///     buttons, so Qt ignores a TapHandler's acceptedButtons for them): each tap opened the modal
+///     context menu, which then swallowed the release — no folder expanded, no page opened.
+void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    const auto view = [app] { return app->currentView(); };
+    const auto routePath = [app] { return app->currentRoute().value(u"path"_s).toString(); };
+    const auto pause = [](int ms) { settle(ms); };
+    // A tap / a left click, and the gesture for the context menu: a long press / a right-click.
+    const auto activate = [&](QQuickItem *item, qreal fx = 0.5) {
+        if (!item)
+            return; // the check after it fails
+        if (touch)
+            touchTap(window, pointIn(item, fx));
+        else
+            mouseClick(window, pointIn(item, fx));
+    };
+    const auto openMenuOn = [&](QQuickItem *item, qreal fx = 0.5) {
+        if (!item)
+            return;
+        if (touch)
+            touchTap(window, pointIn(item, fx), 1000);
+        else
+            mouseClick(window, pointIn(item, fx), Qt::RightButton);
+    };
+    const auto closeMenu = [&] {
+        sendKey(window, Qt::Key_Escape);
+        return waitFor([&] { return openMenus(window) == 0; });
+    };
+    // (The visual tree: Repeater and list delegates are not in the window's QObject tree.)
+    const auto findNamed = [window](const QString &name) {
+        return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    const auto findType = [window](const char *type, const std::function<bool(QQuickItem *)> &pred = {}) {
+        QQuickItem *found = nullptr;
+        waitFor([&] {
+            found = findShown(window->contentItem(),
+                              [&](QQuickItem *item) { return isA(item, type) && (!pred || pred(item)); });
+            return found != nullptr;
+        });
+        return found;
+    };
+
+    QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    // The context menu of the sidebar on screen (the drawer's on phones). Not findChild() on the
+    // window: a sidebar the shell dropped (narrow at start-up) waits for its deferred deletion,
+    // which never comes while the self-test runs inside one event.
+    QObject *treeMenu = nullptr;
+    const auto drawerOpen = [drawer] { return drawer->property("opened").toBool(); };
+    const auto drawerClosed = [drawer] { return !drawer->property("visible").toBool(); };
+    // A row of the sidebar's page tree (the drawer's on phones), scrolled into view.
+    const auto treeRow = [&](const QString &path) -> QQuickItem * {
+        QQuickItem *list = findNamed(u"sidebarTree"_s);
+        if (!list)
+            return nullptr;
+        if (auto *model = list->property("model").value<QObject *>()) {
+            int row = -1;
+            QMetaObject::invokeMethod(model, "indexOf", qReturnArg(row), path);
+            if (row >= 0)
+                QMetaObject::invokeMethod(list, "positionViewAtIndex", row, 4 /* ListView.Contain */);
+        }
+        pause(60);
+        return findShown(list, [&](QQuickItem *item) {
+            return item->property("isDir").isValid() && item->property("path").toString() == path;
+        });
+    };
+    const auto expanded = [&](const QString &path) {
+        QQuickItem *r = treeRow(path);
+        return r && r->property("expanded").toBool();
+    };
+    const auto findTreeMenu = [&] {
+        QQuickItem *sidebar = findNamed(u"sidebarTree"_s);
+        while (sidebar && !isA(sidebar, "ShellSidebar"))
+            sidebar = sidebar->parentItem();
+        return sidebar ? sidebar->findChild<QObject *>(u"sidebarContextMenu"_s) : nullptr;
+    };
+    const QString folder = u"Projekty"_s;
+    const QString page = u"Projekty/Remont mieszkania.md"_s;
+    if (!drawer) {
+        check(false, "the shell has its drawer");
+        return;
+    }
+    const QString empty = u"Szkice"_s;
+    const QString emptyText = QCoreApplication::translate("ShellSidebar", "Empty folder");
+    // An empty folder opens as well and says so: a tap that showed nothing looked like a tap
+    // that did not work.
+    const auto checkEmptyFolder = [&] {
+        activate(treeRow(empty));
+        QQuickItem *r = nullptr;
+        check(waitFor([&] { return (r = treeRow(empty)) && r->property("expanded").toBool(); })
+                      && r->property("subtitle").toString() == emptyText && openMenus(window) == 0,
+              "an empty folder opens and says it is empty");
+    };
+    check(app->workspace()->createFolder(empty), "an empty folder is created");
+    app->goHome();
+    pause(200);
+
+    // ---- The page tree: the drawer on phones (opened from the bottom bar and the top bar),
+    //      the sidebar on desktops.
+    if (narrow) {
+        QQuickItem *menuTab = findNamed(u"bottomNav_menu"_s);
+        check(menuTab != nullptr, "the bottom bar has a Menu tab");
+        if (!menuTab)
+            return;
+        activate(menuTab);
+        check(waitFor(drawerOpen), "the bottom bar's Menu opens the drawer");
+    }
+    treeMenu = findTreeMenu();
+    if (!treeMenu) {
+        check(false, "the sidebar's page tree has a context menu");
+        return;
+    }
+    // Polled: a delegate still being created runs its bindings a moment later.
+    const auto noFingerRightClicks = [&](const char *what) {
+        QStringList bad;
+        const bool none = waitFor([&] { return (bad = fingerRightClickHandlers(window)).isEmpty(); }, 3000);
+        if (!none)
+            std::fprintf(stderr, "selftest: right-click handlers that take a finger: %s\n",
+                         qPrintable(bad.join(u", "_s)));
+        check(none, what);
+    };
+    noFingerRightClicks(narrow ? "no right-click handler in the drawer reacts to a finger"
+                               : "no right-click handler in the sidebar reacts to a finger");
+    QQuickItem *row = treeRow(folder);
+    check(row && row->property("isDir").toBool(), "the page tree lists the folder Projekty");
+    if (!row)
+        return;
+    if (row->property("expanded").toBool()) { // remembered from an earlier run: start collapsed
+        activate(row);
+        waitFor([&] { return !expanded(folder); });
+    }
+    if (!touch) {
+        openMenuOn(treeRow(folder));
+        check(waitFor([&] { return treeMenu->property("visible").toBool(); })
+                      && treeMenu->property("path").toString() == folder && treeMenu->property("isDir").toBool()
+                      && !expanded(folder),
+              "a right-click on a folder opens its context menu (and does not expand it)");
+        check(closeMenu(), "Escape closes the folder's context menu");
+    }
+    activate(treeRow(folder));
+    check(waitFor([&] { return expanded(folder) && treeRow(page); }) && openMenus(window) == 0,
+          touch ? "a tap on a folder in the drawer expands it, without a menu"
+                : "a click on a folder in the sidebar expands it, without a menu");
+    if (!touch) {
+        openMenuOn(treeRow(page));
+        check(waitFor([&] { return treeMenu->property("visible").toBool(); })
+                      && treeMenu->property("path").toString() == page && view() == u"journals",
+              "a right-click on a page opens its context menu (and does not open the page)");
+        check(closeMenu(), "Escape closes the page's context menu");
+    }
+    activate(treeRow(page));
+    check(waitFor([&] { return view() == u"page" && routePath() == page; }) && openMenus(window) == 0,
+          touch ? "a tap on a page in the drawer opens it, without a menu"
+                : "a click on a page in the sidebar opens it, without a menu");
+    if (narrow) {
+        check(waitFor(drawerClosed), "opening a page from the drawer closes it");
+        // Through the top bar's menu button: a long press opens the row's context menu.
+        QQuickItem *menuButton = findNamed(u"topBarMenu"_s);
+        check(menuButton != nullptr, "the top bar has a menu button");
+        if (!menuButton)
+            return;
+        activate(menuButton);
+        check(waitFor(drawerOpen), "the top bar's menu button opens the drawer");
+        checkEmptyFolder();
+        if (QQuickItem *pageRow = treeRow(page)) {
+            openMenuOn(pageRow);
+            check(waitFor([&] { return treeMenu->property("visible").toBool(); })
+                          && treeMenu->property("path").toString() == page && !drawerClosed(),
+                  "a long press on a page in the drawer opens its context menu");
+            check(closeMenu(), "Escape closes the context menu");
+        } else {
+            check(false, "the drawer still lists the page");
+        }
+        if (QQuickItem *folderRow = treeRow(folder)) {
+            openMenuOn(folderRow);
+            check(waitFor([&] { return treeMenu->property("visible").toBool(); })
+                          && treeMenu->property("path").toString() == folder && expanded(folder),
+                  "a long press on a folder in the drawer opens its context menu (the folder stays open)");
+            check(closeMenu(), "Escape closes the folder's context menu");
+        }
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor(drawerClosed) && view() == u"page", "Escape closes the drawer");
+    } else {
+        checkEmptyFolder();
+    }
+
+    // ---- "All pages": a row opens its page; the long press / right-click opens its menu.
+    app->navigate({{u"view"_s, u"allPages"_s}});
+    const auto pagesRow = [&] {
+        QQuickItem *list = findType("AllPagesView");
+        return findShown(list, [](QQuickItem *item) { return !item->property("shownTitle").toString().isEmpty(); });
+    };
+    if (QQuickItem *r = pagesRow()) {
+        noFingerRightClicks("no right-click handler in All pages reacts to a finger");
+        openMenuOn(r, 0.3);
+        check(waitFor([&] { return openMenus(window) == 1; }) && view() == u"allPages",
+              "a long press or right-click on a row in All pages opens its menu");
+        check(closeMenu(), "Escape closes the All pages menu");
+        activate(pagesRow(), 0.3);
+        check(waitFor([&] { return view() == u"page"; }) && openMenus(window) == 0,
+              "a tap or click on a row in All pages opens the page, without a menu");
+    } else {
+        check(false, "All pages lists the pages");
+    }
+
+    // ---- Tasks: a row opens the task's note; the long press / right-click opens its menu.
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    if (QQuickItem *r = findType("TasksRow")) {
+        noFingerRightClicks("no right-click handler in the tasks view reacts to a finger");
+        openMenuOn(r, 0.75);
+        check(waitFor([&] { return openMenus(window) == 1; }) && view() == u"tasks",
+              "a long press or right-click on a task opens its menu");
+        check(closeMenu(), "Escape closes the task's menu");
+        activate(findType("TasksRow"), 0.75);
+        check(waitFor([&] { return view() != u"tasks"; }) && openMenus(window) == 0,
+              "a tap or click on a task opens its note, without a menu");
+    } else {
+        check(false, "the tasks view lists tasks");
+    }
+
+    // ---- The block editor's bullets (an outline page): a tap / click zooms into the block; the
+    //      long press / right-click opens the block menu.
+    app->openPage(page);
+    // The controller of the editor on screen (earlier page views may still wait for their
+    // deferred deletion, see treeMenu).
+    QObject *controller = nullptr;
+    waitFor([&] {
+        QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+            if (item->objectName() != u"pageEditor")
+                return false;
+            const auto *c = item->property("controller").value<QObject *>();
+            return c && c->property("path").toString() == page && c->property("loaded").toBool();
+        });
+        controller = editor ? editor->property("controller").value<QObject *>() : nullptr;
+        return controller != nullptr;
+    });
+    const QString zoomName = QCoreApplication::translate("BlockDelegate", "Zoom into block");
+    const auto bullet = [&] {
+        return findType("QQuickItem", [&zoomName](QQuickItem *item) {
+            const QObjectList children = item->children();
+            for (const QObject *c : children) {
+                if (c->inherits("QQuickAccessibleAttached") && c->property("name").toString() == zoomName)
+                    return true;
+            }
+            return false;
+        });
+    };
+    QQuickItem *dot = controller ? bullet() : nullptr;
+    check(dot != nullptr, "the outline page shows its bullets");
+    if (dot) {
+        noFingerRightClicks("no right-click handler in the block editor reacts to a finger");
+        openMenuOn(dot);
+        check(waitFor([&] { return openMenus(window) == 1; }) && controller->property("zoomBlock").toInt() < 0,
+              "a long press or right-click on a bullet opens the block menu (and does not zoom)");
+        check(closeMenu(), "Escape closes the block menu");
+        activate(bullet());
+        check(waitFor([&] { return controller->property("zoomBlock").toInt() >= 0; }) && openMenus(window) == 0,
+              "a tap or click on a bullet zooms into the block, without a menu");
+        QMetaObject::invokeMethod(controller, "zoomOut");
+    }
 }
 
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
@@ -224,6 +623,15 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         check(handled && view() == u"journals", "after the drawer closed, back reaches the shell again");
     }
 
+    // 3b. Rows with context menus: taps / clicks act, long presses / right-clicks open the menu.
+    checkRowsAndMenus(window, app, check);
+    closeMenus(window); // whatever a failed check left open
+    if (drawer->property("visible").toBool()) {
+        QMetaObject::invokeMethod(drawer, "close");
+        waitFor([&] { return !isOpen(drawer); });
+    }
+    app->goHome();
+
     // 4. The command palette: Escape closes it; the focus returns to the shell.
     app->navigate({ { u"view"_s, u"tasks"_s } });
     app->requestUiAction(u"palette"_s);
@@ -281,7 +689,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             // mouse press to the editor's ListView: nothing happened on click.)
             // Phones (--touch) tap with a finger, desktops click with the mouse.
             const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-            waitFor([] { return false; }, 300);
+            settle(300);
             // The guide's first list block ("Konspekt"), scrolled into view (on a phone it is
             // below the first screen).
             {
@@ -292,7 +700,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(blockRow), int(blockLine));
                 if (auto *list = editor->property("listView").value<QQuickItem *>(); list && blockRow >= 0)
                     QMetaObject::invokeMethod(list, "positionViewAtIndex", blockRow, 1 /* ListView.Center */);
-                waitFor([] { return false; }, 200);
+                settle(200);
             }
             if (QQuickItem *text = renderedTextContaining(editor, u"Kliknij go"_s)) {
                 // A quick tap (30 ms, shorter than the lists' 90 ms press delay on touch UIs).
@@ -303,7 +711,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 check(waitFor([&] { return page->property("editingRow").toInt() >= 0; }) && editorFocused(),
                       "a click or tap on a block's text starts editing it");
                 QMetaObject::invokeMethod(page, "stopEditing");
-                waitFor([] { return false; }, 100);
+                settle(100);
                 // Scrolling with a finger that starts on text scrolls and never starts editing.
                 if (touch) {
                     auto *list = editor->property("listView").value<QQuickItem *>();
@@ -313,7 +721,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                               && page->property("editingRow").toInt() < 0,
                           "a finger dragged over block text scrolls the page and does not start editing");
                     QMetaObject::invokeMethod(list, "positionViewAtBeginning");
-                    waitFor([] { return false; }, 200);
+                    settle(200);
                 }
             } else {
                 check(false, "the guide shows its first outline block");
@@ -330,7 +738,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(linkRow), int(linkLine));
                 if (auto *list = editor->property("listView").value<QQuickItem *>(); list && linkRow >= 0)
                     QMetaObject::invokeMethod(list, "positionViewAtIndex", linkRow, 1 /* ListView.Center */);
-                waitFor([] { return false; }, 200);
+                settle(200);
             }
             if (QQuickItem *text = renderedTextContaining(editor, u"page:Remont"_s)) {
                 const QPointF at = linkPoint(text, u"page:Remont"_s);
@@ -386,7 +794,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 QMetaObject::invokeMethod(page, "stopEditing");
                 if (auto *list = editor->property("listView").value<QQuickItem *>())
                     QMetaObject::invokeMethod(list, "positionViewAtBeginning");
-                waitFor([] { return false; }, 300);
+                settle(300);
                 QQuickItem *toggle = nullptr;
                 for (QQuickItem *t : window->findChildren<QQuickItem *>(u"noteModeToggle"_s)) {
                     if (t->isVisible() && editor->isAncestorOf(t))
@@ -420,7 +828,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 if (list && low >= 0) {
                     QMetaObject::invokeMethod(page, "stopEditing");
                     QMetaObject::invokeMethod(list, "positionViewAtIndex", low, 2 /* ListView.End */);
-                    waitFor([] { return false; }, 100);
+                    settle(100);
                     QMetaObject::invokeMethod(editor, "startEditing", QVariant(low), QVariant(-1));
                     const auto caretBottom = [editor]() -> qreal {
                         auto *edit = editor->property("activeEditor").value<QQuickItem *>();
@@ -466,7 +874,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       }),
                       "the editor and the route follow the rename");
                 QMetaObject::invokeMethod(newPage, "save", qReturnArg(saved));
-                waitFor([] { return false; }, 100);
+                settle(100);
                 check(!app->workspace()->exists(missing), "the old name does not come back");
                 check(app->workspace()->readFile(renamed).contains(u"Rower dla Oli i Kuby"_s),
                       "the text typed before the rename is saved under the new name");

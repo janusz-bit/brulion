@@ -5,11 +5,15 @@
 #
 #   all builds      notifier (base + factory), desktopnotifier (pure message builder, the
 #                   NotificationBus seam, the tray fallback), androidpayload (JSON for
-#                   AndroidBridge — built everywhere so the desktop tests cover it)
+#                   AndroidBridge — built everywhere so the desktop tests cover it),
+#                   soundchoice (the sound of reminders and alarms, freedesktop sound hints),
+#                   remindersounds (ReminderSounds: the sound settings, QML singleton through
+#                   notifyqml.h; QML: qml/notify/ReminderSoundSetting.qml)
 #   Linux desktop   dbusnotificationbus (org.freedesktop.Notifications over QtDBus)
 #   Android         androidnotifier (AndroidBridge::scheduleReminders)
 #   WebAssembly     wasmnotifiersink (platform::WasmNotifier)
-# Tests: tests/app/notify.
+# Desktop builds also get the settings self-test of the real app (`--selftest-sounds`,
+# notifyselftest.h). Tests: tests/app/notify.
 
 set(_brulion_notify_dir ${CMAKE_CURRENT_LIST_DIR})
 
@@ -17,6 +21,8 @@ qt_add_library(brulion_notify STATIC
     ${_brulion_notify_dir}/notifier.h ${_brulion_notify_dir}/notifier.cpp
     ${_brulion_notify_dir}/desktopnotifier.h ${_brulion_notify_dir}/desktopnotifier.cpp
     ${_brulion_notify_dir}/androidpayload.h ${_brulion_notify_dir}/androidpayload.cpp
+    ${_brulion_notify_dir}/soundchoice.h ${_brulion_notify_dir}/soundchoice.cpp
+    ${_brulion_notify_dir}/remindersounds.h ${_brulion_notify_dir}/remindersounds.cpp
 )
 target_include_directories(brulion_notify PUBLIC ${_brulion_notify_dir})
 target_link_libraries(brulion_notify PUBLIC Qt6::Core brulion_core_reminders)
@@ -44,3 +50,14 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 brulion_set_warnings(brulion_notify)
+qt_extract_metatypes(brulion_notify)
+
+# --- The app: QML registration (ReminderSounds), the settings component, the self-test --------
+target_sources(brulion PRIVATE notify/notifyqml.h)
+# The generated QML type registration includes the notify headers by file name.
+target_include_directories(brulion PRIVATE ${_brulion_notify_dir})
+target_link_libraries(brulion PRIVATE brulion_notify)
+qt_target_qml_sources(brulion QML_FILES qml/notify/ReminderSoundSetting.qml)
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+    target_sources(brulion PRIVATE ${_brulion_notify_dir}/notifyselftest.h ${_brulion_notify_dir}/notifyselftest.cpp)
+endif()

@@ -16,7 +16,7 @@ QString desktopAppId()
 }
 
 DesktopNotification buildDesktopNotification(const ScheduledNotification &notification, const QStringList &capabilities,
-                                             int snoozeMinutes, uint replacesId)
+                                             int snoozeMinutes, uint replacesId, const SoundChoice &sound)
 {
     DesktopNotification d;
     d.appName = u"Brulion"_s;
@@ -46,13 +46,32 @@ DesktopNotification buildDesktopNotification(const ScheduledNotification &notifi
 
     d.hints.insert(u"urgency"_s, QVariant::fromValue(uchar(notification.alarm ? 2 : 1)));
     d.hints.insert(u"desktop-entry"_s, desktopAppId());
+    applyDesktopSoundHints(d.hints, normalizedSound(sound),
+                           notification.alarm ? SoundKind::Alarm : SoundKind::Reminder);
     if (notification.alarm) {
-        d.hints.insert(u"sound-name"_s, u"alarm-clock-elapsed"_s);
         d.hints.insert(u"resident"_s, true);
         d.expireTimeout = 0; // never expires: an alarm waits for the user
     } else {
         d.expireTimeout = -1; // the server's default
     }
+    return d;
+}
+
+DesktopNotification buildSoundPreview(SoundKind kind, const SoundChoice &choice, uint replacesId)
+{
+    DesktopNotification d;
+    d.appName = u"Brulion"_s;
+    d.replacesId = replacesId;
+    d.appIcon = desktopAppId();
+    d.summary = kind == SoundKind::Alarm ? u"⏰ "_s + soundText(SoundText::AlarmSample)
+                                         : soundText(SoundText::ReminderSample);
+    d.body = soundText(kind == SoundKind::Alarm ? SoundText::AlarmSampleBody : SoundText::ReminderSampleBody);
+    // A normal, passing notification: a sample must not stay on screen like a real alarm.
+    d.hints.insert(u"urgency"_s, QVariant::fromValue(uchar(1)));
+    d.hints.insert(u"desktop-entry"_s, desktopAppId());
+    d.hints.insert(u"transient"_s, true);
+    applyDesktopSoundHints(d.hints, normalizedSound(choice), kind);
+    d.expireTimeout = 5000;
     return d;
 }
 
@@ -128,7 +147,8 @@ void DesktopNotifier::showNow(const ScheduledNotification &notification)
             replaces = it.key();
     }
     const DesktopNotification message =
-            buildDesktopNotification(notification, m_bus->capabilities(), m_snoozeMinutes, replaces);
+            buildDesktopNotification(notification, m_bus->capabilities(), m_snoozeMinutes, replaces,
+                                     sound(notification.alarm ? SoundKind::Alarm : SoundKind::Reminder));
     const QPointer<DesktopNotifier> self(this);
     m_bus->notify(message, [self, notification](uint id) {
         if (!self)
@@ -143,6 +163,34 @@ void DesktopNotifier::showNow(const ScheduledNotification &notification)
         self->m_shown.insert(id, shown);
         self->updateRingTimer();
     });
+}
+
+QList<SoundChoice::Mode> DesktopNotifier::soundModes() const
+{
+    return {SoundChoice::Mode::Default, SoundChoice::Mode::Custom, SoundChoice::Mode::Silent};
+}
+
+QStringList DesktopNotifier::themeSounds() const
+{
+    return desktopThemeSounds();
+}
+
+bool DesktopNotifier::previewSound(SoundKind kind, const SoundChoice &choice)
+{
+    const QString unavailable = soundText(SoundText::NoService);
+    if (!m_bus || !m_bus->isAvailable()) {
+        Q_EMIT errorOccurred(unavailable);
+        return false;
+    }
+    const QPointer<DesktopNotifier> self(this);
+    m_bus->notify(buildSoundPreview(kind, choice, m_previewId), [self, unavailable](uint id) {
+        if (!self)
+            return;
+        self->m_previewId = id;
+        if (id == 0)
+            Q_EMIT self->errorOccurred(unavailable);
+    });
+    return true;
 }
 
 void DesktopNotifier::fallback(const ScheduledNotification &notification)
@@ -197,20 +245,21 @@ void DesktopNotifier::ring()
     const QStringList capabilities = m_bus->capabilities();
     for (const auto &[id, notification] : std::as_const(again)) {
         const QPointer<DesktopNotifier> self(this);
-        m_bus->notify(buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id),
-                      [self, id](uint newId) {
-                          if (!self || newId == id)
-                              return;
-                          // Refused, or the server made a new one: stop ringing the old entry.
-                          const auto it = self->m_shown.find(id);
-                          if (it == self->m_shown.end())
-                              return;
-                          Shown shown = *it;
-                          self->m_shown.erase(it);
-                          if (newId != 0)
-                              self->m_shown.insert(newId, shown);
-                          self->updateRingTimer();
-                      });
+        m_bus->notify(
+                buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, sound(SoundKind::Alarm)),
+                [self, id](uint newId) {
+                    if (!self || newId == id)
+                        return;
+                    // Refused, or the server made a new one: stop ringing the old entry.
+                    const auto it = self->m_shown.find(id);
+                    if (it == self->m_shown.end())
+                        return;
+                    Shown shown = *it;
+                    self->m_shown.erase(it);
+                    if (newId != 0)
+                        self->m_shown.insert(newId, shown);
+                    self->updateRingTimer();
+                });
     }
     updateRingTimer();
 }

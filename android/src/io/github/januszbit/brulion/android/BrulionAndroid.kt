@@ -45,6 +45,10 @@ object BrulionAndroid {
   private const val REQUEST_NOTIFICATIONS = 0x4201
   private const val REQUEST_STORAGE = 0x4202
 
+  /** Request codes of the ringtone pickers (results: [onActivityResult]). */
+  private const val REQUEST_SOUND_REMINDER = 0x4203
+  private const val REQUEST_SOUND_ALARM = 0x4204
+
   /** Which runtime permissions the app asked for already (to detect "don't ask again"). */
   private const val PREFS_PERMISSIONS = "io.github.januszbit.brulion.android.permissions"
 
@@ -67,6 +71,12 @@ object BrulionAndroid {
 
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
+
+  /**
+   * The ringtone picker of [pickSound] answered for [kind] (0 reminders, 1 alarms): [json] is the
+   * choice `{mode, uri, title}`, or `{"error": "..."}` when there is no picker.
+   */
+  @JvmStatic external fun nativeSoundPicked(kind: Int, json: String)
 
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
@@ -238,6 +248,108 @@ object BrulionAndroid {
     }
 
   // -----------------------------------------------------------------------------------------
+  // Picked documents (imports): any thread — C++ lists picked folders on a worker thread
+  // -----------------------------------------------------------------------------------------
+
+  /**
+   * `{"uri", "name", "dir", "size", "virtual"}` of a picked document, of a picked tree's root
+   * document, or of any openable content URI; `{"error": "..."}` when it cannot be read.
+   */
+  @JvmStatic
+  fun documentInfo(context: Context, uri: String): String = Documents.info(context, uri)
+
+  /** `{"documents": [{"uri", "name", "dir", "size", "virtual"}, ...]}` of a folder document. */
+  @JvmStatic
+  fun listDocuments(context: Context, uri: String): String = Documents.list(context, uri)
+
+  // -----------------------------------------------------------------------------------------
+  // Sounds of reminders and alarms (ReminderSounds.kt; Settings → Reminders in the app)
+  // -----------------------------------------------------------------------------------------
+
+  /**
+   * Applies the sounds `{"reminder": {mode, uri, title}, "alarm": {...}}`: a kind whose sound
+   * changed gets a new notification channel (the old one is deleted). Returns the current channel
+   * ids `{"reminderChannel": "...", "alarmChannel": "..."}`, or `{"error": "..."}`.
+   */
+  @JvmStatic
+  fun setReminderSounds(context: Context, json: String): String =
+    try {
+      val sounds = JSONObject(json)
+      val channels =
+        ReminderSounds.apply(
+          context.applicationContext,
+          SoundChoice.fromJson(sounds.optJSONObject(SoundKind.REMINDER.key)),
+          SoundChoice.fromJson(sounds.optJSONObject(SoundKind.ALARM.key))
+        )
+      JSONObject()
+        .put("reminderChannel", channels[SoundKind.REMINDER])
+        .put("alarmChannel", channels[SoundKind.ALARM])
+        .toString()
+    } catch (e: JSONException) {
+      errorJson("setReminderSounds: not a JSON object", e)
+    } catch (e: RuntimeException) {
+      errorJson("setReminderSounds failed: $e", e)
+    }
+
+  /**
+   * Opens the system's ringtone picker for [kind] (0 reminders, 1 alarms) showing [current]
+   * (`{mode, uri}`); the answer goes to [nativeSoundPicked] (nothing when cancelled). False for
+   * an unknown kind.
+   */
+  @JvmStatic
+  fun pickSound(context: Context, kind: Int, current: String): Boolean {
+    val soundKind = SoundKind.fromCode(kind) ?: return false
+    onMain {
+      val activity = currentActivity()
+      if (activity == null) {
+        soundPicked(soundKind, JSONObject().put("error", "no activity"))
+        return@onMain
+      }
+      try {
+        val intent = ReminderSounds.pickerIntent(activity, soundKind, SoundChoice.parse(current))
+        val requestCode = if (soundKind == SoundKind.ALARM) REQUEST_SOUND_ALARM else REQUEST_SOUND_REMINDER
+        activity.startActivityForResult(intent, requestCode)
+      } catch (e: ActivityNotFoundException) {
+        Log.w(TAG, "no ringtone picker", e)
+        soundPicked(soundKind, JSONObject().put("error", "no ringtone picker"))
+      }
+    }
+    return true
+  }
+
+  /**
+   * Plays `{kind: "reminder" | "alarm", mode, uri}` for about three seconds (vibrates for
+   * "vibrate"). False when there is nothing to play.
+   */
+  @JvmStatic
+  fun previewSound(context: Context, json: String): Boolean =
+    try {
+      val item = JSONObject(json)
+      val kind = SoundKind.fromKey(item.optString("kind"))
+      kind != null && ReminderSounds.preview(context, kind, SoundChoice.fromJson(item))
+    } catch (e: JSONException) {
+      Log.w(TAG, "previewSound: not a JSON object", e)
+      false
+    }
+
+  /** Opens Android's settings of the notification channel of [kind] (0 reminders, 1 alarms). */
+  @JvmStatic
+  fun openSoundSettings(context: Context, kind: Int) {
+    val soundKind = SoundKind.fromCode(kind) ?: return
+    onMain {
+      ReminderNotifier.ensureChannels(context)
+      startFirst(
+        context,
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+          .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+          .putExtra(Settings.EXTRA_CHANNEL_ID, ReminderNotifier.channelId(context, soundKind)),
+        notificationSettingsIntent(context),
+        appDetailsIntent(context)
+      )
+    }
+  }
+
+  // -----------------------------------------------------------------------------------------
   // BrulionActivity hooks (main thread)
   // -----------------------------------------------------------------------------------------
 
@@ -253,6 +365,18 @@ object BrulionAndroid {
 
   internal fun onActivityIntent(activity: Activity, intent: Intent?) {
     activationFrom(activity, intent)?.let { deliver(it) }
+  }
+
+  /** An activity Brulion started for a result answered ([BrulionActivity.onActivityResult]). */
+  internal fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+    val kind =
+      when (requestCode) {
+        REQUEST_SOUND_REMINDER -> SoundKind.REMINDER
+        REQUEST_SOUND_ALARM -> SoundKind.ALARM
+        else -> return
+      }
+    if (resultCode != Activity.RESULT_OK) return // cancelled: the choice stays
+    soundPicked(kind, ReminderSounds.picked(activity, kind, data).toJson())
   }
 
   internal fun onPermissionsResult(requestCode: Int) {
@@ -304,6 +428,18 @@ object BrulionAndroid {
         }
       }
       pendingActivation = activation
+    }
+  }
+
+  /** Hands a picked sound to C++ (it listens while attached; else it is dropped). */
+  private fun soundPicked(kind: SoundKind, json: JSONObject) {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeSoundPicked(kind.code, json.toString())
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native sound callback not registered", e)
+      }
     }
   }
 
