@@ -8,13 +8,15 @@
 
 # EditorHost (editorhost.h, the contract between the editor and the shell) is a header-only
 # QObject interface whose moc output must be compiled exactly once: the tiny library
-# brulion_editorhost provides it. The editor area is included before the shell's, which reuses
-# this target (src/app/shell/area.cmake defines the same one only when it is missing).
+# brulion_editorhost provides it, with the picture size helper both sides use (picturesize.h:
+# the editor for local files, the shell's Workspace for the browser's data: URLs). The editor area
+# is included before the shell's, which reuses this target (src/app/shell/area.cmake defines the
+# same one only when it is missing).
 if(NOT TARGET brulion_editorhost)
-    qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editorhost.h)
-    set_target_properties(brulion_editorhost PROPERTIES LINKER_LANGUAGE CXX)
+    qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editorhost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.h ${CMAKE_CURRENT_SOURCE_DIR}/picturesize.cpp)
     target_include_directories(brulion_editorhost PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core)
+    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core PRIVATE Qt6::Gui)
     qt_extract_metatypes(brulion_editorhost)
     brulion_set_warnings(brulion_editorhost)
 endif()

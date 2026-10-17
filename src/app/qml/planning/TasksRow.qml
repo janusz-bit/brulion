@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
@@ -63,38 +62,49 @@ T.ItemDelegate {
                       task.overdue ? qsTr("overdue") : "", priorityLabel, where].filter(s => !!s).join(", ")
 
     onClicked: control.opened()
-    onPressAndHold: menu.popup()
+    onPressAndHold: control.openMenu()
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: control.taskToggled()
-    Keys.onMenuPressed: menu.popup(control, Theme.space8, control.height)
+    Keys.onMenuPressed: control.openMenu(control, Theme.space8, control.height)
 
     TapHandler {
         // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so on a phone a
         // tap opened the (modal) menu, which swallowed the release: the task never opened.
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         acceptedButtons: Qt.RightButton
-        onTapped: (eventPoint) => menu.popup(eventPoint.position.x, eventPoint.position.y)
+        onTapped: (eventPoint) => control.openMenu(eventPoint.position.x, eventPoint.position.y)
     }
 
-    contentItem: RowLayout {
-        spacing: Theme.touchUi ? 4 : 6
+    // Laid out with bindings, not Layouts: the row has its final height (a title on two lines,
+    // chips on a second line) as soon as it is created — the list is lazy, and a row that grew
+    // after the list had placed it (the Layouts' and the Flow's sizes arrive with their next
+    // polish) pushed the rows below it while Tasks scrolled (docs/UI.md "Scrolling performance").
+    contentItem: Item {
+        id: content
+        readonly property int spacing: Theme.touchUi ? 4 : 6
+        readonly property int textTop: Theme.touchUi ? 10 : 2
+        implicitWidth: box.implicitWidth + spacing + label.implicitWidth
+        implicitHeight: Math.max(box.implicitHeight, textTop + textColumn.height)
 
         TaskBox {
-            Layout.alignment: Qt.AlignTop
+            id: box
             status: control.task.status || "todo"
             Accessible.name: qsTr("Done: %1").arg(control.task.text || "")
             onToggled: control.taskToggled()
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.touchUi ? 10 : 2
-            spacing: Theme.space1
+        // The text and its chips, vertically centred below their top margin (as a Layout would).
+        Item {
+            id: textColumn
+            x: box.implicitWidth + content.spacing
+            y: content.textTop + Math.max(0, (content.height - content.textTop - height) / 2)
+            width: Math.max(0, content.width - x)
+            height: label.height + Theme.space1 + chips.height
 
             Text {
                 id: label
-                Layout.fillWidth: true
+                width: parent.width
                 // Escaped by the core InlineRenderer: notes never inject markup.
                 text: control.task.html || ""
                 textFormat: Text.RichText
@@ -115,9 +125,30 @@ T.ItemDelegate {
             }
 
             Flow {
-                Layout.fillWidth: true
+                id: chips
+                y: label.height + Theme.space1
+                width: parent.width
                 spacing: Theme.space1
-                visible: children.length > 0
+                // The Flow's own height comes with its next polish: the same lines here (a child
+                // goes to the next line when it does not fit; hidden chips take no room).
+                height: {
+                    let x = 0
+                    let line = 0
+                    let total = 0
+                    for (let i = 0; i < chips.children.length; ++i) {
+                        const c = chips.children[i]
+                        if (!c.visible)
+                            continue
+                        if (x > 0 && x + c.width > chips.width) {
+                            total += line + chips.spacing
+                            x = 0
+                            line = 0
+                        }
+                        x += c.width + chips.spacing
+                        line = Math.max(line, c.height)
+                    }
+                    return total + line
+                }
 
                 BChip {
                     visible: control.statusLabel !== ""
@@ -189,43 +220,60 @@ T.ItemDelegate {
         }
     }
 
-    BMenu {
-        id: menu
-        BMenuItem {
-            text: qsTr("Open")
-            iconName: "file-text"
-            onTriggered: control.opened()
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            text: qsTr("To do")
-            checkable: true
-            checked: control.task.status === "todo"
-            onTriggered: control.statusRequested("todo")
-        }
-        BMenuItem {
-            text: qsTr("In progress")
-            checkable: true
-            checked: control.task.status === "doing"
-            onTriggered: control.statusRequested("doing")
-        }
-        BMenuItem {
-            text: qsTr("Done")
-            checkable: true
-            checked: control.task.status === "done"
-            onTriggered: control.statusRequested("done")
-        }
-        BMenuItem {
-            text: qsTr("Waiting")
-            checkable: true
-            checked: control.task.status === "deferred"
-            onTriggered: control.statusRequested("deferred")
-        }
-        BMenuItem {
-            text: qsTr("Cancelled")
-            checkable: true
-            checked: control.task.status === "cancelled"
-            onTriggered: control.statusRequested("cancelled")
+    /// The status menu, created when it is first opened: built with every row, it made each
+    /// row several times as costly to create while scrolling (docs/UI.md "Scrolling performance").
+    property BMenu statusMenu: null
+    /// Opens the menu like BMenu.popup() with the same arguments: (), (x, y) or (item, x, y).
+    function openMenu(a, b, c) {
+        if (!statusMenu)
+            statusMenu = menuComponent.createObject(control) as BMenu
+        if (a === undefined)
+            statusMenu.popup()
+        else if (c === undefined)
+            statusMenu.popup(a, b)
+        else
+            statusMenu.popup(a, b, c)
+    }
+
+    Component {
+        id: menuComponent
+        BMenu {
+            BMenuItem {
+                text: qsTr("Open")
+                iconName: "file-text"
+                onTriggered: control.opened()
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                text: qsTr("To do")
+                checkable: true
+                checked: control.task.status === "todo"
+                onTriggered: control.statusRequested("todo")
+            }
+            BMenuItem {
+                text: qsTr("In progress")
+                checkable: true
+                checked: control.task.status === "doing"
+                onTriggered: control.statusRequested("doing")
+            }
+            BMenuItem {
+                text: qsTr("Done")
+                checkable: true
+                checked: control.task.status === "done"
+                onTriggered: control.statusRequested("done")
+            }
+            BMenuItem {
+                text: qsTr("Waiting")
+                checkable: true
+                checked: control.task.status === "deferred"
+                onTriggered: control.statusRequested("deferred")
+            }
+            BMenuItem {
+                text: qsTr("Cancelled")
+                checkable: true
+                checked: control.task.status === "cancelled"
+                onTriggered: control.statusRequested("cancelled")
+            }
         }
     }
 }

@@ -14,7 +14,10 @@ Rectangle {
     readonly property var properties: block.model.properties || []
     readonly property real firstLineCenter: header.height / 2
 
-    implicitHeight: column.implicitHeight
+    // Folded (as it is created): the header's own height, not the ColumnLayout's, which arrives
+    // only with its next polish — the block has its final height when the editor's list creates
+    // it (docs/UI.md "Scrolling performance").
+    implicitHeight: root.expanded || root.block.editing ? column.implicitHeight : header.implicitHeight
     height: implicitHeight
     radius: Theme.radius
     color: root.expanded || root.block.editing ? Theme.bgSunken : "transparent"

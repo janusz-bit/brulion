@@ -1,12 +1,14 @@
 // QML registration of the GUI-free helpers in brulion_ui_helpers (src/app/ui/CMakeLists.txt):
 // the classes themselves know nothing about QML; these wrappers make them singletons of the
 // app's QML module "Brulion" (DatesHelper, TextHelper, DiffHelper), so qmllint/qmlcachegen
-// still see their full API (from the library's extracted metatypes).
+// still see their full API (from the library's extracted metatypes). Also TouchFlick
+// (brulion_ui_touch): an attached type, `ListView { TouchFlick.enabled: true }`.
 #pragma once
 
 #include "dateshelper.h"
 #include "diffhelper.h"
 #include "texthelper.h"
+#include "touchflick.h"
 
 #include <QtQml/qqmlregistration.h>
 
@@ -40,6 +42,14 @@ struct DiffHelperForeign {
     QML_SINGLETON
 public:
     static DiffHelper *create(QQmlEngine *, QJSEngine *) { return new DiffHelper; }
+};
+
+struct TouchFlickForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ui::TouchFlick)
+    QML_NAMED_ELEMENT(TouchFlick)
+    QML_UNCREATABLE("TouchFlick is an attached property: ListView { TouchFlick.enabled: true }")
+    QML_ATTACHED(brulion::ui::TouchFlick)
 };
 
 } // namespace brulion::ui

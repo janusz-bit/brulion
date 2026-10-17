@@ -1,0 +1,126 @@
+#include "picturesize.h"
+
+#include <QBuffer>
+#include <QByteArray>
+#include <QDateTime>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QImageReader>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QXmlStreamReader>
+
+#include <optional>
+
+using namespace Qt::StringLiterals;
+
+namespace brulion::editor {
+
+namespace {
+
+bool hasSuffix(const QString &name, QLatin1StringView suffix)
+{
+    return name.endsWith(suffix, Qt::CaseInsensitive);
+}
+
+/// A document of the root <svg> element's width, height and viewBox only (nullopt: the file does
+/// not start with an <svg> element, or is not well-formed up to it).
+std::optional<QByteArray> svgRootOnly(QIODevice *device)
+{
+    QXmlStreamReader xml(device);
+    while (!xml.atEnd()) {
+        switch (xml.readNext()) {
+        case QXmlStreamReader::StartElement: {
+            if (xml.name() != u"svg")
+                return std::nullopt;
+            const QXmlStreamAttributes attributes = xml.attributes();
+            QString doc = u"<svg xmlns=\"http://www.w3.org/2000/svg\""_s;
+            for (const QString &name : {u"width"_s, u"height"_s, u"viewBox"_s}) {
+                if (attributes.hasAttribute(name))
+                    doc += u' ' + name + u"=\""_s + attributes.value(name).toString().toHtmlEscaped() + u'"';
+            }
+            doc += u"/>"_s;
+            return doc.toUtf8();
+        }
+        case QXmlStreamReader::Invalid: return std::nullopt;
+        default: break;
+        }
+    }
+    return std::nullopt;
+}
+
+QSize readerSize(QImageReader &reader)
+{
+    const QSize size = reader.size();
+    return size.isValid() && !size.isEmpty() ? size : QSize();
+}
+
+QSize svgSize(QIODevice *device)
+{
+    const qint64 start = device->pos();
+    if (std::optional<QByteArray> root = svgRootOnly(device)) {
+        QBuffer buffer(&*root);
+        buffer.open(QIODevice::ReadOnly);
+        QImageReader reader(&buffer, "svg");
+        const QSize size = readerSize(reader);
+        // Empty: the size comes from the drawing's bounds (no viewBox, no absolute width and
+        // height) — only the whole document has it.
+        if (size.isValid())
+            return size;
+    }
+    if (device->size() - start > MaxFullSvgBytes || !device->seek(start))
+        return {};
+    QImageReader reader(device, "svg");
+    return readerSize(reader);
+}
+
+} // namespace
+
+QSize pictureSize(QIODevice *device, const QString &fileName)
+{
+    if (!device || !device->isReadable())
+        return {};
+    if (hasSuffix(fileName, ".svg"_L1))
+        return svgSize(device);
+    if (hasSuffix(fileName, ".svgz"_L1)) {
+        if (device->size() - device->pos() > MaxFullSvgBytes)
+            return {};
+        QImageReader reader(device, "svgz");
+        return readerSize(reader);
+    }
+    // No format: the reader recognises the content (with a QFile, its name's suffix as a hint).
+    QImageReader reader(device);
+    return readerSize(reader);
+}
+
+QSize localPictureSize(const QString &file)
+{
+    const QFileInfo info(file);
+    if (!info.isFile())
+        return {};
+    struct Entry {
+        QDateTime modified;
+        qint64 bytes = -1;
+        QSize size;
+    };
+    // The editor's thread only in the app; guarded anyway (tests, a future indexer thread).
+    static QMutex mutex;
+    static QHash<QString, Entry> cache;
+    const QDateTime modified = info.lastModified();
+    {
+        const QMutexLocker lock(&mutex);
+        const auto it = cache.constFind(file);
+        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
+            return it->size;
+    }
+    QFile f(file);
+    const QSize size = f.open(QIODevice::ReadOnly) ? pictureSize(&f, file) : QSize();
+    const QMutexLocker lock(&mutex);
+    if (cache.size() > 2000)
+        cache.clear();
+    cache.insert(file, Entry{modified, info.size(), size});
+    return size;
+}
+
+} // namespace brulion::editor

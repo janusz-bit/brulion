@@ -9,8 +9,10 @@
 #include "markdown/markdown.h"
 #include "vault/vault.h"
 
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -217,6 +219,27 @@ private Q_SLOTS:
         // The cache follows changes of the file.
         QVERIFY(ws->vault()->writeBinary(first, "nowe bajty"));
         QVERIFY(ws->assetUrl(first).toString().endsWith(QString::fromLatin1(QByteArray("nowe bajty").toBase64())));
+
+        // The browser: a picture's size comes with its data: URL (the editor gives the embed that
+        // size before the picture has loaded); not a picture, or a broken one: unknown.
+        const auto pngOf = [](QSize size) {
+            QImage image(size, QImage::Format_RGB32);
+            image.fill(Qt::darkGreen);
+            QBuffer buffer;
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+            return buffer.data();
+        };
+        QVERIFY(ws->vault()->writeBinary(u"assets/mała łąka.png"_s, pngOf(QSize(37, 21))));
+        QCOMPARE(ws->assetPixelSize(u"assets/mała łąka.png"_s), QSize(37, 21));
+        QVERIFY(!ws->assetPixelSize(first).isValid()); // "nowe bajty"
+        QVERIFY(!ws->assetPixelSize(u"assets/notatki"_s).isValid());
+        QVERIFY(!ws->assetPixelSize(u"assets/brak.png"_s).isValid());
+        QVERIFY(ws->vault()->writeBinary(u"assets/mała łąka.png"_s, pngOf(QSize(5, 300))));
+        QCOMPARE(ws->assetPixelSize(u"assets/mała łąka.png"_s), QSize(5, 300));
+        // Desktop / Android: the editor reads the local file's header itself.
+        ws->setDataUrlAssets(false);
+        QVERIFY(!ws->assetPixelSize(u"assets/mała łąka.png"_s).isValid());
     }
 
     void templatesAndJournals()

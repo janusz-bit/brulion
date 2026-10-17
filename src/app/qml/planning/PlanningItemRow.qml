@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
@@ -74,14 +73,25 @@ T.ItemDelegate {
         }
     }
 
-    contentItem: RowLayout {
-        spacing: Theme.touchUi ? 6 : 8
+    // Laid out with bindings, not Layouts: the row has its final height (a title on two lines)
+    // as soon as it is created — the agenda is a lazy list, and a row that grew after the list had
+    // placed it pushed the days below it while the agenda scrolled (docs/UI.md "Scrolling
+    // performance").
+    contentItem: Item {
+        id: content
+        readonly property int spacing: Theme.touchUi ? 6 : 8
+        readonly property real chipWidth: chip.visible ? chip.implicitWidth + spacing : 0
+        // (Not chipWidth: whether the chip shows depends on the row's width.)
+        implicitWidth: textColumn.x + Math.max(title.implicitWidth, subtitleText.implicitWidth)
+                       + (control.kindLabel !== "" ? chip.implicitWidth + spacing : 0)
+        implicitHeight: Math.max(marker.height, timeText.visible ? timeText.y + timeText.implicitHeight : 0,
+                                 textColumn.height, chip.visible ? chip.y + chip.implicitHeight : 0)
 
         // Checkbox for tasks, the entry's icon otherwise (both in the same column width).
         Item {
-            Layout.preferredWidth: Theme.touchUi ? Theme.touchTarget : 24
-            Layout.preferredHeight: Theme.touchUi ? Theme.touchTarget : 24
-            Layout.alignment: Qt.AlignTop
+            id: marker
+            width: Theme.touchUi ? Theme.touchTarget : 24
+            height: width
             TaskBox {
                 anchors.centerIn: parent
                 visible: control.isTask
@@ -100,9 +110,10 @@ T.ItemDelegate {
         }
 
         Text {
-            Layout.alignment: Qt.AlignTop
-            Layout.topMargin: Theme.touchUi ? 12 : 4
-            Layout.preferredWidth: timeMetrics.width
+            id: timeText
+            x: marker.width + content.spacing
+            y: Theme.touchUi ? 12 : 4
+            width: timeMetrics.width
             visible: (control.entry.time || "") !== ""
             text: control.entry.time || ""
             font.family: Theme.fontUi
@@ -119,13 +130,16 @@ T.ItemDelegate {
             }
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            spacing: 1
+        Item {
+            id: textColumn
+            x: timeText.visible ? timeText.x + timeText.width + content.spacing : marker.width + content.spacing
+            width: Math.max(0, content.width - x - content.chipWidth)
+            height: title.implicitHeight + (subtitleText.visible ? 1 + subtitleText.implicitHeight : 0)
+            y: Math.max(0, (content.height - height) / 2)
 
             Text {
-                Layout.fillWidth: true
+                id: title
+                width: parent.width
                 text: control.entry.title || ""
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textBase
@@ -138,7 +152,9 @@ T.ItemDelegate {
                 lineHeight: Theme.lineHeightPx(font.pixelSize, 1.35)
             }
             Text {
-                Layout.fillWidth: true
+                id: subtitleText
+                y: title.implicitHeight + 1
+                width: parent.width
                 visible: text !== ""
                 text: control.subtitle
                 font.family: Theme.fontUi
@@ -150,8 +166,9 @@ T.ItemDelegate {
         }
 
         BChip {
-            Layout.alignment: Qt.AlignTop
-            Layout.topMargin: Theme.touchUi ? 10 : 2
+            id: chip
+            x: content.width - width
+            y: Theme.touchUi ? 10 : 2
             visible: control.kindLabel !== "" && control.width > 300
             size: "small"
             variant: control.variant

@@ -25,13 +25,19 @@ Item {
     implicitHeight: height
     Accessible.ignored: true
 
-    Impl.IconImage {
+    // No IconImage without a name: one without a source looks its (empty) name up in the icon
+    // theme on the file system — every icon theme directory of XDG_DATA_DIRS — whenever it is
+    // created or resized (QQuickIconImage::load), which made rows with such icons (menu items,
+    // empty slots) slow to create (docs/UI.md "Scrolling performance").
+    Loader {
         anchors.fill: parent
-        visible: icon.name !== ""
-        sourceSize: Qt.size(icon.size, icon.size)
-        source: icon.name !== "" ? "qrc:/icons/" + icon.name + ".svg" : ""
-        color: icon.color
-        fillMode: Image.PreserveAspectFit
-        smooth: true
+        active: icon.name !== ""
+        sourceComponent: Impl.IconImage {
+            sourceSize: Qt.size(icon.size, icon.size)
+            source: "qrc:/icons/" + icon.name + ".svg"
+            color: icon.color
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+        }
     }
 }

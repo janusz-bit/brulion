@@ -11,7 +11,8 @@ import Brulion
 // Enter / Tab / Shift+Tab move, Esc cancels the cell's edit. Typing reaches the document at once
 // (PageController.setTableCell with `typing`: one undo step per cell), so a cell left open when
 // the app is suspended or closed is saved like any text. Rows and columns are added with
-// the buttons below the grid (shown on hover, when selected or while a cell is edited).
+// the buttons below the grid: always shown on touch screens; with a mouse while the table is
+// selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
 Item {
     id: root
 
@@ -27,7 +28,12 @@ Item {
     readonly property real firstLineCenter: rowHeight / 2
     property int editRow: -2   // -2 none, -1 header
     property int editColumn: -1
-    readonly property bool active: editRow > -2 || block.model.isSelected || hover.hovered
+    readonly property bool active: editRow > -2 || block.model.isSelected
+    /// The row of buttons below the grid. Not on hover: a table that grew under the resting mouse
+    /// pointer moved everything below it while the page scrolled past, and room kept for hidden
+    /// buttons left a gap under every table (docs/UI.md "Scrolling performance"). Selecting the
+    /// table or editing a cell — never scrolling — adds it.
+    readonly property bool buttonsShown: active || Theme.touchUi
 
     /// Natural column widths (clamped), stretched to fill the available width.
     readonly property var columnWidths: {
@@ -53,7 +59,9 @@ Item {
     }
     readonly property real gridWidth: columnWidths.reduce((a, b) => a + b, 0)
 
-    implicitHeight: frame.height + (buttons.visible ? buttons.height + Theme.space1 : 0)
+    // The buttons' own height (the Loader's, from its item's implicit size at creation), not a
+    // Row's, which a positioner only sets in its next polish.
+    implicitHeight: frame.height + (buttons.active ? buttons.implicitHeight + Theme.space1 : 0)
     height: implicitHeight
 
     Accessible.role: Accessible.Table
@@ -61,7 +69,6 @@ Item {
 
     FontMetrics { id: headerMetrics; font.family: Theme.fontUi; font.pixelSize: Theme.textBase; font.weight: Theme.weightSemiBold }
     FontMetrics { id: cellMetrics; font.family: Theme.fontUi; font.pixelSize: Theme.textBase }
-    HoverHandler { id: hover; enabled: !Theme.touchUi }
 
     function focusFirstCell() {
         startCell(rows.length > 0 ? 0 : -1, 0)
@@ -192,9 +199,15 @@ Item {
                                 linkColor: Theme.link
                                 Accessible.ignored: true
                             }
-                            BToolTip {
-                                visible: (cell.error !== "" || cellText.contentWidth > cellText.width) && cellHover.hovered
-                                text: root.block.editor.autoTextSafe(cell.error !== "" ? cell.error : cell.shown)
+                            // Created when shown: a tooltip (a popup with its own items) in
+                            // every cell made a table slow to create while scrolling.
+                            Loader {
+                                active: cellHover.hovered && (cell.error !== "" || cellText.contentWidth > cellText.width)
+                                sourceComponent: BToolTip {
+                                    parent: cell
+                                    visible: true
+                                    text: root.block.editor.autoTextSafe(cell.error !== "" ? cell.error : cell.shown)
+                                }
                             }
                             HoverHandler {
                                 id: cellHover
@@ -317,26 +330,33 @@ Item {
         }
     }
 
-    Row {
+    Loader {
         id: buttons
-        visible: root.active || Theme.touchUi
+        active: root.buttonsShown
         y: frame.height + Theme.space1
-        spacing: Theme.space1
-        BButton {
-            size: "small"
-            variant: "ghost"
-            iconName: "plus"
-            text: qsTr("Row")
-            focusPolicy: Qt.NoFocus
-            onClicked: root.block.controller.addTableRow(root.block.index)
-        }
-        BButton {
-            size: "small"
-            variant: "ghost"
-            iconName: "plus"
-            text: qsTr("Column")
-            focusPolicy: Qt.NoFocus
-            onClicked: root.block.controller.addTableColumn(root.block.index)
+        // Placed by bindings (a Row would take its size only in its next polish).
+        sourceComponent: Item {
+            implicitWidth: addColumn.x + addColumn.implicitWidth
+            implicitHeight: Math.max(addRow.implicitHeight, addColumn.implicitHeight)
+            BButton {
+                id: addRow
+                size: "small"
+                variant: "ghost"
+                iconName: "plus"
+                text: qsTr("Row")
+                focusPolicy: Qt.NoFocus
+                onClicked: root.block.controller.addTableRow(root.block.index)
+            }
+            BButton {
+                id: addColumn
+                x: addRow.implicitWidth + Theme.space1
+                size: "small"
+                variant: "ghost"
+                iconName: "plus"
+                text: qsTr("Column")
+                focusPolicy: Qt.NoFocus
+                onClicked: root.block.controller.addTableColumn(root.block.index)
+            }
         }
     }
 }

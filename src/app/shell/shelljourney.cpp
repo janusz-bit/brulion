@@ -485,9 +485,14 @@ void Journey::writeInToday()
         return;
     }
     auto *editor = day->property("editor").value<QQuickItem *>();
-    QObject *suggestions = editor ? editor->property("suggestions").value<QObject *>() : nullptr;
+    // The editor creates its suggestion popup the first time there is something to complete.
     const auto suggesting = [&] {
-        return waitFor([&] { return suggestions && suggestions->property("visible").toBool(); }, 2000);
+        return waitFor(
+                [&] {
+                    const auto *suggestions = editor ? editor->property("suggestions").value<QObject *>() : nullptr;
+                    return suggestions && suggestions->property("visible").toBool();
+                },
+                2000);
     };
 
     key(Qt::Key_End);

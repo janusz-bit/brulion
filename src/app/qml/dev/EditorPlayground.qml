@@ -300,6 +300,8 @@ ApplicationWindow {
     property int realRow: -1
     property int farRow: -1
     property string textBefore: ""
+    property real headerBefore: 0
+    property real tableBefore: 0
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
     function check(ok, what) {
@@ -415,6 +417,21 @@ ApplicationWindow {
             () => check(page.sourceMode && page.sourceText.length > 100, "source mode shows the file"),
             () => { editor.toggleSourceMode() },
             () => check(!page.sourceMode && page.blocks.count > 10, "back to blocks"),
+            // Zooming into a block and out again: the breadcrumb's room above the blocks goes
+            // with it (an inactive Loader kept its height: a blank band above the first block).
+            () => {
+                window.headerBefore = editor.listView.headerItem ? editor.listView.headerItem.height : -1
+                page.zoomInto(rowOf("Przygotowanie"))
+            },
+            () => check(page.zoomBlock >= 0 && editor.listView.headerItem
+                        && editor.listView.headerItem.height > window.headerBefore,
+                        "zooming in shows the breadcrumb above the blocks: " + window.headerBefore + " → "
+                        + (editor.listView.headerItem ? editor.listView.headerItem.height : -1)),
+            () => page.zoomOut(),
+            () => check(page.zoomBlock < 0 && editor.listView.headerItem
+                        && editor.listView.headerItem.height === window.headerBefore,
+                        "zooming out leaves no room for the breadcrumb: "
+                        + (editor.listView.headerItem ? editor.listView.headerItem.height : -1) + " (was " + window.headerBefore + ")"),
             () => { window.pasteRow = page.insertBlockAfter(rowOf("Ekipa może"), ""); window.countBefore = page.blocks.count },
             () => { const e = editor.activeEditor; e.insert(e.cursorPosition, "- [ ] pierwsze\n- drugie") },
             () => {
@@ -482,14 +499,27 @@ ApplicationWindow {
             () => check(info(window.farRow).plainText.indexOf("Q") > 0 && page.editingRow === window.farRow
                         && editor.activeEditor && editor.activeEditor.activeFocus, "typing brings the edited block back: " + info(window.farRow).plainText),
             // ---- Table cells: typed text is in the document before the cell is left -------------
+            // With a mouse, a table takes no room below its grid until it is selected or edited
+            // (the "+ Row / + Column" buttons): its height never changes under a resting pointer.
             () => {
                 page.stopEditing()
+                page.selectedRow = -1
                 window.textBefore = page.sourceText
                 const row = viewRow("table")
                 editor.listView.positionViewAtIndex(row, ListView.Center)
                 const item = editor.listView.itemAtIndex(row) as BlockDelegate
+                const table = item ? item.contentItem as TableBlockView : null
+                window.tableBefore = table ? table.height : -1
+                check(table !== null && table.height === (table.rows.length + 1) * table.rowHeight,
+                      "a table not being edited has no room below its grid: " + window.tableBefore)
                 if (item)
                     item.focusContent()
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(viewRow("table")) as BlockDelegate
+                const table = item ? item.contentItem as TableBlockView : null
+                check(table !== null && table.height > window.tableBefore + 20,
+                      "editing a cell shows the table's buttons below it: " + (table ? table.height : -1))
             },
             () => typeKeys("źó"),
             () => check(page.sourceText !== window.textBefore && page.sourceText.indexOf("źó") > 0 && page.dirty,
@@ -634,6 +664,31 @@ ApplicationWindow {
                       && editor.activeEditor && editor.activeEditor.text === "![[trasa.svg]]",
                       "a click beside the picture edits its line")
                 page.stopEditing()
+            },
+            // A picture replaced in its file by one of another shape (the same URL: Qt's pixmap
+            // cache may still hold the old picture) gets a frame of the shape it is drawn with —
+            // the file's header (the frame's size before loading) must not stretch it.
+            () => {
+                host.overwriteTextAsset("assets/trasa.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\""
+                                        + " height=\"400\" viewBox=\"0 0 100 400\"><!-- wysoka --><rect width=\"100\""
+                                        + " height=\"400\" fill=\"#e6c39f\"/></svg>")
+                window.waits = 0
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const frame = item ? window.findItem(item.embedView, "embedPicture") : null
+                const img = item ? window.findItem(item.embedView, "embedImage") as Image : null
+                const ready = frame !== null && img !== null && img.status === Image.Ready && frame.height > 0
+                              && img.implicitHeight > 0
+                if (!ready && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                const shown = ready ? img.implicitWidth / img.implicitHeight : -1
+                const box = ready ? frame.width / frame.height : -2
+                check(ready && Math.abs(box / shown - 1) < 0.03,
+                      "a replaced picture is not stretched: frame " + (frame ? frame.width + "×" + frame.height : "-")
+                      + ", picture " + (img ? img.implicitWidth + "×" + img.implicitHeight : "-"))
             },
             // The journal stream caps document headings at the size of a day's date: smaller, in
             // the same order.

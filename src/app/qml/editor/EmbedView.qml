@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import Brulion
 
 // EmbedView — attachments embedded in a block (`![[photo.png]]`, `![alt](assets/a.png)`):
@@ -8,6 +9,10 @@ import Brulion
 // blob/data on WebAssembly). A click on a picture emits clicked(target), a click beside it
 // backgroundClicked() (BlockDelegate: edit the block). SVG pictures are drawn to fit 1024×420
 // with their aspect ratio (a vector picture has no pixel size of its own to cap).
+// A local picture has its size from the start (the embeds' width × height, read from the file's
+// header), and the view's height is a binding, not the Column's own (a positioner sets it only in
+// its next polish): a block that grew when its picture had loaded moved everything below it while
+// the page or the journal scrolled (docs/UI.md "Scrolling performance").
 Column {
     id: root
 
@@ -21,14 +26,41 @@ Column {
     }
 
     spacing: Theme.space2
+    height: {
+        let h = 0
+        void pictures.revision // (itemAt() notifies nothing; a Repeater's items may come after its count)
+        for (let i = 0; i < pictures.count; ++i) {
+            const item = pictures.itemAt(i)
+            if (item)
+                h += item.height + (i > 0 ? spacing : 0)
+        }
+        return h
+    }
 
     Repeater {
+        id: pictures
+        property int revision: 0
+        onItemAdded: revision++
+        onItemRemoved: revision++
         model: root.embeds
         delegate: Item {
             id: embed
             required property var modelData
             readonly property bool image: modelData.image && modelData.url.toString() !== ""
             readonly property bool scalable: /\.svgz?$/i.test(modelData.name || "")
+            /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
+            /// at most 2048 a side; an SVG fitted into 1024 × 420 (rendered at the screen's pixel
+            /// ratio) — null when the model does not know the file's size (then: once loaded).
+            readonly property var knownSize: {
+                const w = modelData.width || 0
+                const h = modelData.height || 0
+                if (w <= 0 || h <= 0)
+                    return null
+                const dpr = scalable && Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
+                const box = scalable ? [1024 * dpr, 420 * dpr] : [2048, 2048]
+                const k = scalable || w > box[0] || h > box[1] ? Math.min(box[0] / w, box[1] / h) : 1
+                return { width: Math.floor(w * k) / dpr, height: Math.floor(h * k) / dpr }
+            }
             width: root.width
             height: image ? picture.height : chip.height
 
@@ -44,9 +76,20 @@ Column {
 
             Rectangle {
                 id: picture
+                objectName: "embedPicture" // (the editor's self-test)
                 visible: embed.image
-                readonly property real naturalWidth: img.status === Image.Ready ? img.implicitWidth : 320
-                readonly property real naturalHeight: img.status === Image.Ready ? img.implicitHeight : 180
+                readonly property bool loaded: img.status === Image.Ready && img.implicitWidth > 0 && img.implicitHeight > 0
+                /// The loaded picture has another shape than the file's header said (Qt's pixmap
+                /// cache still had the file's old picture, replaced since): the frame takes the
+                /// picture's shape, never stretching it. Normally the two agree, so nothing moves
+                /// when it has loaded (an SVG's rendered size differs slightly, in its rounding).
+                readonly property bool otherShape: loaded && embed.knownSize !== null
+                    && Math.abs(img.implicitWidth * embed.knownSize.height - img.implicitHeight * embed.knownSize.width)
+                       > 0.02 * img.implicitWidth * embed.knownSize.height
+                readonly property real naturalWidth: embed.knownSize && !otherShape ? embed.knownSize.width
+                                                     : loaded ? img.implicitWidth : 320
+                readonly property real naturalHeight: embed.knownSize && !otherShape ? embed.knownSize.height
+                                                      : loaded ? img.implicitHeight : 180
                 // Natural size, at most the column width and 420 px high.
                 width: Math.min(root.width, naturalWidth, 420 * naturalWidth / Math.max(1, naturalHeight))
                 height: Math.round(width * naturalHeight / Math.max(1, naturalWidth))
@@ -63,6 +106,7 @@ Column {
                 // to a 2048 px square — so it is fitted (aspect kept) into the largest box shown.
                 Image {
                     id: img
+                    objectName: "embedImage"
                     anchors.fill: parent
                     anchors.margins: 1
                     source: embed.image ? embed.modelData.url : ""

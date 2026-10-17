@@ -7,7 +7,8 @@ import Brulion
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
 //
 // Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
-// Narrow: the sidebar is a Drawer (swipe from the left edge or the menu button), a bottom
+// Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge where the system
+// leaves it to the app — Android's gesture navigation takes it for "back"), a bottom
 // navigation bar and a floating quick-capture button; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //

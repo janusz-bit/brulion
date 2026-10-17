@@ -54,6 +54,7 @@ BDialog {
 
     ListView {
         id: list
+        TouchFlick.enabled: true
         Layout.fillWidth: true
         Layout.preferredHeight: Math.min(Math.max(contentHeight, Theme.listItemHeightTwoLine), 380)
         clip: true

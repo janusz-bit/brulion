@@ -56,6 +56,7 @@ FocusScope {
 
     Flickable {
         id: flick
+        TouchFlick.enabled: true
         anchors.fill: parent
         interactive: root.scrollable && contentHeight > height
         contentHeight: column.implicitHeight

@@ -1,5 +1,6 @@
 #include "workspace.h"
 
+#include "picturesize.h"
 #include "workspacecapture.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
@@ -11,6 +12,7 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QBuffer>
 #include <QDesktopServices>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -160,6 +162,7 @@ void Workspace::close()
     m_indexTotal = 0;
     m_trashCount = -1;
     m_dataUrls.clear();
+    m_dataUrlSizes.clear();
     m_vault->stopWatching();
     disconnect(m_vault.get(), nullptr, this, nullptr);
     disconnect(m_index.get(), nullptr, this, nullptr);
@@ -228,6 +231,7 @@ void Workspace::setDataUrlAssets(bool on)
 {
     m_dataUrlAssets = on;
     m_dataUrls.clear();
+    m_dataUrlSizes.clear();
 }
 
 // ---- Index ------------------------------------------------------------------------------------
@@ -310,8 +314,11 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
         VaultIndex::Batch batch(*m_index);
         for (const VaultChange &c : changes) {
             m_dataUrls.remove(c.path);
-            if (!c.oldPath.isEmpty())
+            m_dataUrlSizes.remove(c.path);
+            if (!c.oldPath.isEmpty()) {
                 m_dataUrls.remove(c.oldPath);
+                m_dataUrlSizes.remove(c.oldPath);
+            }
             switch (c.type) {
             case ChangeType::Created:
             case ChangeType::Modified:
@@ -563,7 +570,23 @@ QUrl Workspace::assetUrl(const QString &path) const
     const QString mime = QMimeDatabase().mimeTypeForFile(key, QMimeDatabase::MatchExtension).name();
     QUrl url(u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(bytes.toBase64()));
     m_dataUrls.insert(key, url);
+    if (mime.startsWith(u"image/"_s)) {
+        QBuffer buffer;
+        buffer.setData(bytes);
+        buffer.open(QIODevice::ReadOnly);
+        m_dataUrlSizes.insert(key, editor::pictureSize(&buffer, key));
+    }
     return url;
+}
+
+QSize Workspace::assetPixelSize(const QString &path) const
+{
+    if (!m_dataUrlAssets || !m_vault || path.isEmpty())
+        return {};
+    const QString key = paths::normalize(path);
+    if (!m_dataUrls.contains(key))
+        assetUrl(path);
+    return m_dataUrlSizes.value(key);
 }
 
 QString Workspace::saveAttachment(const QString &fileName, const QByteArray &data)

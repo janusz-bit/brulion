@@ -61,6 +61,7 @@ Item {
             // ---- Odnośniki --------------------------------------------------------------------------
             Flickable {
                 id: linksFlick
+                TouchFlick.enabled: true
                 clip: true
                 contentWidth: width
                 contentHeight: links.implicitHeight + 2 * Theme.space3

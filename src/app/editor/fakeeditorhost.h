@@ -91,6 +91,9 @@ public:
     Q_INVOKABLE void setFile(const QString &path, const QString &content);
     /// Put an attachment given as text (an SVG picture in the playground's self-test).
     Q_INVOKABLE void setTextAsset(const QString &path, const QString &content);
+    /// Replace an attachment given as text in its file (the same URL, like a picture replaced in
+    /// the vault: Qt's pixmap cache may still have the old one); emits indexChanged.
+    Q_INVOKABLE void overwriteTextAsset(const QString &path, const QString &content);
     /// Change a file "outside the editor": stores it and emits fileChanged(path).
     Q_INVOKABLE void externalWrite(const QString &path, const QString &content);
     Q_INVOKABLE void removeFile(const QString &path);

@@ -14,6 +14,9 @@ Item {
     property BlockDelegate block
     /// Quote style (muted, italic) for blockquotes.
     property bool quoted: false
+    /// Shows and edits the block's text (BlockDelegate keeps one for text blocks; false while the
+    /// block is shown by another view or hidden: no text, no inline editor).
+    property bool live: true
 
     readonly property BlockEditor editor: block.editor
     readonly property int level: block.headingLevel
@@ -21,7 +24,7 @@ Item {
     readonly property int lineHeightPx: editor.headingLineHeight(level)
     readonly property real firstLineCenter: editor.firstLineCenter(level)
     readonly property bool mono: block.view === "html"
-    readonly property bool editing: block.editing
+    readonly property bool editing: live && block.editing
 
     /// The rendered text's height in whole fixed-height lines.
     readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(rendered.implicitHeight / lineHeightPx)) * lineHeightPx
@@ -34,7 +37,7 @@ Item {
         width: parent.width
         visible: !root.editing
         textFormat: Text.RichText
-        text: root.block.model.html
+        text: root.live ? root.block.model.html : ""
         wrapMode: Text.Wrap
         font.family: root.mono ? Theme.fontMono : Theme.fontEditor
         font.pixelSize: root.mono ? Theme.textSm : root.fontSize
@@ -46,7 +49,7 @@ Item {
         color: root.block.closedTask ? Theme.fgFaint : root.quoted ? Theme.fgMuted : Theme.fg
         linkColor: Theme.link
         Accessible.role: Accessible.StaticText
-        Accessible.name: root.block.model.plainText
+        Accessible.name: root.live ? root.block.model.plainText : ""
 
         HoverHandler {
             id: textHover

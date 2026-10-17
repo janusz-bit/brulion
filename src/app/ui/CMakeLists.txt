@@ -15,6 +15,18 @@ target_link_libraries(brulion_ui_helpers PUBLIC Qt6::Core PRIVATE brulion_core_d
 qt_extract_metatypes(brulion_ui_helpers)
 brulion_set_warnings(brulion_ui_helpers)
 
+# brulion_ui_touch — TouchFlick (touchflick.h): corrects Qt's touch flicks on screens that report
+# no velocities (Android). Qt Quick, no private Qt headers; a static library so tests/app/touch
+# drives it with Android-style input without the app; registered as the attached type
+# "TouchFlick" by qmlforeign.h.
+qt_add_library(brulion_ui_touch STATIC
+    touchflick.h touchflick.cpp
+)
+target_include_directories(brulion_ui_touch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+qt_extract_metatypes(brulion_ui_touch)
+brulion_set_warnings(brulion_ui_touch)
+
 # Qt's own Polish texts (standard dialog buttons, QtQuick.Dialogs, QFileDialog — QtTranslations):
 # qtbase_pl.qm and qtdeclarative_pl.qm from Qt's translations folder, bundled as resources
 # ":/i18n/qt/…" so Android and the browser have them too. The folder: BRULION_QT_TRANSLATIONS_DIR

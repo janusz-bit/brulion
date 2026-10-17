@@ -256,6 +256,7 @@ FocusScope {
     // ---- Hours ---------------------------------------------------------------------------------
     Flickable {
         id: hours
+        TouchFlick.enabled: true
         anchors.top: top.bottom
         anchors.bottom: parent.bottom
         width: parent.width

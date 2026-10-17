@@ -51,6 +51,11 @@ FocusScope {
     /// Document mode: the size of the largest heading (0: no limit). The journal stream sets the
     /// size of its days' dates, so a "## Praca" inside a day never outranks the day itself.
     property int headingCap: 0
+    /// The editor is as tall as its blocks and something around it scrolls (a day of the journal
+    /// stream): all blocks are created at once — with the editor itself when its controller is set
+    /// from the start — so the editor has its final height as soon as it exists. (A list that
+    /// created them as it grew made the day grow after the journal list had placed it.)
+    property bool autoHeight: false
 
     // ---- Geometry shared by the delegates ---------------------------------------------------
     /// The page is shown as a document (Obsidian-like), not as an outline.
@@ -85,9 +90,9 @@ FocusScope {
     readonly property bool touch: Theme.touchUi
     readonly property bool toolbarVisible: touch && controller !== null && controller.editingRow >= 0
                                            && !controller.sourceMode
-    readonly property real toolbarHeight: toolbar.height
+    readonly property real toolbarHeight: Theme.touchTarget + Theme.space2 + 1
     /// Top of the mobile toolbar (it sits on the virtual keyboard): text below it is hidden.
-    readonly property real toolbarTop: toolbarVisible ? toolbar.y : height
+    readonly property real toolbarTop: toolbarVisible && toolbarLoader.item ? (toolbarLoader.item as Item).y : height
 
     /// Something to tell the user (a toast): kind "error" | "info".
     signal notice(string text, string kind)
@@ -218,6 +223,16 @@ FocusScope {
         done: Theme.fgFaint, priority: Theme.dangerText
     })
 
+    // Also set at once when the controller arrives, before the list creates its rows: a Binding
+    // applies its value only when the editor has been completed — after the rows exist — and the
+    // new palette (or day) made every row render its text a second time.
+    onControllerChanged: {
+        if (!controller)
+            return
+        controller.palette = rendererPalette
+        controller.locale = DatesHelper.locale
+        controller.now = DatesHelper.fixedNow
+    }
     Binding { target: editor.controller; property: "palette"; value: editor.rendererPalette; when: editor.controller !== null }
     Binding { target: editor.controller; property: "locale"; value: DatesHelper.locale; when: editor.controller !== null }
     // The fixed clock of screenshots and tests. Midnight itself: PageController follows the
@@ -251,7 +266,7 @@ FocusScope {
     function startEditing(row, cursor) {
         if (!controller || row < 0)
             return
-        suggestions.close()
+        closeSuggestions()
         const again = controller.editingRow === row
         controller.startEditing(row, cursor === undefined ? -1 : cursor)
         if (again && activeEditor && activeEditor.row === row)
@@ -284,7 +299,7 @@ FocusScope {
         if (!controller)
             return
         const row = controller.editingRow
-        suggestions.close()
+        closeSuggestions()
         controller.stopEditing()
         if (select && row >= 0)
             controller.selectedRow = row
@@ -294,7 +309,7 @@ FocusScope {
     function toggleSourceMode() {
         if (!controller)
             return
-        suggestions.close()
+        closeSuggestions()
         controller.save()
         controller.sourceMode = !controller.sourceMode
     }
@@ -369,7 +384,7 @@ FocusScope {
     /// composed by the input method (Android keyboards compose every word) counts as typed.
     function updateCompletion(edit) {
         if (!edit || !edit.activeFocus || edit.readOnly || !edit.completions) {
-            suggestions.close()
+            closeSuggestions()
             return
         }
         const plain = edit.plain()
@@ -378,21 +393,23 @@ FocusScope {
         const trigger = pre === "" ? suggestionModel.detect(plain, caret)
                                    : suggestionModel.detect(plain.slice(0, caret) + pre + plain.slice(caret), caret + pre.length)
         if (trigger.mode === "") {
-            suggestions.close()
+            closeSuggestions()
             return
         }
         suggestionModel.setTrigger(trigger)
-        suggestions.trigger = trigger
-        suggestions.row = edit.row
-        suggestions.target = edit
-        if (suggestionModel.count > 0)
-            suggestions.show()
-        else
-            suggestions.close()
+        if (suggestionModel.count === 0) {
+            closeSuggestions()
+            return
+        }
+        const popup = suggestionPopup()
+        popup.trigger = trigger
+        popup.row = edit.row
+        popup.target = edit
+        popup.show()
     }
 
     function acceptSuggestion(index) {
-        const edit = suggestions.target
+        const edit = suggestions ? suggestions.target : null
         if (!controller || !edit || index < 0 || index >= suggestionModel.count)
             return
         // The trigger counted the composed word: make it text before replacing it.
@@ -401,7 +418,7 @@ FocusScope {
             updateCompletion(edit)
         const trigger = suggestions.trigger
         const row = suggestions.row
-        suggestions.close()
+        closeSuggestions()
         const result = controller.applyCompletion(row, trigger, item)
         handleCommandResult(row, result)
     }
@@ -456,7 +473,7 @@ FocusScope {
         const multiline = edit.multiline
 
         // Suggestion popup navigation.
-        if (suggestions.visible) {
+        if (suggestionsOpen) {
             switch (event.key) {
             case Qt.Key_Up: suggestions.move(-1); return true
             case Qt.Key_Down: suggestions.move(1); return true
@@ -468,7 +485,7 @@ FocusScope {
                     return true
                 }
                 break
-            case Qt.Key_Escape: suggestions.close(); return true
+            case Qt.Key_Escape: closeSuggestions(); return true
             }
         }
 
@@ -682,7 +699,7 @@ FocusScope {
         later(() => {
             if (!editor.controller)
                 return
-            if (!editor.activeFocus && !suggestions.visible && !dialogs.anyOpen)
+            if (!editor.activeFocus && !editor.suggestionsOpen && !dialogs.anyOpen)
                 editor.controller.save()
         })
     }
@@ -706,7 +723,7 @@ FocusScope {
         target: editor.controller
         function onEditingRowChanged() {
             if (editor.controller.editingRow < 0)
-                suggestions.close()
+                editor.closeSuggestions()
             else
                 editor.ensureRowVisible(editor.controller.editingRow)
         }
@@ -764,7 +781,7 @@ FocusScope {
                         variant: "primary"
                         iconName: "git-merge"
                         text: qsTr("Compare and merge…")
-                        onClicked: mergeDialog.open()
+                        onClicked: editor.openMergeDialog()
                     }
                     BButton {
                         size: "small"
@@ -781,29 +798,43 @@ FocusScope {
         }
     }
 
-    BDialog {
-        id: mergeDialog
-        parent: T.Overlay.overlay
-        title: qsTr("Merge changes")
-        iconName: "git-merge"
-        preferredWidth: Theme.dialogWidthLg
-        showFooter: false
-        BMergeView {
-            Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(560, editor.height * 0.7)
-            ours: mergeDialog.opened && editor.controller ? editor.controller.sourceText : ""
-            theirs: mergeDialog.opened && editor.controller ? editor.controller.conflictText : ""
-            oursLabel: qsTr("This device")
-            theirsLabel: qsTr("Other version")
-            onResolved: (text) => {
-                editor.controller.resolveConflict(text)
-                mergeDialog.close()
+    // Popups, dialogs and the drop hint are created when first needed (see EditorDialogs): every
+    // page and every day of the journal stream has its own editor.
+    property BDialog mergeDialog: null
+    function openMergeDialog() {
+        if (!mergeDialog)
+            mergeDialog = mergeComponent.createObject(editor) as BDialog
+        mergeDialog.open()
+    }
+    Component {
+        id: mergeComponent
+        BDialog {
+            id: dialog
+            parent: T.Overlay.overlay
+            title: qsTr("Merge changes")
+            iconName: "git-merge"
+            preferredWidth: Theme.dialogWidthLg
+            showFooter: false
+            BMergeView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(560, editor.height * 0.7)
+                ours: dialog.opened && editor.controller ? editor.controller.sourceText : ""
+                theirs: dialog.opened && editor.controller ? editor.controller.conflictText : ""
+                oursLabel: qsTr("This device")
+                theirsLabel: qsTr("Other version")
+                onResolved: (text) => {
+                    editor.controller.resolveConflict(text)
+                    dialog.close()
+                }
             }
         }
     }
 
     ListView {
         id: list
+        // Touch flicks at the finger's speed, and no jump when a drag catches a fling (Qt 6.11 on
+        // Android: TouchFlick, docs/UI.md "Scrolling performance").
+        TouchFlick.enabled: true
         anchors.top: conflictBanner.bottom
         anchors.topMargin: conflictBanner.active ? Theme.space2 : 0
         anchors.left: parent.left
@@ -813,7 +844,24 @@ FocusScope {
         focus: true
         model: editor.controller ? editor.controller.blocks : null
         reuseItems: false
-        cacheBuffer: 1600
+        readonly property int rowCache: editor.autoHeight ? 0 : 1600
+        cacheBuffer: rowCache
+        // A touchpad scrolls without Flickable knowing its velocity (scroll phases), so ListView
+        // filled its cache below the view only, and every row above was created at the view's top
+        // edge — where a row that still grows (a query's results, a Layout's next polish) pushed
+        // the text being read down (QQuickListView::viewportMoved, Qt 6.11). Setting the cache size
+        // again makes the list fill it in both directions: done while it moves up without a drag
+        // or a flick (those have a velocity). Rows created above the view grow upwards. (A cache
+        // set to 0 from outside stays 0: the scroll probe's --probe-cache.)
+        property real lastContentY: 0
+        onContentYChanged: {
+            if (rowCache > 0 && cacheBuffer > 0 && contentY < lastContentY - 0.5 && !dragging && !flicking)
+                cacheBuffer = cacheBuffer === rowCache ? rowCache + 1 : rowCache
+            lastContentY = contentY
+        }
+        // autoHeight: every row is in the range the list fills at once (synchronously, or with
+        // the incubation of the item holding the editor) — none waits for the asynchronous cache.
+        displayMarginEnd: editor.autoHeight ? 1000000 : 0
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: false
         // The toolbar and the keyboard under it cover the bottom of the list.
@@ -845,13 +893,17 @@ FocusScope {
                 active: editor.header !== null
                 sourceComponent: editor.header
             }
-            ZoomBreadcrumb {
+            Loader {
                 x: editor.contentX
                 width: editor.contentWidth
-                controller: editor.controller
-                editor: editor
-                visible: editor.controller !== null && editor.controller.zoomBlock >= 0
-                height: visible ? implicitHeight : 0
+                active: editor.controller !== null && editor.controller.zoomBlock >= 0
+                // An inactive Loader keeps the implicit height of the item it had (Qt 6.11): hidden,
+                // the Column leaves no room for it after zooming out.
+                visible: active
+                sourceComponent: ZoomBreadcrumb {
+                    controller: editor.controller
+                    editor: editor
+                }
             }
         }
 
@@ -878,9 +930,17 @@ FocusScope {
                 event.accepted = true
         }
 
-        T.ScrollBar.vertical: BScrollBar {}
         // The header (page title) gets its height after the first layout: start at the top.
-        Component.onCompleted: editor.later(() => list.positionViewAtBeginning())
+        // (autoHeight: no scroll bar, the list never scrolls.)
+        Component.onCompleted: {
+            if (!editor.autoHeight)
+                T.ScrollBar.vertical = scrollBarComponent.createObject(list)
+            editor.later(() => list.positionViewAtBeginning())
+        }
+        Component {
+            id: scrollBarComponent
+            BScrollBar {}
+        }
     }
 
     // ---- Files dropped on the page: attachments ------------------------------------------------
@@ -903,36 +963,38 @@ FocusScope {
             drop.acceptProposedAction()
         }
     }
-    Rectangle {
+    Loader {
         // While files are dragged over the page.
-        visible: fileDrop.containsDrag
+        active: fileDrop.containsDrag
         anchors.fill: list
         anchors.margins: Theme.space2
-        radius: Theme.radiusLg
-        color: Theme.alpha(Theme.info, 0.06)
-        border.width: 2
-        border.color: Theme.alpha(Theme.focusRing, 0.6)
         z: 5
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            y: Theme.space4
-            width: dropLabel.implicitWidth + 2 * Theme.space4
-            height: dropLabel.implicitHeight + 2 * Theme.space2
-            radius: height / 2
-            color: Theme.bgElevated
-            border.width: 1
-            border.color: Theme.border
-            Row {
-                id: dropLabel
-                anchors.centerIn: parent
-                spacing: Theme.space2
-                BIcon { name: "image"; size: Theme.iconSizeSm; color: Theme.fgMuted; anchors.verticalCenter: parent.verticalCenter }
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Drop to add to this page")
-                    font.family: Theme.fontUi
-                    font.pixelSize: Theme.textSm
-                    color: Theme.fg
+        sourceComponent: Rectangle {
+            radius: Theme.radiusLg
+            color: Theme.alpha(Theme.info, 0.06)
+            border.width: 2
+            border.color: Theme.alpha(Theme.focusRing, 0.6)
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: Theme.space4
+                width: dropLabel.implicitWidth + 2 * Theme.space4
+                height: dropLabel.implicitHeight + 2 * Theme.space2
+                radius: height / 2
+                color: Theme.bgElevated
+                border.width: 1
+                border.color: Theme.border
+                Row {
+                    id: dropLabel
+                    anchors.centerIn: parent
+                    spacing: Theme.space2
+                    BIcon { name: "image"; size: Theme.iconSizeSm; color: Theme.fgMuted; anchors.verticalCenter: parent.verticalCenter }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("Drop to add to this page")
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textSm
+                        color: Theme.fg
+                    }
                 }
             }
         }
@@ -960,11 +1022,26 @@ FocusScope {
         limit: 12
     }
 
-    SuggestionPopup {
-        id: suggestions
-        editor: editor
-        model: suggestionModel
-        onActivated: (index) => editor.acceptSuggestion(index)
+    /// The autocomplete popup (tests read it), created the first time there is something to
+    /// complete — like the dialogs and the touch toolbar, not with every editor.
+    property SuggestionPopup suggestions: null
+    readonly property bool suggestionsOpen: suggestions !== null && suggestions.visible
+    function suggestionPopup(): SuggestionPopup {
+        if (!suggestions)
+            suggestions = suggestionComponent.createObject(editor) as SuggestionPopup
+        return suggestions
+    }
+    function closeSuggestions() {
+        if (suggestions)
+            suggestions.close()
+    }
+    Component {
+        id: suggestionComponent
+        SuggestionPopup {
+            editor: editor
+            model: suggestionModel
+            onActivated: (index) => editor.acceptSuggestion(index)
+        }
     }
 
     EditorDialogs {
@@ -973,15 +1050,25 @@ FocusScope {
         controller: editor.controller
     }
 
-    MobileEditToolbar {
-        id: toolbar
-        editor: editor
-        visible: editor.toolbarVisible
+    // Touch UIs, from the first edit on (then kept: not created again for every edit). Latched
+    // here, not in `active`'s own binding: the Loader loads synchronously inside that binding, so
+    // an onLoaded that changed one of its inputs was a binding loop.
+    onToolbarVisibleChanged: if (toolbarVisible) toolbarLoader.active = true
+    Component.onCompleted: if (toolbarVisible) toolbarLoader.active = true
+    Loader {
+        id: toolbarLoader
+        active: false
         width: parent.width
+        z: 10
+        sourceComponent: MobileEditToolbar {
+            editor: editor
+            visible: editor.toolbarVisible
+            width: toolbarLoader.width
+            height: editor.toolbarHeight
+        }
     }
 
     /// The dialogs (for tests and the playground's scripted states).
     readonly property alias dialogs: dialogs
-    readonly property alias suggestions: suggestions
     readonly property alias listView: list
 }

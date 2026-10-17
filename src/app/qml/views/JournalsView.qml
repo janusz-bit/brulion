@@ -143,12 +143,27 @@ FocusScope {
 
             ListView {
                 id: list
+                TouchFlick.enabled: true
                 anchors.fill: parent
                 focus: true
                 clip: true
                 model: days
                 reuseItems: false
-                cacheBuffer: 900
+                // Days are prepared in the cache (between frames) about two screens ahead: a day is
+                // created whole, with all its blocks, and is often taller than a screen
+                // (ContentJournalDay).
+                readonly property int dayCache: Math.max(1600, Math.round(2 * height))
+                cacheBuffer: dayCache
+                onDayCacheChanged: cacheBuffer = dayCache
+                // Touchpad scrolling up: the cache above the view, as in BlockEditor's list — a day
+                // created at the view's top edge that still grows (a query's results) pushed the
+                // days being read; created above the view, it grows upwards.
+                property real lastContentY: 0
+                onContentYChanged: {
+                    if (cacheBuffer > 0 && contentY < lastContentY - 0.5 && !dragging && !flicking)
+                        cacheBuffer = cacheBuffer === dayCache ? dayCache + 1 : dayCache
+                    lastContentY = contentY
+                }
                 // No current item: ListView gives its current item the focus whenever rows are
                 // inserted or removed before it (a new day at midnight), which took the caret out
                 // of the day being edited (tst_content_journals_qml).

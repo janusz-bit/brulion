@@ -181,6 +181,7 @@ Item {
 
         Flickable {
             id: flick
+            TouchFlick.enabled: true
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

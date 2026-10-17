@@ -552,6 +552,19 @@ void FakeEditorHost::setTextAsset(const QString &path, const QString &content)
     filesChanged(false);
 }
 
+void FakeEditorHost::overwriteTextAsset(const QString &path, const QString &content)
+{
+    const QByteArray data = content.toUtf8();
+    m_assets.insert(path, data);
+    const auto url = m_assetUrls.constFind(path);
+    if (url != m_assetUrls.constEnd()) {
+        QFile f(url->toLocalFile());
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(data) != data.size())
+            m_assetUrls.remove(path);
+    }
+    filesChanged(); // the editors render their embeds again (indexChanged)
+}
+
 void FakeEditorHost::externalWrite(const QString &path, const QString &content)
 {
     m_files.insert(path, content);

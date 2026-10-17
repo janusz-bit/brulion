@@ -113,6 +113,7 @@ FocusScope {
 
                 ListView {
                     id: tagList
+                    TouchFlick.enabled: true
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
@@ -190,6 +191,7 @@ FocusScope {
 
             ListView {
                 id: list
+                TouchFlick.enabled: true
                 anchors.fill: parent
                 clip: true
                 model: tagged

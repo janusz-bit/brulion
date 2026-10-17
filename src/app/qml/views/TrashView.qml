@@ -56,6 +56,7 @@ FocusScope {
 
     ListView {
         id: list
+        TouchFlick.enabled: true
         anchors.fill: parent
         focus: true
         clip: true

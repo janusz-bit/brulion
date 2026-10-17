@@ -90,6 +90,7 @@ Rectangle {
 
         ListView {
             id: list
+            TouchFlick.enabled: true
             objectName: "sidebarTree"
             Layout.fillWidth: true
             Layout.fillHeight: true

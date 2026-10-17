@@ -16,12 +16,16 @@
 // "YYYY-MM-DD HH:mm"), alarm, showPage (show the page next to the item: it is another page and
 // not the group header), journal ("YYYY-MM-DD" when the page is a daily note, else "").
 // Only the first `maxItems` items get rows (hiddenCount: the others; showMore() adds rows).
+// Created from QML, it runs the query the first time when it is completed (with its controller
+// and source), so the block is created with its results — a block whose results came a moment
+// later grew after the editor's list had placed it (docs/UI.md "Scrolling performance").
 #pragma once
 
 #include "types.h"
 
 #include <QAbstractListModel>
 #include <QPointer>
+#include <QQmlParserStatus>
 #include <QString>
 #include <QTimer>
 #include <QVariantList>
@@ -35,8 +39,9 @@ namespace brulion::editor {
 
 class PageController;
 
-class QueryResultModel : public QAbstractListModel {
+class QueryResultModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
     /// The page the query block is on (host, current path for `page:this`, renderer colours,
     /// language, clock).
     Q_PROPERTY(brulion::editor::PageController *controller READ controller WRITE setController NOTIFY controllerChanged FINAL)
@@ -91,6 +96,9 @@ public:
 
     explicit QueryResultModel(QObject *parent = nullptr);
     ~QueryResultModel() override;
+
+    void classBegin() override;
+    void componentComplete() override;
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -161,6 +169,7 @@ private:
     QTimer m_timer;
     bool m_ok = false;
     bool m_ready = false;
+    bool m_completing = false; ///< created from QML, not completed yet (the first run waits for it)
     bool m_complete = true;
     QString m_error;
     QString m_type;

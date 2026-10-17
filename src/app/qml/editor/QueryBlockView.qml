@@ -26,7 +26,7 @@ Rectangle {
     readonly property int itemFontSize: Theme.textEditor
     readonly property int itemLineHeight: Theme.lineHeightPx(itemFontSize, 1.45)
 
-    implicitHeight: column.implicitHeight + 2 * Theme.space3
+    implicitHeight: column.height + 2 * Theme.space3
     height: implicitHeight
     radius: Theme.radius
     color: Theme.bgElevated
@@ -43,6 +43,9 @@ Rectangle {
         id: results
         controller: root.block.controller
         source: root.block.model.editText
+        // The block is created with its rows (while the page scrolls): on a phone 20 of them are
+        // about a screenful and take less than half the time of 50 ("Show more" adds the rest).
+        maxItems: Theme.touchUi ? 20 : 50
     }
 
     function filterLabel(key) {
@@ -108,18 +111,32 @@ Rectangle {
             root.editor.revealRow(r.row)
     }
 
-    ColumnLayout {
+    // A column laid out with bindings, not a ColumnLayout: the block has its final height when the
+    // editor's list creates it (with its first results, QueryResultModel), not after the next
+    // polish — a block growing after the list had placed it pushed the text being read while the
+    // page scrolled (docs/UI.md "Scrolling performance"). Like a ColumnLayout, the spacing goes
+    // between the visible parts only.
+    Item {
         id: column
+        readonly property int spacing: Theme.space2
+        readonly property real headerBottom: headerRow.height
+        readonly property real filtersBottom: filtersFlow.visible ? filtersFlow.y + filtersFlow.height : headerBottom
+        readonly property real sourceBottom: sourceLoader.visible ? sourceLoader.y + sourceLoader.height : filtersBottom
+        readonly property real separatorBottom: resultsSeparator.visible ? resultsSeparator.y + resultsSeparator.height : sourceBottom
+        readonly property real resultsBottom: resultList.visible ? resultList.y + resultList.height : separatorBottom
+        readonly property real moreBottom: moreButton.visible ? moreButton.y + moreButton.implicitHeight : resultsBottom
         x: Theme.space4
         y: Theme.space3
         width: parent.width - 2 * Theme.space4
-        spacing: Theme.space2
+        height: messageRow.visible ? messageRow.y + messageRow.height : moreBottom
 
         // ---- Header: what the block is, how many results; a tap edits the query -------------
         Item {
             id: headerRow
-            Layout.fillWidth: true
-            implicitHeight: Math.max(headerContent.implicitHeight, Theme.touchUi ? 32 : 22)
+            width: parent.width
+            // As tall as with the edit button shown (on hover): the block keeps its height while
+            // the pointer passes over it.
+            height: Math.max(queryLabel.implicitHeight, editQuery.implicitHeight, Theme.touchUi ? 32 : 22)
 
             RowLayout {
                 id: headerContent
@@ -127,6 +144,7 @@ Rectangle {
                 spacing: Theme.space2
                 BIcon { name: "filter"; size: Theme.iconSizeSm; color: Theme.fgMuted }
                 Text {
+                    id: queryLabel
                     text: qsTr("Query")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -148,6 +166,7 @@ Rectangle {
                     running: visible
                 }
                 BIconButton {
+                    id: editQuery
                     visible: !root.block.editing && (headerHover.hovered || Theme.touchUi)
                     size: "small"
                     iconName: "pencil"
@@ -165,10 +184,41 @@ Rectangle {
 
         // ---- The filters as chips (a tap edits the query) ----------------------------------------
         Flow {
-            Layout.fillWidth: true
+            id: filtersFlow
+            y: column.headerBottom + column.spacing
+            width: parent.width
             visible: !root.block.editing && (root.filters.length > 0 || root.terms.length > 0)
             spacing: 6
+            // The Flow's own height comes with its next polish: the same lines here (a chip goes
+            // to the next line when it does not fit).
+            height: {
+                let x = 0
+                let line = 0
+                let total = 0
+                const repeaters = [filterChips, termChips]
+                void filterChips.revision // (itemAt() notifies nothing; items may come after the count)
+                void termChips.revision
+                for (const r of repeaters) {
+                    for (let i = 0; i < r.count; ++i) {
+                        const chip = r.itemAt(i)
+                        if (!chip)
+                            continue
+                        if (x > 0 && x + chip.width > width) {
+                            total += line + spacing
+                            x = 0
+                            line = 0
+                        }
+                        x += chip.width + spacing
+                        line = Math.max(line, chip.height)
+                    }
+                }
+                return total + line
+            }
             Repeater {
+                id: filterChips
+                property int revision: 0
+                onItemAdded: revision++
+                onItemRemoved: revision++
                 model: root.filters
                 delegate: BChip {
                     required property var modelData
@@ -179,6 +229,10 @@ Rectangle {
                 }
             }
             Repeater {
+                id: termChips
+                property int revision: 0
+                onItemAdded: revision++
+                onItemRemoved: revision++
                 model: root.terms
                 delegate: BChip {
                     required property var modelData
@@ -195,7 +249,8 @@ Rectangle {
 
         Loader {
             id: sourceLoader
-            Layout.fillWidth: true
+            y: column.filtersBottom + column.spacing
+            width: parent.width
             active: root.block.editing
             visible: active
             sourceComponent: InlineEditor {
@@ -211,20 +266,36 @@ Rectangle {
 
         // ---- Results ---------------------------------------------------------------------------
         Rectangle {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.space1
-            visible: root.live && results.ready && !root.emptySource && (results.rowCount() > 0 || !results.ok)
-            implicitHeight: 1
+            id: resultsSeparator
+            y: column.sourceBottom + column.spacing + Theme.space1
+            width: parent.width
+            visible: root.live && results.ready && !root.emptySource && (results.itemCount > 0 || !results.ok)
+            height: 1
             color: Theme.borderSubtle
         }
 
         Column {
             id: resultList
-            Layout.fillWidth: true
+            y: column.separatorBottom + column.spacing
+            width: parent.width
             visible: root.live && results.ok && !root.emptySource
             spacing: Theme.touchUi ? 0 : 2
+            height: {
+                let h = 0
+                void resultRows.revision // (itemAt() notifies nothing; items may come after the count)
+                for (let i = 0; i < resultRows.count; ++i) {
+                    const row = resultRows.itemAt(i)
+                    if (row)
+                        h += row.height + (i > 0 ? spacing : 0)
+                }
+                return h
+            }
 
             Repeater {
+                id: resultRows
+                property int revision: 0
+                onItemAdded: revision++
+                onItemRemoved: revision++
                 model: root.live ? results : null
                 delegate: Item {
                     id: row
@@ -248,21 +319,24 @@ Rectangle {
                     height: group ? groupLabel.implicitHeight + (index > 0 ? Theme.space3 : Theme.space1) + Theme.space1
                                   : Math.max(itemText.implicitHeight + 2 * pad, Theme.touchUi ? Theme.touchTarget : 0)
 
-                    // Group header: "Remont łazienki · 3".
-                    Text {
+                    // Each row has only the parts of its kind: up to 50 rows are created with the
+                    // block (while the page scrolls). Group header: "Remont łazienki · 3".
+                    Loader {
                         id: groupLabel
-                        visible: row.group
+                        active: row.group
                         y: row.index > 0 ? Theme.space3 : Theme.space1
                         width: parent.width
-                        text: row.label + "  ·  " + row.count
-                        textFormat: Text.PlainText
-                        font.family: Theme.fontUi
-                        font.pixelSize: Theme.textXs
-                        font.weight: Theme.weightSemiBold
-                        font.capitalization: Font.AllUppercase
-                        font.letterSpacing: 0.4
-                        color: Theme.fgMuted
-                        elide: Text.ElideRight
+                        sourceComponent: Text {
+                            text: row.label + "  ·  " + row.count
+                            textFormat: Text.PlainText
+                            font.family: Theme.fontUi
+                            font.pixelSize: Theme.textXs
+                            font.weight: Theme.weightSemiBold
+                            font.capitalization: Font.AllUppercase
+                            font.letterSpacing: 0.4
+                            color: Theme.fgMuted
+                            elide: Text.ElideRight
+                        }
                     }
 
                     Rectangle {
@@ -274,14 +348,15 @@ Rectangle {
                         color: Theme.bgHover
                     }
 
-                    TaskBox {
-                        id: taskBox
-                        visible: !row.group && row.isTask
-                        status: row.status
-                        x: -Math.round((width - boxSize) / 2) + 2
-                        y: Math.round(row.pad + root.itemLineHeight / 2 - height / 2)
-                        Accessible.name: qsTr("Task: %1").arg(row.text)
-                        onToggled: results.toggleTask(row.index)
+                    Loader {
+                        active: !row.group && row.isTask
+                        sourceComponent: TaskBox {
+                            x: -Math.round((width - boxSize) / 2) + 2
+                            y: Math.round(row.pad + root.itemLineHeight / 2 - height / 2)
+                            status: row.status
+                            Accessible.name: qsTr("Task: %1").arg(row.text)
+                            onToggled: results.toggleTask(row.index)
+                        }
                     }
 
                     Text {
@@ -330,6 +405,8 @@ Rectangle {
 
         // ---- States: more results, nothing found, errors, no live results ------------------------
         BButton {
+            id: moreButton
+            y: column.resultsBottom + column.spacing
             visible: root.live && results.ok && results.hiddenCount > 0 && !root.emptySource
             size: "small"
             variant: "ghost"
@@ -339,20 +416,23 @@ Rectangle {
             onClicked: results.showMore()
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.space2
+        Item {
+            id: messageRow
+            y: column.moreBottom + column.spacing
+            width: parent.width
+            height: Math.max(messageIcon.y + messageIcon.height, message.implicitHeight)
             visible: message.text !== ""
             BIcon {
-                Layout.alignment: Qt.AlignTop
-                Layout.topMargin: 1
+                id: messageIcon
+                y: 1
                 name: !root.live ? "info" : !results.ok ? "circle-alert" : root.emptySource ? "info" : "search"
                 size: Theme.iconSizeSm
                 color: root.live && !results.ok ? Theme.dangerText : Theme.fgFaint
             }
             Text {
                 id: message
-                Layout.fillWidth: true
+                x: messageIcon.width + Theme.space2
+                width: Math.max(0, parent.width - x)
                 text: {
                     if (!root.live)
                         return qsTr("Query results are shown when a notebook is open.")

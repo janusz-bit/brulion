@@ -42,10 +42,11 @@ T.AbstractButton {
                         : control.hovered ? Theme.fg : Theme.borderControl
             Behavior on color { ColorAnimation { duration: Theme.durationFast } }
 
+            // Icons only for the states that show one (an icon is an image to load: a box is
+            // created with every task row and block, also while lists scroll).
             BIcon {
                 anchors.centerIn: parent
-                visible: control.status === "done"
-                name: "check"
+                name: control.status === "done" ? "check" : ""
                 size: control.boxSize - 4
                 color: Theme.dark ? Theme.bg : "#ffffff"
             }
@@ -69,8 +70,7 @@ T.AbstractButton {
             }
             BIcon {
                 anchors.centerIn: parent
-                visible: control.status === "deferred"
-                name: "chevron-right"
+                name: control.status === "deferred" ? "chevron-right" : ""
                 size: control.boxSize - 4
                 color: Theme.fgMuted
             }

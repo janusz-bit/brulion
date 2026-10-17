@@ -39,7 +39,8 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
-            FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE)
+            FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE
+            FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
 
     # A first-time user's journey through the real app with real clicks, taps and keys
@@ -64,7 +65,8 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache"
-            FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow)
+            FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow
+            FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
 endif()
 

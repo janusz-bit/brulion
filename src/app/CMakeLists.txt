@@ -54,15 +54,32 @@ set(BRULION_UI_QML
 # (src/app/ui/CMakeLists.txt, unit-tested in tests/app) and are registered here by
 # ui/qmlforeign.h; DevTools and DeviceInfo are app-only.
 add_subdirectory(ui)
+# The scroll probe (ui/scrollprobe.h, `--scroll-probe`): a measuring tool for developers, ~160 KB
+# of code, nothing at run time unless asked for. Left out of the Android and browser builds that
+# are shipped (Release, MinSizeRel; then `--scroll-probe` only says so); measurement builds
+# (RelWithDebInfo — a debuggable APK — or Debug) and desktop builds have it (ctest
+# tst_scroll_jumps_qml needs it).
+if((ANDROID OR EMSCRIPTEN) AND CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel)$")
+    set(_brulion_scroll_probe_default OFF)
+else()
+    set(_brulion_scroll_probe_default ON)
+endif()
+option(BRULION_SCROLL_PROBE "Build the scroll probe (--scroll-probe)" ${_brulion_scroll_probe_default})
+if(BRULION_SCROLL_PROBE)
+    set(_brulion_scroll_probe_sources ui/scrollprobe.cpp)
+else()
+    set(_brulion_scroll_probe_sources ui/scrollprobe_off.cpp)
+endif()
 set(BRULION_UI_SOURCES
     ui/qmlforeign.h
     ui/devtools.h ui/devtools.cpp
+    ui/scrollprobe.h ${_brulion_scroll_probe_sources}
     ui/deviceinfo.h ui/deviceinfo.cpp
 )
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-target_link_libraries(brulion PRIVATE brulion_ui_helpers)
+target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon; the logo as
 # :/images/logo.svg.
 file(GLOB _brulion_icons CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)

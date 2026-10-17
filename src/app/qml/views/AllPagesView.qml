@@ -216,6 +216,7 @@ FocusScope {
         // ---- The pages ------------------------------------------------------------------------------------
         ListView {
             id: list
+            TouchFlick.enabled: true
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

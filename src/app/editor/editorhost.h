@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QObject>
+#include <QSize>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -46,6 +47,14 @@ public:
     // --- Assets ------------------------------------------------------------------------------
     /// URL the UI can load an attachment from (file:// on desktop/Android, blob/data on WASM).
     virtual QUrl assetUrl(const QString &path) const = 0;
+    /// A picture attachment's pixel size when the host has it at hand (the browser: assetUrl()
+    /// read the file for its data: URL); invalid otherwise — the editor then reads a local file's
+    /// header itself (picturesize.h).
+    virtual QSize assetPixelSize(const QString &path) const
+    {
+        Q_UNUSED(path);
+        return {};
+    }
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;
 

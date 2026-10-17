@@ -103,7 +103,11 @@ Item {
     /// of text (the outline keeps the line its bullet sits on); a click beside one edits it.
     readonly property bool onlyPictures: doc && hasEmbeds && !listItem && model.onlyEmbeds && !editing && view === "text"
     readonly property bool noTextLine: onlyTransclusions || onlyPictures
-    readonly property real contentHeight: noTextLine ? 0 : content.height
+    /// Paragraphs, list items, headings (most blocks): their text is created with the block, not
+    /// through the content Loader — the Loader's own work was a large part of creating a block.
+    readonly property bool textView: view !== "code" && view !== "calc" && view !== "query" && view !== "table"
+                                     && view !== "quote" && view !== "callout" && view !== "rule" && view !== "frontmatter"
+    readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
     readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
                                            + (contentHeight > 0 || hasEmbeds ? Theme.space2 : 0)
@@ -112,6 +116,7 @@ Item {
 
     /// y of the first line's x-height centre (bullet, checkbox, fold arrow).
     readonly property real firstLineCenter: topPad + (onlyTransclusions ? transclusionView.firstLineCenter
+                                                      : textView ? textContent.firstLineCenter
                                                       : content.item ? content.item.firstLineCenter : editor.firstLineCenter(0))
 
     width: ListView.view ? ListView.view.width : 0
@@ -129,7 +134,7 @@ Item {
     Accessible.name: model.plainText
 
     /// The view of the block's content (BlockText, QueryBlockView, TableBlockView, …).
-    readonly property Item contentItem: content.item
+    readonly property Item contentItem: textView ? textContent : content.item as Item
     readonly property alias transclusionView: transclusionView
     readonly property alias embedView: embedView
 
@@ -176,140 +181,165 @@ Item {
         color: Theme.borderSubtle
     }
 
+    // The parts below that only some blocks have — the fold arrow, the bullet, an ordered list
+    // item's number, the task checkbox, the block menu — are created only for those blocks (the
+    // menu only when it opens): a block is created whenever it scrolls into view, so what every
+    // block carries decides how smoothly long pages and the journal scroll (docs/UI.md
+    // "Scrolling performance").
+
     // ---- Fold arrow ------------------------------------------------------------------------
-    Item {
+    Loader {
         id: arrow
-        readonly property bool available: block.model.hasChildren && block.shown && !block.doc
-        visible: available && (block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed)
+        active: block.model.hasChildren && block.shown && !block.doc
         width: block.editor.arrowColumn
         height: Math.max(block.editor.arrowColumn, 24)
         x: block.bulletX - block.editor.bulletColumn / 2 - width + 2
         y: block.firstLineCenter - height / 2
-        opacity: block.model.collapsed ? 0.9 : 0.6
-        Accessible.role: Accessible.Button
-        Accessible.name: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
+        sourceComponent: Item {
+            visible: block.model.collapsed || block.hovered || Theme.touchUi || arrowTap.pressed
+            opacity: block.model.collapsed ? 0.9 : 0.6
+            Accessible.role: Accessible.Button
+            Accessible.name: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
 
-        BIcon {
-            anchors.centerIn: parent
-            name: "chevron-right"
-            size: Theme.iconSizeSm
-            color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
-            rotation: block.model.collapsed ? 0 : 90
-            Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
-        }
-        // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
-        // part that overlaps it).
-        Item {
-            anchors.centerIn: parent
-            width: Theme.touchUi ? Theme.touchTarget : parent.width
-            height: Theme.touchUi ? Theme.touchTarget : parent.height
-            HoverHandler { id: arrowHover; cursorShape: Qt.PointingHandCursor }
-            TapHandler {
-                id: arrowTap
-                onTapped: block.controller.toggleFold(block.index)
+            BIcon {
+                anchors.centerIn: parent
+                name: "chevron-right"
+                size: Theme.iconSizeSm
+                color: arrowHover.hovered ? Theme.fg : Theme.fgMuted
+                rotation: block.model.collapsed ? 0 : 90
+                Behavior on rotation { NumberAnimation { duration: Theme.durationFast; easing.type: Theme.easing } }
+            }
+            // Touch: a 44 px hit area around the small arrow (the bullet, stacked above, keeps the
+            // part that overlaps it).
+            Item {
+                anchors.centerIn: parent
+                width: Theme.touchUi ? Theme.touchTarget : parent.width
+                height: Theme.touchUi ? Theme.touchTarget : parent.height
+                HoverHandler { id: arrowHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                    id: arrowTap
+                    onTapped: block.controller.toggleFold(block.index)
+                }
             }
         }
     }
 
     // ---- Bullet --------------------------------------------------------------------------------
-    Item {
-        id: bullet
+    Loader {
         // Document: tasks show their checkbox, numbered items their number instead.
-        visible: block.listItem && block.shown && !(block.doc && (block.isTask || block.ordered))
+        active: block.listItem && block.shown && !(block.doc && (block.isTask || block.ordered))
         width: block.editor.bulletColumn + (Theme.touchUi ? 6 : 0)
         height: Math.max(block.editor.bulletColumn, Theme.touchUi ? Theme.touchTarget : 22)
         x: block.bulletX - width / 2
         y: block.firstLineCenter - height / 2
-        Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
-        Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
+        sourceComponent: Item {
+            id: bullet
+            Accessible.role: block.doc ? Accessible.Graphic : Accessible.Button
+            Accessible.name: block.doc ? qsTr("List item") : qsTr("Zoom into block")
 
-        // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
-        Rectangle {
-            anchors.centerIn: parent
-            width: 16
-            height: 16
-            radius: 8
-            color: block.model.collapsed ? Theme.bgPressed : Theme.bgHover
-            visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
-        }
-        Rectangle {
-            // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
-            readonly property int shape: block.doc ? block.depth % 3 : 0
-            anchors.centerIn: parent
-            width: shape === 2 ? 5 : 6
-            height: width
-            radius: shape === 2 ? 1 : width / 2
-            color: shape === 1 ? "transparent"
-                   : block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
-            border.width: shape === 1 ? 1.5 : 0
-            border.color: Theme.fgMuted
-        }
-        HoverHandler {
-            id: bulletHover
-            cursorShape: block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
-            enabled: !Theme.touchUi
-        }
-        TapHandler {
-            acceptedButtons: Qt.LeftButton
-            // A document has no zoom: the bullet is part of the text, a click edits the item.
-            onTapped: block.doc ? block.editor.startEditing(block.index, 0) : block.controller.zoomInto(block.index)
-            onLongPressed: blockMenu.popup(bullet, bullet.width / 2, bullet.height)
-        }
-        TapHandler {
-            // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
-            // a phone zoomed in and opened the menu at once. Touch: the long press above.
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
-            acceptedButtons: Qt.RightButton
-            onTapped: blockMenu.popup(bullet, bullet.width / 2, bullet.height)
+            // Folded blocks show a halo around the bullet (Logseq style); hover shows it too.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 16
+                height: 16
+                radius: 8
+                color: block.model.collapsed ? Theme.bgPressed : Theme.bgHover
+                visible: !block.doc && (block.model.collapsed || bulletHover.hovered)
+            }
+            Rectangle {
+                // Outline: the round bullet. Document: a Markdown list's disc, circle, square by depth.
+                readonly property int shape: block.doc ? block.depth % 3 : 0
+                anchors.centerIn: parent
+                width: shape === 2 ? 5 : 6
+                height: width
+                radius: shape === 2 ? 1 : width / 2
+                color: shape === 1 ? "transparent"
+                       : block.closedTask ? Theme.fgFaint : bulletHover.hovered && !block.doc ? Theme.fg : Theme.fgMuted
+                border.width: shape === 1 ? 1.5 : 0
+                border.color: Theme.fgMuted
+            }
+            HoverHandler {
+                id: bulletHover
+                cursorShape: block.doc ? Qt.ArrowCursor : Qt.PointingHandCursor
+                enabled: !Theme.touchUi
+            }
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                // A document has no zoom: the bullet is part of the text, a click edits the item.
+                onTapped: block.doc ? block.editor.startEditing(block.index, 0) : block.controller.zoomInto(block.index)
+                onLongPressed: block.openMenu(bullet, bullet.width / 2, bullet.height)
+            }
+            TapHandler {
+                // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
+                // a phone zoomed in and opened the menu at once. Touch: the long press above.
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                acceptedButtons: Qt.RightButton
+                onTapped: block.openMenu(bullet, bullet.width / 2, bullet.height)
+            }
         }
     }
 
     // ---- Number of an ordered list item (document mode) -----------------------------------------
-    Text {
-        visible: block.doc && block.ordered && !block.isTask && block.shown
+    Loader {
+        active: block.doc && block.ordered && !block.isTask && block.shown
         // Right-aligned in the marker column, on the first line's baseline (body font).
         x: block.levelX - width - Math.round(block.editor.listIndent * 0.25)
         y: block.firstLineCenter - block.editor.firstLineCenter(0)
-        // Rich text like the item's own rendered text: the same line layout, the same baseline.
-        text: TextHelper.escapeHtml(block.listMarker)
-        textFormat: Text.RichText
-        font.family: Theme.fontEditor
-        font.pixelSize: block.editor.fontSize
-        font.features: { "tnum": 1 }
-        lineHeightMode: Text.FixedHeight
-        lineHeight: block.editor.lineHeight
-        color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
-        Accessible.ignored: true
-        TapHandler {
-            acceptedButtons: Qt.LeftButton
-            onTapped: block.editor.startEditing(block.index, 0)
-            onLongPressed: blockMenu.popup(parent, 0, parent.height)
-        }
-        TapHandler {
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
-            acceptedButtons: Qt.RightButton
-            onTapped: blockMenu.popup(parent, 0, parent.height)
+        sourceComponent: Text {
+            id: number
+            // Rich text like the item's own rendered text: the same line layout, the same baseline.
+            text: TextHelper.escapeHtml(block.listMarker)
+            textFormat: Text.RichText
+            font.family: Theme.fontEditor
+            font.pixelSize: block.editor.fontSize
+            font.features: { "tnum": 1 }
+            lineHeightMode: Text.FixedHeight
+            lineHeight: block.editor.lineHeight
+            color: block.closedTask ? Theme.fgFaint : Theme.fgMuted
+            Accessible.ignored: true
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                onTapped: block.editor.startEditing(block.index, 0)
+                onLongPressed: block.openMenu(number, 0, number.height)
+            }
+            TapHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
+                acceptedButtons: Qt.RightButton
+                onTapped: block.openMenu(number, 0, number.height)
+            }
         }
     }
 
     // ---- Task checkbox ---------------------------------------------------------------------------
-    TaskBox {
-        visible: block.isTask && block.shown
-        status: block.taskStatus
+    Loader {
+        active: block.isTask && block.shown
         // Outline: after the bullet; document: in the marker column, instead of the bullet.
+        readonly property real boxSize: Theme.touchUi ? 18 : 16
         x: block.doc ? block.bulletX - width / 2
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
-        onToggled: block.controller.toggleTask(block.index)
+        sourceComponent: TaskBox {
+            status: block.taskStatus
+            onToggled: block.controller.toggleTask(block.index)
+        }
     }
 
     // ---- Content ---------------------------------------------------------------------------
+    BlockText {
+        id: textContent
+        x: block.contentLeft
+        y: block.topPad
+        width: Math.max(40, block.contentRight - x)
+        visible: textContent.live && !block.noTextLine
+        live: block.textView && block.shown
+        block: block
+    }
     Loader {
         id: content
         x: block.view === "callout" || block.view === "quote" || block.framed ? block.levelX : block.contentLeft
         y: block.topPad
         width: Math.max(40, block.contentRight - x)
-        active: block.shown
+        active: block.shown && !block.textView
         visible: !block.noTextLine
         sourceComponent: {
             switch (block.view) {
@@ -321,7 +351,7 @@ Item {
             case "callout": return calloutComponent
             case "rule": return ruleComponent
             case "frontmatter": return frontmatterComponent
-            default: return textComponent
+            default: return null
             }
         }
     }
@@ -347,10 +377,6 @@ Item {
         transclusions: block.hasTransclusions ? block.transclusions : []
     }
 
-    Component {
-        id: textComponent
-        BlockText { block: block }
-    }
     Component {
         id: calloutComponent
         Rectangle {
@@ -441,68 +467,79 @@ Item {
     }
 
     // ---- Block menu ----------------------------------------------------------------------------
-    BMenu {
-        id: blockMenu
-        BMenuItem {
-            visible: !block.doc
-            height: visible ? implicitHeight : 0
-            text: qsTr("Zoom in")
-            iconName: "search"
-            onTriggered: block.controller.zoomInto(block.index)
-        }
-        BMenuItem {
-            visible: block.model.hasChildren && !block.doc
-            height: visible ? implicitHeight : 0
-            text: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
-            iconName: block.model.collapsed ? "chevrons-up-down" : "chevrons-down-up"
-            shortcut: "Ctrl+."
-            onTriggered: block.controller.toggleFold(block.index)
-        }
-        BMenuItem {
-            text: qsTr("Copy block reference")
-            iconName: "link"
-            onTriggered: block.controller.copyBlockRef(block.index)
-        }
-        BMenuItem {
-            text: qsTr("Insert picture…")
-            iconName: "image"
-            onTriggered: block.editor.dialogs.pickImage(block.index, -1)
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            visible: !block.doc || block.listItem
-            height: visible ? implicitHeight : 0
-            text: qsTr("Indent")
-            iconName: "list-indent-increase"
-            shortcut: "Tab"
-            onTriggered: block.controller.indent(block.index)
-        }
-        BMenuItem {
-            visible: !block.doc || block.listItem
-            height: visible ? implicitHeight : 0
-            text: qsTr("Outdent")
-            iconName: "list-indent-decrease"
-            shortcut: "Shift+Tab"
-            onTriggered: block.controller.outdent(block.index)
-        }
-        BMenuItem {
-            text: qsTr("Move up")
-            iconName: "move-up"
-            shortcut: "Alt+Up"
-            onTriggered: block.controller.moveUp(block.index)
-        }
-        BMenuItem {
-            text: qsTr("Move down")
-            iconName: "move-down"
-            shortcut: "Alt+Down"
-            onTriggered: block.controller.moveDown(block.index)
-        }
-        BMenuSeparator {}
-        BMenuItem {
-            text: qsTr("Delete block")
-            iconName: "trash-2"
-            danger: true
-            onTriggered: block.controller.deleteBlock(block.index)
+    /// The block menu (right click / long press on the bullet or number), created when it is first
+    /// opened: built with every block, it was most of a block's cost (~240 objects).
+    property BMenu blockMenu: null
+    function openMenu(item: Item, x: real, y: real) {
+        if (!blockMenu)
+            blockMenu = blockMenuComponent.createObject(block) as BMenu
+        blockMenu.popup(item, x, y)
+    }
+
+    Component {
+        id: blockMenuComponent
+        BMenu {
+            BMenuItem {
+                visible: !block.doc
+                height: visible ? implicitHeight : 0
+                text: qsTr("Zoom in")
+                iconName: "search"
+                onTriggered: block.controller.zoomInto(block.index)
+            }
+            BMenuItem {
+                visible: block.model.hasChildren && !block.doc
+                height: visible ? implicitHeight : 0
+                text: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
+                iconName: block.model.collapsed ? "chevrons-up-down" : "chevrons-down-up"
+                shortcut: "Ctrl+."
+                onTriggered: block.controller.toggleFold(block.index)
+            }
+            BMenuItem {
+                text: qsTr("Copy block reference")
+                iconName: "link"
+                onTriggered: block.controller.copyBlockRef(block.index)
+            }
+            BMenuItem {
+                text: qsTr("Insert picture…")
+                iconName: "image"
+                onTriggered: block.editor.dialogs.pickImage(block.index, -1)
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                visible: !block.doc || block.listItem
+                height: visible ? implicitHeight : 0
+                text: qsTr("Indent")
+                iconName: "list-indent-increase"
+                shortcut: "Tab"
+                onTriggered: block.controller.indent(block.index)
+            }
+            BMenuItem {
+                visible: !block.doc || block.listItem
+                height: visible ? implicitHeight : 0
+                text: qsTr("Outdent")
+                iconName: "list-indent-decrease"
+                shortcut: "Shift+Tab"
+                onTriggered: block.controller.outdent(block.index)
+            }
+            BMenuItem {
+                text: qsTr("Move up")
+                iconName: "move-up"
+                shortcut: "Alt+Up"
+                onTriggered: block.controller.moveUp(block.index)
+            }
+            BMenuItem {
+                text: qsTr("Move down")
+                iconName: "move-down"
+                shortcut: "Alt+Down"
+                onTriggered: block.controller.moveDown(block.index)
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                text: qsTr("Delete block")
+                iconName: "trash-2"
+                danger: true
+                onTriggered: block.controller.deleteBlock(block.index)
+            }
         }
     }
 }

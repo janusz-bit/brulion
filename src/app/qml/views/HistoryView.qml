@@ -138,6 +138,7 @@ FocusScope {
             // ---- Versions ---------------------------------------------------------------------------
             ListView {
                 id: versions
+                TouchFlick.enabled: true
                 visible: root.wide || !root.showingDiff
                 Layout.fillHeight: true
                 Layout.fillWidth: !root.wide

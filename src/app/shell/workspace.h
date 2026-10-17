@@ -159,6 +159,9 @@ public:
     Q_INVOKABLE QString ensureBlockId(const QString &path, int line) override;
     Q_INVOKABLE QVariantList templates() const override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;
+    /// The browser: the picture's size, read with its data: URL (else invalid: the editor reads
+    /// the local file's header itself).
+    QSize assetPixelSize(const QString &path) const override;
     Q_INVOKABLE QString saveAttachment(const QString &fileName, const QByteArray &data) override;
     QVariantMap vaultConfig() const override;
     /// Forwards the route to the shell (navigationRequested) after resolveRoute().
@@ -354,6 +357,7 @@ private:
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;
     mutable QHash<QString, QUrl> m_dataUrls;
+    mutable QHash<QString, QSize> m_dataUrlSizes; // pictures among them (picturesize.h)
 };
 
 } // namespace brulion::shell

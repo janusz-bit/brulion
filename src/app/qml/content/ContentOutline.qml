@@ -23,6 +23,7 @@ Item {
 
     ListView {
         id: list
+        TouchFlick.enabled: true
         anchors.fill: parent
         anchors.topMargin: Theme.space2
         clip: true

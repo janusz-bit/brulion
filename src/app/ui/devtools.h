@@ -17,6 +17,8 @@
 //   --reduced-motion       Theme.reducedMotion
 //   --now "<date> <time>"  fixed clock for DatesHelper ("2026-10-14 10:00"), for reproducible
 //                          screenshots
+//   --scroll-probe <target> scroll a view with synthetic input and record every frame, then quit
+//                          (--scroll-script, --probe-out, …: scrollprobe.h)
 //
 // Headless use: QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./brulion --gallery
 // --section buttons --size 412x915 --screenshot out.png. scripts/screenshots.sh produces the
@@ -108,6 +110,8 @@ private:
     bool m_touch = false;
     bool m_reducedMotion = false;
     QPointer<QQmlApplicationEngine> m_engine;
+    /// The arguments, kept when they ask for the scroll probe (scrollprobe.h).
+    QStringList m_probeArguments;
     QTranslator *m_translator = nullptr;
     bool m_translatorInstalled = false;
     QtTranslations m_qtTranslations;

@@ -61,6 +61,7 @@ FocusScope {
     /// A scrolling page with a centred column.
     component Page: Flickable {
         id: page
+        TouchFlick.enabled: true
         default property alias content: column.data
         readonly property int margin: Theme.compact ? Theme.space4 : Theme.space8
         contentWidth: width

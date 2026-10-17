@@ -38,6 +38,18 @@ QueryResultModel::QueryResultModel(QObject *parent) : QAbstractListModel(parent)
 
 QueryResultModel::~QueryResultModel() = default;
 
+void QueryResultModel::classBegin()
+{
+    m_completing = true;
+}
+
+void QueryResultModel::componentComplete()
+{
+    m_completing = false;
+    if (!m_ready)
+        refresh();
+}
+
 int QueryResultModel::rowCount(const QModelIndex &parent) const
 {
     return parent.isValid() ? 0 : int(m_rows.size());
@@ -198,8 +210,10 @@ void QueryResultModel::setRefreshDelay(int ms)
 
 void QueryResultModel::schedule()
 {
-    // The first run comes right away (the block appears with its results), later ones debounced
-    // (an index change per save while typing).
+    // The first run comes right away (the block appears with its results: from QML when the
+    // model is completed), later ones debounced (an index change per save while typing).
+    if (m_completing)
+        return;
     if (!m_ready) {
         QTimer::singleShot(0, this, [this] {
             if (!m_ready)

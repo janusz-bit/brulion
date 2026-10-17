@@ -25,7 +25,8 @@
 //                rows: [[{ text, display, html, plain, error, formula }]] } with table formulas
 //                evaluated; `html` is the cell's Markdown rendered by the InlineRenderer (formula
 //                results and errors escaped), `plain` its visible text (column widths)
-//   embeds       [{ target, alt, image, url }] attachment embeds (url from EditorHost::assetUrl)
+//   embeds       [{ target, alt, image, url, width, height }] attachment embeds (url from
+//                EditorHost::assetUrl; width × height: a local picture's pixel size, 0 × 0 unknown)
 //   onlyEmbeds   the block consists of embeds only — attachments, pages, sections, blocks (html is "")
 //   transclusions  page / section / block embeds (`![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`,
 //                `!((id))`) with their content rendered read-only: [{ kind: "page" | "heading" |

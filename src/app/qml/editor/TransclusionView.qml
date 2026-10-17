@@ -24,6 +24,20 @@ Column {
     readonly property int bodySize: Theme.textEditor
 
     spacing: Theme.space2
+    // The heights are bindings, not the Columns' own (a positioner sets those only in its next
+    // polish): the block has its final height when the editor's list creates it (docs/UI.md
+    // "Scrolling performance"). (`revision`: itemAt() notifies nothing, a Repeater's items may
+    // come after its count.)
+    height: {
+        let h = 0
+        void frames.revision
+        for (let i = 0; i < frames.count; ++i) {
+            const frame = frames.itemAt(i)
+            if (frame)
+                h += frame.height + (i > 0 ? spacing : 0)
+        }
+        return h
+    }
 
     function iconFor(kind) {
         return kind === "heading" ? "heading" : kind === "block" ? "link" : "file-text"
@@ -60,6 +74,10 @@ Column {
     }
 
     Repeater {
+        id: frames
+        property int revision: 0
+        onItemAdded: revision++
+        onItemRemoved: revision++
         model: root.transclusions
         delegate: Rectangle {
             id: frame
@@ -67,7 +85,7 @@ Column {
             required property int index
             readonly property var entries: modelData.blocks || []
             width: root.width
-            height: frameColumn.implicitHeight + Theme.space2
+            height: frameColumn.height + Theme.space2
             radius: Theme.radius
             color: Theme.dark ? Theme.alpha(Theme.bgSunken, 0.55) : Theme.alpha(Theme.bgSunken, 0.7)
             border.width: 1
@@ -90,6 +108,17 @@ Column {
                 x: Theme.space3
                 width: parent.width - Theme.space3 - Theme.space2
                 spacing: 0
+                height: {
+                    let h = header.height
+                    void entryRows.revision
+                    for (let i = 0; i < entryRows.count; ++i) {
+                        const row = entryRows.itemAt(i)
+                        if (row)
+                            h += row.height
+                    }
+                    return h + (messageText.visible ? messageText.implicitHeight : 0)
+                           + (moreText.visible ? moreText.implicitHeight : 0)
+                }
 
                 // ---- Header: the source as a link -----------------------------------------------------
                 Item {
@@ -133,6 +162,10 @@ Column {
 
                 // ---- Embedded blocks ------------------------------------------------------------------
                 Repeater {
+                    id: entryRows
+                    property int revision: 0
+                    onItemAdded: revision++
+                    onItemRemoved: revision++
                     model: frame.entries
                     delegate: Item {
                         id: entry
@@ -147,7 +180,7 @@ Column {
                         readonly property int lineHeightPx: Theme.lineHeightPx(fontSize, entry.level > 0 ? 1.4 : 1.55)
                         readonly property real indent: Math.min(6, modelData.depth || 0) * root.indentStep
                         width: frameColumn.width
-                        height: nested ? nestedHeader.implicitHeight + Theme.space1
+                        height: nested ? nestedHeader.topPadding + Math.max(Theme.iconSizeSm - 3, nestedTitle.implicitHeight) + Theme.space1
                               : rule ? Theme.space4
                               : Math.max(body.implicitHeight, isTask ? taskBox.implicitHeight : 0) + (entry.level > 0 ? Theme.space1 : 2)
 
@@ -187,6 +220,7 @@ Column {
                                 color: Theme.fgFaint
                             }
                             Text {
+                                id: nestedTitle
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: Math.min(implicitWidth, nestedHeader.width - 20)
                                 text: entry.nested ? entry.modelData.title + (entry.modelData.message !== ""
@@ -263,6 +297,7 @@ Column {
 
                 // ---- Why nothing is shown / what is left out ---------------------------------------------
                 Text {
+                    id: messageText
                     visible: text !== ""
                     width: parent.width
                     bottomPadding: Theme.space1
@@ -276,6 +311,7 @@ Column {
                     TapHandler { onTapped: root.editor.startEditing(root.block.index, -1) }
                 }
                 Text {
+                    id: moreText
                     visible: (frame.modelData.more || 0) > 0
                     width: parent.width
                     topPadding: Theme.space1

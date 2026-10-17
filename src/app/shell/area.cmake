@@ -25,10 +25,10 @@ set(_brulion_shell_dir ${CMAKE_CURRENT_LIST_DIR})
 # unless an area included earlier (the editor) already defined the target. Areas that need the
 # interface link brulion_editorhost instead of moc-ing the header themselves.
 if(NOT TARGET brulion_editorhost)
-    qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editor/editorhost.h)
-    set_target_properties(brulion_editorhost PROPERTIES LINKER_LANGUAGE CXX)
+    qt_add_library(brulion_editorhost STATIC ${CMAKE_CURRENT_SOURCE_DIR}/editor/editorhost.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/editor/picturesize.h ${CMAKE_CURRENT_SOURCE_DIR}/editor/picturesize.cpp)
     target_include_directories(brulion_editorhost PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/editor)
-    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core)
+    target_link_libraries(brulion_editorhost PUBLIC Qt6::Core PRIVATE Qt6::Gui)
     qt_extract_metatypes(brulion_editorhost)
     brulion_set_warnings(brulion_editorhost)
 endif()

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import Brulion
 
 // ContentJournalDay — one day of JournalsView: the date as a heading ("środa, 15 października
@@ -39,10 +38,13 @@ FocusScope {
     /// Nothing to show (also a day holding nothing but its note mode).
     readonly property bool empty: page.loaded && page.blocks.visibleCount === 0
     property bool _foldsRestored: false
-    /// The editor has had its width (see its `controller`); stays true.
-    property bool _editorSized: false
 
-    implicitHeight: column.implicitHeight
+    // The day is laid out with plain bindings, no Layouts: the journal list positions a day with
+    // the height it has when it is created, and a layout's size only arrives with the next polish
+    // — a day growing after the list had placed it pushed every day below it down while the list
+    // scrolled up (docs/UI.md "Scrolling performance"). Its editor builds all its blocks at once
+    // for the same reason (BlockEditor.autoHeight).
+    implicitHeight: editor.y + editor.height
 
     Accessible.role: Accessible.Grouping
     Accessible.name: DatesHelper.formatLong(day.date)
@@ -120,93 +122,104 @@ FocusScope {
         function onConfigChanged() { page.refreshMode() }
     }
 
-    ColumnLayout {
-        id: column
-        width: parent.width
-        spacing: 0
+    // ---- The date -------------------------------------------------------------------------------
+    // Wide: "środa, 14 października 2026" with a "Dziś" badge. Phones: the weekday (and "Dziś")
+    // as a small line above "14 października 2026", so the date fits on one line.
+    Item {
+        id: headerRow
+        x: editor.contentX + editor.gutter
+        width: Math.max(0, day.width - x - Math.max(Theme.space2, editor.width - editor.contentX - editor.contentWidth))
+        height: Math.max(dateColumn.height, openButton.visible ? openButton.implicitHeight : 0,
+                         openIcon.visible ? openIcon.implicitHeight : 0)
 
-        // ---- The date -------------------------------------------------------------------------------
-        // Wide: "środa, 14 października 2026" with a "Dziś" badge. Phones: the weekday (and "Dziś")
-        // as a small line above "14 października 2026", so the date fits on one line.
-        RowLayout {
-            id: headerRow
-            Layout.fillWidth: true
-            Layout.leftMargin: editor.contentX + editor.gutter
-            Layout.rightMargin: Math.max(Theme.space2, editor.width - editor.contentX - editor.contentWidth)
-            spacing: Theme.space2
+        readonly property string longDate: DatesHelper.formatLong(day.date)
+        readonly property int comma: longDate.indexOf(", ")
+        readonly property string weekday: comma > 0 ? longDate.slice(0, comma) : ""
+        readonly property string restOfDate: comma > 0 ? longDate.slice(comma + 2) : longDate
+        readonly property string relative: day.isToday ? qsTr("Today")
+                                            : day.date === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday") : ""
+        /// The badge and the button at the right end.
+        readonly property real actionsWidth: (badge.visible ? badge.implicitWidth + Theme.space2 : 0)
+                                             + (openButton.visible ? openButton.implicitWidth : 0)
+                                             + (openIcon.visible ? openIcon.implicitWidth : 0)
 
-            readonly property string longDate: DatesHelper.formatLong(day.date)
-            readonly property int comma: longDate.indexOf(", ")
-            readonly property string weekday: comma > 0 ? longDate.slice(0, comma) : ""
-            readonly property string restOfDate: comma > 0 ? longDate.slice(comma + 2) : longDate
-            readonly property string relative: day.isToday ? qsTr("Today")
-                                                : day.date === DatesHelper.addDays(DatesHelper.today, -1) ? qsTr("Yesterday") : ""
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-                BText {
-                    visible: day.compactHeader
-                    Layout.fillWidth: true
-                    text: (headerRow.relative !== "" ? headerRow.relative + " · " : "") + headerRow.weekday
-                    variant: "caption"
-                    font.weight: Theme.weightSemiBold
-                    font.capitalization: Font.AllUppercase
-                    font.letterSpacing: 0.6
-                    color: day.isToday ? Theme.accentText : Theme.fgMuted
-                    elide: Text.ElideRight
-                }
-                Text {
-                    id: dateText
-                    Layout.fillWidth: true
-                    text: day.compactHeader ? headerRow.restOfDate : headerRow.longDate
-                    textFormat: Text.PlainText
-                    wrapMode: Text.Wrap
-                    font.family: Theme.fontEditor
-                    font.pixelSize: day.compactHeader ? Theme.textXl
-                                                      : (day.isToday ? Theme.text3xl : Theme.text2xl)
-                    font.weight: Theme.weightSemiBold
-                    font.underline: dateHover.hovered
-                    lineHeightMode: Text.FixedHeight
-                    lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightTight)
-                    color: Theme.fg
-                    Accessible.role: Accessible.Heading
-                    Accessible.name: headerRow.longDate
-                    HoverHandler { id: dateHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: day.openAsPage(false) }
-                }
-            }
-            BBadge {
-                visible: !day.compactHeader && headerRow.relative !== ""
-                Layout.alignment: Qt.AlignVCenter
-                text: headerRow.relative
-                variant: day.isToday ? "accent" : "neutral"
-                solid: day.isToday
-            }
-            BButton {
-                visible: !day.compactHeader
-                Layout.alignment: Qt.AlignVCenter
-                size: "small"
-                variant: "ghost"
-                iconName: "external-link"
-                text: qsTr("Open as page")
-                onClicked: day.openAsPage(false)
-            }
-            BIconButton {
+        Item {
+            id: dateColumn
+            y: (headerRow.height - height) / 2
+            width: Math.max(0, headerRow.width - headerRow.actionsWidth - (headerRow.actionsWidth > 0 ? Theme.space2 : 0))
+            height: dateText.y + dateText.height
+            BText {
+                id: weekdayLine
                 visible: day.compactHeader
-                Layout.alignment: Qt.AlignVCenter
-                size: "small"
-                iconName: "external-link"
-                label: qsTr("Open as page")
-                onClicked: day.openAsPage(false)
+                width: parent.width
+                text: (headerRow.relative !== "" ? headerRow.relative + " · " : "") + headerRow.weekday
+                variant: "caption"
+                font.weight: Theme.weightSemiBold
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: 0.6
+                color: day.isToday ? Theme.accentText : Theme.fgMuted
+                elide: Text.ElideRight
+            }
+            Text {
+                id: dateText
+                y: weekdayLine.visible ? weekdayLine.implicitHeight : 0
+                width: parent.width
+                text: day.compactHeader ? headerRow.restOfDate : headerRow.longDate
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                font.family: Theme.fontEditor
+                font.pixelSize: day.compactHeader ? Theme.textXl
+                                                  : (day.isToday ? Theme.text3xl : Theme.text2xl)
+                font.weight: Theme.weightSemiBold
+                font.underline: dateHover.hovered
+                lineHeightMode: Text.FixedHeight
+                lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightTight)
+                color: Theme.fg
+                Accessible.role: Accessible.Heading
+                Accessible.name: headerRow.longDate
+                HoverHandler { id: dateHover; enabled: !Theme.touchUi; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: day.openAsPage(false) }
             }
         }
+        BBadge {
+            id: badge
+            visible: !day.compactHeader && headerRow.relative !== ""
+            x: dateColumn.width + Theme.space2
+            y: (headerRow.height - height) / 2
+            text: headerRow.relative
+            variant: day.isToday ? "accent" : "neutral"
+            solid: day.isToday
+        }
+        BButton {
+            id: openButton
+            visible: !day.compactHeader
+            anchors.right: parent.right
+            y: (headerRow.height - height) / 2
+            size: "small"
+            variant: "ghost"
+            iconName: "external-link"
+            text: qsTr("Open as page")
+            onClicked: day.openAsPage(false)
+        }
+        BIconButton {
+            id: openIcon
+            visible: day.compactHeader
+            anchors.right: parent.right
+            y: (headerRow.height - height) / 2
+            size: "small"
+            iconName: "external-link"
+            label: qsTr("Open as page")
+            onClicked: day.openAsPage(false)
+        }
+    }
 
-        // ---- Nothing written yet ------------------------------------------------------------------------
-        Item {
-            visible: day.empty
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.space2
+    // ---- Nothing written yet ------------------------------------------------------------------------
+    Loader {
+        id: emptyPrompt
+        active: day.empty
+        y: headerRow.height + Theme.space2
+        width: day.width
+        sourceComponent: Item {
             implicitHeight: Math.max(Theme.touchTarget, prompt.implicitHeight + 2 * Theme.space2)
 
             Rectangle {
@@ -218,64 +231,65 @@ FocusScope {
                 border.width: 1
                 border.color: Theme.borderSubtle
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: Theme.space3
-                    anchors.rightMargin: Theme.space3
-                    spacing: Theme.space2
-                    BIcon { name: "square-pen"; size: Theme.iconSize; color: Theme.fgMuted }
-                    BText {
-                        id: prompt
-                        Layout.fillWidth: true
-                        text: day.isToday ? qsTr("What's on today? Click to start writing.")
-                                          : qsTr("Nothing written on this day. Click to start writing.")
-                        variant: "muted"
-                        wrapMode: Text.Wrap
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: text
-                        Accessible.onPressAction: day.begin()
-                        Keys.onReturnPressed: day.begin()
-                        Keys.onSpacePressed: day.begin()
-                    }
+                BIcon {
+                    id: promptIcon
+                    x: Theme.space3
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "square-pen"
+                    size: Theme.iconSize
+                    color: Theme.fgMuted
+                }
+                BText {
+                    id: prompt
+                    x: promptIcon.x + promptIcon.width + Theme.space2
+                    width: Math.max(0, parent.width - x - Theme.space3)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: day.isToday ? qsTr("What's on today? Click to start writing.")
+                                      : qsTr("Nothing written on this day. Click to start writing.")
+                    variant: "muted"
+                    wrapMode: Text.Wrap
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: text
+                    Accessible.onPressAction: day.begin()
+                    Keys.onReturnPressed: day.begin()
+                    Keys.onSpacePressed: day.begin()
                 }
                 HoverHandler { id: promptHover; enabled: !Theme.touchUi; cursorShape: Qt.IBeamCursor }
                 TapHandler { id: promptTap; onTapped: day.begin() }
                 BFocusRing { visible: prompt.activeFocus; targetRadius: Theme.radius }
             }
         }
+    }
 
-        // ---- The day's blocks -----------------------------------------------------------------------
-        BlockEditor {
-            id: editor
-            objectName: "journalDayEditor"
-            Layout.fillWidth: true
-            // As tall as the blocks: the journal list scrolls, not this editor. On touch UIs the
-            // editing toolbar (on the keyboard, else at the editor's bottom) gets its own room.
-            // An empty day shows the prompt instead (the editor stays in the layout for its
-            // geometry, which the heading and the prompt use).
-            Layout.preferredHeight: day.empty && page.editingRow < 0 ? 0
-                                    : editor.listView.contentHeight + editor.listView.y
-                                      + (editor.toolbarVisible ? editor.toolbarHeight : 0)
-            // The blocks only once the editor has its width: a day created by the journal list gets
-            // its width after its children, and blocks laid out at the editor's minimum width made
-            // the day several times too tall until the next layout, so the list could release and
-            // re-create it without end (scrolled to the end on touch UIs, tst_content_journals_qml).
-            controller: day._editorSized ? page : null
-            onWidthChanged: if (width > 0) day._editorSized = true
-            Component.onCompleted: if (width > 0) day._editorSized = true
-            focus: true
-            onNotice: (text, kind) => AppController.toast(text, kind)
-            listView.interactive: false
-            maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
-            horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
-            bottomSpace: Theme.space3
-            // Document days: headings stay below the date (the size of other days' dates).
-            headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
-            // A day switched to a document among outline days keeps their left edge (date, text);
-            // when the journal is a document by default, its days use the full width.
-            documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
-        }
+    // ---- The day's blocks -----------------------------------------------------------------------
+    BlockEditor {
+        id: editor
+        objectName: "journalDayEditor"
+        y: emptyPrompt.active ? emptyPrompt.y + emptyPrompt.height : headerRow.height
+        width: day.width
+        // As tall as the blocks: the journal list scrolls, not this editor. On touch UIs the
+        // editing toolbar (on the keyboard, else at the editor's bottom) gets its own room.
+        // An empty day shows the prompt instead (the editor stays for its geometry, which the
+        // heading and the prompt use).
+        height: day.empty && page.editingRow < 0 ? 0
+                : editor.listView.contentHeight + editor.listView.y
+                  + (editor.toolbarVisible ? editor.toolbarHeight : 0)
+        autoHeight: true
+        // The editor has its width from the start (a binding, not a layout's polish), so its
+        // blocks are laid out at their final width right away.
+        controller: page
+        focus: true
+        onNotice: (text, kind) => AppController.toast(text, kind)
+        listView.interactive: false
+        maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+        horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
+        bottomSpace: Theme.space3
+        // Document days: headings stay below the date (the size of other days' dates).
+        headingCap: day.compactHeader ? Theme.textXl : Theme.text2xl
+        // A day switched to a document among outline days keeps their left edge (date, text);
+        // when the journal is a document by default, its days use the full width.
+        documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
     }
 
     // Scroll requests of the embedded editor (its list is exactly as tall as its content) go to

@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
@@ -40,6 +39,7 @@ FocusScope {
 
     ListView {
         id: list
+        TouchFlick.enabled: true
         anchors.fill: parent
         visible: !root.empty
         focus: true
@@ -68,25 +68,32 @@ FocusScope {
             required property string longLabel
 
             width: ListView.view.width
-            implicitHeight: column.implicitHeight + Theme.space2
+            implicitHeight: column.height + Theme.space2
             opacity: isPast && !isToday ? 0.72 : 1
 
-            ColumnLayout {
+            // Laid out with bindings, not Layouts: a day has its final height when the list creates
+            // it (a Layout's size arrives only with its next polish, and a day growing after the
+            // list had placed it pushed the days below it while the agenda scrolled up — docs/UI.md
+            // "Scrolling performance").
+            Item {
                 id: column
+                readonly property real markerWidth: Theme.touchUi ? 40 : 36
                 width: Math.min(parent.width - 2 * Theme.space4, root.maximumWidth)
                 x: (parent.width - width) / 2
-                spacing: 0
+                height: separator.y + separator.height
 
                 // Day header: number, weekday and month, "Today", the daily note.
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.space2
-                    Layout.bottomMargin: Theme.space1
-                    spacing: Theme.space3
+                Item {
+                    id: header
+                    y: Theme.space2
+                    width: parent.width
+                    height: Math.max(circle.height, labels.height, journalButton.visible ? journalButton.implicitHeight : 0)
 
                     Rectangle {
-                        Layout.preferredWidth: Theme.touchUi ? 40 : 36
-                        Layout.preferredHeight: Layout.preferredWidth
+                        id: circle
+                        width: column.markerWidth
+                        height: width
+                        y: (header.height - height) / 2
                         radius: width / 2
                         color: day.isToday ? Theme.accentSolid : Theme.bgSunken
                         Text {
@@ -99,11 +106,15 @@ FocusScope {
                             color: day.isToday ? Theme.fgOnAccent : Theme.fg
                         }
                     }
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 0
+                    Item {
+                        id: labels
+                        x: circle.width + Theme.space3
+                        width: Math.max(0, header.width - x - (journalButton.visible ? journalButton.implicitWidth + Theme.space3 : 0))
+                        height: dayLabel.implicitHeight + (relativeLabel.visible ? relativeLabel.implicitHeight : 0)
+                        y: (header.height - height) / 2
                         Text {
-                            Layout.fillWidth: true
+                            id: dayLabel
+                            width: parent.width
                             text: day.longLabel.charAt(0).toLocaleUpperCase() + day.longLabel.slice(1)
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textMd
@@ -114,7 +125,9 @@ FocusScope {
                             Accessible.name: text
                         }
                         Text {
-                            Layout.fillWidth: true
+                            id: relativeLabel
+                            y: dayLabel.implicitHeight
+                            width: parent.width
                             text: {
                                 const h = day.isToday ? qsTr("Today") : DatesHelper.formatHuman(day.date)
                                 return h.charAt(0).toLocaleUpperCase() + h.slice(1)
@@ -128,6 +141,9 @@ FocusScope {
                         }
                     }
                     BButton {
+                        id: journalButton
+                        anchors.right: parent.right
+                        y: (header.height - height) / 2
                         visible: day.hasJournal
                         size: "small"
                         variant: "ghost"
@@ -138,21 +154,41 @@ FocusScope {
                     }
                 }
 
-                Repeater {
-                    model: day.items
-                    delegate: PlanningItemRow {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        entry: modelData
-                        onOpened: root.itemOpened(modelData)
-                        onTaskToggled: root.itemToggled(modelData)
+                Column {
+                    id: entries
+                    y: header.y + header.height + Theme.space1
+                    width: parent.width
+                    height: {
+                        let h = 0
+                        void rows.revision // (itemAt() notifies nothing; items may come after the count)
+                        for (let i = 0; i < rows.count; ++i) {
+                            const row = rows.itemAt(i)
+                            if (row)
+                                h += row.height
+                        }
+                        return h
+                    }
+                    Repeater {
+                        id: rows
+                        property int revision: 0
+                        onItemAdded: revision++
+                        onItemRemoved: revision++
+                        model: day.items
+                        delegate: PlanningItemRow {
+                            required property var modelData
+                            width: entries.width
+                            entry: modelData
+                            onOpened: root.itemOpened(modelData)
+                            onTaskToggled: root.itemToggled(modelData)
+                        }
                     }
                 }
                 Text {
+                    id: nothing
                     visible: day.items.length === 0
-                    Layout.fillWidth: true
-                    Layout.leftMargin: (Theme.touchUi ? 40 : 36) + Theme.space3
-                    Layout.bottomMargin: Theme.space1
+                    x: column.markerWidth + Theme.space3
+                    y: entries.y + entries.height
+                    width: Math.max(0, parent.width - x)
                     text: day.hasJournal ? qsTr("Only a journal entry.") : qsTr("Nothing planned.")
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm
@@ -160,9 +196,11 @@ FocusScope {
                     wrapMode: Text.Wrap
                 }
                 Rectangle {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.space2
-                    implicitHeight: 1
+                    id: separator
+                    y: (nothing.visible ? nothing.y + nothing.implicitHeight + Theme.space1 : entries.y + entries.height)
+                       + Theme.space2
+                    width: parent.width
+                    height: 1
                     color: Theme.borderSubtle
                 }
             }

@@ -159,6 +159,7 @@ FocusScope {
         // ---- Results -----------------------------------------------------------------------------------
         ListView {
             id: list
+            TouchFlick.enabled: true
             visible: root.query !== ""
             Layout.fillWidth: true
             Layout.fillHeight: true

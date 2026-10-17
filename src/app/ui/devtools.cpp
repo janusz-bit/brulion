@@ -1,6 +1,7 @@
 #include "devtools.h"
 
 #include "dateshelper.h"
+#include "scrollprobe.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -12,6 +13,7 @@
 #include <QTimer>
 #include <QTranslator>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -77,6 +79,9 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
     m_touch = arguments.contains(u"--touch"_s);
     m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
+    if (std::any_of(arguments.cbegin(), arguments.cend(),
+                    [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
+        m_probeArguments = arguments;
 
     const QString theme = valueAfter(arguments, u"--theme"_s);
     if (theme == u"light" || theme == u"dark")
@@ -151,6 +156,8 @@ void DevTools::attach(QQmlApplicationEngine *engine)
         if (!m_screenshot.isEmpty())
             QTimer::singleShot(m_delayMs, this, [this, object] { takeScreenshot(object); });
     });
+    // --scroll-probe: frame-by-frame measurements of scrolling (scrollprobe.h).
+    startScrollProbe(engine, m_probeArguments);
 }
 
 void DevTools::takeScreenshot(QObject *root)

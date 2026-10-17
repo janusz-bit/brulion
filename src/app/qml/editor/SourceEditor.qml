@@ -20,6 +20,7 @@ Flickable {
     contentHeight: source.height + 2 * Theme.space6
     boundsBehavior: Flickable.StopAtBounds
     clip: true
+    TouchFlick.enabled: true
 
     function focusEditor() { source.forceActiveFocus() }
 

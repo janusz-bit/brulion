@@ -67,16 +67,34 @@ T.AbstractButton {
         }
     }
 
-    contentItem: Row {
-        spacing: control.size === "small" ? 4 : 5
+    // Icon, text and × placed with bindings, like a Row (spacing between the parts that have a
+    // size), not by a Row: a Row's size arrives with its next polish, so a chip whose text changed
+    // (a list row reused for another task) was too narrow for a moment and the chips around it
+    // wrapped onto another line after the list had placed the row (docs/UI.md "Scrolling
+    // performance").
+    contentItem: Item {
+        id: chipContent
+        readonly property real spacing: control.size === "small" ? 4 : 5
+        readonly property bool iconShown: chipIcon.width > 0 && chipIcon.height > 0
+        readonly property bool labelShown: chipLabel.width > 0 && chipLabel.height > 0
+        readonly property real labelX: iconShown ? chipIcon.width + spacing : 0
+        readonly property real removeX: labelShown ? labelX + chipLabel.width + spacing : labelX
+        implicitWidth: control.removable ? removeX + removeButton.width
+                       : labelShown ? labelX + chipLabel.width
+                       : iconShown ? chipIcon.width : 0
+        implicitHeight: Math.max(iconShown ? chipIcon.height : 0, labelShown ? chipLabel.height : 0,
+                                 control.removable ? removeButton.height : 0)
 
         BIcon {
+            id: chipIcon
             anchors.verticalCenter: parent.verticalCenter
             name: control.showIcon ? control.iconName : ""
             size: control.size === "small" ? 12 : Theme.iconSizeSm
             color: control.fgColor
         }
         Text {
+            id: chipLabel
+            x: chipContent.labelX
             anchors.verticalCenter: parent.verticalCenter
             text: control.text
             font: control.font
@@ -86,6 +104,7 @@ T.AbstractButton {
         }
         T.AbstractButton {
             id: removeButton
+            x: chipContent.removeX
             visible: control.removable
             anchors.verticalCenter: parent.verticalCenter
             // The × circle stays small; on touch UIs the hit area is a full touch target

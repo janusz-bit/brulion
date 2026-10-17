@@ -34,8 +34,9 @@ components — no Material/Fusion look, so all targets look identical.
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
     context — for pages and journals the tabs **Linki** (linked references and unlinked
     mentions), **Konspekt** (headings), **Kalendarz** (month with journal days).
-* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (swipe from the left edge or
-  the ☰ button); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
+* **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the ☰ button, the bottom bar's
+  Menu, or a swipe from the left edge — on Android with gesture navigation that edge swipe is the
+  system's back gesture, so there the buttons open it); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
   a **bottom navigation** bar (Dziennik, Kalendarz, Szukaj, Zadania, Menu → drawer); a floating
   quick-capture button (hidden while editing). The Android back key / gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
@@ -156,6 +157,202 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
   Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie, Link do strony (`[[`), Tag
   (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów, Ukryj klawiaturę.
+
+## Scrolling performance
+
+Long pages, the journal stream, Tasks and the calendar agenda are lazy `ListView`s: a row is
+created when it scrolls into the list's cache and destroyed when it leaves, on the GUI thread,
+while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
+`tst_scroll_jumps_qml` fails on jumps, `tst_touch_flick` / `tst_touch_flick_compressed` on Qt's
+touch faults.
+
+### Rules for contributors
+
+Any delegate of a scrolling list (a block and everything inside it, a day of the journal, a Tasks
+or agenda row) follows these; the reasons are below.
+
+1. **Final height at creation.** The height chain of a delegate is bindings, not Layouts or
+   positioners (a `RowLayout`'s, a `Row`'s / `Column`'s / `Flow`'s size arrives with its next
+   polish, after the list has placed the row). A sum over a Repeater's items reads `itemAt()` and
+   a `revision` the Repeater bumps on `itemAdded` / `itemRemoved`. What a block shows from
+   elsewhere is there when it is created: a model's first run in `componentComplete`
+   (`QQmlParserStatus`, as `QueryResultModel`), not a `Qt.callLater` / `QTimer` later; a
+   picture's size from its file's header (`picturesize.h`), not from the loaded image.
+2. **Nothing changes a row's height while the user only scrolls or points.** No room that
+   appears on hover or under the resting mouse pointer: hover controls take no room or keep
+   theirs (the query header's edit button); room that comes and goes belongs to a user's action
+   (the table's "+ Row / + Column" appear when the table is selected or a cell edited).
+3. **An inactive `Loader` keeps the implicit size of the item it had** (Qt 6.11): in a
+   positioner hide it (`visible: active`), in a sum use `active ? implicitHeight : 0`.
+4. **Create only what is shown.** Menus, dialogs, popups and tooltips through a `Loader` that is
+   active when they open (a tooltip per table cell made tables slow to create); a row has only
+   the parts of its kind (a query row's group label, its checkbox); `BIcon` / `TaskBox` create
+   no image for an empty name or a state without an icon. Do not set something in `onLoaded`
+   that the Loader's own `active` binding reads (a binding loop; the QML self-tests fail on
+   "Binding loop detected").
+5. **Cheap per row, on the GUI thread.** No file reads beyond a header, no parsing of whole
+   documents, no icon theme lookups: an SVG's size comes from its root element only (Qt's SVG
+   reader parses the whole drawing — 0.6 s for a 2.4 MB one on a Raspberry Pi 4). Bound what one
+   row creates: a query block makes 20 result rows on touch screens, 50 with a mouse
+   ("Show more" adds the rest).
+6. **Every list scrolled by touch gets `TouchFlick.enabled: true`** (not for lists with a
+   `snapMode` or `StrictlyEnforceRange`, where it does nothing).
+7. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
+   created at the edge of the view), `VAULT=big` for long journals, a Raspberry Pi for ARM times
+   (`PLATFORM=offscreen`), `tests/app/perf/android-scroll.sh` on the emulator or a phone; ctest
+   `tst_scroll_jumps_qml` and the QML self-tests.
+
+### Why: rows that grow move the content
+
+ListView places a new row with the height it has when its creation completes; a row that grows
+afterwards pushes every row below it. Scrolling up, with the row added at the top edge, the text
+being read jumps — ListView only grows its first row upwards, and only when that row lies wholly
+above the view (`QQuickListViewPrivate::itemGeometryChanged`, Qt 6.11). Whether a row is made
+ahead in the cache or only when it reaches the edge depends on timing (the cache is filled between
+frames; a slow phone, a loaded machine or a fast flick overtakes it), so such a row makes the
+content jump now and then, not every time. Hence:
+
+* bindings instead of Layouts in `ContentJournalDay`, `QueryBlockView`, `TransclusionView`,
+  `EmbedView`, `FrontmatterView` (folded), `PlanningItemRow`, `CalendarAgendaList`, `TasksRow`
+  (its chips' line breaks), `TableBlockView`'s buttons and `BChip` itself — Tasks and the agenda
+  reuse their rows (`reuseItems`), and a reused row whose chips took their new widths a polish
+  later wrapped onto another line after it was placed. (In Qt 6.11 a Repeater inside a delegate
+  creates its items at once — `incubateObject` gives the delegate's context no incubator — but
+  the bindings do not rely on that.)
+* a query block runs its first query when its `QueryResultModel` is completed: on the guide page
+  its results (773 px) used to arrive after the editor had placed the block;
+* pictures: the `embeds` role has each picture's `width` × `height` — a raster picture's header
+  (`QImageReader::size()`), an SVG's root `width` / `height` / `viewBox` given to Qt's own SVG
+  reader as a document of their own (so units, percentages and the viewBox follow Qt's rules
+  exactly), the whole SVG only when the root leaves the size to the drawing and the file is at most
+  64 KB (else unknown: sized when loaded); cached per file, modification time and size. In the
+  browser the size comes with the picture's `data:` URL (`EditorHost::assetPixelSize`). When the
+  loaded picture has another shape than its header said (Qt's pixmap cache still had a picture
+  since replaced in the file), the frame takes the picture's shape — never stretched;
+* the zoom breadcrumb above the blocks is hidden with its Loader (an inactive Loader kept its
+  height: a blank band after zooming out);
+* a day of the journal stream is created whole: its editor (`BlockEditor.autoHeight`) creates all
+  its blocks with it, at the day's width from the start, so the list places the day with its final
+  height. Creating a day is therefore one long step (below); Qt 6.11 creates the rows of a
+  ListView inside another list's row synchronously, so it cannot be spread over frames without
+  the day growing after it was placed. The journal's cache is about two screens (`dayCache`);
+* second line of defence: the block editor's and the journal's lists fill their cache above the
+  view also while a touchpad scrolls up (Flickable knows no velocity for touchpad scrolling, and
+  ListView then caches only below), so rows usually come into view from the cache.
+
+The regression test turns the cache off (`--probe-cache 0`): every row is then created at the
+edge, and a row that is not final at creation fails every run instead of one run in several. It
+runs its seven cases two at a time (each run is bounded in time, ~110 s in all).
+
+### Why: creating a row stalls the list
+
+Rows are created on the GUI thread while the list moves; a frame that creates an expensive row is
+a visible hitch (on Android's threaded render loop a fling freezes for it). What only some rows
+have, or what is used only now and then, is created when needed: block and task menus when they
+open, the block editor's dialogs, autocomplete popup, merge dialog, drop hint and touch toolbar on
+first use, a block's fold arrow / bullet / number / checkbox only when it has one, a text block's
+text without a Loader, a table cell's tooltip when it shows, a table's buttons when they show, a
+task box's icon for "done" / "deferred" only; `BIcon` creates no image without a name (an
+`IconImage` without a source searches the icon theme on disk). The editor's palette, locale and
+clock reach its controller before its rows are created (applied later, they made every row
+render twice).
+
+### Touch flicks: `TouchFlick` (`src/app/ui/touchflick.h`)
+
+Qt 6.11 has two faults on touch screens that report no velocities — Android's
+(`QInputDevice::Capability::Velocity` unset):
+
+* every fling starts at exactly 0.7x the finger's speed (half the distance): `QGuiApplication`
+  copies the platform's velocity (0) into the persistent touch point and then filters
+  0.7 · new + 0.3 · that 0 (`QMutableEventPoint::update` / `setTimestamp`, qeventpoint.cpp), and
+  Flickable averages those samples;
+* a drag that catches a running fling on a row's child (a block's text, a TapHandler, a
+  MouseArea) does not move with the first move Flickable gets, then moves by both with the
+  second: Flickable's filter clears its "steal" flag on the press, and after a fling the
+  drag-start offset is not taken (qquickflickable.cpp, `filterPointerEvent` and `drag()`). On the
+  Flickable itself the drag moves at once.
+
+`TouchFlick.enabled: true` on the block editor's list, the journal stream, Tasks, the agenda, the
+week grid and day panel, the sidebar tree, All pages, search results, tags, history, trash, the
+outline and backlinks panels, source mode, settings, import/export and sync pages and the path
+picker works around both from an application event filter that sees every touch stroke before Qt
+Quick:
+
+* when the release starts a flick and the samples carry the signature (each move reported at
+  exactly 0.7x its own speed), it restarts the flick (`Flickable::flick()`) scaled by the
+  finger's speed / Qt's estimate — the finger's speed is the time-weighted mean over the newest
+  samples covering at least 3 segments and 40 ms (at most 100 ms). Qt's own decisions stay:
+  whether to flick at all, the multi-flick boost, halving at an end, `maximumFlickVelocity`.
+  Nothing changes for mouse, wheel, touchpad, stylus, multi-touch, devices that report
+  velocities, or a Qt without the fault (no signature); lists that snap are left alone;
+* when a press caught a fling, it moves the content with the finger itself — every raw move until
+  Flickable has handled one (it is dragging then): with touch compression, Qt Quick's default,
+  the moves that arrive within one frame reach Flickable as one, which it skips whole (a slow
+  frame while a fling runs into new rows merges several). Flickable's next move puts the content
+  where TouchFlick did. Side effects: Flickable emits `flickEnded` at the first move (setting
+  `contentY` ends the movement it thinks is running) and again at the release when no new fling
+  follows — nothing in the app listens to `flickStarted` / `flickEnded`; and `contentY` changes
+  while neither dragging nor flicking, as with Qt's own catch on the Flickable itself (the
+  "second line of defence" cache refill above may run once more per upward catch).
+
+A few property reads per press, a list walk per move while a catch lasts; otherwise a type check
+per event. `BRULION_TOUCHFLICK=0` turns it off everywhere (A/B measurements; on Android through a
+debuggable APK's `extraenvvars`). ctest `tst_touch_flick` delivers touch like the Android QPA
+(`QWindowSystemInterface`, explicit timestamps; deterministic): fling / finger 0.700 → 1.000 at
+300–2200 px/s, 60–120 Hz and jittery timestamps; a caught fling's moves 0, 40, 20, 20 px → 20,
+20, 20, 20 for a finger moving 20 px each; `tst_touch_flick_compressed` the same with Qt Quick's
+compression and 1–3 moves per frame (the first version of the catch gave 10, 30 and 7, 33 there).
+Its rows without TouchFlick fail when a Qt update changes either fault. Upstream bug report
+drafts: both faults are unfixed in qtbase / qtdeclarative dev.
+
+### Measured (before → after this work)
+
+Scroll probe, phone 412×915 touch and desktop 1280×800 touchpad; "big" = 120–365 generated
+journal days (`make-vault.py`); before = v0.1.1 with the probe added.
+
+* x86 laptop (Xvfb, llvmpipe, RelWithDebInfo, two runs each): big journal, desktop touchpad —
+  longest frame 2.9 / 2.7 s → 82 / 60 ms, p99 1025 / 882 → 16 ms, layout shifts 9 / 10 frames
+  (2933 / 4640 px, single jumps up to 1566 px) → none; phone flick — frames over 100 ms 10 → 0,
+  longest 144 → 63 ms; guide page "Witaj w Brulionie", desktop touchpad — longest 574 / 311 → 82 /
+  84 ms, p99 420 / 104 → 15 ms.
+* Raspberry Pi 4 (Cortex-A72, offscreen, Debug): big journal phone flick — longest frame 5.5 s →
+  0.29 s, p99 739 → 57 ms; startup of a 2-year journal: first frame 2.0 → 1.3 s. Final tree:
+  big journal desktop touchpad — longest 1.6 s → 0.30 s, layout shifts 15 frames (5214 px) →
+  none; guide page desktop touchpad — longest 387 → 86 ms, frames over 100 ms 5 → 0; Tasks phone
+  flick (3 runs) — longest 113–296 → 46–54 ms.
+* Android 16 emulator (x86_64, 60 Hz, real `adb` swipes): a fling starts at 1.02–1.05x the
+  finger's speed (0.73x with `BRULION_TOUCHFLICK=0`, Qt's 0.7); a drag that catches a fling moves
+  with the finger (0 double steps; 4 per run of up to 31 px without TouchFlick); big journal
+  longest frame 129 → 63 ms, none over 100 ms. The calendar agenda's top, reached for the first
+  time, cost one frame over 100 ms in 3 of 5 runs before (152–231 ms), now only in the first run
+  after installing.
+
+### Still there
+
+* **One still frame right after the lift-off** (Android's threaded render loop). Touch moves are
+  applied at the start of a frame (`flushFrameSynchronousEvents` before polish and sync),
+  animations advance after the sync (`QSGThreadedRenderLoop::polishAndSync`), so the fling's
+  first step reaches the screen a frame later. No public API advances a Flickable's timeline;
+  moving the content ahead through `contentY` stops the flick and emits movement signals.
+* **The scroll bar's thumb jumps** — the content does not. ListView estimates the height of the
+  rows it has not created from the average of those it has (`originPosition` / `lastPosition`),
+  and blocks and days differ a lot in height, so `contentHeight` and `originY` change as rows come
+  and go (ListView keeps the content in place; only the thumb's position and size move). ListView
+  takes no per-row size hints, and the model knows a block's text, not its laid-out height, so a
+  better estimate would need a list view of our own; not done.
+* **Creating a day of the journal is one step**: ~10 ms plus ~1 ms per block on a laptop, 7–9 ms
+  per block on a Raspberry Pi 4 (a day of 27–42 blocks: 0.25–0.28 s; with a query block in it
+  more). See "a day of the journal stream is created whole" above for why it is not spread over
+  frames.
+* **Creating a table or a query block is expensive on ARM**: one or two frames of 60–100 ms each
+  on a Raspberry Pi 4 (20–30 ms on a laptop), so a slow phone drag over the guide page is not
+  smoother there than before (frames over 50 ms per run 1–7 → 8–9, the longest ~100 ms in both);
+  the query block's results used to arrive a frame later and push the content down instead.
+* The probe's "view velocity after" a release is still Qt's damped value (Flickable updates
+  `verticalVelocity` with the restarted flick's first animation step); its "start velocity from
+  its distance" shows what the fling did, and its TouchFlick line counts corrections and caught
+  flings. In observe mode it judges touch drags only (a mouse or a stylus moves the content
+  through Qt's mouse path).
 
 ## Note modes: outline and document
 
@@ -294,6 +491,11 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   QtCore + core modules, unit-tested by `tests/app/tst_uihelpers.cpp`); the app registers them
   through `QML_FOREIGN` wrappers in `src/app/ui/qmlforeign.h`. New helper API: add it to the
   class, it reaches QML and qmllint through the library's extracted metatypes.
+* **`TouchFlick`** (attached, `TouchFlick.enabled: true` on a Flickable / ListView): touch flicks
+  at the finger's speed on Android ("Scrolling performance"); static library `brulion_ui_touch`
+  (Qt Quick, no private Qt headers), tested by `tests/app/touch`. As an attached type it carries
+  `QML_ATTACHED` itself (Qt resolves `qmlAttachedProperties` on the registered class), the app's
+  wrapper in `qmlforeign.h` gives it its QML name.
 * **Icons**: Lucide SVGs in `assets/icons/` (see its LICENSE), `BIcon { name: "bell" }`.
   New icons: copy from `lucide-static`, normalise like the others, re-run CMake.
 
@@ -317,6 +519,7 @@ Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appco
 | `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
+| `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
 | `--hidden`, `--capture`, `--today`, `--no-single-instance` | start in the tray / open quick capture / today's journal (a second launch asks the running instance) / allow a second instance |
 
 Scripts (inside `nix develop`; one GUI instance at a time via a lock; a fixed clock `NOW`;
@@ -339,6 +542,18 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks.
+* `tests/app/perf/scroll-probe.sh` — scroll measurements (`--scroll-probe`) of the journal stream,
+  pages (document / outline), All pages, Tasks, the calendar agenda and the sidebar × desktop
+  (wheel, touchpad) / phone (touch drags, flings), on the sample notebook or `VAULT=big` (365
+  synthetic days and long pages, `tests/app/perf/make-vault.py`); a CSV per run and a summary log
+  in `tests/screenshots/perf/` (`CACHE=0`: the lists' cache off, runs named `…-cache0`).
+  `tests/app/perf/perf-record.sh` records a CPU profile (perf) of one run;
+  `tests/app/perf/android-scroll.sh` records real swipes on a phone or the emulator.
+  `tests/app/perf/scroll-jumps.sh` (ctest `tst_scroll_jumps_qml`) scrolls the journal (the sample
+  notebook plus 40 generated days with every kind of block: queries, calculations, embedded
+  sections, blocks and pictures, tables, code), the guide page, Tasks and the calendar agenda
+  with touchpad deltas and touch drags, mostly with the cache off (deterministic), and fails on
+  jumps (`--probe-check`); the sanitizer build runs two of the cases.
 * `tests/app/shell/journey.sh` — the user journey for desktop/phone × light/dark into
   `tests/screenshots/journey/<size>-<theme>/NN-<step>.png` (`JOURNEY=empty`: a new, empty
   notebook); ctest runs it as `tst_shell_journey` / `tst_shell_journey_desktop`.
