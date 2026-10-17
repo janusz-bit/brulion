@@ -3379,6 +3379,94 @@
         <source>Tasks (CSV)</source>
         <translation>Zadania (CSV)</translation>
     </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="463"/>
+        <source>The Trilium export is too large to be read.</source>
+        <translation>Eksport z Trilium jest za duży, by go wczytać.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="473"/>
+        <source>the list of notes is missing</source>
+        <translation>brakuje listy notatek</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="474"/>
+        <source>The Trilium export cannot be read: “!!!meta.json” is damaged (%1). Nothing was imported.</source>
+        <translation>Nie można odczytać eksportu z Trilium: plik „!!!meta.json” jest uszkodzony (%1). Niczego nie zaimportowano.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="493"/>
+        <source>This is Trilium&apos;s export for web publishing. Export the notes again with the format “HTML” or “Markdown” and import that ZIP file.</source>
+        <translation>To eksport Trilium do publikacji w sieci. Wyeksportuj notatki jeszcze raz w formacie „HTML” albo „Markdown” i zaimportuj ten plik ZIP.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="499"/>
+        <source>The Trilium export has a format version Brulion does not know (%1); the notes were imported as well as possible.</source>
+        <translation>Eksport z Trilium ma wersję formatu, której Brulion nie zna (%1); notatki zaimportowano najlepiej, jak się dało.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="517"/>
+        <source>The Trilium export is too large; only a part of it was imported.</source>
+        <translation>Eksport z Trilium jest za duży; zaimportowano tylko jego część.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1087"/>
+        <source>“%1” is too large to convert; it was saved as an attachment.</source>
+        <translation>Notatka „%1” jest za duża do przekształcenia; zapisano ją jako załącznik.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1375"/>
+        <source>“%1”</source>
+        <comment>a quoted note title in a list</comment>
+        <translation>„%1”</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_trilium.cpp" line="1392"/>
+        <source>%n file(s) of the selection are not part of the Trilium export and were not imported. Import each Trilium export on its own.</source>
+        <translation>
+            <numerusform>%n z wybranych plików nie należy do eksportu z Trilium i nie został zaimportowany. Importuj każdy eksport z Trilium osobno.</numerusform>
+            <numerusform>%n z wybranych plików nie należą do eksportu z Trilium i nie zostały zaimportowane. Importuj każdy eksport z Trilium osobno.</numerusform>
+            <numerusform>%n z wybranych plików nie należy do eksportu z Trilium i nie zostało zaimportowanych. Importuj każdy eksport z Trilium osobno.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_trilium.cpp" line="1396"/>
+        <source>%n protected note(s) could not be imported: Trilium exports their content only while a protected session is open.</source>
+        <translation>
+            <numerusform>%n chroniona notatka nie została zaimportowana: Trilium eksportuje treść chronionych notatek tylko przy otwartej sesji chronionej.</numerusform>
+            <numerusform>%n chronione notatki nie zostały zaimportowane: Trilium eksportuje treść chronionych notatek tylko przy otwartej sesji chronionej.</numerusform>
+            <numerusform>%n chronionych notatek nie zostało zaimportowanych: Trilium eksportuje treść chronionych notatek tylko przy otwartej sesji chronionej.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_trilium.cpp" line="1400"/>
+        <source>%n Trilium note(s) of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) were skipped: %1</source>
+        <translation>
+            <numerusform>Pominięto %n notatkę Trilium, której rodzaju Brulion nie ma (zapisane wyszukiwania, mapy notatek, notatki renderowane, skróty): %1</numerusform>
+            <numerusform>Pominięto %n notatki Trilium, których rodzaju Brulion nie ma (zapisane wyszukiwania, mapy notatek, notatki renderowane, skróty): %1</numerusform>
+            <numerusform>Pominięto %n notatek Trilium, których rodzaju Brulion nie ma (zapisane wyszukiwania, mapy notatek, notatki renderowane, skróty): %1</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1405"/>
+        <source>Some links point to notes that are not in the export (another part of the tree, an excluded or a protected note); only their text was kept.</source>
+        <translation>Niektóre linki prowadzą do notatek spoza eksportu (z innej części drzewa, wykluczonych albo chronionych); zachowano tylko ich tekst.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1410"/>
+        <source>Some notes of the Trilium export have no file in it; they were imported without content.</source>
+        <translation>Niektóre notatki z eksportu Trilium nie mają w nim swojego pliku; zaimportowano je bez treści.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1413"/>
+        <source>The note tree is nested too deeply for file paths; the deepest notes were put into the folder of an ancestor.</source>
+        <translation>Drzewo notatek jest zbyt głębokie dla ścieżek plików; najgłębiej położone notatki trafiły do folderu jednego z przodków.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_trilium.cpp" line="1461"/>
+        <source>This is no Trilium export: “!!!meta.json” is missing. Export the notes in Trilium with the format “HTML” or “Markdown” and choose the ZIP file.</source>
+        <translation>To nie jest eksport z Trilium: brakuje pliku „!!!meta.json”. Wyeksportuj notatki w Trilium w formacie „HTML” albo „Markdown” i wybierz plik ZIP.</translation>
+    </message>
 </context>
 <context>
     <name>IoPathPickerDialog</name>
@@ -8314,6 +8402,16 @@
         <location filename="../src/app/io/importtexts.cpp" line="62"/>
         <source>In Roam Research open ••• (top right) → Export All, format “JSON”. Choose the downloaded ZIP or JSON file. Daily pages go to your journal.</source>
         <translation>W Roam Research otwórz ••• (w prawym górnym rogu) → Export All, format „JSON”. Wybierz pobrany plik ZIP lub JSON. Strony dzienne trafią do dziennika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="68"/>
+        <source>In Trilium right-click a note in the tree (for everything: the root note at the top), choose Export, then “This note &amp; all descendants” and the format “HTML” (recommended) or “Markdown”. Choose the downloaded ZIP file – there is no need to unpack it. Day notes go to your journal.</source>
+        <translation>W Trilium kliknij prawym przyciskiem notatkę w drzewie (dla wszystkich notatek: notatkę główną na samej górze), wybierz Eksportuj, potem „Ta notatka i wszystkie jej elementy podrzędne” i format „HTML” (zalecany) albo „Markdown”. Wybierz pobrany plik ZIP – nie trzeba go rozpakowywać. Notatki dzienne trafią do dziennika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/importtexts.cpp" line="72"/>
+        <source>Export on a computer or in the browser on your Trilium server (right-click the note → Export, “This note &amp; all descendants”, “HTML”), copy the ZIP file to the phone (Downloads, Google Drive…) and pick it with “Choose files…”.</source>
+        <translation>Wyeksportuj notatki na komputerze albo w przeglądarce na swoim serwerze Trilium (prawy przycisk na notatce → Eksportuj, „Ta notatka i wszystkie jej elementy podrzędne”, „HTML”), skopiuj plik ZIP na telefon (Pobrane, Dysk Google…) i wskaż go przez „Wybierz pliki…”.</translation>
     </message>
     <message>
         <location filename="../src/app/io/importtexts.cpp" line="68"/>

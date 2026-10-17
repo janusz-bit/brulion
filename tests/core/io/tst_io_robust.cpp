@@ -109,6 +109,23 @@ QList<QList<InputFile>> hostileInputs()
                                                       + u"<table><tr><td>"_s.repeated(500))});
     sets.append({iotest::text(u"source/notes.json"_s, u"{\"activeNotes\":[1,\"x\",null,{\"content\":42}]}"_s)});
     sets.append({iotest::text(u"g.json"_s, u"[{\"title\":5,\"children\":[{\"string\":7,\"children\":\"x\"}]}]"_s)});
+    // Trilium: a meta of the wrong types, a deep tree pointing out of the archive, random content.
+    sets.append({iotest::text(u"!!!meta.json"_s,
+                              u"{\"formatVersion\":\"2\",\"files\":[1,\"x\",null,{\"children\":5,\"title\":7,"
+                              "\"attributes\":\"x\",\"attachments\":[3],\"dataFileName\":[\"a\"]}]}"_s)});
+    sets.append({iotest::text(u"!!!meta.json"_s,
+                              u"{\"formatVersion\":2,\"files\":["_s
+                                      + u"{\"title\":\"../..\",\"dirFileName\":\"../..\",\"children\":["_s.repeated(300)
+                                      + u"{\"dataFileName\":\"../../x.html\"}"_s + u"]}"_s.repeated(300) + u"]}"_s),
+                 iotest::text(u"x.html"_s, u"<p>liść</p>"_s)});
+    sets.append({iotest::text(u"!!!meta.json"_s,
+                              u"{\"formatVersion\":2,\"files\":[{\"noteId\":\"a\",\"title\":\"a\",\"type\":\"text\","
+                              "\"format\":\"markdown\",\"dataFileName\":\"a.md\"},{\"noteId\":\"b\",\"title\":\"b\","
+                              "\"dataFileName\":\"b.html\"}]}"_s),
+                 iotest::text(u"a.md"_s, pathologicalTexts().join(u'\n')),
+                 iotest::text(u"b.html"_s, pathologicalTexts().join(u"<br>"_s))});
+    sets.append({iotest::bytes(u"!!!meta.json"_s, randomBytes(rng, 2000)),
+                 iotest::bytes(u"a.html"_s, randomBytes(rng, 2000))});
     // Pathological Markdown under the names the importers look at.
     QList<InputFile> notes;
     int k = 0;

@@ -15,6 +15,7 @@ std::unique_ptr<Importer> makeKeepImporter();
 std::unique_ptr<Importer> makeJoplinImporter();
 std::unique_ptr<Importer> makeSimplenoteImporter();
 std::unique_ptr<Importer> makeRoamImporter();
+std::unique_ptr<Importer> makeTriliumImporter();
 std::unique_ptr<Importer> makeBearImporter();
 std::unique_ptr<Importer> makeMarkdownImporter();
 std::unique_ptr<Importer> makeHtmlImporter();

@@ -114,8 +114,27 @@ void PathClaims::reserve(const VaultPath &path)
 
 QString pageSegment(const QString &name)
 {
-    const QString s = stripTrailingDotsAndSpaces(fitUtf8(paths::sanitizeFileName(name), MaxSegmentBytes));
-    return s.isEmpty() ? u"Untitled"_s : s;
+    // Bidirectional controls (a right-to-left override makes "…exe.md" look like another name).
+    QString clean = name;
+    clean.removeIf([](QChar c) {
+        const char16_t u = c.unicode();
+        return u == 0x061C || u == 0x200E || u == 0x200F || (u >= 0x202A && u <= 0x202E) || (u >= 0x2066 && u <= 0x2069)
+               || u == 0xFEFF;
+    });
+    QString s = stripTrailingDotsAndSpaces(fitUtf8(paths::sanitizeFileName(clean), MaxSegmentBytes));
+    // "../x" -> ".. x" after the cleanup: never a hidden file.
+    while (!s.isEmpty() && (s.front() == u'.' || s.front().isSpace()))
+        s.remove(0, 1);
+    if (s.isEmpty())
+        return u"Untitled"_s;
+    // Names Windows reserves, with any extension ("nul.txt"): Syncthing and Nextcloud clients
+    // there refuse them.
+    static const QRegularExpression reserved(
+            u"^(?:CON|PRN|AUX|NUL|COM[0-9\\x{B9}\\x{B2}\\x{B3}]|LPT[0-9\\x{B9}\\x{B2}\\x{B3}])(?=\\.|$)"_s,
+            QRegularExpression::CaseInsensitiveOption);
+    if (const auto m = reserved.match(s); m.hasMatch())
+        s.insert(m.capturedEnd(), u'_');
+    return s;
 }
 
 void addTitleAlias(QVariantMap &frontmatter, const QString &title)
@@ -586,6 +605,33 @@ QString extensionForMime(const QString &mime)
     return map.value(mime.trimmed().toLower().section(u';', 0, 0).trimmed());
 }
 
+std::optional<std::pair<QString, QByteArray>> decodeDataUri(const QString &uri)
+{
+    static const QRegularExpression re(u"^data:([^;,]*)((?:;[^;,]*)*),(.*)$"_s,
+                                       QRegularExpression::CaseInsensitiveOption
+                                               | QRegularExpression::DotMatchesEverythingOption);
+    const auto m = re.match(uri.trimmed());
+    if (!m.hasMatch())
+        return std::nullopt;
+    const QString mime = m.captured(1).trimmed().toLower();
+    const bool base64 = m.captured(2).contains(u";base64"_s, Qt::CaseInsensitive);
+    const QByteArray payload = m.captured(3).toUtf8(); // non-ASCII text of plain data: URIs is UTF-8
+    QByteArray data;
+    if (base64) {
+        auto decoded = QByteArray::fromBase64Encoding(
+                QByteArray(payload).replace(' ', QByteArray()).replace('\n', QByteArray()),
+                QByteArray::AbortOnBase64DecodingErrors);
+        if (!decoded)
+            return std::nullopt;
+        data = *decoded;
+    } else {
+        data = QByteArray::fromPercentEncoding(payload);
+    }
+    if (data.isEmpty())
+        return std::nullopt;
+    return std::make_pair(mime.isEmpty() ? u"text/plain"_s : mime, data);
+}
+
 QString tagName(const QString &text)
 {
     static const QRegularExpression spaces(u"\\s+"_s);
@@ -666,9 +712,26 @@ QString mapLinesOutsideCode(const QString &content,
     for (const text::Line &l : lines) {
         const QStringView trimmed = QStringView(l.text).trimmed();
         QStringView bare = trimmed;
-        // A fence may follow a list marker or quote prefix ("- ```js", "> ```").
-        while (bare.startsWith(u'>') || bare.startsWith(u"- ") || bare.startsWith(u"* ") || bare.startsWith(u"+ "))
-            bare = bare.sliced(bare.startsWith(u'>') ? 1 : 2).trimmed();
+        // A fence may follow a list marker or quote prefix ("- ```js", "1. ```js", "> ```").
+        for (;;) {
+            if (bare.startsWith(u'>')) {
+                bare = bare.sliced(1).trimmed();
+                continue;
+            }
+            if (bare.startsWith(u"- ") || bare.startsWith(u"* ") || bare.startsWith(u"+ ")) {
+                bare = bare.sliced(2).trimmed();
+                continue;
+            }
+            qsizetype digits = 0;
+            while (digits < bare.size() && digits < 9 && bare[digits].isDigit() && bare[digits].unicode() < 0x80)
+                ++digits;
+            if (digits > 0 && digits + 1 < bare.size() && (bare[digits] == u'.' || bare[digits] == u')')
+                && bare[digits + 1] == u' ') {
+                bare = bare.sliced(digits + 2).trimmed();
+                continue;
+            }
+            break;
+        }
         if (!fence.isEmpty()) {
             if (bare.startsWith(fence) && bare.trimmed().size() == bare.count(fence[0]))
                 fence.clear();

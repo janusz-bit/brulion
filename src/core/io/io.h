@@ -14,8 +14,9 @@
 //                  class Importer { id(), name(), fileTypes(), detect(files) -> 0..100,
 //                    run(files, options) }
 //                  importers()  — obsidian, logseq, notion, evernote, keep (Google Keep Takeout),
-//                    joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON), bear
-//                    (TextBundle / .bear2bk), markdown (md/markdown/txt + attachments), html, ics
+//                    joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON), trilium (ZIP
+//                    export, HTML or Markdown), bear (TextBundle / .bear2bk), markdown
+//                    (md/markdown/txt + attachments), html, ics
 //                  importerById(id), detectImporter(files) -> best importer or nullptr
 //                  prepareImportFiles(files, &warnings, limits) (archives unpacked in place:
 //                    .zip, .jex/.tar, .bear2bk, .textpack — archives in archives only for a ZIP of

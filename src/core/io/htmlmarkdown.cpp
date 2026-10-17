@@ -5,7 +5,9 @@
 #include <QBrush>
 #include <QColor>
 #include <QFont>
+#include <QHash>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTextBlock>
 #include <QTextDocument>
 #include <QTextFrame>
@@ -112,6 +114,25 @@ bool isTagNameChar(QChar c)
     return c.isLetterOrNumber() || c == u'-' || c == u':' || c == u'_';
 }
 
+/// Index of the '>' ending the tag whose attributes begin at `from`: quoted values may contain
+/// '>'; a quote that is never closed ends at the first '>'. -1 when the tag never ends.
+qsizetype startTagEnd(const QString &html, qsizetype from)
+{
+    QChar quote;
+    for (qsizetype i = from; i < html.size(); ++i) {
+        const QChar c = html[i];
+        if (!quote.isNull()) {
+            if (c == quote)
+                quote = QChar();
+        } else if (c == u'"' || c == u'\'') {
+            quote = c;
+        } else if (c == u'>') {
+            return i;
+        }
+    }
+    return quote.isNull() ? -1 : html.indexOf(u'>', from);
+}
+
 /// Replace every start tag `<name …>` / `<name …/>` by `fn(attributeText)`. Quoted attribute
 /// values may contain '>' (`alt="a > b"`, inline SVG data URIs); a quote that is never closed
 /// does not swallow the rest: the first '>' ends that tag, as for an unquoted value. Linear time
@@ -132,22 +153,7 @@ QString replaceTags(const QString &html, QStringView name, F &&fn)
             pos = attrs; // "<imgx", not "<img"
             continue;
         }
-        qsizetype end = -1;
-        QChar quote;
-        for (qsizetype i = attrs; i < html.size(); ++i) {
-            const QChar c = html[i];
-            if (!quote.isNull()) {
-                if (c == quote)
-                    quote = QChar();
-            } else if (c == u'"' || c == u'\'') {
-                quote = c;
-            } else if (c == u'>') {
-                end = i;
-                break;
-            }
-        }
-        if (end < 0)
-            end = html.indexOf(u'>', attrs); // an unclosed quote
+        const qsizetype end = startTagEnd(html, attrs);
         if (end < 0)
             break; // no tag can end any more
         QStringView text = QStringView(html).sliced(attrs, end - attrs);
@@ -183,6 +189,7 @@ Prepared prepare(const QString &html)
         s.remove(QChar(marker));
     s = detail::removeElements(s, {u"script"_s, u"style"_s, u"noscript"_s, u"template"_s, u"iframe"_s, u"object"_s,
                                    u"embed"_s, u"svg"_s, u"math"_s, u"canvas"_s, u"video"_s, u"audio"_s});
+    s = detail::limitNesting(s);
     for (const QStringView dropped : {u"link", u"meta", u"base", u"script", u"style", u"iframe", u"object", u"embed",
                                       u"source", u"track", u"param"})
         s = replaceTags(s, dropped, [](const QString &) { return QString(); });
@@ -284,9 +291,11 @@ QString encodeDestination(const QString &href)
 
 QString codeSpan(const QString &text)
 {
-    if (!text.contains(u'`'))
+    const qsizetype run = detail::longestRun(text, u'`');
+    if (run == 0)
         return u'`' + text + u'`';
-    return u"`` "_s + text + u" ``"_s;
+    const QString ticks(run + 1, u'`');
+    return ticks + u' ' + text + u' ' + ticks;
 }
 
 class InlineWriter {
@@ -493,15 +502,6 @@ OutBlock outBlock(Kind kind, int quote, QStringList lines = {})
     return b;
 }
 
-/// A code fence longer than any backtick run inside the code.
-QString fence(const QString &code)
-{
-    QString f = u"```"_s;
-    while (code.contains(f))
-        f += u'`';
-    return f;
-}
-
 class BlockWriter {
 public:
     BlockWriter(const QList<HtmlImage> &images, const HtmlToMarkdownOptions &options) : m_inline(images, options) { }
@@ -547,7 +547,7 @@ public:
             const bool code = b.kind == Kind::Code;
             QStringList blockLines = b.lines;
             if (code) {
-                const QString f = fence(blockLines.join(u'\n'));
+                const QString f = detail::codeFenceFor(blockLines.join(u'\n'));
                 blockLines.prepend(f + b.lang);
                 blockLines.append(f);
             }
@@ -650,7 +650,9 @@ private:
         if (task) {
             marker = u"- ["_s + (*task ? u'x' : u' ') + u"] "_s;
         } else if (style <= int(QTextListFormat::ListDecimal)) {
-            marker = QString::number(list->itemNumber(b) + 1) + u". "_s;
+            // `<ol start="5">` counts from 5.
+            const int start = lf.hasProperty(QTextFormat::ListStart) ? lf.start() : 1;
+            marker = QString::number(list->itemNumber(b) + start) + u". "_s;
         } else {
             marker = u"- "_s;
         }
@@ -779,7 +781,8 @@ QString escapeMarkdownText(QStringView text, bool lineStart, bool linkLabel)
     // Block syntax at the start of a line.
     static const QRegularExpression ordered(u"^(\\d{1,9})([.)])(\\s|$)"_s);
     static const QRegularExpression ruleLine(u"^(?:(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,}|(?:\\\\\\*[ \\t]*){3,})$"_s);
-    static const QRegularExpression checkbox(u"^\\[[ xX/>-]\\](?:\\s|$)"_s);
+    // Any one character in brackets is a task's checkbox (`[?]`, `[…]`: custom states).
+    static const QRegularExpression checkbox(u"^\\[[^\\]\\r\\n]\\](?:\\s|$)"_s);
     const QChar first = out.front();
     if ((first == u'-' || first == u'+' || first == u'*') && (out.size() == 1 || at(out, 1).isSpace()))
         return u'\\' + out;
@@ -796,8 +799,20 @@ QString escapeMarkdownText(QStringView text, bool lineStart, bool linkLabel)
     return out;
 }
 
+std::optional<QString> detail::htmlAttribute(const QString &attributes, const QString &name)
+{
+    return attribute(attributes, name);
+}
+
+QString detail::decodeHtmlEntities(const QString &text)
+{
+    return decodeEntities(text);
+}
+
 QString detail::removeElements(const QString &html, const QStringList &tags, bool *removed)
 {
+    // Elements whose content browsers read as raw text: never closed, they run to the end.
+    static const QStringList rawText = {u"script"_s, u"style"_s, u"iframe"_s, u"noscript"_s, u"noembed"_s, u"xmp"_s};
     const auto nameAt = [&](qsizetype i) -> QString {
         for (const QString &tag : tags) {
             if (QStringView(html).sliced(i).startsWith(tag, Qt::CaseInsensitive)) {
@@ -808,6 +823,7 @@ QString detail::removeElements(const QString &html, const QStringList &tags, boo
         }
         return {};
     };
+    QSet<QString> unclosed; // tags without an end tag after the position searched last
     QString out;
     qsizetype pos = 0;
     for (qsizetype i = html.indexOf(u'<'); i >= 0; i = html.indexOf(u'<', i + 1)) {
@@ -819,19 +835,124 @@ QString detail::removeElements(const QString &html, const QStringList &tags, boo
         out += QStringView(html).sliced(pos, i - pos);
         if (removed)
             *removed = true;
-        const qsizetype close = html.indexOf(u"</"_s + tag, i + 1, Qt::CaseInsensitive);
-        if (close < 0) {
+        const qsizetype gt = startTagEnd(html, i + 1 + tag.size());
+        if (gt < 0) { // a start tag that never ends: nothing after it is markup
             pos = html.size();
             break;
         }
-        const qsizetype gt = html.indexOf(u'>', close);
-        pos = gt < 0 ? html.size() : gt + 1;
+        if (tag == u"embed" || html[gt - 1] == u'/') { // void or self-closing: the tag alone
+            pos = gt + 1;
+            i = gt;
+            continue;
+        }
+        const qsizetype close = unclosed.contains(tag) ? -1 : html.indexOf(u"</"_s + tag, gt + 1, Qt::CaseInsensitive);
+        if (close < 0) {
+            unclosed.insert(tag); // later searches start further on: they fail too
+            if (rawText.contains(tag)) {
+                pos = html.size();
+                break;
+            }
+            pos = gt + 1; // only the start tag
+            i = gt;
+            continue;
+        }
+        const qsizetype closeEnd = html.indexOf(u'>', close);
+        pos = closeEnd < 0 ? html.size() : closeEnd + 1;
         i = pos - 1;
     }
     if (pos == 0)
         return html;
     out += QStringView(html).sliced(std::min(pos, html.size()));
     return out;
+}
+
+QString detail::limitNesting(const QString &html, int maxDepth)
+{
+    static const QSet<QString> voidTags = {u"area"_s,  u"base"_s,     u"br"_s,      u"col"_s,    u"embed"_s,
+                                           u"hr"_s,    u"img"_s,      u"input"_s,   u"link"_s,   u"meta"_s,
+                                           u"param"_s, u"source"_s,   u"track"_s,   u"wbr"_s,    u"keygen"_s,
+                                           u"frame"_s, u"basefont"_s, u"isindex"_s, u"command"_s};
+    // Closed implicitly by a sibling or by the end of their parent (`<li>a<li>b`, `<p>a<p>b`).
+    static const QSet<QString> implied = {u"p"_s,  u"li"_s,    u"dt"_s,    u"dd"_s,    u"tr"_s,       u"td"_s,
+                                          u"th"_s, u"thead"_s, u"tbody"_s, u"tfoot"_s, u"option"_s,   u"optgroup"_s,
+                                          u"rb"_s, u"rt"_s,    u"rp"_s,    u"rtc"_s,   u"colgroup"_s, u"caption"_s};
+    if (maxDepth < 1)
+        maxDepth = 1;
+    QStringList open;
+    QHash<QString, int> dropped; // start tags removed, per name, not matched by an end tag yet
+    QString out;
+    qsizetype last = 0;
+    for (qsizetype i = html.indexOf(u'<'); i >= 0; i = html.indexOf(u'<', i + 1)) {
+        if (QStringView(html).sliced(i).startsWith(u"<!--")) {
+            const qsizetype end = html.indexOf(u"-->"_s, i + 4);
+            if (end < 0)
+                break;
+            i = end + 2;
+            continue;
+        }
+        qsizetype k = i + 1;
+        const bool closing = k < html.size() && html[k] == u'/';
+        if (closing)
+            ++k;
+        if (k >= html.size() || !html[k].isLetter())
+            continue;
+        qsizetype nameEnd = k;
+        while (nameEnd < html.size() && isTagNameChar(html[nameEnd]))
+            ++nameEnd;
+        const QString name = html.sliced(k, nameEnd - k).toLower();
+        const qsizetype gt = startTagEnd(html, nameEnd);
+        if (gt < 0)
+            break;
+        const bool counted = !voidTags.contains(name) && !implied.contains(name);
+        bool drop = false;
+        if (!closing) {
+            if (counted && html[gt - 1] != u'/') {
+                if (open.size() >= maxDepth) {
+                    drop = true;
+                    ++dropped[name];
+                } else {
+                    open.append(name);
+                }
+            }
+        } else if (counted) {
+            if (auto it = dropped.find(name); it != dropped.end() && *it > 0) {
+                drop = true;
+                --*it;
+            } else {
+                for (qsizetype j = open.size() - 1; j >= 0; --j) {
+                    if (open[j] == name) {
+                        open.resize(j);
+                        break;
+                    }
+                }
+            }
+        }
+        if (drop) {
+            out += QStringView(html).sliced(last, i - last);
+            last = gt + 1;
+        }
+        i = gt;
+    }
+    if (last == 0)
+        return html;
+    out += QStringView(html).sliced(last);
+    return out;
+}
+
+qsizetype detail::longestRun(QStringView text, QChar c)
+{
+    qsizetype best = 0;
+    qsizetype run = 0;
+    for (const QChar x : text) {
+        run = x == c ? run + 1 : 0;
+        best = std::max(best, run);
+    }
+    return best;
+}
+
+QString detail::codeFenceFor(QStringView code)
+{
+    return QString(std::max<qsizetype>(3, longestRun(code, u'`') + 1), u'`');
 }
 
 QString htmlToPlainText(const QString &html)

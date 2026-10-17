@@ -1,7 +1,8 @@
 # io — import from other apps and export to other formats (docs/ARCHITECTURE.md): importers
-# (Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Bear, Markdown,
-# HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single HTML, JSON,
-# iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar, HTML <-> Markdown.
+# (Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear,
+# Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
+# HTML, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
+# HTML <-> Markdown.
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
 # QtGui is used for QTextDocument (HTML parsing).
 if(NOT TARGET brulion_miniz)
@@ -30,6 +31,7 @@ brulion_add_core_module(io
         import_joplin.cpp
         import_simplenote.cpp
         import_roam.cpp
+        import_trilium.cpp trilium_p.h trilium.cpp
         import_html.cpp
         import_ics.cpp
         exporter.h exporter.cpp exporters_p.h

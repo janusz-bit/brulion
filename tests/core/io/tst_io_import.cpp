@@ -87,7 +87,8 @@ private Q_SLOTS:
             QVERIFY(runImport(*i, {}, iotest::options()).files.isEmpty());
         }
         QCOMPARE(ids, QStringList({u"obsidian"_s, u"logseq"_s, u"notion"_s, u"evernote"_s, u"keep"_s, u"joplin"_s,
-                                   u"simplenote"_s, u"roam"_s, u"bear"_s, u"markdown"_s, u"html"_s, u"ics"_s}));
+                                   u"simplenote"_s, u"roam"_s, u"trilium"_s, u"bear"_s, u"markdown"_s, u"html"_s,
+                                   u"ics"_s}));
         QCOMPARE(importerById(u"keep")->name(), u"Google Keep"_s);
         QVERIFY(importerById(u"nope") == nullptr);
     }
@@ -375,6 +376,21 @@ private Q_SLOTS:
         const ImportResult r = importWith(u"keep"_s, files, o);
         QCOMPARE(iotest::pathsOf(r),
                  QStringList({u"Bez tytułu 2.md"_s, u"Bez tytułu 4.md"_s, u"Bez tytułu 5.md"_s, u"Bez tytułu 6.md"_s}));
+    }
+
+    void windowsReservedAndBidiNames()
+    {
+        // Vaults sync to Windows too: names it reserves ("CON", "nul.txt", "COM1") get a "_";
+        // bidirectional controls, which make a name look like another, are dropped.
+        const ImportResult r =
+                importWith(u"markdown"_s,
+                           {text(u"CON.md"_s, u"1"_s), text(u"Aux.md"_s, u"2"_s), text(u"lpt1.md"_s, u"3"_s),
+                            text(u"con.txt.md"_s, u"4"_s), text(u"\u202Efdp.exe.md"_s, u"5"_s),
+                            text(u"Konsola.md"_s, u"6"_s), text(u"Prn/a.md"_s, u"7"_s), bytes(u"nul.png"_s, "P")},
+                           iotest::options());
+        QCOMPARE(iotest::pathsOf(r),
+                 QStringList({u"Aux_.md"_s, u"CON_.md"_s, u"Konsola.md"_s, u"Prn_/a.md"_s,
+                              u"assets/Markdown/nul_.png"_s, u"con_.txt.md"_s, u"fdp.exe.md"_s, u"lpt1_.md"_s}));
     }
 
     void attachmentSubfolderAndSuffixLinks()

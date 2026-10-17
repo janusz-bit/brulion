@@ -92,11 +92,12 @@
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
 * **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Joplin,
-  Simplenote, Roam, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na telefonie
-  (*Więcej → Importuj notatki*: pliki, ZIP albo cały folder skarbca, z podglądem przed zapisem;
-  [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)). Eksport do ZIP
-  z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego pliku HTML,
-  JSON, iCalendar, OPML i CSV zadań.
+  Simplenote, Roam, Trilium, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na
+  telefonie (*Więcej → Importuj notatki*: pliki, ZIP albo cały folder skarbca, z podglądem przed
+  zapisem; [docs/IMPORT.md](docs/IMPORT.md) — m.in. jak wyeksportować notatki z Trilium i co się
+  z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)).
+  Eksport do ZIP z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego
+  pliku HTML, JSON, iCalendar, OPML i CSV zadań.
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
   wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
 * **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
@@ -209,7 +210,7 @@ daily journals and block outliner on top of plain Obsidian-compatible `.md` file
 either an Obsidian-like document or a Logseq-like outline, switchable at any time), with a
 calendar, reminders and real alarms, calculation blocks and spreadsheet-like table formulas,
 live queries, version history, and import/export for Obsidian, Logseq, Notion, Evernote,
-Google Keep, Joplin, Simplenote, Roam, Bear, HTML and iCalendar.
+Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
   alarms that fire while the app is closed) and in the **browser** (Qt for WebAssembly,

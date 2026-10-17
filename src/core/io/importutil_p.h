@@ -36,9 +36,11 @@ private:
     std::function<bool(const VaultPath &)> m_exists;
 };
 
-/// One path segment for a page or folder name: paths::sanitizeFileName() without trailing dots
-/// / spaces (Windows), at most 200 bytes of UTF-8 (file systems allow 255 per name; room is left
-/// for the extension and a " 2" suffix) — "Untitled" when nothing is left.
+/// One path segment for a page or folder name: paths::sanitizeFileName() without leading dots
+/// (hidden files), trailing dots / spaces and names Windows reserves ("CON" -> "CON_": vaults
+/// sync to Windows too), without bidirectional controls (they disguise names), at most 200 bytes
+/// of UTF-8 (file systems allow 255 per name; room is left for the extension and a " 2" suffix)
+/// — "Untitled" when nothing is left.
 QString pageSegment(const QString &name);
 /// `title` as frontmatter `aliases` when pageSegment() had to change it (characters that file
 /// names cannot hold, length), so links and search still find the note by its real title.
@@ -64,6 +66,8 @@ public:
     VaultPath claimPage(const QString &relative);
     /// `<attachmentsFolder>/<subfolder>/<relative>` made safe, unique and claimed.
     VaultPath claimAttachment(const QString &relative);
+    /// Mark a vault path as taken (a daily note the import writes): later claims avoid it.
+    void reservePath(const VaultPath &path) { m_claims.reserve(path); }
     /// The folder receiving attachments.
     QString attachmentFolder() const { return m_attachmentFolder; }
     /// Daily-note path of `date` (VaultConfig journal settings).
@@ -150,6 +154,10 @@ QString attachmentLink(const VaultPath &path, const QString &label = {});
 
 /// MIME type -> file extension with dot (".png"), empty when unknown.
 QString extensionForMime(const QString &mime);
+
+/// A decoded `data:` URI: {MIME type (lower case, "text/plain" when not given), bytes}; nullopt
+/// when malformed or empty.
+std::optional<std::pair<QString, QByteArray>> decodeDataUri(const QString &uri);
 
 /// A tag name from free text (labels, categories): whitespace -> '-', characters not allowed
 /// in tags removed; empty when nothing usable is left (or only digits).

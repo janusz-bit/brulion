@@ -23,34 +23,6 @@ bool isHtml(const QString &path)
     return ext == u".html" || ext == u".htm" || ext == u".xhtml";
 }
 
-/// Decoded data: URI ({mime, bytes}), nullopt when malformed.
-std::optional<std::pair<QString, QByteArray>> decodeDataUri(const QString &uri)
-{
-    static const QRegularExpression re(u"^data:([^;,]*)((?:;[^;,]*)*),(.*)$"_s,
-                                       QRegularExpression::CaseInsensitiveOption
-                                               | QRegularExpression::DotMatchesEverythingOption);
-    const auto m = re.match(uri.trimmed());
-    if (!m.hasMatch())
-        return std::nullopt;
-    const QString mime = m.captured(1).trimmed().toLower();
-    const bool base64 = m.captured(2).contains(u";base64"_s, Qt::CaseInsensitive);
-    const QByteArray payload = m.captured(3).toUtf8(); // non-ASCII text of plain data: URIs is UTF-8
-    QByteArray data;
-    if (base64) {
-        auto decoded = QByteArray::fromBase64Encoding(
-                QByteArray(payload).replace(' ', QByteArray()).replace('\n', QByteArray()),
-                QByteArray::AbortOnBase64DecodingErrors);
-        if (!decoded)
-            return std::nullopt;
-        data = *decoded;
-    } else {
-        data = QByteArray::fromPercentEncoding(payload);
-    }
-    if (data.isEmpty())
-        return std::nullopt;
-    return std::make_pair(mime.isEmpty() ? u"text/plain"_s : mime, data);
-}
-
 /// Text of an HTML file: a BOM or valid UTF-8 wins; otherwise the charset the page declares
 /// (`<meta charset>`, e.g. windows-1250 / ISO-8859-2 of old Polish pages) when Qt supports it,
 /// else Latin-1 (decodeText()).

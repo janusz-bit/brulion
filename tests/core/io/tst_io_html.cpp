@@ -3,6 +3,7 @@
 
 #include "io/htmlmarkdown.h"
 
+#include <QElapsedTimer>
 #include <QTest>
 
 using namespace brulion;
@@ -26,6 +27,8 @@ private Q_SLOTS:
         QTest::newRow("bullet list nested")
                 << u"<ul><li>a</li><li>b<ul><li>c</li></ul></li></ul><p>po</p>"_s << u"- a\n- b\n\t- c\n\npo\n"_s;
         QTest::newRow("ordered list") << u"<ol><li>jeden</li><li>dwa</li></ol>"_s << u"1. jeden\n2. dwa\n"_s;
+        QTest::newRow("ordered list with start")
+                << u"<ol start=\"5\"><li>piąty</li><li>szósty</li></ol>"_s << u"5. piąty\n6. szósty\n"_s;
         QTest::newRow("checkbox list")
                 << u"<ul><li><input type=checkbox checked> zrobione</li><li><input type='checkbox'> otwarte</li></ul>"_s
                 << u"- [x] zrobione\n- [ ] otwarte\n"_s;
@@ -102,6 +105,14 @@ private Q_SLOTS:
                 << u"Treść\n"_s;
         QTest::newRow("empty") << QString() << QString();
         QTest::newRow("whitespace only") << u"<p>  </p><div><br></div>"_s << QString();
+        // Removed elements take only themselves: a void <embed>, a self-closing <svg/>, an
+        // unclosed <video> (its start tag); an unclosed <script> runs to the end as in browsers.
+        QTest::newRow("embed is void") << u"<p>a</p><embed src=\"x.swf\"><p>b</p>"_s << u"a\n\nb\n"_s;
+        QTest::newRow("self-closing svg") << u"<p>a</p><svg viewBox=\"0 0 1 1\"/><p>b</p>"_s << u"a\n\nb\n"_s;
+        QTest::newRow("unclosed video") << u"<p>a</p><video src=\"v.mp4\"><p>b</p>"_s << u"a\n\nb\n"_s;
+        QTest::newRow("embed in object") << u"<p>a</p><object><embed src=x></object><p>b</p>"_s << u"a\n\nb\n"_s;
+        QTest::newRow("unclosed script") << u"<p>a</p><script>evil()<p>b</p>"_s << u"a\n"_s;
+        QTest::newRow("code span with backticks") << u"<p><code>a``b</code></p>"_s << u"``` a``b ```\n"_s;
     }
 
     void convert()
@@ -167,6 +178,36 @@ private Q_SLOTS:
         QVERIFY(htmlToMarkdown(u"</div></p><<<>>>&#xFFFFFF;&#0;"_s).markdown.size() < 40);
     }
 
+    void deepNesting_data()
+    {
+        QTest::addColumn<QString>("html");
+        // About 1 MB each: QTextDocument needs time quadratic in the depth, so nesting deeper
+        // than 64 elements is flattened (text and shallow structure stay).
+        QTest::newRow("spans") << u"<span>"_s.repeated(150'000) + u"głęboko"_s;
+        QTest::newRow("divs") << u"<div>"_s.repeated(150'000) + u"głęboko"_s;
+        QTest::newRow("closed divs") << u"<div>"_s.repeated(80'000) + u"głęboko"_s + u"</div>"_s.repeated(80'000);
+        QTest::newRow("lists") << u"<ol><li>"_s.repeated(60'000) + u"głęboko"_s;
+        QTest::newRow("unclosed paragraphs") << u"<p>akapit"_s.repeated(5'000) + u"<p>głęboko"_s;
+    }
+
+    void deepNesting()
+    {
+        QFETCH(QString, html);
+        QElapsedTimer timer;
+        timer.start();
+        const QString md = htmlToMarkdown(html).markdown;
+        QVERIFY2(timer.elapsed() < 20000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY(md.contains(u"głęboko"_s));
+    }
+
+    void unclosedParagraphsStaySeparate()
+    {
+        // Elements HTML closes implicitly do not count as nesting.
+        const QString md = htmlToMarkdown(u"<p>akapit"_s.repeated(200)).markdown;
+        QCOMPARE(md.count(u"akapit"_s), 200);
+        QCOMPARE(md.count(u"\n\n"_s), 199);
+    }
+
     void escape_data()
     {
         QTest::addColumn<QString>("text");
@@ -195,6 +236,10 @@ private Q_SLOTS:
         QTest::newRow("block id") << u"tekst ^abc"_s << false << u"tekst \\^abc"_s;
         QTest::newRow("checkbox at line start") << u"[ ] x"_s << true << u"\\[ ] x"_s;
         QTest::newRow("checkbox mid line") << u"[ ] x"_s << false << u"[ ] x"_s;
+        // Any one character in brackets is a task state for Brulion (`[?]`, `[…]`).
+        QTest::newRow("custom checkbox at line start") << u"[…] dalej"_s << true << u"\\[…] dalej"_s;
+        QTest::newRow("checkbox alone") << u"[?]"_s << true << u"\\[?]"_s;
+        QTest::newRow("brackets with a word") << u"[ab] x"_s << true << u"[ab] x"_s;
     }
 
     void escape()

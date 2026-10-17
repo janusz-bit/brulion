@@ -181,7 +181,7 @@ leżą pliki, co wybrać) — albo od razu wybierz pliki: Brulion sam rozpozna f
   przytrzymanie zaznacza kilka plików**. Okno nie filtruje typów plików (dostawcy różnie je
   nazywają i filtr wyszarzałby np. ZIP z Notion na Dysku albo plik .md w Pobranych) — format
   rozpoznaje Brulion po zawartości. Działają `.md`, `.txt`, `.html`, `.enex`, `.json`, `.zip`
-  (cały eksport Obsidian / Logseq / Notion / Google Keep), `.jex`, `.ics` i inne.
+  (cały eksport Obsidian / Logseq / Notion / Google Keep / Trilium), `.jex`, `.ics` i inne.
 * **Wybierz folder…** — folder skarbca Obsidian, grafu Logseq albo folder z plikami `.md`:
   otwórz go w oknie systemowym, stuknij **„Użyj tego folderu”** i zezwól na dostęp (tylko do
   odczytu, tylko ten folder). Android **nie pozwala** wybrać całego folderu *Pobrane*, katalogu

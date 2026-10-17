@@ -64,6 +64,14 @@ ImporterInfo ImportController::importerInfo(const QString &id)
                 u"files"_s, u"network"_s,
                 tr("Export in the browser (••• → Export All, format “JSON”) and pick the downloaded file with “Choose "
                    "files…”.")};
+    if (id == u"trilium")
+        return {tr("In Trilium right-click a note in the tree (for everything: the root note at the top), choose "
+                   "Export, then “This note & all descendants” and the format “HTML” (recommended) or “Markdown”. "
+                   "Choose the downloaded ZIP file – there is no need to unpack it. Day notes go to your journal."),
+                u"files"_s, u"folder-tree"_s,
+                tr("Export on a computer or in the browser on your Trilium server (right-click the note → Export, "
+                   "“This note & all descendants”, “HTML”), copy the ZIP file to the phone (Downloads, Google "
+                   "Drive…) and pick it with “Choose files…”.")};
     if (id == u"bear")
         return {tr("In Bear choose File → Backup Notes (a .bear2bk file), or select notes and export them as "
                    "TextBundle. Choose the backup or the exported files."),
