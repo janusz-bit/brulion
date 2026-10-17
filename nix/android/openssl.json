@@ -1,0 +1,7 @@
+{
+  "!comment": "OpenSSL 3 for Android: KDAB's android_openssl (prebuilt libssl/libcrypto per ABI), bundled into the APK by nix/android.nix when `rev` is set. Pin the same commit as scripts/android-build.sh; nix/android/update-locks.sh --openssl REV fills in `hash`.",
+  "owner": "KDAB",
+  "repo": "android_openssl",
+  "rev": null,
+  "hash": null
+}

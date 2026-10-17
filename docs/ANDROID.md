@@ -379,6 +379,84 @@ W brulion.selftest: SELFTEST activated path=strony/Łódź.md line=7
 i alarm jako budzik z `showIntent` (`setAlarmClock`), oba z akcją `…android.action.FIRE`
 i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
 
+## Budowanie przez Nix (flake)
+
+APK można też zbudować jako wynik flake'a — czysta derywacja w piaskownicy Nixa (bez sieci;
+wszystko, co pobierane, ma przypięty hash), na hoście **x86_64-linux** (NDK i narzędzia SDK są
+tylko na x86_64; NixOS nie potrzebuje do tego nix-ld):
+
+```sh
+nix build .#brulion-android           # arm64-v8a: result/brulion-<wersja>-arm64-v8a-unsigned.apk
+nix build .#brulion-android-x86_64    # dla emulatora
+nix build .#brulion-android-aab       # arm64-v8a: APK + AAB (bundleRelease, ok. 10 s więcej)
+nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulion-<wersja>-arm64-v8a.apk
+```
+
+Wynik jest **niepodpisany** (wyrównany `zipalign -P 16` dla stron 16 KB), a podpis dokłada
+dopiero `brulion-android-sign` w chwili uruchomienia — klucz i hasło nigdy nie trafiają do
+`/nix/store`. Derywacja sprawdza APK tak jak `scripts/android-build.sh` (pakiet, uprawnienia,
+komponenty manifestu, klasy Kotlina, `libbrulion_<abi>.so`, wyrównanie 16 KB).
+
+| Składnik | Skąd (`nix/android.nix`) |
+|---|---|
+| Qt for Android 6.11.2 (qtbase, qtdeclarative, qtsvg) | archiwa `.7z` z repozytorium Qt (te same, które pobiera aqt), osobno dla modułu i ABI, hashe SHA-256 publikowane przez Qt — `nix/android/qt-android.json`, `nix/android/qt.nix` |
+| Qt hosta (moc, rcc, qmlcachegen, androiddeployqt, lrelease…) | nixpkgs `qt6` — **ta sama wersja** co Qt for Android (sprawdzane przy ewaluacji) |
+| SDK (platforma 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (licencja SDK akceptowana w `flake.nix`) |
+| Gradle / AGP | Gradle 9 z nixpkgs (JDK 21) zamiast wrappera z szablonu Qt; AGP 9.0.0, Kotlin, androidx — z `nix/android/gradle-deps.json` (mitm-cache), wspólne dla wszystkich ABI |
+| aapt2 | z build-tools SDK (`android.aapt2FromMavenOverride`) zamiast binarki z Mavena |
+| OpenSSL 3 (KDAB android_openssl) | przypięty commit w `nix/android/openssl.json` (na razie pusty; ten sam commit co skrypt) |
+
+Podpisywanie (`nix run .#brulion-android-sign -- PLIK.apk|PLIK.aab [opcje]`, działa też na
+aarch64, np. na Raspberry Pi — apksigner z nixpkgs to Java):
+
+* `--keystore` (albo `BRULION_ANDROID_KEYSTORE`), domyślnie
+  `~/.local/share/brulion/brulion-release.jks` — klucz z `scripts/android-new-keystore.sh`;
+* hasło: `--password-file` (albo `BRULION_ANDROID_KEYSTORE_PASSWORD_FILE`), inaczej
+  `QT_ANDROID_KEYSTORE_STORE_PASS`, inaczej plik obok magazynu z końcówką `.password` zamiast
+  `.jks`, inaczej apksigner zapyta;
+* `--alias` (albo `BRULION_ANDROID_KEY_ALIAS` / `QT_ANDROID_KEYSTORE_ALIAS`), domyślnie jedyny
+  klucz w magazynie; `--out` — plik wynikowy (domyślnie bieżący katalog, nazwa bez `-unsigned`).
+
+Po podpisaniu APK jest sprawdzany (`apksigner verify`, wyrównanie 16 KB); AAB podpisuje
+`jarsigner`.
+
+**Aktualizacja locków** — po `nix flake update` (nowe Qt w nixpkgs) albo po zmianie zależności
+Gradle (szablon Qt, `android/`):
+
+```sh
+nix/android/update-locks.sh            # Qt for Android dla wersji qt6 z nixpkgs + zależności Gradle
+nix/android/update-locks.sh --qt       # tylko qt-android.json (kilka sekund)
+nix/android/update-locks.sh --gradle   # tylko gradle-deps.json (~3 min: buduje aplikację i nagrywa pobrania Gradle)
+nix/android/update-locks.sh --openssl <commit>   # przypina KDAB android_openssl (hash archiwum)
+```
+
+Zależności Gradle nagrywa skrypt aktualizacji z `gradle.fetchDeps` (nixpkgs): buduje
+aplikację poza piaskownicą (w bubblewrap, z dostępem do sieci przez nagrywające proxy) aż do
+`gradle assembleRelease bundleRelease` i zapisuje listę plików z hashami.
+
+Jak to działa (szczegóły w komentarzach `nix/android.nix`): CMake z SDK konfiguruje projekt
+z plikiem toolchain Qt for Android; cel `brulion_make_apk` buduje bibliotekę i uruchamia
+`androiddeployqt`, który kopiuje szablon Gradle z Qt i woła `./gradlew`. Derywacja zapisuje
+wcześniej własny `gradlew` (Gradle z nixpkgs z flagami mitm-cache) — `androiddeployqt` nie
+nadpisuje pliku nowszego od szablonu. Qt for Android jest podawane jako drzewo dowiązań
+z zapisywalną kopią `src/` (szablonów), bo `androiddeployqt` edytuje skopiowane z nich pliki
+(np. `res/values/libs.xml`), a kopie plików ze store'u są tylko do odczytu.
+
+Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
+
+* od zera (pusty store, 1,3 GiB pobrań, m.in. NDK, SDK, Qt, Gradle, JDK): **250 s**;
+* z gotowymi zależnościami (zmiana w źródłach): **~145 s** (C++ ~95 s, Gradle ~43 s, sprawdzenia);
+* APK jest **powtarzalny bit w bit**: `nix build --rebuild` i budowanie w pustym store dały ten sam plik;
+* to ten sam APK co ze `scripts/android-build.sh`: ten sam kod źródłowy zbudowany skryptem
+  z `SOURCE_DATE_EPOCH=315532800` (stała nixpkgs) różni się tylko 20 bajtami build-id
+  w `libbrulion_<abi>.so` (zależnymi od ścieżki budowania); bez niej jeszcze znacznikami czasu
+  plików w zasobach Qt (rcc). Podpis `brulion-android-sign` daje bajt w bajt to samo co podpis
+  skryptu (apksigner z build-tools 36, schemat v3);
+* APK x86_64 podpisany kluczem jednorazowym działa na emulatorze (Android 16, API 36): przykładowy
+  brulion, edycja bloku, przypomnienie (powiadomienie w tle, otwarcie bloku po dotknięciu),
+  eksport do ZIP, obrót ekranu; w logcat żadnych awarii. Emulator z `-gpu swangle_indirect`
+  rysuje poprawnie (`swiftshader_indirect` zostawia czarne pasy na przyciskach).
+
 ## Dla programistów
 
 ### Pliki
@@ -394,6 +472,7 @@ i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
 | `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64) |
+| `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
 w `<build>/src/app/android-build/`. Nie nadpisujemy `build.gradle` z Qt — szablon 6.11 używa

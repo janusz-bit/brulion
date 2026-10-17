@@ -188,6 +188,11 @@ scripts/dev-build.sh -t .        # zbuduj i uruchom wszystkie testy (JOBS=8 — 
 ./build/src/app/brulion --demo   # … z przykładowym brulionem
 ```
 
+APK Androida z flake'a (na hoście x86_64-linux, niepodpisany): `nix build .#brulion-android`
+(arm64-v8a; `.#brulion-android-x86_64` dla emulatora, `.#brulion-android-aab` z AAB), podpis:
+`nix run .#brulion-android-sign -- result/*.apk` — patrz
+[docs/ANDROID.md](docs/ANDROID.md#budowanie-przez-nix-flake).
+
 Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey`, skrypty
 `tests/app/*/screenshots.sh`) — patrz [docs/UI.md](docs/UI.md#dev-tools-screenshots-and-ui-tests).
 
@@ -229,5 +234,7 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
 The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`).
 Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK, or
 <https://janusz-bit.github.io/brulion/>). Build: `nix develop`, then
-`scripts/dev-build.sh -t .`. Developer docs (in English): [architecture](docs/ARCHITECTURE.md),
-[Markdown dialect](docs/SYNTAX.md), [UI](docs/UI.md). License: AGPL-3.0-or-later.
+`scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
+unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
+English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
+[UI](docs/UI.md). License: AGPL-3.0-or-later.

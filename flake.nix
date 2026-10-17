@@ -14,12 +14,56 @@
         "aarch64-linux"
       ];
       forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+
+      # The Android SDK and NDK are unfree: a nixpkgs that allows them (and accepts the Android
+      # SDK license), used for the Android packages only.
+      androidPkgs =
+        system:
+        import nixpkgs {
+          inherit system;
+          config = {
+            android_sdk.accept_license = true;
+            allowUnfreePredicate =
+              pkg: lib.hasPrefix "https://developer.android.com/" (pkg.meta.homepage or "");
+          };
+        };
+
+      # Android (x86_64-linux only): an unsigned release APK per ABI, nix/android.nix.
+      androidPackages =
+        system:
+        let
+          pkgs = androidPkgs system;
+          apk =
+            args:
+            pkgs.callPackage ./nix/android.nix (args // { inherit (self.packages.${system}.brulion) version; });
+        in
+        {
+          brulion-android = apk { abi = "arm64-v8a"; };
+          brulion-android-x86_64 = apk { abi = "x86_64"; };
+          # The arm64-v8a APK and an Android App Bundle (.aab).
+          brulion-android-aab = apk {
+            abi = "arm64-v8a";
+            withAab = true;
+          };
+        };
     in
     {
-      packages = forAllSystems (pkgs: rec {
-        brulion = pkgs.callPackage ./nix/package.nix { };
-        default = brulion;
-      });
+      # nix build .#brulion                 desktop app (also the default)
+      # nix build .#brulion-android         Android APK, arm64-v8a, unsigned (x86_64-linux hosts)
+      # nix build .#brulion-android-x86_64  Android APK for the emulator, unsigned
+      # nix build .#brulion-android-aab     arm64-v8a APK + Android App Bundle, unsigned
+      # nix run .#brulion-android-sign -- result/*.apk   signs an APK with the release key
+      packages = forAllSystems (
+        pkgs:
+        rec {
+          brulion = pkgs.callPackage ./nix/package.nix { };
+          default = brulion;
+          brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
+        }
+        // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
+          androidPackages pkgs.stdenv.hostPlatform.system
+        )
+      );
 
       # pkgs.brulion built with the nixpkgs of whoever applies the overlay.
       overlays.default = final: _prev: {
