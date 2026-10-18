@@ -2,6 +2,35 @@ qt_add_executable(brulion WIN32 MACOSX_BUNDLE
     main.cpp
 )
 
+# Developer QML: the component gallery (`--gallery`), the editor playground (`--editor`) and the
+# in-app scripts and self-tests (`--editor-script`: qml/dev/PageScript.qml,
+# qml/content/ContentJournalsSelfTest.qml), about 0.7 MB of compiled QML. Left out of the
+# Android and browser builds that are shipped (Release, MinSizeRel), where these options then
+# load nothing; PageView and JournalsView get the stand-ins from qml/stubs/. Desktop builds and
+# the other build types have them (the ctest QML self-tests need them).
+# BRULION_DEV_QML=AUTO (the default) decides by platform and CMAKE_BUILD_TYPE on every configure,
+# so a build dir reused for another build type follows it; ON or OFF force it. The result is
+# BRULION_DEV_QML_ENABLED (also read by tests/app).
+set(BRULION_DEV_QML AUTO CACHE STRING
+    "Build the developer QML (gallery, editor playground, in-app self-tests): AUTO, ON or OFF")
+set_property(CACHE BRULION_DEV_QML PROPERTY STRINGS AUTO ON OFF)
+string(TOUPPER "${BRULION_DEV_QML}" _brulion_dev_qml)
+if(_brulion_dev_qml STREQUAL "AUTO")
+    if((ANDROID OR EMSCRIPTEN) AND CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel)$")
+        set(_brulion_dev_qml OFF)
+    else()
+        set(_brulion_dev_qml ON)
+    endif()
+elseif(_brulion_dev_qml MATCHES "^(ON|YES|TRUE|Y|1)$")
+    set(_brulion_dev_qml ON)
+elseif(_brulion_dev_qml MATCHES "^(OFF|NO|FALSE|N|0)$")
+    set(_brulion_dev_qml OFF)
+else()
+    message(FATAL_ERROR "BRULION_DEV_QML must be AUTO, ON or OFF, not '${BRULION_DEV_QML}'")
+endif()
+set(BRULION_DEV_QML_ENABLED ${_brulion_dev_qml} CACHE INTERNAL "Effective BRULION_DEV_QML")
+message(STATUS "Developer QML: ${BRULION_DEV_QML_ENABLED} (BRULION_DEV_QML=${BRULION_DEV_QML})")
+
 # --- Design system (docs/UI.md): Theme singleton, shared B* components, the dev gallery and
 # their C++ helpers (QML singletons DatesHelper, TextHelper, DiffHelper, DeviceInfo, DevTools).
 set(BRULION_UI_QML
@@ -47,9 +76,10 @@ set(BRULION_UI_QML
     qml/components/BToast.qml
     qml/components/BToastHost.qml
     qml/components/BToolTip.qml
-    qml/dev/Gallery.qml
-    qml/dev/GallerySection.qml
 )
+if(BRULION_DEV_QML_ENABLED)
+    list(APPEND BRULION_UI_QML qml/dev/Gallery.qml qml/dev/GallerySection.qml)
+endif()
 # DatesHelper, TextHelper and DiffHelper live in the GUI-free static library brulion_ui_helpers
 # (src/app/ui/CMakeLists.txt, unit-tested in tests/app) and are registered here by
 # ui/qmlforeign.h; DevTools and DeviceInfo are app-only.
@@ -149,6 +179,13 @@ if(ANDROID)
         QT_ANDROID_TARGET_SDK_VERSION 36
         QT_ANDROID_COMPILE_SDK_VERSION 36
     )
+
+    # Shipped APKs (Release, MinSizeRel) without the QML debugging plugins (qmltooling, 12
+    # libraries, 1 MB per ABI) that androiddeployqt would deploy with QtQml: they only serve a QML
+    # debugger or profiler (-qmljsdebugger), which these builds never start.
+    if(CMAKE_BUILD_TYPE MATCHES "^(Release|MinSizeRel)$")
+        qt_import_plugins(brulion EXCLUDE_BY_TYPE qmltooling)
+    endif()
 
     # HTTPS (Nextcloud / WebDAV sync): Qt's OpenSSL TLS plugin loads libssl_3.so and
     # libcrypto_3.so when the first secure connection starts; Qt for Android does not ship them.

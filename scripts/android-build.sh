@@ -404,6 +404,17 @@ for class in BrulionAndroid BrulionActivity AlarmScheduler ReminderNotifier Alar
   grep -q "/$class;" <<<"$dex_classes" || die "class $class missing from classes.dex (Kotlin not compiled?)"
 done
 echo "Kotlin classes in dex: $(wc -l <<<"$dex_classes")"
+# R8 (release builds, android/settings.gradle) must keep the Java classes C++ calls by name.
+qt_classes=$(unzip -p "$apk" 'classes*.dex' | grep -a -o 'Lorg/qtproject/qt/android/Qt[A-Za-z]*;' | sort -u)
+for class in QtNative QtActivityBase QtLoader; do
+  grep -q "/$class;" <<<"$qt_classes" || die "Qt's Java class $class missing from classes.dex (R8 keep rules: android/proguard-rules.pro)"
+done
+# ... and the androidx members that Qt's C++ calls (FileProvider.getUriForFile, the font download).
+androidx_names=$(unzip -p "$apk" 'classes*.dex' | LC_ALL=C grep -a -o -E 'getUriForFile|fetchFonts|Landroidx/core/provider/FontRequest;' | sort -u)
+for name in getUriForFile fetchFonts 'Landroidx/core/provider/FontRequest;'; do
+  grep -qxF "$name" <<<"$androidx_names" || die "$name missing from classes.dex (R8 keep rules: android/proguard-rules.pro)"
+done
+echo "classes.dex: $(unzip -l "$apk" 'classes*.dex' | tail -n 1 | awk '{ print $1 }') bytes"
 listing=$(unzip -l "$apk")
 for abi in "${ABIS[@]}"; do
   grep -q "lib/$abi/libbrulion_$abi.so" <<<"$listing" || die "lib/$abi/libbrulion_$abi.so missing from the APK"
@@ -415,6 +426,9 @@ done
 echo "native libraries: $(grep -c 'lib/.*\.so$' <<<"$listing") in lib/{$(IFS=, && echo "${ABIS[*]}")}"
 openssl=$(unzip -p "$apk" "lib/${ABIS[0]}/libcrypto_3.so" | LC_ALL=C grep -a -o -m 1 'OpenSSL 3\.[0-9.]* [0-9]* [A-Z][a-z]* [0-9]*' || true)
 echo "OpenSSL: ${openssl:-version not found} (libssl_3.so, libcrypto_3.so)"
+if [[ $BUILD_TYPE == Release || $BUILD_TYPE == MinSizeRel ]] && grep -q 'libplugins_qmltooling_' <<<"$listing"; then
+  die "QML debugging plugins (qmltooling) in a $BUILD_TYPE APK (src/app/CMakeLists.txt leaves them out)"
+fi
 
 # 16 KB pages (Android 15+ devices with 16 KB memory pages refuse other libraries): the 64-bit
 # libraries must be stored uncompressed at 16 KB boundaries in the APK and have ELF LOAD

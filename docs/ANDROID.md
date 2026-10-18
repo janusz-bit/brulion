@@ -429,6 +429,36 @@ W brulion.selftest: SELFTEST activated path=strony/Łódź.md line=7
 i alarm jako budzik z `showIntent` (`setAlarmClock`), oba z akcją `…android.action.FIRE`
 i `exactAllowReason=policy_permission` (`USE_EXACT_ALARM`).
 
+### Rozmiar APK
+
+Co buildy wydań (Release, MinSizeRel) pomijają albo zmniejszają — zmierzone 2026-10-18 na APK
+arm64-v8a (`tests/bench/mobile/size-report.py apk`):
+
+| Zmiana | Gdzie | APK arm64 |
+|---|---|---|
+| **R8** zmniejsza kod Javy/Kotlina (biblioteka standardowa Kotlina, androidx) | `android/settings.gradle`, reguły `android/proguard-rules.pro` | `classes.dex` 5,12 MB → 0,35 MB |
+| bez wtyczek debugera i profilera QML (`qmltooling`, 12 bibliotek) | `src/app/CMakeLists.txt` (`qt_import_plugins(… EXCLUDE_BY_TYPE qmltooling)`) | −1,0 MB |
+| bez QML deweloperskiego: galerii (`--gallery`), placu zabaw edytora (`--editor`), skryptów i samotestów `--editor-script` | opcja `BRULION_DEV_QML` w `src/app/CMakeLists.txt` (domyślne `AUTO`: wyłączona w Release/MinSizeRel na Androidzie i w przeglądarce, ustalane przy każdym `cmake`), zaślepki `src/app/qml/stubs/` | `libbrulion` −0,77 MB |
+| OpenSSL 3 (HTTPS, wyżej) | `src/app/CMakeLists.txt` | +4,45 MB |
+
+Razem 83,15 MB → 81,02 MB (do pobrania, po kompresji: 27,46 → 27,18 MB); bez OpenSSL byłoby
+76,5 MB. Buildy Debug i RelWithDebInfo (APK pomiarowe) mają `qmltooling` i QML deweloperski.
+
+**R8** działa w każdym buildzie release Gradle'a (APK i AAB z `CMAKE_BUILD_TYPE` Release,
+RelWithDebInfo, MinSizeRel; Debug — bez R8). `android/settings.gradle` włącza go w projekcie
+Gradle, który `androiddeployqt` składa z szablonu Qt — `build.gradle` z Qt zostaje nietknięty.
+Klasy, które C++ woła przez JNI po nazwie, zostają w całości: Javy Qt (`org.qtproject.qt.**`,
+także szukane przez refleksję) i Kotlina Brulionu (`io.github.januszbit.brulion.android.**`);
+komponenty z manifestu (aktywności, odbiorniki, `FileProvider`) zachowuje sam AGP. C++ Qt woła
+po nazwie także kilka metod androidx, których nie woła żaden kod Javy — reguły zachowują je
+osobno: `FileProvider.getUriForFile` (lokalny plik jako `content://` dla
+`QDesktopServices::openUrl` i przeciągania) oraz `FontRequest` / `FontsContractCompat`
+(pobieranie czcionek ikon dla `QIcon::fromTheme`). Brulion dziś z nich nie korzysta (otwiera
+tylko linki http/https/mailto, ikony ma własne), ale bez tych reguł nowa funkcja działałaby
+w Debug, a w release nie. Nazwy nie są zaciemniane (`-dontobfuscate`: czytelne stosy wywołań
+w logcat). `scripts/android-build.sh` i derywacja Nix sprawdzają po buildzie, że w
+`classes.dex` są klasy Brulionu, `QtNative`, `QtActivityBase`, `QtLoader` i te metody androidx.
+
 ## Budowanie przez Nix (flake)
 
 APK można też zbudować jako wynik flake'a — czysta derywacja w piaskownicy Nixa (bez sieci;
@@ -445,7 +475,8 @@ nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulio
 Wynik jest **niepodpisany** (wyrównany `zipalign -P 16` dla stron 16 KB), a podpis dokłada
 dopiero `brulion-android-sign` w chwili uruchomienia — klucz i hasło nigdy nie trafiają do
 `/nix/store`. Derywacja sprawdza APK tak jak `scripts/android-build.sh` (pakiet, uprawnienia,
-komponenty manifestu, klasy Kotlina, `libbrulion_<abi>.so`, OpenSSL, wyrównanie 16 KB).
+komponenty manifestu, klasy Kotlina i Javy Qt po R8, `libbrulion_<abi>.so`, OpenSSL, brak
+`qmltooling`, wyrównanie 16 KB).
 
 | Składnik | Skąd (`nix/android.nix`) |
 |---|---|
@@ -519,6 +550,7 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
 | `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
+| `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
 | `android/res/xml/network_security_config.xml` | zaufane urzędy certyfikacji HTTPS: systemowe i zainstalowane przez użytkownika — [HTTPS i OpenSSL](#https-i-openssl) |
 | `android/assets/licenses/` | teksty licencji dołączanych bibliotek (OpenSSL, Apache-2.0) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
@@ -531,8 +563,9 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
 w `<build>/src/app/android-build/`. Nie nadpisujemy `build.gradle` z Qt — szablon 6.11 używa
 AGP 9 z wbudowaną obsługą Kotlina (`kotlin.srcDirs` obejmuje `src/`), więc pliki `.kt` w
 `android/src` kompilują się bez dodatkowej konfiguracji; `androidx.core` (NotificationCompat)
-też jest już w szablonie. Kod nie jest minifikowany (R8 wyłączony w szablonie Qt); gdyby to się
-zmieniło, `BrulionAndroid` (wołany przez JNI) wymaga reguły `-keep`.
+też jest już w szablonie. Buildy release zmniejsza R8 (`android/settings.gradle`, [Rozmiar
+APK](#rozmiar-apk)): klasy Kotlina wołane z C++ muszą leżeć w pakiecie
+`io.github.januszbit.brulion.android`, który `android/proguard-rules.pro` zachowuje w całości.
 
 ### Most JNI (C++ ↔ Kotlin)
 
@@ -622,8 +655,10 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   testowym.
 * Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane
   uprawnienia (`aapt2 dump badging`), komponenty w scalonym manifeście (`aapt2 dump xmltree`),
-  klasy Kotlina w `classes.dex`, `lib/<abi>/libbrulion_<abi>.so`, OpenSSL (`libssl_3.so`,
-  `libcrypto_3.so` dla każdego ABI), a także zgodność ze
+  klasy Kotlina i Javy Qt (`QtNative`, `QtActivityBase`, `QtLoader`) oraz metody androidx
+  wołane przez Qt (`getUriForFile`, `fetchFonts` — reguły R8) w `classes.dex`,
+  `lib/<abi>/libbrulion_<abi>.so`, OpenSSL (`libssl_3.so`, `libcrypto_3.so` dla każdego ABI),
+  brak wtyczek `qmltooling` w Release, a także zgodność ze
   **stronami pamięci 16 KB** (Android 15+; telefony z takimi stronami nie wczytają innych
   bibliotek): `zipalign -c -P 16` i wyrównanie segmentów `LOAD` 64-bitowych bibliotek
   (`llvm-readelf`) — źle wyrównana `libbrulion_<abi>.so` przerywa build (NDK r27 dostaje

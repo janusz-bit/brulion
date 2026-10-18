@@ -293,17 +293,21 @@ Używaj hasła aplikacji Nextcloud (Ustawienia → Bezpieczeństwo), nie główn
 
 ## Rozmiar
 
-Build `MinSizeRel` (Qt 6.11.2, emsdk 4.0.7), aplikacja-szkielet (UI w budowie):
+Build `MinSizeRel` (Qt 6.11.2, emsdk 4.0.7), pełna aplikacja:
 
-| Plik | Surowy | gzip -9 |
-|---|---|---|
-| `brulion.wasm` | 23 725 057 B (22,63 MiB) | 8 912 441 B (8,50 MiB); brotli -q 11: 6 306 203 B (6,01 MiB) |
-| `brulion.js` | 273 953 B (0,26 MiB) | 63 666 B |
+| Plik | Surowy | gzip -9 | brotli -q 11 |
+|---|---|---|---|
+| `brulion.wasm` | 40 259 601 B (38,39 MiB) | 13 670 465 B (13,04 MiB) | 9 403 485 B (8,97 MiB) |
+| `brulion.js` | 275 745 B (0,26 MiB) | 64 196 B | |
 
-Z tego ok. 16,5 MB to kod, 7,1 MB dane (zasoby Qt: czcionki, QML, tabele Unicode). Wynik
-pomiaru z 14.10.2026; `scripts/wasm-build.sh` wypisuje aktualne wartości po każdym buildzie.
-Pierwsze wejście pobiera więc ok. 6–9 MB (zależnie od kompresji serwera), kolejne starty idą
-z cache service workera (lokalnie < 1 s).
+Z tego ok. 26,2 MB to kod, 13,8 MB dane (skompilowany QML, zasoby Qt: czcionki, tabele
+Unicode). Wynik pomiaru z 18.10.2026; `scripts/wasm-build.sh` wypisuje aktualne wartości po
+każdym buildzie. Pierwsze wejście pobiera więc ok. 9–13 MB (zależnie od kompresji serwera),
+kolejne starty idą z cache service workera (lokalnie < 1 s).
+
+Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw edytora, skryptów
+i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
+`brulion.wasm` (−160 008 B po gzip -9, −104 716 B po brotli).
 
 ## Ograniczenia techniczne
 

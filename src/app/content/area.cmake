@@ -25,5 +25,11 @@ qt_target_qml_sources(brulion
         qml/content/ContentNewPageDialog.qml
         qml/content/ContentNoteModeChoice.qml
         qml/content/ContentHighlightText.qml
-        qml/content/ContentJournalsSelfTest.qml
 )
+# Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); JournalsView loads the self-test type
+# either way.
+if(BRULION_DEV_QML_ENABLED)
+    qt_target_qml_sources(brulion QML_FILES qml/content/ContentJournalsSelfTest.qml)
+else()
+    qt_target_qml_sources(brulion QML_FILES qml/stubs/ContentJournalsSelfTest.qml)
+endif()

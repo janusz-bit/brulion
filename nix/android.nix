@@ -262,8 +262,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postInstall
   '';
 
-  # The checks of scripts/android-build.sh: package, permissions, components, Kotlin classes,
-  # the native library, OpenSSL and 16 KB page alignment.
+  # The checks of scripts/android-build.sh: package, permissions, components, Kotlin classes and
+  # Qt's Java classes (R8), the native library, OpenSSL, no QML debugging plugins and 16 KB page
+  # alignment.
   doInstallCheck = true;
   installCheckPhase = ''
     runHook preInstallCheck
@@ -289,6 +290,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     for class in BrulionAndroid BrulionActivity AlarmScheduler ReminderNotifier AlarmActivity BootReceiver; do
       [[ $dex == *"/$class;"* ]] || fail "class $class missing from classes.dex"
     done
+    # R8 (android/settings.gradle) must keep the Java classes C++ calls by name.
+    qtDex=$(unzip -p "$apk" 'classes*.dex' | ${gnugrep}/bin/grep -a -o 'Lorg/qtproject/qt/android/Qt[A-Za-z]*;' | sort -u)
+    for class in QtNative QtActivityBase QtLoader; do
+      [[ $qtDex == *"/$class;"* ]] || fail "Qt's Java class $class missing from classes.dex (android/proguard-rules.pro)"
+    done
+    # ... and the androidx members that Qt's C++ calls (FileProvider.getUriForFile, font download).
+    androidxNames=$(unzip -p "$apk" 'classes*.dex' | LC_ALL=C ${gnugrep}/bin/grep -a -o -E 'getUriForFile|fetchFonts|Landroidx/core/provider/FontRequest;' | sort -u)
+    for name in getUriForFile fetchFonts 'Landroidx/core/provider/FontRequest;'; do
+      ${gnugrep}/bin/grep -qxF "$name" <<<"$androidxNames" || fail "$name missing from classes.dex (android/proguard-rules.pro)"
+    done
     listing=$(unzip -l "$apk")
     [[ $listing == *"lib/${abi}/libbrulion_${abi}.so"* ]] || fail "lib/${abi}/libbrulion_${abi}.so missing"
     ${lib.optionalString (androidOpenssl != null) ''
@@ -296,6 +307,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
         [[ $listing == *"lib/${abi}/$ssl"* ]] || fail "OpenSSL ($ssl) missing: no HTTPS"
       done
     ''}
+    [[ $listing != *libplugins_qmltooling_* ]] || fail "QML debugging plugins (qmltooling) in a release APK"
     ${lib.optionalString withAab ''
       [[ $(unzip -l $out/brulion-${version}-${abi}-unsigned.aab) == *"base/lib/${abi}/libbrulion_${abi}.so"* ]] ||
         fail "the AAB has no base/lib/${abi}/libbrulion_${abi}.so"

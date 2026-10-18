@@ -510,7 +510,14 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
 
 Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appcontroller.h`,
 `src/app/main.cpp`); unknown options are ignored. Headless runs:
-`QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`.
+`QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`. The developer QML behind `--gallery`,
+`--editor` and `--editor-script` (`qml/dev/`, `qml/content/ContentJournalsSelfTest.qml`) is built
+unless the CMake option `BRULION_DEV_QML` (`AUTO`, `ON`, `OFF`) turns it off. `AUTO`, the
+default, leaves it out of the shipped Android and browser builds (Release / MinSizeRel, about
+0.7 MB less) and is decided again on every configure, so a build dir reused for another
+`CMAKE_BUILD_TYPE` follows it. Without it `--editor-script` does nothing (stand-ins from
+`qml/stubs/`) and `--gallery` / `--editor` end at once (exit code 1); the QML tests that need it
+(`tst_editor_qml`, `tst_content_journals_qml`) are left out.
 
 | Option | Effect |
 |---|---|
