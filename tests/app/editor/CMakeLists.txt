@@ -38,6 +38,12 @@ brulion_add_test(tst_editor_picturesize
 # QML directory next to the Qt6Qml package (in Nix builds QtQml lives in its own prefix, which
 # an unwrapped binary does not know). Skipped when that directory cannot be found.
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
+# tst_editor_suggestions' ListView test imports QtQuick: give it Qt's QML directory, as below, so
+# that it does not depend on the caller's environment (it skips when QtQuick cannot be imported).
+if(EXISTS "${_brulion_qt_qml_root}/QtQuick")
+    set_tests_properties(tst_editor_suggestions PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
+endif()
 if(TARGET brulion AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     add_test(NAME tst_editor_qml
         COMMAND brulion --editor --editor-script selftest --no-single-instance

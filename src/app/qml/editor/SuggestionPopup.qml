@@ -117,9 +117,15 @@ T.Popup {
         }
         ListView {
             id: list
+            objectName: "suggestionList"
             width: parent.width
             height: popup.availableHeight - (headerText.visible ? headerText.height : 0)
             clip: true
+            // No rows built ahead of the viewport: a ListView makes those asynchronously, and a
+            // keystroke that resets the model while one is still being made (a slow phone) has
+            // Qt cancel it by its old row ("DelegateModel::cancel: index out range 6 5"); removing
+            // rows instead leaves the view waiting for it. At most `limit` (12) light rows.
+            cacheBuffer: 0
             model: popup.model
             currentIndex: popup.currentIndex
             boundsBehavior: Flickable.StopAtBounds

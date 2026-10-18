@@ -6,8 +6,16 @@
 #include "suggestionmodel.h"
 
 #include <QAbstractItemModelTester>
+#include <QQmlComponent>
+#include <QQmlEngine>
+#include <QQmlIncubationController>
+#include <QQuickItem>
+#include <QQuickWindow>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
+
+#include <memory>
 
 using namespace brulion;
 using namespace brulion::editor;
@@ -29,6 +37,25 @@ QStringList values(const SuggestionModel &m, const QString &key)
     for (int i = 0; i < m.count(); ++i)
         out.append(m.get(i).value(key).toString());
     return out;
+}
+
+/// Incubates asynchronous QML objects only when told to: the delegates a list view builds ahead
+/// of its viewport stay half-made until then, as on a slow phone between two keystrokes.
+class HeldIncubation : public QQmlIncubationController {
+public:
+    void finish()
+    {
+        for (int i = 0; i < 100 && incubatingObjectCount() > 0; ++i)
+            incubateFor(20);
+    }
+};
+
+/// The text of the delegate in row `row` of a ListView (itemAtIndex), or "" without one.
+QString rowText(QQuickItem *view, int row)
+{
+    QQuickItem *item = nullptr;
+    QMetaObject::invokeMethod(view, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, row));
+    return item ? item->property("text").toString() : QString();
 }
 
 } // namespace
@@ -197,6 +224,79 @@ private Q_SLOTS:
         QCOMPARE(m.count(), 0);
         m.setMode(u"nonsense"_s);
         QCOMPARE(m.count(), 0);
+    }
+
+    void listViewWhileTyping_data()
+    {
+        QTest::addColumn<bool>("buffered");
+        QTest::newRow("default cache buffer") << true;
+        QTest::newRow("no cache buffer (the popup)") << false;
+    }
+
+    void listViewWhileTyping()
+    {
+        // A ListView builds the rows below its viewport (its cache buffer) asynchronously, one at
+        // a time. A keystroke that reset the model while one of them was still being built made
+        // Qt cancel it by its old row ("DelegateModel::cancel: index out range 6 5" on the
+        // Android emulator, typing "/przypom"), and a removal of that row instead leaves the view
+        // waiting for it. SuggestionPopup's list has no cache buffer: nothing is ever half-made
+        // when the items change. (Its cacheBuffer is checked by tst_editor_qml.)
+        QFETCH(bool, buffered);
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+        QQmlEngine engine;
+        HeldIncubation incubation;
+        engine.setIncubationController(&incubation);
+        // Three rows in view, the rest below them.
+        const QByteArray qml = "import QtQuick\n"
+                               "ListView {\n"
+                               "    width: 200; height: 60\n"
+                               "    delegate: Text { required property string title\n"
+                               "                     width: 200; height: 20; text: title }\n"
+                               "}\n";
+        QQmlComponent component(&engine);
+        component.setData(qml, QUrl());
+        if (component.isError())
+            QSKIP(qPrintable(u"Qt Quick is not on the QML import path (QML_IMPORT_PATH): "_s
+                             + component.errorString()));
+        SuggestionModel m;
+        m.setTrigger({{u"mode"_s, u"slash"_s}, {u"filter"_s, QString()}, {u"token"_s, u"/"_s}});
+        QVariantMap properties{{u"model"_s, QVariant::fromValue(&m)}};
+        if (!buffered)
+            properties.insert(u"cacheBuffer"_s, 0);
+        QQuickWindow window;
+        window.resize(200, 60);
+        std::unique_ptr<QQuickItem> view(qobject_cast<QQuickItem *>(component.createWithInitialProperties(properties)));
+        QVERIFY(view);
+        view->setParentItem(window.contentItem());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QCOMPARE(rowText(view.get(), 0), titles(m).at(0));
+        if (buffered) {
+            // What the popup avoids: a buffer row being built (the harness sees it).
+            QTRY_VERIFY(incubation.incubatingObjectCount() > 0);
+            incubation.finish();
+            QCOMPARE(incubation.incubatingObjectCount(), 0);
+            return;
+        }
+        QTest::failOnWarning(QRegularExpression(u"DelegateModel"_s));
+        QTest::qWait(100);
+        QCOMPARE(incubation.incubatingObjectCount(), 0);
+        const QStringList typed = {u"p"_s, u"pr"_s, u"prz"_s, u"przy"_s, u"przyp"_s, u"przypom"_s, QString(), u"zad"_s};
+        for (const QString &filter : typed) {
+            m.setFilter(filter);
+            QTest::qWait(30);
+            QCOMPARE(incubation.incubatingObjectCount(), 0);
+            QCOMPARE(view->property("count").toInt(), m.count());
+            for (int i = 0; i < std::min(3, m.count()); ++i)
+                QCOMPARE(rowText(view.get(), i), titles(m).at(i));
+        }
+        QCOMPARE(titles(m).at(0), u"Zadanie"_s);
+        // Scrolling builds the rows as they come into view, at once.
+        m.setFilter(QString());
+        QMetaObject::invokeMethod(view.get(), "positionViewAtEnd");
+        QTest::qWait(30);
+        QCOMPARE(incubation.incubatingObjectCount(), 0);
+        QCOMPARE(rowText(view.get(), m.count() - 1), titles(m).last());
     }
 
     void refreshesOnIndexChange()

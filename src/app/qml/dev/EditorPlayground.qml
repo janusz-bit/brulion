@@ -404,7 +404,13 @@ ApplicationWindow {
                 e.cursorPosition = e.length
                 e.insert(e.length, " [[Rem")
             },
-            () => check(editor.suggestions.visible && editor.suggestions.model.count > 0, "[[ opens page suggestions"),
+            () => {
+                check(editor.suggestions.visible && editor.suggestions.model.count > 0, "[[ opens page suggestions")
+                // Rows built ahead asynchronously and a keystroke resetting the model: Qt warned
+                // "DelegateModel::cancel: index out range" (tst_editor_suggestions).
+                const list = findItem(editor.suggestions.contentItem, "suggestionList") as ListView
+                check(list !== null && list.cacheBuffer === 0, "the suggestion list builds no rows ahead of its viewport")
+            },
             () => { key(Qt.Key_Return) },
             () => check(info(r).plainText.indexOf("Remont kuchni") > 0 && !editor.suggestions.opened, "Enter accepts a suggestion: " + info(r).plainText),
             () => { key(Qt.Key_Escape) },
