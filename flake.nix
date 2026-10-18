@@ -114,7 +114,7 @@
           inherit (pkgs.stdenv.hostPlatform) system;
         in
         {
-          # Builds the app and runs the unit tests (ctest) and the desktop file/AppStream checks.
+          # Builds the app (no unit tests: doCheck = false) and checks the desktop file/AppStream data.
           inherit (self.packages.${system}) brulion;
 
           # The NixOS module evaluates; its nginx config and autostart entry build.

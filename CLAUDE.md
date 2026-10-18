@@ -32,7 +32,7 @@ Read before changing code:
   The script holds a machine-wide lock: only one compilation at a time on this machine.
 * Run the app from the build dir: `./build/src/app/brulion` (`QT_QPA_PLATFORM=offscreen` for
   headless smoke runs; screenshots via the app's `--screenshot` option once it exists).
-* `nix build .#brulion` — the Nix package (runs the tests).
+* `nix build .#brulion` — the Nix package (no tests: `doCheck = false`, so installing never runs them).
 
 ## Resource limits on the dev machine (important)
 

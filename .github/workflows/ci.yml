@@ -1,5 +1,5 @@
 # Checks for every push to main and every pull request:
-#  * nix     — `nix flake check` + `nix build .#brulion` (builds and runs the unit tests) on
+#  * nix     — `nix flake check` + `nix build .#brulion` (builds the package; tests run in linux) on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer, ctest (fast feedback, independent of nixpkgs);
@@ -64,7 +64,7 @@ jobs:
             done
           fi
 
-      - name: nix build .#brulion (builds and runs the unit tests)
+      - name: nix build .#brulion
         run: nix build .#brulion -L --print-out-paths
 
   linux:

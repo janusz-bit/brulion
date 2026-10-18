@@ -264,7 +264,7 @@ scripts/dev-build.sh -t tst_dates tst_dates   # tylko jeden test (cel + regex)
 Polecenia Nixa:
 
 ```sh
-nix build .#brulion -L         # pakiet -> ./result (z testami ctest i walidacją .desktop/AppStream)
+nix build .#brulion -L         # pakiet -> ./result (bez testów; walidacja .desktop/AppStream)
 nix flake check -L             # pakiet, moduł NixOS, formatowanie, test VM (x86_64)
 nix fmt                        # formatowanie plików .nix (nixfmt)
 ```

@@ -1,5 +1,7 @@
 # The Brulion desktop app (Qt 6 from nixpkgs): bin/brulion, desktop entry, AppStream metainfo
-# and icons. `nix build .#brulion` builds it and runs the unit tests (ctest).
+# and icons. `nix build .#brulion` builds it without the unit tests (they run in CI's Linux job
+# and with scripts/dev-build.sh / scripts/remote-build.sh; `brulion.overrideAttrs { doCheck = true; }`
+# turns them on here).
 {
   lib,
   stdenv,
@@ -59,7 +61,7 @@ stdenv.mkDerivation (finalAttrs: {
     patchShebangs tests
   '';
 
-  doCheck = true;
+  doCheck = false;
   preCheck = ''
     export QT_QPA_PLATFORM=offscreen
     export HOME=$TMPDIR

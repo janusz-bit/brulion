@@ -150,7 +150,7 @@ app; these guards keep data from being lost:
   `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
   and worker-thread stack sizes by it (1 otherwise).
 * Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
-  `nix build .#brulion` (builds, runs ctest, validates the desktop file and AppStream
+  `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
   `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check`.
 * Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy) → AppImage x86_64 +
