@@ -423,6 +423,55 @@ private Q_SLOTS:
         QCOMPARE(m.title(), u"Maj 2030"_s);
     }
 
+    void createdFromQmlRebuildsOnce()
+    {
+        // QML sets vaultIndex, mode, today, weekStart and locale one after another while it
+        // creates the model: no rows meanwhile, one rebuild when the component is complete, the
+        // same days as a model given the same properties directly.
+        auto index = makeIndex(
+                {{u"journals/2026-10-15.md"_s, u"- [ ] Zadanie 📅 2026-10-16\n- Spotkanie ⏰ 2026-10-17 10:00\n"_s},
+                 {u"Projekt.md"_s, u"- [ ] Zaległe 📅 2026-10-01\n- [ ] Co tydzień 📅 2026-10-05 🔁 every week\n"_s}});
+        for (const QString &mode : {u"month"_s, u"week"_s, u"agenda"_s}) {
+            CalendarModel direct;
+            direct.setToday(u"2026-10-15"_s);
+            direct.setWeekStart(7);
+            direct.setMode(mode);
+            direct.setVaultIndex(index.get());
+
+            CalendarModel m;
+            QSignalSpy items(&m, &CalendarModel::itemsChanged);
+            m.classBegin();
+            QCOMPARE(m.rowCount(), 0);
+            m.setVaultIndex(index.get());
+            m.setMode(mode);
+            m.setToday(u"2026-10-15"_s);
+            m.setWeekStart(7);
+            m.setLocale(u"pl"_s);
+            QCOMPARE(items.count(), 0);
+            QCOMPARE(m.rowCount(), 0);
+            m.componentComplete();
+            QCOMPARE(items.count(), 1);
+            QCOMPARE(m.rowCount(), direct.rowCount());
+            QCOMPARE(m.rangeStart(), direct.rangeStart());
+            QCOMPARE(m.rangeEnd(), direct.rangeEnd());
+            QCOMPARE(m.overdue(), direct.overdue());
+            for (int r = 0; r < m.rowCount(); ++r) {
+                QCOMPARE(role(m, r, CalendarModel::DateRole), role(direct, r, CalendarModel::DateRole));
+                QCOMPARE(role(m, r, CalendarModel::ItemsRole), role(direct, r, CalendarModel::ItemsRole));
+                QCOMPARE(role(m, r, CalendarModel::KindsRole), role(direct, r, CalendarModel::KindsRole));
+            }
+            // Afterwards every change rebuilds at once.
+            m.setWeekStart(1);
+            QCOMPARE(items.count(), 2);
+        }
+        // Nothing set: the default month comes back when the component is complete.
+        CalendarModel plain;
+        plain.classBegin();
+        QCOMPARE(plain.rowCount(), 0);
+        plain.componentComplete();
+        QCOMPARE(plain.rowCount(), 42);
+    }
+
     void manyEntries()
     {
         // Two years of daily notes and thousands of tasks (some recurring every day, reminders):

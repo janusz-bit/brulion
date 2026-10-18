@@ -103,6 +103,15 @@ QString textWord(const QString &w)
 
 constexpr int kMaxIncrementalOps = 400;
 
+/// The key of a task row, "path:line" — exactly what u"%1:%2"_s.arg(path).arg(line) builds,
+/// without parsing the pattern twice for every row (only a path with '%' can differ).
+QString taskKey(const QString &path, int line)
+{
+    if (path.contains(u'%'))
+        return u"%1:%2"_s.arg(path).arg(line);
+    return path + u':' + QString::number(line);
+}
+
 } // namespace
 
 TaskListModel::TaskListModel(QObject *parent) : QAbstractListModel(parent)
@@ -113,6 +122,18 @@ TaskListModel::TaskListModel(QObject *parent) : QAbstractListModel(parent)
 }
 
 TaskListModel::~TaskListModel() = default;
+
+void TaskListModel::classBegin()
+{
+    m_completing = true;
+}
+
+void TaskListModel::componentComplete()
+{
+    m_completing = false;
+    if (m_rebuildPending)
+        rebuild();
+}
 
 QStringList TaskListModel::sectionKeys()
 {
@@ -145,8 +166,8 @@ QString TaskListModel::sectionOf(const Task &task, QDate today, Qt::DayOfWeek we
     if (task.due && task.due->date < today)
         return u"overdue"_s;
     std::optional<QDate> date;
-    if (const auto d = sectionDate(task))
-        date = d->date;
+    if (const auto dated = sectionDate(task))
+        date = dated->date;
     else if (reminder)
         date = reminder;
     else if (task.start && task.start->date > today)
@@ -228,7 +249,7 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     case SectionLabelRole: return sectionLabel(item.section);
     case SectionCountRole: return m_sectionCounts.value(item.section);
     case CollapsedRole: return false;
-    case KeyRole: return u"%1:%2"_s.arg(item.ref.path).arg(t.line);
+    case KeyRole: return taskKey(item.ref.path, t.line);
     case Qt::DisplayRole:
     case TextRole: return plainText(t.text);
     case HtmlRole:
@@ -264,8 +285,8 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     case ReminderLabelRole: return item.reminder ? humanDate(item.reminder->at, loc, today) : QString();
     case ReminderAlarmRole: return item.reminder && item.reminder->alarm;
     case DoneDateRole: {
-        const auto d = finishedDate(t);
-        return d ? isoDate(*d) : QString();
+        const auto finished = finishedDate(t);
+        return finished ? isoDate(*finished) : QString();
     }
     case CreatedRole: return t.created ? isoDate(*t.created) : QString();
     default: return {};
@@ -337,7 +358,7 @@ void TaskListModel::setVaultIndex(VaultIndex *index)
     if (index)
         m_indexConnection = connect(index, &VaultIndex::changed, this, &TaskListModel::scheduleRefresh);
     Q_EMIT vaultIndexChanged();
-    rebuild();
+    requestRebuild();
 }
 
 QObject *TaskListModel::vaultIndexObject() const
@@ -357,7 +378,7 @@ void TaskListModel::setToday(const QString &today)
     m_todayText = today;
     m_today = parseIsoDate(today);
     Q_EMIT todayChanged();
-    rebuild();
+    requestRebuild();
 }
 
 void TaskListModel::setWeekStart(int weekStart)
@@ -367,7 +388,7 @@ void TaskListModel::setWeekStart(int weekStart)
         return;
     m_weekStart = w;
     Q_EMIT weekStartChanged();
-    rebuild();
+    requestRebuild();
 }
 
 void TaskListModel::setLocale(const QString &locale)
@@ -397,7 +418,7 @@ void TaskListModel::setPalette(const QVariantMap &palette)
 void TaskListModel::filtersEdited()
 {
     Q_EMIT filtersChanged();
-    rebuild();
+    requestRebuild();
 }
 
 void TaskListModel::setTagFilter(const QString &tag)
@@ -474,7 +495,7 @@ void TaskListModel::setSortKey(const QString &key)
     m_sort = k;
     Q_EMIT sortKeyChanged();
     Q_EMIT filtersChanged(); // queryText has the sort
-    rebuild();
+    requestRebuild();
 }
 
 bool TaskListModel::filtered() const
@@ -637,6 +658,10 @@ bool TaskListModel::applyQuery(const QString &query)
         folder.chop(1);
     while (folder.startsWith(u'/'))
         folder.remove(0, 1);
+    // The same filters again (TasksView applies its route when created and when complete).
+    if (tag == m_tag && page.trimmed() == m_page && folder.trimmed() == m_folder && priority == m_priority
+        && status == m_status && text.simplified() == m_text && sort == m_sort)
+        return true;
     const bool sortChanged = sort != m_sort;
     m_tag = tag;
     m_page = page.trimmed();
@@ -648,7 +673,7 @@ bool TaskListModel::applyQuery(const QString &query)
     Q_EMIT filtersChanged();
     if (sortChanged)
         Q_EMIT sortKeyChanged();
-    rebuild();
+    requestRebuild();
     return true;
 }
 
@@ -760,6 +785,14 @@ Qt::DayOfWeek TaskListModel::weekStartDay() const
     return m_index ? m_index->config().weekStartsOn : Qt::Monday;
 }
 
+void TaskListModel::requestRebuild()
+{
+    if (m_completing)
+        m_rebuildPending = true;
+    else
+        rebuild();
+}
+
 void TaskListModel::scheduleRefresh()
 {
     if (m_refreshTimer.interval() == 0)
@@ -771,6 +804,7 @@ void TaskListModel::scheduleRefresh()
 void TaskListModel::rebuild()
 {
     m_refreshTimer.stop();
+    m_rebuildPending = false;
     const QDate today = currentDay();
     const Qt::DayOfWeek ws = weekStartDay();
     QList<Item> items;
@@ -810,52 +844,94 @@ void TaskListModel::rebuild()
         }
     }
 
-    const QStringList keys = sectionKeys();
-    const QString sort = m_sort;
-    std::stable_sort(items.begin(), items.end(), [&](const Item &a, const Item &b) {
-        const auto sa = keys.indexOf(a.section);
-        const auto sb = keys.indexOf(b.section);
-        if (sa != sb)
-            return sa < sb;
-        const Task &ta = a.ref.task;
-        const Task &tb = b.ref.task;
-        if (a.section == u"done") {
-            const auto da = finishedDate(ta);
-            const auto db = finishedDate(tb);
-            if (da != db) {
-                if (da && db)
-                    return *da > *db;
-                return da.has_value();
+    // Sort by keys computed once per task (the comparison runs n log n times): the section's
+    // place, the dates, the priority rank and the page title's place in compareNames() order
+    // (collation keys of the distinct titles, sorted once).
+    const QStringList sections = sectionKeys();
+    const qsizetype done = sections.indexOf(u"done"_s);
+    enum class By { Due, Priority, Created, Page };
+    const By by = m_sort == u"priority"  ? By::Priority
+                  : m_sort == u"created" ? By::Created
+                  : m_sort == u"page"    ? By::Page
+                                         : By::Due;
+    QHash<QString, int> titleRank;
+    {
+        QList<std::pair<QCollatorSortKey, QString>> titles;
+        for (const Item &item : std::as_const(items)) {
+            if (!titleRank.contains(item.pageTitle)) {
+                titleRank.insert(item.pageTitle, 0);
+                titles.append({nameSortKey(item.pageTitle), item.pageTitle});
             }
-        } else if (sort == u"priority") {
-            if (priorityRank(ta.priority) != priorityRank(tb.priority))
-                return priorityRank(ta.priority) < priorityRank(tb.priority);
-        } else if (sort == u"created") {
-            if (ta.created != tb.created) {
-                if (ta.created && tb.created)
-                    return *ta.created > *tb.created;
-                return ta.created.has_value();
-            }
-        } else if (sort == u"page") {
-            const int c = compareNames(a.pageTitle, b.pageTitle);
-            if (c != 0)
-                return c < 0;
-            if (a.ref.path != b.ref.path)
-                return a.ref.path < b.ref.path;
-            return ta.line < tb.line;
         }
-        const auto da = sortDate(ta) ? sortDate(ta) : (a.reminder ? std::optional<DateSpec>(a.reminder->at) : std::nullopt);
-        const auto db = sortDate(tb) ? sortDate(tb) : (b.reminder ? std::optional<DateSpec>(b.reminder->at) : std::nullopt);
-        if (const int c = compareOptionalSpecs(da, db); c != 0)
+        std::sort(titles.begin(), titles.end(), [](const auto &a, const auto &b) {
+            const int c = a.first.compare(b.first);
+            return c != 0 ? c < 0 : QString::compare(a.second, b.second) < 0;
+        });
+        for (int k = 0; k < titles.size(); ++k)
+            titleRank[titles.at(k).second] = k;
+    }
+    struct SortKey {
+        qsizetype section;
+        std::optional<QDate> finished; ///< done section
+        int priority;
+        std::optional<QDate> created;
+        std::optional<DateSpec> date; ///< sort date, else the reminder
+        int title;
+        int item;
+    };
+    QList<SortKey> order;
+    order.reserve(items.size());
+    for (int k = 0; k < items.size(); ++k) {
+        const Item &item = items.at(k);
+        const Task &t = item.ref.task;
+        std::optional<DateSpec> date = sortDate(t);
+        if (!date && item.reminder)
+            date = item.reminder->at;
+        order.append(SortKey{sections.indexOf(item.section), finishedDate(t), priorityRank(t.priority), t.created, date,
+                             titleRank.value(item.pageTitle), k});
+    }
+    std::stable_sort(order.begin(), order.end(), [&](const SortKey &a, const SortKey &b) {
+        if (a.section != b.section)
+            return a.section < b.section;
+        const Item &ia = items.at(a.item);
+        const Item &ib = items.at(b.item);
+        if (a.section == done) {
+            if (a.finished != b.finished) {
+                if (a.finished && b.finished)
+                    return *a.finished > *b.finished;
+                return a.finished.has_value();
+            }
+        } else if (by == By::Priority) {
+            if (a.priority != b.priority)
+                return a.priority < b.priority;
+        } else if (by == By::Created) {
+            if (a.created != b.created) {
+                if (a.created && b.created)
+                    return *a.created > *b.created;
+                return a.created.has_value();
+            }
+        } else if (by == By::Page) {
+            if (a.title != b.title)
+                return a.title < b.title;
+            if (ia.ref.path != ib.ref.path)
+                return ia.ref.path < ib.ref.path;
+            return ia.ref.task.line < ib.ref.task.line;
+        }
+        if (const int c = compareOptionalSpecs(a.date, b.date); c != 0)
             return c < 0;
-        if (priorityRank(ta.priority) != priorityRank(tb.priority))
-            return priorityRank(ta.priority) < priorityRank(tb.priority);
-        if (const int c = compareNames(a.pageTitle, b.pageTitle); c != 0)
-            return c < 0;
-        if (a.ref.path != b.ref.path)
-            return a.ref.path < b.ref.path;
-        return ta.line < tb.line;
+        if (a.priority != b.priority)
+            return a.priority < b.priority;
+        if (a.title != b.title)
+            return a.title < b.title;
+        if (ia.ref.path != ib.ref.path)
+            return ia.ref.path < ib.ref.path;
+        return ia.ref.task.line < ib.ref.task.line;
     });
+    QList<Item> sorted;
+    sorted.reserve(items.size());
+    for (const SortKey &k : std::as_const(order))
+        sorted.append(std::move(items[k.item]));
+    items = std::move(sorted);
 
     m_items = std::move(items);
     m_sectionCounts.clear();
@@ -889,21 +965,25 @@ void TaskListModel::rebuildRows()
             if (m_collapsed.contains(item.section))
                 continue;
             rows.append(Row{false, item.section, i});
-            newKeys.append(u"%1:%2"_s.arg(item.ref.path).arg(item.ref.task.line));
+            newKeys.append(taskKey(item.ref.path, item.ref.task.line));
         }
     }
 
     // Keep the view steady (scroll position, delegates) with row moves/inserts/removes instead of a
     // reset: ticking off a task moves one row. Large reshuffles reset.
     const QStringList &oldKeys = m_rowKeys;
-    const QSet<QString> newSet(newKeys.cbegin(), newKeys.cend());
-    int removals = 0;
-    for (const QString &k : oldKeys)
-        removals += newSet.contains(k) ? 0 : 1;
-    const bool incremental = !m_rows.isEmpty() && oldKeys.size() == m_rows.size()
-                             && removals + std::abs(int(newKeys.size()) - int(oldKeys.size())) < kMaxIncrementalOps
-                             && QSet<QString>(oldKeys.cbegin(), oldKeys.cend()).size() == oldKeys.size()
-                             && newSet.size() == newKeys.size();
+    QSet<QString> newSet; // only needed to update rows that are shown already
+    bool incremental = false;
+    if (!m_rows.isEmpty()) {
+        newSet = QSet<QString>(newKeys.cbegin(), newKeys.cend());
+        int removals = 0;
+        for (const QString &k : oldKeys)
+            removals += newSet.contains(k) ? 0 : 1;
+        incremental = oldKeys.size() == m_rows.size()
+                      && removals + std::abs(int(newKeys.size()) - int(oldKeys.size())) < kMaxIncrementalOps
+                      && QSet<QString>(oldKeys.cbegin(), oldKeys.cend()).size() == oldKeys.size()
+                      && newSet.size() == newKeys.size();
+    }
 
     if (!incremental) {
         beginResetModel();

@@ -24,6 +24,8 @@
 //
 // Rows are section headers and tasks (rowType "header" | "task"); the tasks of collapsed
 // sections are left out, their header stays (with the count). Empty sections have no header.
+// Created from QML, the model builds its rows once, when the component is complete (not once
+// per property set on creation); afterwards every change of a property rebuilds at once.
 //
 // Header roles: rowType, section, sectionLabel, sectionCount, collapsed.
 // Task roles (also on headers, empty): key ("path:line"), text (plain), html (escaped rich
@@ -40,6 +42,7 @@
 #include <QAbstractListModel>
 #include <QDate>
 #include <QPointer>
+#include <QQmlParserStatus>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantMap>
@@ -48,8 +51,9 @@
 
 namespace brulion::planning {
 
-class TaskListModel : public QAbstractListModel {
+class TaskListModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
 
     Q_PROPERTY(QObject *vaultIndex READ vaultIndexObject WRITE setVaultIndexObject NOTIFY vaultIndexChanged FINAL)
     /// Today ("YYYY-MM-DD"); "" = the system clock.
@@ -127,6 +131,10 @@ public:
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
+
+    // QQmlParserStatus: properties set while QML creates the model rebuild once, at the end.
+    void classBegin() override;
+    void componentComplete() override;
 
     VaultIndex *vaultIndex() const;
     void setVaultIndex(VaultIndex *index);
@@ -235,6 +243,8 @@ private:
     QDate currentDay() const;
     Qt::DayOfWeek weekStartDay() const;
     void scheduleRefresh();
+    /// rebuild(), or once when the QML component is complete.
+    void requestRebuild();
     void rebuild();
     void rebuildRows();
     void filtersEdited();
@@ -272,6 +282,8 @@ private:
     int m_vaultTasks = 0;
 
     QTimer m_refreshTimer;
+    bool m_completing = false;     ///< between classBegin() and componentComplete()
+    bool m_rebuildPending = false; ///< a rebuild was requested meanwhile
 };
 
 } // namespace brulion::planning

@@ -87,13 +87,11 @@ QString longLabel(QDate d, dates::UiLocale locale)
             dates::monthName(d.month(), locale, NameForm::Genitive));
 }
 
-/// Is `item` (a Due entry) the written date of its task, not a later occurrence of its series?
-bool isWrittenDue(const VaultIndex *index, const CalendarItem &item)
+/// Is `item` (a Due entry of `note`) the written date of its task, not a later occurrence of its
+/// series?
+bool isWrittenDue(const ParsedNote *note, const CalendarItem &item)
 {
-    if (!item.recurring || !index)
-        return true;
-    const ParsedNote *note = index->note(item.path);
-    if (!note)
+    if (!item.recurring || !note)
         return true;
     for (const Task &t : note->tasks) {
         if (t.line == item.line)
@@ -125,6 +123,36 @@ CalendarModel::CalendarModel(QObject *parent) : QAbstractListModel(parent)
 
 CalendarModel::~CalendarModel() = default;
 
+void CalendarModel::classBegin()
+{
+    m_completing = true;
+    // Nothing is bound to the model yet: no rows until the component is complete, so views
+    // created with it do not make delegates for the days of the constructor first.
+    beginResetModel();
+    m_days.clear();
+    m_rowOf.clear();
+    endResetModel();
+    m_rebuildPending = true;
+    m_resetPending = true;
+}
+
+void CalendarModel::componentComplete()
+{
+    m_completing = false;
+    if (m_rebuildPending)
+        rebuild(m_resetPending);
+}
+
+void CalendarModel::requestRebuild(bool forceReset)
+{
+    if (m_completing) {
+        m_rebuildPending = true;
+        m_resetPending = m_resetPending || forceReset;
+        return;
+    }
+    rebuild(forceReset);
+}
+
 int CalendarModel::rowCount(const QModelIndex &parent) const
 {
     return parent.isValid() ? 0 : int(m_days.size());
@@ -139,30 +167,30 @@ QVariant CalendarModel::data(const QModelIndex &index, int role) const
 
 QVariant CalendarModel::dayData(const Day &day, int role) const
 {
-    const QDate d = day.date;
+    const QDate date = day.date;
     const QDate today = currentDay();
     const dates::UiLocale loc = uiLocale(m_locale);
     switch (role) {
     case Qt::DisplayRole:
-    case DateRole: return isoDate(d);
-    case DayRole: return d.day();
-    case MonthRole: return d.month();
-    case YearRole: return d.year();
-    case DayOfWeekRole: return d.dayOfWeek();
-    case InMonthRole: return m_mode != u"month" || d.month() == anchor().month();
-    case IsTodayRole: return d == today;
-    case IsPastRole: return d < today;
-    case IsWeekendRole: return d.dayOfWeek() >= 6;
-    case IsSelectedRole: return d == anchor();
-    case WeekNumberRole: return d.weekNumber();
+    case DateRole: return isoDate(date);
+    case DayRole: return date.day();
+    case MonthRole: return date.month();
+    case YearRole: return date.year();
+    case DayOfWeekRole: return date.dayOfWeek();
+    case InMonthRole: return m_mode != u"month" || date.month() == anchor().month();
+    case IsTodayRole: return date == today;
+    case IsPastRole: return date < today;
+    case IsWeekendRole: return date.dayOfWeek() >= 6;
+    case IsSelectedRole: return date == anchor();
+    case WeekNumberRole: return date.weekNumber();
     case JournalPathRole: return day.journal;
     case HasJournalRole: return !day.journal.isEmpty();
     case ItemsRole: return day.items;
     case ItemCountRole: return int(day.items.size());
     case TimedCountRole: return day.timed;
     case KindsRole: return day.kinds;
-    case LabelRole: return dates::formatDateShort(d, loc);
-    case LongLabelRole: return longLabel(d, loc);
+    case LabelRole: return dates::formatDateShort(date, loc);
+    case LongLabelRole: return longLabel(date, loc);
     default: return {};
     }
 }
@@ -209,7 +237,7 @@ void CalendarModel::setVaultIndex(VaultIndex *index)
     if (index)
         m_indexConnection = connect(index, &VaultIndex::changed, this, &CalendarModel::scheduleRefresh);
     Q_EMIT vaultIndexChanged();
-    rebuild(true);
+    requestRebuild(true);
 }
 
 QObject *CalendarModel::vaultIndexObject() const
@@ -229,7 +257,7 @@ void CalendarModel::setMode(const QString &mode)
         return;
     m_mode = m;
     Q_EMIT modeChanged();
-    rebuild(true);
+    requestRebuild(true);
 }
 
 QString CalendarModel::anchorDate() const
@@ -239,19 +267,19 @@ QString CalendarModel::anchorDate() const
 
 void CalendarModel::setAnchorDate(const QString &date)
 {
-    const QDate d = parseIsoDate(date);
-    if (!d.isValid() || d == anchor()) {
-        if (d.isValid() && !m_anchor.isValid())
-            m_anchor = d; // pin it (today might change later)
+    const QDate picked = parseIsoDate(date);
+    if (!picked.isValid() || picked == anchor()) {
+        if (picked.isValid() && !m_anchor.isValid())
+            m_anchor = picked; // pin it (today might change later)
         return;
     }
     const QDate old = anchor();
-    m_anchor = d;
+    m_anchor = picked;
     Q_EMIT anchorDateChanged();
-    const auto [from, to] = rangeFor(d);
+    const auto [from, to] = rangeFor(picked);
     if (from == m_rangeStart && to == m_rangeEnd) {
         // Same range: only the selection moves (and inMonth stays — same month in month mode).
-        for (const QDate &x : {old, d}) {
+        for (const QDate &x : {old, picked}) {
             const int row = m_rowOf.value(x, -1);
             if (row >= 0)
                 Q_EMIT dataChanged(createIndex(row, 0), createIndex(row, 0), {IsSelectedRole});
@@ -259,7 +287,7 @@ void CalendarModel::setAnchorDate(const QString &date)
         Q_EMIT rangeChanged(); // showingToday, title stay correct
         return;
     }
-    rebuild(true);
+    requestRebuild(true);
 }
 
 void CalendarModel::setToday(const QString &today)
@@ -272,7 +300,7 @@ void CalendarModel::setToday(const QString &today)
     Q_EMIT todayChanged();
     if (anchor() != oldAnchor)
         Q_EMIT anchorDateChanged(); // an unpinned anchor follows today
-    rebuild(true);
+    requestRebuild(true);
 }
 
 void CalendarModel::setWeekStart(int weekStart)
@@ -282,7 +310,7 @@ void CalendarModel::setWeekStart(int weekStart)
         return;
     m_weekStart = w;
     Q_EMIT weekStartChanged();
-    rebuild(true);
+    requestRebuild(true);
 }
 
 void CalendarModel::setLocale(const QString &locale)
@@ -291,7 +319,7 @@ void CalendarModel::setLocale(const QString &locale)
         return;
     m_locale = locale;
     Q_EMIT localeChanged();
-    rebuild(true);
+    requestRebuild(true);
 }
 
 void CalendarModel::setAgendaDays(int days)
@@ -302,7 +330,7 @@ void CalendarModel::setAgendaDays(int days)
     m_agendaDays = days;
     Q_EMIT agendaDaysChanged();
     if (m_mode == u"agenda")
-        rebuild(true);
+        requestRebuild(true);
 }
 
 void CalendarModel::setRefreshDelay(int msec)
@@ -351,7 +379,7 @@ QString CalendarModel::shortTitle() const
     const bool en = loc == dates::UiLocale::English;
     const QDate a = m_rangeStart;
     const QDate b = m_rangeEnd;
-    const auto month = [loc](QDate d) { return dates::monthName(d.month(), loc, dates::NameForm::Short); };
+    const auto month = [loc](QDate x) { return dates::monthName(x.month(), loc, dates::NameForm::Short); };
     const QString dash = u"–"_s;
     QString out;
     if (a.month() == b.month() && a.year() == b.year())
@@ -396,21 +424,21 @@ void CalendarModel::goToday()
 
 void CalendarModel::moveAnchor(int days)
 {
-    const QDate d = anchor().addDays(days);
-    if (dates::isSupportedDate(d))
-        setAnchorDate(isoDate(d));
+    const QDate target = anchor().addDays(days);
+    if (dates::isSupportedDate(target))
+        setAnchorDate(isoDate(target));
 }
 
 // ---- queries -------------------------------------------------------------------------------
 
 QVariantList CalendarModel::dayItems(const QString &date) const
 {
-    const QDate d = parseIsoDate(date);
+    const QDate on = parseIsoDate(date);
     QVariantList out;
-    if (!d.isValid() || !m_index)
+    if (!on.isValid() || !m_index)
         return out;
     const QDate today = currentDay();
-    const QList<CalendarItem> items = calendarItems(*m_index, d, d);
+    const QList<CalendarItem> items = calendarItems(*m_index, on, on);
     for (const CalendarItem &item : items) {
         if (item.kind == CalendarItem::Journal) {
             out.prepend(QVariantMap{
@@ -523,8 +551,9 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
 {
     const bool isTask = item.kind != CalendarItem::Reminder || item.status.has_value();
     const bool closed = item.status && isClosed(*item.status);
-    const bool overdue = item.kind == CalendarItem::Due && !closed && item.status && item.date < today
-                         && isWrittenDue(m_index.data(), item);
+    const ParsedNote *note = m_index ? m_index->note(item.path) : nullptr;
+    const bool overdue =
+            item.kind == CalendarItem::Due && !closed && item.status && item.date < today && isWrittenDue(note, item);
     QString variant;
     switch (item.kind) {
     case CalendarItem::Journal: variant = u"neutral"_s; break;
@@ -534,7 +563,6 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
     case CalendarItem::Reminder: variant = closed ? u"done"_s : item.alarm ? u"alarm"_s : u"reminder"_s; break;
     case CalendarItem::Done: variant = u"done"_s; break;
     }
-    const ParsedNote *note = m_index ? m_index->note(item.path) : nullptr;
     const QString time = clockTime(item.time);
     return QVariantMap{
             {u"key"_s, u"%1:%2:%3:%4"_s.arg(kindName(item.kind), item.path).arg(item.line).arg(time)},
@@ -560,6 +588,8 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
 
 void CalendarModel::rebuild(bool forceReset)
 {
+    m_rebuildPending = false;
+    m_resetPending = false;
     const QDate today = currentDay();
     const auto [from, to] = rangeFor(anchor());
     const bool rangeMoved = from != m_rangeStart || to != m_rangeEnd;
@@ -597,10 +627,10 @@ void CalendarModel::rebuild(bool forceReset)
     }
 
     QList<Day> days;
-    for (QDate d = from; d.isValid() && d <= to; d = d.addDays(1)) {
-        Day day = byDate.value(d);
-        day.date = d;
-        if (m_mode == u"agenda" && day.items.isEmpty() && day.journal.isEmpty() && d != today)
+    for (QDate date = from; date.isValid() && date <= to; date = date.addDays(1)) {
+        Day day = byDate.value(date);
+        day.date = date;
+        if (m_mode == u"agenda" && day.items.isEmpty() && day.journal.isEmpty() && date != today)
             continue;
         days.append(day);
     }

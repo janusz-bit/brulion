@@ -324,7 +324,9 @@ QString queryValue(const QString &value)
     return u'"' + inner + u'"';
 }
 
-int compareNames(const QString &a, const QString &b)
+namespace {
+
+const QCollator &nameCollator()
 {
     static thread_local QCollator collator = [] {
         QCollator c{QLocale(QLocale::Polish, QLocale::Poland)};
@@ -332,8 +334,20 @@ int compareNames(const QString &a, const QString &b)
         c.setNumericMode(true);
         return c;
     }();
-    const int r = collator.compare(a, b);
+    return collator;
+}
+
+} // namespace
+
+int compareNames(const QString &a, const QString &b)
+{
+    const int r = nameCollator().compare(a, b);
     return r != 0 ? r : QString::compare(a, b);
+}
+
+QCollatorSortKey nameSortKey(const QString &name)
+{
+    return nameCollator().sortKey(name);
 }
 
 } // namespace brulion::planning

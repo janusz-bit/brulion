@@ -8,6 +8,7 @@
 #include "markdown/inlinerenderer.h"
 #include "types.h"
 
+#include <QCollator>
 #include <QDate>
 #include <QDateTime>
 #include <QString>
@@ -100,5 +101,9 @@ QString queryValue(const QString &value);
 
 /// Locale-aware, case- and diacritic-insensitive comparison of names (Polish collation).
 int compareNames(const QString &a, const QString &b);
+/// The collation key of a name for sorting many: the sign of
+/// `nameSortKey(a).compare(nameSortKey(b))`, then QString::compare(a, b) when that is 0, is the
+/// sign of compareNames(a, b).
+QCollatorSortKey nameSortKey(const QString &name);
 
 } // namespace brulion::planning

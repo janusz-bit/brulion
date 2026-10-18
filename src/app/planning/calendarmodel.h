@@ -28,7 +28,8 @@
 // The model watches the index (debounced by refreshDelay ms; refresh() rebuilds at once).
 // `today` "" follows the system clock (re-evaluated at midnight). `weekStart` 0 takes the
 // vault's weekStartsOn. Everything is local wall-clock dates (QDate arithmetic, never UTC), so
-// DST changes cannot shift a day.
+// DST changes cannot shift a day. Created from QML, the model builds its days once, when the
+// component is complete (not once per property set on creation).
 #pragma once
 
 #include "reminders/calendar.h"
@@ -38,6 +39,7 @@
 #include <QDate>
 #include <QHash>
 #include <QPointer>
+#include <QQmlParserStatus>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
@@ -50,8 +52,9 @@ class VaultIndex;
 
 namespace brulion::planning {
 
-class CalendarModel : public QAbstractListModel {
+class CalendarModel : public QAbstractListModel, public QQmlParserStatus {
     Q_OBJECT
+    Q_INTERFACES(QQmlParserStatus)
 
     /// The VaultIndex to read (QObject* so QML can pass PlanningContext.vaultIndex).
     Q_PROPERTY(QObject *vaultIndex READ vaultIndexObject WRITE setVaultIndexObject NOTIFY vaultIndexChanged FINAL)
@@ -130,6 +133,10 @@ public:
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
+
+    // QQmlParserStatus: properties set while QML creates the model rebuild once, at the end.
+    void classBegin() override;
+    void componentComplete() override;
 
     VaultIndex *vaultIndex() const;
     void setVaultIndex(VaultIndex *index);
@@ -214,6 +221,8 @@ private:
     /// [first, last] of the range for `anchor` in the current mode.
     std::pair<QDate, QDate> rangeFor(QDate anchor) const;
     void scheduleRefresh();
+    /// rebuild(forceReset), or once when the QML component is complete.
+    void requestRebuild(bool forceReset);
     void rebuild(bool forceReset);
     QVariantMap itemMap(const CalendarItem &item, QDate today) const;
     QVariant dayData(const Day &day, int role) const;
@@ -243,6 +252,9 @@ private:
 
     QTimer m_refreshTimer;
     QTimer m_midnightTimer;
+    bool m_completing = false;     ///< between classBegin() and componentComplete()
+    bool m_rebuildPending = false; ///< a rebuild was requested meanwhile
+    bool m_resetPending = false;   ///< … with forceReset
 };
 
 } // namespace brulion::planning

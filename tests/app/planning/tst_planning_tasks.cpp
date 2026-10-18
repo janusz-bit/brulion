@@ -5,6 +5,7 @@
 // rendered text, choices for the filter menus, and incremental row updates.
 #include "index/query.h"
 #include "planningtest.h"
+#include "planningutil.h"
 #include "tasklistmodel.h"
 
 #include <QAbstractItemModelTester>
@@ -321,6 +322,134 @@ private Q_SLOTS:
         QCOMPARE(m.sortKey(), u"due"_s);
     }
 
+    void pageTitlesSortLikeCompareNames()
+    {
+        // Tasks that tie on date and priority are ordered by page title (Polish collation:
+        // case- and diacritic-aware, numbers by value), then path and line — in the due and the
+        // page sort alike.
+        const QStringList titles{u"Żaba"_s,      u"zebra"_s,  u"Ćma"_s,    u"cma"_s,    u"Strona 2"_s, u"Strona 10"_s,
+                                 u"strona 2b"_s, u"Ąb"_s,     u"ab"_s,     u"Ab"_s,     u"Łódź"_s,     u"lody"_s,
+                                 u"Ośrodek"_s,   u"osa"_s,    u"Ń"_s,      u"ń2"_s,     u"20 lat"_s,   u"3 dni"_s,
+                                 u"Źródło"_s,    u"zrodlo"_s, u"Ślimak"_s, u"slimak"_s, u"ęa"_s,       u"Ea"_s};
+        brulion::planning::test::Files files;
+        for (int k = 0; k < titles.size(); ++k) {
+            files.append(
+                    {u"Folder %1/%2.md"_s.arg(k % 3).arg(titles.at(k)),
+                     u"- [ ] Pierwsze 📅 2026-10-20\n- [ ] Drugie 📅 2026-10-20\n- [x] Zrobione ✅ 2026-10-10\n"_s});
+        }
+        auto index = makeIndex(files);
+        for (const QString &sort : {u"due"_s, u"page"_s, u"priority"_s}) {
+            TaskListModel m;
+            m.setToday(u"2026-10-15"_s);
+            m.setSortKey(sort);
+            m.setCollapsedSections({});
+            m.setVaultIndex(index.get());
+            QCOMPARE(m.totalCount(), 3 * int(titles.size()));
+            const auto text = [&](int row, TaskListModel::Role role) {
+                return m.data(m.index(row, 0), role).toString();
+            };
+            const auto ordered = [&](int a, int b) { // title, then path, then line
+                if (const int c = brulion::planning::compareNames(text(a, TaskListModel::PageTitleRole),
+                                                                  text(b, TaskListModel::PageTitleRole));
+                    c != 0)
+                    return c < 0;
+                if (text(a, TaskListModel::PathRole) != text(b, TaskListModel::PathRole))
+                    return text(a, TaskListModel::PathRole) < text(b, TaskListModel::PathRole);
+                return text(a, TaskListModel::LineRole).toInt() < text(b, TaskListModel::LineRole).toInt();
+            };
+            for (int r = 1; r < m.rowCount(); ++r) {
+                if (text(r - 1, TaskListModel::RowTypeRole) != u"task"_s
+                    || text(r, TaskListModel::RowTypeRole) != u"task"_s
+                    || text(r - 1, TaskListModel::SectionRole) != text(r, TaskListModel::SectionRole))
+                    continue;
+                QVERIFY2(ordered(r - 1, r),
+                         qPrintable(u"%1: %2 (%3) before %4 (%5)"_s.arg(
+                                 sort, text(r - 1, TaskListModel::PageTitleRole), text(r - 1, TaskListModel::PathRole),
+                                 text(r, TaskListModel::PageTitleRole), text(r, TaskListModel::PathRole))));
+            }
+        }
+    }
+
+    void nameSortKeysOrderLikeCompareNames()
+    {
+        const QStringList names{u"Żaba"_s,      u"zebra"_s, u"Ćma"_s,  u"cma"_s,  u"Strona 2"_s, u"Strona 10"_s,
+                                u"strona 02"_s, u"Ąb"_s,    u"ab"_s,   u"Ab"_s,   u"AB"_s,       u"Łódź"_s,
+                                u"lodz"_s,      u"Ń"_s,     u"n"_s,    QString(), u" "_s,        u"20 lat"_s,
+                                u"3 dni"_s,     u"a1b"_s,   u"a01b"_s, u"é"_s,    u"e\u0301"_s,  u"Ölüdeniz"_s,
+                                u"ß"_s,         u"ss"_s,    u"日本"_s, u"🙂"_s};
+        const auto sign = [](int v) { return v < 0 ? -1 : v > 0 ? 1 : 0; };
+        for (const QString &a : names) {
+            for (const QString &b : names) {
+                int byKey = brulion::planning::nameSortKey(a).compare(brulion::planning::nameSortKey(b));
+                if (byKey == 0)
+                    byKey = QString::compare(a, b);
+                QVERIFY2(sign(byKey) == sign(brulion::planning::compareNames(a, b)), qPrintable(a + u" / "_s + b));
+            }
+        }
+    }
+
+    void taskKeys()
+    {
+        // "path:line" as u"%1:%2"_s.arg(path).arg(line) builds it — also for paths with '%'.
+        auto index = makeIndex({{u"Zwykła strona.md"_s, u"- [ ] A\n"_s},
+                                {u"100% gotowe.md"_s, u"Wstęp\n\n- [ ] B\n"_s},
+                                {u"a%1b%2.md"_s, u"- [ ] C\n- [ ] D\n"_s}});
+        TaskListModel m;
+        m.setToday(u"2026-10-15"_s);
+        m.setVaultIndex(index.get());
+        QCOMPARE(m.totalCount(), 4);
+        for (int r = 0; r < m.rowCount(); ++r) {
+            const QModelIndex i = m.index(r, 0);
+            if (m.data(i, TaskListModel::RowTypeRole) != u"task"_s)
+                continue;
+            const QString key = m.data(i, TaskListModel::KeyRole).toString();
+            QCOMPARE(key, u"%1:%2"_s.arg(m.data(i, TaskListModel::PathRole).toString())
+                                  .arg(m.data(i, TaskListModel::LineRole).toInt()));
+            QCOMPARE(m.rowOfKey(key), r);
+        }
+        QCOMPARE(m.rowOfKey(u"Zwykła strona.md:0"_s) >= 0, true);
+    }
+
+    void createdFromQmlRebuildsOnce()
+    {
+        // QML sets vaultIndex, today, weekStart, locale and palette one after another while it
+        // creates the model: one rebuild when the component is complete, the same rows as a
+        // model given the same properties directly.
+        auto index = makeIndex(vault());
+        TaskListModel direct;
+        direct.setToday(u"2026-10-15"_s);
+        direct.setWeekStart(7);
+        direct.setVaultIndex(index.get());
+
+        TaskListModel m;
+        QSignalSpy counts(&m, &TaskListModel::countsChanged);
+        m.classBegin();
+        m.setVaultIndex(index.get());
+        m.setToday(u"2026-10-15"_s);
+        m.setWeekStart(7);
+        m.setLocale(u"pl"_s);
+        m.setPalette({{u"link"_s, u"#123456"_s}});
+        QCOMPARE(counts.count(), 0);
+        QCOMPARE(m.rowCount(), 0);
+        m.componentComplete();
+        QCOMPARE(counts.count(), 1);
+        QCOMPARE(column(m, TaskListModel::KeyRole, false), column(direct, TaskListModel::KeyRole, false));
+        QCOMPARE(sectionKeys(m), sectionKeys(direct));
+        // Afterwards every change rebuilds at once.
+        m.setTagFilter(u"praca"_s);
+        QCOMPARE(counts.count(), 2);
+        direct.setTagFilter(u"praca"_s);
+        QCOMPARE(column(m, TaskListModel::KeyRole, false), column(direct, TaskListModel::KeyRole, false));
+
+        // Nothing set while it was created: nothing to build.
+        TaskListModel empty;
+        QSignalSpy emptyCounts(&empty, &TaskListModel::countsChanged);
+        empty.classBegin();
+        empty.componentComplete();
+        QCOMPARE(emptyCounts.count(), 0);
+        QCOMPARE(empty.rowCount(), 0);
+    }
+
     void applyQuery()
     {
         auto index = makeIndex(vault());
@@ -345,6 +474,16 @@ private Q_SLOTS:
         // Broken queries change nothing.
         QVERIFY(!m.applyQuery(u"due:<=jutrzejszy"_s));
         QCOMPARE(m.totalCount(), 1);
+        // The same filters again (a view applies its route twice): nothing to rebuild.
+        QSignalSpy counts(&m, &TaskListModel::countsChanged);
+        QSignalSpy filters(&m, &TaskListModel::filtersChanged);
+        QVERIFY(m.applyQuery(u"path:Projekty/Dom/ priority:high farbę"_s));
+        QCOMPARE(counts.count(), 0);
+        QCOMPARE(filters.count(), 0);
+        QCOMPARE(m.totalCount(), 1);
+        QVERIFY(m.applyQuery(u"path:Projekty/Dom/ priority:high farbę sort:page"_s)); // the sort differs
+        QCOMPARE(counts.count(), 1);
+        QCOMPARE(m.sortKey(), u"page"_s);
     }
 
     void choices()
