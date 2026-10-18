@@ -15,6 +15,10 @@ import Brulion
 // size:         "small" | "normal" (default)
 // It is a real TextField: text, accepted(), validator, inputMethodHints … all work.
 // Accessible name: `accessibleName`, else the placeholder text.
+// Touch keyboards: the action key is Done (Enter: accepted()). Qt's own default on Android
+// (QQuickTextInput, QTBUG-61652) is Next — a Tab to whatever focusable item lies below, a button
+// as well — whenever there is one, so Enter/accepted() never came there. In a form, set
+// `EnterKey.type: Qt.EnterKeyNext` on the fields that lead to another field.
 T.TextField {
     id: control
 
@@ -56,6 +60,7 @@ T.TextField {
     font.pixelSize: Theme.textControl
     selectByMouse: true
     hoverEnabled: !Theme.touchUi
+    EnterKey.type: Qt.EnterKeyDone
 
     Accessible.role: Accessible.EditableText
     Accessible.name: accessibleName

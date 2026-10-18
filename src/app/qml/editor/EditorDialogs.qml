@@ -123,6 +123,7 @@ Item {
         const parts = DatesHelper.splitSpec(current)
         const dateDialog = datePopup()
         const picker = dateDialog.picker
+        picker.clearTyped()
         dateDialog.title = which === "scheduled" ? qsTr("Scheduled") : which === "start" ? qsTr("Start date") : qsTr("Due date")
         dateDialog.iconName = which === "scheduled" ? "hourglass" : "calendar"
         picker.selectedDate = parts.ok ? parts.date : DatesHelper.addDays(DatesHelper.today, 1)
@@ -139,6 +140,7 @@ Item {
         mode = "journal"
         const dateDialog = datePopup()
         const picker = dateDialog.picker
+        picker.clearTyped()
         dateDialog.title = qsTr("Link to a day")
         dateDialog.iconName = "calendar-days"
         picker.selectedDate = DatesHelper.today
@@ -219,7 +221,8 @@ Item {
             parent: T.Overlay.overlay
             preferredWidth: Theme.dialogWidthSm + 40
             acceptText: root.mode === "journal" ? qsTr("Insert") : qsTr("Save")
-            acceptEnabled: picker.selectedDate !== ""
+            // A recognised typed date counts before it is confirmed (commitPending()).
+            acceptEnabled: (picker.selectedDate !== "" || picker.natural.ok) && !picker.timeInvalid
             footerLeading: [
                 BButton {
                     visible: dateDialog.removable
@@ -235,6 +238,7 @@ Item {
                     }
                 }
             ]
+            onAcceptRequested: picker.commitPending()
             onAccepted: {
                 const r = root.blockRow()
                 if (r >= 0 && root.mode === "journal")
@@ -248,6 +252,7 @@ Item {
             BDatePicker {
                 id: picker
                 Layout.fillWidth: true
+                applyTypedOnFocusLoss: true
                 onPicked: (value) => {
                     const s = DatesHelper.splitSpec(value)
                     if (s.ok) {

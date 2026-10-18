@@ -483,6 +483,13 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   `onLongPressed`); a right-click `TapHandler` also sets `acceptedDevices: PointerDevice.Mouse |
   PointerDevice.TouchPad | PointerDevice.Stylus` — Qt hands finger touches (no buttons) to a
   TapHandler whatever its `acceptedButtons`, so without it every tap opened the menu.
+  Touch keyboards: `BTextField` asks for the action key Done (`EnterKey.type: Qt.EnterKeyDone`).
+  Qt on Android otherwise shows Next whenever something focusable lies below a field, and Next
+  only moves the focus: Enter and `accepted()` never arrive. Forms whose fields lead to the next
+  one (Nextcloud, Syncthing) set `EnterKey.type: Qt.EnterKeyNext` on those fields. `BDatePicker`
+  applies a typed date or time on Enter, when the field loses focus
+  (`applyTypedOnFocusLoss`), when the keyboard is hidden and on Save (`commitPending()`, called
+  from `BDialog.acceptRequested`); an invalid time keeps the dialog open with its hint.
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers

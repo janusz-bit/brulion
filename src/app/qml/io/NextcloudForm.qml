@@ -109,6 +109,7 @@ IoCard {
                 accessibleName: qsTr("Server address")
                 leadingIcon: "server"
                 inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                EnterKey.type: Qt.EnterKeyNext // on to the user name (touch keyboards)
                 errorText: form.setup.urlError
                 onTextEdited: {
                     form.setup.url = text
@@ -125,6 +126,7 @@ IoCard {
                 accessibleName: qsTr("User name")
                 leadingIcon: "at-sign"
                 inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                EnterKey.type: Qt.EnterKeyNext // on to the password
                 errorText: form.setup.userError
                 onTextEdited: {
                     form.setup.user = text

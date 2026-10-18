@@ -23,6 +23,9 @@ import Brulion
 // "Usuń" button). Escape, a click on the scrim, the × button, dragging the sheet down
 // and Android back all reject. Ctrl+Enter accepts. Focus moves to `initialFocusItem` (or
 // the dialog) on open and returns to the previously focused item on close.
+// acceptRequested() comes first when the accept button or Ctrl+Enter asks to accept: apply
+// text still being typed there (a field keeps the focus with Ctrl+Enter or a touch keyboard);
+// `acceptEnabled` is checked again afterwards (onAcceptRequested: picker.commitPending()).
 T.Dialog {
     id: control
 
@@ -52,7 +55,12 @@ T.Dialog {
     readonly property real safeTop: parent && parent.SafeArea ? parent.SafeArea.margins.top : 0
     property real dragOffset: 0
 
+    signal acceptRequested()
+
     function tryAccept() {
+        if (!acceptEnabled || busy)
+            return
+        acceptRequested()
         if (acceptEnabled && !busy)
             accept()
     }

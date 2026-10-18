@@ -18,7 +18,8 @@ import Brulion
 // Result: at = "YYYY-MM-DD HH:mm" (local wall-clock time), alarm = bool, recurrence =
 // canonical English rule written into the file ("every week on Monday", via
 // DatesHelper.formatRule(rule, "en")) or "" — the UI shows the rule in the UI language.
-// Quick picks: in 10 min, in an hour, today 19:00, tomorrow 8:00, Monday 9:00.
+// Quick picks: in 10 min, in an hour, today 19:00, tomorrow 8:00, Monday 9:00. A date or time
+// typed but not yet confirmed (no Enter / Done) applies when its field is left and on Save.
 BDialog {
     id: control
 
@@ -150,7 +151,7 @@ BDialog {
     subtitle: context
     preferredWidth: Theme.dialogWidthLg
     acceptText: qsTr("Save")
-    acceptEnabled: valid
+    acceptEnabled: valid && !picker.timeInvalid
     initialFocusItem: null
 
     footerLeading: [
@@ -168,6 +169,9 @@ BDialog {
         }
     ]
 
+    // What is still typed in the picker counts (the field may keep the focus: Ctrl+Enter, a
+    // touch keyboard's Save tap).
+    onAcceptRequested: picker.commitPending()
     onAccepted: reminderAccepted({ at: control.at, alarm: control.alarm, recurrence: control.canonicalRule })
 
     // Summary of the chosen moment (shown at the top of the single-column layout and at
@@ -254,8 +258,11 @@ BDialog {
                 Layout.fillWidth: true
                 withTime: true
                 timeRequired: true
+                applyTypedOnFocusLoss: true
                 marks: control.marks
+                // Opening, a quick pick: the dialog's moment replaces whatever was typed.
                 function syncFromDialog() {
+                    clearTyped()
                     selectedDate = control.atDate
                     time = control.atTime
                     if (control.atDate !== "") {

@@ -302,6 +302,9 @@ ApplicationWindow {
     property string textBefore: ""
     property real headerBefore: 0
     property real tableBefore: 0
+    /// The date picker's fields in the reminder / date dialog (typed dates and times).
+    property BTextField dateField: null
+    property BTextField timeField: null
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
     function check(ok, what) {
@@ -546,6 +549,96 @@ ApplicationWindow {
             },
             () => { page.save() },
             () => check(!page.dirty && host.file(page.path).indexOf("[[Remont kuchni]]") > 0, "saved to the host"),
+            // ---- Dates and times typed in the dialogs count without their own Enter ------------
+            // (Android's keyboard showed Next, a Tab, as the action key of these fields, so Enter
+            // never came; a time typed but not confirmed was dropped on Save.)
+            () => {
+                window.realRow = page.insertBlockAfter(rowOf("Ekipa może"), "Odebrać paczkę z paczkomatu")
+                page.stopEditing()
+                editor.dialogs.createReminder(window.realRow, false)
+                window.waits = 0
+            },
+            () => {
+                const d = editor.dialogs.reminderDialog
+                // Opening takes its transition (it then focuses the dialog): wait for it.
+                if (!d.opened && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                window.dateField = findItem(d.contentItem, "datePickerNatural") as BTextField
+                window.timeField = findItem(d.contentItem, "datePickerTime") as BTextField
+                check(d.opened && window.dateField !== null && window.timeField !== null && d.at === "2026-10-16 09:00",
+                      "the reminder dialog has its date and time fields: " + d.at)
+                check(window.dateField !== null && window.dateField.EnterKey.type === Qt.EnterKeyDone
+                      && window.timeField !== null && window.timeField.EnterKey.type === Qt.EnterKeyDone,
+                      "the fields' keyboard action key is Done (Enter), not Next")
+                window.dateField.forceActiveFocus()
+            },
+            () => typeKeys("za 2 minuty"),
+            () => check(window.dateField.text === "za 2 minuty" && editor.dialogs.reminderDialog.at === "2026-10-16 09:00",
+                        "a typed date waits for Enter: " + editor.dialogs.reminderDialog.at),
+            () => realKey(Qt.Key_Return),
+            () => check(editor.dialogs.reminderDialog.at === "2026-10-15 10:02" && window.dateField.text === "",
+                        "Enter (the keyboard's Done) applies the typed date: " + editor.dialogs.reminderDialog.at),
+            () => typeKeys("jutro 18:30"),
+            () => window.timeField.forceActiveFocus(),
+            () => check(editor.dialogs.reminderDialog.at === "2026-10-16 18:30" && window.dateField.text === "",
+                        "leaving the field applies the typed date: " + editor.dialogs.reminderDialog.at),
+            () => { window.timeField.selectAll(); typeKeys("2346") },
+            () => check(window.timeField.activeFocus && editor.dialogs.reminderDialog.at === "2026-10-16 18:30",
+                        "a typed time waits while its field has the focus"),
+            // Save with the focus still in the field (Ctrl+Enter; a touch keyboard's Save tap).
+            () => editor.dialogs.reminderDialog.tryAccept(),
+            () => {
+                const line = page.sourceText.split("\n").find(l => l.indexOf("Odebrać paczkę z paczkomatu") >= 0) || ""
+                check(!editor.dialogs.reminderDialog.opened && line.indexOf("⏰ 2026-10-16 23:46") > 0,
+                      "Save applies the typed time: " + line)
+            },
+            () => { editor.dialogs.createReminder(window.realRow, false); window.waits = 0 },
+            () => {
+                if (!editor.dialogs.reminderDialog.opened && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                window.timeField.forceActiveFocus()
+                window.timeField.selectAll()
+                typeKeys("25:99")
+            },
+            () => editor.dialogs.reminderDialog.tryAccept(),
+            () => check(editor.dialogs.reminderDialog.opened && !editor.dialogs.reminderDialog.acceptEnabled
+                        && window.timeField.text === "25:99", "a typed time that is none keeps the dialog open"),
+            () => window.dateField.forceActiveFocus(),
+            () => check(window.timeField.text === "25:99" && !editor.dialogs.reminderDialog.acceptEnabled,
+                        "it stays in its field with the hint after leaving it"),
+            () => { window.timeField.forceActiveFocus(); window.timeField.selectAll(); typeKeys("7") },
+            () => realKey(Qt.Key_Return),
+            () => check(editor.dialogs.reminderDialog.at === "2026-10-16 07:00" && editor.dialogs.reminderDialog.acceptEnabled,
+                        "Enter in the time field applies a valid time: " + editor.dialogs.reminderDialog.at),
+            () => editor.dialogs.reminderDialog.close(),
+            // The due-date dialog: a typed date counts on Save.
+            () => { editor.dialogs.pickDate(window.realRow, "due"); window.waits = 0 },
+            () => {
+                if (!editor.dialogs.dateDialog.opened && window.waits++ < 50) {
+                    window.stepIndex -= 1
+                    return
+                }
+                window.dateField = findItem(editor.dialogs.dateDialog.contentItem, "datePickerNatural") as BTextField
+                if (window.dateField)
+                    window.dateField.forceActiveFocus()
+            },
+            () => typeKeys("w sobotę"),
+            () => editor.dialogs.dateDialog.tryAccept(),
+            () => {
+                const line = page.sourceText.split("\n").find(l => l.indexOf("Odebrać paczkę z paczkomatu") >= 0) || ""
+                check(!editor.dialogs.dateDialog.opened && line.indexOf("📅 2026-10-17") > 0,
+                      "the date dialog's Save applies the typed date: " + line)
+            },
+            () => editor.dialogs.pickRecurrence(window.realRow),
+            () => {
+                const field = editor.dialogs.recurrenceDialog.ruleField as BTextField
+                check(field !== null && field.EnterKey.type === Qt.EnterKeyDone, "the recurrence rule's action key is Done")
+                editor.dialogs.recurrenceDialog.close()
+            },
             // ---- Live query results: tasks from the vault, checkable in their own files ----------
             () => {
                 const row = viewRow("query")

@@ -256,6 +256,7 @@ ColumnLayout {
                     placeholderText: setup.defaultUrl
                     accessibleName: qsTr("Syncthing address")
                     inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    EnterKey.type: Qt.EnterKeyNext // on to the API key (touch keyboards)
                     errorText: setup.urlError
                     onTextEdited: setup.url = text
                 }

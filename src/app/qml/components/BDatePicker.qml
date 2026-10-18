@@ -14,14 +14,19 @@ import Brulion
 //
 // * Natural-language field (showNaturalInput): "jutro o 9", "w piątek 18:00", "next monday"
 //   (Polish + English via DatesHelper.parseNatural) with a live preview "→ czw, 15 paź
-//   09:00"; Enter applies it.
+//   09:00"; Enter (the keyboard's action key: Done) applies it, and with applyTypedOnFocusLoss
+//   also leaving the field or hiding the touch keyboard.
 // * Month grid: names from DatesHelper (UI locale), week starts on `weekStart` (default
 //   DatesHelper.weekStart, Monday), today marked with a red ring, selected day filled,
 //   days of other months faint, `marks` (date -> kinds) as coloured dots: due, overdue,
 //   scheduled, reminder, alarm, journal, done (Theme.markColor).
 // * Keyboard (grid focused): arrows ±1 day / ±1 week, PageUp/PageDown ±1 month (with Shift
 //   ±1 year), Home/End start/end of week, T today, Enter/Space select.
-// * Time (withTime): "9", "930", "18.30" are normalised to "HH:mm" when editing finishes.
+// * Time (withTime): "9", "930", "18.30" are normalised to "HH:mm" when editing finishes (Enter,
+//   Done, leaving the field, hiding the touch keyboard); a time that is not one stays in the
+//   field with a hint (timeInvalid).
+// * In a dialog with an OK button, call commitPending() before accepting: it applies what is
+//   still being typed (the field may keep the focus on OK: Ctrl+Enter, a touch keyboard).
 //
 // Properties are strings ("YYYY-MM-DD", "HH:mm") — no JavaScript Date (UTC pitfalls).
 // value = "YYYY-MM-DD" or "YYYY-MM-DD HH:mm"; picked(value) is emitted for user changes.
@@ -44,6 +49,14 @@ T.Control {
     property string focusDate
     /// Text of the natural-language field (e.g. to prefill it).
     property alias naturalText: naturalField.text
+    /// A recognised date in the natural-language field is also applied when the field loses
+    /// focus (the user moved on to the time, a switch, OK) — for pickers inside a dialog with an
+    /// OK button, where Cancel throws the draft away anyway. Off where a pick acts at once
+    /// (JournalsView's "Go to day": leaving the field must not navigate).
+    property bool applyTypedOnFocusLoss: false
+    /// The time field holds text that is not a 24-hour time (its hint is shown); a dialog should
+    /// not accept then.
+    readonly property bool timeInvalid: withTime && timeField.invalid
 
     readonly property string value: selectedDate === "" ? ""
                                   : (withTime && time !== "" ? selectedDate + " " + time : selectedDate)
@@ -99,11 +112,42 @@ T.Control {
     function focusGrid() {
         grid.forceActiveFocus(Qt.TabFocusReason)
     }
+    /// Apply what is still being typed, as Enter would: a recognised date in the
+    /// natural-language field, then a changed time in the time field. Returns false when the
+    /// typed time is not valid (it stays in the field with its hint).
+    function commitPending() {
+        if (natural.ok)
+            applyNatural()
+        return withTime ? timeField.commitTyped() : true
+    }
+    /// Forget typed text (natural-language field, an invalid time) — when a dialog opens anew.
+    function clearTyped() {
+        naturalField.clear()
+        timeField.invalid = false
+    }
 
     onSelectedDateChanged: {
         if (DatesHelper.isValidDate(selectedDate)) {
             focusDate = selectedDate
             showMonthOf(selectedDate)
+        }
+    }
+    // A time set from outside (a quick pick, a recognised natural date) replaces a rejected one.
+    onTimeChanged: if (!timeField.activeFocus) timeField.invalid = false
+    // Touch keyboards: hiding the keyboard (Back, its hide key) ends typing as well — the field
+    // keeps the focus then, so editingFinished would come only later (the summary above kept
+    // the old time meanwhile).
+    // (var: qmllint knows Qt.inputMethod only as a QObject; `as InputMethod` yields null.)
+    readonly property var _inputMethod: Qt.inputMethod
+    Connections {
+        target: control._inputMethod
+        function onVisibleChanged() {
+            if (control._inputMethod.visible)
+                return
+            if (timeField.activeFocus)
+                timeField.commitTyped()
+            else if (naturalField.activeFocus && control.applyTypedOnFocusLoss)
+                control.applyNatural()
         }
     }
     Component.onCompleted: {
@@ -147,6 +191,7 @@ T.Control {
 
             BTextField {
                 id: naturalField
+                objectName: "datePickerNatural"
                 Layout.fillWidth: true
                 leadingIcon: "sparkles"
                 clearable: true
@@ -154,6 +199,9 @@ T.Control {
                 accessibleName: qsTr("Date in your own words")
                 inputMethodHints: Qt.ImhNoPredictiveText
                 onAccepted: control.applyNatural()
+                // Leaving the field (editingFinished without focus: not Enter, which accepted()
+                // handled and which cleared the field).
+                onEditingFinished: if (!activeFocus && control.applyTypedOnFocusLoss) control.applyNatural()
                 Keys.onDownPressed: control.focusGrid()
             }
             Item {
@@ -412,6 +460,7 @@ T.Control {
             Item { Layout.fillWidth: true }
             BTextField {
                 id: timeField
+                objectName: "datePickerTime"
                 Layout.preferredWidth: Theme.touchUi ? 96 : 84
                 implicitWidth: Layout.preferredWidth
                 size: "small"
@@ -423,20 +472,29 @@ T.Control {
                 font.features: { "tnum": 1 }
                 errorText: ""
                 property bool invalid: false
-                onEditingFinished: {
+                /// Normalise and apply the typed time (Enter, Done, leaving the field, OK);
+                /// false when it is no time (then it stays, with the hint below).
+                function commitTyped(): bool {
                     const t = text.trim() === "" && !control.timeRequired ? "" : DatesHelper.normalizeTime(text)
                     invalid = t === "" && (text.trim() !== "" || control.timeRequired)
                     if (invalid)
-                        return
-                    text = t
+                        return false
+                    if (text !== t)
+                        text = t
+                    if (t === control.time)
+                        return true
                     if (control.selectedDate !== "")
                         control.commit(control.selectedDate, t)
                     else
                         control.time = t
+                    return true
                 }
-                // Follows control.time except while the user is typing.
+                onTextEdited: invalid = false
+                onEditingFinished: commitTyped()
+                // Follows control.time except while the user is typing (and while a rejected
+                // time is shown with its hint).
                 Binding on text {
-                    when: !timeField.activeFocus
+                    when: !timeField.activeFocus && !timeField.invalid
                     value: control.time
                     restoreMode: Binding.RestoreNone
                 }
