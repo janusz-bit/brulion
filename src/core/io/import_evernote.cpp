@@ -171,12 +171,15 @@ QList<Note> parseEnex(const QByteArray &xml, const QString &fileName, ImportCont
     return notes;
 }
 
-/// End of the element starting at `from` (balanced `<div` / `</div>`), or -1.
+/// End of the element starting at `from` (balanced `<div` / `</div>`), or -1. `html` must be
+/// valid UTF-16 (the caller checks it once; it is not checked again here).
 qsizetype divEnd(const QString &html, qsizetype from)
 {
     static const QRegularExpression tag(u"<(/?)div\\b[^>]*>"_s, QRegularExpression::CaseInsensitiveOption);
     int depth = 0;
-    for (auto it = tag.globalMatch(html, from); it.hasNext();) {
+    for (auto it = tag.globalMatch(html, from, QRegularExpression::NormalMatch,
+                                   QRegularExpression::DontCheckSubjectStringMatchOption);
+         it.hasNext();) {
         const auto m = it.next();
         depth += m.capturedLength(1) == 0 ? 1 : -1;
         if (depth == 0)
@@ -228,20 +231,31 @@ QString enmlToHtml(QString enml, bool *encrypted)
     }
     out += QStringView(enml).sliced(last);
     enml = out;
-    // Code blocks: the text of the whole <div> subtree in a <pre>.
-    for (qsizetype pos = 0;;) {
-        const auto m = codeBlock.match(enml, pos);
+    // Code blocks: the text of the whole <div> subtree in a <pre>. One pass that copies the text
+    // between them (the search goes on after the subtree; the <pre> holds no tags). The UTF-16
+    // is checked once: QRegularExpression would check the whole text on every match call, and
+    // as there, invalid UTF-16 matches nothing.
+    if (!QStringView(enml).isValidUtf16())
+        return enml;
+    out.clear();
+    last = 0;
+    for (;;) {
+        const auto m = codeBlock.match(enml, last, QRegularExpression::NormalMatch,
+                                       QRegularExpression::DontCheckSubjectStringMatchOption);
         if (!m.hasMatch())
             break;
         const qsizetype end = divEnd(enml, m.capturedStart());
         if (end < 0)
             break;
         const QString code = htmlToPlainText(enml.sliced(m.capturedStart(), end - m.capturedStart()));
-        const QString pre = u"<pre>"_s + code.toHtmlEscaped() + u"</pre>"_s;
-        enml.replace(m.capturedStart(), end - m.capturedStart(), pre);
-        pos = m.capturedStart() + pre.size();
+        out += QStringView(enml).sliced(last, m.capturedStart() - last);
+        out += u"<pre>"_s + code.toHtmlEscaped() + u"</pre>"_s;
+        last = end;
     }
-    return enml;
+    if (last == 0)
+        return enml;
+    out += QStringView(enml).sliced(last);
+    return out;
 }
 
 QString resourceFileName(const Resource &res)

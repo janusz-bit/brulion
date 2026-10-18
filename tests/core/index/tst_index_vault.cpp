@@ -2,6 +2,7 @@
 // journals, graph, change notification and configuration.
 #include "fixture.h"
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -308,6 +309,37 @@ private Q_SLOTS:
         QVERIFY(excerpt.startsWith(u'…'));
         QVERIFY(excerpt.endsWith(u'…'));
         QVERIFY(excerpt.contains(u"o kot i"_s));
+    }
+
+    void unlinkedReferencesLongLineIsLinear()
+    {
+        // Review regression (perf plan N6): each rejected partial mention ("Strona 12") restarted
+        // the regex at the next position with the whole line as the subject, and every match
+        // call checked the UTF-16 of the whole line — 20 000 of them took most of a second.
+        VaultIndex index;
+        index.update(u"Strona 1.md"_s, u"# Strona 1\n"_s);
+        QString line;
+        for (int i = 0; i < 20000; ++i)
+            line += u"Strona 1%1 "_s.arg(i % 10);
+        index.update(u"Długa notatka.md"_s, line + u"i na końcu Strona 1.\n"_s);
+        QElapsedTimer t;
+        t.start();
+        const QList<UnlinkedRef> refs = index.unlinkedReferences(u"Strona 1.md"_s);
+        QVERIFY2(t.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(refs.size(), 1);
+        QVERIFY(refs.first().excerpt.endsWith(u"i na końcu Strona 1."_s));
+    }
+
+    void unlinkedReferencesInvalidUtf16()
+    {
+        // PCRE2 refuses a subject with a lone surrogate, so such a line never had mentions (the
+        // line is checked once now instead of on every match call); other lines are searched.
+        VaultIndex index;
+        index.update(u"Kot.md"_s, u"x"_s);
+        index.update(u"A.md"_s, u"Mój kot "_s + QChar(0xD800) + u"\nDrugi kot tutaj\n"_s);
+        const QList<UnlinkedRef> refs = index.unlinkedReferences(u"Kot.md"_s);
+        QCOMPARE(refs.size(), 1);
+        QCOMPARE(refs.first().line, 1);
     }
 
     // ---- blocks, tags, tasks, reminders, journals -------------------------------------------

@@ -6,6 +6,7 @@
 #include "markdown/frontmatter.h"
 
 #include <QCryptographicHash>
+#include <QElapsedTimer>
 #include <QTest>
 
 using namespace brulion;
@@ -232,6 +233,40 @@ private Q_SLOTS:
         QCOMPARE(iotest::textAt(r, u"Inna notatka.md"_s),
                  u"Treść\n\n- [ ] Zadzwoń 📅 2026-10-20 12:00\n- [x] Zrobione\n"_s);
         QCOMPARE(r.warnings.size(), 1); // encrypted part
+    }
+
+    void evernoteCodeBlocks()
+    {
+        // Code blocks are converted in one pass now (perf plan N6); the output is as before:
+        // nested code blocks belong to the outer one, the attribute is case-insensitive, and an
+        // unbalanced code block is left as it is.
+        const QByteArray note =
+                "<en-export><note><title>Kod</title><content><![CDATA[<en-note><div>Przed</div>"
+                "<div style=\"--en-codeblock:true;\"><div>a &lt; b</div><div style=\"-en-codeblock:true\">"
+                "<div>wewnątrz</div></div><div>koniec</div></div><div>Środek</div>"
+                "<DIV Style=\"-EN-CODEBLOCK : TRUE\">x = 1</DIV><div>Po</div>"
+                "<div style=\"-en-codeblock:true\"><div>niezamknięty</en-note>]]></content></note></en-export>";
+        const ImportResult r = importWith(u"evernote"_s, {bytes(u"a.enex"_s, note)});
+        QCOMPARE(bodyOf(iotest::textAt(r, u"Kod.md"_s)),
+                 u"Przed\n\n```\na < b\nwewnątrz\nkoniec\n```\n\nŚrodek\n\n```\nx = 1\n```\n\nPo\nniezamknięty\n"_s);
+    }
+
+    void evernoteManyCodeBlocks()
+    {
+        QByteArray body;
+        for (int b = 0; b < 3000; ++b)
+            body += "<div>Przykład " + QByteArray::number(b)
+                    + ":</div><div style=\"--en-codeblock:true;\"><div>int x = " + QByteArray::number(b)
+                    + ";</div><div>return x;</div></div>";
+        const QByteArray note = "<en-export><note><title>Kod</title><content><![CDATA[<en-note>" + body
+                                + "</en-note>]]></content></note></en-export>";
+        QElapsedTimer t;
+        t.start();
+        const ImportResult r = importWith(u"evernote"_s, {bytes(u"a.enex"_s, note)});
+        QVERIFY2(t.elapsed() < 10000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+        const QString md = bodyOf(iotest::textAt(r, u"Kod.md"_s));
+        QCOMPARE(md.count(u"```\nint x = "_s), 3000);
+        QVERIFY(md.contains(u"Przykład 2999:\n\n```\nint x = 2999;\nreturn x;\n```"_s));
     }
 
     void evernoteMalformed()

@@ -200,12 +200,86 @@ qsizetype autolinkEnd(QStringView s, qsizetype i)
     return charAt(s, j) == u'>' ? j + 1 : -1;
 }
 
-qsizetype emailAutolinkEnd(QStringView s, qsizetype i)
+/// Mutable scan state: cached positions of the next `]]` / `]` (the scan only moves forward)
+/// and of the subject's last lone surrogate.
+struct ScanState {
+    qsizetype wikiClose = -1; ///< -2 = none, -1 = unknown
+    qsizetype bracketClose = -1;
+    qsizetype lastLoneSurrogate = -2; ///< -2 = unknown, -1 = none
+};
+
+/// Position of the last UTF-16 unit of `s` that is not part of a surrogate pair, or -1.
+qsizetype lastLoneSurrogate(QStringView s)
 {
+    for (qsizetype k = s.size() - 1; k >= 0; --k) {
+        if (s[k].isLowSurrogate()) {
+            if (k == 0 || !s[k - 1].isHighSurrogate())
+                return k;
+            --k; // a pair
+        } else if (s[k].isHighSurrogate()) {
+            return k; // its low surrogate would have been seen first
+        }
+    }
+    return -1;
+}
+
+/// A character between `<` and `>` of an e-mail autolink: the local part, '@' or the domain.
+bool isEmailAutolinkChar(QChar c)
+{
+    if (isAsciiLetter(c) || isAsciiDigit(c))
+        return true;
+    switch (c.unicode()) {
+    case u'.':
+    case u'!':
+    case u'#':
+    case u'$':
+    case u'%':
+    case u'&':
+    case u'\'':
+    case u'*':
+    case u'+':
+    case u'/':
+    case u'=':
+    case u'?':
+    case u'^':
+    case u'_':
+    case u'`':
+    case u'{':
+    case u'|':
+    case u'}':
+    case u'~':
+    case u'-':
+    case u'@': return true;
+    default: return false;
+    }
+}
+
+/// `<local@domain>` autolink at `i`: end or -1.
+qsizetype emailAutolinkEnd(QStringView s, qsizetype i, ScanState &st)
+{
+    // A match consists of characters of isEmailAutolinkChar() up to the first other character,
+    // which must be '>': run the regex on that slice only. (QRegularExpression checks the UTF-16
+    // of its whole subject on every call — per '<' this made long paragraphs quadratic.)
+    qsizetype j = i + 1;
+    while (j < s.size() && isEmailAutolinkChar(s[j]))
+        ++j;
+    if (j >= s.size() || s[j] != u'>')
+        return -1;
+    const QStringView candidate = s.sliced(i, j + 1 - i);
+    if (!candidate.contains(u'@'))
+        return -1;
+    // As before with the whole paragraph as the subject and `i` as the offset: PCRE2 checks the
+    // UTF-16 from the offset to the end (the pattern has no lookbehind) and matches nothing when
+    // a lone surrogate follows.
+    if (st.lastLoneSurrogate == -2)
+        st.lastLoneSurrogate = lastLoneSurrogate(s);
+    if (st.lastLoneSurrogate > i)
+        return -1;
     static const QRegularExpression re(
             uR"(<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>)"_s);
-    const auto m = re.matchView(s, i, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption);
-    return m.hasMatch() ? m.capturedEnd(0) : -1;
+    const auto m =
+            re.matchView(candidate, 0, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption);
+    return m.hasMatch() ? i + m.capturedEnd(0) : -1;
 }
 
 /// `((id))` at `i`: end or -1 (id = [A-Za-z0-9_-]+).
@@ -225,12 +299,6 @@ qsizetype blockRefEnd(QStringView s, qsizetype i)
         return -1;
     return j + 2;
 }
-
-/// Mutable scan state: cached positions of the next `]]` / `]` (the scan only moves forward).
-struct ScanState {
-    qsizetype wikiClose = -1; ///< -2 = none, -1 = unknown
-    qsizetype bracketClose = -1;
-};
 
 qsizetype nextCached(QStringView s, qsizetype from, QStringView needle, qsizetype &cached)
 {
@@ -507,7 +575,7 @@ void lexInline(QStringView orig, QStringView masked, const std::function<void(co
             if (e >= 0) {
                 target = orig.sliced(i + 1, e - i - 2).toString();
             } else {
-                e = emailAutolinkEnd(s, i);
+                e = emailAutolinkEnd(s, i, st);
                 if (e >= 0)
                     target = u"mailto:"_s + orig.sliced(i + 1, e - i - 2);
             }

@@ -4,6 +4,8 @@
 #include "markdown/inline_p.h"
 
 #include <QElapsedTimer>
+#include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QTest>
 
 using namespace brulion;
@@ -178,6 +180,164 @@ private Q_SLOTS:
         QCOMPARE(l.from, 0);
         QCOMPARE(l.to, 16);
         QCOMPARE(links(u"<jan@example.com>"_s).first().target, u"mailto:jan@example.com"_s);
+    }
+
+    void emailAutolinks_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("target"); // of the first link; empty: no link
+        QTest::newRow("plain") << u"<jan@example.com>"_s << u"mailto:jan@example.com"_s;
+        QTest::newRow("local part punctuation") << u"Pisz: <jan.k+x!#$%&'*/=?^_`{|}~-@a.example.pl>."_s
+                                                << u"mailto:jan.k+x!#$%&'*/=?^_`{|}~-@a.example.pl"_s;
+        QTest::newRow("inner of double brackets") << u"<<jan@example.com>>"_s << u"mailto:jan@example.com"_s;
+        QTest::newRow("after other tags") << u"<b>x</b> <i>y <a@b.pl>"_s << u"mailto:a@b.pl"_s;
+        QTest::newRow("hyphen inside a label") << u"<a@my-host.pl>"_s << u"mailto:a@my-host.pl"_s;
+        QTest::newRow("label of 63") << u"<a@%1.pl>"_s.arg(QString(63, u'x'))
+                                     << u"mailto:a@%1.pl"_s.arg(QString(63, u'x'));
+        QTest::newRow("label of 64") << u"<a@%1.pl>"_s.arg(QString(64, u'x')) << QString();
+        QTest::newRow("label starts with hyphen") << u"<a@-host.pl>"_s << QString();
+        QTest::newRow("label ends with hyphen") << u"<a@host-.pl>"_s << QString();
+        QTest::newRow("empty label") << u"<a@host..pl>"_s << QString();
+        QTest::newRow("trailing dot") << u"<a@host.>"_s << QString();
+        QTest::newRow("underscore in domain") << u"<a@ho_st.pl>"_s << QString();
+        QTest::newRow("no local part") << u"<@host.pl>"_s << QString();
+        QTest::newRow("two at signs") << u"<a@b@c.pl>"_s << QString();
+        QTest::newRow("space") << u"<jan @example.com>"_s << QString();
+        QTest::newRow("not closed") << u"<jan@example.com"_s << QString();
+        QTest::newRow("Polish letter") << u"<żaneta@example.com>"_s << QString();
+        QTest::newRow("bracket inside") << u"<jan<x@example.com>"_s << u"mailto:x@example.com"_s;
+        // PCRE2 checks the UTF-16 from the match offset to the end of the paragraph: an e-mail
+        // autolink followed by a lone surrogate was never linked, one after it was; kept as it was.
+        QTest::newRow("lone surrogate after") << u"<jan@example.com> "_s + QChar(0xD800) << QString();
+        QTest::newRow("lone low surrogate after") << u"<jan@example.com>"_s + QChar(0xDC00) << QString();
+        QTest::newRow("lone surrogate before")
+                << QChar(0xD800) + u" żółw <jan@example.com>"_s << u"mailto:jan@example.com"_s;
+        QTest::newRow("lone low surrogate before") << u"x"_s + QChar(0xDFFF) + u"<a@b.pl> y"_s << u"mailto:a@b.pl"_s;
+        QTest::newRow("surrogate pair after") << u"<jan@example.com> 😀"_s << u"mailto:jan@example.com"_s;
+    }
+    void emailAutolinks()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, target);
+        const QList<Link> found = links(text);
+        QCOMPARE(found.isEmpty() ? QString() : found.first().target, target);
+    }
+
+    void emailAutolinksMatchTheRegexOnTheWholeText()
+    {
+        // Property: an e-mail autolink at the start of a text is what the CommonMark regex
+        // finds when matched on the whole text there (the parser matches only a short slice).
+        static const QRegularExpression whole(
+                uR"(<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>)"_s);
+        const QString alphabet = u"abz09@.-_+~>< ąż\t!"_s;
+        QRandomGenerator rng(1017);
+        for (int k = 0; k < 20000; ++k) {
+            QString s = u"<jan.kowalski@poczta.example.pl>"_s;
+            // A valid autolink with up to four random edits, or random text.
+            if (rng.bounded(4) == 0) {
+                s = u"<"_s;
+                for (int n = int(rng.bounded(1, 30)); n > 0; --n)
+                    s += alphabet.at(rng.bounded(int(alphabet.size())));
+            } else {
+                for (int edits = int(rng.bounded(5)); edits > 0; --edits) {
+                    const qsizetype at = 1 + rng.bounded(int(s.size()));
+                    const QChar c = alphabet.at(rng.bounded(int(alphabet.size())));
+                    switch (rng.bounded(3)) {
+                    case 0: s.insert(at, c); break;
+                    case 1:
+                        if (at < s.size())
+                            s.remove(at, 1);
+                        break;
+                    default:
+                        if (at < s.size())
+                            s[at] = c;
+                        break;
+                    }
+                }
+            }
+            const auto m =
+                    whole.match(s, 0, QRegularExpression::NormalMatch, QRegularExpression::AnchorAtOffsetMatchOption);
+            const QList<Link> found = links(s);
+            const bool atStart = !found.isEmpty() && found.first().from == 0;
+            QVERIFY2(atStart == m.hasMatch(), qPrintable(s));
+            if (atStart) {
+                QCOMPARE(found.first().to, m.capturedEnd());
+                QCOMPARE(found.first().target, u"mailto:"_s + s.sliced(1, m.capturedEnd() - 2));
+            }
+        }
+    }
+
+    void emailAutolinksMatchTheRegexAtTheirOffset()
+    {
+        // Property: with lone surrogates and surrogate pairs around it, an e-mail autolink is
+        // exactly what the CommonMark regex matched on the whole paragraph at the '<' (as the
+        // parser did before it matched only a slice; PCRE2 checks the UTF-16 from that offset).
+        static const QRegularExpression whole(
+                uR"(<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>)"_s);
+        QStringList pieces = u"<a@b.pl>|<jan@example.com>|<x@y>|<a@b| |żółw|😀|<|>|@|ab"_s.split(u'|');
+        for (const int lone : {0xD800, 0xDBFF, 0xDC00, 0xDFFF})
+            pieces.append(QString(QChar(lone)));
+        QRandomGenerator rng(1018);
+        int linked = 0;
+        int refused = 0;
+        for (int k = 0; k < 20000; ++k) {
+            QString s;
+            for (int n = int(rng.bounded(1, 9)); n > 0; --n)
+                s += pieces.at(rng.bounded(int(pieces.size())));
+            struct Expected {
+                qsizetype from, to;
+                QString target;
+            };
+            QList<Expected> expected;
+            qsizetype from = 0;
+            while ((from = s.indexOf(u'<', from)) >= 0) {
+                const auto m = whole.matchView(s, from, QRegularExpression::NormalMatch,
+                                               QRegularExpression::AnchorAtOffsetMatchOption);
+                if (m.hasMatch()) {
+                    expected.append(
+                            {from, m.capturedEnd(), u"mailto:"_s + s.sliced(from + 1, m.capturedEnd() - from - 2)});
+                    from = m.capturedEnd();
+                } else {
+                    // An autolink on its own, refused for a lone surrogate after it?
+                    const qsizetype close = s.indexOf(u'>', from);
+                    if (close > 0
+                        && whole.matchView(QStringView(s).sliced(from, close + 1 - from), 0,
+                                           QRegularExpression::NormalMatch,
+                                           QRegularExpression::AnchorAtOffsetMatchOption)
+                                   .hasMatch())
+                        ++refused;
+                    ++from;
+                }
+            }
+            const QList<Link> found = links(s);
+            QCOMPARE(found.size(), expected.size());
+            for (qsizetype l = 0; l < found.size(); ++l) {
+                QCOMPARE(found[l].from, expected[l].from);
+                QCOMPARE(found[l].to, expected[l].to);
+                QCOMPARE(found[l].target, expected[l].target);
+            }
+            linked += int(found.size());
+        }
+        // Both sides of the rule are exercised: links before a lone surrogate are refused.
+        QVERIFY2(linked > 1000 && refused > 1000, qPrintable(u"%1 %2"_s.arg(linked).arg(refused)));
+    }
+
+    void manyAngleBracketsAreLinear()
+    {
+        // Review regression (perf plan N6): the e-mail autolink regex was matched with the whole
+        // paragraph as the subject once per '<', and QRegularExpression checks the UTF-16 of
+        // the whole subject on every call — 20 000 inline tags took seconds.
+        const QString tags = u"<span>a</span> "_s.repeated(20000) + u"<jan@example.com>"_s;
+        const QString lessThan = u"a < b "_s.repeated(50000) + u"<jan@example.com>"_s;
+        QElapsedTimer t;
+        t.start();
+        const QList<Link> a = links(tags);
+        const QList<Link> b = links(lessThan);
+        QVERIFY2(t.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(a.size(), 1);
+        QCOMPARE(a.first().target, u"mailto:jan@example.com"_s);
+        QCOMPARE(b.size(), 1);
+        QCOMPARE(b.first().from, lessThan.size() - 17);
     }
 
     void tagsUnicode()

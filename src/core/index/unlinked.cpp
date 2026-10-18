@@ -105,10 +105,16 @@ struct Span {
 Span firstMatch(const QString &line, const QList<MentionMatcher> &matchers)
 {
     Span best;
+    // QRegularExpression checks the UTF-16 of the whole subject on every match call (a long
+    // line with many partial mentions was quadratic): check it once here. PCRE2 matches nothing
+    // in invalid UTF-16, so neither does this.
+    if (!QStringView(line).isValidUtf16())
+        return best;
     for (const MentionMatcher &m : matchers) {
         qsizetype offset = 0;
         while (offset <= line.size()) {
-            const QRegularExpressionMatch hit = m.re.match(line, offset);
+            const QRegularExpressionMatch hit = m.re.match(line, offset, QRegularExpression::NormalMatch,
+                                                           QRegularExpression::DontCheckSubjectStringMatchOption);
             if (!hit.hasMatch())
                 break;
             const qsizetype s = hit.capturedStart();
