@@ -164,20 +164,10 @@ bool isTokenChar(char32_t cp)
 QStringList words(QStringView folded)
 {
     QStringList out;
-    qsizetype start = -1;
-    for (qsizetype i = 0; i < folded.size();) {
-        const auto [cp, len] = codePointAt(folded, i);
-        if (isTokenChar(cp)) {
-            if (start < 0)
-                start = i;
-        } else if (start >= 0) {
-            out.append(folded.sliced(start, i - start).toString());
-            start = -1;
-        }
-        i += len;
-    }
-    if (start >= 0)
-        out.append(folded.sliced(start).toString());
+    forEachWord(folded, [&](QStringView w) {
+        out.append(w.toString());
+        return true;
+    });
     return out;
 }
 
@@ -188,8 +178,16 @@ QString foldQuery(QStringView query)
 
 int compareNames(const QString &a, const QString &b)
 {
-    const QString la = nfc(a).toLower();
-    const QString lb = nfc(b).toLower();
+    return compareNameKeys(nameSortKey(a), a, nameSortKey(b), b);
+}
+
+QString nameSortKey(const QString &name)
+{
+    return nfc(name).toLower();
+}
+
+int compareNameKeys(const QString &la, const QString &a, const QString &lb, const QString &b)
+{
     qsizetype i = 0;
     qsizetype j = 0;
     while (i < la.size() && j < lb.size()) {

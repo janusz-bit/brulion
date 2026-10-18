@@ -418,6 +418,20 @@ private Q_SLOTS:
         QCOMPARE(m_index.suggestBlocks(u"a"_s, 3).size(), 3);
     }
 
+    void suggestBlocksSkipsFrontmatter()
+    {
+        // Only blocks with every word are offered, never the frontmatter (the title and tags hold
+        // the words here; YAML stays page-level, its block has no text).
+        VaultIndex index;
+        index.update(u"k.md"_s,
+                     u"---\ntags: [kawa]\ntitle: Kawa ogród\n---\n- kawa z mlekiem w ogrodzie\n-   \n- herbata"_s);
+        const QList<BlockRef> refs = index.suggestBlocks(u"kawa ogrod"_s, 10);
+        QCOMPARE(refs.size(), 1);
+        QCOMPARE(fixture::blockText(index, refs.first().path, refs.first().blockIndex), u"kawa z mlekiem w ogrodzie"_s);
+        QVERIFY(index.note(u"k.md"_s)->blocks.first().kind == BlockKind::Frontmatter);
+        QVERIFY(index.suggestBlocks(u"tags"_s, 10).isEmpty());
+    }
+
     void suggestBlocksEmptyQuery()
     {
         VaultIndex index;

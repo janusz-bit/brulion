@@ -29,10 +29,10 @@ int bodyStartLine(const ParsedNote &note)
     return note.blocks.first().endLine + 1;
 }
 
-/// Can a block be offered for `((` completion?
+/// Can a block be offered for `((` completion? (Runs for every block on every key press.)
 bool suggestable(const Block &block)
 {
-    return block.kind != BlockKind::Frontmatter && !block.text.trimmed().isEmpty();
+    return block.kind != BlockKind::Frontmatter && !QStringView(block.text).trimmed().isEmpty();
 }
 
 struct Excerpt {
@@ -435,6 +435,8 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
         return out;
     }
     const bool withPath = q.contains(u'/');
+    const QStringList queryWords = words(q);
+    const QString noAlias;
     struct Scored {
         PageSuggestion s;
         NameRank rank;
@@ -445,26 +447,28 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
     QList<Scored> scored;
     for (const auto &[path, e] : d->entries) {
         NameRank best = NameRank::None;
-        const NameCandidate *bestCandidate = nullptr;
-        for (const NameCandidate &c : e->names) {
-            const NameRank r = rankName(c.folded, q);
+        const QString *bestName = nullptr;
+        const QString *bestAlias = nullptr;
+        for (const NameCandidate &c : std::as_const(e->names)) {
+            const NameRank r = rankName(c.folded, q, queryWords);
             if (r > best) { // titles win ties against aliases (listed first)
                 best = r;
-                bestCandidate = &c;
+                bestName = &c.folded;
+                bestAlias = &c.alias;
             }
         }
-        NameCandidate pathCandidate{e->foldedPath, {}};
         if (withPath) {
-            const NameRank r = rankName(pathCandidate.folded, q);
+            const NameRank r = rankName(e->foldedPath, q, queryWords);
             if (r > best) {
                 best = r;
-                bestCandidate = &pathCandidate;
+                bestName = &e->foldedPath;
+                bestAlias = &noAlias;
             }
         }
-        if (best == NameRank::None || !bestCandidate)
+        if (best == NameRank::None || !bestName)
             continue;
-        scored.append(Scored{PageSuggestion{path, e->note.title, bestCandidate->alias}, best,
-                             !bestCandidate->alias.isEmpty(), bestCandidate->folded, e->seq});
+        scored.append(Scored{PageSuggestion{path, e->note.title, *bestAlias}, best, !bestAlias->isEmpty(), *bestName,
+                             e->seq});
     }
     std::sort(scored.begin(), scored.end(), [](const Scored &a, const Scored &b) {
         if (a.rank != b.rank)
@@ -530,12 +534,11 @@ QList<BlockRef> VaultIndex::suggestBlocks(const QString &text, int limit) const
         const QStringList &folded = e->foldedBlockTexts();
         const QList<Block> &blocks = e->note.blocks;
         for (qsizetype i = 0; i < blocks.size(); ++i) {
-            if (!suggestable(blocks[i]))
-                continue;
+            // The word test first: it rejects almost every block, without touching the Block.
             const QString &f = folded[i];
             const bool all = std::all_of(wordsOfQuery.cbegin(), wordsOfQuery.cend(),
                                          [&](const QString &w) { return f.contains(w); });
-            if (!all)
+            if (!all || !suggestable(blocks[i]))
                 continue;
             const int quality = f.startsWith(first) ? 2 : (indexOfWordStart(f, first) >= 0 ? 1 : 0);
             const int score = (blocks[i].id.isEmpty() ? 0 : 4) + quality;

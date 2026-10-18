@@ -255,8 +255,10 @@ FocusScope {
 
     BQuickSwitcher {
         id: switcher
-        // Workspace.revision: refresh when pages come and go while it is open.
-        pages: Workspace.revision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
+        // Workspace.revision: refresh when pages come and go while it is open. Closed (visible
+        // stays true until the exit transition ends), it neither queries nor follows the
+        // revision: every save bumps it.
+        pages: switcher.visible && Workspace.revision >= 0 ? Workspace.switcherPages(switcher.query, 60) : []
         onPageChosen: (page) => AppController.openPage(page.path)
         onCreateRequested: (name) => {
             const path = Workspace.createPage(name)

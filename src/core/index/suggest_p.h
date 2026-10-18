@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QStringView>
 
 namespace brulion::index_detail {
@@ -24,5 +25,7 @@ int boundedEditDistance(QStringView a, QStringView b, int max);
 
 /// Rank of a folded `name` for the folded, non-empty query `q`.
 NameRank rankName(QStringView name, QStringView q);
+/// rankName() with `queryWords` = words(q), computed once for all names ranked for one query.
+NameRank rankName(QStringView name, QStringView q, const QStringList &queryWords);
 
 } // namespace brulion::index_detail

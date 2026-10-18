@@ -1,9 +1,12 @@
 // Query language (docs/SYNTAX.md §10): parseQuery and runQuery over the fixture vault.
 #include "fixture.h"
 
+#include "index/textutil_p.h"
+
 #include <QElapsedTimer>
 #include <QTest>
 
+#include <algorithm>
 #include <ctime>
 
 using namespace brulion;
@@ -475,6 +478,45 @@ private Q_SLOTS:
         QCOMPARE(runQuery(parsed(u"type:tasks page:"_s + stars + u"*z"_s), index, fixture::Today).total, 0);
         QCOMPARE(runQuery(parsed(u"type:pages path:"_s + stars + u"*z"_s), index, fixture::Today).total, 0);
         QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"wildcard queries took %1 ms"_s.arg(timer.elapsed())));
+    }
+
+    void sortsByPageNames()
+    {
+        // Page order is compareNames() (Polish letters after their base, numbers by value,
+        // NFD = NFC, then code units); the runner computes each name's key only once.
+        const QStringList titles = {u"Strona 10"_s, u"strona 2"_s, u"Łódź"_s,         u"Lublin"_s,
+                                    u"Żywiec"_s,    u"Źródło"_s,   u"Z\u0307ywiec"_s, u"Zakopane"_s,
+                                    u"ćma"_s,       u"Cyrk"_s,     u"éclair"_s,       u"Ecz"_s,
+                                    u"dom"_s,       u"Dom"_s,      u"Strona 007"_s,   u"Strona 8"_s,
+                                    u"İstanbul"_s,  u"istanbul"_s, u"ŁÓDŹ kaliska"_s, u"zażółć"_s};
+        VaultIndex index;
+        for (const QString &t : titles)
+            index.update(t + u".md"_s, u"- [ ] zadanie #lista\n- [ ] drugie #lista"_s);
+        QStringList expected = titles;
+        std::stable_sort(expected.begin(), expected.end(), [](const QString &a, const QString &b) {
+            if (const int c = index_detail::compareNames(a, b); c != 0)
+                return c < 0;
+            return a < b;
+        });
+        const auto pages = [](const QueryResult &r) {
+            QStringList out;
+            for (const QueryItem &item : r.items) {
+                const QString page = item.path.chopped(3);
+                if (out.isEmpty() || out.last() != page)
+                    out.append(page);
+            }
+            return out;
+        };
+        QCOMPARE(pages(runQuery(parsed(u"type:pages tag:lista"_s), index, fixture::Today)), expected);
+        QCOMPARE(pages(runQuery(parsed(u"type:pages tag:lista sort:page"_s), index, fixture::Today)), expected);
+        QCOMPARE(pages(runQuery(parsed(u"type:tasks sort:page"_s), index, fixture::Today)), expected);
+        std::reverse(expected.begin(), expected.end());
+        QCOMPARE(pages(runQuery(parsed(u"type:tasks sort:-page"_s), index, fixture::Today)), expected);
+        std::reverse(expected.begin(), expected.end());
+        QStringList groups;
+        for (const QueryGroup &g : runQuery(parsed(u"type:tasks group:page"_s), index, fixture::Today).groups)
+            groups.append(g.key.chopped(3));
+        QCOMPARE(groups, expected);
     }
 
     void reminderOverdueIsWallClock()

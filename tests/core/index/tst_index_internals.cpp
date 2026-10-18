@@ -4,12 +4,162 @@
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
 
+#include "text/text.h"
+
+#include <QRandomGenerator>
 #include <QTest>
+
+#include <algorithm>
 
 using namespace brulion::index_detail;
 using namespace Qt::StringLiterals;
 
 Q_DECLARE_METATYPE(brulion::index_detail::NameRank)
+
+namespace {
+
+// rankName() as it was before it visited the name's words as views (the reference of
+// rankNameMatchesReference()).
+qsizetype referenceSubsequenceSpan(QStringView name, QStringView q)
+{
+    qsizetype start = -1;
+    qsizetype j = 0;
+    for (qsizetype i = 0; i < name.size() && j < q.size(); ++i) {
+        if (name[i] != q[j])
+            continue;
+        if (j == 0)
+            start = i;
+        if (++j == q.size())
+            return i - start + 1;
+    }
+    return -1;
+}
+
+bool referenceOccursAtWordStart(QStringView name, QStringView q)
+{
+    for (qsizetype i = name.indexOf(q); i >= 0; i = name.indexOf(q, i + 1)) {
+        if (i == 0 || !isTokenChar(codePointBefore(name, i)))
+            return true;
+    }
+    return false;
+}
+
+NameRank referenceRankName(QStringView name, QStringView q)
+{
+    if (q.isEmpty() || name.isEmpty())
+        return NameRank::None;
+    if (name == q)
+        return NameRank::Exact;
+    if (name.startsWith(q))
+        return NameRank::Prefix;
+    if (name.contains(q))
+        return referenceOccursAtWordStart(name, q) ? NameRank::WordPrefix : NameRank::Contains;
+    const QStringList nameWords = words(name);
+    const QStringList queryWords = words(q);
+    if (queryWords.size() > 1) {
+        const bool all = std::all_of(queryWords.begin(), queryWords.end(), [&](const QString &qw) {
+            return std::any_of(nameWords.begin(), nameWords.end(), [&](const QString &w) { return w.startsWith(qw); });
+        });
+        if (all)
+            return NameRank::WordPrefix;
+    }
+    if (q.size() >= 4) {
+        const int max = q.size() >= 7 ? 2 : 1;
+        for (const QString &w : nameWords) {
+            if (boundedEditDistance(q, QStringView(w).first(std::min(w.size(), q.size())), max) <= max
+                || boundedEditDistance(q, w, max) <= max)
+                return NameRank::FuzzyClose;
+        }
+    }
+    if (q.size() >= 2) {
+        const qsizetype span = referenceSubsequenceSpan(name, q);
+        if (span >= 0)
+            return span <= q.size() * 2 ? NameRank::FuzzyClose : NameRank::Fuzzy;
+    }
+    return NameRank::None;
+}
+
+/// Random text from Polish words, digits, separators, other scripts and lone surrogates.
+QString randomName(QRandomGenerator &r)
+{
+    static const QStringList parts = {u"kawa"_s,
+                                      u"Kawiarnia"_s,
+                                      u"dom"_s,
+                                      u"Jana"_s,
+                                      u"spotkanie"_s,
+                                      u"zespołu"_s,
+                                      u"Łódź"_s,
+                                      u"żółw"_s,
+                                      u"źdźbło"_s,
+                                      u"Strona"_s,
+                                      u"12"_s,
+                                      u"007"_s,
+                                      u"raport"_s,
+                                      u"roczny"_s,
+                                      u"Ελλάδα"_s,
+                                      u"привет"_s,
+                                      u"日記"_s,
+                                      u"😀"_s,
+                                      u"Z\u0307ywiec"_s,
+                                      u"İ"_s,
+                                      u"ß"_s,
+                                      QString(QChar(0xD800)),
+                                      u"é"_s,
+                                      u"x"_s};
+    static const QStringList separators = {u" "_s, u"/"_s, u"-"_s, u"_"_s, u"  "_s, u"."_s, QString()};
+    QString s;
+    const int n = int(r.bounded(1, 5));
+    for (int i = 0; i < n; ++i) {
+        if (i > 0)
+            s += separators[r.bounded(int(separators.size()))];
+        s += parts[r.bounded(int(parts.size()))];
+    }
+    return s;
+}
+
+/// A query derived from `name` (prefix, word, typo, swapped words) or another random name.
+QString randomQuery(QRandomGenerator &r, const QString &name)
+{
+    QString q;
+    switch (r.bounded(7)) {
+    case 0: q = name.left(int(r.bounded(1, int(name.size()) + 1))); break;
+    case 1: {
+        const QStringList w = words(name);
+        q = w.isEmpty() ? name : w[r.bounded(int(w.size()))];
+        break;
+    }
+    case 2: {
+        q = name;
+        if (q.size() > 2) {
+            const int i = int(r.bounded(int(q.size()) - 1));
+            switch (r.bounded(3)) {
+            case 0: q.remove(i, 1); break;
+            case 1: std::swap(q[i], q[i + 1]); break;
+            default: q.insert(i, u'q'); break;
+            }
+        }
+        break;
+    }
+    case 3: {
+        QStringList w = words(name);
+        std::reverse(w.begin(), w.end());
+        for (QString &x : w)
+            x = x.left(int(r.bounded(1, int(x.size()) + 1)));
+        q = w.join(u' ');
+        break;
+    }
+    case 4: { // characters spread out
+        const int step = int(r.bounded(2, 5));
+        for (qsizetype i = 0; i < name.size(); i += step)
+            q += name[i];
+        break;
+    }
+    default: q = randomName(r); break;
+    }
+    return brulion::text::foldKey(q);
+}
+
+} // namespace
 
 class TestIndexInternals : public QObject {
     Q_OBJECT
@@ -165,6 +315,58 @@ private Q_SLOTS:
         QFETCH(QString, query);
         QFETCH(NameRank, rank);
         QCOMPARE(brulion::index_detail::rankName(name, query), rank);
+    }
+
+    void rankNameMatchesReference()
+    {
+        // Property: ranking with the query's words computed once and the name's words visited
+        // as views gives the old ranking.
+        QRandomGenerator r(20261017);
+        QList<int> seen(int(NameRank::Exact) + 1, 0);
+        for (int n = 0; n < 50000; ++n) {
+            const QString name = brulion::text::foldKey(randomName(r));
+            const QString q = randomQuery(r, name);
+            const NameRank expected = referenceRankName(name, q);
+            QCOMPARE(brulion::index_detail::rankName(name, q), expected);
+            QCOMPARE(brulion::index_detail::rankName(name, q, words(q)), expected);
+            ++seen[int(expected)];
+        }
+        for (qsizetype rank = 0; rank < seen.size(); ++rank)
+            QVERIFY2(seen[rank] > 100, qPrintable(u"rank %1 seen %2 times"_s.arg(rank).arg(seen[rank])));
+    }
+
+    void forEachWordVisitsWords()
+    {
+        QRandomGenerator r(7);
+        for (int n = 0; n < 20000; ++n) {
+            const QString s = randomName(r);
+            QStringList seen;
+            QVERIFY(forEachWord(s, [&](QStringView w) {
+                seen.append(w.toString());
+                return true;
+            }));
+            QCOMPARE(seen, words(s));
+            if (seen.isEmpty())
+                continue;
+            // Stopping at word k visits k + 1 words and reports the stop.
+            const qsizetype k = r.bounded(int(seen.size()));
+            qsizetype visits = 0;
+            QVERIFY(!forEachWord(s, [&](QStringView) { return visits++ < k; }));
+            QCOMPARE(visits, k + 1);
+        }
+    }
+
+    void nameSortKeysCompareLikeNames()
+    {
+        // Sorts compare precomputed keys: the same order as compareNames().
+        QRandomGenerator r(11);
+        for (int n = 0; n < 20000; ++n) {
+            QString a = randomName(r);
+            QString b = r.bounded(4) == 0 ? a : randomName(r);
+            if (r.bounded(3) == 0)
+                b = b.toUpper();
+            QCOMPARE(compareNameKeys(nameSortKey(a), a, nameSortKey(b), b), brulion::index_detail::compareNames(a, b));
+        }
     }
 
     void cleanTarget_data()

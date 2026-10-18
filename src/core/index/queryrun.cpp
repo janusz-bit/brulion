@@ -126,6 +126,7 @@ struct SortValue {
     int number = 0;
     QString text;
     DateSpec date;
+    QString nameKey; ///< nameSortKey(text) for QuerySortKey::Page (set by sortCandidates)
 };
 
 struct GroupInfo {
@@ -169,7 +170,8 @@ private:
     void collapseNested(QList<Candidate> &cands) const;
     void sortCandidates(QList<Candidate> &cands) const;
     SortValue sortValue(QuerySortKey key, const View &view) const;
-    int defaultCompare(const View &a, const View &b) const;
+    /// `keyA` / `keyB`: nameSortKey() of the titles (used by page queries only).
+    int defaultCompare(const View &a, const QString &keyA, const View &b, const QString &keyB) const;
     QList<GroupInfo> groupsOf(const View &view);
     QList<QueryGroup> buildGroups(const QList<Candidate> &cands);
 
@@ -524,14 +526,14 @@ SortValue Runner::sortValue(QuerySortKey key, const View &view) const
     switch (key) {
     case QuerySortKey::Priority:
         if (view.task)
-            v = SortValue{true, priorityRank(view.task->priority), {}, {}};
+            v = SortValue{true, priorityRank(view.task->priority), {}, {}, {}};
         return v;
     case QuerySortKey::Status:
         if (view.task)
-            v = SortValue{true, statusRank(view.task->status), {}, {}};
+            v = SortValue{true, statusRank(view.task->status), {}, {}, {}};
         return v;
-    case QuerySortKey::Page: return SortValue{true, 0, view.note().title, {}};
-    case QuerySortKey::Path: return SortValue{true, 0, view.path(), {}};
+    case QuerySortKey::Page: return SortValue{true, 0, view.note().title, {}, {}};
+    case QuerySortKey::Path: return SortValue{true, 0, view.path(), {}, {}};
     default: break;
     }
     const QList<DateSpec> values = dateValues(dateFieldOf(key), view);
@@ -544,10 +546,10 @@ SortValue Runner::sortValue(QuerySortKey key, const View &view) const
     return v;
 }
 
-int Runner::defaultCompare(const View &a, const View &b) const
+int Runner::defaultCompare(const View &a, const QString &keyA, const View &b, const QString &keyB) const
 {
     if (m_query.type == QueryType::Pages) {
-        if (const int c = compareNames(a.note().title, b.note().title); c != 0)
+        if (const int c = compareNameKeys(keyA, a.note().title, keyB, b.note().title); c != 0)
             return c;
         return a.path() < b.path() ? -1 : (b.path() < a.path() ? 1 : 0);
     }
@@ -566,20 +568,34 @@ void Runner::sortCandidates(QList<Candidate> &cands) const
         switch (key) {
         case QuerySortKey::Priority:
         case QuerySortKey::Status: return a.number - b.number;
-        case QuerySortKey::Page: return a.text == b.text ? 0 : compareNames(a.text, b.text);
+        case QuerySortKey::Page: return a.text == b.text ? 0 : compareNameKeys(a.nameKey, a.text, b.nameKey, b.text);
         case QuerySortKey::Path: return a.text < b.text ? -1 : (b.text < a.text ? 1 : 0);
         default: return dates::compareDateSpecs(a.date, b.date);
         }
     };
-    // Sort values are computed once per item: in the comparator they would cost O(n log n)
-    // list allocations (tens of thousands of tasks in a big vault).
+    // Sort values (and the name keys of compareNames()) are computed once per item: in the
+    // comparator they would cost O(n log n) allocations (tens of thousands of tasks in a big
+    // vault).
     const qsizetype keyCount = m_query.sort.size();
     QList<SortValue> values;
     values.reserve(cands.size() * keyCount);
     for (const Candidate &c : std::as_const(cands)) {
-        for (const QuerySort &s : m_query.sort)
+        for (const QuerySort &s : m_query.sort) {
             values.append(sortValue(s.key, c.view));
+            if (s.key == QuerySortKey::Page)
+                values.last().nameKey = nameSortKey(values.last().text);
+        }
     }
+    QList<QString> titleKeys;
+    if (m_query.type == QueryType::Pages) {
+        titleKeys.reserve(cands.size());
+        for (const Candidate &c : std::as_const(cands))
+            titleKeys.append(nameSortKey(c.view.note().title));
+    }
+    const auto titleKey = [&](qsizetype i) -> const QString & {
+        static const QString none;
+        return titleKeys.isEmpty() ? none : titleKeys[i];
+    };
     QList<qsizetype> order(cands.size());
     std::iota(order.begin(), order.end(), 0);
     std::stable_sort(order.begin(), order.end(), [&](qsizetype x, qsizetype y) {
@@ -595,7 +611,7 @@ void Runner::sortCandidates(QList<Candidate> &cands) const
             if (c != 0)
                 return s.descending ? c > 0 : c < 0;
         }
-        return defaultCompare(cands.at(x).view, cands.at(y).view) < 0;
+        return defaultCompare(cands.at(x).view, titleKey(x), cands.at(y).view, titleKey(y)) < 0;
     });
     QList<Candidate> sorted;
     sorted.reserve(cands.size());
@@ -663,12 +679,19 @@ QList<QueryGroup> Runner::buildGroups(const QList<Candidate> &cands)
     QList<qsizetype> order(groups.size());
     std::iota(order.begin(), order.end(), 0);
     const bool byName = m_query.group == QueryGroupKey::Page;
+    QList<QString> nameKeys;
+    if (byName) {
+        nameKeys.reserve(infos.size());
+        for (const GroupInfo &g : std::as_const(infos))
+            nameKeys.append(nameSortKey(g.order));
+    }
     std::stable_sort(order.begin(), order.end(), [&](qsizetype a, qsizetype b) {
         const GroupInfo &x = infos[a];
         const GroupInfo &y = infos[b];
         if (x.rank != y.rank)
             return x.rank < y.rank;
-        const int c = byName ? compareNames(x.order, y.order) : QString::compare(x.order, y.order);
+        const int c = byName ? compareNameKeys(nameKeys[a], x.order, nameKeys[b], y.order)
+                             : QString::compare(x.order, y.order);
         if (c != 0)
             return c < 0;
         return x.key < y.key;

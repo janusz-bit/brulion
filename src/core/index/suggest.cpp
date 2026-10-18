@@ -76,6 +76,11 @@ int boundedEditDistance(QStringView a, QStringView b, int max)
 
 NameRank rankName(QStringView name, QStringView q)
 {
+    return rankName(name, q, q.isEmpty() || name.isEmpty() ? QStringList() : words(q));
+}
+
+NameRank rankName(QStringView name, QStringView q, const QStringList &queryWords)
+{
     if (q.isEmpty() || name.isEmpty())
         return NameRank::None;
     if (name == q)
@@ -84,23 +89,24 @@ NameRank rankName(QStringView name, QStringView q)
         return NameRank::Prefix;
     if (name.contains(q))
         return occursAtWordStart(name, q) ? NameRank::WordPrefix : NameRank::Contains;
-    const QStringList nameWords = words(name);
+    // The name's words are visited as views: this runs for every page on every key press of
+    // the quick switcher.
     // Multi-word query: every query word starts a word of the name ("dom ja" -> "Dom Jana").
-    const QStringList queryWords = words(q);
     if (queryWords.size() > 1) {
         const bool all = std::all_of(queryWords.begin(), queryWords.end(), [&](const QString &qw) {
-            return std::any_of(nameWords.begin(), nameWords.end(), [&](const QString &w) { return w.startsWith(qw); });
+            return !forEachWord(name, [&](QStringView w) { return !w.startsWith(qw); });
         });
         if (all)
             return NameRank::WordPrefix;
     }
     if (q.size() >= 4) {
         const int max = q.size() >= 7 ? 2 : 1;
-        for (const QString &w : nameWords) {
-            if (boundedEditDistance(q, QStringView(w).first(std::min(w.size(), q.size())), max) <= max
-                || boundedEditDistance(q, w, max) <= max)
-                return NameRank::FuzzyClose;
-        }
+        const bool close = !forEachWord(name, [&](QStringView w) {
+            return boundedEditDistance(q, w.first(std::min(w.size(), q.size())), max) > max
+                   && boundedEditDistance(q, w, max) > max;
+        });
+        if (close)
+            return NameRank::FuzzyClose;
     }
     if (q.size() >= 2) {
         const qsizetype span = subsequenceSpan(name, q);

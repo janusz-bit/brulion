@@ -27,6 +27,27 @@ bool isTokenChar(char32_t cp);
 /// Words of a folded name: runs of token characters ("projekty/dom-jana" -> projekty, dom, jana).
 QStringList words(QStringView folded);
 
+/// Call `f(QStringView word)` for each word of words(folded), in order, without allocating;
+/// stops when `f` returns false. Returns false when stopped.
+template<typename F>
+bool forEachWord(QStringView folded, F &&f)
+{
+    qsizetype start = -1;
+    for (qsizetype i = 0; i < folded.size();) {
+        const auto [cp, len] = codePointAt(folded, i);
+        if (isTokenChar(cp)) {
+            if (start < 0)
+                start = i;
+        } else if (start >= 0) {
+            if (!f(folded.sliced(start, i - start)))
+                return false;
+            start = -1;
+        }
+        i += len;
+    }
+    return start < 0 || f(folded.sliced(start));
+}
+
 /// Fold a user query for suggestions: trim, collapse whitespace, text::foldKey.
 QString foldQuery(QStringView query);
 
@@ -35,6 +56,12 @@ QString foldQuery(QStringView query);
 /// accents ignored (é = e), digit runs by value ("Strona 2" < "Strona 10"); ties are broken by
 /// code units so the order is total. Returns <0, 0 or >0.
 int compareNames(const QString &a, const QString &b);
+
+/// The part of compareNames() that depends on one name only (NFC, lower case): sorts compute
+/// it once per name and compare with compareNameKeys().
+QString nameSortKey(const QString &name);
+/// compareNames(a, b) given keyA = nameSortKey(a) and keyB = nameSortKey(b).
+int compareNameKeys(const QString &keyA, const QString &a, const QString &keyB, const QString &b);
 
 /// Index of `term` in folded `hay` as a whole token (no token character on either side), or -1.
 qsizetype indexOfToken(QStringView hay, QStringView term, qsizetype from = 0);
