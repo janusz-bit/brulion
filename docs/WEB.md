@@ -121,6 +121,8 @@ wczytania muszą widzieć licznik +1.
 python3 -m http.server 8123 --bind 127.0.0.1 --directory site &
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
   --loads 2 --selftest --expect-first 1 --screenshot online.png    # zapis + przeładowanie
+node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof-index \
+  --loads 2 --index-notes 3000                                     # indeks bez wejścia
 kill %1                                                            # serwer wyłączony
 node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/prof \
   --loads 1 --selftest --expect-first 3 --screenshot offline.png   # offline z cache SW
@@ -139,6 +141,13 @@ Pozostałe opcje:
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
   zrzut ekranu ładowania (pasek postępu).
 * `--lang pl-PL` (domyślnie) — język przeglądarki.
+* `--index-notes N` — przed pierwszym wczytaniem zapisuje do IndexedDB skarbiec z N
+  wygenerowanymi notatkami (tak jak przechowuje je montaż IDBFS, z `settings.ini` wskazującym
+  go jako bieżący); każde wczytanie musi potem zgłosić kompletny indeks
+  (`brulionShell.indexed()`, czas w `brulionShell.indexedAt`) **bez żadnego wejścia** (myszy,
+  klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). CI
+  uruchamia go z 3000 notatek.
+
 Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez SwiftShader.
 `BRULION_CHROME_NO_SANDBOX=1` (lub `CI=true`) wyłącza sandbox, gdy nie może wystartować
 (kontenery, GitHub Actions na Ubuntu 24.04).
@@ -150,7 +159,8 @@ Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez Swif
 Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): każdy push na `main`
 (zmiany w `src/`, `wasm/`…) buduje stronę `scripts/wasm-build.sh --setup`, uruchamia test
 dymny w Chrome pod ścieżką `/brulion/` (start, trwałość po przeładowaniu i restarcie
-przeglądarki, start offline z service workera) i wdraża `dist-wasm/` na GitHub Pages.
+przeglądarki, pełny indeks 3000 notatek bez żadnego wejścia, start offline z service workera)
+i wdraża `dist-wasm/` na GitHub Pages.
 Jednorazowo: *Settings → Pages → Build and deployment → Source: GitHub Actions*. Ten sam
 workflow wywołany z `release.yml` tylko buduje (`brulion-web-<wersja>.zip` w wydaniu), bez
 wdrożenia.
@@ -317,6 +327,22 @@ i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 01
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
+* **Żadnych powtarzanych timerów 0 ms.** Dyspozytor zdarzeń Qt 6.11.2 dla WebAssembly
+  (`QEventDispatcherWasm::sendTimerEvents()`) ustawia kolejny `setTimeout` przeglądarki tylko
+  wtedy, gdy `QTimerInfoList::activateTimers()` zwróci > 0, a ta funkcja nie liczy timerów o
+  interwale 0. Powtarzany `QTimer` z interwałem 0 odpala więc raz i wstrzymuje **wszystkie**
+  timery Qt, dopóki inny timer nie zostanie uruchomiony/zatrzymany albo nie przyjdzie wejście
+  (ruch myszy, klawisz). Tak indeks skarbca w przeglądarce stawał w połowie (370–570 z 1000
+  notatek niezaindeksowanych po 60 s bez dotykania karty — w Chromium i Firefoksie; dziennik
+  pokazywał „Wczytywanie notatnika…”, wyszukiwanie, odnośniki, zadania i przypomnienia były
+  niepełne), a dopiero ruch myszy popychał go o kilka porcji. Dlatego `Workspace` indeksuje
+  w przeglądarce timerem 1 ms (przeglądarka i tak czeka między kolejnymi `setTimeout` ≥ 4 ms).
+  Bezpieczne są: interwał ≥ 1 ms, timery jednorazowe (zatrzymanie timera ponownie ustawia
+  `setTimeout`), `QTimer::singleShot(0, …)` i wywołania kolejkowane (idą przez zdarzenia, nie
+  timery). Test: `scripts/wasm-smoke.mjs --index-notes` (wyżej).
+  Minimalny przypadek: `QCoreApplication` z jednym powtarzanym `QTimer` 0 ms — licznik
+  wywołań zatrzymuje się na 1 (z interwałem 1 ms: ~230 wywołań/s); dodatkowy timer 250 ms
+  nie odpala wtedy ani razu (obok timera 1 ms: 4 razy na sekundę).
 
 ## Pliki
 

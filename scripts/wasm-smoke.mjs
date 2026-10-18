@@ -4,7 +4,7 @@
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--two-tabs] [--lang pl-PL] \
-//       [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
+//       [--index-notes N] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
 // has replaced the loading screen. With --selftest the page runs `?selftest=storage`
@@ -14,8 +14,12 @@
 // offline start from the service worker cache). --notify grants the notification permission,
 // lets the app show a test notification (?selftest=notify), clicks it and expects the click to
 // reach the app. --two-tabs opens a second tab, which must wait ("open in another tab") until
-// the first one leaves the app. --loader-screenshot throttles the first download and captures
-// the loading screen. Exit code 0 = all checks passed.
+// the first one leaves the app. --index-notes N writes a vault of N generated notes into
+// IndexedDB before the first load (as the app's IDBFS mount stores it, named the current vault):
+// every load must then report a complete index (brulionShell.indexed(), wasm/index.html) with no
+// input at all — Qt's WebAssembly timers once stalled until the mouse moved (docs/WEB.md).
+// --loader-screenshot throttles the first download and captures the loading screen. Exit code
+// 0 = all checks passed.
 //
 // Chromium: $CHROME or chromium/chromium-browser/google-chrome on PATH. WebGL 2 comes from
 // SwiftShader (software). Set BRULION_CHROME_NO_SANDBOX=1 (or CI=true) where the sandbox
@@ -42,12 +46,62 @@ function parseArgs(argv) {
     else if (a === '--lang') args.lang = next();
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
     else if (a === '--expect-first') args.expectFirst = Number(next());
+    else if (a === '--index-notes') args.indexNotes = Number(next());
     else if (a === '--screenshot') args.screenshot = next();
     else if (a === '--timeout') args.timeout = Number(next());
     else throw new Error(`unknown option ${a}`);
   }
   if (!args.url || !args.profile) throw new Error('--url and --profile are required');
   return args;
+}
+
+// A vault of `count` generated notes (Polish text, links, tags, tasks) written into IndexedDB the
+// way Emscripten's IDBFS stores the app's mounts (src/platform/wasm/wasmstorage.h): one database
+// per mount point (version 21, store FILE_DATA keyed by absolute path, index "timestamp"; files
+// {timestamp, mode, contents}, folders {timestamp, mode}), plus the app's settings.ini naming it
+// the current vault. Runs in a page of the site's origin.
+function seedVaultScript(count) {
+  return `(async () => {
+    const root = '/home/web_user/Brulion';
+    const appData = '/home/web_user/.local/share/Brulion/Brulion';
+    const words = ['zażółć', 'gęślą', 'jaźń', 'notatka', 'spotkanie', 'projekt', 'ogród', 'książka',
+      'źródło', 'łódź', 'ćwiczenia', 'pomysł', 'wtorek', 'zakupy', 'rower', 'przegląd'];
+    const enc = new TextEncoder();
+    const timestamp = new Date();
+    const entries = [];
+    const dirs = new Set();
+    for (let i = 0; i < ${count}; i++) {
+      const dir = root + '/Folder ' + (i % 10);
+      dirs.add(dir);
+      let text = '# Notatka ' + i + '\\n\\n';
+      for (let p = 0; p < 5; p++) {
+        const line = [];
+        for (let k = 0; k < 16; k++) line.push(words[(i * 7 + p * 5 + k * 3) % words.length]);
+        text += '- ' + line.join(' ') + ' [[Notatka ' + ((i * 31 + p) % ${count}) + ']] #temat' + ((i + p) % 20) + '\\n';
+      }
+      text += '- [ ] zadanie ' + i + '\\n';
+      entries.push([dir + '/Notatka ' + i + '.md', { timestamp, mode: 33188, contents: enc.encode(text) }]);
+    }
+    for (const d of dirs) entries.push([d, { timestamp, mode: 16877 }]);
+    const put = (dbName, rows) => new Promise((resolve, reject) => {
+      const req = indexedDB.open(dbName, 21);
+      req.onupgradeneeded = () => {
+        const store = req.result.createObjectStore('FILE_DATA');
+        store.createIndex('timestamp', 'timestamp', { unique: false });
+      };
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction(['FILE_DATA'], 'readwrite');
+        for (const [key, value] of rows) tx.objectStore('FILE_DATA').put(value, key);
+        tx.oncomplete = () => { req.result.close(); resolve(rows.length); };
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+    const settings = enc.encode('[vaults]\\ncurrent=' + root + '\\n');
+    await put(root, entries);
+    await put(appData, [[appData + '/settings.ini', { timestamp, mode: 33188, contents: settings }]]);
+    return entries.length;
+  })()`;
 }
 
 function findChrome() {
@@ -184,6 +238,18 @@ async function main() {
     console.log(`screenshot: ${file}`);
   };
 
+  if (args.indexNotes > 0) {
+    // Any document of the site's origin can write its IndexedDB; the logo does not start the app.
+    const logo = new URL('icons/logo.svg', url).href;
+    await cdp.send('Page.navigate', { url: logo });
+    for (const end = deadline(30); Date.now() < end; await sleep(250)) {
+      if ((await evaluate('location.href + " " + document.readyState').catch(() => '')) === `${logo} complete`) break;
+    }
+    const written = await evaluate(seedVaultScript(args.indexNotes), true).catch(() => undefined);
+    console.log(`vault of ${args.indexNotes} notes written into IndexedDB (${written} entries)`);
+    if (!written) problems.push('could not write the test vault into IndexedDB');
+  }
+
   const results = [];
   for (let load = 1; load <= args.loads; load++) {
     const started = Date.now();
@@ -228,6 +294,15 @@ async function main() {
     console.log(`load ${load}: ${seconds} s ${JSON.stringify(state)}`);
     results.push({ load, seconds: Number(seconds), ...state });
     if (!state?.loaderHidden) problems.push(`load ${load}: app did not start (${state?.title}: ${state?.details || state?.status})`);
+    if (args.indexNotes > 0 && state?.loaderHidden) {
+      // No input from here on: the index must complete by itself.
+      let indexedAt;
+      for (const end = deadline(args.timeout); Date.now() < end && !(indexedAt > 0); await sleep(250)) {
+        indexedAt = await evaluate('window.brulionShell?.indexedAt ?? null');
+      }
+      console.log(`load ${load}: index of ${args.indexNotes} notes complete at ${indexedAt > 0 ? `${Math.round(indexedAt)} ms` : 'never'}`);
+      if (!(indexedAt > 0)) problems.push(`load ${load}: the index did not complete within ${args.timeout} s without input`);
+    }
   }
 
   // Service worker: registered after the first start; wait until it controls the page.

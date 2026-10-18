@@ -12,6 +12,10 @@
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#ifdef Q_OS_WASM
+#include "wasm/wasmshell.h"
+#endif
+
 #include <QBuffer>
 #include <QDesktopServices>
 #include <QElapsedTimer>
@@ -47,6 +51,18 @@ QString foldStateKey(const QString &path)
 /// Files indexed per event-loop turn while building the index in the background.
 constexpr qint64 kIndexBudgetMs = 12;
 
+/// Interval of the repeating timer that runs the index chunks. In the browser it must not be 0:
+/// Qt 6.11's single-threaded WebAssembly event dispatcher re-arms its browser timeout only after
+/// it fired a timer with a non-zero interval, so a repeating 0 ms timer fires once and then holds
+/// back every Qt timer until another timer starts or stops or input arrives — the index stood
+/// still until the user moved the mouse (docs/WEB.md). Browsers make back-to-back timeouts wait
+/// 4 ms anyway.
+#ifdef Q_OS_WASM
+constexpr int kIndexIntervalMs = 1;
+#else
+constexpr int kIndexIntervalMs = 0;
+#endif
+
 QVariantMap pageEntry(const QString &path)
 {
     return { { u"path"_s, path }, { u"title"_s, paths::pageTitle(path) } };
@@ -76,7 +92,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
 #ifdef Q_OS_WASM
     m_dataUrlAssets = true;
 #endif
-    m_indexTimer.setInterval(0);
+    m_indexTimer.setInterval(kIndexIntervalMs);
     connect(&m_indexTimer, &QTimer::timeout, this, &Workspace::indexChunk);
 
     m_reminders = new WorkspaceReminders([this] { return now(); }, this);
@@ -302,6 +318,9 @@ void Workspace::indexingFinished()
     // index would make reminders look deleted).
     m_reminders->start();
     setReady(false);
+#ifdef Q_OS_WASM
+    platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks
+#endif
 }
 
 void Workspace::setReady(bool wasReady)

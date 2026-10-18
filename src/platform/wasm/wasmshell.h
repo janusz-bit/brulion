@@ -18,4 +18,8 @@ void setShellStage(ShellStage stage);
 /// by itself after a timeout, so a missing call never locks the user out.
 void hideShellLoadingScreen();
 
+/// Tells the shell that the open vault is fully indexed (`brulionShell.indexed()`; the shell
+/// keeps the time in `brulionShell.indexedAt` for scripts/wasm-smoke.mjs and the benchmarks).
+void reportIndexReady();
+
 } // namespace brulion::platform

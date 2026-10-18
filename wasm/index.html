@@ -228,14 +228,18 @@
             });
           });
         }
-        window.brulionShell = {
+        var shellBridge = {
           stage: function (name) {
             bridged = true;
             if (T[name]) setStatus(T[name]);
             setProgress(NaN);
           },
-          done: hideLoader
+          done: hideLoader,
+          // The vault's index is complete (search, links, tasks, reminders). The time
+          // (performance.now()) is read by scripts/wasm-smoke.mjs and the browser benchmarks.
+          indexed: function () { shellBridge.indexedAt = performance.now(); }
         };
+        window.brulionShell = shellBridge;
 
         // Downloads the .wasm with progress (bytes of the uncompressed file vs. its known size).
         function fetchWasm(url) {
