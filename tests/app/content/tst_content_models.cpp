@@ -226,6 +226,32 @@ private Q_SLOTS:
         QCOMPARE(value(model, 1, "isToday").toBool(), false);
     }
 
+    void journalsShowTheCompleteIndexAtOnce()
+    {
+        // At start-up the shell and its lists exist before the vault is indexed (it opens after
+        // the window's first frame): the first refresh sees no notes yet. When indexing ends, the
+        // list refreshes on the next turn, not after its debounce (120 ms in the app; very long
+        // here, so only the immediate refresh can fill the list within the test).
+        struct SlowJournalList : JournalListModel {
+            SlowJournalList() { setRefreshDelay(600'000); }
+        };
+        const QString root = m_tmp.filePath(u"vault-%1"_s.arg(++m_n));
+        QVERIFY(writeRaw(root + u"/journals/2026-10-13.md"_s, "- wtorek: zażółć gęślą jaźń\n"));
+        QVERIFY(writeRaw(root + u"/journals/2026-10-12.md"_s, "- poniedziałek\n"));
+        Workspace ws;
+        ws.setClock([this] { return m_now; });
+        QString error;
+        QVERIFY2(ws.open(root, root + u"-state"_s, &error), qPrintable(error));
+        QVERIFY(!ws.ready()); // indexed in the background, chunk by chunk
+        SlowJournalList model;
+        model.setWorkspace(&ws);
+        model.refreshNow();
+        QCOMPARE(column(model, "date"), QStringList{u"2026-10-14"_s}); // today only, nothing indexed
+
+        QTRY_VERIFY(ws.ready());
+        QTRY_COMPARE(column(model, "date"), (QStringList{u"2026-10-14"_s, u"2026-10-13"_s, u"2026-10-12"_s}));
+    }
+
     void journalsAlternativeNamesAndClose()
     {
         auto ws = open({ { u"journals/2026_10_13.md"_s, u"- Logseq\n"_s }, { u"journals/2026-10-13.md"_s, u"- Brulion\n"_s } });

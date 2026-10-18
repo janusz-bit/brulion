@@ -61,6 +61,14 @@ void WorkspaceListModel::connectWorkspace()
     });
     connect(m_workspace, &shell::Workspace::revisionChanged, this, [this] { scheduleRefresh(m_refreshDelay); });
     connect(m_workspace, &EditorHost::indexChanged, this, [this] { scheduleRefresh(m_refreshDelay); });
+    // The index is complete (the vault was opened): show it on the next turn, not after the
+    // debounce, which coalesces edits and index chunks. The shell's lists exist before the index
+    // is done (the vault opens after the window's first frame), so a small vault's journal
+    // would otherwise appear only 120 ms after its last chunk.
+    connect(m_workspace, &shell::Workspace::readyChanged, this, [this] {
+        if (m_workspace && m_workspace->ready())
+            scheduleRefresh(0);
+    });
 }
 
 VaultIndex *WorkspaceListModel::vaultIndex() const
