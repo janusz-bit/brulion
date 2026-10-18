@@ -92,6 +92,15 @@ qt_add_resources(brulion brulion_logo
     BASE ${PROJECT_SOURCE_DIR}/assets
     FILES ${PROJECT_SOURCE_DIR}/assets/logo.svg)
 
+# main.cpp removes QQmlApplicationEngine's QML file selector (startup time): file selector
+# directories (+android/, +wasm/ …) among the app's QML and resources would be ignored.
+file(GLOB_RECURSE _brulion_file_selectors LIST_DIRECTORIES true
+    ${CMAKE_CURRENT_SOURCE_DIR}/* ${PROJECT_SOURCE_DIR}/assets/*)
+list(FILTER _brulion_file_selectors INCLUDE REGEX "/\\+[^/]*$")
+if(_brulion_file_selectors)
+    message(FATAL_ERROR "QML file selectors are not used (src/app/main.cpp): ${_brulion_file_selectors}")
+endif()
+
 qt_add_qml_module(brulion
     URI Brulion
     VERSION 1.0

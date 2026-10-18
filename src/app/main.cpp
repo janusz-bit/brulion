@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QLocale>
 #include <QQmlApplicationEngine>
+#include <QQmlFileSelector>
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QTranslator>
@@ -169,6 +170,16 @@ int main(int argc, char *argv[])
 #endif
     };
     const auto startUi = [&] {
+        // QQmlApplicationEngine resolves every URL (QML types, images, icons) through a
+        // QQmlFileSelector, which looks up +<selector>/ variants in the resources: about a third
+        // of the QML type loading before the first window on a phone-class CPU. Brulion has no
+        // file selector directories (src/app/CMakeLists.txt checks): remove it. get() initialises
+        // the engine as its first load would, at the same moment (locale, Qt translations); it is
+        // deprecated, but the only way to the selector the engine creates in its first load.
+        QT_WARNING_PUSH
+        QT_WARNING_DISABLE_DEPRECATED
+        delete QQmlFileSelector::get(&engine);
+        QT_WARNING_POP
         engine.loadFromModule("Brulion", devTools.rootComponent()); // "Main", "Gallery", …
         if (mainUi)
             controller->start(); // open the last vault or show onboarding
