@@ -1,0 +1,17 @@
+# Baseline of scripts/perf-check.sh for this machine: medians and spreads of the guard rows.
+# Recorded 2026-10-18 (run pi-c-1)
+# cpu: Raspberry Pi 4 Model B Rev 1.4
+# bench sources: 0256a7ed19260667d3c763a89f0382f287f2994c211173b7fe778441910ee074
+# profile: small
+# bench.sh: -r 5
+suite,function,tag,unit,median,spread_pct
+bench_index,openFromDisk,10000 notes scan+read+index,ms,8350.72,4.1
+bench_index,firstSearch,10000 notes,ms,2551.22,11.7
+bench_index,query,10000 notes tag praca,ms,1082,35.6
+bench_index,suggestBlocks,10000 notes 'kawa ogród',ms,80,5.0
+bench_index,suggestPages,10000 notes 'stro',ms,28,5.4
+bench_index,memory,10000 notes + search index,MiB,544.833,0.0
+bench_reminders,afterEdit,"mixed vault 10000 notes, update + all consumers",ms,963,21.3
+bench_markdown,blockDocOps,5000 blocks keystroke,ms,8.125,9.2
+bench_vault,localStoreFlush,10000 synced files,ms,953,34.2
+bench_sync,syncNoChanges,5000 files,ms,1348.57,4.7

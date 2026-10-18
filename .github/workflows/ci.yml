@@ -4,7 +4,10 @@
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer, ctest (fast feedback, independent of nixpkgs);
 #  * lint    — actionlint + shellcheck (workflows, scripts) and clang-format on the changed lines
-#              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`).
+#              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
+#  * perf    — non-blocking performance smoke: `scripts/perf-check.sh -s` (how running time
+#              scales with input size, and the index's memory; no absolute timings, so shared
+#              runners are fine — docs/PERFORMANCE.md). A failure warns, it never fails the run.
 # Android (android.yml) and the browser build (wasm.yml) have their own workflows.
 name: CI
 
@@ -172,3 +175,55 @@ jobs:
           if [ "$STRICT" = true ]; then
             exit "$status"
           fi
+
+  perf:
+    name: Performance smoke (scaling + memory, non-blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # A regression warns (annotation + job summary) but never blocks a merge: shared runners are
+    # noisy, so only machine-independent checks run here (docs/PERFORMANCE.md, "Regression guards").
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          aqtversion: ==3.3.0
+          cache: true
+
+      - name: Build the benchmark suites (Release)
+        run: |
+          cmake -S . -B build-bench -G Ninja -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+            -DCMAKE_BUILD_TYPE=Release -DBRULION_BUILD_BENCHMARKS=ON
+          cmake --build build-bench --parallel --target bench_text bench_index bench_markdown bench_io
+
+      - name: scripts/perf-check.sh -s
+        run: |
+          status=0
+          scripts/perf-check.sh -n -s -b build-bench -o "$RUNNER_TEMP/perf" -- -r 3 \
+            > "$RUNNER_TEMP/perf.log" 2>&1 || status=$?
+          cat "$RUNNER_TEMP/perf.log"
+          {
+            echo '### Performance smoke: scripts/perf-check.sh -s'
+            echo
+            echo '```'
+            grep -E '^(ok|FAIL|MISSING) |^perf-check:' "$RUNNER_TEMP/perf.log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            grep -E '^(FAIL|MISSING) ' "$RUNNER_TEMP/perf.log" | while read -r line; do
+              echo "::warning title=performance regression?::$line"
+            done
+          fi
+          exit "$status"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: perf-smoke
+          path: ${{ runner.temp }}/perf
+          retention-days: 14

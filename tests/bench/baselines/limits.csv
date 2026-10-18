@@ -1,0 +1,26 @@
+# Machine-independent limits of scripts/perf-check.sh (also its CI smoke, -s): no commas inside
+# the row field. kind "scaling": exponent k of time ~ n^k between the two largest sizes of the
+# series (row = the tag with '#' for the number) must stay <= limit — a quadratic regression
+# shows k ~ 2 on any machine. kind "max": the row's median (its unit: MiB for memory) <= limit.
+# profiles: the bench profiles (full, small) a limit applies to. The small profile (Pi) has
+# smaller steps (x2-x3) and a 1 MB L2 cache, so linear code reaches k 1.25-1.3 there (foldKeyWithMap
+# 100K -> 300K, inline HTML 5000 -> 10000); its quadratic rows measured k 1.70-4.0 (v0.1.1/d1141c0).
+# Flakiness check (laptop E-cores, 16 runs with and without a busy loop on every core): max k 1.13
+# for the full-profile series; the quadratic foldKey failed 8 of 8. See docs/PERFORMANCE.md.
+kind,suite,function,row,limit,profiles,note
+scaling,bench_text,foldKey,polish # K chars,1.2,full,N1 linear fold (k 2.27 before)
+scaling,bench_text,foldKeyWithMap,polish # K chars,1.2,full,linear
+scaling,bench_index,searchLargeNote,# KB note,1.3,full,N1 search re-index of a big note (k 2.34 before)
+scaling,bench_markdown,parsePathological,inline html x#,1.3,full,N6 raw inline HTML (k 1.99 before)
+scaling,bench_markdown,parsePathological,one paragraph # '<',1.3,full,N6 '<' without autolink (k 1.99 before)
+scaling,bench_index,unlinkedLongLine,# partial mentions on one line,1.3,full,N6 unlinked references on a long line (k 1.99 before)
+scaling,bench_io,htmlToMarkdown,flat list # items,1.3,full,N10 long HTML lists (k 2.09 before)
+scaling,bench_io,htmlToMarkdown,nested list # items,1.3,full,N10 (k 2.30 before)
+scaling,bench_text,foldKey,polish # K chars,1.5,small,N1 (k 4.04 before on the Pi)
+scaling,bench_text,foldKeyWithMap,polish # K chars,1.5,small,linear (k 1.07-1.27 on the Pi)
+scaling,bench_index,searchLargeNote,# KB note,1.5,small,N1 (k 2.74 before)
+scaling,bench_markdown,parsePathological,inline html x#,1.5,small,N6 (k 1.99 before; 1.25-1.27 now)
+scaling,bench_index,unlinkedLongLine,# partial mentions on one line,1.5,small,N6 (k 1.93 before)
+scaling,bench_io,htmlToMarkdown,flat list # items,1.5,small,N10 (k 1.89 before)
+scaling,bench_io,htmlToMarkdown,nested list # items,1.5,small,N10 (k 1.70 before)
+max,bench_index,memory,10000 notes + search index,560,full small,MiB of heap; ratchet after L8 (target 230)

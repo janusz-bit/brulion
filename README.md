@@ -201,6 +201,8 @@ Dokumentacja: [architektura](docs/ARCHITECTURE.md) · [składnia](docs/SYNTAX.md
 [NixOS](docs/NIXOS.md) · [wydania](docs/RELEASE.md). Poprzednia wersja (TypeScript +
 Tauri) jest zachowana na gałęzi `archive/web-v1`.
 
+Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, strażnicy regresji): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+
 ## Licencja
 
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
@@ -238,3 +240,5 @@ Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
 [UI](docs/UI.md). License: AGPL-3.0-or-later.
+
+Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

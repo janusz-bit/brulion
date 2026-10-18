@@ -23,3 +23,8 @@ endfunction()
 add_subdirectory(core)
 # Design system helpers of the app (src/app/ui): fuzzy matching, diffs, dates for QML.
 add_subdirectory(app)
+# QBENCHMARK suites (tests/bench, run with scripts/bench.sh); off by default so CI and Nix stay fast.
+option(BRULION_BUILD_BENCHMARKS "Build the benchmark suites in tests/bench (scripts/bench.sh)" OFF)
+if(BRULION_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
+endif()
