@@ -72,6 +72,7 @@ void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)
     const bool bom = bomPaths.contains(from);
     const bool stale = staleContent.contains(from);
     untrackFile(from);
+    moveFileWatch(from, to.path);
     if (history && !history->rename(from, to.path))
         qCWarning(lcVault).noquote() << "Cannot move the history of" << from << ":" << history->errorString();
     if (!vaultutil::isTracked(to.path))

@@ -246,6 +246,12 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
 
 void SyncRun::listLocal()
 {
+    // A watching vault watches folders (and the files open in editors), so its listing misses
+    // what other programs rewrote in place since its last rescan. Unchanged binary files are
+    // judged by that listing alone (size and mtime): rescan first, or a download would replace
+    // a picture edited in place without a conflict copy.
+    if (vault()->isWatching())
+        vault()->rescan();
     for (const FileStat &stat : vault()->files()) {
         if (!stat.isDir && isSyncablePath(stat.path))
             m_local.insert(stat.path, stat);

@@ -1773,6 +1773,57 @@ private Q_SLOTS:
         QVERIFY(!f.page.dirty());
     }
 
+    void tellsTheHostWhichPageItShows()
+    {
+        // The host watches the pages editors show (Workspace: in-place rewrites by other
+        // programs); every page reported as shown is reported as closed again.
+        struct RecordingHost : FakeEditorHost {
+            QStringList events;
+            void editorOpened(const QString &path) override { events.append(u"+"_s + path); }
+            void editorClosed(const QString &path) override { events.append(u"-"_s + path); }
+        };
+        RecordingHost host;
+        RecordingHost other;
+        host.setFile(Page, u"- a\n"_s);
+        {
+            PageController page;
+            page.setHost(&host); // no page yet
+            QCOMPARE(host.events, QStringList());
+            page.setPath(Page);
+            QCOMPARE(host.events, QStringList{u"+"_s + Page});
+            page.setPath(Page);
+            page.followRename(u"Inna.md"_s, u"Inna2.md"_s); // not ours
+            QCOMPARE(host.events.size(), 1);
+            host.events.clear();
+            page.followRename(Page, u"Notatki/Zażółć.md"_s);
+            QCOMPARE(host.events, (QStringList{u"-"_s + Page, u"+Notatki/Zażółć.md"_s}));
+            page.setPath(u"B.md"_s);
+            QCOMPARE(host.events.mid(2), (QStringList{u"-Notatki/Zażółć.md"_s, u"+B.md"_s}));
+            host.events.clear();
+            page.setHost(&other);
+            QCOMPARE(host.events, QStringList{u"-B.md"_s});
+            QCOMPARE(other.events, QStringList{u"+B.md"_s});
+            page.setPath(QString());
+            page.setPath(u"C.md"_s);
+            page.setHost(nullptr);
+            page.setHost(&other);
+            QCOMPARE(other.events.mid(1), (QStringList{u"-B.md"_s, u"+C.md"_s, u"-C.md"_s, u"+C.md"_s}));
+            other.events.clear();
+        }
+        QCOMPARE(other.events, QStringList{u"-C.md"_s}); // destroyed
+        QCOMPARE(host.events, QStringList{u"-B.md"_s});
+
+        // A host destroyed first is not told anything.
+        auto *gone = new RecordingHost;
+        PageController page;
+        page.setHost(gone);
+        page.setPath(Page);
+        delete gone;
+        page.setPath(u"D.md"_s);
+        page.setHost(&host);
+        QCOMPARE(host.events.last(), u"+D.md"_s);
+    }
+
     void removedFileKeepsText()
     {
         Fixture f(u"- a\n"_s);

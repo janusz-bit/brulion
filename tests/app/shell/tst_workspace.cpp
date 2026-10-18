@@ -183,6 +183,92 @@ private Q_SLOTS:
         QCOMPARE(strings(removed.first()), QStringList{ u"b.md"_s });
     }
 
+    void watchesOpenPagesAndRescansInTheForeground()
+    {
+        // Other programs that rewrite notes in place (no new file renamed over the old one, so
+        // nothing a folder watch sees): the pages open in editors are watched themselves, the
+        // rest is found when the app comes back to the foreground.
+        QString root;
+        auto ws = open({{u"Otwarta.md"_s, u"- otwarta"_s}, {u"Zamknięta.md"_s, u"- zamknięta"_s}}, &root);
+        ws->editorOpened(u"Otwarta.md"_s); // as an editor (PageController) does
+        bool ok = false;
+        QCOMPARE(ws->read(u"Otwarta.md"_s, &ok), u"- otwarta"_s);
+        QVERIFY(ok);
+        QVERIFY(ws->vault()->watchedPaths().contains(root + u"/Otwarta.md"_s));
+        QVERIFY(!ws->vault()->watchedPaths().contains(root + u"/Zamknięta.md"_s));
+        QSignalSpy fileChanged(ws.get(), &brulion::EditorHost::fileChanged);
+
+        QVERIFY(writeRaw(root + u"/Otwarta.md"_s, "- otwarta, zmieniona w innym edytorze"));
+        QTRY_COMPARE(fileChanged.size(), 1);
+        QCOMPARE(fileChanged.takeFirst().first().toString(), u"Otwarta.md"_s);
+
+        // Still in the foreground: a focus change within the app does not rescan.
+        ws->applicationStateChanged(Qt::ApplicationActive);
+        QVERIFY(writeRaw(root + u"/Zamknięta.md"_s, "- zamknięta, teraz z linkiem do [[Cel]]"));
+        ws->applicationStateChanged(Qt::ApplicationActive);
+        QCOMPARE(fileChanged.size(), 0);
+        // Away and back: the closed page's new content is found and indexed.
+        ws->applicationStateChanged(Qt::ApplicationInactive);
+        ws->applicationStateChanged(Qt::ApplicationSuspended);
+        QCOMPARE(fileChanged.size(), 0);
+        ws->applicationStateChanged(Qt::ApplicationActive);
+        QCOMPARE(fileChanged.size(), 1);
+        QCOMPARE(fileChanged.takeFirst().first().toString(), u"Zamknięta.md"_s);
+        QCOMPARE(ws->read(u"Zamknięta.md"_s, &ok), u"- zamknięta, teraz z linkiem do [[Cel]]"_s);
+        // A new page open in an editor is watched once its first save created it.
+        ws->editorOpened(u"Nowa.md"_s);
+        QVERIFY(ws->write(u"Nowa.md"_s, u"- nowa"_s));
+        QVERIFY(ws->vault()->watchedPaths().contains(root + u"/Nowa.md"_s));
+    }
+
+    void watchesOnlyPagesShownInEditors()
+    {
+        // Review regression (perf plan N3): every read and save named its page to the vault's
+        // bounded list of watched files, so embeds, Tasks, Calendar or an export that read or
+        // saved many other pages pushed the pages open in editors out of it.
+        QHash<QString, QString> files{{u"Otwarta.md"_s, u"- otwarta"_s}};
+        const int others = brulion::Vault::maxWatchedFiles() + 10;
+        for (int i = 0; i < others; ++i)
+            files.insert(u"Strona %1.md"_s.arg(i), u"- [ ] zadanie %1"_s.arg(i));
+        QString root;
+        auto ws = open(files, &root);
+        const auto watchedPages = [&] {
+            QStringList pages = ws->vault()->watchedPaths().filter(u".md"_s);
+            for (QString &page : pages)
+                page = page.mid(root.size() + 1);
+            return pages;
+        };
+        ws->editorOpened(u"Otwarta.md"_s);
+        ws->editorOpened(u"Otwarta.md"_s); // also in the side panel
+        for (int i = 0; i < others; ++i) {
+            bool ok = false;
+            const QString page = u"Strona %1.md"_s.arg(i);
+            QCOMPARE(ws->read(page, &ok), u"- [ ] zadanie %1"_s.arg(i));
+            QVERIFY(ws->write(page, u"- [x] zadanie %1"_s.arg(i)));
+        }
+        QCOMPARE(watchedPages(), QStringList{u"Otwarta.md"_s});
+
+        QSignalSpy fileChanged(ws.get(), &brulion::EditorHost::fileChanged);
+        QVERIFY(writeRaw(root + u"/Otwarta.md"_s, "- otwarta, zmieniona w innym edytorze"));
+        QTRY_COMPARE(fileChanged.size(), 1);
+        QCOMPARE(fileChanged.first().first().toString(), u"Otwarta.md"_s);
+
+        ws->editorClosed(u"Otwarta.md"_s);
+        QCOMPARE(watchedPages(), QStringList{u"Otwarta.md"_s}); // the side panel still shows it
+        ws->editorClosed(u"Otwarta.md"_s);
+        QCOMPARE(watchedPages(), QStringList());
+        ws->editorClosed(u"Otwarta.md"_s); // unbalanced: ignored
+        ws->editorOpened(u"Zażółć.md"_s);
+        QVERIFY(ws->write(u"Zażółć.md"_s, u"- nowa"_s));
+        QCOMPARE(watchedPages(), QStringList{u"Zażółć.md"_s});
+
+        // A page open while another vault opens is watched there too.
+        ws->editorOpened(u"Otwarta.md"_s);
+        QString error;
+        QVERIFY2(ws->open(root, m_tmp.filePath(u"state-again"_s), &error), qPrintable(error));
+        QCOMPARE(watchedPages(), (QStringList{u"Otwarta.md"_s, u"Zażółć.md"_s}));
+    }
+
     void attachments()
     {
         QString root;

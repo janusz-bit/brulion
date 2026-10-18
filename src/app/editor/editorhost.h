@@ -27,6 +27,12 @@ public:
     virtual QString read(const QString &path, bool *ok = nullptr) = 0;
     /// Save content (the host makes it atomic, records history, updates the index).
     virtual bool write(const QString &path, const QString &content) = 0;
+    /// An editor shows `path` now / no longer shows it (PageController: loading, following a
+    /// rename, another path or host, destruction). The host may watch the files editors show
+    /// for programs that rewrite them in place; several editors can show one file. Default:
+    /// nothing.
+    virtual void editorOpened(const QString & /*path*/) { }
+    virtual void editorClosed(const QString & /*path*/) { }
 
     // --- Index-backed helpers (all return plain QVariant data for QML) -------------------------
     /// Page completions for `[[`: list of { path, title, alias?, folder }.

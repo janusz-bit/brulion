@@ -20,7 +20,8 @@
 //     remove(p, source) -> moves to .trash/, removePermanently(p, source)
 //     trash(), trashInfo(trashPath), restore(trashPath), emptyTrash()
 //     startWatching() / stopWatching() (also before open()), rescan(), processPendingEvents(),
-//     setWatchDelay(ms), setRescanInterval(ms)
+//     setWatchDelay(ms), setRescanInterval(ms), watchFile(p) / unwatchFile(p) (open files),
+//     watchedPaths()
 //     scanStatus() -> VaultScanStatus{state Ok|RootMissing|StorageChanged|Unreadable,
 //     unreadableFolders, message} + signal scanStatusChanged(); isStorageAvailable() (live
 //     check), setStorageProbe(fn) (storage identity; default QStorageInfo device + mount root)
@@ -58,8 +59,14 @@
 //  * rename()/remove() of an entry that changed kind behind the vault's back (a folder
 //    replaced by a file) first report that change (External), then their own.
 //  * External changes (Syncthing, Nextcloud, other editors) are found by the file system
-//    watcher (all tracked folders + files; atomic replace-by-rename re-arms the watch) and by
-//    rescan() — call it on start-up/resume, or let setRescanInterval() do it. Events are
+//    watcher and by rescan() — call it on start-up/resume, or let setRescanInterval() do it.
+//    The watcher watches every tracked folder (files created, deleted, renamed or replaced by
+//    renaming a new version over them — how Syncthing, Nextcloud and most editors save), the
+//    config file and the files named by watchFile() (the files open in editors: their in-place
+//    rewrites are seen at once; atomic replace-by-rename re-arms the watch). In-place rewrites
+//    of other files are found by the next rescan(), or when the vault reads or writes them —
+//    one watch per folder instead of per file keeps within inotify limits (Android) and keeps
+//    start-up fast with thousands of notes. Events are
 //    coalesced for setWatchDelay() ms, then the affected folders are diffed against the
 //    cache: stat (size, mtime) first, content hash for text files, so touches and the echoes
 //    of the vault's own writes produce nothing. A file that disappears while another with the
@@ -238,6 +245,19 @@ public:
     void setWatchDelay(int msec);
     /// Periodic rescan() interval; 0 (default) disables it.
     void setRescanInterval(int msec);
+    /// Also watch this file itself, not only its folder: a program that rewrites it in place
+    /// (instead of saving a new file and renaming it over the old one) is then noticed at once,
+    /// not at the next rescan(). Meant for the files open in an editor; the vault watches the
+    /// maxWatchedFiles() most recently named ones, also across stopWatching() and open(); a file
+    /// that does not exist yet is watched once it appears. Renames take the watch along.
+    void watchFile(const VaultPath &path);
+    /// Stop watching a file named by watchFile() itself (its folder stays watched).
+    void unwatchFile(const VaultPath &path);
+    /// How many files watchFile() keeps watched.
+    static int maxWatchedFiles();
+    /// Absolute paths the file system watcher watches now (folders, then files; each sorted),
+    /// empty when not watching — diagnostics and tests.
+    QStringList watchedPaths() const;
     /// Diff the whole folder against the cache; emits and returns the changes (source External).
     QList<VaultChange> rescan();
     /// Handle queued watcher events (and checks scheduled by reads) now instead of after the

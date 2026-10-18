@@ -25,9 +25,6 @@ using namespace Qt::StringLiterals;
 namespace brulion {
 namespace {
 
-/// More file watches than this are not requested (inotify limits); rescans cover the rest.
-constexpr qsizetype kMaxFileWatches = 20000;
-
 bool entryByPath(const DiskEntry &a, const DiskEntry &b)
 {
     return a.stat.path < b.stat.path;
@@ -597,12 +594,22 @@ void VaultPrivate::startWatching()
                      [this](const QString &path) { onWatcherEvent(path, true); });
     QObject::connect(watcher.get(), &QFileSystemWatcher::fileChanged, q,
                      [this](const QString &path) { onWatcherEvent(path, false); });
+    // Folders, not files: a folder's events cover what most programs do to the files in it
+    // (Syncthing, Nextcloud and most editors write a new file and rename it over the old one;
+    // creations, deletions, renames and touches). Watching every file instead costs an inotify
+    // watch each (Android allows a few thousand per app) and Qt's addPaths() is quadratic in
+    // the number of watched paths. In-place rewrites of the files no editor has open are found
+    // by rescan() (the app rescans when it comes back to the foreground).
     QStringList paths{root};
+    paths.reserve(dirs.size() + fileWatches.size() + 2);
     for (auto it = dirs.cbegin(); it != dirs.cend(); ++it)
         paths.append(absPath(it.key()));
-    qsizetype budget = kMaxFileWatches;
-    for (auto it = files.cbegin(); it != files.cend() && budget > 0; ++it, --budget)
-        paths.append(absPath(it.key()));
+    if (files.contains(vaultConfigPath()))
+        paths.append(absPath(vaultConfigPath()));
+    for (const VaultPath &file : std::as_const(fileWatches)) {
+        if (files.contains(file))
+            paths.append(absPath(file));
+    }
     const QStringList failed = watcher->addPaths(paths);
     if (!failed.isEmpty()) {
         qCWarning(lcVault).noquote() << failed.size()
@@ -617,16 +624,57 @@ void VaultPrivate::stopWatching()
     watcher.reset();
 }
 
+bool VaultPrivate::watchesFile(const VaultPath &path) const
+{
+    return path == vaultConfigPath() || fileWatches.contains(path);
+}
+
 void VaultPrivate::watchFile(const VaultPath &path)
 {
-    if (!watcher || !vaultutil::isTracked(path))
+    if (!watcher || !vaultutil::isTracked(path) || !watchesFile(path))
         return;
     const QString abs = absPath(path);
     // A file replaced by renaming another over it (atomic saves of editors, QSaveFile,
     // Syncthing) leaves a dead watch on the old inode: always watch afresh.
     watcher->removePath(abs);
-    if (watcher->files().size() < kMaxFileWatches)
+    if (files.contains(path))
         watcher->addPath(abs);
+}
+
+void VaultPrivate::keepWatching(const VaultPath &path)
+{
+    if (path.isEmpty())
+        return;
+    if (const qsizetype at = fileWatches.indexOf(path); at >= 0) {
+        fileWatches.move(at, fileWatches.size() - 1); // most recently named last
+        return;
+    }
+    fileWatches.append(path);
+    if (fileWatches.size() > kMaxFileWatches) {
+        const VaultPath oldest = fileWatches.takeFirst();
+        if (watcher && oldest != vaultConfigPath())
+            watcher->removePath(absPath(oldest));
+    }
+    watchFile(path);
+}
+
+void VaultPrivate::stopWatchingFile(const VaultPath &path)
+{
+    if (!fileWatches.removeOne(path) || path == vaultConfigPath())
+        return;
+    if (watcher)
+        watcher->removePath(absPath(path));
+}
+
+void VaultPrivate::moveFileWatch(const VaultPath &from, const VaultPath &to)
+{
+    const qsizetype at = fileWatches.indexOf(from);
+    if (at < 0 || from == to)
+        return;
+    if (fileWatches.contains(to))
+        fileWatches.removeAt(at); // already watched under the new name
+    else
+        fileWatches[at] = to;
 }
 
 void VaultPrivate::watchDir(const VaultPath &path)
@@ -707,6 +755,32 @@ void Vault::stopWatching()
 bool Vault::isWatching() const
 {
     return d->watcher != nullptr;
+}
+
+void Vault::watchFile(const VaultPath &path)
+{
+    d->keepWatching(paths::normalize(path));
+}
+
+void Vault::unwatchFile(const VaultPath &path)
+{
+    d->stopWatchingFile(paths::normalize(path));
+}
+
+int Vault::maxWatchedFiles()
+{
+    return int(VaultPrivate::kMaxFileWatches);
+}
+
+QStringList Vault::watchedPaths() const
+{
+    if (!d->watcher)
+        return {};
+    QStringList folders = d->watcher->directories();
+    QStringList files = d->watcher->files();
+    folders.sort();
+    files.sort();
+    return folders + files;
 }
 
 void Vault::setWatchDelay(int msec)

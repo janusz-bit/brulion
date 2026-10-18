@@ -209,9 +209,19 @@ public:
     bool requireStorage();
 
     // --- watching (vaultscan.cpp)
+    /// Files watched themselves (Vault::watchFile()); folders are always watched.
+    static constexpr qsizetype kMaxFileWatches = 64;
     void startWatching();
     void stopWatching();
+    /// True for files watched themselves: those named by Vault::watchFile() and the config file.
+    bool watchesFile(const VaultPath &path) const;
+    /// (Re-)arm the watch on `path` when it is watched itself (after it was written or replaced).
     void watchFile(const VaultPath &path);
+    /// Vault::watchFile(): `path` becomes the most recently named watched file.
+    void keepWatching(const VaultPath &path);
+    void stopWatchingFile(const VaultPath &path);
+    /// A watched file was renamed: watch it under its new name.
+    void moveFileWatch(const VaultPath &from, const VaultPath &to);
     void watchDir(const VaultPath &path);
     void unwatch(const VaultPath &path);
     void syncConfigFolderWatch();
@@ -258,6 +268,9 @@ public:
     std::unique_ptr<QFileSystemWatcher> watcher;
     bool watchRequested = false; ///< startWatching() called (also before open())
     bool configFolderWatched = false;
+    /// Files watched themselves (besides their folders), the most recently named last; kept
+    /// across stopWatching() / open().
+    QList<VaultPath> fileWatches;
     QSet<VaultPath> pendingDirs;
     QSet<VaultPath> pendingFiles;
     QTimer batchTimer;

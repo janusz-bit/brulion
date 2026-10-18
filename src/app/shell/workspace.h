@@ -151,6 +151,9 @@ public:
     // ---- EditorHost -----------------------------------------------------------------------
     QString read(const QString &path, bool *ok = nullptr) override;
     bool write(const QString &path, const QString &content) override;
+    /// Pages shown by editors are watched themselves (Vault::watchFile()), counted per page.
+    void editorOpened(const QString &path) override;
+    void editorClosed(const QString &path) override;
     Q_INVOKABLE QVariantList suggestPages(const QString &prefix, int limit = 20) const override;
     Q_INVOKABLE QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     Q_INVOKABLE QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
@@ -297,6 +300,11 @@ public:
     Q_INVOKABLE void toggleFavorite(const QString &path) { setFavorite(path, !isFavorite(path)); }
     /// Remember that a page was opened (recentPages).
     Q_INVOKABLE void notePageOpened(const QString &path);
+    /// The app left the foreground (another window has the focus, the phone shows another app)
+    /// or came back. Coming back rescans the vault: other programs may have rewritten notes in
+    /// place meanwhile, which the vault's folder watches do not report (it watches only the
+    /// files open in editors themselves). Connected to QGuiApplication::applicationStateChanged.
+    void applicationStateChanged(Qt::ApplicationState state);
     /// Folded blocks of a page on this device (the editor's PageController.foldState: lines of
     /// folded blocks); follows renames, forgotten when the page is deleted.
     Q_INVOKABLE QVariantList foldState(const QString &path) const;
@@ -356,8 +364,11 @@ private:
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;
+    bool m_wasInactive = false; ///< the app left the foreground since the last rescan
     mutable QHash<QString, QUrl> m_dataUrls;
     mutable QHash<QString, QSize> m_dataUrlSizes; // pictures among them (picturesize.h)
+    /// Pages shown by editors (editorOpened()), and by how many.
+    QHash<QString, int> m_editorFiles;
 };
 
 } // namespace brulion::shell

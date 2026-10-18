@@ -16,6 +16,7 @@
 #include <QDesktopServices>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QMimeDatabase>
@@ -24,6 +25,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <utility>
 
 using namespace Qt::StringLiterals;
 
@@ -84,6 +86,8 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        connect(app, &QGuiApplication::applicationStateChanged, this, &Workspace::applicationStateChanged);
 }
 
 Workspace::~Workspace()
@@ -117,12 +121,18 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     });
     connect(m_index.get(), &VaultIndex::changed, this, &EditorHost::indexChanged);
 #ifndef Q_OS_WASM
-    // Other programs (Syncthing, editors) change files: watch the folder, and rescan slowly
-    // because watchers miss events now and then (Android, network folders). In the browser
-    // nothing else writes to the vault (the HTML shell allows one tab), so neither is needed.
+    // Other programs (Syncthing, editors) change files: watch the folders (and the files open in
+    // editors, see editorOpened()), rescan when the app comes back to the foreground
+    // (applicationStateChanged()) and slowly in between, because watchers miss events now and
+    // then (Android, network folders) and in-place rewrites of other files show in no folder.
+    // In the browser nothing else writes to the vault (the HTML shell allows one tab), so none
+    // of this is needed.
+    for (auto it = m_editorFiles.cbegin(); it != m_editorFiles.cend(); ++it)
+        m_vault->watchFile(it.key()); // editors that were open before this vault
     m_vault->startWatching();
     m_vault->setRescanInterval(120 * 1000);
 #endif
+    m_wasInactive = false;
 
     for (const FileStat &f : m_vault->files())
         m_indexQueue.append(f.path);
@@ -392,6 +402,30 @@ bool Workspace::write(const QString &path, const QString &content)
     if (!ok)
         Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
     return ok;
+}
+
+void Workspace::editorOpened(const QString &rawPath)
+{
+    // The pages editors show are watched themselves, so another program that rewrites one in
+    // place is noticed at once (the vault's folder watches do not see that). Only those: reads
+    // and saves of other pages (embeds, Tasks, Calendar, export) must not push them out of the
+    // vault's bounded list of watched files.
+    const QString path = paths::normalize(rawPath);
+    if (path.isEmpty() || m_editorFiles[path]++ > 0)
+        return;
+    if (m_vault)
+        m_vault->watchFile(path);
+}
+
+void Workspace::editorClosed(const QString &rawPath)
+{
+    const QString path = paths::normalize(rawPath);
+    const auto it = m_editorFiles.find(path);
+    if (it == m_editorFiles.end() || --it.value() > 0)
+        return;
+    m_editorFiles.erase(it);
+    if (m_vault)
+        m_vault->unwatchFile(path);
 }
 
 QString Workspace::readFile(const QString &path)
@@ -1159,6 +1193,18 @@ void Workspace::setFavorite(const QString &rawPath, bool favorite)
         list.removeAll(path);
     storeList(QString::fromLatin1(kFavorites), list);
     Q_EMIT favoritesChanged();
+}
+
+void Workspace::applicationStateChanged(Qt::ApplicationState state)
+{
+    if (state != Qt::ApplicationActive) {
+        m_wasInactive = true;
+        return;
+    }
+#ifndef Q_OS_WASM
+    if (std::exchange(m_wasInactive, false) && m_vault)
+        m_vault->rescan(); // emits changed() for what other programs did meanwhile
+#endif
 }
 
 void Workspace::notePageOpened(const QString &rawPath)

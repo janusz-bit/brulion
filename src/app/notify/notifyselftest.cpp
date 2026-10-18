@@ -160,6 +160,9 @@ public:
             check(false, "the sample notebook opens");
             return m_failures;
         }
+        // The shell is built in the turn that reports "ready"; let its first page apply its route
+        // (a queued call) before leaving it, as any user would.
+        settle(200);
         m_window->requestActivate();
         waitFor([this] { return m_window->isActive(); }, 2000);
         m_app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"reminders"_s}});

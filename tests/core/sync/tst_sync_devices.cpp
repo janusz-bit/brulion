@@ -180,6 +180,31 @@ private Q_SLOTS:
         QCOMPARE(p.a.readBytes(copy), QByteArray("\x02\x02\x02\x02"));
     }
 
+    void binaryFileRewrittenInPlaceIsNotOverwritten()
+    {
+        // Review regression (perf plan N3): a watching vault watches folders, and a folder watch
+        // does not report a file rewritten in place. An unchanged binary file is judged by the
+        // vault's listing (size, mtime): without a rescan the download replaced the local edit.
+        Pair p({{u"assets/kot.png"_s, QByteArray("\x01\x01\x01")}});
+        p.a.sync();
+        p.b.sync();
+        p.b.vault->startWatching();
+        p.clock.advance(1000);
+        QVERIFY(p.a.writeBytes(u"assets/kot.png"_s, QByteArray("\x02\x02\x02\x02")));
+        p.a.sync();
+        // Another program on the phone edits the picture in place (no new file, no rename).
+        QVERIFY(writeFileBehind(p.b.root, u"assets/kot.png"_s, QByteArray("\x03\x03")));
+        QCoreApplication::processEvents();
+        QCOMPARE(p.b.vault->stat(u"assets/kot.png"_s)->size, qint64(3)); // not seen yet
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(rb.conflicts, QList<VaultPath>{u"assets/kot.png"_s});
+        QCOMPARE(rb.conflictCopies.size(), 1);
+        QCOMPARE(p.b.readBytes(u"assets/kot.png"_s), QByteArray("\x03\x03"));
+        QCOMPARE(p.b.readBytes(rb.conflictCopies.first()), QByteArray("\x02\x02\x02\x02"));
+        p.a.sync();
+        QCOMPARE(p.a.readBytes(u"assets/kot.png"_s), QByteArray("\x03\x03"));
+    }
+
     void firstSyncWithContentOnBothSidesKeepsEverything()
     {
         Pair p({{u"wspólny.md"_s, "taki sam\n"},

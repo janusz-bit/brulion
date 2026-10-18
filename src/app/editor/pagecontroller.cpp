@@ -192,6 +192,7 @@ PageController::PageController(QObject *parent) : QObject(parent), m_model(new B
 PageController::~PageController()
 {
     flush();
+    showFile(nullptr, QString());
 }
 
 void PageController::flush()
@@ -215,6 +216,7 @@ void PageController::setHost(EditorHost *host)
         disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
     m_model->setHost(host);
+    showFile(m_host, m_path);
     if (m_host) {
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
@@ -232,6 +234,7 @@ void PageController::setPath(const QString &path)
     flush();
     m_path = path;
     m_model->setPath(path);
+    showFile(m_host, m_path);
     Q_EMIT pathChanged();
     if (m_host && !m_path.isEmpty())
         load();
@@ -513,6 +516,7 @@ void PageController::followRename(const QString &oldPath, const QString &newPath
     m_path = newPath;
     m_model->setPath(newPath);
     m_conflictCopyPath.clear();
+    showFile(m_host, m_path);
     Q_EMIT pathChanged();
     if (!m_host || !m_loaded)
         return;
@@ -587,6 +591,21 @@ void PageController::writeConflictCopy()
     }
     if (m_host->write(m_conflictCopyPath, local))
         m_conflictCopyText = local;
+}
+
+void PageController::showFile(EditorHost *host, const QString &path)
+{
+    if (path.isEmpty())
+        host = nullptr;
+    const QString shown = host ? path : QString();
+    if (host == m_shownHost && shown == m_shownPath)
+        return;
+    if (m_shownHost)
+        m_shownHost->editorClosed(m_shownPath);
+    m_shownHost = host;
+    m_shownPath = shown;
+    if (m_shownHost)
+        m_shownHost->editorOpened(m_shownPath);
 }
 
 void PageController::onFileChanged(const QString &path)

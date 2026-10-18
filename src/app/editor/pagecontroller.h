@@ -465,6 +465,8 @@ private:
     };
 
     void onFileChanged(const QString &path);
+    /// Tell the hosts which file this editor shows (EditorHost::editorOpened/editorClosed).
+    void showFile(EditorHost *host, const QString &path);
     void markDirty();
     void setDirty(bool dirty);
     void setConflict(bool conflict, const QString &remote = QString());
@@ -509,6 +511,8 @@ private:
 
     QPointer<EditorHost> m_host;
     QString m_path;
+    QPointer<EditorHost> m_shownHost; ///< told by showFile() that this editor shows m_shownPath
+    QString m_shownPath;
     BlockListModel *m_model = nullptr;
     QUndoStack *m_undo = nullptr;
     QTimer m_saveTimer;

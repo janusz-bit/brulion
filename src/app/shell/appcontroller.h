@@ -296,8 +296,14 @@ Q_SIGNALS:
     /// quit() was called: main() ends the event loop.
     void quitRequested();
 
+private Q_SLOTS:
+    void onFirstFrame();
+
 private:
     void setStatus(const QString &status, const QString &error = {});
+    /// Opens the vault a turn later — after the window's first frame (the splash) while it has
+    /// not shown one yet: scanning a big vault must not keep the window blank.
+    void scheduleOpening(const QString &path, bool seedDemo);
     void finishOpening(const QString &path, bool seedDemo);
     void routeChanged();
     void onPathRenamed(const QString &oldPath, const QString &newPath);
@@ -319,6 +325,9 @@ private:
     bool m_startHidden = false;
     bool m_quitting = false;
     bool m_started = false;
+    bool m_framePresented = false;                  ///< a window of the app has shown a frame
+    QList<std::function<void()>> m_afterFirstFrame; ///< openings waiting for that frame
+    QMetaObject::Connection m_frameConnection;
     QString m_pendingVault;
     QString m_failedPath;
     bool m_failedSeedDemo = false;

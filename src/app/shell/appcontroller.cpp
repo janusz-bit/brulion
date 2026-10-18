@@ -12,12 +12,17 @@
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QMetaMethod>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUrl>
+#include <QWindow>
+
+#include <utility>
 
 #ifdef Q_OS_ANDROID
 #include "android/androidbridge.h"
@@ -182,7 +187,7 @@ void AppController::start()
     if (!m_devVault.isEmpty()) {
         if (m_devDemo) {
             setStatus(u"loading"_s);
-            QTimer::singleShot(0, this, [this] { finishOpening(m_devVault, true); });
+            scheduleOpening(m_devVault, true);
         } else {
             openVault(m_devVault);
         }
@@ -561,7 +566,7 @@ void AppController::openVault(const QString &rawPath)
     }
     setStatus(u"loading"_s);
     // Let the UI show the loading state before the folder is scanned.
-    QTimer::singleShot(0, this, [this, path] { finishOpening(path, false); });
+    scheduleOpening(path, false);
 }
 
 void AppController::openVaultAt(const QString &path, const QVariantMap &route)
@@ -574,7 +579,56 @@ void AppController::openDemoVault()
 {
     m_routeAfterOpen.clear(); // the sample notebook opens on its welcome page
     setStatus(u"loading"_s);
-    QTimer::singleShot(0, this, [this] { finishOpening(demoVaultPath(), true); });
+    scheduleOpening(demoVaultPath(), true);
+}
+
+void AppController::scheduleOpening(const QString &path, bool seedDemo)
+{
+    const auto open = [this, path, seedDemo] { finishOpening(path, seedDemo); };
+    // At start-up the window has not drawn anything yet: show it (the splash) first, then scan
+    // the vault — with thousands of notes that takes a moment, more so on a phone. Later (the
+    // onboarding, switching notebooks), without a window (tests, started hidden to the tray)
+    // or without a QGuiApplication: on the next turn of the event loop, as always.
+    QWindow *window = nullptr;
+    if (!m_framePresented && qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        const QWindowList windows = QGuiApplication::topLevelWindows();
+        for (QWindow *w : windows) {
+            if (w->isVisible() && w->metaObject()->indexOfSignal("frameSwapped()") >= 0) {
+                window = w;
+                break;
+            }
+        }
+    }
+    if (!window) {
+        QTimer::singleShot(0, this, open);
+        return;
+    }
+    // Whichever comes first: the window's first frame (QQuickWindow::frameSwapped, emitted by
+    // the render thread; connected by name: this library does not link Qt Quick) or a timeout
+    // for a window that is never exposed (minimised, on a hidden workspace).
+    constexpr int kFirstFrameTimeoutMs = 1000;
+    auto done = std::make_shared<bool>(false);
+    const auto once = [done, open] {
+        if (!std::exchange(*done, true))
+            open();
+    };
+    m_afterFirstFrame.append(once);
+    if (!m_frameConnection) {
+        const QMetaObject *meta = window->metaObject();
+        const QMetaMethod frameSwapped = meta->method(meta->indexOfSignal("frameSwapped()"));
+        const QMetaMethod slot = staticMetaObject.method(staticMetaObject.indexOfSlot("onFirstFrame()"));
+        m_frameConnection = connect(window, frameSwapped, this, slot, Qt::QueuedConnection);
+    }
+    QTimer::singleShot(kFirstFrameTimeoutMs, this, once);
+}
+
+void AppController::onFirstFrame()
+{
+    m_framePresented = true;
+    disconnect(m_frameConnection);
+    const QList<std::function<void()>> waiting = std::exchange(m_afterFirstFrame, {});
+    for (const std::function<void()> &fn : waiting)
+        fn();
 }
 
 void AppController::finishOpening(const QString &path, bool seedDemo)
@@ -663,7 +717,7 @@ void AppController::retryOpenVault()
     const bool seed = m_failedSeedDemo;
     if (seed) {
         setStatus(u"loading"_s);
-        QTimer::singleShot(0, this, [this, path] { finishOpening(path, true); });
+        scheduleOpening(path, true);
     } else {
         openVault(path);
     }
