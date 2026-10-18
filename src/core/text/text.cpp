@@ -3,6 +3,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <atomic>
 
 using namespace Qt::StringLiterals;
 
@@ -66,20 +67,118 @@ void replaceStrokeL(QString &s)
     s.replace(u'Ł', u'L');
 }
 
-/// Fold a single code point (lower-case, no marks, ł -> l); may append nothing.
-void appendFoldedCodePoint(char32_t cp, QString &out)
+/// Fold a single code point the slow way and append the result (possibly nothing): Qt's full
+/// lower-case mapping when `lower` (İ -> i + U+0307), ł/Ł -> l/L, canonical decomposition,
+/// combining marks dropped; a lone surrogate becomes U+FFFD.
+void appendFoldedSlow(char32_t cp, bool lower, QString &out)
 {
-    if (cp < 0x80) {
-        out += QChar(char16_t(cp >= u'A' && cp <= u'Z' ? cp + 32 : cp));
-        return;
-    }
     if (QChar::isSurrogate(cp)) {
         out += QChar(char16_t(ReplacementChar));
         return;
     }
-    QString lower = QString::fromUcs4(&cp, 1).toLower();
-    replaceStrokeL(lower);
-    appendWithoutMarks(lower.normalized(QString::NormalizationForm_D), out);
+    QString folded;
+    appendCodePoint(folded, cp); // not QString::fromUcs4(): it drops U+FEFF as a byte order mark
+    if (lower)
+        folded = std::move(folded).toLower();
+    replaceStrokeL(folded);
+    appendWithoutMarks(folded.normalized(QString::NormalizationForm_D), out);
+}
+
+// Folding works one code point at a time: NFD decomposes every code point on its own and then
+// only reorders combining marks, which folding drops (tst_text checks the equivalence with
+// the whole-string fold on every BMP code point and on random strings). Normalising a whole
+// long text was quadratic: Qt decomposes in place and moves the tail of the string once per
+// decomposed character (a 500 KB Polish note took seconds).
+//
+// Folded forms of the BMP code units, filled on first use (so non-ASCII text needs no
+// allocation per character): the low half of an entry for foldKey(), the high half for
+// foldDiacritics(). 0 = not computed yet; FoldsToNothing; NeedsSlowPath (more than one unit);
+// else the folded unit. Neither marker is a possible one-unit result (a lone surrogate folds to
+// U+FFFD). Threads racing on an entry store the same value. Surrogate units are never looked up.
+// 256 KB of zero-initialised static data; only the pages of the scripts in use are touched.
+constexpr char16_t FoldsToNothing = 0xD800;
+constexpr char16_t NeedsSlowPath = 0xD801;
+std::atomic<quint32> foldTable[0x10000 - 0x80];
+
+char16_t tableHalf(char16_t c, bool lower)
+{
+    QString folded;
+    appendFoldedSlow(c, lower, folded);
+    if (folded.isEmpty())
+        return FoldsToNothing;
+    return folded.size() == 1 ? folded.front().unicode() : NeedsSlowPath;
+}
+
+/// Folded form of the non-ASCII, non-surrogate unit `c`: a unit, FoldsToNothing or NeedsSlowPath.
+char16_t foldedUnit(char16_t c, bool lower)
+{
+    std::atomic<quint32> &entry = foldTable[c - 0x80];
+    quint32 v = entry.load(std::memory_order_relaxed);
+    if (v == 0) {
+        v = quint32(tableHalf(c, true)) | (quint32(tableHalf(c, false)) << 16);
+        entry.store(v, std::memory_order_relaxed);
+    }
+    return char16_t(lower ? v & 0xFFFF : v >> 16);
+}
+
+/// foldKey() (`Lower`) or foldDiacritics() of `s`, one code point at a time. `WithMap`: the
+/// offset in `s` of the code point that produced each folded unit is appended to `map`.
+template<bool Lower, bool WithMap>
+QString foldPerCodePoint(QStringView s, QList<qsizetype> *map)
+{
+    // Output (and map) sized for one unit per input unit, written in place; grown only when a
+    // code point folds to more units than it has (Hangul syllables), trimmed at the end.
+    QString out(s.size(), Qt::Uninitialized);
+    QChar *d = out.data();
+    [[maybe_unused]] const qsizetype mapBase = WithMap ? map->size() : 0;
+    [[maybe_unused]] qsizetype *m = nullptr;
+    if constexpr (WithMap) {
+        map->resizeForOverwrite(mapBase + s.size());
+        m = map->data() + mapBase;
+    }
+    qsizetype n = 0;
+    QString slow;
+    for (qsizetype i = 0; i < s.size();) {
+        const char16_t c = s[i].unicode();
+        char16_t unit = c;
+        if (c >= 0x80)
+            unit = QChar::isSurrogate(c) ? NeedsSlowPath : foldedUnit(c, Lower);
+        else if (Lower && c >= u'A' && c <= u'Z')
+            unit = char16_t(c + 32);
+        if (unit == NeedsSlowPath) {
+            const auto [cp, len] = codePointAt(s, i);
+            slow.clear();
+            appendFoldedSlow(cp, Lower, slow);
+            // Room for this result and one unit per input unit still to come.
+            const qsizetype need = n + slow.size() + (s.size() - i - len);
+            if (need > out.size()) {
+                const qsizetype size = std::max(need, out.size() + out.size() / 2);
+                out.resize(size);
+                d = out.data();
+                if constexpr (WithMap) {
+                    map->resizeForOverwrite(mapBase + size);
+                    m = map->data() + mapBase;
+                }
+            }
+            for (const QChar u : std::as_const(slow)) {
+                if constexpr (WithMap)
+                    m[n] = i;
+                d[n++] = u;
+            }
+            i += len;
+            continue;
+        }
+        if (unit != FoldsToNothing) {
+            if constexpr (WithMap)
+                m[n] = i;
+            d[n++] = QChar(unit);
+        }
+        ++i;
+    }
+    out.resize(n);
+    if constexpr (WithMap)
+        map->resize(mapBase + n);
+    return out;
 }
 
 } // namespace
@@ -92,19 +191,14 @@ QString foldDiacritics(QStringView s)
 {
     if (isAscii(s))
         return s.toString();
-    QString decomposed = s.toString().normalized(QString::NormalizationForm_D);
-    replaceStrokeL(decomposed);
-    QString out;
-    out.reserve(decomposed.size());
-    appendWithoutMarks(decomposed, out);
-    return out;
+    return foldPerCodePoint<false, false>(s, nullptr);
 }
 
 QString foldKey(QStringView s)
 {
     if (isAscii(s))
         return s.toString().toLower();
-    return foldDiacritics(s.toString().toLower());
+    return foldPerCodePoint<true, false>(s, nullptr);
 }
 
 qsizetype FoldedText::toOriginal(qsizetype foldedOffset) const
@@ -117,16 +211,8 @@ qsizetype FoldedText::toOriginal(qsizetype foldedOffset) const
 FoldedText foldKeyWithMap(QStringView s)
 {
     FoldedText folded;
-    folded.text.reserve(s.size());
     folded.map.reserve(s.size() + 1);
-    for (qsizetype i = 0; i < s.size();) {
-        const auto [cp, len] = codePointAt(s, i);
-        const qsizetype before = folded.text.size();
-        appendFoldedCodePoint(cp, folded.text);
-        for (qsizetype k = before; k < folded.text.size(); ++k)
-            folded.map.append(i);
-        i += len;
-    }
+    folded.text = foldPerCodePoint<true, true>(s, &folded.map);
     folded.map.append(s.size());
     return folded;
 }

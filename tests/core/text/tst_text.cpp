@@ -1,7 +1,12 @@
 #include "text/text.h"
 
 #include <QElapsedTimer>
+#include <QRandomGenerator>
 #include <QTest>
+#include <QThread>
+
+#include <memory>
+#include <vector>
 
 using namespace brulion;
 using namespace Qt::StringLiterals;
@@ -19,12 +24,208 @@ QString referenceFnv(const QByteArray &bytes)
     return u"%1"_s.arg(h, 16, 16, QChar(u'0'));
 }
 
+/// One code point (a surrogate code point: a lone surrogate). Not QString::fromUcs4(), which
+/// drops U+FEFF as a byte order mark.
+QString codePointString(char32_t cp)
+{
+    if (!QChar::requiresSurrogates(cp))
+        return QString(QChar(char16_t(cp)));
+    const QChar pair[2] = {QChar(QChar::highSurrogate(cp)), QChar(QChar::lowSurrogate(cp))};
+    return QString(pair, 2);
+}
+
+/// The fold as first implemented (and as specified): NFD of the whole string, ł/Ł -> l/L,
+/// combining marks dropped, lone surrogates -> U+FFFD. Quadratic on long texts, fine here.
+QString wholeStringFoldDiacritics(const QString &s)
+{
+    QString decomposed = s.normalized(QString::NormalizationForm_D);
+    decomposed.replace(u'ł', u'l');
+    decomposed.replace(u'Ł', u'L');
+    QString out;
+    for (qsizetype i = 0; i < decomposed.size();) {
+        char32_t cp = decomposed.at(i).unicode();
+        if (QChar::isHighSurrogate(cp) && i + 1 < decomposed.size() && decomposed.at(i + 1).isLowSurrogate()) {
+            cp = QChar::surrogateToUcs4(decomposed.at(i), decomposed.at(i + 1));
+            ++i;
+        }
+        ++i;
+        if (QChar::isMark(cp))
+            continue;
+        out += codePointString(QChar::isSurrogate(cp) ? char32_t(0xFFFD) : cp);
+    }
+    return out;
+}
+
+QString wholeStringFoldKey(const QString &s)
+{
+    return wholeStringFoldDiacritics(s.toLower());
+}
+
+/// Code points as hex, for failure messages.
+QString hex(const QString &s)
+{
+    QStringList units;
+    for (const QChar c : s)
+        units.append(QString::number(c.unicode(), 16));
+    return units.join(u' ');
+}
+
+/// Code point ranges that stress folding: ASCII, Latin-1 / Extended (Polish), combining marks
+/// (incl. reordering), Greek (final sigma, tonos), Cyrillic, Hebrew points, Vietnamese stacked
+/// marks, Greek Extended, letterlike signs (Ohm, Kelvin, Angstrom), kana with voicing marks,
+/// Hangul syllables and Jamo, CJK compatibility ideographs, ligatures, fullwidth letters,
+/// variation selectors, Deseret (supplementary case pairs), musical symbol decompositions,
+/// emoji, lone surrogates, İ/ı, ł/Ł, U+FEFF and the last BMP code points.
+const std::vector<std::pair<char32_t, char32_t>> &foldRanges()
+{
+    static const std::vector<std::pair<char32_t, char32_t>> ranges = {
+            {0x20, 0x7E},       {0xA0, 0x24F},      {0x300, 0x36F},   {0x370, 0x3FF},     {0x400, 0x4FF},
+            {0x591, 0x5C7},     {0x1E00, 0x1EFF},   {0x1F00, 0x1FFF}, {0x2126, 0x212B},   {0x3040, 0x30FF},
+            {0xAC00, 0xAC40},   {0xD7A0, 0xD7A3},   {0x1100, 0x1112}, {0xF900, 0xF910},   {0xFB00, 0xFB06},
+            {0xFB1D, 0xFB4E},   {0xFF21, 0xFF5A},   {0xFE00, 0xFE0F}, {0x10400, 0x1044F}, {0x1D15E, 0x1D164},
+            {0x1F600, 0x1F64F}, {0xE0100, 0xE0110}, {0xD800, 0xDFFF}, {0x130, 0x131},     {0x141, 0x142},
+            {0xFEFF, 0xFEFF},   {0xFFF9, 0xFFFF}};
+    return ranges;
+}
+
 } // namespace
 
 class TestText : public QObject {
     Q_OBJECT
 private Q_SLOTS:
     // ---- folding -----------------------------------------------------------------------
+    // First slot on purpose: the folding table is filled lazily, here by four threads at once.
+    void foldTableConcurrent()
+    {
+        QString all;
+        for (char32_t cp = 0x80; cp <= 0xFFFF; ++cp) {
+            if (!QChar::isSurrogate(cp))
+                all += QChar(char16_t(cp));
+        }
+        QString expectedKey;
+        QString expectedDiacritics;
+        for (const QChar c : std::as_const(all)) {
+            expectedKey += wholeStringFoldKey(QString(c));
+            expectedDiacritics += wholeStringFoldDiacritics(QString(c));
+        }
+        constexpr int Threads = 4;
+        QString keys[Threads];
+        QString diacritics[Threads];
+        std::vector<std::unique_ptr<QThread>> threads;
+        for (int t = 0; t < Threads; ++t) {
+            threads.emplace_back(QThread::create([&, t] {
+                // Alternate the order so the threads also race on the second half of an entry.
+                if (t % 2 == 0) {
+                    keys[t] = text::foldKey(all);
+                    diacritics[t] = text::foldDiacritics(all);
+                } else {
+                    diacritics[t] = text::foldDiacritics(all);
+                    keys[t] = text::foldKey(all);
+                }
+            }));
+        }
+        for (const auto &thread : threads)
+            thread->start();
+        for (const auto &thread : threads)
+            QVERIFY(thread->wait(60000));
+        for (int t = 0; t < Threads; ++t) {
+            QCOMPARE(keys[t], expectedKey);
+            QCOMPARE(diacritics[t], expectedDiacritics);
+        }
+    }
+
+    void foldEveryCodePoint()
+    {
+        // Folding one code point at a time equals the whole-string NFD because NFD's canonical
+        // reordering only moves characters with a non-zero combining class, and those are all
+        // combining marks, which folding drops.
+        for (char32_t cp = 0; cp <= 0x10FFFF; ++cp) {
+            if (QChar::combiningClass(cp) != 0 && !QChar::isMark(cp))
+                QFAIL(qPrintable(u"U+%1 has a combining class but is no mark"_s.arg(quint32(cp), 4, 16, QChar(u'0'))));
+        }
+        // Every BMP code point (the lazily filled table), plane 1 (case pairs, decompositions,
+        // emoji), the CJK compatibility supplement and the variation selectors, alone and
+        // between ASCII letters.
+        const auto check = [](char32_t cp) {
+            const QString one = codePointString(cp);
+            const QString inWord = u"Ab"_s + one + u"Cd"_s;
+            for (const QString &s : {one, inWord}) {
+                const QString key = text::foldKey(s);
+                if (key != wholeStringFoldKey(s))
+                    return u"foldKey U+%1: %2 instead of %3"_s.arg(quint32(cp), 4, 16, QChar(u'0'))
+                            .arg(hex(key), hex(wholeStringFoldKey(s)));
+                const QString diacritics = text::foldDiacritics(s);
+                if (diacritics != wholeStringFoldDiacritics(s))
+                    return u"foldDiacritics U+%1: %2 instead of %3"_s.arg(quint32(cp), 4, 16, QChar(u'0'))
+                            .arg(hex(diacritics), hex(wholeStringFoldDiacritics(s)));
+                if (text::foldKeyWithMap(s).text != key)
+                    return u"foldKeyWithMap U+%1"_s.arg(quint32(cp), 4, 16, QChar(u'0'));
+            }
+            return QString();
+        };
+        for (const auto &[first, last] :
+             {std::pair<char32_t, char32_t>{0, 0x1FFFF}, {0x2F800, 0x2FA1F}, {0xE0000, 0xE01EF}}) {
+            for (char32_t cp = first; cp <= last; ++cp) {
+                if (const QString error = check(cp); !error.isEmpty())
+                    QFAIL(qPrintable(error));
+            }
+        }
+    }
+
+    void foldRandomStrings()
+    {
+        // Property: the linear fold equals the whole-string fold on random Unicode (adjacent
+        // marks of different classes, decomposed input, surrogate pairs and lone surrogates).
+        const auto &ranges = foldRanges();
+        QRandomGenerator rng(20261017);
+        for (int k = 0; k < 20000; ++k) {
+            QString s;
+            const int len = int(rng.bounded(1, 24));
+            for (int j = 0; j < len; ++j) {
+                const auto &range = ranges[rng.bounded(int(ranges.size()))];
+                s += codePointString(range.first + rng.bounded(quint32(range.second - range.first + 1)));
+            }
+            const QString key = text::foldKey(s);
+            if (key != wholeStringFoldKey(s))
+                QFAIL(qPrintable(u"foldKey(%1): %2 instead of %3"_s.arg(hex(s), hex(key), hex(wholeStringFoldKey(s)))));
+            const QString diacritics = text::foldDiacritics(s);
+            if (diacritics != wholeStringFoldDiacritics(s))
+                QFAIL(qPrintable(u"foldDiacritics(%1): %2 instead of %3"_s.arg(hex(s), hex(diacritics),
+                                                                               hex(wholeStringFoldDiacritics(s)))));
+            // The map: one offset per folded unit, non-decreasing, each the start of a code
+            // point of `s`, then s.size().
+            const text::FoldedText f = text::foldKeyWithMap(s);
+            QCOMPARE(f.text, key);
+            QCOMPARE(f.map.size(), f.text.size() + 1);
+            QCOMPARE(f.map.last(), s.size());
+            for (qsizetype u = 0; u < f.text.size(); ++u) {
+                const qsizetype at = f.map.at(u);
+                QVERIFY(at >= 0 && at < s.size());
+                QVERIFY(u == 0 || f.map.at(u - 1) <= at);
+                QVERIFY(!(s.at(at).isLowSurrogate() && at > 0 && s.at(at - 1).isHighSurrogate()));
+            }
+        }
+    }
+
+    void foldLongText()
+    {
+        // A long Polish text with decomposed letters, emoji and Hangul (the result grows) folds
+        // like the whole-string reference, and fast: the whole-string NFD was quadratic (this
+        // 2 M character text took over 3 minutes on the x86_64 laptop).
+        const QString paragraph = u"Zażółć gęślą jaźń — „Środa” o 9:00 🔁 S\u0301RODA Łódź İstanbul 한국어 ΣΊΣΥΦΟΣ\n"_s;
+        const QString big = paragraph.repeated(50000 / paragraph.size() + 1);
+        QCOMPARE(text::foldKey(big), wholeStringFoldKey(big));
+        QCOMPARE(text::foldDiacritics(big), wholeStringFoldDiacritics(big));
+        QCOMPARE(text::foldKeyWithMap(big).text, wholeStringFoldKey(big));
+        const QString huge = paragraph.repeated(2000000 / paragraph.size() + 1);
+        QElapsedTimer timer;
+        timer.start();
+        const QString folded = text::foldKey(huge);
+        QVERIFY(folded.size() > 1000000);
+        // Generous bound (Debug builds, slow machines); a few hundred ms on the laptop.
+        QVERIFY2(timer.elapsed() < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
+    }
+
     void foldDiacritics_data()
     {
         QTest::addColumn<QString>("input");
@@ -35,6 +236,7 @@ private Q_SLOTS:
         QTest::newRow("ascii") << u"Hello, World 123"_s << u"Hello, World 123"_s;
         QTest::newRow("other latin") << u"Crème brûlée, Ærø"_s << u"Creme brulee, Ærø"_s;
         QTest::newRow("emoji kept") << u"2026-10-15 🔁 ⏰"_s << u"2026-10-15 🔁 ⏰"_s;
+        QTest::newRow("zero width no-break space kept") << u"Ą\uFEFFb"_s << u"A\uFEFFb"_s;
         QTest::newRow("empty") << QString() << QString();
     }
     void foldDiacritics()
@@ -55,6 +257,8 @@ private Q_SLOTS:
         QTest::newRow("dotted I") << u"İstanbul"_s << u"istanbul"_s;
         QTest::newRow("tokens kept") << u"2026-10-15 18:30 🔁"_s << u"2026-10-15 18:30 🔁"_s;
         QTest::newRow("variation selector dropped") << u"⏰️ 9:00"_s << u"⏰ 9:00"_s;
+        // Not a byte order mark inside a text (foldKeyWithMap used to drop it).
+        QTest::newRow("zero width no-break space kept") << u"\uFEFFŚroda"_s << u"\uFEFFsroda"_s;
     }
     void foldKey()
     {
