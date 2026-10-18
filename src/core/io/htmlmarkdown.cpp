@@ -28,7 +28,12 @@ constexpr char16_t UncheckedBox = 0xE000;
 constexpr char16_t CheckedBox = 0xE001;
 constexpr char16_t LangOpen = 0xE002;
 constexpr char16_t LangClose = 0xE003;
+/// First character of the number prefix that marks the list formats of the parts of a list
+/// split by ListSplitter (followed by a nonce and the number of the split list).
+constexpr char16_t ListPartMarker = 0xE004;
 const QString ImageScheme = u"brulion-img:"_s;
+/// Lists with more items are split before QTextDocument parses them (see splitLongLists()).
+constexpr int MaxListItems = 50;
 /// Right margin given to every <blockquote>; QTextDocument adds the margins of nested quotes.
 constexpr int QuoteMargin = 37;
 
@@ -185,8 +190,8 @@ Prepared prepare(const QString &html)
 
     QString s = html;
     // The marker characters must only ever come from us (icon fonts use private-use code points).
-    for (const char16_t marker : {UncheckedBox, CheckedBox, LangOpen, LangClose})
-        s.remove(QChar(marker));
+    static_assert(CheckedBox == UncheckedBox + 1 && LangOpen == UncheckedBox + 2 && LangClose == UncheckedBox + 3);
+    s.removeIf([](QChar c) { return c.unicode() >= UncheckedBox && c.unicode() <= LangClose; });
     s = detail::removeElements(s, {u"script"_s, u"style"_s, u"noscript"_s, u"template"_s, u"iframe"_s, u"object"_s,
                                    u"embed"_s, u"svg"_s, u"math"_s, u"canvas"_s, u"video"_s, u"audio"_s});
     s = detail::limitNesting(s);
@@ -218,6 +223,490 @@ Prepared prepare(const QString &html)
     });
     p.html = s;
     return p;
+}
+
+// --- long lists --------------------------------------------------------------------------------
+//
+// QTextDocument (Qt 6.11) needs time quadratic in the number of items of one list: every item
+// added marks all blocks of its list dirty (QTextBlockGroupPrivate::markBlocksDirty) and
+// QTextList::itemNumber() is a linear search. Long lists are therefore split into consecutive
+// lists before parsing. To split exactly where QTextDocument would see a new item of the same
+// list, ListSplitter follows the tokenizer and the tree building of QTextHtmlParser (qtbase
+// src/gui/text/qtexthtmlparser.cpp: parse(), parseTag(), parseCloseTag(), parseWord(),
+// parseAttributes(), resolveParent()); CSS cannot change the structure there (displayMode comes
+// only from the element table). Whatever it does not follow exactly makes it leave the HTML
+// alone.
+
+enum class Element : quint8 {
+    Other,
+    P,
+    Li,
+    Ul,
+    Ol,
+    Td,
+    Th,
+    Tr,
+    Table,
+    Thead,
+    Tbody,
+    Tfoot,
+    Caption,
+    Dd,
+    Dt,
+    Dl,
+    Body,
+    Head
+};
+
+struct ElementInfo {
+    Element element = Element::Other;
+    bool block = false; ///< QTextHtmlElement::DisplayBlock
+    bool none = false;  ///< QTextHtmlElement::DisplayNone
+    bool empty = false; ///< QTextHtmlParserNode::mayNotHaveChildren()
+};
+
+/// QTextHtmlParser's element table (only what decides the structure).
+ElementInfo elementInfo(const QString &name)
+{
+    using E = Element;
+    static const QHash<QString, ElementInfo> table = {
+            {u"p"_s, {E::P, true}},
+            {u"li"_s, {E::Li, true}},
+            {u"ul"_s, {E::Ul, true}},
+            {u"ol"_s, {E::Ol, true}},
+            {u"td"_s, {E::Td, true}},
+            {u"th"_s, {E::Th, true}},
+            {u"tr"_s, {E::Tr}},
+            {u"table"_s, {E::Table}},
+            {u"thead"_s, {E::Thead}},
+            {u"tbody"_s, {E::Tbody}},
+            {u"tfoot"_s, {E::Tfoot}},
+            {u"caption"_s, {E::Caption, true}},
+            {u"dd"_s, {E::Dd, true}},
+            {u"dt"_s, {E::Dt, true}},
+            {u"dl"_s, {E::Dl, true}},
+            {u"body"_s, {E::Body, true}},
+            {u"qt"_s, {E::Body, true}},
+            {u"head"_s, {E::Head, false, true}},
+            {u"blockquote"_s, {E::Other, true}},
+            {u"center"_s, {E::Other, true}},
+            {u"div"_s, {E::Other, true}},
+            {u"h1"_s, {E::Other, true}},
+            {u"h2"_s, {E::Other, true}},
+            {u"h3"_s, {E::Other, true}},
+            {u"h4"_s, {E::Other, true}},
+            {u"h5"_s, {E::Other, true}},
+            {u"h6"_s, {E::Other, true}},
+            {u"pre"_s, {E::Other, true}},
+            {u"hr"_s, {E::Other, true, false, true}},
+            {u"img"_s, {E::Other, false, false, true}},
+            {u"br"_s, {E::Other, false, false, true}},
+            {u"meta"_s, {E::Other, false, true, true}},
+            {u"link"_s, {E::Other, false, true}},
+            {u"script"_s, {E::Other, false, true}},
+            {u"style"_s, {E::Other, false, true}},
+            {u"title"_s, {E::Other, false, true}},
+    };
+    return table.value(name);
+}
+
+/// QTextHtmlParserNode::allowedInContext()
+bool allowedIn(Element element, Element parent)
+{
+    using E = Element;
+    switch (element) {
+    case E::Dd:
+    case E::Dt: return parent == E::Dl;
+    case E::Tr: return parent == E::Table || parent == E::Thead || parent == E::Tbody || parent == E::Tfoot;
+    case E::Th:
+    case E::Td: return parent == E::Tr;
+    case E::Thead:
+    case E::Tbody:
+    case E::Tfoot:
+    case E::Caption: return parent == E::Table;
+    case E::Body: return parent != E::Head;
+    default: return true;
+    }
+}
+
+class ListSplitter {
+public:
+    explicit ListSplitter(const QString &html) : m_txt(html), m_len(html.size()) { }
+
+    struct Result {
+        QString html;
+        int parts = 0;  ///< number of lists split
+        QString prefix; ///< number prefix of the parts' list formats, followed by the list's number
+    };
+
+    /// The HTML with every list of more than `maxItems` items split.
+    Result split(int maxItems)
+    {
+        Result r{m_txt, 0, {}};
+        // <!--StartFragment-->: Qt parses only the fragment; qrichtext: every node keeps white space.
+        if (maxItems < 1 || !mayHaveLongList(maxItems) || m_txt.contains(u"<!--StartFragment-->"_s)
+            || m_txt.contains(u"qrichtext"_s, Qt::CaseInsensitive))
+            return r;
+        if (!scan())
+            return r;
+        struct Insert {
+            qsizetype from;
+            qsizetype to; ///< replaced range [from, to)
+            QString text;
+        };
+        QList<Insert> inserts;
+        // The nonce keeps a document from posing as a part of a split list (`-qt-list-number-prefix`
+        // in its own style attributes); it is a hash of the document, so the result is reproducible.
+        r.prefix = QChar(ListPartMarker) + QString::number(qHash(QStringView(m_txt), 0), 16) + u':';
+        for (const List &l : std::as_const(m_lists)) {
+            if (!l.clean || l.ownText || l.keepsWhiteSpace || l.items.size() <= maxItems)
+                continue;
+            const QString name = l.ordered ? u"ol"_s : u"ul"_s;
+            const QStringView attrs = QStringView(m_txt).sliced(l.attrsStart, l.attrsEnd - l.attrsStart);
+            const QString marker =
+                    u" style=\"-qt-list-number-prefix:'"_s + r.prefix + QString::number(r.parts) + u"';"_s;
+            ++r.parts;
+            inserts.append(Insert{l.tagStart, l.tagEnd, u'<' + name + attrs + marker + u" margin-bottom:0px\">"_s});
+            for (qsizetype i = maxItems; i < l.items.size(); i += maxItems) {
+                const bool last = i + maxItems >= l.items.size();
+                const qsizetype at = l.items[i];
+                inserts.append(Insert{at, at,
+                                      u"</"_s + name + u"><"_s + name + attrs + marker + u" margin-top:0px"_s
+                                              + (last ? u"\">"_s : u"; margin-bottom:0px\">"_s)});
+            }
+        }
+        if (inserts.isEmpty())
+            return r;
+        std::sort(inserts.begin(), inserts.end(), [](const Insert &a, const Insert &b) { return a.from < b.from; });
+        QString out;
+        qsizetype last = 0;
+        for (const Insert &in : std::as_const(inserts)) {
+            out += QStringView(m_txt).sliced(last, in.from - last);
+            out += in.text;
+            last = in.to;
+        }
+        out += QStringView(m_txt).sliced(last);
+        r.html = std::move(out);
+        return r;
+    }
+
+private:
+    struct Open {
+        QString name; ///< tag as QTextHtmlParser keeps it (lower case)
+        Element element = Element::Other;
+        bool block = false;
+        bool none = false;
+        bool pre = false; ///< white-space may be pre / pre-wrap (inherited)
+        int list = -1;    ///< index into m_lists for <ul>/<ol>
+    };
+    struct List {
+        bool ordered = false;
+        bool clean = false;   ///< the start tag can be written again with more attributes
+        bool ownText = false; ///< text right after the start tag: the list gets a block (with its margins)
+        /// An element inside keeps white space (white-space: pre / pre-wrap): after it an empty
+        /// block keeps QTextHtmlImporter's "preserve white space" state, which a new list resets.
+        bool keepsWhiteSpace = false;
+        qsizetype tagStart = 0;
+        qsizetype attrsStart = 0;
+        qsizetype attrsEnd = 0;
+        qsizetype tagEnd = 0;
+        QList<qsizetype> items; ///< offsets of the '<' of the <li> that are children of the list
+    };
+
+    /// Can any list have more than `maxItems` items? Counts "<li" (QTextHtmlParser allows
+    /// spaces after '<'); cheap, so that ordinary documents are not scanned.
+    bool mayHaveLongList(int maxItems) const
+    {
+        int count = 0;
+        for (qsizetype i = m_txt.indexOf(u'<'); i >= 0; i = m_txt.indexOf(u'<', i + 1)) {
+            qsizetype k = i + 1;
+            while (k < m_len && m_txt[k].isSpace())
+                ++k;
+            if (k + 1 < m_len && (m_txt[k] == u'l' || m_txt[k] == u'L')
+                && (m_txt[k + 1] == u'i' || m_txt[k + 1] == u'I') && ++count > maxItems)
+                return true;
+        }
+        return false;
+    }
+
+    bool hasPrefix(QChar c, qsizetype lookahead = 0) const
+    {
+        return m_pos + lookahead < m_len && m_txt[m_pos + lookahead] == c;
+    }
+
+    void eatSpace()
+    {
+        while (m_pos < m_len && m_txt[m_pos].isSpace() && m_txt[m_pos] != QChar::ParagraphSeparator)
+            ++m_pos;
+    }
+
+    /// QTextHtmlParser::parseWord(). Entities are not decoded (`entity` is set when the word has
+    /// one); a decoded entity never ends a word there, so the word ends at the same place.
+    QString parseWord(bool *entity)
+    {
+        QString word;
+        if (hasPrefix(u'"')) {
+            ++m_pos;
+            while (m_pos < m_len) {
+                const QChar c = m_txt[m_pos++];
+                if (c == u'"')
+                    break;
+                *entity = *entity || c == u'&';
+                word += c;
+            }
+        } else if (hasPrefix(u'\'')) {
+            ++m_pos;
+            while (m_pos < m_len) {
+                const QChar c = m_txt[m_pos++];
+                if (c == u'\'' && m_txt[m_pos - 2] != u'\\')
+                    break;
+                word += c;
+            }
+        } else {
+            while (m_pos < m_len) {
+                const QChar c = m_txt[m_pos++];
+                if (c == u'>' || (c == u'/' && hasPrefix(u'>')) || c == u'<' || c == u'=' || c.isSpace()) {
+                    --m_pos;
+                    break;
+                }
+                *entity = *entity || c == u'&';
+                word += c;
+            }
+        }
+        return word;
+    }
+
+    /// QTextHtmlParser::parseAttributes(); true when a `style` attribute may set `white-space`
+    /// (or an attribute name has an entity: it may be `style`).
+    bool parseAttributes()
+    {
+        bool whiteSpace = false;
+        while (m_pos < m_len) {
+            eatSpace();
+            if (hasPrefix(u'>') || hasPrefix(u'/'))
+                break;
+            bool keyEntity = false;
+            const QString key = parseWord(&keyEntity);
+            if (key.isEmpty())
+                break;
+            QString value;
+            eatSpace();
+            if (hasPrefix(u'=')) {
+                ++m_pos;
+                eatSpace();
+                bool valueEntity = false;
+                value = parseWord(&valueEntity);
+            }
+            if (keyEntity
+                || (key.compare(u"style"_s, Qt::CaseInsensitive) == 0
+                    && (value.contains(u"white-space"_s, Qt::CaseInsensitive)
+                        || value.contains(u"whitespace"_s, Qt::CaseInsensitive) || value.contains(u'\\')
+                        || value.contains(u'&'))))
+                whiteSpace = true;
+        }
+        return whiteSpace;
+    }
+
+    /// Follow the document; false when the structure cannot be followed exactly.
+    bool scan()
+    {
+        while (m_pos < m_len) {
+            qsizetype lt = m_txt.indexOf(u'<', m_pos);
+            if (lt < 0)
+                lt = m_len;
+            // Text goes to the node created last: a list's own text when nothing but comments
+            // came after its start tag (QTextHtmlImporter then gives the list a block).
+            if (m_textList >= 0) {
+                for (qsizetype i = m_pos; i < lt; ++i) {
+                    if (!m_txt[i].isSpace()) {
+                        m_lists[m_textList].ownText = true;
+                        break;
+                    }
+                }
+            }
+            if (lt == m_len)
+                break;
+            m_pos = lt + 1;
+            if (!parseTag(lt))
+                return false;
+        }
+        return true;
+    }
+
+    bool parseTag(qsizetype lt)
+    {
+        eatSpace();
+        if (hasPrefix(u'!')) {
+            ++m_pos;
+            if (hasPrefix(u'-') && hasPrefix(u'-', 1)) {
+                m_pos += 2;
+                const qsizetype end = m_txt.indexOf(u"-->"_s, m_pos);
+                m_pos = end >= 0 ? end + 3 : m_len;
+            } else {
+                skipPast(u'>');
+            }
+            return true;
+        }
+        m_textList = -1; // a node is created (comments create none)
+        bool entity = false;
+        if (hasPrefix(u'/')) {
+            ++m_pos;
+            const QString name = parseWord(&entity).toLower().trimmed();
+            skipPast(u'>');
+            // A void element's end tag can close the element opened after it (parseCloseTag()
+            // looks at the node created before the last one): not followed here.
+            if (entity || name == u"br" || name == u"img" || name == u"hr" || name == u"meta")
+                return false;
+            if (name.isEmpty())
+                return true;
+            for (qsizetype i = qsizetype(m_open.size()) - 1; i >= 0; --i) {
+                if (m_open[i].name == name) {
+                    m_open.resize(i);
+                    break;
+                }
+            }
+            return true;
+        }
+        const QString name = parseWord(&entity).toLower();
+        if (entity)
+            return false; // `<u&#108;>` is a <ul> for QTextHtmlParser
+        const qsizetype attrsStart = m_pos;
+        const bool whiteSpaceStyle = m_pos < m_len && m_txt[m_pos].isSpace() && parseAttributes();
+        const qsizetype attrsEnd = m_pos;
+        bool closed = false;
+        while (m_pos < m_len && m_txt[m_pos] != u'>') {
+            closed = closed || m_txt[m_pos] == u'/';
+            ++m_pos;
+        }
+        const bool ended = m_pos < m_len;
+        ++m_pos;
+        if (name.isEmpty())
+            return true; // a node without a tag never becomes a parent
+        const ElementInfo info = elementInfo(name);
+        const qsizetype parent = resolveParent(info.element);
+        if (info.element == Element::Li && parent >= 0 && m_open[parent].list >= 0)
+            m_lists[m_open[parent].list].items.append(lt);
+        m_open.resize(parent + 1);
+        const bool parentNone = parent >= 0 && m_open[parent].none;
+        // <pre> is white-space: pre; <br> is pre-wrap but always inserts a line separator.
+        const bool pre = (parent >= 0 && m_open[parent].pre) || name == u"pre" || whiteSpaceStyle;
+        if (pre) {
+            // Innermost first: the lists around a marked list are marked already (linear time).
+            for (auto o = m_open.crbegin(); o != m_open.crend(); ++o) {
+                if (o->list < 0)
+                    continue;
+                if (m_lists[o->list].keepsWhiteSpace)
+                    break;
+                m_lists[o->list].keepsWhiteSpace = true;
+            }
+        }
+        Open node{name, info.element, info.block && !parentNone, info.none || parentNone, pre, -1};
+        if (info.empty || closed) // closed again at once
+            return true;
+        if (info.element == Element::Ul || info.element == Element::Ol) {
+            static const QRegularExpression plainAttributes(
+                    u"\\A(?:[ \\t\\n\\r\\f]+[A-Za-z_:][-A-Za-z0-9_:.]*(?:[ \\t\\n\\r\\f]*=[ \\t\\n\\r\\f]*"
+                    u"(?:\"[^\"]*\"|'[^'\\\\]*'|[A-Za-z0-9_.:#%+,;-]+))?)*[ \\t\\n\\r\\f]*\\z"_s);
+            List l;
+            l.ordered = info.element == Element::Ol;
+            l.keepsWhiteSpace = pre;
+            l.tagStart = lt;
+            l.attrsStart = attrsStart;
+            l.attrsEnd = attrsEnd;
+            l.tagEnd = m_pos;
+            // Everything up to '>' must be attributes QTextHtmlParser reads to the end, so that
+            // attributes appended to a copy of the tag are read too.
+            l.clean = ended
+                      && plainAttributes.matchView(QStringView(m_txt).sliced(attrsStart, m_pos - 1 - attrsStart))
+                                 .hasMatch();
+            node.list = int(m_lists.size());
+            m_textList = node.list;
+            m_lists.append(l);
+        }
+        m_open.push_back(std::move(node));
+        return true;
+    }
+
+    void skipPast(QChar c)
+    {
+        while (m_pos < m_len) {
+            if (m_txt[m_pos++] == c)
+                break;
+        }
+    }
+
+    /// QTextHtmlParser::resolveParent(): index in m_open of the parent of a new `element`
+    /// (-1: the root); may insert the <table>/<tr> QTextHtmlParser adds for a lone <td>/<tr>.
+    qsizetype resolveParent(Element element)
+    {
+        qsizetype p = qsizetype(m_open.size()) - 1;
+        const auto hasAncestor = [&](Element e) {
+            for (qsizetype n = p; n >= 0; --n) {
+                if (m_open[n].element == e)
+                    return true;
+            }
+            return false;
+        };
+        // The inserted nodes keep the default display (inline) of QTextHtmlParserNode (and are
+        // taken to keep white space like their parent).
+        const bool pre = p >= 0 && m_open[p].pre;
+        if (element == Element::Td && !hasAncestor(Element::Tr)) {
+            m_open.push_back(Open{u"table"_s, Element::Table, false, false, pre});
+            m_open.push_back(Open{u"tr"_s, Element::Tr, false, false, pre});
+            p += 2;
+        }
+        if (element == Element::Tr && !hasAncestor(Element::Table)) {
+            m_open.push_back(Open{u"table"_s, Element::Table, false, false, pre});
+            p += 1;
+        }
+        if (element == Element::P) {
+            qsizetype n = p;
+            while (n >= 0 && !m_open[n].block)
+                --n;
+            if (n >= 0 && m_open[n].element == Element::P)
+                p = n;
+        }
+        if ((element == Element::P || element == Element::Li) && p >= 0 && m_open[p].element == element)
+            --p;
+        while (p >= 0 && !allowedIn(element, m_open[p].element))
+            --p;
+        return p;
+    }
+
+    const QString &m_txt;
+    const qsizetype m_len;
+    qsizetype m_pos = 0;
+    std::vector<Open> m_open; ///< the open elements, outermost first (the root is not included)
+    QList<List> m_lists;
+    int m_textList = -1; ///< the list whose start tag was the last tag (comments aside)
+};
+
+/// Number of the first item of each part of a list that ListSplitter split (`split`): the parts
+/// continue the numbering of the list as QTextDocument counts its items.
+QHash<const QTextList *, qint64> listPartStarts(const QTextDocument &doc, const ListSplitter::Result &split)
+{
+    QHash<int, qint64> next; // split list -> number of its next item
+    QHash<const QTextList *, qint64> starts;
+    QSet<const QTextList *> seen;
+    for (QTextBlock b = doc.begin(); b.isValid(); b = b.next()) {
+        const QTextList *list = b.textList();
+        if (!list || seen.contains(list))
+            continue;
+        seen.insert(list);
+        const QTextListFormat lf = list->format();
+        const QString prefix = lf.numberPrefix();
+        if (!prefix.startsWith(split.prefix))
+            continue;
+        bool ok = false;
+        const int id = QStringView(prefix).sliced(split.prefix.size()).toInt(&ok);
+        if (!ok || id < 0 || id >= split.parts)
+            continue;
+        const auto it = next.constFind(id);
+        const qint64 start = it != next.cend() ? *it : (lf.hasProperty(QTextFormat::ListStart) ? lf.start() : 1);
+        starts.insert(list, start);
+        next.insert(id, start + list->count());
+    }
+    return starts;
 }
 
 // --- inline ------------------------------------------------------------------------------------
@@ -504,7 +993,10 @@ OutBlock outBlock(Kind kind, int quote, QStringList lines = {})
 
 class BlockWriter {
 public:
-    BlockWriter(const QList<HtmlImage> &images, const HtmlToMarkdownOptions &options) : m_inline(images, options) { }
+    BlockWriter(const QList<HtmlImage> &images, const HtmlToMarkdownOptions &options,
+                QHash<const QTextList *, qint64> listStarts = {})
+        : m_inline(images, options), m_listStarts(std::move(listStarts))
+    { }
 
     void frame(QTextFrame *frame)
     {
@@ -650,8 +1142,11 @@ private:
         if (task) {
             marker = u"- ["_s + (*task ? u'x' : u' ') + u"] "_s;
         } else if (style <= int(QTextListFormat::ListDecimal)) {
-            // `<ol start="5">` counts from 5.
-            const int start = lf.hasProperty(QTextFormat::ListStart) ? lf.start() : 1;
+            // `<ol start="5">` counts from 5; the parts of a split list continue its numbering.
+            const auto part = m_listStarts.constFind(list);
+            const qint64 start = part != m_listStarts.cend()              ? *part
+                                 : lf.hasProperty(QTextFormat::ListStart) ? lf.start()
+                                                                          : 1;
             marker = QString::number(list->itemNumber(b) + start) + u". "_s;
         } else {
             marker = u"- "_s;
@@ -729,6 +1224,7 @@ private:
     void add(OutBlock b) { m_blocks.append(std::move(b)); }
 
     InlineWriter m_inline;
+    QHash<const QTextList *, qint64> m_listStarts; ///< see listPartStarts()
     QList<OutBlock> m_blocks;
 };
 
@@ -955,10 +1451,18 @@ QString detail::codeFenceFor(QStringView code)
     return QString(std::max<qsizetype>(3, longestRun(code, u'`') + 1), u'`');
 }
 
-QString htmlToPlainText(const QString &html)
+QString detail::splitLongLists(const QString &html, int maxItems, int *parts)
+{
+    ListSplitter::Result r = ListSplitter(html).split(maxItems);
+    if (parts)
+        *parts = r.parts;
+    return std::move(r.html);
+}
+
+QString detail::htmlToPlainTextWithListLimit(const QString &html, int maxListItems)
 {
     SafeDocument doc;
-    doc.setHtml(prepare(html).html);
+    doc.setHtml(splitLongLists(prepare(html).html, maxListItems));
     QString text = doc.toPlainText();
     text.replace(QChar::Nbsp, u' ').replace(QChar::LineSeparator, u'\n').replace(QChar::ParagraphSeparator, u'\n');
     text.remove(QChar::ObjectReplacementCharacter);
@@ -966,17 +1470,30 @@ QString htmlToPlainText(const QString &html)
     return text;
 }
 
-HtmlMarkdown htmlToMarkdown(const QString &html, const HtmlToMarkdownOptions &options)
+HtmlMarkdown detail::htmlToMarkdownWithListLimit(const QString &html, const HtmlToMarkdownOptions &options,
+                                                 int maxListItems)
 {
     const Prepared prepared = prepare(html);
+    const ListSplitter::Result split = ListSplitter(prepared.html).split(maxListItems);
     SafeDocument doc;
-    doc.setHtml(prepared.html);
-    BlockWriter writer(prepared.images, options);
+    doc.setHtml(split.html);
+    BlockWriter writer(prepared.images, options,
+                       split.parts > 0 ? listPartStarts(doc, split) : QHash<const QTextList *, qint64>());
     writer.frame(doc.rootFrame());
     HtmlMarkdown out;
     out.markdown = writer.markdown();
     out.title = doc.metaInformation(QTextDocument::DocumentTitle).simplified();
     return out;
+}
+
+QString htmlToPlainText(const QString &html)
+{
+    return detail::htmlToPlainTextWithListLimit(html, MaxListItems);
+}
+
+HtmlMarkdown htmlToMarkdown(const QString &html, const HtmlToMarkdownOptions &options)
+{
+    return detail::htmlToMarkdownWithListLimit(html, options, MaxListItems);
 }
 
 } // namespace brulion::io

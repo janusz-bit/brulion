@@ -2,6 +2,8 @@
 // to the io module.
 #pragma once
 
+#include "io/htmlmarkdown.h"
+
 #include <QString>
 #include <QStringList>
 #include <QStringView>
@@ -37,5 +39,20 @@ std::optional<QString> htmlAttribute(const QString &attributes, const QString &n
 /// Character references decoded: `&amp;` `&lt;` `&gt;` `&quot;` `&apos;` `&nbsp;` and numeric
 /// ones (`&#261;`, `&#x105;`); anything else stays as written.
 QString decodeHtmlEntities(const QString &text);
+
+/// `html` with every `<ul>`/`<ol>` of more than `maxItems` items split into consecutive lists of
+/// at most `maxItems` items (QTextDocument needs time quadratic in the items of one list). The
+/// split points are exactly where QTextHtmlParser starts a new item of that list; each part
+/// repeats the list's attributes, its margins between parts are 0 and its list format carries
+/// a number prefix that htmlToMarkdown() uses to continue the numbering, so the Markdown is
+/// that of the whole list. Lists whose start tag Qt would not read to the end, documents with
+/// `<!--StartFragment-->`, entities in tag names and end tags of void elements are left as they
+/// are. Linear time. `parts` receives the number of lists split.
+QString splitLongLists(const QString &html, int maxItems, int *parts = nullptr);
+
+/// htmlToMarkdown() / htmlToPlainText() with lists split after `maxListItems` items (the public
+/// functions use a fixed limit; tests compare the results for other limits).
+HtmlMarkdown htmlToMarkdownWithListLimit(const QString &html, const HtmlToMarkdownOptions &options, int maxListItems);
+QString htmlToPlainTextWithListLimit(const QString &html, int maxListItems);
 
 } // namespace brulion::io::detail

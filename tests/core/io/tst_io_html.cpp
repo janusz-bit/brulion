@@ -2,13 +2,189 @@
 #include "iotest.h"
 
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 
 #include <QElapsedTimer>
+#include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QTest>
+
+#include <limits>
 
 using namespace brulion;
 using namespace brulion::io;
 using namespace Qt::StringLiterals;
+
+namespace {
+
+constexpr int NoListLimit = std::numeric_limits<int>::max();
+
+/// The parts joined in order. The parts of a braced list are evaluated from left to right; the
+/// operands of `+` are not sequenced, so with random parts the documents would depend on the
+/// compiler (GCC on aarch64 and on x86_64 build different ones).
+QString cat(std::initializer_list<QString> parts)
+{
+    QString s;
+    for (const QString &part : parts)
+        s += part;
+    return s;
+}
+
+/// Random HTML with short lists in every shape QTextDocument has to cope with: nesting,
+/// numbering attributes, items without end tags, empty and self-closing items, code and
+/// paragraphs inside items, stray text and end tags, table/definition elements that close the
+/// list implicitly, comments, entities, `<` in text.
+class HtmlListGenerator {
+public:
+    explicit HtmlListGenerator(quint32 seed) : m_r(seed) { }
+
+    QString document()
+    {
+        QString s;
+        if (chance(20))
+            s += u"<html><head><title>Tytuł</title></head><body>"_s;
+        const int blocks = 1 + below(4);
+        for (int b = 0; b < blocks; ++b) {
+            switch (below(10)) {
+            case 0: s += u"<p>"_s + inlineContent() + u"</p>"_s; break;
+            case 1: s += u"<blockquote>"_s + list(0) + u"</blockquote>"_s; break;
+            case 2: s += u"<table><tr><td>"_s + list(0) + u"</td><td>x</td></tr></table>"_s; break;
+            case 3: s += u"<pre>kod\n  wcięty</pre>"_s; break;
+            case 4: s += cat({u"<div>"_s, inlineContent(), list(1), u"</div>"_s}); break;
+            case 5: s += cat({u"<h2>"_s, word(), u"</h2>"_s, list(0)}); break;
+            default: s += list(0); break;
+            }
+            if (chance(20))
+                s += pick({u"\n"_s, u"<hr>"_s, u"tekst luzem"_s, u"<p>"_s, u"</div>"_s});
+        }
+        if (chance(3))
+            s += pick({u"</br>"_s, u"<u&#108;><li>x</ul>"_s, u"<!--StartFragment-->"_s});
+        return s;
+    }
+
+private:
+    int below(int n) { return int(m_r.bounded(n)); }
+    bool chance(int percent) { return below(100) < percent; }
+    QString pick(std::initializer_list<QString> options) { return *(options.begin() + below(int(options.size()))); }
+
+    QString word()
+    {
+        if (chance(15)) // `<` opens an element for QTextHtmlParser
+            return pick({u"x < y"_s, u"a <3"_s, u"1 <= 2"_s});
+        return pick({u"żółw"_s, u"Zażółć gęślą jaźń"_s, u"Łódź"_s, u"kot"_s, u"a &amp; b"_s, u"1."_s, u"**"_s, u"[ ]"_s,
+                     u"  "_s, u"#tag"_s, u"&nbsp;"_s, u"ćma"_s, u"- nie lista"_s, u"źdźbło"_s, u"pójdź"_s,
+                     u"x &lt; y"_s});
+    }
+
+    QString inlineContent()
+    {
+        QString s;
+        const int n = below(4);
+        for (int i = 0; i < n; ++i) {
+            switch (below(14)) {
+            case 0: s += cat({u"<b>"_s, word(), chance(70) ? u"</b>"_s : QString()}); break;
+            case 1: s += u"<i>"_s + word() + u"</i>"_s; break;
+            case 2: s += u"<a href=\"https://x.org/a\">"_s + word() + u"</a>"_s; break;
+            case 3: s += u"<br>"_s; break;
+            case 4: s += u"<img src=\"https://x.org/i.png\" alt=\"obraz\">"_s; break;
+            case 5: s += u"<input type=checkbox"_s + (chance(50) ? u" checked"_s : QString()) + u"> "_s; break;
+            case 6: s += u"<code>k`d</code>"_s; break;
+            case 7: s += u"<span style=\"background-color:#ff0\">"_s + word() + u"</span>"_s; break;
+            case 8: s += u"<!-- komentarz <li> -->"_s; break;
+            case 9: s += u"<wbr>"_s; break;
+            case 10: s += u"<p>"_s + word(); break;
+            default: s += word() + u' '; break;
+            }
+        }
+        return s;
+    }
+
+    QString listAttributes()
+    {
+        QString a;
+        const int n = below(3);
+        for (int i = 0; i < n; ++i) {
+            switch (below(13)) {
+            case 0: a += u" start=\"%1\""_s.arg(int(m_r.bounded(-3, 30))); break;
+            case 1: a += u" start=x"_s; break;
+            case 2: a += u" type=\""_s + pick({u"a"_s, u"A"_s, u"i"_s, u"1"_s, u"square"_s, u"none"_s}) + u'"'; break;
+            case 3: a += u" style=\"list-style-type:decimal\""_s; break;
+            case 4: a += u" style=\"margin:0px\""_s; break;
+            case 5: a += u" style=\"margin-top:0; margin-bottom:5px; -qt-list-indent:2\""_s; break;
+            case 6: a += u" class='todo-list'"_s; break;
+            case 7: a += u" START=3"_s; break;
+            case 8: a += u" id=lista"_s; break;
+            case 9: a += u" data-x=\"a>b\""_s; break;
+            case 10: a += u" / "_s; break;
+            case 11: a += u" style=\"-qt-list-number-prefix:'(';\""_s; break;
+            default: a += u"\n title=\"Lista\""_s; break;
+            }
+        }
+        return a;
+    }
+
+    QString itemContent(int depth)
+    {
+        if (chance(3))
+            return pick({u"<pre>"_s, u"<pre style=\"margin:0\">"_s, u"<pre style=\"margin-top:0\">"_s})
+                   + u"a  b</pre>"_s;
+        switch (below(16)) {
+        case 0: return QString();
+        case 1: return depth < 3 ? cat({inlineContent(), list(depth + 1)}) : inlineContent();
+        case 2: return depth < 3 ? cat({list(depth + 1), word()}) : word();
+        case 3: return cat({u"<p>"_s, word(), u"</p><p>"_s, word(), u"</p>"_s});
+        case 4: return u"<span style=\"white-space:nowrap\">"_s + word() + u"</span>"_s;
+        case 5: return cat({u"<div>"_s, word(), u"</div>"_s, word()});
+        case 6: return cat({pick({u"<dt>"_s, u"<dd>"_s, u"<td>"_s, u"<tr>"_s, u"<tbody>"_s, u"<caption>"_s}), word()});
+        case 7:
+            return cat(
+                    {word(), pick({u"</b>"_s, u"</li>"_s, u"</ul>"_s, u"</ol>"_s, u"</div>"_s, u"</p>"_s, u"</>"_s})});
+        case 8: return cat({u"<b>"_s, word(), u"<p>"_s, word()});
+        case 9: return u"<table><tr><td>"_s + word() + u"</td></tr></table>"_s;
+        default: return inlineContent();
+        }
+    }
+
+    QString list(int depth)
+    {
+        const bool ordered = chance(50);
+        QString tag = ordered ? u"ol"_s : u"ul"_s;
+        if (chance(10))
+            tag = tag.toUpper();
+        QString s = u'<' + tag + listAttributes() + u'>';
+        if (chance(10))
+            s += u"luzem "_s;
+        const int items = below(depth == 0 ? 12 : 5);
+        for (int i = 0; i < items; ++i) {
+            if (chance(25))
+                s += pick({u"\n  "_s, u" "_s, u"<!-- x -->"_s, u"luzem"_s, u"\n"_s});
+            // White space kept (white-space: pre, <pre>) makes a list stay whole: rarely.
+            s += cat({u"<li"_s,
+                      chance(3)
+                              ? u" style=\"white-space:pre\""_s
+                              : pick({QString(), QString(), QString(), u" class=\"checked\""_s, u" class=unchecked"_s,
+                                      u" style=\"margin-top:0\""_s, u" style=\"margin-bottom:-5px\""_s, u" value=7"_s}),
+                      chance(5) ? u"/>"_s : u">"_s, itemContent(depth)});
+            if (chance(60))
+                s += u"</li>"_s;
+        }
+        if (chance(85))
+            s += u"</"_s + tag + u'>';
+        return s;
+    }
+
+    QRandomGenerator m_r;
+};
+
+QString numberedItems(int from, int count, const QString &indent = QString())
+{
+    QString md;
+    for (int i = 0; i < count; ++i)
+        md += indent + QString::number(from + i) + u". pozycja "_s + QString::number(i) + u'\n';
+    return md;
+}
+
+} // namespace
 
 class TestIoHtml : public QObject {
     Q_OBJECT
@@ -206,6 +382,202 @@ private Q_SLOTS:
         const QString md = htmlToMarkdown(u"<p>akapit"_s.repeated(200)).markdown;
         QCOMPARE(md.count(u"akapit"_s), 200);
         QCOMPARE(md.count(u"\n\n"_s), 199);
+    }
+
+    void longLists_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::addColumn<QString>("markdown");
+        QString html = u"<ul>"_s;
+        QString md;
+        for (int i = 1; i <= 250; ++i) {
+            html += u"<li>punkt %1 żółw</li>"_s.arg(i);
+            md += u"- punkt %1 żółw\n"_s.arg(i);
+        }
+        QTest::newRow("bullets") << html + u"</ul><p>po liście</p>"_s << md + u"\npo liście\n"_s;
+
+        // Items without end tags, an <ol start>: the numbering runs on over the parts.
+        html = u"<p>przed</p><ol start=\"5\" type=\"1\">"_s;
+        for (int i = 0; i < 450; ++i)
+            html += u"\n<li>pozycja "_s + QString::number(i);
+        QTest::newRow("ordered from 5") << html + u"</ol>"_s << u"przed\n\n"_s + numberedItems(5, 450);
+
+        html = u"<ol>"_s;
+        md.clear();
+        for (int i = 0; i < 330; ++i) {
+            html += u"<li>pozycja "_s + QString::number(i);
+            md += QString::number(i + 1) + u". pozycja "_s + QString::number(i) + u'\n';
+            if (i % 10 == 0) {
+                html += u"<ul><li>a</li><li><b>b</b></li></ul>"_s;
+                md += u"\t- a\n\t- **b**\n"_s;
+            }
+            html += u"</li>"_s;
+        }
+        QTest::newRow("nested") << html + u"</ol>"_s << md;
+
+        // A long nested list is split too; the outer numbering is unaffected.
+        html = u"<ol><li>pierwszy<ol>"_s;
+        for (int i = 0; i < 120; ++i)
+            html += u"<li>pozycja "_s + QString::number(i) + u"</li>"_s;
+        html += u"</ol></li><li>drugi</li></ol>"_s;
+        QTest::newRow("long nested list")
+                << html << u"1. pierwszy\n"_s + numberedItems(1, 120, u"\t"_s) + u"2. drugi\n"_s;
+
+        html = u"<blockquote><ul>"_s;
+        md.clear();
+        for (int i = 0; i < 220; ++i) {
+            html += u"<li><input type=checkbox%1> zadanie %2</li>"_s.arg(i % 3 ? QString() : u" checked"_s).arg(i);
+            md += u"> - [%1] zadanie %2\n"_s.arg(i % 3 ? u" "_s : u"x"_s).arg(i);
+        }
+        QTest::newRow("tasks in a quote") << html + u"</ul></blockquote>"_s << md;
+
+        // Empty items: QTextDocument reuses their block for the next item, so they are not
+        // counted; the numbering of the parts follows QTextDocument's count.
+        html = u"<ol>"_s;
+        md.clear();
+        int number = 0;
+        for (int i = 0; i < 300; ++i) {
+            if (i % 7 == 3) {
+                html += u"<li></li>"_s;
+                continue;
+            }
+            html += u"<li>pozycja "_s + QString::number(i) + u"</li>"_s;
+            md += QString::number(++number) + u". pozycja "_s + QString::number(i) + u'\n';
+        }
+        QTest::newRow("empty items") << html + u"</ol>"_s << md;
+
+        // Two long lists, one after the other: still two lists (a blank line between them).
+        html = u"<ol>"_s;
+        for (int i = 0; i < 150; ++i)
+            html += u"<li>pozycja "_s + QString::number(i) + u"</li>"_s;
+        html += u"</ol><ol start=\"1000\">"_s;
+        for (int i = 0; i < 150; ++i)
+            html += u"<li>pozycja "_s + QString::number(i) + u"</li>"_s;
+        QTest::newRow("two lists") << html + u"</ol>"_s << numberedItems(1, 150) + numberedItems(1000, 150);
+    }
+
+    void longLists()
+    {
+        QFETCH(QString, html);
+        QFETCH(QString, markdown);
+        int parts = 0;
+        detail::splitLongLists(html, 100, &parts);
+        QVERIFY(parts > 0);
+        QCOMPARE(htmlToMarkdown(html).markdown, markdown);
+        QCOMPARE(detail::htmlToMarkdownWithListLimit(html, {}, NoListLimit).markdown, markdown);
+        QCOMPARE(htmlToPlainText(html), detail::htmlToPlainTextWithListLimit(html, NoListLimit));
+    }
+
+    void splitListsKeepOutput()
+    {
+        // Property: splitting lists (after every item, or every 2nd / 3rd) changes nothing in the
+        // Markdown or the plain text of any document.
+        constexpr int Documents = 1500;
+        HtmlListGenerator gen(20261017);
+        int split = 0; // documents with a list split after every item
+        for (int n = 0; n < Documents; ++n) {
+            const QString html = gen.document();
+            const QString whole = detail::htmlToMarkdownWithListLimit(html, {}, NoListLimit).markdown;
+            for (const int limit : {1, 2, 3}) {
+                int parts = 0;
+                detail::splitLongLists(html, limit, &parts);
+                if (limit == 1 && parts > 0)
+                    ++split;
+                const QString md = detail::htmlToMarkdownWithListLimit(html, {}, limit).markdown;
+                QVERIFY2(md == whole,
+                         qPrintable(u"limit %1, html:\n%2\nwhole:\n%3\nsplit:\n%4"_s.arg(limit).arg(html, whole, md)));
+            }
+            const QString text = detail::htmlToPlainTextWithListLimit(html, NoListLimit);
+            QVERIFY2(detail::htmlToPlainTextWithListLimit(html, 1) == text, qPrintable(html));
+        }
+        QVERIFY2(split > Documents / 4, qPrintable(QString::number(split))); // the splitting was exercised
+    }
+
+    void splitLongListsLeavesOthers_data()
+    {
+        QTest::addColumn<QString>("html");
+        const QString items = u"<li>a</li>"_s.repeated(5);
+        QTest::newRow("short list") << u"<ul>"_s + u"<li>a</li>"_s.repeated(3) + u"</ul>"_s;
+        QTest::newRow("start fragment") << u"<!--StartFragment--><ul>"_s + items + items + u"</ul>"_s;
+        QTest::newRow("void end tag") << u"<ul>"_s + items + u"</br>"_s + items + u"</ul>"_s;
+        QTest::newRow("entity in a tag name") << u"<ul>"_s + items + u"<l&#105;>b"_s + items + u"</ul>"_s;
+        QTest::newRow("slash in the start tag") << u"<ul / class=x>"_s + items + items + u"</ul>"_s;
+        QTest::newRow("unquoted value with a quote") << u"<ul class=a\"b>"_s + items + items + u"</ul>"_s;
+        QTest::newRow("single quote after backslash") << u"<ol title='a\\'>"_s + items + items + u"</ol>"_s;
+        QTest::newRow("items inside an inline element") << u"<ul><li><b>x"_s + items + items + u"</ul>"_s;
+        QTest::newRow("no list") << u"<p>"_s + u"<li>a"_s.repeated(10) + u"</p>"_s;
+    }
+
+    void splitLongListsLeavesOthers()
+    {
+        QFETCH(QString, html);
+        int parts = -1;
+        QCOMPARE(detail::splitLongLists(html, 3, &parts), html);
+        QCOMPARE(parts, 0);
+    }
+
+    void splitLongListsSplitsAtItems()
+    {
+        int parts = 0;
+        QString split = detail::splitLongLists(u"<OL start=3 class=\"x\">\n<li>a<li>b</li> <li>c<ol><li>d</ol>e</ol>"_s,
+                                               2, &parts);
+        QCOMPARE(parts, 1);
+        // The parts' number prefix: a marker, a nonce (hash of the document), the list's number.
+        static const QRegularExpression nonce(u"\uE004[0-9a-f]+:"_s);
+        QVERIFY(split.contains(nonce));
+        split.replace(nonce, u"#:"_s);
+        QCOMPARE(
+                split,
+                u"<ol start=3 class=\"x\" style=\"-qt-list-number-prefix:'#:0'; margin-bottom:0px\">\n<li>a<li>b</li> "
+                "</ol><ol start=3 class=\"x\" style=\"-qt-list-number-prefix:'#:0'; margin-top:0px\"><li>c<ol><li>d</ol>e</ol>"_s);
+    }
+
+    void listPartPrefixCannotBeForged()
+    {
+        // A document's own -qt-list-number-prefix (a CSS escape of the marker) never makes a
+        // list continue the numbering of a split one; the marker character in text stays text.
+        QString html = u"<ol>"_s + u"<li>a</li>"_s.repeated(60) + u"</ol>"_s;
+        for (const QString &prefix : {u"\\E004 0"_s, u"\\E004 0:0"_s, u"\\E004 "_s})
+            html += u"<p>p</p><ol style=\"-qt-list-number-prefix:'"_s + prefix + u"'\"><li>b</li><li>c</li></ol>"_s;
+        const QString md = htmlToMarkdown(html).markdown;
+        QString split; // the 60 items are split (50 + 10) and still numbered 1 … 60
+        for (int i = 1; i <= 60; ++i)
+            split += QString::number(i) + u". a\n"_s;
+        QVERIFY(md.startsWith(split));
+        QCOMPARE(md.count(u"1. b\n2. c\n"_s), 3);
+        QCOMPARE(htmlToMarkdown(u"<p>x\uE004y</p>"_s).markdown, u"x\uE004y\n"_s);
+    }
+
+    void longListIsLinear_data()
+    {
+        QTest::addColumn<QString>("html");
+        QTest::addColumn<int>("lines");
+        constexpr int Items = 20000;
+        QString flat = u"<ul>"_s;
+        QString ordered = u"<ol start=\"7\">"_s;
+        QString nested = u"<ul>"_s;
+        for (int i = 0; i < Items; ++i) {
+            flat += u"<li>punkt zażółć "_s + QString::number(i) + u"</li>"_s;
+            ordered += u"<li>pozycja "_s + QString::number(i);
+            nested += u"<li>punkt "_s + QString::number(i)
+                      + (i % 10 == 0 ? u"<ul><li>a</li><li>b</li></ul>"_s : QString()) + u"</li>"_s;
+        }
+        QTest::newRow("flat") << flat + u"</ul>"_s << Items;
+        QTest::newRow("ordered") << ordered + u"</ol>"_s << Items;
+        QTest::newRow("nested") << nested + u"</ul>"_s << Items + Items / 10 * 2;
+    }
+
+    void longListIsLinear()
+    {
+        // QTextDocument alone needs about 13 s for 20 000 items of one list (x86_64, Release).
+        QFETCH(QString, html);
+        QFETCH(int, lines);
+        QElapsedTimer timer;
+        timer.start();
+        const QString md = htmlToMarkdown(html).markdown;
+        QVERIFY2(timer.elapsed() < 4000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
+        QCOMPARE(md.count(u'\n'), lines);
+        QVERIFY(md.endsWith(u"19999\n"_s));
     }
 
     void escape_data()
