@@ -8,6 +8,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRandomGenerator>
+#include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -26,6 +29,113 @@ QJsonObject fileObject(const QString &path)
         return {};
     return QJsonDocument::fromJson(file.readAll()).object();
 }
+
+QByteArray fileBytes(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+bool writeFileBytes(const QString &path, const QByteArray &bytes)
+{
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly | QIODevice::Truncate) && file.write(bytes) == bytes.size();
+}
+
+/// The store's semantics written the straightforward way (every flush reads and parses the
+/// file): the reference that LocalStore must match whatever shortcuts it takes.
+class ReferenceStore {
+public:
+    explicit ReferenceStore(QString path) : m_path(std::move(path)) { reload(); }
+
+    QMap<QString, QJsonValue> data;
+
+    void set(const QString &key, const QJsonValue &value)
+    {
+        if (value.isUndefined()) {
+            remove(key);
+            return;
+        }
+        if (const auto it = data.constFind(key); it != data.cend() && *it == value)
+            return;
+        data.insert(key, value);
+        m_pending.insert(key, value);
+    }
+    void remove(const QString &key)
+    {
+        if (data.remove(key))
+            m_pending.insert(key, std::nullopt);
+    }
+    void clear()
+    {
+        if (data.isEmpty() && m_pending.isEmpty() && m_lastBytes.isEmpty())
+            return;
+        data.clear();
+        m_pending.clear();
+        m_cleared = true;
+    }
+    void flush()
+    {
+        if (!m_cleared && m_pending.isEmpty())
+            return;
+        QMap<QString, QJsonValue> disk;
+        QByteArray raw;
+        read(disk, raw);
+        if (!raw.isEmpty() && raw != m_lastBytes)
+            data = applied(disk);
+        QJsonObject object;
+        for (auto it = data.cbegin(); it != data.cend(); ++it)
+            object.insert(it.key(), it.value());
+        m_lastBytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+        QVERIFY(writeFileBytes(m_path, m_lastBytes));
+        m_pending.clear();
+        m_cleared = false;
+    }
+    void reload()
+    {
+        QMap<QString, QJsonValue> disk;
+        QByteArray raw;
+        read(disk, raw);
+        m_lastBytes = raw;
+        data = applied(disk);
+    }
+
+private:
+    void read(QMap<QString, QJsonValue> &out, QByteArray &raw)
+    {
+        out.clear();
+        raw = fileBytes(m_path);
+        if (raw.isEmpty() && !QFileInfo::exists(m_path))
+            return;
+        QJsonParseError error;
+        const QJsonDocument doc = QJsonDocument::fromJson(raw, &error);
+        if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+            QFile::remove(m_path + u".corrupt"_s);
+            QFile::rename(m_path, m_path + u".corrupt"_s);
+            raw.clear();
+            return;
+        }
+        const QJsonObject object = doc.object();
+        for (auto it = object.constBegin(); it != object.constEnd(); ++it)
+            out.insert(it.key(), it.value());
+    }
+    QMap<QString, QJsonValue> applied(const QMap<QString, QJsonValue> &disk) const
+    {
+        QMap<QString, QJsonValue> out = m_cleared ? QMap<QString, QJsonValue>() : disk;
+        for (auto it = m_pending.cbegin(); it != m_pending.cend(); ++it) {
+            if (it.value())
+                out.insert(it.key(), *it.value());
+            else
+                out.remove(it.key());
+        }
+        return out;
+    }
+
+    QString m_path;
+    QHash<QString, std::optional<QJsonValue>> m_pending;
+    bool m_cleared = false;
+    QByteArray m_lastBytes;
+};
 
 } // namespace
 
@@ -183,6 +293,146 @@ private Q_SLOTS:
         QCOMPARE(fileObject(path), (QJsonObject{{u"from-b"_s, 2}, {u"shared"_s, u"b"_s}}));
         QVERIFY(a.reload());
         QCOMPARE(a.keys(), (QStringList{u"from-b"_s, u"shared"_s}));
+    }
+
+    void unchangedFileIsNotReparsedButChangesAreSeen()
+    {
+        // A flush finds the file as this store left it (nothing to merge), or changed by someone
+        // else — also to content of the same size, or back to bytes it wrote earlier.
+        const QString path = freshPath();
+        LocalStore a(path);
+        a.set(u"liczba"_s, 1);
+        a.set(u"tekst"_s, u"zażółć"_s);
+        QVERIFY(a.flush());
+        const QByteArray first = fileBytes(path);
+        a.set(u"liczba"_s, 2);
+        QVERIFY(a.flush());
+        const QByteArray second = fileBytes(path);
+        QCOMPARE(second.size(), first.size());
+        // Same size, other content: an older version of the file put back by somebody else.
+        QVERIFY(writeFileBytes(path, first));
+        a.set(u"nowy"_s, true);
+        QVERIFY(a.flush());
+        QCOMPARE(fileObject(path), (QJsonObject{{u"liczba"_s, 1}, {u"tekst"_s, u"zażółć"_s}, {u"nowy"_s, true}}));
+        QCOMPARE(a.get(u"liczba"_s).toInt(), 1);
+        // Another writer's keys of the same size as ours.
+        QVERIFY(writeFileBytes(
+                path, QJsonDocument(QJsonObject{{u"liczba"_s, 7}, {u"tekst"_s, u"zażółć"_s}, {u"nowy"_s, true}})
+                              .toJson(QJsonDocument::Compact)));
+        a.remove(u"nowy"_s);
+        QVERIFY(a.flush());
+        QCOMPARE(fileObject(path), (QJsonObject{{u"liczba"_s, 7}, {u"tekst"_s, u"zażółć"_s}}));
+        QCOMPARE(a.get(u"liczba"_s).toInt(), 7);
+        // Garbage of the same size as the last write: still kept aside, our view written.
+        const QByteArray last = fileBytes(path);
+        QVERIFY(writeFileBytes(path, QByteArray(last.size(), '#')));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"is not a JSON object"_s));
+        a.set(u"po"_s, 1);
+        QVERIFY(a.flush());
+        QCOMPARE(fileBytes(path + u".corrupt"_s), QByteArray(last.size(), '#'));
+        QCOMPARE(fileObject(path), (QJsonObject{{u"liczba"_s, 7}, {u"tekst"_s, u"zażółć"_s}, {u"po"_s, 1}}));
+    }
+
+    void matchesTheReferenceStore_data()
+    {
+        QTest::addColumn<quint32>("seed");
+        for (quint32 seed = 1; seed <= 12; ++seed)
+            QTest::newRow(qPrintable(u"seed %1"_s.arg(seed))) << seed;
+    }
+    void matchesTheReferenceStore()
+    {
+        // Random operations on two stores sharing a file (two app instances) and on another
+        // program writing that file, mirrored on two reference stores sharing a second file:
+        // the stores' contents and the files' bytes must be the same after every step.
+        QFETCH(quint32, seed);
+        static QtMessageHandler previous = nullptr;
+        previous =
+                qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &message) {
+                    if (!message.contains(u"is not a JSON object"_s))
+                        previous(type, context, message);
+                });
+        const auto restore = qScopeGuard([] { qInstallMessageHandler(previous); });
+        const QString real = freshPath();
+        const QString model = freshPath();
+        QVERIFY(QDir().mkpath(QFileInfo(real).absolutePath()));
+        QVERIFY(QDir().mkpath(QFileInfo(model).absolutePath()));
+        std::unique_ptr<LocalStore> stores[2] = {std::make_unique<LocalStore>(real),
+                                                 std::make_unique<LocalStore>(real)};
+        ReferenceStore refs[2] = {ReferenceStore(model), ReferenceStore(model)};
+        QRandomGenerator rng(seed);
+        const QStringList keys{u"ui/folds/a.md"_s,     u"ui/folds/Łódź.md"_s, u"sync/base/x.md"_s, u"sync/state/x.md"_s,
+                               u"trash/.trash/ż.md"_s, u"ui/recentPages"_s,   u"reminders/seen"_s, u"zażółć"_s};
+        const auto randomValue = [&]() -> QJsonValue {
+            switch (rng.bounded(5)) {
+            case 0: return int(rng.bounded(20));
+            case 1: return u"wartość %1 gęślą"_s.arg(rng.bounded(9));
+            case 2: return QJsonObject{{u"etag"_s, QString::number(rng.bounded(4))}, {u"size"_s, int(rng.bounded(3))}};
+            case 3: return QJsonValue::Null;
+            default: return QJsonArray{int(rng.bounded(3)), u"ą"_s};
+            }
+        };
+        for (int step = 0; step < 400; ++step) {
+            const int who = int(rng.bounded(2));
+            LocalStore &store = *stores[who];
+            ReferenceStore &ref = refs[who];
+            const quint32 op = rng.bounded(100);
+            QString what;
+            if (op < 35) {
+                const QString key = keys.at(rng.bounded(keys.size()));
+                const QJsonValue value = randomValue();
+                store.set(key, value);
+                ref.set(key, value);
+                what = u"set"_s;
+            } else if (op < 45) {
+                const QString key = keys.at(rng.bounded(keys.size()));
+                store.remove(key);
+                ref.remove(key);
+                what = u"remove"_s;
+            } else if (op < 48) {
+                store.clear();
+                ref.clear();
+                what = u"clear"_s;
+            } else if (op < 75) {
+                QVERIFY(store.flush());
+                ref.flush();
+                what = u"flush"_s;
+            } else if (op < 82) {
+                QVERIFY(store.reload());
+                ref.reload();
+                what = u"reload"_s;
+            } else if (op < 90) {
+                // Another program writes keys of its own.
+                QJsonObject object;
+                for (const QString &key : keys) {
+                    if (rng.bounded(2))
+                        object.insert(key, randomValue());
+                }
+                const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
+                QVERIFY(writeFileBytes(real, bytes));
+                QVERIFY(writeFileBytes(model, bytes));
+                what = u"external write"_s;
+            } else if (op < 97) {
+                // The same bytes written again (a copy back from a backup, a sync echo).
+                const QByteArray bytes = fileBytes(real);
+                QVERIFY(writeFileBytes(real, bytes));
+                QVERIFY(writeFileBytes(model, fileBytes(model)));
+                what = u"rewrite"_s;
+            } else {
+                const QByteArray garbage(int(fileBytes(real).size()), '{');
+                QVERIFY(writeFileBytes(real, garbage));
+                QVERIFY(writeFileBytes(model, garbage));
+                what = u"garbage"_s;
+            }
+            const QString where = u"step %1 (%2 by %3)"_s.arg(step).arg(what).arg(who);
+            for (int i = 0; i < 2; ++i) {
+                const QStringList refKeys = refs[i].data.keys();
+                QCOMPARE(stores[i]->keys(), refKeys);
+                for (const QString &key : std::as_const(refKeys))
+                    QVERIFY2(stores[i]->get(key) == refs[i].data.value(key), qPrintable(where + u" key "_s + key));
+            }
+            QVERIFY2(fileBytes(real) == fileBytes(model), qPrintable(where));
+            QVERIFY2(fileBytes(real + u".corrupt"_s) == fileBytes(model + u".corrupt"_s), qPrintable(where));
+        }
     }
 
     void clearDropsKeysOfTheFile()

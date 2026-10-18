@@ -82,7 +82,9 @@ Q_SIGNALS:
 
 private:
     using Map = QMap<QString, QJsonValue>;
-    bool readFile(Map &out, QByteArray &raw);
+    /// Read the file into `raw` and its keys into `out`. When the bytes equal `known` (content
+    /// this store parsed or wrote before), `out` stays empty: the caller already has them.
+    bool readFile(Map &out, QByteArray &raw, const QByteArray *known = nullptr);
     Map withPendingApplied(const Map &disk) const;
     void touch(const QString &key, const std::optional<QJsonValue> &value);
     void scheduleFlush();

@@ -141,7 +141,10 @@ bool LocalStore::flush()
     }
     Map disk;
     QByteArray raw;
-    if (!readFile(disk, raw)) {
+    // The file as we last read or wrote it (the common case: nobody else writes it) needs no
+    // parsing: m_data already is its content with our changes applied. With the sync merge
+    // bases in the store, that parse is most of a flush.
+    if (!readFile(disk, raw, &m_lastBytes)) {
         Q_EMIT saveFailed(m_error);
         return false;
     }
@@ -177,7 +180,7 @@ bool LocalStore::reload()
     return true;
 }
 
-bool LocalStore::readFile(Map &out, QByteArray &raw)
+bool LocalStore::readFile(Map &out, QByteArray &raw, const QByteArray *known)
 {
     out.clear();
     raw.clear();
@@ -189,6 +192,9 @@ bool LocalStore::readFile(Map &out, QByteArray &raw)
         return false;
     }
     raw = file.readAll();
+    // `known` bytes were parsed (or written by us) before: valid, and the caller has their keys.
+    if (known && !raw.isEmpty() && raw == *known)
+        return true;
     QJsonParseError error;
     const QJsonDocument doc = QJsonDocument::fromJson(raw, &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject()) {
