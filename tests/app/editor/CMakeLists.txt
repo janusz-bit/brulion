@@ -6,6 +6,10 @@ brulion_add_test(tst_editor_blocktext
 brulion_add_test(tst_editor_controller
     SOURCES tst_editor_controller.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
+# Its 3000- and 5000-block cases take minutes under the sanitizers on CI runners (279 s of
+# ctest's default 300 s before 0.2.0, then over it): scale the limit like the tests' own ones.
+math(EXPR _controller_timeout "300 + 30 * ${BRULION_TEST_SLOWDOWN}")
+set_tests_properties(tst_editor_controller PROPERTIES TIMEOUT ${_controller_timeout})
 # Calculations across edits: definitions above, sum(above), calc fences, frontmatter, and random
 # edits checked against a model computing everything from scratch (BlockListModel keeps results
 # across calc-neutral edits).
