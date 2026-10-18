@@ -254,7 +254,9 @@ z kilkoma architekturami), `BRULION_ANDROID_BUILD_DIR` (domyślnie `build-androi
 `BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (także `.aab`),
 `BRULION_ANDROID_UNIT_TESTS=1` (testy Kotlina), `BRULION_ANDROID_LINT=1` (Android lint),
 `BRULION_ANDROID_SELFTEST=1` (także APK testowy mostu), `BRULION_ANDROID_VERSION_CODE`,
-`BRULION_ANDROID_CMAKE=system`, `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są błędami), `JOBS`.
+`BRULION_ANDROID_CMAKE=system`, `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są błędami), `JOBS`,
+`SOURCE_DATE_EPOCH` (czas plików w zasobach Qt, rcc; domyślnie czas ostatniego commita —
+powtarzalne APK).
 
 `versionCode` = `major·1000000 + minor·1000 + patch` (0.1.0 → 1000) — ten sam wzór co
 w poprzedniej wersji Brulionu (Tauri), więc nowe APK aktualizują stare (przy tym samym kluczu).
@@ -449,9 +451,10 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
 * APK jest **powtarzalny bit w bit**: `nix build --rebuild` i budowanie w pustym store dały ten sam plik;
 * to ten sam APK co ze `scripts/android-build.sh`: ten sam kod źródłowy zbudowany skryptem
   z `SOURCE_DATE_EPOCH=315532800` (stała nixpkgs) różni się tylko 20 bajtami build-id
-  w `libbrulion_<abi>.so` (zależnymi od ścieżki budowania); bez niej jeszcze znacznikami czasu
-  plików w zasobach Qt (rcc). Podpis `brulion-android-sign` daje bajt w bajt to samo co podpis
-  skryptu (apksigner z build-tools 36, schemat v3);
+  w `libbrulion_<abi>.so` (zależnymi od ścieżki budowania); z innym `SOURCE_DATE_EPOCH` (skrypt
+  domyślnie bierze czas ostatniego commita) jeszcze znacznikami czasu plików w zasobach Qt (rcc).
+  Podpis `brulion-android-sign` daje bajt w bajt to samo co podpis skryptu (apksigner
+  z build-tools 36, schemat v3);
 * APK x86_64 podpisany kluczem jednorazowym działa na emulatorze (Android 16, API 36): przykładowy
   brulion, edycja bloku, przypomnienie (powiadomienie w tle, otwarcie bloku po dotknięciu),
   eksport do ZIP, obrót ekranu; w logcat żadnych awarii. Emulator z `-gpu swangle_indirect`
@@ -558,7 +561,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   scripts/android-emulator-test.sh     # logi i zrzuty ekranu: dist-android/emulator-test/
   ```
 
-  Instaluje emulator i obraz `system-images;android-36;google_apis;x86_64`, uruchamia APK
+  Instaluje emulator i obraz `system-images;android-36;google_apis;x86_64` (rysowanie programowe
+  `-gpu swangle_indirect`; `swiftshader_indirect` zostawia czarne pasy na przyciskach), uruchamia APK
   aplikacji (czy działa, kanały powiadomień), potem APK testowy mostu: uprawnienia przez JNI,
   dwa razy `scheduleReminders` (przypomnienie za 45 s, alarm za 75 s dzwoniący 1 min,
   przeszłe — pominięte), budziki w `dumpsys alarm`, powiadomienia na kanałach `reminders`

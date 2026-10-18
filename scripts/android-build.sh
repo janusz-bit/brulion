@@ -35,6 +35,8 @@
 #                                patched cmake does not find the NDK sysroot's EGL/GLES headers)
 #   BRULION_WERROR=ON            warnings in Brulion's own C++ code are errors
 #   JOBS                         parallel compile jobs (default: all cores)
+#   SOURCE_DATE_EPOCH            time stamp of the files in Qt resources (rcc), for reproducible
+#                                builds (default: the time of the last git commit)
 # Signing — the release keystore (same variables androiddeployqt reads):
 #   QT_ANDROID_KEYSTORE_PATH     keystore file, or
 #   QT_ANDROID_KEYSTORE_BASE64   the keystore as base64 (CI secret)
@@ -279,6 +281,13 @@ fi
 
 # --- configure + build -------------------------------------------------------------------------
 
+# Reproducible APKs: rcc stamps the files it compiles into the library with this time instead of
+# their modification times (which differ between checkouts). The Nix build uses 315532800.
+if [[ -z ${SOURCE_DATE_EPOCH:-} ]] && epoch=$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null) && [[ -n $epoch ]]; then
+  export SOURCE_DATE_EPOCH=$epoch
+fi
+echo "SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-not set (no git checkout): file times}"
+
 abi_list=$(IFS=';' && echo "${ABIS[*]}")
 cmake_args=(
   -S "$ROOT" -B "$BUILD_DIR" -G Ninja
@@ -315,7 +324,11 @@ targets=(brulion_make_apk)
 [[ ${BRULION_ANDROID_AAB:-0} == 1 ]] && targets+=(brulion_make_aab)
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && targets+=(brulion_android_selftest_make_apk)
 info "Building ${targets[*]} (-j$JOBS)"
-cmake --build "$BUILD_DIR" --parallel "$JOBS" --target "${targets[@]}"
+# One target at a time: brulion_make_apk and brulion_make_aab both run androiddeployqt and Gradle
+# in the same android-build/ directory, and together they break each other's outputs.
+for target in "${targets[@]}"; do
+  cmake --build "$BUILD_DIR" --parallel "$JOBS" --target "$target"
+done
 
 # --- sign --------------------------------------------------------------------------------------
 

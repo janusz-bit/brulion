@@ -93,8 +93,10 @@ emulator=("$SDK/emulator/emulator")
 if [[ -e /etc/NIXOS ]] && command -v steam-run >/dev/null; then emulator=(steam-run "${emulator[@]}"); fi
 
 info "Starting the emulator ($AVD, $SERIAL)"
+# Software rendering through ANGLE: swiftshader_indirect leaves black stripes on Qt Quick
+# buttons, so its screenshots would show a broken UI.
 "${emulator[@]}" -avd "$AVD" -port "$PORT" -no-window -no-audio -no-boot-anim -no-snapshot -wipe-data \
-  -gpu swiftshader_indirect >"$OUT/emulator.log" 2>&1 &
+  -gpu swangle_indirect >"$OUT/emulator.log" 2>&1 &
 emulator_pid=$!
 cleanup() {
   adb emu kill >/dev/null 2>&1 || true
