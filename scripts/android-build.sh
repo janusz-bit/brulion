@@ -33,6 +33,8 @@
 #   BRULION_ANDROID_VERSION_CODE versionCode (default major*1000000 + minor*1000 + patch)
 #   BRULION_ANDROID_CMAKE=system use the cmake/ninja on PATH instead of the SDK's (NixOS's
 #                                patched cmake does not find the NDK sysroot's EGL/GLES headers)
+#   BRULION_ANDROID_OPENSSL_DIR  a checkout of KDAB/android_openssl for offline builds (default:
+#                                CMake downloads the pinned OpenSSL 3 libraries, src/app/CMakeLists.txt)
 #   BRULION_WERROR=ON            warnings in Brulion's own C++ code are errors
 #   JOBS                         parallel compile jobs (default: all cores)
 #   SOURCE_DATE_EPOCH            time stamp of the files in Qt resources (rcc), for reproducible
@@ -47,7 +49,8 @@
 #   APK signed with the release key. Create a release key: scripts/android-new-keystore.sh.
 #
 # Output: dist-android/brulion-<version>-<abis>.apk (+ .aab). On GitHub Actions also written to
-# $GITHUB_OUTPUT as `apk`, `aab`, `version` and `signing` (release/throwaway).
+# $GITHUB_OUTPUT as `apk`, `aab`, `version`, `signing` (release/throwaway) and `openssl` (its
+# version).
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -305,6 +308,7 @@ cmake_args=(
   -DBRULION_ANDROID_VERSION_CODE="${BRULION_ANDROID_VERSION_CODE:-}"
 )
 [[ ${BRULION_ANDROID_SELFTEST:-0} == 1 ]] && cmake_args+=(-DBRULION_ANDROID_SELFTEST=ON)
+[[ -n ${BRULION_ANDROID_OPENSSL_DIR:-} ]] && cmake_args+=(-DBRULION_ANDROID_OPENSSL_DIR="$BRULION_ANDROID_OPENSSL_DIR")
 for abi in "${ABIS[@]:1}"; do
   cmake_args+=("-DQT_PATH_ANDROID_ABI_$abi=$QT_ROOT/$QT_VERSION/$(qt_arch "$abi")")
 done
@@ -403,13 +407,19 @@ echo "Kotlin classes in dex: $(wc -l <<<"$dex_classes")"
 listing=$(unzip -l "$apk")
 for abi in "${ABIS[@]}"; do
   grep -q "lib/$abi/libbrulion_$abi.so" <<<"$listing" || die "lib/$abi/libbrulion_$abi.so missing from the APK"
+  # HTTPS: Qt's TLS plugin loads OpenSSL 3 at run time (src/app/CMakeLists.txt).
+  for lib in libssl_3.so libcrypto_3.so; do
+    grep -q "lib/$abi/$lib" <<<"$listing" || die "lib/$abi/$lib missing from the APK: HTTPS (Nextcloud sync) would not work"
+  done
 done
 echo "native libraries: $(grep -c 'lib/.*\.so$' <<<"$listing") in lib/{$(IFS=, && echo "${ABIS[*]}")}"
+openssl=$(unzip -p "$apk" "lib/${ABIS[0]}/libcrypto_3.so" | LC_ALL=C grep -a -o -m 1 'OpenSSL 3\.[0-9.]* [0-9]* [A-Z][a-z]* [0-9]*' || true)
+echo "OpenSSL: ${openssl:-version not found} (libssl_3.so, libcrypto_3.so)"
 
 # 16 KB pages (Android 15+ devices with 16 KB memory pages refuse other libraries): the 64-bit
 # libraries must be stored uncompressed at 16 KB boundaries in the APK and have ELF LOAD
-# segments aligned to at least 16 KB. Brulion's own library must comply; Qt's prebuilt ones
-# are reported.
+# segments aligned to at least 16 KB. Brulion's own library and the OpenSSL it bundles must
+# comply; Qt's prebuilt ones are reported.
 "$BT/zipalign" -c -P 16 4 "$apk" >/dev/null || die "$apk is not zip-aligned for 16 KB pages (zipalign -c -P 16 4)"
 readelf_bin=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf
 if [[ -x $readelf_bin ]]; then
@@ -428,7 +438,8 @@ if [[ -x $readelf_bin ]]; then
     ((min > 0)) || die "$lib: llvm-readelf found no LOAD segments"
     checked=$((checked + 1))
     if ((min < 16384)); then
-      [[ $lib != */libbrulion_* ]] || die "$lib: LOAD segments aligned to $min bytes, 16 KB pages need 16384"
+      [[ $lib != */libbrulion_* && $lib != */libssl_3.so && $lib != */libcrypto_3.so ]] ||
+        die "$lib: LOAD segments aligned to $min bytes, 16 KB pages need 16384"
       misaligned+=("$lib ($min)")
     fi
   done < <(find "$elf_tmp" -name '*.so' -print0)
@@ -474,6 +485,7 @@ if [[ -n ${GITHUB_OUTPUT:-} ]]; then
     echo "apk=$apk"
     echo "aab=$aab"
     echo "signing=$signing"
+    echo "openssl=${openssl:-unknown}"
   } >>"$GITHUB_OUTPUT"
 fi
 

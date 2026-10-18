@@ -149,6 +149,79 @@ if(ANDROID)
         QT_ANDROID_TARGET_SDK_VERSION 36
         QT_ANDROID_COMPILE_SDK_VERSION 36
     )
+
+    # HTTPS (Nextcloud / WebDAV sync): Qt's OpenSSL TLS plugin loads libssl_3.so and
+    # libcrypto_3.so when the first secure connection starts; Qt for Android does not ship them.
+    # Bundled as Qt documents it ("Adding OpenSSL Support for Android"): the prebuilt OpenSSL 3 of
+    # KDAB/android_openssl (Apache-2.0, docs/ANDROID.md), pinned to one commit and checked by
+    # SHA-256, for every ABI of the build (androiddeployqt puts each one into lib/<its ABI>/).
+    set(BRULION_ANDROID_OPENSSL_DIR "" CACHE PATH
+        "android_openssl checkout with ssl_3/<abi>/lib{crypto,ssl}_3.so (default: download the pinned files)")
+    # OpenSSL 3.1.8, 16 KB pages for 64-bit ABIs; https://github.com/KDAB/android_openssl. The Nix
+    # build (nix/android.nix) passes this commit as BRULION_ANDROID_OPENSSL_DIR: pin the same one in
+    # nix/android/openssl.json (nix/android/update-locks.sh --openssl <commit>).
+    set(_brulion_openssl_commit b71f1470962019bd89534a2919f5925f93bc5779)
+    set(_brulion_openssl_files
+        arm64-v8a/libcrypto_3.so=1e6c12ae0c2dadfe9d178d7f80f0ab248a1877a234066098bf5594e5205e5740
+        arm64-v8a/libssl_3.so=01d2bd0baac626efd3309f35f99c4b826dd9b885a7e4d14d5b12b3603d3a407f
+        armeabi-v7a/libcrypto_3.so=a9d5352e52600e1c1c05d12e3112a479af7a2a3287760e3fcde432a423266b19
+        armeabi-v7a/libssl_3.so=a1a9fda0b13d93a30cf103f993c080eafc6e1dee249e1a29d68cd7616dc052a4
+        x86_64/libcrypto_3.so=bc4bdd31835659e639c2dc8f0a722342f51230074c23ee3dd6d1fa2353d72db1
+        x86_64/libssl_3.so=2af32571317adf90fb7a007756a17dd15cd2469da9ebbd4e973883f8753369c1
+        x86/libcrypto_3.so=420507adf9896267252d93e6bbf5eae5d8555a7693c026019980babf51065f3d
+        x86/libssl_3.so=5ed7b9c925755af7a0e163b244c535d283869270e55c77777d1cec7cfcfe88d3
+    )
+    set(_brulion_openssl_abis ${QT_ANDROID_ABIS})
+    if(NOT _brulion_openssl_abis)
+        set(_brulion_openssl_abis ${CMAKE_ANDROID_ARCH_ABI})
+    endif()
+    set(_brulion_openssl_libs "")
+    foreach(_entry IN LISTS _brulion_openssl_files)
+        string(REGEX MATCH "^([^/]+)/([^=]+)=(.+)$" _match "${_entry}")
+        set(_abi ${CMAKE_MATCH_1})
+        set(_name ${CMAKE_MATCH_2})
+        set(_sha256 ${CMAKE_MATCH_3})
+        if(NOT _abi IN_LIST _brulion_openssl_abis)
+            continue()
+        endif()
+        if(BRULION_ANDROID_OPENSSL_DIR)
+            set(_file ${BRULION_ANDROID_OPENSSL_DIR}/ssl_3/${_abi}/${_name})
+        else()
+            set(_file ${CMAKE_BINARY_DIR}/android_openssl/${_brulion_openssl_commit}/${_abi}/${_name})
+            if(EXISTS ${_file})
+                file(SHA256 ${_file} _actual)
+            else()
+                set(_actual "")
+            endif()
+            if(NOT _actual STREQUAL _sha256)
+                set(_url "https://raw.githubusercontent.com/KDAB/android_openssl/${_brulion_openssl_commit}/ssl_3/${_abi}/${_name}")
+                message(STATUS "Downloading ${_url}")
+                file(DOWNLOAD ${_url} ${_file}.part TLS_VERIFY ON STATUS _status
+                    EXPECTED_HASH SHA256=${_sha256})
+                list(GET _status 0 _code)
+                if(NOT _code EQUAL 0)
+                    file(REMOVE ${_file}.part)
+                    message(FATAL_ERROR "Cannot download OpenSSL for Android (${_status}): ${_url}. Offline: "
+                        "set BRULION_ANDROID_OPENSSL_DIR to a checkout of KDAB/android_openssl at ${_brulion_openssl_commit}.")
+                endif()
+                file(RENAME ${_file}.part ${_file})
+            endif()
+        endif()
+        if(NOT EXISTS ${_file})
+            message(FATAL_ERROR "${_file} not found (BRULION_ANDROID_OPENSSL_DIR)")
+        endif()
+        file(SHA256 ${_file} _actual)
+        if(NOT _actual STREQUAL _sha256)
+            message(FATAL_ERROR "${_file}: SHA-256 ${_actual}, expected ${_sha256} (KDAB/android_openssl ${_brulion_openssl_commit})")
+        endif()
+        list(APPEND _brulion_openssl_libs ${_file})
+    endforeach()
+    foreach(_abi IN LISTS _brulion_openssl_abis)
+        if(NOT "${_brulion_openssl_libs}" MATCHES "/${_abi}/libssl_3\\.so")
+            message(FATAL_ERROR "No OpenSSL for the Android ABI ${_abi} (src/app/CMakeLists.txt)")
+        endif()
+    endforeach()
+    set_property(TARGET brulion APPEND PROPERTY QT_ANDROID_EXTRA_LIBS ${_brulion_openssl_libs})
 endif()
 
 # Browser (Qt for WebAssembly, single-threaded): docs/WEB.md, scripts/wasm-build.sh, which

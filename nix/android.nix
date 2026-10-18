@@ -81,8 +81,9 @@ let
   jdk = jdk21_headless;
   gradle = gradle_9.override { java = jdk; };
 
-  # OpenSSL 3 for Android (KDAB's android_openssl, prebuilt libssl/libcrypto per ABI), bundled
-  # when nix/android/openssl.json pins a commit (the same commit as scripts/android-build.sh).
+  # OpenSSL 3 for Android (KDAB's android_openssl, prebuilt libssl/libcrypto per ABI) for HTTPS:
+  # nix/android/openssl.json pins the commit src/app/CMakeLists.txt names, which checks the
+  # libraries by SHA-256 (without a pin, CMake would download them: not in the sandbox).
   opensslLock = lib.importJSON ./android/openssl.json;
   androidOpenssl =
     if opensslLock.rev == null then
@@ -174,10 +175,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     "-DBRULION_QT_TRANSLATIONS_DIR=${qt6.qttranslations}/translations"
   ]
   ++ lib.optionals (androidOpenssl != null) [
-    # The pinned source, for either kind of integration in CMake: FetchContent (which must not
-    # try the network in the sandbox) or a plain path variable.
-    "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
-    "-DFETCHCONTENT_SOURCE_DIR_ANDROID_OPENSSL=${androidOpenssl}"
+    # The pinned checkout instead of CMake's download (src/app/CMakeLists.txt).
     "-DBRULION_ANDROID_OPENSSL_DIR=${androidOpenssl}"
   ];
 
@@ -265,7 +263,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   # The checks of scripts/android-build.sh: package, permissions, components, Kotlin classes,
-  # the native library and 16 KB page alignment.
+  # the native library, OpenSSL and 16 KB page alignment.
   doInstallCheck = true;
   installCheckPhase = ''
     runHook preInstallCheck
@@ -294,7 +292,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     listing=$(unzip -l "$apk")
     [[ $listing == *"lib/${abi}/libbrulion_${abi}.so"* ]] || fail "lib/${abi}/libbrulion_${abi}.so missing"
     ${lib.optionalString (androidOpenssl != null) ''
-      [[ $listing == *"lib/${abi}/libssl_3.so"* ]] || fail "OpenSSL (libssl_3.so) missing"
+      for ssl in libssl_3.so libcrypto_3.so; do
+        [[ $listing == *"lib/${abi}/$ssl"* ]] || fail "OpenSSL ($ssl) missing: no HTTPS"
+      done
     ''}
     ${lib.optionalString withAab ''
       [[ $(unzip -l $out/brulion-${version}-${abi}-unsigned.aab) == *"base/lib/${abi}/libbrulion_${abi}.so"* ]] ||
@@ -304,15 +304,16 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
     ${buildTools}/zipalign -c -P 16 4 "$apk" >/dev/null || fail "not zip-aligned for 16 KB pages"
     ${lib.optionalString is64bit ''
-      # 64-bit libraries: ELF LOAD segments aligned to 16 KB. Brulion's own must be; Qt's are
-      # reported.
+      # 64-bit libraries: ELF LOAD segments aligned to 16 KB. Brulion's own and OpenSSL must be;
+      # Qt's are reported.
       mkdir elf && unzip -q "$apk" 'lib/${abi}/*.so' -d elf
       misaligned=()
       for so in elf/lib/${abi}/*.so; do
         min=$(${ndk}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf -lW "$so" |
           awk '$1 == "LOAD" { a = strtonum($NF); if (min == "" || a < min) min = a } END { print min + 0 }')
         if ((min < 16384)); then
-          [[ $so != */libbrulion_* ]] || fail "$so: LOAD segments aligned to $min bytes"
+          [[ $so != */libbrulion_* && $so != */libssl_3.so && $so != */libcrypto_3.so ]] ||
+            fail "$so: LOAD segments aligned to $min bytes"
           misaligned+=("''${so##*/} ($min)")
         fi
       done

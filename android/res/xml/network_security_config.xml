@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The certificate authorities Brulion trusts for HTTPS (Nextcloud / WebDAV sync). Qt's TLS
+     (OpenSSL) takes its trust anchors from Android's trust manager, which follows this file.
+     Apps for Android 7+ trust only the system's authorities by default; Brulion also trusts the
+     ones the user installed (Settings → Security → Encryption & credentials), so a self-hosted
+     Nextcloud with its own authority works once that is installed on the phone, as on a desktop
+     (the connection test's hint says so). docs/ANDROID.md, "HTTPS i OpenSSL". -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates
+                src="user"
+                tools:ignore="AcceptsUserCertificates" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

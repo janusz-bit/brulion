@@ -1,6 +1,7 @@
 # Signed Android APK (artifact "brulion-android-apk") built with scripts/android-build.sh
-# (Qt 6.11.2 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint) — see
-# docs/ANDROID.md. Also called by release.yml.
+# (Qt 6.11.2 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint; OpenSSL 3
+# for HTTPS, which CMake downloads from KDAB/android_openssl at the commit and SHA-256 sums
+# pinned in src/app/CMakeLists.txt) — see docs/ANDROID.md. Also called by release.yml.
 # Release signing uses the repository secrets QT_ANDROID_KEYSTORE_BASE64,
 # QT_ANDROID_KEYSTORE_STORE_PASS, QT_ANDROID_KEYSTORE_KEY_PASS and QT_ANDROID_KEYSTORE_ALIAS
 # (create them with scripts/android-new-keystore.sh). Without them the APK is signed with a
@@ -131,7 +132,7 @@ jobs:
           add-job-summary: on-failure
 
       - id: build
-        name: Build, sign and check the APK (+ Kotlin unit tests and lint)
+        name: Build, sign and check the APK (+ OpenSSL, Kotlin unit tests and lint)
         env:
           ANDROID_NDK_ROOT: ${{ steps.sdk.outputs.ndk }}
           QT_ANDROID_KEYSTORE_BASE64: ${{ secrets.QT_ANDROID_KEYSTORE_BASE64 }}
@@ -148,9 +149,12 @@ jobs:
         env:
           VERSION: ${{ steps.build.outputs.version }}
           SIGNING: ${{ steps.build.outputs.signing }}
+          OPENSSL: ${{ steps.build.outputs.openssl }}
         run: |
           {
             echo "### Brulion $VERSION for Android"
+            echo
+            echo "HTTPS: $OPENSSL (KDAB android_openssl, Apache-2.0)"
             echo
             echo "| File | Size | SHA-256 |"
             echo "|---|---|---|"

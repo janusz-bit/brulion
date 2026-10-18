@@ -16,7 +16,8 @@ Notatki to zwykłe pliki `.md` w folderze. Na telefonie folder może:
 * być **folderem Syncthing** na pamięci współdzielonej (np. `/storage/emulated/0/Brulion`) —
   wymaga uprawnienia „Dostęp do wszystkich plików”, opis niżej;
 * leżeć w **prywatnym katalogu aplikacji** (bez dodatkowych uprawnień) i być synchronizowany
-  z **Nextcloud** (WebDAV) z poziomu Brulionu — Ustawienia → Synchronizacja.
+  z **Nextcloud** (WebDAV) z poziomu Brulionu — Ustawienia → Synchronizacja (przez HTTPS, patrz
+  [HTTPS i OpenSSL](#https-i-openssl)).
 
 Wszystko działa offline. Synchronizacja (Syncthing czy Nextcloud) nigdy nie blokuje pisania.
 
@@ -219,6 +220,51 @@ Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
   plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
   Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
 
+## HTTPS i OpenSSL
+
+Synchronizacja z Nextcloud (WebDAV) idzie przez HTTPS. Qt for Android nie ma własnego TLS:
+jego wtyczka TLS (`libplugins_tls_qopensslbackend`) przy pierwszym bezpiecznym połączeniu
+wczytuje OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), którego Qt nie dostarcza. Dlatego APK
+zawiera **OpenSSL 3.1.8** — gotowe biblioteki z
+[KDAB/android_openssl](https://github.com/KDAB/android_openssl), tak jak zaleca dokumentacja Qt
+(„Adding OpenSSL Support for Android”). Bez nich (do wersji 0.1.1) każde połączenie HTTPS kończyło
+się błędem „TLS initialization failed”, a test połączenia na ekranie Nextcloud zgłaszał
+niezaufany certyfikat także przy poprawnym serwerze.
+
+* **Certyfikat serwera jest zawsze sprawdzany**; Brulion nigdy nie wysyła hasła do niezaufanego
+  serwera. Zaufane są urzędy certyfikacji systemu **i te, które zainstalował użytkownik**
+  (Ustawienia → Bezpieczeństwo → Szyfrowanie i dane logowania → Zainstaluj certyfikat → Certyfikat
+  CA; `android/res/xml/network_security_config.xml`). Własny Nextcloud z własnym urzędem
+  certyfikacji działa więc po zainstalowaniu na telefonie certyfikatu tego urzędu — jak na
+  komputerze. Sam certyfikat samopodpisany serwera nie wystarcza: test połączenia pokazuje wtedy
+  „Certyfikat serwera nie jest zaufany: mógł wygasnąć, być samopodpisany albo wystawiony na inną
+  nazwę…” z podpowiedzią, co zrobić.
+* **Skąd biblioteki**: commit KDAB przypięty w `src/app/CMakeLists.txt`
+  (`_brulion_openssl_commit`), każdy z 8 plików (`libssl_3.so`, `libcrypto_3.so` dla arm64-v8a,
+  armeabi-v7a, x86_64 i x86) sprawdzany po SHA-256. CMake pobiera przy konfiguracji tylko pliki
+  budowanych ABI (z `raw.githubusercontent.com` do `<build>/android_openssl/<commit>/`), a
+  `androiddeployqt` dokłada je do `lib/<abi>/` (`QT_ANDROID_EXTRA_LIBS`). Bez sieci:
+  `BRULION_ANDROID_OPENSSL_DIR=<checkout android_openssl na tym commicie>`. Build Nix bierze ten sam
+  commit z `nix/android/openssl.json`. 64-bitowe biblioteki mają segmenty wyrównane do 16 KB.
+* **Aktualizacja** (nowe wydanie OpenSSL u KDAB): nowy commit i sumy SHA-256
+  (`sha256sum ssl_3/*/lib{ssl,crypto}_3.so` w checkoutcie) w `src/app/CMakeLists.txt`, potem
+  `nix/android/update-locks.sh --openssl <commit>`.
+* **Sprawdzane przy budowaniu**: `scripts/android-build.sh` i derywacja Nix przerywają build, gdy
+  w APK brakuje `libssl_3.so` albo `libcrypto_3.so` dla któregoś ABI; skrypt wypisuje wersję
+  OpenSSL.
+* Koszt: +4,45 MB w APK arm64 (1,77 MB po kompresji).
+* Sprawdzone 2026-10-18 na emulatorze (Android 16) z APK ze skryptu i z
+  `nix build .#brulion-android-x86_64`, z lokalnym serwerem WebDAV przez HTTPS: OpenSSL 3.1.8
+  wczytany (`QSslSocket::supportsSsl()`), certyfikat samopodpisany i certyfikat nieznanego urzędu
+  zgłaszane jako niezaufane, po zainstalowaniu urzędu jako certyfikatu użytkownika „Połączono”,
+  synchronizacja w obie strony; wcześniej (0.1.1) każde HTTPS: „TLS initialization failed”.
+
+**Licencja.** OpenSSL 3 i paczka KDAB są na licencji **Apache License 2.0**, zgodnej z AGPL-3.0
+Brulionu (licencje GPLv3 i AGPLv3 pozwalają łączyć program z kodem na Apache-2.0). Tekst
+licencji jedzie w APK (`assets/licenses/OpenSSL-LICENSE.txt`, z `android/assets/licenses/`) — kto
+rozpowszechnia APK (wydania na GitHubie, F-Droid), przekazuje go razem z nim. Biblioteki nie są
+modyfikowane.
+
 ## Budowanie APK
 
 Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące
@@ -246,6 +292,7 @@ Wymaga hosta **Linux x86_64** (NDK i narzędzia Qt są tylko na x86_64) — nie 
 | JDK | 21 (Qt 6.11 zaleca 21; działa 17+) | system / nixpkgs `jdk21_headless` |
 | Gradle / Android Gradle Plugin | 9.3.1 / 9.0.0 (szablon Qt 6.11, wbudowana obsługa Kotlina) | wrapper Gradle z Qt |
 | minSdk / targetSdk / compileSdk | 28 / 36 / 36 | `src/app/CMakeLists.txt` |
+| OpenSSL (HTTPS) | 3.1.8, KDAB android_openssl `b71f147` | pobierany przez CMake, sprawdzany po SHA-256 (`src/app/CMakeLists.txt`) |
 
 Zmienne (wszystkie opcjonalne): `QT_ROOT`, `QT_VERSION`, `QT_HOST_PATH`, `ANDROID_SDK_ROOT`
 (domyślnie `~/.cache/brulion-android-sdk`; brakujące pakiety instaluje jego `cmdline-tools`),
@@ -254,9 +301,10 @@ z kilkoma architekturami), `BRULION_ANDROID_BUILD_DIR` (domyślnie `build-androi
 `BRULION_ANDROID_BUILD_TYPE` (`Release`), `BRULION_ANDROID_AAB=1` (także `.aab`),
 `BRULION_ANDROID_UNIT_TESTS=1` (testy Kotlina), `BRULION_ANDROID_LINT=1` (Android lint),
 `BRULION_ANDROID_SELFTEST=1` (także APK testowy mostu), `BRULION_ANDROID_VERSION_CODE`,
-`BRULION_ANDROID_CMAKE=system`, `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są błędami), `JOBS`,
-`SOURCE_DATE_EPOCH` (czas plików w zasobach Qt, rcc; domyślnie czas ostatniego commita —
-powtarzalne APK).
+`BRULION_ANDROID_CMAKE=system`, `BRULION_ANDROID_OPENSSL_DIR` (OpenSSL z checkoutu
+KDAB/android_openssl zamiast pobierania), `BRULION_WERROR=ON` (ostrzeżenia w naszym C++ są
+błędami), `JOBS`, `SOURCE_DATE_EPOCH` (czas plików w zasobach Qt, rcc; domyślnie czas ostatniego
+commita — powtarzalne APK).
 
 `versionCode` = `major·1000000 + minor·1000 + patch` (0.1.0 → 1000) — ten sam wzór co
 w poprzedniej wersji Brulionu (Tauri), więc nowe APK aktualizują stare (przy tym samym kluczu).
@@ -397,7 +445,7 @@ nix run .#brulion-android-sign -- result/brulion-*-unsigned.apk   # → ./brulio
 Wynik jest **niepodpisany** (wyrównany `zipalign -P 16` dla stron 16 KB), a podpis dokłada
 dopiero `brulion-android-sign` w chwili uruchomienia — klucz i hasło nigdy nie trafiają do
 `/nix/store`. Derywacja sprawdza APK tak jak `scripts/android-build.sh` (pakiet, uprawnienia,
-komponenty manifestu, klasy Kotlina, `libbrulion_<abi>.so`, wyrównanie 16 KB).
+komponenty manifestu, klasy Kotlina, `libbrulion_<abi>.so`, OpenSSL, wyrównanie 16 KB).
 
 | Składnik | Skąd (`nix/android.nix`) |
 |---|---|
@@ -406,7 +454,7 @@ komponenty manifestu, klasy Kotlina, `libbrulion_<abi>.so`, wyrównanie 16 KB).
 | SDK (platforma 36, build-tools 36.0.0), NDK r27c, CMake 3.31.6 + Ninja | nixpkgs `androidenv` (licencja SDK akceptowana w `flake.nix`) |
 | Gradle / AGP | Gradle 9 z nixpkgs (JDK 21) zamiast wrappera z szablonu Qt; AGP 9.0.0, Kotlin, androidx — z `nix/android/gradle-deps.json` (mitm-cache), wspólne dla wszystkich ABI |
 | aapt2 | z build-tools SDK (`android.aapt2FromMavenOverride`) zamiast binarki z Mavena |
-| OpenSSL 3 (KDAB android_openssl) | przypięty commit w `nix/android/openssl.json` (na razie pusty; ten sam commit co skrypt) |
+| OpenSSL 3 (KDAB android_openssl) | przypięty commit w `nix/android/openssl.json` — ten sam co w `src/app/CMakeLists.txt`, podawany jako `BRULION_ANDROID_OPENSSL_DIR` |
 
 Podpisywanie (`nix run .#brulion-android-sign -- PLIK.apk|PLIK.aab [opcje]`, działa też na
 aarch64, np. na Raspberry Pi — apksigner z nixpkgs to Java):
@@ -471,6 +519,8 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
 | `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
+| `android/res/xml/network_security_config.xml` | zaufane urzędy certyfikacji HTTPS: systemowe i zainstalowane przez użytkownika — [HTTPS i OpenSSL](#https-i-openssl) |
+| `android/assets/licenses/` | teksty licencji dołączanych bibliotek (OpenSSL, Apache-2.0) |
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
@@ -572,11 +622,13 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   testowym.
 * Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane
   uprawnienia (`aapt2 dump badging`), komponenty w scalonym manifeście (`aapt2 dump xmltree`),
-  klasy Kotlina w `classes.dex` i `lib/<abi>/libbrulion_<abi>.so`, a także zgodność ze
+  klasy Kotlina w `classes.dex`, `lib/<abi>/libbrulion_<abi>.so`, OpenSSL (`libssl_3.so`,
+  `libcrypto_3.so` dla każdego ABI), a także zgodność ze
   **stronami pamięci 16 KB** (Android 15+; telefony z takimi stronami nie wczytają innych
   bibliotek): `zipalign -c -P 16` i wyrównanie segmentów `LOAD` 64-bitowych bibliotek
   (`llvm-readelf`) — źle wyrównana `libbrulion_<abi>.so` przerywa build (NDK r27 dostaje
-  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`), biblioteki Qt są tylko zgłaszane.
+  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`; tak samo OpenSSL), biblioteki Qt są tylko
+  zgłaszane.
 * Logi: `adb logcat -s BrulionAndroid:* brulion.android:* Qt:*`.
 * Nastawione budziki: `adb shell dumpsys alarm | grep -B2 -A6 io.github.januszbit.brulion`.
 * Test ponownego nastawiania bez restartu (odbiornik nie jest eksportowany, więc potrzebny jest
