@@ -41,10 +41,15 @@ ColumnLayout {
             exporterObject.page = recent[0].path
     }
     function save() {
-        if (AppController.isWasm)
+        if (AppController.isWasm) {
             exporterObject.saveInBrowser()
-        else
-            saveDialog.open()
+            return
+        }
+        // Assigned now, not bound: save() also runs from the controller's stateChanged, before
+        // a binding on its file name has followed — the dialog (Android: the system's "Save as",
+        // the name passed as its EXTRA_TITLE) read the name on open() and came up empty.
+        saveDialog.selectedFile = exporterObject.suggestedSaveFile
+        saveDialog.open()
     }
 
     onPresetChanged: applyPreset()
@@ -57,6 +62,7 @@ ColumnLayout {
 
     ExportController {
         id: exporterObject
+        objectName: "exportController"
         workspace: Workspace
         onSaved: (message) => AppController.toast(message, "success")
         // The file is ready: ask where to put it right away.
@@ -239,6 +245,7 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: Theme.space2
         BButton {
+            objectName: "exportStartButton"
             text: qsTr("Export…")
             iconName: "upload"
             variant: "primary"
@@ -354,10 +361,11 @@ ColumnLayout {
 
     FileDialog {
         id: saveDialog
+        objectName: "exportSaveDialog"
         title: qsTr("Save the export")
         fileMode: FileDialog.SaveFile
         currentFolder: exporterObject.defaultSaveFolder
-        selectedFile: exporterObject.fileName !== "" ? exporterObject.defaultSaveFolder + "/" + exporterObject.fileName : ""
+        // selectedFile: set by save()
         nameFilters: {
             const f = exporterObject.formats.find(x => x.id === exporterObject.format)
             return f ? [f.name + " (*" + f.ext + ")", qsTr("All files (*)")] : [qsTr("All files (*)")]

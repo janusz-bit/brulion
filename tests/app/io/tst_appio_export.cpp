@@ -287,6 +287,33 @@ private Q_SLOTS:
         QCOMPARE(c.state(), u"error"_s);
     }
 
+    void suggestedSaveFile()
+    {
+        // The save dialog's file (FileDialog.selectedFile; Android's "Save as" shows its name):
+        // a file URL in defaultSaveFolder whose name is the export's — spaces, "%", Polish
+        // letters and all.
+        auto ws = open({{u"Plany 100% – żółw/Grządki.md"_s, "- marchew\n"}});
+        ExportController c;
+        c.setWorkspace(ws.get());
+        QVERIFY(c.suggestedSaveFile().isEmpty());
+        c.setScope(u"folder"_s);
+        c.setFolder(u"Plany 100% – żółw"_s);
+        QTRY_COMPARE(c.summary().value(u"files"_s).toInt(), 1);
+        QSignalSpy state(&c, &ExportController::stateChanged);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY2(c.fileName().startsWith(u"Plany 100% – żółw"_s) && c.fileName().endsWith(u".zip"_s),
+                 qPrintable(c.fileName()));
+        const QUrl url = c.suggestedSaveFile();
+        QVERIFY(url.isLocalFile());
+        QCOMPARE(url.fileName(), c.fileName());
+        QCOMPARE(QFileInfo(url.toLocalFile()).absolutePath(), QDir(c.defaultSaveFolder().toLocalFile()).absolutePath());
+        QVERIFY(!url.hasFragment() && !url.hasQuery());
+        c.discard();
+        QVERIFY(c.suggestedSaveFile().isEmpty());
+        QVERIFY(state.size() >= 3); // its NOTIFY signal: preparing, ready, idle
+    }
+
     void tasksCsvToExportFolder()
     {
         auto ws = open(sampleVault());

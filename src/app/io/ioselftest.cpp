@@ -14,6 +14,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <qtestsupport_gui.h>
 
 #include <cstdio>
@@ -100,6 +101,34 @@ bool shown(const QQuickItem *item)
     return item && item->isVisible() && item->width() > 0 && item->height() > 0;
 }
 
+/// Records a QML dialog's selectedFile when it becomes visible — inside open(), when a native
+/// dialog (Android's "Save as") has just taken it — before anything that runs after open().
+class OpenWatcher : public QObject {
+    Q_OBJECT
+
+public:
+    explicit OpenWatcher(QObject *dialog) : m_dialog(dialog)
+    {
+        connect(dialog, SIGNAL(visibleChanged()), this, SLOT(visibleChanged()));
+    }
+    bool opened() const { return m_opened; }
+    QUrl fileAtOpen() const { return m_fileAtOpen; }
+
+private Q_SLOTS:
+    void visibleChanged()
+    {
+        if (m_opened || !m_dialog->property("visible").toBool())
+            return;
+        m_opened = true;
+        m_fileAtOpen = m_dialog->property("selectedFile").toUrl();
+    }
+
+private:
+    QObject *m_dialog;
+    bool m_opened = false;
+    QUrl m_fileAtOpen;
+};
+
 /// Scrolls the nearest Flickable around `item` (if any) so that the item's middle is in its
 /// viewport — away from the phone's bottom bar and the floating button where possible.
 void ensureVisible(QQuickItem *item)
@@ -159,6 +188,7 @@ public:
         fromMoreMenu();
         phoneSteps();
         importTypedPath();
+        exportSaveDialog();
         return m_failures;
     }
 
@@ -391,6 +421,43 @@ private:
               "“Open the imported folder” shows Import/Obsidian in All pages");
     }
 
+    // 7. The export's save dialog opens with the produced file's name.
+    void exportSaveDialog()
+    {
+        m_app->navigate({{u"view"_s, u"importExport"_s}, {u"tab"_s, u"export"_s}});
+        QObject *controller = nullptr;
+        QObject *dialog = nullptr;
+        QQuickItem *button = nullptr;
+        waitFor([&] {
+            controller = nullptr;
+            for (QObject *c : m_window->findChildren<QObject *>(u"exportController"_s)) {
+                if (shown(qobject_cast<QQuickItem *>(c->parent())))
+                    controller = c;
+            }
+            dialog = controller ? controller->parent()->findChild<QObject *>(u"exportSaveDialog"_s) : nullptr;
+            button = item("exportStartButton");
+            return controller && dialog && shown(button) && button->isEnabled();
+        });
+        check(controller && dialog && shown(button) && button->isEnabled(), "the export tab offers “Export…”");
+        if (!controller || !dialog || !button)
+            return;
+        OpenWatcher watcher(dialog);
+        tap(button);
+        const bool opened = waitFor([&watcher] { return watcher.opened(); }, 15000);
+        check(opened, "“Export…” produces the file and opens the save dialog");
+        if (!opened)
+            return;
+        const QString name = controller->property("fileName").toString();
+        std::fprintf(stderr, "selftest: export file “%s”, the dialog opened with “%s”\n", qPrintable(name),
+                     qPrintable(watcher.fileAtOpen().toString()));
+        check(!name.isEmpty() && name.endsWith(u".zip"_s) && watcher.fileAtOpen().fileName() == name,
+              "the save dialog opens with the export’s name");
+        QMetaObject::invokeMethod(dialog, "reject");
+        check(waitFor([dialog] { return !dialog->property("visible").toBool(); }), "the save dialog closes");
+        QMetaObject::invokeMethod(controller, "discard");
+        settle(200);
+    }
+
     QQmlApplicationEngine *m_engine;
     shell::AppController *m_app;
     bool m_touch;
@@ -415,3 +482,5 @@ void startImportSelfTest(QQmlApplicationEngine *engine, shell::AppController *ap
 }
 
 } // namespace brulion::ioviews
+
+#include "ioselftest.moc"

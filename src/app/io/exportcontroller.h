@@ -11,7 +11,7 @@
 //             saveInBrowser() / saveToExportFolder() → "saved" (savedTo) | "error" (errorText)
 //
 // Saving per platform:
-//   desktop     QML FileDialog (fileMode: SaveFile, selectedFile = suggested name) → saveTo(url)
+//   desktop     QML FileDialog (fileMode: SaveFile, selectedFile = suggestedSaveFile) → saveTo(url)
 //   Android     the same FileDialog opens the system's "Save as" (a content:// document Qt writes
 //               to); saveToExportFolder() ("Save to Downloads") puts it into the Download folder
 //               through MediaStore — no storage permission needed (Android 10+; Android 9 writes
@@ -80,6 +80,9 @@ class ExportController : public QObject {
     Q_PROPERTY(QString savedTo READ savedTo NOTIFY stateChanged FINAL)
     /// Folder for the file dialog to start in (Documents / Download).
     Q_PROPERTY(QUrl defaultSaveFolder READ defaultSaveFolder CONSTANT FINAL)
+    /// The produced file's name in defaultSaveFolder, as a file URL for FileDialog.selectedFile
+    /// (Android's "Save as" shows its file name); empty without a file.
+    Q_PROPERTY(QUrl suggestedSaveFile READ suggestedSaveFile NOTIFY stateChanged FINAL)
     /// Folder used by saveToExportFolder().
     Q_PROPERTY(QString exportFolder READ exportFolder CONSTANT FINAL)
 
@@ -112,6 +115,7 @@ public:
     QString errorText() const { return m_errorText; }
     QString savedTo() const { return m_savedTo; }
     QUrl defaultSaveFolder() const;
+    QUrl suggestedSaveFile() const;
     QString exportFolder() const;
 
     /// Produce the file (async; "ready" when done).

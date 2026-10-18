@@ -338,6 +338,14 @@ QUrl ExportController::defaultSaveFolder() const
     return QUrl::fromLocalFile(dir);
 }
 
+QUrl ExportController::suggestedSaveFile() const
+{
+    const QString name = fileName();
+    if (name.isEmpty())
+        return {};
+    return QUrl::fromLocalFile(QDir(defaultSaveFolder().toLocalFile()).filePath(name));
+}
+
 QString ExportController::exportFolder() const
 {
     for (const auto location : { QStandardPaths::DownloadLocation, QStandardPaths::DocumentsLocation }) {

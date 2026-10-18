@@ -7,7 +7,9 @@
 //   4. the top bar's "More" menu: "Import notes" → the import tab;
 //   5. with an app chosen the phone's steps for it show (phones only);
 //   6. an Obsidian vault (Polish names) typed as a path → the preview counts it, nothing written
-//      yet → "Import" → the report → "Open the imported folder" → All pages in Import/Obsidian.
+//      yet → "Import" → the report → "Open the imported folder" → All pages in Import/Obsidian;
+//   7. the export tab: "Export…" → the file is produced → the save dialog opens with its name
+//      already set (Android's "Save as" takes the name when it opens) → cancelled.
 // Prints "selftest: PASS|FAIL <what>" lines; the exit code is the number of failures. Run by
 // ctest as tst_appio_import_qml* (tests/app/io/CMakeLists.txt). Desktop builds only (nested
 // event processing).
