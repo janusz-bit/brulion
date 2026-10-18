@@ -20,8 +20,17 @@ namespace {
 
 constexpr double kNormalAlphaDecay = 0.0228;  // ~300 ticks
 constexpr double kReducedAlphaDecay = 0.109;  // ~60 ticks
+constexpr double kSlowAlphaDecay = 0.067;     // ~100 ticks: time-boxed runs (slow devices)
 constexpr qint64 kReducedBurstMs = 30;
 constexpr qint64 kReducedInitialBudgetMs = 150;
+/// Timer-driven steps measured before a run is time-boxed or not (a fixed step: deterministic).
+constexpr int kDecisionTicks = 3;
+/// Time-boxed runs: steps per timer event while frames are shown, and afterwards — at least these
+/// ms of work, half / three quarters of a longer tick interval (phones, the browser), never more
+/// than kSlowMaxBurstMs, so input is handled in between.
+constexpr double kSlowBurstMs = 10;
+constexpr double kSlowFinishBurstMs = 20;
+constexpr double kSlowMaxBurstMs = 25;
 
 double nodeRadius(GraphModel::Kind kind, int degree)
 {
@@ -193,6 +202,8 @@ void GraphModel::setActive(bool active)
     if (m_active == active)
         return;
     m_active = active;
+    if (active)
+        m_runClock.start(); // shown again: a time-boxed run shows its frames anew
     Q_EMIT activeChanged();
     updateRunning();
 }
@@ -202,7 +213,7 @@ void GraphModel::setReducedMotion(bool on)
     if (m_reducedMotion == on)
         return;
     m_reducedMotion = on;
-    m_layout.params().alphaDecay = on ? kReducedAlphaDecay : kNormalAlphaDecay;
+    beginRun();
     Q_EMIT reducedMotionChanged();
     updateRunning();
 }
@@ -328,7 +339,21 @@ QRectF GraphModel::bounds() const
 void GraphModel::reheat(double alpha)
 {
     m_layout.setAlpha(std::max(m_layout.alpha(), alpha));
+    beginRun();
     updateRunning();
+}
+
+void GraphModel::beginRun()
+{
+    m_layout.params().alphaDecay = m_reducedMotion ? kReducedAlphaDecay : kNormalAlphaDecay;
+    m_runTicks = 0;
+    m_tickMs = 0;
+    m_paintMs.store(0, std::memory_order_relaxed); // frames of this run count (not a settled one)
+    m_runClock.start();
+    if (m_timeBoxed) {
+        m_timeBoxed = false;
+        Q_EMIT timeBoxedChanged();
+    }
 }
 
 void GraphModel::relayout()
@@ -339,6 +364,7 @@ void GraphModel::relayout()
         edges.append(e);
     m_layout.reset(int(m_nodes.size()), edges, m_seed);
     m_dragging = -1;
+    beginRun();
     if (m_reducedMotion) {
         QElapsedTimer t;
         t.start();
@@ -382,6 +408,7 @@ void GraphModel::endDrag(int node)
         m_layout.unfix(node);
     m_dragging = -1;
     m_layout.setAlphaTarget(0);
+    beginRun();
     if (m_reducedMotion) {
         // Settle the neighbours at once instead of animating them.
         m_layout.setAlpha(std::max(m_layout.alpha(), 0.1));
@@ -407,8 +434,34 @@ void GraphModel::onTick()
             m_layout.tick();
         if (!m_layout.running())
             Q_EMIT positionsChanged();
+    } else if (m_timeBoxed && m_dragging < 0) {
+        // A slow device: several steps per event (as many as fit the budget), frames only for
+        // the first m_timeBoxMs of the run — the rest is shown when it is done.
+        const bool frames = m_runClock.elapsed() < m_timeBoxMs;
+        const double budget = frames ? std::clamp(0.5 * m_tickInterval, kSlowBurstMs, kSlowMaxBurstMs)
+                                     : std::clamp(0.75 * m_tickInterval, kSlowFinishBurstMs, kSlowMaxBurstMs);
+        QElapsedTimer t;
+        t.start();
+        do {
+            m_layout.tick();
+        } while (m_layout.running() && double(t.nsecsElapsed()) / 1e6 + m_tickMs <= budget);
+        if (frames || !m_layout.running())
+            Q_EMIT positionsChanged();
     } else {
+        QElapsedTimer t;
+        t.start();
         m_layout.tick();
+        if (m_runTicks < kDecisionTicks) {
+            // The first steps of a run and the latest paint tell whether this device keeps up.
+            ++m_runTicks;
+            m_tickMs += (double(t.nsecsElapsed()) / 1e6 - m_tickMs) / double(m_runTicks);
+            if (m_runTicks == kDecisionTicks && m_dragging < 0
+                && m_tickMs + m_paintMs.load(std::memory_order_relaxed) > m_slowFrameMs) {
+                m_timeBoxed = true;
+                m_layout.params().alphaDecay = kSlowAlphaDecay;
+                Q_EMIT timeBoxedChanged();
+            }
+        }
         Q_EMIT positionsChanged();
     }
     updateRunning();
@@ -640,7 +693,7 @@ void GraphModel::rebuild()
     m_indexOf = indexOf;
     m_adjacency = adjacency;
     m_dragging = -1;
-    m_layout.params().alphaDecay = m_reducedMotion ? kReducedAlphaDecay : kNormalAlphaDecay;
+    beginRun();
     m_layout.reset(int(nodes.size()), edges, m_seed, xs, ys, known);
     const bool changed = newIds != oldIds || m_layout.edges() != oldEdges;
     if (carried > 0)

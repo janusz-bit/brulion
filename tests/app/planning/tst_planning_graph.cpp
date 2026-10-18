@@ -411,6 +411,147 @@ private Q_SLOTS:
         QVERIFY(!m.running());
     }
 
+    // ---- slow devices --------------------------------------------------------------------------
+
+    void timeBoxedRunsOnSlowDevices()
+    {
+        // A device that cannot draw 30 frames a second (here: any device, threshold 0): after
+        // three measured steps the run cools down in ~100 steps instead of ~300, in bursts, with
+        // no frames once the time box is over (0 ms here) — and the layout is still deterministic.
+        auto index = makeIndex(bigVault(400, 3));
+        GraphModel m;
+        m.setSlowFrameMs(0);
+        m.setTimeBoxMs(0);
+        m.setTickInterval(1);
+        m.setSeed(7);
+        QSignalSpy frames(&m, &GraphModel::positionsChanged);
+        QSignalSpy boxed(&m, &GraphModel::timeBoxedChanged);
+        m.setVaultIndex(index.get());
+        QVERIFY(m.running());
+        QVERIFY(!m.timeBoxed());
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+        QVERIFY(m.timeBoxed());
+        QCOMPARE(boxed.count(), 1);
+        QVERIFY(m.alpha() < m.layout().params().alphaMin);
+        // The rebuild, the three measured steps, then only the final layout.
+        QCOMPARE(frames.count(), 1 + 3 + 1);
+
+        // The same steps by hand: 3 with the normal cooling, then the fast one until it stops.
+        GraphModel manual;
+        manual.setActive(false);
+        manual.setSeed(7);
+        manual.setVaultIndex(index.get());
+        ForceLayout &layout = manual.layout();
+        layout.tick(3);
+        layout.params().alphaDecay = 0.067;
+        int steps = 3;
+        while (layout.running()) {
+            layout.tick();
+            ++steps;
+        }
+        QVERIFY2(steps > 80 && steps < 120, qPrintable(QString::number(steps)));
+        QCOMPARE(manual.nodeCount(), m.nodeCount());
+        for (int i = 0; i < m.nodeCount(); ++i)
+            QCOMPARE(m.position(i), manual.position(i));
+
+        // A new run decides again, starting with the normal cooling.
+        m.reheat(0.5);
+        QVERIFY(!m.timeBoxed());
+        QCOMPARE(m.layout().params().alphaDecay, 0.0228);
+        QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+        QVERIFY(m.timeBoxed());
+    }
+
+    void timeBoxDecisionMeasuresStepsAndPainting()
+    {
+        auto index = makeIndex(bigVault(200, 3));
+        // Cheap steps and cheap painting: the normal run of ~300 steps with a frame each.
+        {
+            GraphModel m;
+            m.setSlowFrameMs(50);
+            m.setTickInterval(1);
+            QSignalSpy frames(&m, &GraphModel::positionsChanged);
+            m.setVaultIndex(index.get());
+            m.reportPaintCost(10); // the view painted the first frame of the run
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+            QVERIFY(!m.timeBoxed());
+            QVERIFY(frames.count() > 250);
+            QVERIFY(m.tickCostMs() > 0);
+        }
+        // Painting the view takes longer than a 30 fps frame: time-boxed.
+        {
+            GraphModel m;
+            m.setSlowFrameMs(50);
+            m.setTickInterval(1);
+            m.reportPaintCost(80); // a paint before the run (a settled frame) does not count
+            m.setVaultIndex(index.get());
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+            QVERIFY(!m.timeBoxed());
+            m.reheat(1.0);
+            m.reportPaintCost(80); // a frame of this run
+            QTRY_VERIFY_WITH_TIMEOUT(m.timeBoxed(), 20000);
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+        }
+        // Reduced motion keeps its own schedule.
+        {
+            GraphModel m;
+            m.setSlowFrameMs(0);
+            m.setReducedMotion(true);
+            m.setTickInterval(1);
+            m.setVaultIndex(index.get());
+            QTRY_VERIFY_WITH_TIMEOUT(!m.running(), 20000);
+            QVERIFY(!m.timeBoxed());
+        }
+    }
+
+    void timeBoxedFramesLeaveOutLabelsWhileMoving()
+    {
+        auto index = makeIndex(bigVault(400, 3));
+        GraphModel m;
+        m.setSlowFrameMs(0);
+        m.setTickInterval(200); // the decision after 3 steps, then time to look at it
+        m.setVaultIndex(index.get());
+        QTRY_VERIFY_WITH_TIMEOUT(m.timeBoxed(), 20000);
+        m.setActive(false); // frozen (not moving)
+        QVERIFY(!m.running());
+        GraphItem item;
+        item.setSize(QSizeF(800, 600));
+        item.setModel(&m);
+        item.setLabelZoom(0.01); // labels for every visible node
+        item.setAutoFit(true);
+        QImage still(800, 600, QImage::Format_ARGB32_Premultiplied);
+        QImage moving(800, 600, QImage::Format_ARGB32_Premultiplied);
+        QImage bare(800, 600, QImage::Format_ARGB32_Premultiplied);
+        {
+            QPainter p(&still);
+            item.render(&p, still.size());
+        }
+        m.setActive(true); // moving again (no step happens before the event loop runs)
+        QVERIFY(m.running());
+        {
+            QPainter p(&moving);
+            item.render(&p, moving.size());
+        }
+        m.setActive(false);
+        item.setLabelZoom(1e6); // no labels at all
+        {
+            QPainter p(&bare);
+            item.render(&p, bare.size());
+        }
+        QVERIFY(still != moving);
+        QCOMPARE(moving, bare);
+        QVERIFY(item.lastPaintMs() > 0);
+    }
+
+    void movingRepaintInterval()
+    {
+        QCOMPARE(GraphItem::movingRepaintInterval(0), 66);
+        QCOMPARE(GraphItem::movingRepaintInterval(10), 66);
+        QCOMPARE(GraphItem::movingRepaintInterval(100), 300);
+        QCOMPARE(GraphItem::movingRepaintInterval(150.2), 451);
+        QCOMPARE(GraphItem::movingRepaintInterval(5000), 600);
+    }
+
     void emptyVault()
     {
         auto index = makeIndex({});

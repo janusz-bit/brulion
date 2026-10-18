@@ -23,6 +23,9 @@ constexpr double kLabelMaxWidth = 220;
 constexpr int kAntialiasEdgeLimit = 2500;
 constexpr double kSpriteMaxRadius = 24;
 constexpr int kMaxSprites = 600;
+/// Throttled repaints of a moving time-boxed layout: at least this far apart, at most this far.
+constexpr int kMinMovingRepaintMs = 66;
+constexpr int kMaxMovingRepaintMs = 600;
 
 QColor withAlpha(QColor c, double factor)
 {
@@ -60,6 +63,9 @@ GraphItem::GraphItem(QQuickItem *parent) : QQuickPaintedItem(parent)
         update();
     });
     connect(&m_camera, &QVariantAnimation::finished, this, [this] { update(); });
+    m_clock.start();
+    m_repaintTimer.setSingleShot(true);
+    connect(&m_repaintTimer, &QTimer::timeout, this, [this] { update(); });
 }
 
 GraphItem::~GraphItem() = default;
@@ -454,7 +460,36 @@ void GraphItem::onPositionsChanged()
     }
     applyAutoFit();
     emitHighlightPosition();
-    update();
+    repaintMoving();
+}
+
+int GraphItem::movingRepaintInterval(double paintMs)
+{
+    return std::clamp(int(std::ceil(3 * paintMs)), kMinMovingRepaintMs, kMaxMovingRepaintMs);
+}
+
+void GraphItem::repaintMoving()
+{
+    // Slow devices: a frame of the moving layout costs more than the simulation steps between
+    // them (QPainter rasterises everything, on the GUI thread or while it waits): repaint now and
+    // then, so the steps — and the user's input — get most of the time. The settled layout is
+    // painted at once (runningChanged), so are gestures and camera moves (they call update()).
+    const bool throttle = m_model && m_model->timeBoxed() && m_model->running() && m_gesture == Gesture::None
+                          && m_camera.state() != QAbstractAnimation::Running;
+    if (!throttle) {
+        m_repaintTimer.stop();
+        update();
+        return;
+    }
+    if (m_repaintTimer.isActive())
+        return;
+    const qint64 last = m_lastPaintEnd.load(std::memory_order_relaxed);
+    const qint64 interval = movingRepaintInterval(lastPaintMs());
+    const qint64 since = last < 0 ? interval : (m_clock.nsecsElapsed() - last) / 1000000;
+    if (since >= interval)
+        update();
+    else
+        m_repaintTimer.start(int(interval - since));
 }
 
 void GraphItem::emitHighlightPosition()
@@ -820,9 +855,17 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
 {
     QElapsedTimer timer;
     timer.start();
+    // Painting may run on the render thread (while the GUI thread waits): atomics for the timing.
+    const auto finished = [&] {
+        const double ms = double(timer.nsecsElapsed()) / 1e6;
+        m_lastPaintMs.store(ms, std::memory_order_relaxed);
+        m_lastPaintEnd.store(m_clock.nsecsElapsed(), std::memory_order_relaxed);
+        if (m_model)
+            m_model->reportPaintCost(ms);
+    };
     painter->fillRect(QRectF(QPointF(0, 0), size), m_bg);
     if (!m_model || m_model->nodeCount() == 0) {
-        m_lastPaintMs = double(timer.nsecsElapsed()) / 1e6;
+        finished();
         return;
     }
     const auto &nodes = m_model->nodes();
@@ -958,9 +1001,17 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
 
     // Labels: everything visible at sufficient zoom; otherwise the highlighted neighbourhood,
     // the local centre and the best connected nodes. No overlaps (except the highlighted one).
-    const bool all = z >= m_labelZoom;
+    // A time-boxed layout on the move: only the highlighted node and the local centre (labels
+    // are the costly part of a frame, and they would only flicker past).
+    const bool sparse = m_model->timeBoxed() && m_model->running();
+    const bool all = z >= m_labelZoom && !sparse;
     std::vector<int> candidates;
-    if (all) {
+    if (sparse) {
+        if (hl >= 0 && hl < n && visible[size_t(hl)])
+            candidates.push_back(hl);
+        if (focus >= 0 && visible[size_t(focus)])
+            candidates.push_back(focus);
+    } else if (all) {
         for (int i = 0; i < n; ++i) {
             if (visible[size_t(i)])
                 candidates.push_back(i);
@@ -1067,7 +1118,7 @@ void GraphItem::render(QPainter *painter, const QSizeF &size)
         painter->setPen(dimming && !hood[size_t(i)] ? labelDim : m_label);
         painter->drawStaticText(QPointF(rect.left() + 3, rect.top() + 1), st);
     }
-    m_lastPaintMs = double(timer.nsecsElapsed()) / 1e6;
+    finished();
 }
 
 } // namespace brulion::planning

@@ -8,7 +8,9 @@
 // the highlighted neighbourhood and the best connected nodes), labels that do not overlap
 // (cached QStaticText, at most MaxLabels). Off-screen nodes and edges are culled; antialiasing
 // is switched off for large graphs while the simulation or a gesture is running, so 2000 nodes
-// stay smooth, and comes back once things settle.
+// stay smooth, and comes back once things settle. On slow devices (GraphModel::timeBoxed) the
+// moving layout is repainted at most every movingRepaintInterval() ms and without labels (except
+// the highlighted and the focused node) — gestures and camera moves still repaint at once.
 //
 // Interaction (mouse, touch, touchpad):
 // * wheel / pinch / touchpad pinch: zoom at the pointer; drag on the background / two-finger
@@ -25,14 +27,17 @@
 #include "graphmodel.h"
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QHash>
 #include <QImage>
 #include <QPointer>
 #include <QQuickPaintedItem>
 #include <QStaticText>
+#include <QTimer>
 #include <QVariantAnimation>
 
+#include <atomic>
 #include <set>
 
 namespace brulion::planning {
@@ -145,7 +150,10 @@ public:
     QString highlightedId() const;
     QPointF highlightedPosition() const;
     bool interacting() const { return m_interacting; }
-    double lastPaintMs() const { return m_lastPaintMs; }
+    double lastPaintMs() const { return m_lastPaintMs.load(std::memory_order_relaxed); }
+    /// While a time-boxed layout moves: the least time between two repaints for a paint of
+    /// `paintMs` (painting takes at most a quarter of the time), ms.
+    static int movingRepaintInterval(double paintMs);
 
     /// Show the whole graph (animated unless `animated` is false or animationDuration is 0).
     Q_INVOKABLE void fitAll(bool animated = true);
@@ -210,6 +218,8 @@ private:
     void setSelected(int node);
     void setInteracting(bool on);
     void onPositionsChanged();
+    /// update() — throttled while a time-boxed layout moves (see movingRepaintInterval()).
+    void repaintMoving();
     void onStructureChanged();
     void applyAutoFit();
     void stopCameraAnimation();
@@ -277,8 +287,11 @@ private:
     QHash<int, QStaticText> m_labels;
     QHash<quint64, QImage> m_sprites;
     QHash<int, QString> m_labelTexts;
-    double m_lastPaintMs = 0;
+    std::atomic<double> m_lastPaintMs{0};
     bool m_settledRepaint = false;
+    QElapsedTimer m_clock;                  ///< started at construction (any thread reads it)
+    std::atomic<qint64> m_lastPaintEnd{-1}; ///< m_clock time at the end of the last paint, ns
+    QTimer m_repaintTimer;                  ///< a throttled repaint
 };
 
 } // namespace brulion::planning

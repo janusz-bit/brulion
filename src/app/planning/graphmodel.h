@@ -15,6 +15,13 @@
 // * The simulation runs on a timer (tickInterval ms) while `active` and stops when it has
 //   cooled down (`running`). With reducedMotion it cools down fast and is computed in bursts
 //   without intermediate frames, so nothing moves on screen.
+// * Slow devices (`timeBoxed`): when the first steps of a run, together with painting the view
+//   (GraphItem reports its paint time), cost more than a 30 fps frame, the rest of the run cools
+//   down in about 100 steps instead of 300, computed in bursts of several steps per timer event;
+//   the view repaints only now and then while it moves (GraphItem) and shows the frames of at
+//   most the first two seconds — then the rest is computed without frames and shown when done.
+//   The decision is measured on the device (phones, the browser, an old laptop alike) and taken
+//   at a fixed step, so the layout of a slow run is deterministic too.
 // * Index changes are applied after `refreshDelay` ms: nodes keep their positions, new ones
 //   start next to a neighbour, and the simulation is reheated a little.
 // * Deterministic: the same index, settings and `seed` give the same layout (see ForceLayout).
@@ -34,6 +41,8 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <atomic>
 
 namespace brulion {
 class VaultIndex;
@@ -66,6 +75,8 @@ class GraphModel : public QObject {
     Q_PROPERTY(int tickInterval READ tickInterval WRITE setTickInterval NOTIFY tickIntervalChanged FINAL)
     /// Debounce of rebuilds after index changes, ms (default 300).
     Q_PROPERTY(int refreshDelay READ refreshDelay WRITE setRefreshDelay NOTIFY refreshDelayChanged FINAL)
+    /// The current run is time-boxed because this device is slow (see above).
+    Q_PROPERTY(bool timeBoxed READ timeBoxed NOTIFY timeBoxedChanged FINAL)
 
     Q_PROPERTY(bool running READ running NOTIFY runningChanged FINAL)
     Q_PROPERTY(double alpha READ alpha NOTIFY positionsChanged FINAL)
@@ -127,6 +138,18 @@ public:
     void setTickInterval(int msec);
     int refreshDelay() const { return m_refreshTimer.interval(); }
     void setRefreshDelay(int msec);
+    bool timeBoxed() const { return m_timeBoxed; }
+    /// Frame cost (one step + one paint, ms) above which a run is time-boxed (default 33; tests:
+    /// 0 = always, a huge value = never).
+    double slowFrameMs() const { return m_slowFrameMs; }
+    void setSlowFrameMs(double ms) { m_slowFrameMs = ms; }
+    /// How long a time-boxed run shows intermediate frames, ms (default 2000).
+    void setTimeBoxMs(int ms) { m_timeBoxMs = ms; }
+    /// GraphItem reports how long painting the graph took (any thread; the latest paint of the
+    /// current run counts).
+    void reportPaintCost(double ms) { m_paintMs.store(ms, std::memory_order_relaxed); }
+    /// Average cost of the simulation steps of the current run's first steps, ms.
+    double tickCostMs() const { return m_tickMs; }
 
     bool running() const { return m_running; }
     double alpha() const { return m_layout.alpha(); }
@@ -180,6 +203,7 @@ Q_SIGNALS:
     void tickIntervalChanged();
     void refreshDelayChanged();
     void runningChanged();
+    void timeBoxedChanged();
     /// The nodes or edges changed (positions too).
     void structureChanged();
     /// Positions changed (a simulation step, a drag).
@@ -191,6 +215,8 @@ private:
     void onTick();
     void updateRunning();
     void settingsEdited();
+    /// A (re)started simulation: the normal cooling, a fresh decision about time-boxing.
+    void beginRun();
 
     QPointer<VaultIndex> m_index;
     QMetaObject::Connection m_indexConnection;
@@ -218,6 +244,14 @@ private:
     int m_pageCount = 0;
     bool m_running = false;
     int m_dragging = -1;
+    // Time-boxing on slow devices (see the header comment).
+    double m_slowFrameMs = 33;
+    int m_timeBoxMs = 2000;
+    std::atomic<double> m_paintMs{0};
+    double m_tickMs = 0;
+    int m_runTicks = 0; ///< timer-driven steps of the current run
+    bool m_timeBoxed = false;
+    QElapsedTimer m_runClock;
 
     QTimer m_timer;
     QTimer m_refreshTimer;
