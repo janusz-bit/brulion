@@ -49,6 +49,7 @@
 #pragma once
 
 #include "blocktext.h"
+#include "calc/calclocale.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 
@@ -60,11 +61,17 @@
 #include <QString>
 
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace brulion {
 class EditorHost;
 }
+
+namespace brulion::calc {
+class PageCalc;
+class Scope;
+} // namespace brulion::calc
 
 namespace brulion::editor {
 
@@ -223,8 +230,27 @@ private:
         bool transclusionsValid = false;
         bool transclusionsLocal = false; ///< embeds this page: follows every change of it
         QVariantList transclusions;
-        bool dependsOnPage = false; ///< inline calculations, own block refs: re-render on any change
+        bool dependsOnRefs = false; ///< own block refs `((id))`: re-render on any change of the page
+        bool dependsOnCalc = false; ///< inline calculations: re-render when the calc scope may change
+        int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
+        // Calculations: calcResults / tableData are current while resultsValid and, when they
+        // read calc variables (resultsUseScope: calc blocks, tables with formulas), resultsEpoch
+        // == m_calcEpoch (the block's own text and everything the calculations see unchanged).
+        bool resultsValid = false;
+        bool resultsUseScope = false;
+        int resultsEpoch = -1;
+        bool calcTextValid = false; ///< calcInert / calcFences describe the current text
+        bool calcInert = true;      ///< the text defines nothing (see analyseCalc())
+        bool calcFences = false;    ///< the text has fence characters (``` / ~~~)
+        /// Calc variables above the block (at scopeEpoch).
+        std::shared_ptr<const calc::Scope> scope;
+        int scopeEpoch = -1;
+    };
+    /// What an edit of a block can do to the page's calculations (see apply()).
+    struct CalcFlags {
+        bool sensitive = true; ///< defines variables / fences / frontmatter, or lies inside a calc fence
+        bool openAfter = true; ///< a calc fence or the frontmatter continues after the block
     };
 
     int docIndexOfRow(int row) const;
@@ -236,7 +262,8 @@ private:
     void ensureEmbeds(int row) const;
     void ensureTransclusions(int row) const;
     void rebuildIndex();
-    void replay(const QList<markdown::BlockChange> &changes, const QList<quint64> &finalUids);
+    /// Replays the row changes; returns whether the edit was calc-neutral (see apply()).
+    bool replay(const QList<markdown::BlockChange> &changes, const QList<quint64> &finalUids);
     void invalidateContent(quint64 uid);
     /// Recompute structural state and derived data of all rows; emit dataChanged for rows that
     /// differ. `contentChanged` recomputes calc/table results and page-dependent html.
@@ -245,9 +272,31 @@ private:
     QVariantMap computeTableData(int docIndex) const;
     void emitRowsChanged(const QList<int> &rows, const QList<int> &roles);
 
+    // --- Calculations (docs/SYNTAX.md §9) ---------------------------------------------------------
+    // Calc blocks, table formulas and inline calculations see the variables defined above them
+    // (calc::PageCalc: calc blocks, `key:: value` properties, numeric frontmatter). The page's
+    // PageCalc is built at most once per text revision, and only when a result has to be
+    // computed. An edit that cannot change what any calculation sees ("calc-neutral": it only
+    // touches blocks that define nothing and lie outside calc fences and the frontmatter) keeps
+    // m_calcEpoch, so the other blocks keep their results and every block its scope; any other
+    // edit, a new content, or a language change starts a new epoch.
+    calc::CalcLocale calcLocale() const;
+    /// The variables block `docIndex` sees (cached per block for the current epoch).
+    std::shared_ptr<const calc::Scope> scopeFor(int docIndex) const;
+    /// Classify every block of the current text (m_calcFlags).
+    void analyseCalc();
+    /// Start a new calc epoch: every result and scope is recomputed when needed.
+    void calcContentChanged();
+
     markdown::BlockDocument m_doc;
     mutable QString m_text;
     mutable bool m_textValid = false;
+    mutable std::shared_ptr<const calc::PageCalc> m_pageCalc; ///< for the current text; null = to build
+    int m_calcEpoch = 0;
+    QHash<quint64, CalcFlags> m_calcFlags; ///< by uid, for the current text when m_calcFlagsValid
+    bool m_calcFlagsValid = false;
+    /// Something reads calc variables: calc blocks, tables with formulas, rendered inline calculations.
+    mutable bool m_hasCalcConsumers = false;
     QList<quint64> m_rows;              ///< uid per model row (mirrors the document after replays)
     QHash<quint64, int> m_docIndex;      ///< uid -> document index
     mutable QHash<quint64, RowState> m_state;

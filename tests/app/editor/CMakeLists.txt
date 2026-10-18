@@ -6,6 +6,12 @@ brulion_add_test(tst_editor_blocktext
 brulion_add_test(tst_editor_controller
     SOURCES tst_editor_controller.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
+# Calculations across edits: definitions above, sum(above), calc fences, frontmatter, and random
+# edits checked against a model computing everything from scratch (BlockListModel keeps results
+# across calc-neutral edits).
+brulion_add_test(tst_editor_calc
+    SOURCES tst_editor_calc.cpp
+    LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
 brulion_add_test(tst_editor_suggestions
     SOURCES tst_editor_suggestions.cpp
     LIBS brulion_editor)
