@@ -241,34 +241,42 @@
         };
         window.brulionShell = shellBridge;
 
-        // Downloads the .wasm with progress (bytes of the uncompressed file vs. its known size).
+        // Download progress: bytes of the uncompressed file vs. its known size, read from a copy
+        // of the response body.
+        function showDownloadProgress(body) {
+          var reader = body.getReader();
+          var loaded = 0;
+          function next() {
+            return reader.read().then(function (chunk) {
+              if (chunk.done) {
+                setProgress(1);
+                setStatus(T.start);
+                return undefined;
+              }
+              loaded += chunk.value.byteLength;
+              setProgress(loaded / WASM_SIZE);
+              setStatus(T.download + ' ' + Math.min(100, Math.floor(loaded * 100 / WASM_SIZE)) + '%');
+              return next();
+            });
+          }
+          next().catch(function () {});
+        }
+        // Downloads the .wasm. compileStreaming gets the browser's own Response: only then can the
+        // browser keep the compiled code for the next visits (V8's WebAssembly code cache goes by
+        // the response URL; a Response made here has none). A server that sends another type
+        // than application/wasm gets a Response with that type (compileStreaming needs it; no
+        // code cache then).
         function fetchWasm(url) {
           return fetch(url).then(function (response) {
             if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + url);
-            var headers = { 'Content-Type': 'application/wasm' };
-            if (!response.body || !(WASM_SIZE > 0) || typeof ReadableStream === 'undefined') {
-              return new Response(response.body, { headers: headers });
+            var type = (response.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+            if (type !== 'application/wasm') {
+              response = new Response(response.body, { headers: { 'Content-Type': 'application/wasm' } });
             }
-            var reader = response.body.getReader();
-            var loaded = 0;
-            var stream = new ReadableStream({
-              pull: function (controller) {
-                return reader.read().then(function (chunk) {
-                  if (chunk.done) {
-                    setProgress(1);
-                    setStatus(T.start);
-                    controller.close();
-                    return;
-                  }
-                  loaded += chunk.value.byteLength;
-                  setProgress(loaded / WASM_SIZE);
-                  setStatus(T.download + ' ' + Math.min(100, Math.floor(loaded * 100 / WASM_SIZE)) + '%');
-                  controller.enqueue(chunk.value);
-                });
-              },
-              cancel: function (reason) { return reader.cancel(reason); }
-            });
-            return new Response(stream, { headers: headers });
+            if (response.body && WASM_SIZE > 0 && typeof ReadableStream !== 'undefined') {
+              showDownloadProgress(response.clone().body);
+            }
+            return response;
           });
         }
         function compileWasm(url) {

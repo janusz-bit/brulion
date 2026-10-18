@@ -343,6 +343,15 @@ i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 01
   Minimalny przypadek: `QCoreApplication` z jednym powtarzanym `QTimer` 0 ms — licznik
   wywołań zatrzymuje się na 1 (z interwałem 1 ms: ~230 wywołań/s); dodatkowy timer 250 ms
   nie odpala wtedy ani razu (obok timera 1 ms: 4 razy na sekundę).
+* Kod skompilowany: `index.html` podaje `WebAssembly.compileStreaming()` oryginalną odpowiedź
+  `fetch` (postęp pobierania czyta z jej kopii, `response.clone()`), bo tylko odpowiedź z
+  adresem URL może trafić do pamięci podręcznej skompilowanego kodu przeglądarki. Chrome
+  zapisuje wtedy skompilowany moduł przy pierwszych wizytach (przy odpowiedzi z service workera
+  obok niej w Cache Storage) i od trzeciej wizyty nie kompiluje funkcji od nowa: pierwsza
+  klatka 0,85 → 0,63 s, praca głównego wątku 1,78 → 1,28 s (laptop, 1000 notatek); przy
+  4× wolniejszym CPU (jak telefon) 2,47 → 1,77 s i 6,7 → 5,4 s. Gdy serwer wysyła inny typ
+  niż `application/wasm`, powłoka tworzy odpowiedź z tym typem (wymaga go
+  `compileStreaming`) — wtedy bez tej pamięci.
 
 ## Pliki
 
