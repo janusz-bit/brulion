@@ -2,12 +2,10 @@
 
 **Nowości w {{VERSION}}**
 
-* **Rejestr zdarzeń** (*Ustawienia → Aplikacja → Rejestr zdarzeń* albo przycisk w *Ustawienia → Synchronizacja*): co aplikacja robiła, z filtrami i wyszukiwaniem, także z poprzednich uruchomień. Przyciski Kopiuj, Udostępnij, Zapisz w Pobranych i Zapisz jako — gdy coś nie działa, wyślij ten plik. Hasła, tokeny i dane logowania są z niego zawsze usuwane; rejestr zostaje na urządzeniu.
-* **Widać, co robi synchronizacja:** etap i postęp na żywo („Sprawdzanie plików na serwerze… folder 12 z ok. 40”), czas, przycisk „Zatrzymaj”. Gdy serwer nie odpowiada, po ok. 20 s pojawia się ostrzeżenie, a gdy nie odpowie wcale, przebieg kończy się błędem z powodem i ponowieniem („Kolejna próba za 25 s”, „Spróbuj teraz”) — już nigdy „synchronizuję…” bez końca.
-* **Historia synchronizacji:** ostatnie 20 przebiegów z wynikiem po polsku, a w „Szczegółach” czasy etapów, liczba zapytań, pliki z błędami i ich przyczyny. Konflikty i masowe usuwanie są oznaczone jako „Czeka na Twoją decyzję”.
-* NixOS: instalacja z flake'a nie uruchamia już testów (szybsza instalacja).
+* **Dokumentacja napisana w Brulionie:** osobny notatnik „Dokumentacja Brulionu” — 14 stron (tryby, linki, tagi, zadania, przypomnienia, obliczenia, zapytania, dziennik i szablony, synchronizacja, import i eksport, skróty, format plików) z żywymi przykładami. Powstaje przy pierwszym otwarciu i można go dowolnie edytować.
+* **Szybkie przełączanie notatników:** przycisk ⇄ obok nazwy notatnika w pasku bocznym (ostatnie notatniki, dokumentacja, „Otwórz inny notatnik…”), polecenie w palecie (Ctrl+K) i skrót **Ctrl+Shift+B**, który skacze do dokumentacji i z powrotem do poprzedniego notatnika. W wersji przeglądarkowej jest jeden notatnik, więc dokumentacji tam nie ma.
 
-Z wersji 0.2.0: płynne przewijanie, dużo szybsza praca na telefonie, HTTPS i Nextcloud na Androidzie, import z Trilium.
+Z wersji 0.2.1: rejestr zdarzeń, podgląd synchronizacji na żywo i jej historia. Z wersji 0.2.0: płynne przewijanie, dużo szybsza praca na telefonie, HTTPS i Nextcloud na Androidzie, import z Trilium.
 
 **Najważniejsze**
 

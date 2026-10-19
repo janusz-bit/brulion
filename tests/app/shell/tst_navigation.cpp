@@ -583,6 +583,67 @@ private Q_SLOTS:
 
     // ---- commands ---------------------------------------------------------------------------
 
+    void documentationNotebook()
+    {
+        // "Dokumentacja Brulionu": opened from the switcher / Ctrl+Shift+B, seeded on first
+        // use, starts on its table of contents, and the toggle goes back to the user's notebook.
+        auto app = openApp(u"moje notatki"_s);
+        const QString mine = QDir::cleanPath(m_tmp.filePath(u"moje notatki"_s));
+        const QString docs = app->docsVaultPath();
+        QVERIFY(docs.endsWith(u"/Dokumentacja Brulionu"_s));
+        QVERIFY(!app->inDocsVault());
+
+        CommandModel *model = app->commands();
+        QVERIFY(model->ids().contains(u"vault.docs"_s));
+        const auto title = [&] {
+            for (const QVariant &v : model->commands()) {
+                if (v.toMap().value(u"id"_s).toString() == u"vault.docs")
+                    return v.toMap().value(u"title"_s).toString();
+            }
+            return QString();
+        };
+        const QString toDocs = title();
+        QVERIFY(!toDocs.isEmpty());
+
+        QVERIFY(model->run(u"vault.docs"_s));
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
+        QVERIFY(app->inDocsVault());
+        QCOMPARE(app->currentView(), u"page"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Spis treści.md"_s);
+        QVERIFY(app->workspace()->exists(u"Zadania.md"_s));
+        QVERIFY(app->workspace()->exists(u"Format plików.md"_s));
+        QVERIFY(title() != toDocs); // "Back to my notebook"
+        QCOMPARE(app->settings()->recentVaults().size(), 2);
+
+        // Back: the notebook used before, on its usual home route.
+        app->toggleDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(mine).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!app->inDocsVault());
+        QVERIFY(!app->workspace()->exists(u"Spis treści.md"_s));
+        QCOMPARE(title(), toDocs);
+
+        // The second visit does not seed again over the user's edits.
+        app->toggleDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->workspace()->exists(u"Spis treści.md"_s));
+    }
+
+    void documentationNotebookWithoutOtherNotebook()
+    {
+        // Started in the documentation with no other notebook known: "back" shows the start screen.
+        auto app = makeApp();
+        app->start();
+        app->openDocsVault();
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->inDocsVault());
+        app->toggleDocsVault();
+        QCOMPARE(app->status(), u"onboarding"_s);
+        QVERIFY(!app->inDocsVault());
+    }
+
     void commands()
     {
         auto app = openApp(u"commands"_s);
