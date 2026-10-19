@@ -52,6 +52,8 @@ nieprzetłumaczonych tekstów.
 | reminder, alarm, snooze | przypomnienie, alarm, drzemka (przycisk „Drzemka 10 min”) |
 | query | zapytanie |
 | sync, sync center | synchronizacja, centrum synchronizacji |
+| event log, log, detailed log | rejestr zdarzeń (nie „dziennik” — to dziennik notatek), logi, szczegółowy rejestr |
+| sync run, history of runs | synchronizacja (#42), historia synchronizacji |
 | conflict, conflict copy, merge | konflikt, kopia konfliktu, scal |
 | keep mine / the other version | zachowaj moją / druga wersja |
 | app password | hasło aplikacji |

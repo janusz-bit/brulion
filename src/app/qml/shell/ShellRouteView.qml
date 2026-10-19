@@ -46,6 +46,7 @@ Item {
         case "history": return historyView
         case "trash": return trashView
         case "settings": return settingsView
+        case "logs": return logsView
         default: return null
         }
     }
@@ -85,4 +86,5 @@ Item {
     Component { id: historyView; HistoryView { route: root.route } }
     Component { id: trashView; TrashView { route: root.route } }
     Component { id: settingsView; SettingsView { route: root.route } }
+    Component { id: logsView; LogsView { route: root.route } }
 }

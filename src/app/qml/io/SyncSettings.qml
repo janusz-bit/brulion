@@ -75,6 +75,18 @@ ColumnLayout {
                 }
             }
             ShellSettingRow {
+                title: qsTr("Event log")
+                description: Logs.problemCount > 0
+                             ? qsTr("%n warning(s) or error(s) since the app started. Every step of the sync, to check or to send.", "", Logs.problemCount)
+                             : qsTr("Every step of the sync, to check or to send.")
+                BButton {
+                    text: qsTr("Open")
+                    iconName: "scroll-text"
+                    size: "small"
+                    onClicked: AppController.navigate({ view: "logs", group: "sync" })
+                }
+            }
+            ShellSettingRow {
                 title: qsTr("Sync center")
                 description: qsTr("Status, Syncthing setup, conflicts and merging.")
                 BButton {

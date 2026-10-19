@@ -41,6 +41,7 @@
 #include "workspacesync.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QPointer>
 #include <QStringList>
@@ -356,6 +357,7 @@ private:
     QStringList m_indexQueue;
     qsizetype m_indexTotal = 0;
     QTimer m_indexTimer;
+    QElapsedTimer m_indexClock; ///< since open() (the event log's "Index ready" line)
     int m_revision = 0;
     mutable int m_trashCount = -1;
     // Children of this object (parented: QML never takes them over); detached by close().

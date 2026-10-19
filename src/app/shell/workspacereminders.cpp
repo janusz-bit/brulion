@@ -2,6 +2,7 @@
 
 #include "dates/dates.h"
 #include "index/vaultindex.h"
+#include "log/categories.h"
 #include "reminders/reminders.h"
 #include "vault/vault.h"
 
@@ -14,7 +15,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-Q_LOGGING_CATEGORY(lcReminders, "brulion.reminders")
+using logging::lcReminders;
 
 namespace {
 

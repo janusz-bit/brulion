@@ -106,11 +106,12 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `search` | `SearchView` | `query?` |
 | `allPages` | `AllPagesView` | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` | `tag?` |
-| `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud, Konflikty (merge) | `tab?`, `copy?` |
+| `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge) | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` | `tab?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore | `path` |
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja | `section?` |
+| `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -434,6 +435,51 @@ Choosing and switching the mode:
   `BlockEditor.documentInset` = the outline's gutter); with `journalMode` document the days use
   the full width.
 
+## Sync visibility and the event log
+
+The user must always be able to tell what the sync is doing, whether something failed and
+why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
+
+* **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
+  `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
+  no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i
+  pobieranie zmian"), "folder 12 z ok. 40" / "sprawdzono 120 z 3125 plików · zmiany: 3", a bar
+  (indeterminate until the files are known), "Trwa 1 min 20 s · 1,4 MB · po zmianie notatki ·
+  #42", the files in flight ("Teraz: …") and "Zatrzymaj". When nothing arrives for 20 s an amber
+  box says "Serwer nie odpowiada od 25 s…" with what Brulion waits for; after 180 s the run is
+  stopped and retried — the panel never says "syncing" forever. `Workspace.sync.statusText`
+  (sidebar footer, settings) follows the phases at the same pace.
+* **Retry and decisions:** a failed run shows "Kolejna próba za 25 s" (a countdown) with
+  "Spróbuj teraz"; held-back deletions and conflicts are "Czeka na Twoją decyzję" / "Konflikt w
+  … — scal wersje" (the deletion guard and the conflict list stay as before).
+* **History** (`SyncHistoryList.qml`, card "Historia synchronizacji"): the last runs (20 kept,
+  5 shown, "Pokaż wszystkie"), quiet ones folded ("Bez zmian ×3, 09:25–09:55"); each row: the
+  result in words with a coloured icon (never colour alone), when, why ("ręcznie", "po zmianie
+  notatki", "ponowna próba", …), what moved and how long. "Ostatnio: … · Szczegóły" under the
+  status. A row opens **`SyncRunDetails.qml`** (a dialog; bottom sheet on phones): the result
+  with its explanation, code and technical message, "Na co poszedł czas" (a bar of the phases
+  plus a list for screen readers), the changes, the requests to the server (count, average,
+  bytes, protocol, timeouts, the slowest), the files that failed with a Polish explanation per
+  code, conflicts ("Scal"), "Pokaż w rejestrze" (the log at the run's time) and "Kopiuj
+  szczegóły".
+* **Rejestr zdarzeń** (`qml/diag/LogsView.qml`, route `logs`; from Settings → Aplikacja (with a
+  warning count) and Synchronizacja, the sync center, the palette — "rejestr", "logi",
+  "diagnostyka"): a search field (case and diacritics ignored), area chips (Wszystko,
+  Synchronizacja, Sieć, Notatnik, Indeks, Przypomnienia, Import i eksport, Aplikacja, System),
+  the level (Wszystkie / Ostrzeżenia i błędy / Tylko błędy), chips for a run's time window and
+  for the detailed mode; the list (`LogRow`: time, level icon + letter, area, the message as
+  plain text, "×37" for repeats; warnings and errors tinted; day headers; earlier runs of the
+  app included, "Ukryj wcześniejsze uruchomienia") follows new entries at the end, otherwise a
+  "Nowe wpisy (n)" button appears; long press / right click copies a line. Actions: Kopiuj
+  (what is shown, with the header; ≤ 256 KB), Udostępnij (Android share sheet), Zapisz w
+  Pobranych (Android), Zapisz jako… (desktop, Android SAF), Pobierz (browser), Otwórz folder
+  (desktop), Szczegółowy rejestr, Wyczyść… (confirmed). The footer: the detailed switch and what
+  the log contains (no passwords or tokens; note names and the server may appear; it never
+  leaves the device unless shared). Phones: the meta data above each message, Kopiuj in the
+  menu.
+* An export starts with a translated header: version, device, Qt, time and detail level, what
+  it contains and what it never contains, and the last five sync runs.
+
 ## Shared components (`qml/components/`)
 
 `BButton`, `BIconButton`, `BTextField`, `BTextArea`, `BSearchField`, `BSwitch`, `BCheckBox`,
@@ -530,7 +576,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -555,7 +601,10 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   (with the mode choice), capture, drawer.
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
-  import/export with prepared notebooks.
+  import/export with prepared notebooks; the io script also seeds a sync history and an earlier
+  session of the event log (`fixtures.sh`) for `sync-nextcloud`, `sync-details`,
+  `sync-details-failed`, `logs`, `logs-sync`, `settings-app` (and `sync-stalled`, not in the
+  default set: a server that never answers, 24 s per shot).
 * `tests/app/perf/scroll-probe.sh` — scroll measurements (`--scroll-probe`) of the journal stream,
   pages (document / outline), All pages, Tasks, the calendar agenda and the sidebar × desktop
   (wheel, touchpad) / phone (touch drags, flings), on the sample notebook or `VAULT=big` (365

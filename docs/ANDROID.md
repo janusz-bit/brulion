@@ -220,6 +220,25 @@ Gotowy plik eksportu (ZIP, HTML, iCalendar…) zapiszesz na dwa sposoby:
   plików”); zajęta nazwa dostaje od systemu dopisek „(1)”, a raport podaje nazwę pliku. Na
   Androidzie 9 plik jest zapisywany bezpośrednio w *Download* (potrzebne uprawnienie do pamięci).
 
+## Rejestr zdarzeń: udostępnianie
+
+Rejestr zdarzeń (*Ustawienia → Aplikacja → Rejestr zdarzeń*, docs/ARCHITECTURE.md „Logging”)
+leży w katalogu plików aplikacji (`/data/user/0/io.github.januszbit.brulion/files/logs/brulion.log`
+i `brulion.log.1`) — niewidoczny dla innych aplikacji. Brulion zapisuje go od razu przy
+ostrzeżeniach i przy przejściu w tło (Android potrafi zatrzymać proces bez zamykania aplikacji;
+następne uruchomienie odnotowuje taką sesję). Wysłać go można:
+
+* **Udostępnij** — kopia eksportu trafia do `files/share/` (stara jest usuwana) i idzie przez
+  systemowy arkusz udostępniania (`ACTION_SEND`, `EXTRA_STREAM` z adresem `content://` z
+  FileProvidera Qt `<pakiet>.qtprovider`, który obejmuje tylko `files-path`, stąd katalog pod
+  `files/`; odbiorca dostaje jednorazowe prawo odczytu) — `AndroidBridge::shareFile()`, JNI bez
+  kodu Kotlina;
+* **Zapisz w Pobranych** (`MediaStore`, jak eksport) albo **Zapisz jako…** (systemowe okno);
+* **Kopiuj** — do schowka (najnowsze 256 KB).
+
+Eksport zaczyna się nagłówkiem (wersja, urządzenie, co zawiera, czego nie zawiera — hasła i
+tokeny są usuwane, ostatnie synchronizacje).
+
 ## HTTPS i OpenSSL
 
 Synchronizacja z Nextcloud (WebDAV) idzie przez HTTPS. Qt for Android nie ma własnego TLS:

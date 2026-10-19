@@ -53,7 +53,7 @@ for size in "${sizes[@]}"; do
     rm -rf "$dir"
     mkdir -p "$dir"
     home="$(mktemp -d)"
-    if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" HOME="$home" \
+    if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" HOME="$home" \
       QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
       timeout 300 "$bin" --journey "$dir" "${scenario_args[@]}" --no-single-instance --size "$geometry" --journey-theme "$theme" \
       --locale "$locale" --now "$now" "${extra[@]}" 2> "$dir/log.txt"; then

@@ -114,7 +114,7 @@ static QList<Command> buildCommands(const AppController *app)
 
 /// buildCommands() with the note mode command right after "Markdown source", available where that
 /// is (an editor shows a page or a day): document (Obsidian-like) / outline (Logseq-like), written
-/// into the note (docs/UI.md "Note modes").
+/// into the note (docs/UI.md "Note modes"); and the event log after the sync center.
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
@@ -127,6 +127,15 @@ static QList<Command> allCommands(const AppController *app)
                 u"file-text"_s,
                 {},
                 inEditor});
+    // The event log ("Rejestr zdarzeń") right after the sync center; also found as logs, diagnostics.
+    const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
+    out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
+               {u"go.logs"_s,
+                CommandModel::tr("Event log"),
+                CommandModel::tr("Logs, diagnostics, sync problems"),
+                u"scroll-text"_s,
+                {},
+                app->status() == u"ready"});
     return out;
 }
 

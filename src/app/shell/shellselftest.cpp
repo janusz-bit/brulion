@@ -1,10 +1,19 @@
 #include "shellselftest.h"
 
 #include "appcontroller.h"
+#include "appsettings.h"
 #include "workspace.h"
+#include "workspacesync.h"
 
+#include "log/categories.h"
+#include "log/logger.h"
+#include "log/redact.h"
+#include "sync/synchistory.h"
+
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QGuiApplication>
 #include <QInputDevice>
 #include <QKeyEvent>
 #include <QQmlApplicationEngine>
@@ -287,6 +296,150 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
 }
 
 using Check = std::function<void(bool, const char *)>;
+
+/// 5c. The event log ("Rejestr zdarzeń") and the details of a sync run, with real taps / clicks:
+///     lines logged anywhere reach the page (a secret never does), the search ignores diacritics,
+///     an area chip filters, the detailed mode switches the Logger; the sync center's history
+///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
+void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    using brulion::logging::Logger;
+    Logger *logger = Logger::instance();
+    check(logger != nullptr, "the event log is installed");
+    if (!logger)
+        return;
+    const QString secret = u"Selftest-Sekret-987"_s;
+    brulion::logging::addSecret(secret);
+    qCInfo(brulion::logging::lcSync).noquote() << u"#98 selftest: Zażółć gęślą jaźń"_s;
+    qCWarning(brulion::logging::lcNet).noquote()
+            << u"#98 selftest: PUT https://jan:%1@chmura.invalid/x.md failed"_s.arg(secret);
+    logger->flush();
+
+    app->navigate({{u"view"_s, u"logs"_s}});
+    const auto shownNamed = [window](const QString &name) {
+        return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    QQuickItem *list = nullptr;
+    check(waitFor([&] { return (list = shownNamed(u"logsList"_s)) && list->property("count").toInt() > 0; }, 5000),
+          "the event log page lists entries");
+    if (!list)
+        return;
+    auto *model = list->property("model").value<QObject *>();
+    const auto visible = [model] {
+        QString text;
+        if (model)
+            QMetaObject::invokeMethod(model, "visibleText", qReturnArg(text));
+        return text;
+    };
+    check(waitFor([&] { return visible().contains(u"#98 selftest: Zażółć gęślą jaźń"_s); }),
+          "a line logged by the sync reaches the page");
+    check(!visible().contains(secret) && visible().contains(u"https://***@chmura.invalid/x.md"_s),
+          "the page shows the line without the secret");
+
+    // The search ignores letter case and diacritics.
+    if (QQuickItem *search = shownNamed(u"logsSearch"_s)) {
+        tapOrClick(window, pointIn(search), touch);
+        settle(50);
+        for (const QChar ch : u"ZAZOLC"_s)
+            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        check(waitFor([&] { return model && model->property("count").toInt() == 1; }),
+              "searching \"ZAZOLC\" finds the line with \"Zażółć\"");
+        sendKey(window, Qt::Key_Escape);
+        check(waitFor([&] { return model && model->property("search").toString().isEmpty(); }),
+              "Escape clears the search");
+    } else {
+        check(false, "the search field is on screen");
+    }
+
+    // An area chip filters; "Everything" shows all again.
+    if (QQuickItem *chip = shownNamed(u"logsGroup-net"_s)) {
+        tapOrClick(window, pointIn(chip), touch);
+        check(waitFor([&] { return model && model->property("group").toString() == u"net"_s; }),
+              "the Network chip filters the list");
+        check(!visible().contains(u"Zażółć gęślą jaźń"_s) && visible().contains(u"#98 selftest: PUT"_s),
+              "only network lines are left");
+        if (QQuickItem *all = shownNamed(u"logsGroup-all"_s))
+            tapOrClick(window, pointIn(all), touch);
+        check(waitFor([&] { return model && model->property("group").toString().isEmpty(); }),
+              "Everything shows all lines");
+    } else {
+        check(false, "the area chips are on screen");
+    }
+
+    // The detailed mode (at the end of the list).
+    QMetaObject::invokeMethod(list, "positionViewAtEnd");
+    settle(150);
+    if (QQuickItem *detailed = shownNamed(u"logsDetailed"_s)) {
+        tapOrClick(window, pointIn(detailed, 0.9, 0.5), touch);
+        check(waitFor([&] { return logger->verbosity() == brulion::logging::Verbosity::Detailed; }),
+              "the switch turns the detailed log on");
+        check(app->settings()->value(u"diagnostics/logVerbosity"_s).toString() == u"detailed"_s,
+              "the detailed log is remembered");
+        tapOrClick(window, pointIn(detailed, 0.9, 0.5), touch);
+        check(waitFor([&] { return logger->verbosity() == brulion::logging::Verbosity::Normal; }),
+              "the switch turns it off again");
+    } else {
+        check(false, "the detailed-log switch is on screen at the end of the list");
+    }
+
+    // Copy (desktop button): the export header and no secret on the clipboard.
+    if (QQuickItem *copy = shownNamed(u"logsCopy"_s)) {
+        QGuiApplication::clipboard()->clear();
+        tapOrClick(window, pointIn(copy), touch);
+        const QString text = QGuiApplication::clipboard()->text();
+        check(text.isEmpty() || (text.contains(u"\n----\n"_s) && !text.contains(secret)),
+              "Copy puts the shown lines with the header on the clipboard, without the secret");
+    }
+    brulion::logging::removeSecret(secret);
+
+    // A sync run's details from the sync center's history.
+    WorkspaceSync *sync = app->workspace()->sync();
+    if (!sync || !sync->syncHistory()) {
+        check(false, "the sync history exists for the open notebook");
+        return;
+    }
+    brulion::sync::SyncRunRecord run;
+    run.number = 42;
+    run.trigger = brulion::sync::SyncTrigger::LocalChange;
+    run.started = QDateTime::currentDateTime().addSecs(-90);
+    run.finished = QDateTime::currentDateTime().addSecs(-28);
+    run.durationMs = 62'000;
+    run.outcome = brulion::sync::SyncOutcome::Failed;
+    run.errorCode = u"timeout"_s;
+    run.errorMessage =
+            u"PROPFIND https://chmura.invalid/remote.php/dav/files/jan/Brulion/Dziennik/ timed out after 60 s"_s;
+    run.phases = {{brulion::sync::SyncPhase::Connect, 0, 120, 0, 0},
+                  {brulion::sync::SyncPhase::ListRemote, 120, 61'880, 12, 48'000}};
+    sync->syncHistory()->add(run);
+    app->navigate({{u"view"_s, u"sync"_s}, {u"tab"_s, u"nextcloud"_s}});
+    QQuickItem *row = nullptr;
+    check(waitFor([&] { return (row = shownNamed(u"syncHistoryRow"_s)) != nullptr; }, 5000),
+          "the sync center lists the run in its history");
+    if (!row)
+        return;
+    tapOrClick(window, pointIn(row), touch);
+    QObject *details = nullptr;
+    check(waitFor([&] {
+              details = window->findChild<QObject *>(u"syncRunDetails"_s);
+              return details && details->property("opened").toBool();
+          }),
+          "a history row opens the run's details");
+    if (!details)
+        return;
+    check(details->property("known").toBool() && details->property("title").toString().contains(u"42"_s),
+          "the details show run #42");
+    QQuickItem *showLog = nullptr;
+    check(waitFor([&] { return (showLog = shownNamed(u"syncDetailsShowLog"_s)) != nullptr; }),
+          "the details offer the event log");
+    if (showLog) {
+        tapOrClick(window, pointIn(showLog), touch);
+        check(waitFor([&] {
+                  return app->currentView() == u"logs"_s && app->currentRoute().value(u"fromMs"_s).toLongLong() > 0;
+              }),
+              "\"Show in the event log\" opens the log at the run's time");
+    }
+}
 
 /// 3b. Rows with a context menu, with the input people really use: a finger on phones (--touch:
 ///     real touch events through the window), the mouse on desktops. A tap or a left click does
@@ -884,6 +1037,11 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
         }
         app->goHome();
     }
+
+    // 5c. The event log page and a sync run's details.
+    checkLogsAndSyncDetails(window, app, check);
+    closeMenus(window);
+    app->goHome();
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

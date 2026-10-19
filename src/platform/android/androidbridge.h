@@ -113,6 +113,15 @@ public:
      */
     DownloadResult saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data);
 
+    /**
+     * Offers the file at @p path to other apps through the system's share sheet (ACTION_SEND
+     * with a content:// URI of Qt's FileProvider "<package>.qtprovider", read permission
+     * granted to the receiver). The file must lie below the app's files dir (the provider's
+     * only internal path). @p subject goes into EXTRA_SUBJECT (mail apps), @p chooserTitle
+     * above the sheet. False when the intent could not be started.
+     */
+    bool shareFile(const QString &path, const QString &mimeType, const QString &subject, const QString &chooserTitle);
+
     // Documents picked with the system's picker (content:// URIs) for imports: one
     // ContentResolver query per call. Static and thread-safe — import listings run on worker
     // threads (JNI attaches them); no bridge instance is needed. The bytes are read with QFile

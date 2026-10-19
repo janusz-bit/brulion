@@ -2,7 +2,10 @@
 // settings, a first sync both ways, server changes reaching the index and the editors, a real
 // conflict ending as a conflict copy that is merged back and synced, connection tests, offline
 // and authentication errors in the status, the mass-deletion guard waiting for confirmation;
-// the Syncthing status through a fake REST API, and reading Syncthing's config.xml.
+// the history of runs (sync-history.json, folded quiet runs, details, persistence), the live
+// progress throttled to a few updates a second, the translated per-file texts, no secrets in
+// anything shown; the Syncthing status through a fake REST API, and reading Syncthing's
+// config.xml.
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -10,8 +13,11 @@
 #include "synctest.h"
 
 #include "sync/sync.h"
+#include "sync/synchistory.h"
 #include "vault/vault.h"
 
+#include <QElapsedTimer>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -318,6 +324,183 @@ private Q_SLOTS:
         QCOMPARE(sync->statusText(), u"Nextcloud is not set up completely"_s);
         sync->syncNow();
         QCOMPARE(errors.size(), 1);
+    }
+
+    void historyAndDetails()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        QString root;
+        auto ws = open(&server, {{u"Zażółć.md"_s, u"- gęślą jaźń\n"_s}}, &root);
+        WorkspaceSync *sync = ws->sync();
+        QVERIFY(sync->history().isEmpty());
+        QVERIFY(sync->lastRun().isEmpty());
+        sync->setNextcloud(account(server));
+        QSignalSpy historyChanged(sync, &WorkspaceSync::historyChanged);
+        QVERIFY(syncAndWait(sync));
+        // Two runs without changes fold into one row.
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(historyChanged.size() >= 3);
+        QVariantList rows = sync->history();
+        QCOMPARE(rows.size(), 2);
+        const QVariantMap quiet = rows.first().toMap();
+        QCOMPARE(quiet.value(u"outcome"_s).toString(), u"ok"_s);
+        QCOMPARE(quiet.value(u"quiet"_s).toBool(), true);
+        QCOMPARE(quiet.value(u"repeats"_s).toInt(), 2);
+        QCOMPARE(quiet.value(u"outcomeText"_s).toString(), u"No changes ×2"_s);
+        QCOMPARE(quiet.value(u"tone"_s).toString(), u"success"_s);
+        QCOMPARE(quiet.value(u"trigger"_s).toString(), u"manual"_s);
+        QCOMPARE(quiet.value(u"triggerText"_s).toString(), u"by hand"_s);
+        QCOMPARE(quiet.value(u"number"_s).toInt(), 3);
+        const QVariantMap first = rows.last().toMap();
+        QCOMPARE(first.value(u"number"_s).toInt(), 1);
+        QCOMPARE(first.value(u"outcomeText"_s).toString(), u"Synced"_s);
+        QVERIFY2(first.value(u"summary"_s).toString().startsWith(u"↑1"_s),
+                 qPrintable(first.value(u"summary"_s).toString()));
+        QCOMPARE(sync->lastRun().value(u"number"_s).toInt(), 3);
+
+        const QVariantMap details = sync->runDetails(1);
+        QCOMPARE(details.value(u"number"_s).toInt(), 1);
+        const QVariantList phases = details.value(u"phases"_s).toList();
+        QVERIFY(phases.size() >= 5);
+        QCOMPARE(phases.first().toMap().value(u"id"_s).toString(), u"connect"_s);
+        QCOMPARE(phases.first().toMap().value(u"text"_s).toString(), u"Connecting to the server"_s);
+        const QVariantMap stats = details.value(u"stats"_s).toMap();
+        QVERIFY(stats.value(u"requests"_s).toInt() > 0);
+        QVERIFY(stats.value(u"requestsText"_s).toString().contains(u"PROPFIND"_s));
+        QVERIFY(stats.value(u"requestsText"_s).toString().contains(u"PUT"_s));
+        QCOMPARE(details.value(u"counts"_s).toMap().value(u"uploaded"_s).toInt(), 1);
+        QVERIFY(details.value(u"fromMs"_s).toLongLong() > 0);
+        QVERIFY(details.value(u"toMs"_s).toLongLong() >= details.value(u"fromMs"_s).toLongLong());
+        QVERIFY(sync->runDetails(99).isEmpty());
+        const QString text = sync->runDetailsText(1);
+        QVERIFY2(text.startsWith(u"Sync #1 · "_s), qPrintable(text));
+        QVERIFY(text.contains(u"Result: Synced"_s));
+        QVERIFY(text.contains(u"Requests: "_s));
+        QCOMPARE(sync->runDetailsText(99), QString());
+        const QStringList lines = sync->historyLines(5);
+        QCOMPARE(lines.size(), 2);
+        QVERIFY2(lines.first().startsWith(u"#3 2026-10-14 10:02 · by hand · No changes ×2"_s),
+                 qPrintable(lines.first()));
+
+        // A failed run is in the history too, with its code and explanation.
+        sync->setNextcloud(account(server, u"złe hasło"_s));
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        const QVariantMap failed = sync->history().first().toMap();
+        QCOMPARE(failed.value(u"outcome"_s).toString(), u"failed"_s);
+        QCOMPARE(failed.value(u"errorCode"_s).toString(), u"auth"_s);
+        QCOMPARE(failed.value(u"errorText"_s).toString(), u"Wrong user name or app password."_s);
+        QCOMPARE(failed.value(u"outcomeText"_s).toString(), u"Failed: wrong user name or app password"_s);
+        QCOMPARE(failed.value(u"needsUser"_s).toBool(), true);
+        QCOMPARE(failed.value(u"tone"_s).toString(), u"danger"_s);
+        QCOMPARE(failed.value(u"number"_s).toInt(), 4); // numbering survives the new engine
+        QVERIFY(!sync->runDetailsText(4).contains(u"złe hasło"_s));
+        QVERIFY(!sync->historyLines().join(u'\n').contains(u"złe hasło"_s));
+
+        // Persisted next to the vault's device state: a new session sees the same runs and
+        // goes on numbering.
+        ws.reset();
+        QVERIFY(QFile::exists(root + u"-state/sync-history.json"_s));
+        auto again = std::make_unique<Workspace>();
+        again->setClock(m_clock.fn());
+        WorkspaceSync *sync2 = again->sync();
+        sync2->setSyncthingDiscovery(false);
+        sync2->setTransport(&server);
+        sync2->setAutomatic(false);
+        sync2->setOnlineCheck([] { return true; });
+        QVERIFY(again->open(root, root + u"-state"_s));
+        QCOMPARE(sync2->history().size(), 3);
+        sync2->setNextcloud(account(server));
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync2));
+        QCOMPARE(sync2->history().first().toMap().value(u"number"_s).toInt(), 5);
+        sync2->clearHistory();
+        QVERIFY(sync2->history().isEmpty());
+    }
+
+    void liveIsThrottled()
+    {
+        // Progress arrives once per file; the UI gets a few updates a second, and the status line
+        // (sidebar, settings) is not re-evaluated per file either.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        QMap<QString, QString> files;
+        for (int i = 0; i < 80; ++i)
+            files.insert(u"Dziennik/Dzień %1.md"_s.arg(i), u"- wpis %1\n"_s.arg(i));
+        auto ws = open(&server, files);
+        WorkspaceSync *sync = ws->sync();
+        sync->setNextcloud(account(server));
+        server.setLatency("PUT", 15);
+        QSignalSpy live(sync, &WorkspaceSync::liveChanged);
+        QSignalSpy status(sync, &WorkspaceSync::statusChanged);
+        QVariantMap seen;
+        connect(sync, &WorkspaceSync::liveChanged, this, [&] {
+            if (sync->live().value(u"phase"_s).toString() == u"syncing"_s)
+                seen = sync->live();
+        });
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(syncAndWait(sync));
+        QTRY_VERIFY(sync->live().isEmpty()); // idle again
+        const qint64 ms = timer.elapsed();
+        QCOMPARE(server.text(u"Brulion/Dziennik/Dzień 79.md"_s).value_or(QString()), u"- wpis 79\n"_s);
+        const int bound = int(ms / 250) + 6;
+        QVERIFY2(live.size() <= bound, qPrintable(u"%1 live updates in %2 ms"_s.arg(live.size()).arg(ms)));
+        QVERIFY2(status.size() <= bound + 6, qPrintable(u"%1 status updates in %2 ms"_s.arg(status.size()).arg(ms)));
+        QVERIFY(status.size() < 80);
+        if (!seen.isEmpty()) { // a fast machine may finish within one update
+            QCOMPARE(seen.value(u"running"_s).toBool(), true);
+            QCOMPARE(seen.value(u"total"_s).toInt(), 80);
+            QVERIFY(seen.value(u"phaseText"_s).toString().endsWith(u"…"_s));
+            QVERIFY(seen.value(u"elapsedText"_s).toString().startsWith(u"Running for "_s));
+            QCOMPARE(seen.value(u"trigger"_s).toString(), u"manual"_s);
+            QVERIFY(seen.value(u"number"_s).toInt() > 0);
+        }
+    }
+
+    void texts_data()
+    {
+        QTest::addColumn<QString>("code");
+        QTest::addColumn<QString>("text");
+        QTest::newRow("locked") << u"locked"_s << u"The file is locked on the server (open in another app?)."_s;
+        QTest::newRow("case-clash")
+                << u"case-clash"_s
+                << u"Another file has the same name in different letter case — rename one of them."_s;
+        QTest::newRow("read-failed") << u"read-failed"_s << u"The file cannot be read on this device."_s;
+        QTest::newRow("unknown with status") << u"http"_s << u"The file could not be synced (HTTP 418)."_s;
+    }
+
+    void texts()
+    {
+        QFETCH(QString, code);
+        QFETCH(QString, text);
+        WorkspaceSync sync;
+        QCOMPARE(sync.fileErrorText(code, code == u"http" ? 418 : 0), text);
+        QCOMPARE(sync.triggerText(u"edit"_s), u"after an edit"_s);
+        QCOMPARE(sync.triggerText(u"network"_s), u"network is back"_s);
+        QCOMPARE(sync.triggerText(u"nonsense"_s), QString());
+    }
+
+    void noSecretsShown()
+    {
+        // A password typed into the server address and a refused one never show up anywhere.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto ws = open(&server, {{u"a.md"_s, u"- a\n"_s}});
+        WorkspaceSync *sync = ws->sync();
+        NextcloudSettings n = account(server, u"Tajne-Hasło-123"_s);
+        n.url = u"https://jan:Inne-Tajne-456@chmura.example.pl"_s;
+        sync->setNextcloud(n);
+        QVERIFY(!sync->currentDavUrl().contains(u"Inne-Tajne"_s));
+        QVERIFY(syncAndWait(sync));
+        QCOMPARE(sync->lastErrorCode(), u"auth"_s);
+        const QString shown = sync->statusText() + sync->lastError()
+                              + QString::fromUtf8(QJsonDocument::fromVariant(sync->history()).toJson())
+                              + QString::fromUtf8(QJsonDocument::fromVariant(sync->runDetails(1)).toJson())
+                              + sync->runDetailsText(1) + sync->historyLines().join(u'\n');
+        QVERIFY(!shown.contains(u"Tajne-Hasło-123"_s));
+        QVERIFY(!shown.contains(u"Inne-Tajne-456"_s));
     }
 
     void massDeletionWaitsForConfirmation()

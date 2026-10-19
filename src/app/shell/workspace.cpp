@@ -7,6 +7,8 @@
 
 #include "dates/dates.h"
 #include "index/vaultindex.h"
+#include "log/categories.h"
+#include "log/slowscope.h"
 #include "markdown/markdown.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -153,6 +155,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     for (const FileStat &f : m_vault->files())
         m_indexQueue.append(f.path);
     m_indexTotal = m_indexQueue.size();
+    m_indexClock.start();
     m_trashCount = -1;
     m_reminders->attach(m_vault.get(), m_index.get());
     m_sync->attach(m_vault.get());
@@ -314,6 +317,11 @@ void Workspace::finishIndexing()
 
 void Workspace::indexingFinished()
 {
+    if (m_indexClock.isValid()) {
+        qCInfo(logging::lcIndex).noquote()
+                << u"Index ready: %1 notes in %2"_s.arg(m_indexTotal).arg(logging::formatMs(m_indexClock.elapsed()));
+        m_indexClock.invalidate();
+    }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built
     // index would make reminders look deleted).
     m_reminders->start();

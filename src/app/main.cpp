@@ -3,7 +3,15 @@
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
+#include "logcontroller.h" // the event log page's controller (src/app/diag)
+#include "workspace.h"
+#include "workspacesync.h"
 
+#include "log/categories.h"
+#include "log/logger.h"
+#include "log/slowscope.h"
+
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -71,6 +79,7 @@ int main(int argc, char *argv[])
     // Wayland app id / desktop entry: io.github.januszbit.brulion.desktop (packaging/).
     QGuiApplication::setDesktopFileName(u"io.github.januszbit.brulion"_s);
 #endif
+
 #ifdef Q_OS_ANDROID
     // Right after the application object: the bridge picks up the notification tap that
     // cold-started the app and delivers it once the UI is connected (docs/ANDROID.md).
@@ -108,6 +117,42 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // The event log ("Rejestr zdarzeń", src/core/log) — after the single-instance check, so a second
+    // launch never writes into the running one's log: every Qt message from here on, redacted,
+    // in memory and in brulion.log (desktop: ~/.local/state/Brulion/Brulion/logs; Android: the
+    // app's files dir; browser: memory only). stderr / logcat keep their output.
+    using brulion::logging::Logger;
+    brulion::logging::LoggerOptions logOptions;
+    // The developer tools (gallery, editor playground) log to memory only.
+    logOptions.directory = mainUi ? brulion::platform::logDirectory() : QString();
+    // --now "2026-10-14 10:00" (screenshots): the log's clock starts there too.
+    if (const QDateTime fixedStart = QDateTime::fromString(argValue(args, u"--now"_s), u"yyyy-MM-dd HH:mm"_s);
+        fixedStart.isValid()) {
+        auto since = std::make_shared<QElapsedTimer>();
+        since->start();
+        logOptions.clock = [base = fixedStart.toMSecsSinceEpoch(), since] { return base + since->elapsed(); };
+    }
+    logOptions.sessionInfo = u"Brulion %1 (%2, Qt %3)"_s.arg(
+            QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()));
+    Logger *logger = Logger::install(logOptions);
+    logger->setVerbosity(brulion::logging::Verbosity::Normal);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, logger, &Logger::endSession);
+    // Going to the background: write the log now (Android may stop the process there without
+    // aboutToQuit) and note how long the app was away when it comes back.
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged, logger,
+                     [logger, away = QElapsedTimer()](Qt::ApplicationState state) mutable {
+                         const bool background = state == Qt::ApplicationSuspended || state == Qt::ApplicationHidden;
+                         if (background && !away.isValid()) {
+                             away.start();
+                             qCInfo(brulion::logging::lcApp) << "App in the background";
+                             logger->flush();
+                         } else if (state == Qt::ApplicationActive && away.isValid()) {
+                             qCInfo(brulion::logging::lcApp).noquote()
+                                     << u"App active again after %1"_s.arg(brulion::logging::formatMs(away.elapsed()));
+                             away.invalidate();
+                         }
+                     });
+
     // Polish is the default UI language (English when the system or --locale en asks for it,
     // or the language chosen in the settings). English loads brulion_en.qm too: it holds the
     // plural forms of the English source texts.
@@ -118,7 +163,8 @@ int main(int argc, char *argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    // Declared before the engine: QML singletons point into it, so it must outlive the engine.
+    // Declared before the engine: QML singletons point into them, so they must outlive the engine.
+    brulion::diag::LogController logs;
     std::unique_ptr<AppController> controller;
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
@@ -143,6 +189,14 @@ int main(int argc, char *argv[])
             devTools.setLanguage(controller->settings()->language());
         QObject::connect(controller.get(), &AppController::languageChanged, &devTools,
                          &brulion::ui::DevTools::setLanguage);
+        // The detailed event log (Settings → Application, the event log page) is a device setting.
+        brulion::shell::AppSettings *settings = controller->settings();
+        logs.setDetailed(settings->value(u"diagnostics/logVerbosity"_s).toString() == u"detailed");
+        logs.setPersistVerbosity(
+                [settings](const QString &verbosity) { settings->setValue(u"diagnostics/logVerbosity"_s, verbosity); });
+        logs.setRecentSyncs([ctl = controller.get()] { return ctl->workspace()->sync()->historyLines(5); });
+        if (fixedNow.isValid())
+            logs.setClock([fixedNow] { return fixedNow; });
         QObject::connect(controller.get(), &AppController::quitRequested, &app, &QCoreApplication::quit,
                          Qt::QueuedConnection);
 #ifdef BRULION_DESKTOP_INTEGRATION

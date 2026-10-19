@@ -130,12 +130,12 @@ for shot in "${shots[@]}"; do
       fi
       if [[ -n "${shot_prep[$shot]:-}" ]]; then
         read -r -a prep <<< "${shot_prep[$shot]}"
-        XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+        XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
           QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
           "$bin" --demo --no-single-instance "${prep[@]}" --size "$geometry" --locale "$locale" --now "${prep_now[$shot]:-$now}" \
           --delay 2600 "${extra[@]}" --screenshot "$home/prep.png" >/dev/null 2>&1 || true
       fi
-      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" "${vault_args[@]}" --no-single-instance --route "$route" --size "$geometry" --theme "$theme" --locale "$locale" \
         --now "${shot_now[$shot]:-$now}" --delay "$delay" "${extra[@]}" --screenshot "$file" \

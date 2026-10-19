@@ -76,7 +76,7 @@ day_text() { # day_text <n>
 
 home="$work/home"
 vault="$home/Przykładowy brulion"
-export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache"
+export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
 # A first start seeds the sample notebook (and indexes it), like a user's first run.
 if ! timeout -k 10 "$run_timeout" "$bin" --demo --vault "$vault" --size 800x600 --now "$now" \
   --no-single-instance --delay 1500 \
@@ -118,7 +118,7 @@ run_case() { # run_case <case>
   rm -rf "$own"
   cp -a "$home" "$own"
   # Down to the end and back up, each direction at most max_ms.
-  if XDG_CONFIG_HOME="$own/config" XDG_DATA_HOME="$own/data" XDG_CACHE_HOME="$own/cache" \
+  if XDG_CONFIG_HOME="$own/config" XDG_DATA_HOME="$own/data" XDG_CACHE_HOME="$own/cache" XDG_STATE_HOME="$own/state" \
     timeout -k 10 "$run_timeout" "$bin" --vault "$own/Przykładowy brulion" --route "$route" "${geometry[@]}" --now "$now" \
     --locale pl --no-single-instance \
     --scroll-probe auto --scroll-script "$script" --probe-speed 3000 --probe-max "$max_ms" \

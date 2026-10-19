@@ -1,5 +1,8 @@
 #include "exportcontroller.h"
 
+#include "log/categories.h"
+#include "log/slowscope.h"
+
 #include "fileexchange.h"
 #include "iobackground.h"
 
@@ -443,6 +446,12 @@ void ExportController::runExporter()
                 m_result = result.files;
                 m_warnings = m_readWarnings + result.warnings;
                 setProgress(1);
+                qint64 bytes = 0;
+                for (const io::ExportedFile &f : m_result)
+                    bytes += f.data.size();
+                qCInfo(logging::lcIo).noquote() << u"Export as %1: %2 file(s), %3, %4 warning(s)"_s.arg(
+                        m_format, QString::number(m_result.size()), logging::formatBytes(bytes),
+                        QString::number(m_warnings.size()));
                 if (m_result.isEmpty()) {
                     setState(u"error"_s, result.warnings.isEmpty() ? tr("Nothing was exported.") : result.warnings.first());
                     return;

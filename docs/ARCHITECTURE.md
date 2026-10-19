@@ -21,12 +21,12 @@ One C++/QML code base, three targets, all built against **Qt 6.11.2** (CMake acc
 │      qml/content, qml/planning, qml/io, qml/dev (gallery, editor playground)               │
 │ C++ area libraries: brulion_ui_helpers · brulion_ui_touch · brulion_editor                 │
 │      (+ brulion_editorhost) · brulion_shell · brulion_notify · brulion_content ·           │
-│      brulion_planning · brulion_ioviews                                                    │
+│      brulion_planning · brulion_ioviews · brulion_diag                                     │
 ├──── src/platform  (library brulion_platform) ──────────────────────────────────────────────┤
 │ Android: AndroidBridge (JNI ↔ android/src/…/BrulionAndroid.kt)                             │
 │ WebAssembly: WasmStorage (IDBFS), WasmNotifier, wasmshell (loading screen), self-tests     │
 ├──── src/core  (brulion_core_<module> libraries; QtCore + QtNetwork, io also QtGui) ────────┤
-│ util · text · dates · markdown · calc · vault · index · sync · reminders · io              │
+│ log · util · text · dates · markdown · calc · vault · index · sync · reminders · io        │
 └────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -57,14 +57,15 @@ cross-module scenarios in `tests/core/integration`. Shared data model: `src/core
 
 | Module (deps) | Responsibility (main classes / functions) |
 |---|---|
+| `log` (—) | the event log (UI "Rejestr zdarzeń", see "Logging" below): the `brulion.*` logging categories and their UI groups, `Entry` + the line format, `redact()` + the registry of live secrets (`ScopedSecret`), `Logger` (chained Qt message handler, ring buffer, rotating file, rate limits, verbosity, export), `SlowScope` / `formatBytes` / `formatMs` |
 | `util` | `paths.h`: vault paths (normalize/NFC, join, dirname, basename, `pageTitle`), ignored paths and temp files, Syncthing / Brulion conflict copy names, `sanitizeFileName`, unique paths |
 | `text` (util) | diacritic folding (`foldDiacritics`, `foldKey`: "ŻÓŁW" → "zolw"), Unicode word boundaries and regex helpers, EOL-preserving `splitLines`/`joinLines`, FNV-1a `contentHash` |
 | `dates` (text) | local dates (`DateSpec`, never through UTC); `parseNaturalDate` (Polish + English: "jutro o 9", "w piątek 18:00", "za 2 godziny", "next friday 6pm"); `RecurrenceRule` parse/format/`nextOccurrence`/`occurrencesBetween`, Logseq repeaters; query date expressions (`resolveDateExpr`: `today`, `+7d`, `this-week`, `today..+7d`, `overdue`); human formatting ("dziś 09:00", "pt 17 paź") |
 | `markdown` (util, text, dates) | `parseNote` → `ParsedNote` (blocks/outline, links, tags, tasks, reminders, properties, YAML-subset frontmatter, headings, block ids, journal date); metadata tokens; pure edits (`setTaskStatus` incl. the next occurrence of recurring tasks, `renameLinks`, `ensureBlockId`, frontmatter values); journals and templates; note modes (outline / document: `resolveNoteMode` from the `brulion:` frontmatter key, journal / page defaults and a content heuristic; `setNoteModeKey`); **`BlockDocument`** (editable block list with lossless round trip: split/merge/indent/outdent/move subtree/toggle task/list item to paragraph); **`InlineRenderer`** → escaped Qt rich text with `page:`/`tag:`/`block:`/`ext:`/`task:`/`reminder:` links and date/reminder/recurrence chips |
 | `calc` (text, dates) | own engine (lexer + Pratt parser + evaluator, bounded work, no `eval`): Polish decimal comma, variables (Unicode names), `ans`, percent sugar, units and conversions, currencies as tags, functions, `sum`/`suma` lines; calc blocks, inline `= expr`, page scope (calc variables + numeric properties); GFM tables: parse/serialize/replace and **table formulas** (A1, ranges, `[Kolumna]`, `above`/`left`…, dependency order, `#CYCLE`) |
-| `vault` (util, text) | `Vault` (folder scan, cached listing, atomic `QSaveFile` writes, `QFileSystemWatcher` on the folders and the files open in editors + rescans (when the app returns to the foreground, every 2 minutes) for external changes, echo suppression by content hash, trash `.trash/`, rename/move, `.brulion/config.json`, storage checks — see "Data safety"); `History` (device-local version snapshots, throttled and pruned); `LocalStore` (small JSON key-value store per vault in AppData) |
+| `vault` (util, text, log) | `Vault` (folder scan, cached listing, atomic `QSaveFile` writes, `QFileSystemWatcher` on the folders and the files open in editors + rescans (when the app returns to the foreground, every 2 minutes) for external changes, echo suppression by content hash, trash `.trash/`, rename/move, `.brulion/config.json`, storage checks — see "Data safety"); `History` (device-local version snapshots, throttled and pruned); `LocalStore` (small JSON key-value store per vault in AppData) |
 | `index` (util, text, dates, markdown) | `VaultIndex` (incremental, coalesced `changed()`: notes, link resolution per SYNTAX §2, backlinks incl. `((id))` refs, unlinked references, block ids, tags, tasks, reminders, journals, attachments, page/block suggestions, graph data); `SearchIndex` (BM25+, prefix + fuzzy, diacritic-insensitive, excerpts); the query language (`parseQuery`/`runQuery`, SYNTAX §10) |
-| `sync` (util, text, vault; QtNetwork) | `HttpTransport` seam + `NetworkHttpTransport`; `WebDavClient` (PROPFIND/GET/PUT/DELETE/MKCOL, ETags, Basic auth); `SyncEngine` (bidirectional, per-file state + merge bases in LocalStore, conflict copies, deletions, mass-deletion guard); `merge3()` line diff3 with a union of concurrent appends, `mergeJson3()` for the config; `SyncScheduler` (interval, debounce after edits, online/foreground triggers); Syncthing: `SyncthingClient` (REST status), conflict copies, `.stignore` template |
+| `sync` (util, text, vault, log; QtNetwork) | `HttpTransport` seam + `NetworkHttpTransport` (protocol, transfer progress); `WebDavClient` (PROPFIND/GET/PUT/DELETE/MKCOL, ETags, Basic auth; every request observed: `exchanged`, in-flight / idle time, one `brulion.net` line per request in the detailed log); `SyncEngine` (bidirectional, per-file state + merge bases in LocalStore, conflict copies, deletions, mass-deletion guard; numbered runs with a trigger, phase timings, request statistics, per-file error codes, `activity()`); `merge3()` line diff3 with a union of concurrent appends, `mergeJson3()` for the config; `SyncScheduler` (interval, debounce after edits, online/foreground triggers, retry back-off; `runFinished` for every run; stall watchdog while syncing: "stalled" after 20 s without progress, stopped and retried after 180 s); `SyncHistory` (the last 20 runs, quiet ones folded, in its own `sync-history.json`); Syncthing: `SyncthingClient` (REST status), conflict copies, `.stignore` template |
 | `reminders` (util, text, dates, markdown, index, vault) | `upcomingNotifications()` (stable ids, recurrence expansion, done tasks skipped); `NotificationSink` (implemented by the app's notifiers); `ReminderScheduler` (in-app timing for platforms without background alarms, missed-reminder detection); `calendarItems()`; `snoozeReminder()` |
 | `io` (util, text, dates, markdown, index; QtGui) | importers (Obsidian, Logseq, Notion, Evernote ENEX, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, Markdown/TXT, HTML, iCalendar) with auto-detection and safe target paths; exporters (Markdown ZIP, Obsidian, Logseq, HTML site, single HTML, JSON, iCalendar, OPML, CSV tasks); ZIP (vendored `3rdparty/miniz`), TAR, CSV, iCalendar; HTML→Markdown via `QTextDocument` |
 
@@ -73,12 +74,16 @@ cross-module scenarios in `tests/core/integration`. Shared data model: `src/core
 Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h`:
 `targetName()` ("linux" | "android" | "wasm").
 
+* **Everywhere** (`platform.h`): `logDirectory()` (Linux `$XDG_STATE_HOME/Brulion/Brulion/logs`,
+  Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
+  for the event log.
 * **Android** (`android/androidbridge.h`): `AndroidBridge`, the JNI side of
   `android/src/io/github/januszbit/brulion/android/` (Kotlin: `BrulionAndroid`,
   `AlarmScheduler`, `ReminderNotifier`, `AlarmActivity`, receivers incl. `BOOT_COMPLETED`):
   all-files access, notification permission, exact alarms, full-screen alarm screen,
   `scheduleReminders(json)` (replaces the armed set), notification taps (`activated`,
-  `takeActivation()` after a cold start), "Save to Downloads" (MediaStore) and picked documents
+  `takeActivation()` after a cold start), "Save to Downloads" (MediaStore), `shareFile()` (the
+  system share sheet for a file below filesDir through Qt's FileProvider) and picked documents
   for imports (`documentInfo` / `listDocuments`: DocumentsContract, callable from worker
   threads). `android/selftest` builds an APK exercising the bridge.
 * **WebAssembly** (`wasm/`): `WasmStorage` mounts IDBFS on the vault and app-data folders,
@@ -103,14 +108,62 @@ library that tests link without the app; classes reach QML through `QML_FOREIGN`
 |---|---|---|
 | `ui` — design-system helpers | `DatesHelper` (natural dates, formatting, recurrence, month grids), `TextHelper` (folding, fuzzy ranking, escaping), `DiffHelper` (line/word diffs, conflict hunks) in `brulion_ui_helpers`; `TouchFlick` (touch flicks at the finger's speed on Android) in `brulion_ui_touch`; app-only `DeviceInfo`, `DevTools` (dev/test options) | `qml/theme/Theme.qml`, `qml/components/B*.qml`, `qml/dev/Gallery.qml` |
 | `editor` — block editor | `EditorHost` (contract with the shell; header-only, moc'ed once in `brulion_editorhost`, which also has `picturesize.h`: a picture's size from its header or an SVG's root, for the editor and the browser's data: URLs), `QueryHost`, `PageController` (commands, undo, debounced saves, external-change merge, note mode: outline / document), `BlockListModel`, `MarkdownHighlighter`, `SuggestionModel`, `QueryResultModel`, `EditorInput`, pure `blocktext.h`, `FakeEditorHost` (playground, tests) | `qml/editor/*` (BlockEditor, delegates for calc/code/table/query/embeds, MobileEditToolbar, dialogs), `qml/dev/EditorPlayground.qml`, `qml/dev/PageScript.qml` |
-| `shell` — app frame | `AppController` (lifecycle, vault, navigation history, side panel, permissions, dev options), `AppSettings` (QSettings + owner-only secret file), `Workspace` (owns `Vault` + `VaultIndex`; implements `EditorHost`/`QueryHost`; pages, history, trash, journals, quick capture via `workspacecapture.h`) with `WorkspaceReminders` and `WorkspaceSync`, wired by `workspaceintegration.h`; `RouteHistory` (`navigation.h`), `CommandModel`, `FolderTreeModel`, `DemoVault` ("Przykładowy brulion"), `SingleInstance`, `DesktopTray`; dev: `ShellSelfTest`, `ShellJourney` | `qml/Main.qml`, `qml/shell/*` (AppShell, sidebar, top bar, bottom nav, route view, dialogs), `OnboardingView`, `SettingsView` |
+| `shell` — app frame | `AppController` (lifecycle, vault, navigation history, side panel, permissions, dev options), `AppSettings` (QSettings + owner-only secret file), `Workspace` (owns `Vault` + `VaultIndex`; implements `EditorHost`/`QueryHost`; pages, history, trash, journals, quick capture via `workspacecapture.h`) with `WorkspaceReminders` and `WorkspaceSync` (+ `workspacesyncruns.cpp`: the throttled `live` progress, `history`, `runDetails`), wired by `workspaceintegration.h`; `RouteHistory` (`navigation.h`), `CommandModel`, `FolderTreeModel`, `DemoVault` ("Przykładowy brulion"), `SingleInstance`, `DesktopTray`; dev: `ShellSelfTest`, `ShellJourney` | `qml/Main.qml`, `qml/shell/*` (AppShell, sidebar, top bar, bottom nav, route view, dialogs), `OnboardingView`, `SettingsView` |
 | `notify` — notifier adapters (`brulion_notify`) | `Notifier` (a `reminders::NotificationSink` + signals; `createPlatformNotifier()`), `DesktopNotifier` + `DBusNotificationBus` (snooze/OK actions, ringing alarms, tray fallback, sound hints), `AndroidNotifier` + `androidpayload` (JSON for the bridge, tested on the desktop), `WasmNotifierSink`; `ReminderSounds` + `soundchoice.h` (the sounds of reminders and alarms: device-local in AppSettings, per platform — Android ringtones on versioned notification channels, freedesktop theme sounds / files, the browser's tone); dev: the settings self-test (`notifyselftest.h`) | `qml/notify/ReminderSoundSetting.qml` (in `SettingsView`) |
 | `content` — reading views | `WorkspaceListModel` base (diffed updates), `JournalListModel`, `BacklinksModel` / `TagBlocksModel` (`GroupedRefsModel`), `TagListModel`, `PageListModel`, `SearchResultModel`, `HistoryModel`, `OutlineModel`, `PageTools` | `JournalsView`, `PageView`, `AllPagesView`, `TagsView`, `SearchView`, `TrashView`, `HistoryView`, `qml/content/*` (side panel, backlinks, dialogs) |
 | `planning` — calendar, tasks, graph | `CalendarModel` (month/week/agenda), `TaskListModel` (sections, filters run by the query engine), `ForceLayout` (Barnes–Hut) + `GraphModel` + `GraphItem` (painted, zoom/pan/pinch), `PlanningActions` (task toggles with undo, journal appends), `PlanningContext` | `CalendarView`, `TasksView`, `GraphView`, `qml/planning/*` |
-| `io` — sync center, import/export (`brulion_ioviews`) | `ImportController`, `ExportController`, `FileGatherer` (listing and reading off the GUI thread) / `DocumentProvider` (Android `content://` documents and document trees) / `writeToUrl` (`fileexchange.h`), `NextcloudSetup`, `SyncthingSetup`, `ConflictResolver` (merge3 hunks, base from History); dev: the import self-test (`ioselftest.h`) | `SyncView`, `ImportExportView`, `qml/io/*` |
+| `io` — sync center, import/export (`brulion_ioviews`) | `ImportController`, `ExportController`, `FileGatherer` (listing and reading off the GUI thread) / `DocumentProvider` (Android `content://` documents and document trees) / `writeToUrl` (`fileexchange.h`), `NextcloudSetup`, `SyncthingSetup`, `ConflictResolver` (merge3 hunks, base from History); dev: the import self-test (`ioselftest.h`) | `SyncView` (live progress, the history of runs and their details: `SyncLiveProgress`, `SyncHistoryList`, `SyncRunDetails`), `ImportExportView`, `qml/io/*` |
+| `diag` — the event log (`brulion_diag`) | `LogController` (QML singleton `Logs`: copy, share, save, clear, the export header, the detailed mode), `LogModel` (the Logger's entries filtered by area, level, diacritic-insensitive search and a time window, following new ones), `logexport.h` (header, file name, clipboard cap) | `qml/diag/LogsView.qml` (route `logs`), `LogRow` |
 
 Routes and views: docs/UI.md "Navigation". Area tests: `tests/app/<area>/` (C++ unit tests plus
 QML smoke tests and screenshot scripts that run the real app headless).
+
+## Logging (the event log)
+
+Users see it as **"Rejestr zdarzeń"** (route `logs`; English "Event log" — not "Dziennik",
+which is the journal). It answers "what is the app / the sync doing, and did something fail?"
+and is what a user sends us.
+
+* **Writing log lines:** Qt's own macros with the categories of `log/categories.h` —
+  `qCInfo(brulion::logging::lcSync) << …`: `brulion.app`, `.sync`, `.net`, `.vault`, `.index`,
+  `.reminders`, `.io`, `.platform` (older `brulion.workspace`, `brulion.notify.*`,
+  `brulion.android` map to the same UI groups). Levels: debug = detail (only in the detailed
+  mode), info = what happened, warning = failed but Brulion copes or retries, critical = needs
+  the user. Log lines are English and technical (grep-able); the UI around them is translated.
+  Sync lines start with the run number (`#42`); one sync run writes 2–8 lines in the normal
+  mode (start, warnings, one summary line with phase timings and request statistics), the
+  detailed mode adds a line per phase and per HTTP request (method, path relative to the
+  WebDAV folder, status, ms, bytes — never headers or bodies).
+* **Never logged:** passwords, app passwords, tokens, cookies, note contents, request or
+  response bodies. Paths and titles of notes, the server address and the Nextcloud user may
+  appear (the export header says so).
+* **Capture:** `main.cpp` installs `logging::Logger` right after the single-instance check: a
+  chained `qInstallMessageHandler` takes every Qt message (`brulion.*`, Qt's `qt.*`, QML
+  warnings, `console.*`), **redacts** it, collapses identical repeats ("×37"), rate-limits
+  debug/info bursts per category (with a "dropped N lines" note), keeps the newest 5000 entries
+  in a ring and appends them to `brulion.log` (rotating to `brulion.log.1` at 1 MB, 3 MB in the
+  detailed mode; owner-only files in `platform::logDirectory()`; the browser keeps the log in
+  memory — its file system is IndexedDB). stderr / logcat keep receiving everything (redacted).
+  Session start/end lines reveal a session the system killed. No timer runs while nothing is
+  logged; `appended()` is coalesced to ≤ 4 per second. Developer windows (gallery, editor
+  playground) log to memory only; test and screenshot scripts give the app a private
+  `XDG_STATE_HOME`.
+* **Redaction** (`log/redact.h`) applies to every message and to every sync error that is
+  stored or shown: registered live secrets (`ScopedSecret`: the app password in `AppSettings`,
+  the password and the Basic token in each `WebDavClient`, the Syncthing API key) in plain,
+  percent-encoded and Base64 form; `Authorization` / `Cookie` / API-key header values;
+  `Basic …` / `Bearer …`; `user:password@` in URLs; secret-like query parameters and
+  `key=value` / `"key": "value"` pairs; Nextcloud app passwords; JWTs. Tests check end to end
+  that a secret never reaches the ring, the files, the export, stderr, the sync history or the
+  UI (`tst_log_*`, `tst_sync_secrets`, `tst_diag_logexport`, `tst_shell_workspace_sync`, the
+  shell self-test).
+* **Verbosity:** normal / detailed (`AppSettings` key `diagnostics/logVerbosity`; the switch on
+  the log page and in Settings → Application) through `QLoggingCategory::setFilterRules` on
+  the named `brulion.*` categories; `QT_LOGGING_RULES` still wins for developers.
+* **Sync history** (`sync::SyncHistory`, `<device state>/sync-history.json`, never in the sync
+  bookkeeping store): the last 20 runs with trigger, outcome, error code, phases, statistics
+  and per-file errors (quiet runs folded); `WorkspaceSync.history` / `runDetails()` for the sync
+  center, `historyLines()` for the export header.
 
 ## Data safety
 

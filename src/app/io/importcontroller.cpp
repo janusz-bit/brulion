@@ -1,5 +1,7 @@
 #include "importcontroller.h"
 
+#include "log/categories.h"
+
 #include "iobackground.h"
 
 #include "io/importer.h"
@@ -668,6 +670,11 @@ void ImportController::finishImport(bool cancelled)
         { u"source"_s, m_writeSource },
         { u"cancelled"_s, cancelled },
     };
+    qCInfo(logging::lcIo).noquote()
+            << u"Import from %1 %2: %3 of %4 file(s) saved into %5, %6 failed, %7 warning(s)"_s.arg(
+                       m_writeSource, cancelled ? u"stopped"_s : u"finished"_s, QString::number(qMax(0, written)),
+                       QString::number(m_writeQueue.size()), m_writeFolder.isEmpty() ? u"(notebook)"_s : m_writeFolder,
+                       QString::number(m_writeFailed.size()), QString::number(m_writeWarnings.size()));
     m_writeQueue.clear();
     m_cancelRequested = false;
     Q_EMIT reportChanged();

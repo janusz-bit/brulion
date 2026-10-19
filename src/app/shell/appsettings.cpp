@@ -404,6 +404,7 @@ bool AppSettings::setNextcloudPassword(const QString &password)
     const bool had = hasNextcloudPassword();
     if (password.isEmpty()) {
         const bool ok = !QFileInfo::exists(file) || QFile::remove(file);
+        m_passwordSecret.reset();
         if (had)
             Q_EMIT nextcloudPasswordChanged();
         return ok;
@@ -412,6 +413,7 @@ bool AppSettings::setNextcloudPassword(const QString &password)
     if (!QDir().mkpath(dir))
         return false;
     QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    m_passwordSecret.reset(password);
     QSaveFile out(file);
     if (!out.open(QIODevice::WriteOnly))
         return false;
@@ -429,9 +431,13 @@ bool AppSettings::setNextcloudPassword(const QString &password)
 QString AppSettings::nextcloudPassword() const
 {
     QFile in(passwordFile());
-    if (!in.open(QIODevice::ReadOnly))
+    if (!in.open(QIODevice::ReadOnly)) {
+        m_passwordSecret.reset();
         return {};
-    return QString::fromUtf8(in.readAll());
+    }
+    const QString password = QString::fromUtf8(in.readAll());
+    m_passwordSecret.reset(password);
+    return password;
 }
 
 // ---- Generic --------------------------------------------------------------------------------

@@ -66,6 +66,9 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/IoCard.qml
     qml/io/IoStep.qml
     qml/io/SyncStatusPanel.qml
+    qml/io/SyncLiveProgress.qml
+    qml/io/SyncHistoryList.qml
+    qml/io/SyncRunDetails.qml
     qml/io/SyncDeletionGuard.qml
     qml/io/NextcloudForm.qml
     qml/io/SyncthingPanel.qml

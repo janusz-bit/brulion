@@ -1,5 +1,7 @@
 #include "appcontroller.h"
 
+#include "log/categories.h"
+
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
@@ -44,7 +46,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
 
-Q_LOGGING_CATEGORY(lcApp, "brulion.app")
+using logging::lcApp;
 
 namespace {
 

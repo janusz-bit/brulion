@@ -3,9 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// SyncStatusPanel — the Nextcloud sync state (Workspace.sync): what is happening now, progress,
-// offline and error explanations, "Synchronizuj teraz", when it last / next runs and what the last
-// run did (sent, downloaded, merged, conflicts, errors — failed files listed).
+// SyncStatusPanel — the Nextcloud sync state (Workspace.sync): what is happening now
+// (SyncLiveProgress: phase, n of N, files in flight, elapsed time, a stalled server), offline and
+// error explanations, a retry countdown with "Spróbuj teraz", "Synchronizuj teraz", when it last /
+// next runs, the last run's result with "Szczegóły" and what it did (sent, downloaded, merged,
+// conflicts, errors — failed files listed with their explanation).
 //
 //   SyncStatusPanel { onShowConflicts: tabs.currentIndex = 3 }
 IoCard {
@@ -17,8 +19,28 @@ IoCard {
     readonly property var report: sync ? sync.lastReport : ({})
     readonly property bool hasReport: !!report && report.finished !== undefined && report.finished !== ""
     property bool showErrors: false
+    readonly property var lastRun: sync ? sync.lastRun : ({})
+    /// Seconds until the planned retry (ticks while shown).
+    property int retryIn: 0
 
     signal showConflicts()
+
+    function updateRetry() {
+        retryIn = sync && sync.retrying && sync.nextSyncMs > 0 ? Math.max(0, Math.round((sync.nextSyncMs - Date.now()) / 1000)) : 0
+    }
+    function countdownText(seconds) {
+        if (seconds >= 120)
+            return qsTr("in %n min", "", Math.round(seconds / 60))
+        return qsTr("in %n s", "", seconds)
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        triggeredOnStart: true
+        running: panel.visible && !!panel.sync && panel.sync.retrying && !panel.syncing
+        onTriggered: panel.updateRetry()
+    }
 
     function nextText() {
         if (!sync || sync.nextSync === "")
@@ -35,7 +57,7 @@ IoCard {
              : syncState === "idle" ? Theme.successText : Theme.fgMuted
     // Problems that need the user (password, folder, storage) are red; passing ones (network)
     // only amber — Brulion retries by itself.
-    readonly property bool needsUser: syncState === "error" && ["network", "timeout", "server"].indexOf(sync ? sync.lastErrorCode : "") < 0
+    readonly property bool needsUser: syncState === "error" && ["network", "timeout", "server", "stalled", "files"].indexOf(sync ? sync.lastErrorCode : "") < 0
     tone: syncState === "error" ? (needsUser ? "danger" : "warning") : "default"
     title: qsTr("Nextcloud")
     subtitle: !sync ? ""
@@ -53,23 +75,10 @@ IoCard {
         }
     ]
 
-    // ---- Now ---------------------------------------------------------------------------------
-    RowLayout {
+    // ---- Now: phase, n of N, files in flight, elapsed time, stalls ------------------------------
+    SyncLiveProgress {
         Layout.fillWidth: true
-        visible: panel.syncing
-        spacing: Theme.space3
-        BProgressBar {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            indeterminate: !panel.sync || panel.sync.progress < 0
-            value: panel.sync && panel.sync.progress >= 0 ? panel.sync.progress : 0
-        }
-        // A long first sync over mobile data can be stopped: what is done stays synced.
-        BButton {
-            text: qsTr("Stop")
-            iconName: "x"
-            onClicked: panel.sync.cancelSync()
-        }
+        onShowLog: AppController.navigate({ view: "logs", group: "sync" })
     }
 
     Rectangle {
@@ -102,7 +111,8 @@ IoCard {
             switch (panel.sync ? panel.sync.lastErrorCode : "") {
             case "auth": return qsTr("Enter a new app password below and save. Brulion keeps trying with the old one until then.")
             case "network":
-            case "timeout": return qsTr("Brulion tries again by itself; your notes stay safe on this device.")
+            case "timeout":
+            case "stalled": return qsTr("Brulion tries again by itself; your notes stay safe on this device.")
             case "not-found": return qsTr("Check the server folder below – or let the first sync create it.")
             case "local-empty":
             case "remote-empty": return qsTr("Nothing was deleted. Check that the notebook folder and the server folder are the right ones, then sync again.")
@@ -111,6 +121,73 @@ IoCard {
             default: return ""
             }
         }
+    }
+
+    // A failed run waits for its retry: say when, and offer it now.
+    RowLayout {
+        Layout.fillWidth: true
+        visible: !!panel.sync && panel.sync.retrying && !panel.syncing && panel.syncState !== "offline"
+        spacing: Theme.space2
+        BIcon { Layout.alignment: Qt.AlignVCenter; name: "clock"; size: Theme.iconSizeSm; color: Theme.fgMuted }
+        BText {
+            Layout.fillWidth: true
+            text: panel.retryIn > 0 ? qsTr("Next attempt %1.").arg(panel.countdownText(panel.retryIn))
+                                    : qsTr("Next attempt in a moment.")
+            variant: "small"
+            color: Theme.fgMuted
+            wrapMode: Text.Wrap
+        }
+        BButton {
+            text: qsTr("Try now")
+            iconName: "refresh-cw"
+            size: "small"
+            onClicked: panel.sync.syncNow()
+        }
+    }
+
+    // The last run: its result, with the way to its details.
+    RowLayout {
+        Layout.fillWidth: true
+        visible: !panel.syncing && panel.lastRun.number !== undefined
+        spacing: Theme.space2
+        Rectangle {
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: 8
+            implicitHeight: 8
+            radius: 4
+            color: panel.lastRun.tone === "danger" ? Theme.dangerText
+                 : panel.lastRun.tone === "warning" ? Theme.warningText
+                 : panel.lastRun.tone === "success" ? Theme.successText : Theme.fgMuted
+        }
+        BText {
+            Layout.fillWidth: true
+            text: panel.lastRun.number !== undefined
+                  ? qsTr("Last run: %1 · %2").arg(panel.lastRun.outcomeText).arg(panel.lastRun.summary) : ""
+            variant: "small"
+            wrapMode: Text.Wrap
+        }
+        BButton {
+            objectName: "syncLastRunDetails"
+            text: qsTr("Details")
+            size: "small"
+            variant: "ghost"
+            iconName: "chevron-right"
+            iconRight: true
+            onClicked: {
+                detailsLoader.number = panel.lastRun.number
+                detailsLoader.active = true
+            }
+        }
+    }
+    Loader {
+        id: detailsLoader
+        property int number: 0
+        active: false
+        sourceComponent: SyncRunDetails {
+            number: detailsLoader.number
+            onClosed: detailsLoader.active = false
+        }
+        onLoaded: (detailsLoader.item as SyncRunDetails).open()
     }
 
     // ---- When ------------------------------------------------------------------------------
@@ -127,7 +204,8 @@ IoCard {
             if (panel.sync.lastSyncText !== "")
                 parts.push(qsTr("Last synced %1").arg(panel.sync.lastSyncText))
             const next = panel.nextText()
-            if (next !== "" && !panel.syncing)
+            // A retry has its own countdown above.
+            if (next !== "" && !panel.syncing && !panel.sync.retrying)
                 parts.push(panel.syncState === "error" || panel.syncState === "offline" ? qsTr("next attempt %1").arg(next)
                                                                                          : qsTr("next sync %1").arg(next))
             return parts.join(" · ")
@@ -241,10 +319,17 @@ IoCard {
             }
             BText {
                 Layout.fillWidth: true
+                visible: text !== ""
+                text: errorRow.modelData.text || ""
+                variant: "small"
+                wrapMode: Text.Wrap
+            }
+            BText {
+                Layout.fillWidth: true
                 text: errorRow.modelData.message
                 variant: "small"
                 color: Theme.fgMuted
-                wrapMode: Text.Wrap
+                wrapMode: Text.WrapAnywhere
             }
         }
     }

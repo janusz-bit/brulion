@@ -47,7 +47,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             list(GET _pair 1 _kind)
             set(_home ${_import_homes}/${_kind})
             set_tests_properties(${_test} PROPERTIES
-                ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}"
+                ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}"
                 FIXTURES_REQUIRED appio_import_homes TIMEOUT ${_import_timeout} RUN_SERIAL TRUE
                 FAIL_REGULAR_EXPRESSION "selftest: FAIL;TypeError;ReferenceError")
         endforeach()

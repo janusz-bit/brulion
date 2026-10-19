@@ -5,13 +5,15 @@ import QtQuick.Templates as T
 import Brulion
 
 // SyncView — route "sync" ({tab?: "overview" | "syncthing" | "nextcloud" | "conflicts", copy?: a
-// conflict copy to open}): the sync center.
+// conflict copy to open, run?: a sync run whose details to open}): the sync center.
 //   Przegląd   the two ways explained in plain words (Syncthing: a folder kept the same by
 //              Syncthing on every device; Nextcloud: your own server over WebDAV, also in the
 //              browser), their state, waiting conflicts and the mass-deletion guard
 //   Syncthing  steps, live status, the recommended .stignore, REST access (qml/io/SyncthingPanel)
-//   Nextcloud  status with "Synchronizuj teraz", progress, the last report, offline / error
-//              explanations, the deletion guard, the account form (qml/io/NextcloudForm)
+//   Nextcloud  status with "Synchronizuj teraz", live progress, the last report, offline / error
+//              explanations, the deletion guard, the history of runs with their details
+//              (qml/io/SyncHistoryList, SyncRunDetails), the way to the event log, the account
+//              form (qml/io/NextcloudForm)
 //   Konflikty  conflict copies (list) and the resolver (qml/io/SyncConflictResolver): side by side
 //              on wide windows, one after the other on narrow ones
 //
@@ -45,6 +47,10 @@ FocusScope {
         if (route.copy) {
             chosenCopy = route.copy
             showTab("conflicts")
+        } else if (route.run) {
+            // A run's details (the event log's links, screenshots): on the Nextcloud tab.
+            showTab("nextcloud")
+            Qt.callLater(historyList.open, route.run)
         } else if (route.tab) {
             showTab(route.tab)
         }
@@ -271,6 +277,26 @@ FocusScope {
                 SyncStatusPanel {
                     visible: !!root.sync && (root.sync.configured || root.sync.state !== "disabled")
                     onShowConflicts: root.showTab("conflicts")
+                }
+                SyncHistoryList { id: historyList }
+                // What the app and the sync did, step by step — to check or to send to us.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BIcon { Layout.alignment: Qt.AlignVCenter; name: "scroll-text"; size: Theme.iconSize; color: Theme.fgMuted }
+                    BText {
+                        Layout.fillWidth: true
+                        text: qsTr("Sync takes long or something fails? The event log shows every step.")
+                        variant: "small"
+                        color: Theme.fgMuted
+                        wrapMode: Text.Wrap
+                    }
+                    BButton {
+                        objectName: "syncOpenLog"
+                        text: qsTr("Event log")
+                        size: "small"
+                        onClicked: AppController.navigate({ view: "logs", group: "sync" })
+                    }
                 }
                 NextcloudForm {}
             }

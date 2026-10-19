@@ -3,15 +3,18 @@
 #include "workspace.h"
 
 #include "dates/dates.h"
+#include "log/categories.h"
+#include "log/redact.h"
 #include "sync/sync.h"
+#include "sync/synchistory.h"
 #include "util/paths.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QLoggingCategory>
 #include <QSysInfo>
 #include <QUrl>
 #include <QXmlStreamReader>
@@ -22,8 +25,6 @@
 using namespace Qt::StringLiterals;
 
 namespace brulion::shell {
-
-Q_LOGGING_CATEGORY(lcSync, "brulion.sync")
 
 namespace {
 
@@ -134,6 +135,13 @@ WorkspaceSync::WorkspaceSync(QObject *parent) : QObject(parent)
 {
     m_syncthingTimer.setInterval(SyncthingPollMs);
     connect(&m_syncthingTimer, &QTimer::timeout, this, &WorkspaceSync::refreshSyncthing);
+    // Progress arrives once per file: the UI gets at most four updates a second, and one a
+    // second while syncing for the elapsed time. No timer runs while nothing syncs.
+    m_liveTimer.setSingleShot(true);
+    m_liveTimer.setInterval(250);
+    connect(&m_liveTimer, &QTimer::timeout, this, &WorkspaceSync::updateLive);
+    m_liveTick.setInterval(1000);
+    connect(&m_liveTick, &QTimer::timeout, this, &WorkspaceSync::updateLive);
     m_startTimer.setSingleShot(true);
     m_startTimer.setInterval(StartDelayMs);
     connect(&m_startTimer, &QTimer::timeout, this, [this] {
@@ -254,6 +262,7 @@ void WorkspaceSync::attach(Vault *vault)
     m_vault = vault;
     if (vault)
         m_vaultConnection = connect(vault, &Vault::changed, this, &WorkspaceSync::onVaultChanged);
+    openHistory();
     refreshConflicts();
     rebuild();
     rebuildSyncthing();
@@ -271,6 +280,11 @@ void WorkspaceSync::detach()
     m_syncthingStatus = { { u"enabled"_s, false }, { u"folder"_s, false } };
     Q_EMIT syncthingChanged();
     refreshConflicts();
+    if (m_history) {
+        m_history.reset();
+        m_historyStore.reset();
+        Q_EMIT historyChanged();
+    }
 }
 
 void WorkspaceSync::teardown()
@@ -282,6 +296,12 @@ void WorkspaceSync::teardown()
     m_scheduler.reset();
     m_engine.reset();
     m_client.reset();
+    m_liveTimer.stop();
+    m_liveTick.stop();
+    if (!m_live.isEmpty()) {
+        m_live.clear();
+        Q_EMIT liveChanged();
+    }
     if (had) {
         Q_EMIT configurationChanged();
         Q_EMIT statusChanged();
@@ -301,14 +321,30 @@ void WorkspaceSync::rebuild()
     m_engine = std::make_unique<sync::SyncEngine>(m_vault.data(), m_client.get(), m_vault->store(), deviceName());
     if (m_clock)
         m_engine->setClock(m_clock);
+    if (m_history)
+        m_engine->setNextRunNumber(m_history->nextNumber());
     m_scheduler = std::make_unique<sync::SyncScheduler>(m_engine.get());
     m_scheduler->setInterval(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs);
     if (m_onlineCheck)
         m_scheduler->setOnlineCheck(m_onlineCheck);
     else
         m_scheduler->useSystemNetworkInformation();
-    connect(m_scheduler.get(), &sync::SyncScheduler::statusChanged, this, &WorkspaceSync::statusChanged);
+    connect(m_scheduler.get(), &sync::SyncScheduler::statusChanged, this, [this] {
+        m_lastStatusText = statusText();
+        Q_EMIT statusChanged();
+        scheduleLive();
+    });
+    connect(m_scheduler.get(), &sync::SyncScheduler::progressChanged, this, &WorkspaceSync::scheduleLive);
+    connect(m_scheduler.get(), &sync::SyncScheduler::runStarted, this, &WorkspaceSync::scheduleLive);
+    connect(m_scheduler.get(), &sync::SyncScheduler::runFinished, this, &WorkspaceSync::onRunFinished);
     connect(m_scheduler.get(), &sync::SyncScheduler::synced, this, &WorkspaceSync::onSynced);
+    // Which account and folder (never the password): the first lines to look at in a log.
+    const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
+    qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: user %1 at %2, folder %3, every %4"_s.arg(
+            m_nextcloud.user.trimmed(),
+            server.adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment).toString(),
+            defaultFolder(m_nextcloud.folder),
+            m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s);
     if (m_automatic)
         m_startTimer.start();
     Q_EMIT configurationChanged();
@@ -402,6 +438,8 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
         return tr("There is no space left on the server.");
     if (code == u"server")
         return tr("The server reported an error. Brulion will try again later.");
+    if (code == u"stalled")
+        return tr("The server stopped answering, so the sync was stopped. Brulion will try again.");
     if (code == u"local-empty")
         return tr("Sync paused: the notebook folder looks empty although it was synced before.");
     if (code == u"remote-empty")
@@ -416,7 +454,7 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
         const int n = s.lastReport ? int(s.lastReport->errors.size()) : 0;
         return tr("%n file(s) could not be synced.", "", n);
     }
-    return fallback.isEmpty() ? tr("Sync failed.") : fallback;
+    return fallback.isEmpty() ? tr("Sync failed.") : logging::redact(fallback);
 }
 
 QString WorkspaceSync::statusText() const
@@ -428,12 +466,24 @@ QString WorkspaceSync::statusText() const
     const sync::SyncStatus s = m_scheduler->status();
     switch (s.state) {
     case sync::SyncState::Syncing:
-        if (!s.progress || s.progress->phase == sync::SyncProgress::Phase::Connecting)
+        if (s.abandoning)
+            return tr("Stopping: the server is not answering…");
+        if (s.stalled)
+            return tr("The server has not answered for %1…").arg(durationText(s.stalledMs));
+        if (!s.progress)
             return tr("Connecting…");
-        if (s.progress->phase == sync::SyncProgress::Phase::Listing)
-            return tr("Checking files…");
-        if (s.progress->total > 0)
-            return tr("Syncing %1 of %2…").arg(s.progress->done).arg(s.progress->total);
+        switch (s.progress->phase) {
+        case sync::SyncProgress::Phase::Connecting: return tr("Connecting…");
+        case sync::SyncProgress::Phase::Listing: return tr("Checking files on the server…");
+        case sync::SyncProgress::Phase::ListingLocal: return tr("Checking files on this device…");
+        case sync::SyncProgress::Phase::Comparing: return tr("Comparing changes…");
+        case sync::SyncProgress::Phase::Syncing:
+            if (s.progress->total > 0)
+                return tr("Syncing… %1 of %2 checked").arg(s.progress->done).arg(s.progress->total);
+            return tr("Syncing…");
+        case sync::SyncProgress::Phase::Saving: return tr("Saving the sync state…");
+        case sync::SyncProgress::Phase::Done: return tr("Syncing…");
+        }
         return tr("Syncing…");
     case sync::SyncState::Offline:
         return tr("Offline — will sync later");
@@ -476,7 +526,8 @@ qreal WorkspaceSync::progress() const
     if (!m_scheduler)
         return -1;
     const sync::SyncStatus s = m_scheduler->status();
-    if (s.state != sync::SyncState::Syncing || !s.progress || s.progress->total <= 0)
+    if (s.state != sync::SyncState::Syncing || !s.progress || s.progress->total <= 0
+        || s.progress->phase != sync::SyncProgress::Phase::Syncing)
         return -1;
     return std::clamp(qreal(s.progress->done) / qreal(s.progress->total), 0.0, 1.0);
 }
@@ -496,7 +547,10 @@ QVariantMap WorkspaceSync::lastReport() const
     const sync::SyncReport &r = *status.lastReport;
     QVariantList errors;
     for (const sync::SyncFileError &e : r.errors)
-        errors.append(QVariantMap{ { u"path"_s, e.path }, { u"message"_s, e.message } });
+        errors.append(QVariantMap{{u"path"_s, e.path},
+                                  {u"code"_s, e.code},
+                                  {u"text"_s, fileErrorText(e.code, e.status)},
+                                  {u"message"_s, logging::redact(e.message)}});
     return {
         { u"uploaded"_s, r.uploaded },
         { u"downloaded"_s, r.downloaded },

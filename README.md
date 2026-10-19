@@ -146,6 +146,38 @@ w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwan
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
 10 plików) — dopóki nie potwierdzisz listy.
 
+W zakładce *Nextcloud* widać na żywo, co robi trwająca synchronizacja (etap, „folder 12 z
+ok. 40”, aktualne pliki, czas trwania, ilość danych), ostrzeżenie, gdy serwer przestaje
+odpowiadać (po 3 minutach bez odpowiedzi synchronizacja jest przerywana i ponawiana — nigdy nie
+„synchronizuje się” w nieskończoność), odliczanie do kolejnej próby oraz **historię ostatnich 20
+synchronizacji**: kiedy i dlaczego się zaczęły, ile trwały, co przesłały, z błędami po polsku.
+„Szczegóły” pokazują, na co poszedł czas (łączenie, sprawdzanie plików na serwerze i na
+urządzeniu, przesyłanie, zapis), żądania do serwera i pliki, których nie udało się
+zsynchronizować.
+
+## Gdy coś nie działa — rejestr zdarzeń
+
+Brulion zapisuje, co robi — zwłaszcza synchronizacja — w **rejestrze zdarzeń**: *Ustawienia →
+Aplikacja → Rejestr zdarzeń*, *Ustawienia → Synchronizacja*, przycisk „Rejestr zdarzeń”
+w zakładce *Nextcloud* centrum synchronizacji albo paleta poleceń (Ctrl+K, „rejestr”, „logi”).
+Wpisy można filtrować (Synchronizacja, Sieć, Notatnik…, tylko ostrzeżenia i błędy) i
+przeszukiwać (bez polskich znaków też: „zazolc” znajdzie „Zażółć”); widać też wcześniejsze
+uruchomienia aplikacji.
+
+**Jak wysłać nam rejestr:** na telefonie *Udostępnij* (np. do poczty lub komunikatora) albo
+*Zapisz w Pobranych*; na komputerze *Zapisz jako…* (pliki leżą też w
+`~/.local/state/Brulion/Brulion/logs/brulion.log`, „Otwórz folder”); w przeglądarce *Pobierz*;
+wszędzie *Kopiuj*. Gdy synchronizacja sprawia kłopot, włącz najpierw **Szczegółowy rejestr**
+(zapisuje też każde żądanie do serwera), powtórz synchronizację i dopiero wtedy wyślij rejestr.
+
+**Co zawiera:** czas, rodzaj i przebieg zdarzeń — adres serwera i nazwę użytkownika
+Nextcloud, nazwy i ścieżki notatek, których dotyczą zmiany i błędy, folder notatnika, wersję
+aplikacji i systemu. **Czego nie zawiera:** haseł, haseł aplikacji, tokenów, ciasteczek ani
+treści notatek — Brulion usuwa je, zanim cokolwiek trafi do rejestru (także z adresów w
+rodzaju `https://jan:hasło@…`). Rejestr zostaje na urządzeniu (dwa pliki po 1 MB, 3 MB w
+trybie szczegółowym) i nigdy nie jest nigdzie wysyłany — udostępniasz go tylko Ty. *Wyczyść*
+usuwa go w całości.
+
 ## Skróty klawiszowe
 
 | Skrót | Działanie |
@@ -231,6 +263,10 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   `brulion: outline` frontmatter, and notes from Obsidian or Logseq open in the right mode
   without it.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
+* Something not working? Settings → Application → **Event log** shows what the app and the sync
+  did (live sync progress and the history of runs are in the sync center); share or save it
+  and send it to us — it stays on the device and never contains passwords, tokens or note
+  contents.
 * Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
 
 The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`).

@@ -18,6 +18,8 @@
 // prefix ("views/tasks/showDone", "editor/sourceMode", ...).
 #pragma once
 
+#include "log/redact.h"
+
 #include <QObject>
 #include <QString>
 #include <QVariant>
@@ -184,6 +186,8 @@ private:
 
     std::unique_ptr<QSettings> m_settings;
     QString m_dataDir;
+    /// The app password is masked in every log line (logging::redact) while it is stored.
+    mutable logging::ScopedSecret m_passwordSecret;
 };
 
 } // namespace brulion::shell

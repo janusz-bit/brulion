@@ -137,7 +137,7 @@ for shot in "${shots[@]}"; do
       if [[ -n "${shot_notemode[$shot]:-}" ]]; then
         vault="$home/Przykładowy brulion"
         fixtures=tests/app/shell/notemode
-        XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+        XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
           QML_DISABLE_DISK_CACHE=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
           "$bin" --demo --vault "$vault" --size "$geometry" --locale "$locale" --now "$now" \
           --delay 600 --screenshot "$home/prep.png" >/dev/null 2>&1 || true
@@ -155,7 +155,7 @@ for shot in "${shots[@]}"; do
         fi
         vault_args=(--vault "$vault")
       fi
-      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" ${vault_args[@]+"${vault_args[@]}"} "${args[@]}" --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" \
         --delay "$shot_delay" "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then

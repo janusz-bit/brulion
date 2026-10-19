@@ -10,7 +10,8 @@ import Brulion
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, test notification), Synchronizacja (qml/io/SyncSettings: status,
-// the sync center, the Nextcloud account), Aplikacja (close to tray, version, licence, source code).
+// the sync center, the Nextcloud account), Aplikacja (close to tray, the event log and its
+// detailed mode, version, licence, source code).
 //
 // Wide windows: section list on the left, one section on the right. Narrow: all sections in
 // one scrolling column.
@@ -591,6 +592,32 @@ Item {
                 iconName: "monitor"
                 checked: AppSettings.closeToTray
                 onToggled: AppSettings.closeToTray = checked
+            }
+            ShellSettingRow {
+                title: qsTr("Event log")
+                description: qsTr("What the app and the sync did, step by step. It stays on this device; share it when something does not work.")
+                BBadge {
+                    visible: Logs.problemCount > 0
+                    count: Logs.problemCount
+                    variant: "warning"
+                    Accessible.name: qsTr("%n warning(s) or error(s)", "", Logs.problemCount)
+                }
+                BButton {
+                    objectName: "settingsOpenLog"
+                    text: qsTr("Open")
+                    iconName: "scroll-text"
+                    size: "small"
+                    onClicked: AppController.navigate({ view: "logs" })
+                }
+            }
+            BSwitch {
+                objectName: "settingsDetailedLog"
+                Layout.fillWidth: true
+                text: qsTr("Detailed log")
+                description: qsTr("Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.")
+                iconName: "scroll-text"
+                checked: Logs.detailed
+                onToggled: Logs.detailed = checked
             }
             ShellSettingRow {
                 title: qsTr("Version")

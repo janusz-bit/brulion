@@ -265,6 +265,61 @@ QJniObject stringField(const char *className, const char *field)
 
 } // namespace
 
+bool AndroidBridge::shareFile(const QString &path, const QString &mimeType, const QString &subject,
+                              const QString &chooserTitle)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const QString authority =
+            context.callObjectMethod("getPackageName", "()Ljava/lang/String;").toString() + u".qtprovider"_s;
+    const QJniObject file("java/io/File", "(Ljava/lang/String;)V", QJniObject::fromString(path).object<jstring>());
+    const QJniObject uri = QJniObject::callStaticObjectMethod(
+            "androidx/core/content/FileProvider", "getUriForFile",
+            "(Landroid/content/Context;Ljava/lang/String;Ljava/io/File;)Landroid/net/Uri;", context.object(),
+            QJniObject::fromString(authority).object<jstring>(), file.object());
+    if (failed("FileProvider.getUriForFile") || !uri.isValid())
+        return false;
+    const auto stringConstant = [](const char *cls, const char *name) {
+        return QJniObject::getStaticObjectField(cls, name, "Ljava/lang/String;");
+    };
+    QJniObject intent("android/content/Intent", "(Ljava/lang/String;)V",
+                      stringConstant("android/content/Intent", "ACTION_SEND").object<jstring>());
+    intent.callObjectMethod("setType", "(Ljava/lang/String;)Landroid/content/Intent;",
+                            QJniObject::fromString(mimeType).object<jstring>());
+    intent.callObjectMethod("putExtra", "(Ljava/lang/String;Landroid/os/Parcelable;)Landroid/content/Intent;",
+                            stringConstant("android/content/Intent", "EXTRA_STREAM").object<jstring>(), uri.object());
+    // The URI also as ClipData: createChooser() hands it and the read grant to the share sheet,
+    // which can then show the file's preview (without it the sheet is denied access).
+    const QJniObject clip =
+            QJniObject::callStaticObjectMethod("android/content/ClipData", "newRawUri",
+                                               "(Ljava/lang/CharSequence;Landroid/net/Uri;)Landroid/content/ClipData;",
+                                               QJniObject::fromString(subject).object<jstring>(), uri.object());
+    if (!failed("ClipData.newRawUri") && clip.isValid())
+        intent.callMethod<void>("setClipData", "(Landroid/content/ClipData;)V", clip.object());
+    intent.callObjectMethod("putExtra", "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+                            stringConstant("android/content/Intent", "EXTRA_SUBJECT").object<jstring>(),
+                            QJniObject::fromString(subject).object<jstring>());
+    const jint grantRead = QJniObject::getStaticField<jint>("android/content/Intent", "FLAG_GRANT_READ_URI_PERMISSION");
+    intent.callObjectMethod("addFlags", "(I)Landroid/content/Intent;", grantRead);
+    QJniObject chooser = QJniObject::callStaticObjectMethod(
+            "android/content/Intent", "createChooser",
+            "(Landroid/content/Intent;Ljava/lang/CharSequence;)Landroid/content/Intent;", intent.object(),
+            QJniObject::fromString(chooserTitle).object<jstring>());
+    if (failed("Intent.createChooser") || !chooser.isValid())
+        return false;
+    chooser.callObjectMethod("addFlags", "(I)Landroid/content/Intent;", grantRead);
+    // The context is the activity while the app is visible; anything else needs a new task.
+    QJniEnvironment env;
+    const jclass activityClass = env.findClass("android/app/Activity");
+    if (!activityClass || !env->IsInstanceOf(context.object(), activityClass)) {
+        const jint newTask = QJniObject::getStaticField<jint>("android/content/Intent", "FLAG_ACTIVITY_NEW_TASK");
+        chooser.callObjectMethod("addFlags", "(I)Landroid/content/Intent;", newTask);
+    }
+    context.callMethod<void>("startActivity", "(Landroid/content/Intent;)V", chooser.object());
+    return !failed("startActivity");
+}
+
 DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data)
 {
     DownloadResult result;

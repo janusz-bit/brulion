@@ -8,9 +8,9 @@ namespace brulion::shell {
 
 QStringList routeViews()
 {
-    return { u"journals"_s, u"journal"_s, u"page"_s, u"calendar"_s, u"tasks"_s, u"graph"_s,
-             u"search"_s, u"allPages"_s, u"tags"_s, u"tag"_s, u"sync"_s, u"importExport"_s,
-             u"history"_s, u"trash"_s, u"settings"_s };
+    return {u"journals"_s, u"journal"_s,  u"page"_s,     u"calendar"_s, u"tasks"_s, u"graph"_s,
+            u"search"_s,   u"allPages"_s, u"tags"_s,     u"tag"_s,      u"sync"_s,  u"importExport"_s,
+            u"history"_s,  u"trash"_s,    u"settings"_s, u"logs"_s};
 }
 
 QVariantMap normalizeRoute(const QVariantMap &route)

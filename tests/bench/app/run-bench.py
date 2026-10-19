@@ -147,6 +147,7 @@ def main():
                 "XDG_CONFIG_HOME": os.path.join(home, "config"),
                 "XDG_DATA_HOME": os.path.join(home, "data"),
                 "XDG_CACHE_HOME": os.path.join(home, "cache"),
+                "XDG_STATE_HOME": os.path.join(home, "state"),
                 "XDG_DATA_DIRS": os.environ.get("PROBE_XDG_DATA_DIRS", "/run/current-system/sw/share"),
                 "LD_PRELOAD": os.path.abspath(args.probe),
                 "BENCH_SCENARIO": args.scenario,

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Screenshots of the sync center and import/export in the real app: SyncView (overview, Syncthing,
-# Nextcloud with an unreachable server, conflicts: a two-way merge, a binary file), ImportExportView
-# (choosing the app, a Logseq graph previewed, export of a folder) and the settings' sync section —
+# Nextcloud with an unreachable server and the history of runs, a run's details, conflicts: a
+# two-way merge, a binary file), ImportExportView (choosing the app, a Logseq graph previewed,
+# export of a folder), the settings' sync and application sections and the event log page
+# (`sync-stalled`, not in the default set: a server that never answers, the stall warning) —
 # × {desktop 1280×800, phone 412×915 --touch} × {light, dark} into
 # tests/screenshots/io-<shot>-<size>-<theme>.png.
 #
@@ -53,9 +55,16 @@ declare -A shot_routes=(
   [import-preview]="{\"view\":\"importExport\",\"files\":\"$graph\"}"
   [export]='{"view":"importExport","tab":"export","scope":"folder","folder":"Projekty"}'
   [settings-sync]='{"view":"settings","section":"sync"}'
+  [sync-details]='{"view":"sync","run":40}'
+  [sync-details-failed]='{"view":"sync","run":39}'
+  [sync-stalled]='{"view":"sync","tab":"nextcloud"}'
+  [logs]='logs'
+  [logs-sync]='{"view":"logs","group":"sync"}'
+  [settings-app]='{"view":"settings","section":"app"}'
 )
 all_shots=(sync sync-syncthing sync-nextcloud sync-conflicts sync-conflict-merge sync-conflict-binary
-  sync-conflict-list import import-notion import-preview export settings-sync)
+  sync-conflict-list import import-notion import-preview export settings-sync sync-details sync-details-failed
+  logs logs-sync settings-app)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 if [[ ! -x "$bin" ]]; then
@@ -87,15 +96,42 @@ for shot in "${shots[@]}"; do
       io_nextcloud_home "$home"
       cp -a "$template" "$home/Przykładowy brulion"
       io_history_base "$home" "$home/Przykładowy brulion"
-      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+      io_sync_history "$home" "$home/Przykładowy brulion"
+      io_event_log "$home"
+      shot_delay="$delay"
+      stall_pid=""
+      if [[ "$shot" == sync-stalled ]]; then
+        # A local server that accepts connections and never answers: the live progress, then the
+        # stall warning after 20 s (shown from ~22 s on). Not in the default set (slow).
+        python3 -c '
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+s.listen(16)
+print(s.getsockname()[1], flush=True)
+held = []
+while True:
+    held.append(s.accept()[0])
+' >"$home/stall-port" &
+        stall_pid=$!
+        for _ in $(seq 50); do [[ -s "$home/stall-port" ]] && break; sleep 0.1; done
+        sed -i "s|^nextcloud\\\\url=.*|nextcloud\\\\url=http://127.0.0.1:$(cat "$home/stall-port")|" \
+          "$home/config/Brulion/Brulion.ini"
+        shot_delay=27000
+      fi
+      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" --demo --vault "$home/Przykładowy brulion" --route "${shot_routes[$shot]}" --no-single-instance \
         --size "$geometry" --theme "$theme" --locale "$locale" --now "$now" \
-        --delay "$delay" "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then
+        --delay "$shot_delay" "${extra[@]}" --screenshot "$file" 2> >(grep -v "^brulion: screenshot" >&2); then
         echo "$file"
       else
         echo "screenshots: FAILED $file" >&2
         failed=1
+      fi
+      if [[ -n "$stall_pid" ]]; then
+        kill "$stall_pid" 2>/dev/null || true
+        wait "$stall_pid" 2>/dev/null || true
       fi
       rm -rf "$home"
     done

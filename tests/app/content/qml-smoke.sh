@@ -45,7 +45,7 @@ for size in desktop phone; do
     home="$work/home"
     rm -rf "$home"
     log="$work/log.txt"
-    if ! XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+    if ! XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
       "$bin" --demo --route "$route" --no-single-instance "${geometry[@]}" --now "2026-10-14 10:00" \
       --locale pl --delay 1500 --screenshot "$work/shot.png" 2> "$log"; then
       echo "FAIL: the app did not run for $route ($size)"

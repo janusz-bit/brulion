@@ -100,7 +100,7 @@ for shot in "${shots[@]}"; do
     for theme in "${themes[@]}"; do
       file="$out/planning-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
-      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" \
+      if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" "${args[@]}" --no-single-instance --size "$geometry" --theme "$theme" --locale "$locale" \
         --now "$now" --delay "$shot_delay" "${extra[@]}" --screenshot "$file" \

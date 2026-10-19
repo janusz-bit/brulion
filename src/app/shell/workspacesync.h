@@ -30,6 +30,18 @@
 //                  text }
 //   conflicts    [{ original, copy, title, time ("YYYY-MM-DDTHH:mm:ss"), when, device,
 //                  source: "syncthing" | "brulion", text (a text file that can be merged) }]
+//   live         the running sync, updated at most 4 times a second (and once a second for the
+//                elapsed time) — {} when idle (workspacesyncruns.cpp):
+//                { running, number, trigger, triggerText, phase ("connecting" | "listing" |
+//                  "listing-local" | "comparing" | "syncing" | "saving" | "done"), phaseText,
+//                  detailText, done, total, progress (0…1, -1 = unknown), active: [titles],
+//                  activeText, elapsedMs, elapsedText, bytesText, changes, errors, stalled,
+//                  stallText, waitingFor: [..], abandoning }
+//   history      the last runs, newest first (SyncHistory in <device state>/sync-history.json):
+//                [{ number, started, startedText, durationMs, durationText, trigger, triggerText,
+//                   outcome, outcomeText, tone ("success" | "warning" | "danger" | "info"),
+//                   summary, errorCode, errorText, needsUser, repeats, quiet }]
+//   runDetails(n) one run for the "Szczegóły" dialog (phases, requests, errors, conflicts)
 #pragma once
 
 #include "types.h"
@@ -47,6 +59,7 @@
 #include <optional>
 
 namespace brulion {
+class LocalStore;
 class Vault;
 }
 
@@ -55,9 +68,11 @@ class HttpTransport;
 class NetworkHttpTransport;
 class SyncEngine;
 class SyncScheduler;
+class SyncHistory;
 class SyncthingClient;
 class WebDavClient;
 struct SyncReport;
+struct SyncRunRecord;
 } // namespace brulion::sync
 
 namespace brulion::shell {
@@ -128,6 +143,17 @@ class WorkspaceSync : public QObject {
     /// Name of this device in conflict copies.
     Q_PROPERTY(QString deviceName READ deviceName NOTIFY configurationChanged FINAL)
 
+    /// The running sync, throttled (see the top of this file); {} when idle.
+    Q_PROPERTY(QVariantMap live READ live NOTIFY liveChanged FINAL)
+    /// The last runs, newest first (see the top of this file).
+    Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged FINAL)
+    /// The newest history row ({} before the first run).
+    Q_PROPERTY(QVariantMap lastRun READ lastRun NOTIFY historyChanged FINAL)
+    /// Epoch ms of the planned next attempt (a QML countdown), 0 = none.
+    Q_PROPERTY(qint64 nextSyncMs READ nextSyncMs NOTIFY statusChanged FINAL)
+    /// The next attempt is a retry after failed runs (back-off).
+    Q_PROPERTY(bool retrying READ retrying NOTIFY statusChanged FINAL)
+
     // ---- Syncthing ----------------------------------------------------------------------
     Q_PROPERTY(QVariantMap syncthing READ syncthingStatus NOTIFY syncthingChanged FINAL)
 
@@ -195,6 +221,18 @@ public:
     int conflictCount() const { return int(m_conflicts.size()); }
     /// { state, text, lastSync } for AppController.syncStatus.
     QVariantMap appStatus() const;
+    QVariantMap live() const { return m_live; }
+    QVariantList history() const;
+    QVariantMap lastRun() const;
+    qint64 nextSyncMs() const;
+    bool retrying() const;
+    sync::SyncHistory *syncHistory() const { return m_history.get(); }
+    /// The newest `max` runs as one line each for the exported log's header
+    /// ("#43 2026-10-18 14:03 · zaplanowana · bez zmian · 1,1 s").
+    QStringList historyLines(int max = 5) const;
+    /// Translated texts (also used by the tests): a trigger, a phase, a per-file error code.
+    QString triggerText(const QString &trigger) const;
+    QString fileErrorText(const QString &code, int status = 0) const;
 
     // ---- actions ------------------------------------------------------------------------
     /// Sync now (also between automatic runs; joins a running sync).
@@ -223,6 +261,17 @@ public:
     /// Keep the original as it is: move the conflict copy to the trash.
     Q_INVOKABLE bool discardConflictCopy(const QString &copy);
 
+    /// One run for the details dialog: the history fields plus phases [{ id, text, durationText,
+    /// share (0…1 of the run), items, detailText }], stats { requests, requestsText, averageText,
+    /// bytesText, protocol, slowest: [{ method, title, path, status, msText }] }, errors
+    /// [{ path, title, code, text (translated), message (technical) }], conflicts [{ path,
+    /// title }], fromMs / toMs (the run's time window for the event log); {} when unknown.
+    Q_INVOKABLE QVariantMap runDetails(int number) const;
+    /// The same as plain text ("Kopiuj szczegóły"): translated labels, technical values.
+    Q_INVOKABLE QString runDetailsText(int number) const;
+    /// Forget the kept runs.
+    Q_INVOKABLE void clearHistory();
+
 Q_SIGNALS:
     void configurationChanged();
     void statusChanged();
@@ -235,6 +284,8 @@ Q_SIGNALS:
     void conflictsFound(int count);
     /// Something failed that the user should know about (translated).
     void errorOccurred(const QString &message);
+    void liveChanged();
+    void historyChanged();
 
 private:
     sync::HttpTransport *transport();
@@ -246,6 +297,18 @@ private:
     void onSynced(const sync::SyncReport &report);
     QString errorText(const QString &code, const QString &fallback) const;
     QString human(const QDateTime &time) const;
+    // workspacesyncruns.cpp: live progress, history, run details.
+    void scheduleLive();
+    void updateLive();
+    void onRunFinished(const sync::SyncReport &report, bool stalled);
+    void openHistory();
+    QVariantMap historyRow(const sync::SyncRunRecord &record) const;
+    QString phaseText(const QString &phase) const;
+    QString outcomeText(const sync::SyncRunRecord &record) const;
+    QString shortErrorText(const QString &code) const;
+    QString durationText(qint64 ms) const;
+    QString bytesText(qint64 bytes) const;
+    QDateTime now() const;
     QString effectiveDeviceName() const;
     std::optional<QVariantMap> conflictFor(const QString &copy) const;
 
@@ -273,6 +336,12 @@ private:
     QTimer m_syncthingTimer;
     QTimer m_startTimer;
     int m_syncthingGeneration = 0;
+    std::unique_ptr<LocalStore> m_historyStore;
+    std::unique_ptr<sync::SyncHistory> m_history;
+    QVariantMap m_live;
+    QString m_lastStatusText;
+    QTimer m_liveTimer; ///< coalesces progress into ≤ 4 updates per second
+    QTimer m_liveTick;  ///< once a second while syncing (elapsed time, stall countdown)
 };
 
 } // namespace brulion::shell

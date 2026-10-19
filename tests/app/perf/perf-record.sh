@@ -13,7 +13,7 @@ bin="${BRULION_BIN:-build/src/app/brulion}"
 now="${NOW:-2026-10-14 10:00}"
 home="$(mktemp -d)"
 trap 'rm -rf "$home"' EXIT
-export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache"
+export XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
 [[ -n "${PROBE_XDG_DATA_DIRS:-}" ]] && export XDG_DATA_DIRS="$PROBE_XDG_DATA_DIRS"
 wrap=()
 if command -v xvfb-run >/dev/null 2>&1; then wrap=(xvfb-run -a -s "-screen 0 1920x1200x24"); else export QT_QPA_PLATFORM=offscreen; fi

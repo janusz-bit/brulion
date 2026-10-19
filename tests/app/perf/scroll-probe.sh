@@ -54,7 +54,7 @@ declare -A big_pages=([page-doc]="Witaj w Brulionie.md" [page-long-doc]="Długi 
 
 run_app() { # run_app <home> <args…>
   local home="$1"; shift
-  local env=(XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache"
+  local env=(XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state"
     XDG_DATA_DIRS="${PROBE_XDG_DATA_DIRS:-${XDG_DATA_DIRS:-}}"
     QT_FORCE_STDERR_LOGGING=1 QSG_INFO=1 QT_LOGGING_RULES="qt.scenegraph.time.renderloop=true")
   if [[ "$platform" == xvfb ]]; then
