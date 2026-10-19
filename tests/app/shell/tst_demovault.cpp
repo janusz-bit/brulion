@@ -231,8 +231,7 @@ private Q_SLOTS:
         QStringList missing;
         for (const MissingPage &m : index.missingPages())
             missing.append(m.name);
-        missing.sort();
-        QCOMPARE(missing, (QStringList{ u"Notatka do utworzenia"_s, u"Pomysły na prezenty"_s }));
+        QCOMPARE(missing, QStringList{ u"Pomysły na prezenty"_s });
         QVERIFY(index.blockById(u"budzet1"_s).has_value());
         QCOMPARE(index.resolveLink(u"plan-mieszkania.svg"_s).value_or(QString()), u"assets/plan-mieszkania.svg"_s);
         QCOMPARE(index.journals().size(), 3);
@@ -308,8 +307,67 @@ private Q_SLOTS:
         }
         QVERIFY(calcLines >= 20);
         QVERIFY(formulas >= 10);
-        QCOMPARE(queries, 3); // the guide page, the renovation page, the documentation
+        QCOMPARE(queries, 2);
         QVERIFY(rules >= 2);
+    }
+
+    void documentationNotebook()
+    {
+        // "Dokumentacja Brulionu": its own notebook, every example works, every link resolves
+        // (except the one meant to be created by a click), the demo notebook has none of it.
+        QVERIFY(!filesByPath(kNow).keys().join(u'\n').contains(u"Dokumentacja"_s));
+        QTemporaryDir dir;
+        Vault vault(dir.filePath(u"Dokumentacja Brulionu"_s));
+        QVERIFY(vault.open());
+        const auto docs = shell::docsVaultFiles();
+        QVERIFY(docs.size() >= 14);
+        QCOMPARE(shell::seedDocsVault(vault), int(docs.size()));
+        QCOMPARE(shell::seedDocsVault(vault), 0);
+        QVERIFY(vault.exists(shell::docsWelcomePage()));
+
+        VaultIndex index(vault.config());
+        for (const FileStat &f : vault.files())
+            index.update(f.path, paths::isMarkdown(f.path) ? vault.readText(f.path) : QString());
+        QStringList missing;
+        for (const MissingPage &m : index.missingPages())
+            missing.append(m.name);
+        QCOMPARE(missing, QStringList{ u"Notatka do utworzenia"_s });
+
+        int queries = 0;
+        for (const DemoFile &f : docs) {
+            const QString &content = f.content;
+            for (const calc::CalcBlock &block : calc::findCalcBlocks(content)) {
+                calc::Scope scope;
+                for (const calc::CalcLineResult &r : calc::evaluateCalc(block.source, scope)) {
+                    if (!r.input.trimmed().isEmpty())
+                        QVERIFY2(r.hasValue() && !r.hasError(), qPrintable(f.path + u": "_s + r.input));
+                }
+            }
+            for (const calc::TableSpan &span : calc::findTables(content)) {
+                const auto model = calc::parseTable(QStringView(content).mid(span.from, span.to - span.from));
+                QVERIFY(model.has_value());
+                const calc::TableEval eval = calc::evaluateTable(*model);
+                for (const QStringList &row : eval.values) {
+                    for (const QString &v : row)
+                        QVERIFY2(v.isNull() || (v != calc::kErrorMarker && v != calc::kCycleMarker && !v.isEmpty()),
+                                 qPrintable(f.path));
+                }
+            }
+            static const QRegularExpression inlineCalc(u"`=([^`]+)`"_s);
+            for (const auto &m : inlineCalc.globalMatch(content)) {
+                const calc::CalcLineResult r = calc::evaluateInline(m.captured(1), calc::Scope());
+                QVERIFY2(r.hasValue() && !r.hasError(), qPrintable(f.path + u": "_s + m.captured(0)));
+            }
+            static const QRegularExpression queryBlock(u"```query\n(.*?)```"_s,
+                                                       QRegularExpression::DotMatchesEverythingOption);
+            for (const auto &m : queryBlock.globalMatch(content)) {
+                const auto parsed = brulion::parseQuery(m.captured(1));
+                QVERIFY2(std::holds_alternative<Query>(parsed), qPrintable(f.path));
+                QVERIFY(brulion::runQuery(std::get<Query>(parsed), index, kNow.date()).total > 0);
+                ++queries;
+            }
+        }
+        QVERIFY(queries >= 1);
     }
 
     void journalTemplate()

@@ -27,4 +27,4 @@ Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po p
 
 Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu brulionu.
 
-Wróć do [[Dokumentacja/Spis treści|spisu treści]]. Jeśli chcesz zrozumieć, co leży w plikach, zobacz [[Dokumentacja/Format plików|Format plików]].
+Wróć do [[Spis treści|spisu treści]]. Jeśli chcesz zrozumieć, co leży w plikach, zobacz [[Format plików|Format plików]].

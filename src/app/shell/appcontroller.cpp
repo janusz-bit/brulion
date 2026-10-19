@@ -577,6 +577,25 @@ void AppController::openVaultAt(const QString &path, const QVariantMap &route)
     openVault(path);
 }
 
+QString AppController::docsVaultPath() const
+{
+#ifdef Q_OS_WASM
+    return {}; // one vault folder in the browser
+#else
+    return QDir::cleanPath(m_dataDir + u"/Dokumentacja Brulionu"_s);
+#endif
+}
+
+void AppController::openDocsVault()
+{
+    if (docsVaultPath().isEmpty())
+        return;
+    // Always the table of contents, not the journal: this notebook is for reading.
+    m_routeAfterOpen = normalizeRoute({ { u"view"_s, u"page"_s }, { u"path"_s, docsWelcomePage() } });
+    setStatus(u"loading"_s);
+    scheduleOpening(docsVaultPath(), true);
+}
+
 void AppController::openDemoVault()
 {
     m_routeAfterOpen.clear(); // the sample notebook opens on its welcome page
@@ -648,8 +667,12 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     }
     m_failedPath.clear();
     bool showWelcome = false;
+    bool docs = false;
     if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        if (seedDemoVault(*m_workspace->vault(), now()) < 0)
+        docs = !docsVaultPath().isEmpty() && QDir::cleanPath(path) == docsVaultPath();
+        const int written = docs ? seedDocsVault(*m_workspace->vault())
+                                 : seedDemoVault(*m_workspace->vault(), now());
+        if (written < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }
@@ -670,8 +693,8 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
                 {{u"view"_s, u"journal"_s}, {u"date"_s, date}, {u"path"_s, m_workspace->journalFileFor(date)}});
     } else if (!first.isEmpty())
         m_history.navigate(first);
-    else if (showWelcome && m_workspace->exists(demoWelcomePage()))
-        m_history.navigate({ { u"view"_s, u"page"_s }, { u"path"_s, demoWelcomePage() } });
+    else if (showWelcome && m_workspace->exists(docs ? docsWelcomePage() : demoWelcomePage()))
+        m_history.navigate({ { u"view"_s, u"page"_s }, { u"path"_s, docs ? docsWelcomePage() : demoWelcomePage() } });
     setStatus(u"ready"_s);
     routeChanged();
     applyPendingNotification();

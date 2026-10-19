@@ -34,4 +34,4 @@ Gdy coś nie działa, zajrzyj do **Rejestru zdarzeń** (*Ustawienia → Aplikacj
 - Usunięte strony wpadają do **Kosza**, skąd można je odzyskać.
 - Dane robocze synchronizacji (historia, ślady scalania) leżą poza folderem brulionu, więc nie synchronizują się między urządzeniami.
 
-Zobacz też [[Dokumentacja/Format plików|Format plików]].
+Zobacz też [[Format plików|Format plików]].

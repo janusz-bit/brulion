@@ -11,7 +11,7 @@ Każda notatka ma jeden z dwóch trybów. **Zawartość pliku jest taka sama** �
 | **Dokument** (jak Obsidian) | ciągły tekst: nagłówki, akapity, zwykłe listy | opisów, artykułów, notatek ze spotkań |
 | **Konspekt** (jak Logseq) | punkt z kropką dla każdego bloku, wcięcia, zwijanie, przybliżanie | dziennik, listy myśli, planowanie |
 
-Ta strona jest dokumentem; [[Dokumentacja/Zadania|Zadania]] też. Dziennik domyślnie jest konspektem.
+Ta strona jest dokumentem; [[Zadania|Zadania]] też. Dziennik domyślnie jest konspektem.
 
 ## Wybór i przełączanie trybu
 - Przy tworzeniu strony (Ctrl+N) wybierasz tryb w oknie.
@@ -56,4 +56,4 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…`. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
-Zobacz też: [[Dokumentacja/Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]], [[Dokumentacja/Skróty klawiszowe|Skróty klawiszowe]].
+Zobacz też: [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]], [[Skróty klawiszowe|Skróty klawiszowe]].

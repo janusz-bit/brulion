@@ -21,7 +21,7 @@ Czas jest czasem lokalnym, zapisanym bez strefy; „9:00” znaczy 9:00 u Ciebie
 - W szybkiej notatce (Ctrl+Shift+N) wystarczy napisać datę w treści.
 
 ## Powtarzanie
-Jeśli blok ma też regułę `🔁` (zobacz [[Dokumentacja/Zadania|Zadania]]), przypomnienie powtarza się razem z nią. Przypomnienie przy zadaniu zrobionym lub anulowanym nie dzwoni.
+Jeśli blok ma też regułę `🔁` (zobacz [[Zadania|Zadania]]), przypomnienie powtarza się razem z nią. Przypomnienie przy zadaniu zrobionym lub anulowanym nie dzwoni.
 
 ## Powiadomienia
 - Dotknięcie powiadomienia otwiera notatkę na właściwym bloku.
@@ -31,4 +31,4 @@ Jeśli blok ma też regułę `🔁` (zobacz [[Dokumentacja/Zadania|Zadania]]), p
 - Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku, gdzie pokazuje je baner z przypomnieniami do obsłużenia.
 
 ## Gdzie je znajdziesz
-Przypomnienia i alarmy widać w **Kalendarzu** (miesiąc, tydzień, agenda) i w zapytaniach: `type:reminders remind:this-week` — zobacz [[Dokumentacja/Zapytania|Zapytania]]. Domyślną godzinę ustawisz w *Ustawienia → Przypomnienia*.
+Przypomnienia i alarmy widać w **Kalendarzu** (miesiąc, tydzień, agenda) i w zapytaniach: `type:reminders remind:this-week` — zobacz [[Zapytania|Zapytania]]. Domyślną godzinę ustawisz w *Ustawienia → Przypomnienia*.

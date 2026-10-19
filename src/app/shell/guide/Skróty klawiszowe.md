@@ -38,4 +38,4 @@ Skróty komputerowe. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, 
 
 Zaznaczony blok (po Esc): Enter edytuje, Backspace lub Delete usuwa, strzałki przechodzą dalej, Tab i Alt+strzałki działają jak podczas edycji.
 
-W dokumencie Backspace na początku punktu listy najpierw zdejmuje pole zadania, potem znacznik listy. Opis działania trybów: [[Dokumentacja/Dokument i konspekt|Dokument i konspekt]].
+W dokumencie Backspace na początku punktu listy najpierw zdejmuje pole zadania, potem znacznik listy. Opis działania trybów: [[Dokument i konspekt|Dokument i konspekt]].

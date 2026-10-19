@@ -4,13 +4,13 @@ brulion: document
 ---
 # Zapytania
 
-Blok z językiem `query` zbiera zadania, bloki, strony albo przypomnienia z całego brulionu i pokazuje je na bieżąco. Zadania można odhaczać prosto w wynikach. Oto otwarte zadania na najbliższy tydzień:
+Blok z językiem `query` zbiera zadania, bloki, strony albo przypomnienia z całego brulionu i pokazuje je na bieżąco. Zadania można odhaczać prosto w wynikach. Oto strony z tagiem #dokumentacja, czyli wszystkie strony tego brulionu:
 
 ```query
-type:tasks status:open due:<=+7d sort:due
+type:pages tag:dokumentacja sort:page
 ```
 
-Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytanie” w widoku [[Dokumentacja/Zadania|Zadania]]. Domyślnie wynik ma najwyżej 500 pozycji; dodaj `limit:20`, żeby go skrócić.
+Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytanie” w widoku [[Zadania|Zadania]]. Domyślnie wynik ma najwyżej 500 pozycji; dodaj `limit:20`, żeby go skrócić.
 
 ## Składnia
 - Warunki rozdzielasz spacjami lub nowymi liniami. **Wszystkie** warunki muszą być spełnione; wartości rozdzielone przecinkiem to „lub” (`status:todo,doing`).
@@ -54,4 +54,4 @@ Przykład: `due:<=+7d` oznacza „termin w ciągu tygodnia, łącznie z zaległy
 - `ref:this` — bloki, które linkują do tej strony,
 - `type:tasks ref:this status:open group:page` — otwarte zadania powiązane z tą stroną, pogrupowane.
 
-Zobacz też [[Dokumentacja/Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.
+Zobacz też [[Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.

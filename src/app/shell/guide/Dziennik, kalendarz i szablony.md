@@ -20,7 +20,7 @@ Widok **Kalendarz** ma układ miesiąca, tygodnia i agendy. Pokazuje:
 
 Kliknięcie dnia otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
 
-Zobacz [[Dokumentacja/Zadania|Zadania]] i [[Dokumentacja/Przypomnienia i alarmy|Przypomnienia i alarmy]].
+Zobacz [[Zadania|Zadania]] i [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
 
 ## Szablony
 Szablony to zwykłe notatki w folderze `templates/`. Wstawiasz je poleceniem `/Szablon…`. Zmienne w nich zastępowane są przy wstawianiu:
@@ -33,6 +33,6 @@ Szablony to zwykłe notatki w folderze `templates/`. Wstawiasz je poleceniem `/S
 | `{{title}}` | tytuł strony |
 | `{{cursor}}` | gdzie ustawić kursor po wstawieniu |
 
-Plik `templates/journal.md` jest szablonem **nowego dnia dziennika**: pusty dzień pokazuje go jako tekst startowy, a notatka powstaje razem z pierwszą zmianą. W tym brulionie zajrzyj do [[templates/journal|szablonu dziennika]] i [[templates/Spotkanie|szablonu spotkania]].
+Plik `templates/journal.md` jest szablonem **nowego dnia dziennika**: pusty dzień pokazuje go jako tekst startowy, a notatka powstaje razem z pierwszą zmianą. Przykładowy brulion ma gotowe szablony `journal` i `Spotkanie`.
 
-Wróć do [[Dokumentacja/Spis treści|spisu treści]].
+Wróć do [[Spis treści|spisu treści]].

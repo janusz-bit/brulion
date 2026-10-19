@@ -1,0 +1,36 @@
+---
+tags: [dokumentacja]
+aliases: [Dokumentacja, Pomoc]
+brulion: document
+---
+# Dokumentacja Brulionu
+
+Ta dokumentacja jest zwykłymi notatkami Brulionu — osobnym brulionem „Dokumentacja Brulionu”. Możesz ją czytać, klikać linki, a nawet edytować: to Twoja kopia. Przykłady w niej są żywe, więc najlepiej uczyć się, zmieniając je na próbę. Do własnych notatek wrócisz przyciskiem przełączania brulionów obok nazwy brulionu w pasku bocznym.
+
+## Od czego zacząć
+- [[Pierwsze kroki|Pierwsze kroki]] — pierwszy wpis, nowa strona, wyszukiwanie.
+- [[Dokument i konspekt|Dokument i konspekt]] — dwa tryby pisania i praca na blokach.
+
+## Pisanie i porządkowanie
+- [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia.
+- [[Tagi i właściwości|Tagi i właściwości]] — `#tagi`, nagłówek YAML, `klucz:: wartość`.
+- [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]] — codzienne strony i szablony.
+
+## Planowanie
+- [[Zadania|Zadania]] — terminy, priorytety, powtarzanie.
+- [[Przypomnienia i alarmy|Przypomnienia i alarmy]] — powiadomienia i budziki.
+- [[Zapytania|Zapytania]] — listy zadań i bloków zbierane z całego brulionu.
+
+## Liczenie
+- [[Obliczenia|Obliczenia]] — bloki `calc`, tabele z formułami, rachunki w tekście.
+
+## Pliki i urządzenia
+- [[Synchronizacja|Synchronizacja]] — Syncthing, Nextcloud, konflikty, historia wersji.
+- [[Import i eksport|Import i eksport]] — przenoszenie notatek z i do innych programów.
+- [[Format plików|Format plików]] — jak notatki wyglądają na dysku.
+
+## Pod ręką
+- [[Skróty klawiszowe|Skróty klawiszowe]]
+
+> [!tip] Paleta poleceń
+> Nie pamiętasz, gdzie coś jest? Naciśnij Ctrl+K i wpisz kilka liter — paleta znajdzie polecenie, widok albo ustawienie.

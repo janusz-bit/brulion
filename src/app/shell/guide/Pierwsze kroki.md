@@ -7,7 +7,7 @@ brulion: document
 ## Brulion i foldery
 Brulion przechowuje notatki jako zwykłe pliki `.md` w wybranym folderze — tym folderem jest Twój **brulion** (notatnik). Nie ma konta ani bazy danych; kopię zapasową zrobisz kopiując folder, a ten sam folder otworzysz w Obsidianie czy Logsequ.
 
-Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy albo otwierasz ten przykładowy. Inny brulion otworzysz z palety poleceń (Ctrl+K) albo w ustawieniach.
+Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy albo otwierasz ten przykładowy. Między brulionami przełączasz się przyciskiem ⇄ obok nazwy brulionu na górze paska bocznego: lista ostatnich brulionów, Dokumentacja Brulionu i „Otwórz inny brulion…”.
 
 ## Pierwszy wpis
 1. Otwórz **Dziennik** (Ctrl+J) — to strona na dziś.
@@ -18,7 +18,7 @@ Strona dnia powstaje dopiero przy pierwszej zmianie — samo zaglądanie niczego
 
 ## Nowa strona
 - **Ctrl+N** albo przycisk „+” w pasku bocznym. Nazwa może zawierać `/`, wtedy strona trafi do folderu: `Projekty/Dom`.
-- W oknie wybierasz tryb: dokument albo konspekt (zobacz [[Dokumentacja/Dokument i konspekt|Dokument i konspekt]]).
+- W oknie wybierasz tryb: dokument albo konspekt (zobacz [[Dokument i konspekt|Dokument i konspekt]]).
 - Skrót: wpisz w dowolnej notatce `[[Nazwa nowej strony]]` i kliknij link — strona powstanie.
 
 ## Szybka notatka
@@ -36,6 +36,6 @@ Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj. Niżej ulub
 Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kosz, ustawienia, rejestr zdarzeń — znajdziesz w menu **Więcej** (⋮) oraz w palecie poleceń.
 
 ## Co dalej
-- [[Dokumentacja/Dokument i konspekt|Dokument i konspekt]]
-- [[Dokumentacja/Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]]
-- [[Dokumentacja/Spis treści|Spis treści]]
+- [[Dokument i konspekt|Dokument i konspekt]]
+- [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]]
+- [[Spis treści|Spis treści]]

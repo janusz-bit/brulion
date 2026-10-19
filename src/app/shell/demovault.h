@@ -30,6 +30,13 @@ QString demoWelcomePage();
 /// Files of the sample vault (journal paths use the default "journals/yyyy-MM-dd.md").
 QList<DemoFile> demoVaultFiles(const QDateTime &now);
 
+/// The first page of the documentation notebook "Dokumentacja Brulionu" and all its files.
+QString docsWelcomePage();
+QList<DemoFile> docsVaultFiles();
+
+/// Write the documentation notes into an open vault (as seedDemoVault()).
+int seedDocsVault(Vault &vault);
+
 /// Write the sample files into an open vault; files that already exist are left alone.
 /// Returns how many files were written (-1 when a write failed).
 int seedDemoVault(Vault &vault, const QDateTime &now);

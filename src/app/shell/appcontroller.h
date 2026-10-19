@@ -100,6 +100,8 @@ class AppController : public QObject {
     Q_PROPERTY(QString appStorageVaultPath READ appStorageVaultPath CONSTANT FINAL)
     /// Where "Przykładowy brulion" lives.
     Q_PROPERTY(QString demoVaultPath READ demoVaultPath CONSTANT FINAL)
+    /// The notebook with the documentation ("Dokumentacja Brulionu"; empty in the browser).
+    Q_PROPERTY(QString docsVaultPath READ docsVaultPath CONSTANT FINAL)
     /// Vault waiting for the storage permission (Android), "" otherwise.
     Q_PROPERTY(QString pendingVaultPath READ pendingVaultPath NOTIFY pendingVaultPathChanged FINAL)
     /// The vault that could not be opened (status "error"; retryOpenVault()), "" otherwise.
@@ -199,6 +201,7 @@ public:
     QString defaultVaultPath() const;
     QString appStorageVaultPath() const;
     QString demoVaultPath() const;
+    QString docsVaultPath() const;
     QString pendingVaultPath() const { return m_pendingVault; }
     QString failedVaultPath() const { return m_failedPath; }
     /// Device-local state folder of a vault (History, LocalStore): <dataDir>/vaults/<id>.
@@ -213,6 +216,8 @@ public:
     Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);
     /// Create (first time) and open "Przykładowy brulion" with the sample notes.
     Q_INVOKABLE void openDemoVault();
+    /// Opens the documentation notebook, seeding it on first use (no-op in the browser).
+    Q_INVOKABLE void openDocsVault();
     /// Show onboarding and close the vault (a moment later: the shell's editors save first).
     Q_INVOKABLE void closeVault();
     /// "Try again" after an error: open failedVaultPath() again (else the current vault).

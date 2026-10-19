@@ -80,6 +80,13 @@ Rectangle {
                 elide: Text.ElideRight
             }
             BIconButton {
+                id: switchButton
+                iconName: "repeat"
+                label: qsTr("Switch notebook")
+                size: "small"
+                onClicked: notebookMenu.popup(switchButton, 0, switchButton.height)
+            }
+            BIconButton {
                 iconName: "square-pen"
                 label: qsTr("New page")
                 shortcut: "Ctrl+N"
@@ -317,6 +324,53 @@ Rectangle {
         width: 1
         height: parent.height
         color: Theme.border
+    }
+
+    // Quick switch between notebooks: the recent ones, the documentation, any other folder.
+    BMenu {
+        id: notebookMenu
+        objectName: "notebookMenu"
+
+        readonly property string current: AppSettings.currentVault
+        readonly property string docsPath: AppController.docsVaultPath
+
+        Repeater {
+            model: AppSettings.recentVaults.filter(v => v.path !== notebookMenu.docsPath)
+            delegate: BMenuItem {
+                required property var modelData
+                text: modelData.name
+                iconName: "folder"
+                checkable: true
+                checked: modelData.path === notebookMenu.current
+                onTriggered: {
+                    if (!checked)
+                        AppController.openVault(modelData.path)
+                    sidebar.navigated()
+                }
+            }
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            visible: notebookMenu.docsPath !== ""
+            height: visible ? implicitHeight : 0
+            text: qsTr("Brulion documentation")
+            iconName: "book-open"
+            checkable: true
+            checked: notebookMenu.docsPath === notebookMenu.current
+            onTriggered: {
+                if (!checked)
+                    AppController.openDocsVault()
+                sidebar.navigated()
+            }
+        }
+        BMenuItem {
+            text: qsTr("Open another notebook…")
+            iconName: "folder-open"
+            onTriggered: {
+                sidebar.navigated()
+                AppController.closeVault()
+            }
+        }
     }
 
     BMenu {

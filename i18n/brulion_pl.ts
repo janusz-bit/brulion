@@ -5720,6 +5720,21 @@
 <context>
     <name>ShellSidebar</name>
     <message>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <source>Switch notebook</source>
+        <translation>Przełącz notatnik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <source>Brulion documentation</source>
+        <translation>Dokumentacja Brulionu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <source>Open another notebook…</source>
+        <translation>Otwórz inny notatnik…</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="48"/>
         <source>Sidebar</source>
         <translation>Pasek boczny</translation>

@@ -43,4 +43,4 @@ Pliki nigdy nie zawierają dat słowami („jutro”) — tylko `RRRR-MM-DD` i `
 ## Co zostaje nietknięte
 Brulion przepisuje tylko to, co zmieniłeś: reszta pliku, w tym zakończenia linii i formatowanie, zostaje bajt w bajt taka sama. Dlatego różnice w systemie kontroli wersji pozostają małe.
 
-Pełna specyfikacja dla programistów: `docs/SYNTAX.md` w repozytorium. Przegląd funkcji: [[Dokumentacja/Spis treści|Spis treści]].
+Pełna specyfikacja dla programistów: `docs/SYNTAX.md` w repozytorium. Przegląd funkcji: [[Spis treści|Spis treści]].

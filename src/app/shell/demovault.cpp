@@ -44,9 +44,9 @@ QString fill(QString text, const QHash<QString, QString> &vars)
     return text;
 }
 
-/// The documentation pages (src/app/shell/guide/Dokumentacja/*.md, embedded as :/guide/...),
-/// written in Brulion's own Markdown; they land in the folder "Dokumentacja/".
-QList<DemoFile> guideFiles(const QHash<QString, QString> &vars)
+/// The documentation pages (src/app/shell/guide/*.md, embedded as :/guide/...), written in
+/// Brulion's own Markdown: the notes of the notebook "Dokumentacja Brulionu".
+QList<DemoFile> guideFiles()
 {
     QList<DemoFile> out;
     QDirIterator it(u":/guide"_s, { u"*.md"_s }, QDir::Files, QDirIterator::Subdirectories);
@@ -55,7 +55,7 @@ QList<DemoFile> guideFiles(const QHash<QString, QString> &vars)
         if (!file.open(QIODevice::ReadOnly))
             continue;
         const QString path = it.filePath().mid(QStringLiteral(":/guide/").size());
-        out.append({ path, fill(QString::fromUtf8(file.readAll()), vars) });
+        out.append({ path, QString::fromUtf8(file.readAll()) });
     }
     std::sort(out.begin(), out.end(), [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
     return out;
@@ -195,7 +195,7 @@ type:tasks status:open due:<=+7d sort:due
 - Eksport do archiwum ZIP z Markdownem, strony HTML, JSON, iCalendar (zadania i przypomnienia), OPML i CSV.
 
 ## Dokumentacja
-Pełna dokumentacja jest w tym brulionie: zacznij od [[Dokumentacja/Spis treści|Dokumentacji]] — strony o trybach, linkach, zadaniach, przypomnieniach, obliczeniach, zapytaniach, synchronizacji i skrótach.
+Pełna dokumentacja jest w osobnym brulionie „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Przełączysz się do niego przyciskiem ⇄ obok nazwy brulionu w pasku bocznym — i tak samo wrócisz.
 
 ## Skróty klawiszowe
 | Skrót | Działanie |
@@ -432,14 +432,13 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now)
         { u"templates/Spotkanie.md"_s, kMeetingTemplate },
         { u"assets/plan-mieszkania.svg"_s, kPlanSvg },
     };
-    files.append(guideFiles(vars));
     return files;
 }
 
-int seedDemoVault(Vault &vault, const QDateTime &now)
+static int seedFiles(Vault &vault, const QList<DemoFile> &files)
 {
     int written = 0;
-    for (const DemoFile &file : demoVaultFiles(now)) {
+    for (const DemoFile &file : files) {
         if (vault.exists(file.path))
             continue;
         if (!vault.writeText(file.path, file.content, ChangeSource::Import))
@@ -447,6 +446,26 @@ int seedDemoVault(Vault &vault, const QDateTime &now)
         ++written;
     }
     return written;
+}
+
+QString docsWelcomePage()
+{
+    return u"Spis treści.md"_s;
+}
+
+QList<DemoFile> docsVaultFiles()
+{
+    return guideFiles();
+}
+
+int seedDocsVault(Vault &vault)
+{
+    return seedFiles(vault, docsVaultFiles());
+}
+
+int seedDemoVault(Vault &vault, const QDateTime &now)
+{
+    return seedFiles(vault, demoVaultFiles(now));
 }
 
 } // namespace brulion::shell

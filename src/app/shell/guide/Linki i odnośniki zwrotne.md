@@ -17,7 +17,7 @@ Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (zakład
 | `((id))` | odwołanie do bloku z dowolnej strony — pokazuje jego tekst |
 | `[tekst](https://adres)` | zwykły link w Markdownie |
 
-Przykłady: [[Dokumentacja/Spis treści|Spis treści]], [[Przepisy#Szarlotka babci]], oraz strona, która jeszcze nie istnieje: [[Notatka do utworzenia]]. Kliknięcie takiego linku tworzy stronę.
+Przykłady: [[Spis treści|Spis treści]], [[Zadania#Powtarzanie]], oraz strona, która jeszcze nie istnieje: [[Notatka do utworzenia]]. Kliknięcie takiego linku tworzy stronę.
 
 ## Jak Brulion znajduje stronę
 Nazwa z linku jest dopasowywana do plików po kolei: pełna ścieżka w brulionie, ścieżka względem bieżącego folderu, sama nazwa pliku (bez względu na wielkość liter), a na końcu aliasy z nagłówka strony (`aliases: [Skrót]`). Przy kilku pasujących wygrywa strona o najkrótszej ścieżce. Gdy dwie strony mają tę samą nazwę w różnych folderach, użyj ścieżki: `[[Projekty/Dom]]`.
@@ -39,4 +39,4 @@ Zmiana nazwy strony (F2) aktualizuje linki do niej w pozostałych notatkach. His
 ## Graf
 Widok **Graf** rysuje strony i dni dziennika jako sieć połączeń: cały brulion albo okolice jednej strony (głębokość 1–2). Przełączniki ukrywają tagi, brakujące strony, dzienniki i szablony.
 
-Dalej: [[Dokumentacja/Tagi i właściwości|Tagi i właściwości]].
+Dalej: [[Tagi i właściwości|Tagi i właściwości]].

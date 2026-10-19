@@ -62,4 +62,4 @@ Odwołania:
 
 Zwykłe komórki czytane są tak, jak zapisują ludzie: `12,50 zł`, `23%`. Błąd w formule pokazuje się jako `#ERR` (po najechaniu: powód), a zapętlenie jako `#CYCLE`. Tabelę edytujesz jak arkusz, a Brulion przepisuje ją do Markdownu.
 
-Wstaw tabelę albo blok obliczeń poleceniami `/Tabela` i `/Obliczenia`. Zobacz też [[Dokumentacja/Tagi i właściwości|właściwości]], z których wartości można liczyć.
+Wstaw tabelę albo blok obliczeń poleceniami `/Tabela` i `/Obliczenia`. Zobacz też [[Tagi i właściwości|właściwości]], z których wartości można liczyć.
