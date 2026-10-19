@@ -2,6 +2,8 @@
 
 #include "vault/vaultutil_p.h"
 
+#include "log/slowscope.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -139,6 +141,8 @@ bool LocalStore::flush()
         m_cleared = false;
         return true;
     }
+    // A slow flush (a large store on slow storage) shows up in the event log.
+    logging::SlowScope slow(lcVault(), "LocalStore flush", 200);
     Map disk;
     QByteArray raw;
     // The file as we last read or wrote it (the common case: nobody else writes it) needs no
@@ -166,15 +170,18 @@ bool LocalStore::flush()
     m_lastBytes = bytes;
     m_pending.clear();
     m_cleared = false;
+    slow.setDetail(logging::formatBytes(bytes.size()));
     return true;
 }
 
 bool LocalStore::reload()
 {
+    logging::SlowScope slow(lcVault(), "LocalStore load", 200);
     Map disk;
     QByteArray raw;
     if (!readFile(disk, raw))
         return false;
+    slow.setDetail(logging::formatBytes(raw.size()));
     m_lastBytes = raw;
     m_data = withPendingApplied(disk);
     return true;

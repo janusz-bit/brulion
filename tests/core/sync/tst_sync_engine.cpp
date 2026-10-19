@@ -404,9 +404,21 @@ private Q_SLOTS:
         for (const SyncProgress &p : events)
             phases.append(p.phase);
         using P = SyncProgress::Phase;
-        QCOMPARE(phases, (QList<P>{P::Connecting, P::Listing, P::Syncing, P::Syncing, P::Syncing, P::Done}));
-        QCOMPARE(events.last(), (SyncProgress{P::Done, 2, 2, {}}));
-        QCOMPARE(events.at(3).path, u"a.md"_s);
+        // The server folder does not exist yet (created by this first sync): no folder answered.
+        QCOMPARE(phases, (QList<P>{P::Connecting, P::Listing, P::ListingLocal, P::Comparing, P::Syncing, P::Syncing,
+                                   P::Syncing, P::Saving, P::Done}));
+        QCOMPARE(events.last().phase, P::Done);
+        QCOMPARE(events.last().done, 2);
+        QCOMPARE(events.last().total, 2);
+        QCOMPARE(events.last().changes, 2);
+        QCOMPARE(events.at(5).path, u"a.md"_s);
+        QCOMPARE(events.at(5).done, 1);
+        // Elapsed time and bytes only grow.
+        for (qsizetype i = 1; i < events.size(); ++i) {
+            QVERIFY(events.at(i).elapsedMs >= events.at(i - 1).elapsedMs);
+            QVERIFY(events.at(i).bytesDone >= events.at(i - 1).bytesDone);
+        }
+        QVERIFY(events.last().bytesDone > 0);
         QCOMPARE(spy.size(), events.size());
     }
 
@@ -774,6 +786,268 @@ private Q_SLOTS:
         QVERIFY(!persistent.hasPendingChanges());
         LocalStore reloaded(dir.path() + u"/sync.json"_s);
         QVERIFY(reloaded.contains(SyncEngine::stateKey(u"a.md"_s)));
+    }
+
+    // ---- Instrumentation: phases, statistics, codes, progress, run numbers, log lines ----------
+
+    void reportsPhasesAndStatistics()
+    {
+        FakeWebDavServer server;
+        server.putText(u"Notatki/Dziennik/2026-10-14.md"_s, u"- zdalny wpis\n"_s);
+        server.mkdir(u"Notatki/Projekty"_s);
+        Device a(server, u"laptop"_s, {{u"Zażółć.md"_s, "gęślą jaźń\n"}, {u"b.md"_s, "b"}});
+        SyncRunOptions options;
+        options.trigger = SyncTrigger::Manual;
+        const SyncReport r = a.sync(options);
+        QCOMPARE(counts(r), (Counts{.up = 2, .down = 1}));
+        QCOMPARE(r.runNumber, 1);
+        QCOMPARE(r.trigger, SyncTrigger::Manual);
+        QList<SyncPhase> phases;
+        for (const SyncPhaseTime &p : r.phases)
+            phases.append(p.phase);
+        QCOMPARE(phases, (QList<SyncPhase>{SyncPhase::Connect, SyncPhase::ListRemote, SyncPhase::ListLocal,
+                                           SyncPhase::Compare, SyncPhase::Transfer, SyncPhase::SaveState}));
+        qint64 previousStart = 0;
+        for (const SyncPhaseTime &p : r.phases) {
+            QVERIFY(p.startMs >= previousStart);
+            QVERIFY(p.durationMs >= 0);
+            QVERIFY(p.startMs + p.durationMs <= r.durationMs);
+            previousStart = p.startMs;
+        }
+        QCOMPARE(r.phases.at(1).items, 3); // the base folder, Dziennik, Projekty
+        QVERIFY(r.phases.at(1).bytes > 0);
+        QCOMPARE(r.phases.at(2).items, 2);
+        QCOMPARE(r.phases.at(4).items, 3);
+        QVERIFY(r.phases.at(4).bytes > 0);
+        const SyncStats &st = r.stats;
+        QCOMPARE(st.requests, int(server.logSize()));
+        QCOMPARE(st.requestsByMethod.value("PROPFIND"), int(server.requests("PROPFIND").size()));
+        QCOMPARE(st.requestsByMethod.value("GET"), 1);
+        QCOMPARE(st.requestsByMethod.value("PUT"), 2);
+        QVERIFY(st.listingBytes > 0);
+        QVERIFY(st.bytesSent > 0);
+        QVERIFY(st.bytesReceived >= st.listingBytes);
+        QCOMPARE(st.remoteFolders, 3);
+        QCOMPARE(st.remoteFiles, 1);
+        QCOMPARE(st.localFiles, 2);
+        QCOMPARE(st.pathsChecked, 3);
+        QCOMPARE(st.failedRequests, 0);
+        QCOMPARE(st.timeouts, 0);
+        QVERIFY(!st.slowest.isEmpty() && st.slowest.size() <= 5);
+        for (qsizetype i = 1; i < st.slowest.size(); ++i)
+            QVERIFY(st.slowest.at(i - 1).ms >= st.slowest.at(i).ms);
+        // Paths in the statistics are relative to the WebDAV base, never full URLs.
+        for (const SyncRequestTime &t : st.slowest)
+            QVERIFY2(!t.path.contains(u"://"_s), qPrintable(t.path));
+        // The next run gets the next number.
+        QCOMPARE(a.sync().runNumber, 2);
+        QCOMPARE(a.engine->nextRunNumber(), 3);
+    }
+
+    void failedRunKeepsThePhasesItReached()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}});
+        server.hooks.append([](const HttpRequest &, const QString &) { return FakeWebDavServer::status(503); });
+        const SyncReport r = a.sync();
+        QVERIFY(r.failed());
+        QList<SyncPhase> phases;
+        for (const SyncPhaseTime &p : r.phases)
+            phases.append(p.phase);
+        QCOMPARE(phases, (QList<SyncPhase>{SyncPhase::Connect, SyncPhase::ListRemote, SyncPhase::SaveState}));
+        QCOMPARE(r.stats.failedRequests, 1);
+        QCOMPARE(r.stats.requests, 1);
+    }
+
+    void runNumbersAndTheLogTag()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}});
+        a.engine->setNextRunNumber(42);
+        QCOMPARE(a.sync().runNumber, 42);
+        QCOMPARE(a.client->logTag(), u"#42"_s);
+        QCOMPARE(a.sync().runNumber, 43);
+        a.engine->setNextRunNumber(-5);
+        QCOMPARE(a.engine->nextRunNumber(), 1);
+    }
+
+    void fileErrorCodes_data()
+    {
+        QTest::addColumn<int>("status");
+        QTest::addColumn<QString>("code");
+        QTest::newRow("locked") << 423 << u"locked"_s;
+        QTest::newRow("forbidden") << 403 << u"forbidden"_s;
+        QTest::newRow("too large") << 413 << u"too-large"_s;
+        QTest::newRow("quota") << 507 << u"insufficient-storage"_s;
+        QTest::newRow("server") << 500 << u"server"_s;
+        QTest::newRow("other") << 418 << u"http"_s;
+    }
+
+    void fileErrorCodes()
+    {
+        QFETCH(int, status);
+        QFETCH(QString, code);
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"Żółw.md"_s, "z"}});
+        server.hooks.append([status](const HttpRequest &request, const QString &path) -> std::optional<HttpResponse> {
+            if (request.method == "PUT" && path.endsWith(u"/Żółw.md"_s))
+                return fail(status);
+            return std::nullopt;
+        });
+        const SyncReport r = a.sync();
+        QCOMPARE(r.errors.size(), 1);
+        QCOMPARE(r.errors.first().path, u"Żółw.md"_s);
+        QCOMPARE(r.errors.first().code, code);
+        QCOMPARE(r.errors.first().status, status);
+        QVERIFY(r.errors.first().message.contains(QString::number(status)));
+        QVERIFY(!r.failed());
+        QCOMPARE(r.stats.failedRequests, 1);
+    }
+
+    void localErrorCodes()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}});
+        a.sync();
+        server.putText(u"Notatki/nowy.md"_s, u"z serwera\n"_s);
+        QVERIFY(writeFileBehind(a.root, u"nowy.md"_s, "lokalny\n"));
+        const SyncReport r = a.sync();
+        QCOMPARE(r.errors.size(), 1);
+        QCOMPARE(r.errors.first().code, u"unseen-local-file"_s);
+        QCOMPARE(r.errors.first().status, 0);
+    }
+
+    void readFailureCode()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"tajne.md"_s, "x"}});
+        const QString file = a.root + u"/tajne.md"_s;
+        QVERIFY(QFile::setPermissions(file, QFileDevice::Permissions()));
+        QFile probe(file);
+        if (probe.open(QIODevice::ReadOnly)) {
+            QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+            QSKIP("running with permissions that ignore file modes (root)");
+        }
+        const SyncReport r = a.sync();
+        QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QCOMPARE(r.errors.size(), 1);
+        QCOMPARE(r.errors.first().path, u"tajne.md"_s);
+        QCOMPARE(r.errors.first().code, u"read-failed"_s);
+    }
+
+    void countsPreconditionRetriesAndRemoteBusy()
+    {
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "jeden\ndwa\n"}});
+        a.sync();
+        QVERIFY(a.write(u"a.md"_s, u"JEDEN\ndwa\n"_s));
+        bool raced = false;
+        server.hooks.append([&](const HttpRequest &request, const QString &path) -> std::optional<HttpResponse> {
+            if (!raced && request.method == "PUT" && path.endsWith(u"/a.md"_s)) {
+                raced = true;
+                server.putText(u"Notatki/a.md"_s, u"jeden\ndwa\ntrzy\n"_s);
+            }
+            return std::nullopt;
+        });
+        const SyncReport merged = a.sync();
+        QCOMPARE(counts(merged), (Counts{.merged = 1}));
+        QCOMPARE(merged.stats.preconditionRetries, 1);
+
+        QVERIFY(a.write(u"a.md"_s, u"JEDEN\ndwa\ntrzy\ncztery\n"_s));
+        int version = 0;
+        server.hooks = {[&](const HttpRequest &request, const QString &path) -> std::optional<HttpResponse> {
+            if (request.method == "PUT" && path.endsWith(u"/a.md"_s))
+                server.putText(u"Notatki/a.md"_s, u"JEDEN\ndwa\ntrzy\n%1\n"_s.arg(++version));
+            return std::nullopt;
+        }};
+        const SyncReport busy = a.sync();
+        QCOMPARE(busy.errors.size(), 1);
+        QCOMPARE(busy.errors.first().code, u"remote-busy"_s);
+        QVERIFY(busy.stats.preconditionRetries >= 2);
+    }
+
+    void listingProgressGrows()
+    {
+        FakeWebDavServer server;
+        for (const QString &folder : {u"A"_s, u"B"_s, u"C"_s})
+            server.putText(u"Notatki/%1/x.md"_s.arg(folder), u"x"_s);
+        Device a(server, u"laptop"_s);
+        QList<SyncProgress> listing;
+        SyncRunOptions options;
+        options.onProgress = [&](const SyncProgress &p) {
+            if (p.phase == SyncProgress::Phase::Listing)
+                listing.append(p);
+        };
+        a.sync(options);
+        QVERIFY(listing.size() >= 2);
+        QCOMPARE(listing.first().done, 0);
+        for (qsizetype i = 1; i < listing.size(); ++i) {
+            QVERIFY(listing.at(i).done >= listing.at(i - 1).done);
+            QVERIFY(listing.at(i).total >= listing.at(i - 1).total);
+            QVERIFY(listing.at(i).done <= listing.at(i).total);
+        }
+        QCOMPARE(listing.last().done, 4);
+        QCOMPARE(listing.last().total, 4);
+        QCOMPARE(listing.last().remoteEntries, 6); // 3 folders + 3 files
+    }
+
+    void activePathsAndActivity()
+    {
+        FakeWebDavServer server;
+        server.setLatency("PUT", 200);
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"b.md"_s, "b"}, {u"c.md"_s, "c"}});
+        QCOMPARE(a.engine->activity(), SyncActivity());
+        QList<SyncProgress> syncing;
+        SyncRunOptions options;
+        options.onProgress = [&](const SyncProgress &p) {
+            if (p.phase == SyncProgress::Phase::Syncing)
+                syncing.append(p);
+        };
+        std::optional<SyncReport> report;
+        a.engine->sync(options, [&](const SyncReport &r) { report = r; });
+        QVERIFY(waitFor([&] { return a.client->requestsInFlight() > 0 && !server.requests("PUT").isEmpty(); }));
+        const SyncActivity activity = a.engine->activity();
+        QVERIFY(activity.running);
+        QCOMPARE(activity.runNumber, 1);
+        QVERIFY(activity.requestsInFlight >= 1);
+        QVERIFY(!activity.waitingFor.isEmpty());
+        QVERIFY2(activity.waitingFor.first().startsWith(u"PUT "_s), qPrintable(activity.waitingFor.join(u", ")));
+        QVERIFY(activity.idleMs >= 0 && activity.idleMs < 200 * BRULION_TEST_SLOWDOWN + 5000);
+        QVERIFY(waitFor([&] { return report.has_value(); }));
+        bool sawActive = false;
+        for (const SyncProgress &p : syncing) {
+            QVERIFY(p.active.size() <= a.engine->concurrency());
+            QVERIFY(!p.active.contains(p.path));
+            sawActive = sawActive || !p.active.isEmpty();
+        }
+        QVERIFY(sawActive);
+        QVERIFY(!a.engine->activity().running);
+    }
+
+    void logsAFewLinesPerRun()
+    {
+        static QStringList lines;
+        lines.clear();
+        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context,
+                                                                    const QString &message) {
+            if (type != QtDebugMsg && context.category && QByteArrayView(context.category).startsWith("brulion."))
+                lines.append(QString::fromUtf8(context.category) + u' ' + message);
+        });
+        FakeWebDavServer server;
+        Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"Zażółć.md"_s, "b"}});
+        SyncRunOptions options;
+        options.trigger = SyncTrigger::LocalChange;
+        a.sync(options);
+        a.sync();
+        qInstallMessageHandler(previous);
+        const QString all = lines.join(u'\n');
+        QVERIFY2(lines.size() >= 4 && lines.size() <= 10, qPrintable(all));
+        QVERIFY2(all.contains(u"brulion.sync #1 started (edit)"_s), qPrintable(all));
+        QVERIFY2(all.contains(u"brulion.sync #1 ok in "_s), qPrintable(all));
+        QVERIFY2(all.contains(u"up 2, down 0"_s), qPrintable(all));
+        QVERIFY2(all.contains(u"requests (MKCOL"_s) || all.contains(u"requests ("_s), qPrintable(all));
+        QVERIFY2(all.contains(u"#2 ok in "_s) && all.contains(u"nothing to change"_s), qPrintable(all));
+        QVERIFY2(!all.contains(server.options().password), qPrintable(all));
     }
 };
 

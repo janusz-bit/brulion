@@ -9,10 +9,14 @@
 
 namespace brulion::sync::detail {
 
+/// Observes every finished request (timing, sizes, status; also timeouts), right before `done`.
+using ExchangeObserver = std::function<void(const HttpExchange &)>;
+
 /// Send `request` through `transport`. `done` runs exactly once — never inside this call —
 /// unless `context` is destroyed first. With request.timeoutMs > 0, a transport that has not
 /// answered in time is replaced by a timed-out HttpResponse (status 0, timedOut); its late
-/// answer is dropped.
-void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &request, HttpCallback done);
+/// answer is dropped. `observe` (optional) runs right before `done` with the exchange.
+void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &request, HttpCallback done,
+                 ExchangeObserver observe = {});
 
 } // namespace brulion::sync::detail

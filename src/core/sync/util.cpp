@@ -5,8 +5,6 @@
 
 namespace brulion::sync::detail {
 
-Q_LOGGING_CATEGORY(lcSync, "brulion.sync")
-
 std::optional<QString> decodeUtf8Strict(QByteArrayView bytes, bool stripBom)
 {
     QStringDecoder::Flags flags = QStringDecoder::Flag::Stateless;

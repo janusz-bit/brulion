@@ -1,6 +1,8 @@
 // Internal helpers shared by the sync module's translation units.
 #pragma once
 
+#include "log/categories.h"
+
 #include <QByteArrayView>
 #include <QLoggingCategory>
 #include <QObject>
@@ -11,7 +13,10 @@
 
 namespace brulion::sync::detail {
 
-Q_DECLARE_LOGGING_CATEGORY(lcSync)
+/// "brulion.sync" (the log module's category).
+using brulion::logging::lcSync;
+/// "brulion.net": HTTP exchanges.
+using brulion::logging::lcNet;
 
 /// Strict UTF-8 decoding: std::nullopt when `bytes` are not valid UTF-8. With `stripBom` a
 /// leading byte order mark is dropped, otherwise it is kept as U+FEFF.

@@ -41,6 +41,18 @@ struct SyncStatus {
     std::optional<SyncReport> lastReport;   ///< report of the last completed run
     std::optional<SyncProgress> progress;   ///< progress of the running sync
     QDateTime nextSync;      ///< when the next automatic sync is planned (invalid: none)
+    /// nextSync is a retry after failed runs (back-off), not the regular interval.
+    bool retrying = false;
+    int failures = 0;                           ///< consecutive failed runs
+    SyncTrigger trigger = SyncTrigger::Unknown; ///< of the running run (or the last one)
+    QDateTime runStarted;                       ///< start of the running run (invalid when idle)
+    /// The running run has had no answer / progress for at least the stall threshold.
+    bool stalled = false;
+    qint64 stalledMs = 0;   ///< how long (while stalled)
+    QStringList waitingFor; ///< SyncActivity::waitingFor while stalled
+    /// The watchdog stopped the run (no progress for the stall limit): it ends as soon as the
+    /// open requests time out, and is reported as failed with code "stalled".
+    bool abandoning = false;
 };
 
 /// Clock and one-shot timers of the scheduler; injectable so tests control time.
@@ -78,6 +90,16 @@ public:
     void setRetryBase(qint64 msec);   ///< default 30 000, at least 1 000
     /// Coming to the foreground syncs only when the last sync is older than this (default 60 000).
     void setActiveSyncGap(qint64 msec);
+    /// A running sync without any answer / progress for this long is "stalled" (status, a log
+    /// warning; default 20 000).
+    void setStallThreshold(qint64 msec);
+    /// ... and for this long is stopped by the watchdog: cancelled, reported as failed with code
+    /// "stalled" and retried with the back-off (default 180 000; 0 = never).
+    void setStallLimit(qint64 msec);
+    /// How often the running sync is checked (default 2 000; the timer runs only while syncing).
+    void setStallPollInterval(qint64 msec);
+    qint64 stallThreshold() const { return m_stallThreshold; }
+    qint64 stallLimit() const { return m_stallLimit; }
     qint64 interval() const { return m_interval; }
     qint64 debounce() const { return m_debounce; }
 
@@ -99,7 +121,7 @@ public:
     /// Sync now — also when not started (a "sync now" button). `done` gets the report, or
     /// std::nullopt when offline, failed or cancelled (see status().lastError); it may run
     /// synchronously when offline. Joins a running sync.
-    void syncNow(RunCallback done = {});
+    void syncNow(RunCallback done = {}, SyncTrigger trigger = SyncTrigger::Manual);
     /// Sync now applying the deletions the mass-deletion guard held back (the user confirmed
     /// status().lastReport->pendingDeletions): SyncRunOptions::confirmDeletions for one run.
     /// While a sync is running, it runs right after it.
@@ -126,14 +148,25 @@ public Q_SLOTS:
     void setAppActive(bool active);
 
 Q_SIGNALS:
+    /// Anything in status() changed except `progress` alone (state, errors, nextSync, stall, …).
     void statusChanged();
+    /// status().progress changed (once per path while syncing: throttle in the UI).
+    void progressChanged();
     /// A run completed (also with per-file errors).
     void synced(const brulion::sync::SyncReport &report);
+    /// A run starts (also a run the scheduler joins is not reported twice).
+    void runStarted(brulion::sync::SyncTrigger trigger);
+    /// Every finished run — also failed, refused and cancelled ones (for the history). `stalled`:
+    /// the watchdog stopped it (SyncRunRecord: outcome failed, code "stalled"); the status then
+    /// says lastErrorCode "stalled" as well.
+    void runFinished(const brulion::sync::SyncReport &report, bool stalled);
 
 private:
-    void trigger();
+    void trigger(SyncTrigger why);
     void onRunFinished(const SyncReport &report);
-    void schedulePeriodic(qint64 delay);
+    void pollStall();
+    void scheduleStallPoll();
+    void schedulePeriodic(qint64 delay, bool retry = false);
     void cancelTimer(int &handle);
     void updateStatus(const std::function<void(SyncStatus &)> &change);
     SyncState idleState() const;
@@ -147,6 +180,17 @@ private:
     qint64 m_debounce = 20'000;
     qint64 m_retryBase = 30'000;
     qint64 m_activeGap = 60'000;
+    qint64 m_stallThreshold = 20'000;
+    qint64 m_stallLimit = 180'000;
+    qint64 m_stallPoll = 2'000;
+    int m_stallTimer = 0;
+    bool m_retryPlanned = false;                         ///< the periodic timer is a retry after a failure
+    bool m_firstRun = true;                              ///< the next periodic run is the first after start()
+    bool m_watchdogCancelled = false;                    ///< the watchdog cancelled the running run
+    SyncTrigger m_afterRunTrigger = SyncTrigger::Manual; ///< kind of the run m_triggerAfterRun starts
+    qint64 m_runStartedMs = 0;
+    qint64 m_lastHeartbeatMs = 0; ///< run time of the last "still running" line
+    qint64 m_stalledSinceMs = 0;  ///< idle time when the stall was detected
     bool m_started = false;
     bool m_running = false;
     bool m_cancelling = false;     ///< stop() cancelled the running run

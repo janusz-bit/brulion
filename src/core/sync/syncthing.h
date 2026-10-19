@@ -3,6 +3,7 @@
 // copies made by Syncthing are found by findConflicts() (sync/conflicts.h).
 #pragma once
 
+#include "log/redact.h"
 #include "sync/http.h"
 
 #include <QList>
@@ -120,6 +121,7 @@ private:
     void getJson(const QString &path, JsonCallback done);
 
     QString m_apiKey;
+    logging::ScopedSecret m_secretApiKey; ///< masked in every log line
     HttpTransport *m_transport;
     QString m_url;
     QString m_folderId;

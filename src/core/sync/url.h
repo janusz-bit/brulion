@@ -28,7 +28,8 @@ QString trimTrailingSlashes(const QString &s);
 /// The server may be given with or without a scheme (default https), with a sub-path
 /// ("https://example.com/nextcloud"), or as a full DAV / web UI URL pasted from the browser
 /// (the "/remote.php/…", "/index.php/…", "/apps/…" and "/login" parts are dropped). User name
-/// and folder segments are percent-encoded; the folder is normalised ("./a/../b" -> "b").
+/// and folder segments are percent-encoded; the folder is normalised ("./a/../b" -> "b"). User
+/// info typed into the address ("https://jan:secret@host") is dropped.
 QString nextcloudDavUrl(const QString &server, const QString &user, const QString &folder);
 
 /// Decoded path of a URL or absolute path: "https://h/a%20b/%C5%BC.md?x=1" -> "/a b/ż.md".

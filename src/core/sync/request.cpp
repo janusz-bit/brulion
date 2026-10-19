@@ -2,6 +2,7 @@
 
 #include "sync/util_p.h"
 
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QTimer>
 
@@ -16,9 +17,14 @@ namespace {
 struct PendingRequest {
     QPointer<QObject> context;
     HttpCallback done;
+    ExchangeObserver observe;
     QPointer<QTimer> timer;
     bool finished = false;
     bool inSend = true;
+    QElapsedTimer elapsed;
+    QByteArray method;
+    QUrl url;
+    qint64 bytesSent = 0;
 
     void finish(const HttpResponse &response)
     {
@@ -31,6 +37,22 @@ struct PendingRequest {
         }
         if (!context)
             return;
+        if (observe) {
+            HttpExchange exchange;
+            exchange.method = method;
+            exchange.url = url.adjusted(QUrl::RemoveUserInfo);
+            exchange.status = response.status;
+            exchange.timedOut = response.timedOut;
+            exchange.networkError = response.networkError;
+            exchange.elapsedMs = elapsed.elapsed();
+            exchange.bytesSent = bytesSent;
+            exchange.bytesReceived = response.body.size();
+            exchange.contentType = response.header("content-type");
+            exchange.protocol = response.protocol;
+            observe(exchange);
+            if (!context)
+                return;
+        }
         const HttpCallback callback = std::move(done);
         done = nullptr;
         callback(response);
@@ -50,11 +72,17 @@ HttpResponse timeoutResponse(const HttpRequest &request)
 
 } // namespace
 
-void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &request, HttpCallback done)
+void sendRequest(HttpTransport *transport, QObject *context, const HttpRequest &request, HttpCallback done,
+                 ExchangeObserver observe)
 {
     auto pending = std::make_shared<PendingRequest>();
     pending->context = context;
     pending->done = std::move(done);
+    pending->observe = std::move(observe);
+    pending->elapsed.start();
+    pending->method = request.method;
+    pending->url = request.url;
+    pending->bytesSent = request.body.size();
     if (!transport) {
         post(context, [pending] {
             HttpResponse response;

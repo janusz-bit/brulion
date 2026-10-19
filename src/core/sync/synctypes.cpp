@@ -56,6 +56,54 @@ QString syncActionName(SyncAction action)
     return {};
 }
 
+QString syncTriggerName(SyncTrigger trigger)
+{
+    switch (trigger) {
+    case SyncTrigger::Unknown: return u"unknown"_s;
+    case SyncTrigger::Start: return u"start"_s;
+    case SyncTrigger::Timer: return u"timer"_s;
+    case SyncTrigger::Retry: return u"retry"_s;
+    case SyncTrigger::Manual: return u"manual"_s;
+    case SyncTrigger::LocalChange: return u"edit"_s;
+    case SyncTrigger::NetworkBack: return u"network"_s;
+    case SyncTrigger::Foreground: return u"foreground"_s;
+    case SyncTrigger::Background: return u"background"_s;
+    case SyncTrigger::Confirmation: return u"confirm"_s;
+    }
+    return u"unknown"_s;
+}
+
+std::optional<SyncTrigger> syncTriggerFromName(QStringView name)
+{
+    for (int i = int(SyncTrigger::Unknown); i <= int(SyncTrigger::Confirmation); ++i) {
+        if (name == syncTriggerName(SyncTrigger(i)))
+            return SyncTrigger(i);
+    }
+    return std::nullopt;
+}
+
+QString syncPhaseName(SyncPhase phase)
+{
+    switch (phase) {
+    case SyncPhase::Connect: return u"connect"_s;
+    case SyncPhase::ListRemote: return u"list-remote"_s;
+    case SyncPhase::ListLocal: return u"list-local"_s;
+    case SyncPhase::Compare: return u"compare"_s;
+    case SyncPhase::Transfer: return u"transfer"_s;
+    case SyncPhase::SaveState: return u"save-state"_s;
+    }
+    return {};
+}
+
+std::optional<SyncPhase> syncPhaseFromName(QStringView name)
+{
+    for (int i = int(SyncPhase::Connect); i <= int(SyncPhase::SaveState); ++i) {
+        if (name == syncPhaseName(SyncPhase(i)))
+            return SyncPhase(i);
+    }
+    return std::nullopt;
+}
+
 QString SyncReport::failureMessage() const
 {
     if (remoteError.isError())

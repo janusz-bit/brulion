@@ -3,11 +3,14 @@
 #include "vault/vault.h"
 #include "vault/vault_p.h"
 
+#include "log/slowscope.h"
+
 #include "text/text.h"
 #include "util/paths.h"
 
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
@@ -970,6 +973,8 @@ bool Vault::open(QString *error)
         return failed(tr("%1 is not a folder").arg(d->root));
     if (!info.exists() && !QDir().mkpath(d->root))
         return failed(tr("Cannot create the folder %1").arg(d->root));
+    QElapsedTimer openTimer;
+    openTimer.start();
     const bool watch = d->watchRequested; // also when requested before the first open()
     d->stopWatching();
     d->reset();
@@ -986,6 +991,9 @@ bool Vault::open(QString *error)
     const bool configDiffers = d->loadConfig();
     if (watch)
         d->startWatching();
+    qCInfo(lcVault).noquote() << u"Notebook opened: %1 files, %2 folders in %3"_s.arg(d->files.size())
+                                         .arg(d->dirs.size())
+                                         .arg(logging::formatMs(openTimer.elapsed()));
     if (configDiffers)
         Q_EMIT configChanged();
     return true;

@@ -1,6 +1,8 @@
 // One SyncEngine run: list both sides, decide per path (planSync), transfer, merge, record.
 #include "sync/syncrun_p.h"
 
+#include "log/redact.h"
+#include "log/slowscope.h"
 #include "sync/conflicts.h"
 #include "sync/merge.h"
 #include "sync/pool_p.h"
@@ -22,12 +24,21 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::sync {
 
+using detail::lcSync;
+
 namespace {
 
 /// Tracked files (besides the vault config) before the "one side suddenly empty" guard applies.
 constexpr int kEmptySideGuardMin = 2;
 /// Attempts to merge when the remote file keeps changing under us (HTTP 412).
 constexpr int kMaxMergeAttempts = 3;
+/// Per-file error warnings logged per run; the rest is summed up.
+constexpr int kMaxLoggedErrors = 10;
+/// Slowest requests kept per run.
+constexpr int kSlowestKept = 5;
+
+using logging::formatBytes;
+using logging::formatMs;
 
 bool isJsonObject(const QString &text)
 {
@@ -68,14 +79,216 @@ int countWithoutConfig(const Map &files)
 SyncRun::Outcome SyncRun::Outcome::fromError(const WebDavError &error)
 {
     if (error.isFatal())
-        return Outcome{Kind::Fatal, error.message, error};
-    return failed(error.message);
+        return Outcome{Kind::Fatal, error.message, error, errorCodeName(error.code), error.status};
+    return failed(errorCodeName(error.code), error.message, error.status);
 }
 
-SyncRun::SyncRun(SyncEngine *engine, SyncRunOptions options)
-    : m_engine(engine)
-    , m_options(std::move(options))
+SyncRun::SyncRun(SyncEngine *engine, SyncRunOptions options, int number)
+    : m_engine(engine), m_options(std::move(options))
 {
+    m_report.runNumber = number;
+    m_report.trigger = m_options.trigger;
+    m_runTimer.start();
+    m_activityTimer.start();
+}
+
+QString SyncRun::tag() const
+{
+    return u"#%1"_s.arg(m_report.runNumber);
+}
+
+SyncActivity SyncRun::activity() const
+{
+    SyncActivity a;
+    a.running = !m_finished;
+    a.runNumber = m_report.runNumber;
+    a.idleMs = m_activityTimer.elapsed();
+    if (const WebDavClient *c = client()) {
+        a.requestsInFlight = c->requestsInFlight();
+        a.waitingFor = c->inFlight(4);
+        if (a.requestsInFlight > 0)
+            a.idleMs = qMin(a.idleMs, c->idleMs());
+    }
+    return a;
+}
+
+void SyncRun::beginPhase(SyncPhase phase)
+{
+    endPhase(0);
+    SyncPhaseTime time;
+    time.phase = phase;
+    time.startMs = m_runTimer.elapsed();
+    m_phase = time;
+    m_phaseBytes = m_report.stats.bytesSent + m_report.stats.bytesReceived;
+}
+
+void SyncRun::endPhase(int items)
+{
+    if (!m_phase)
+        return;
+    SyncPhaseTime time = *m_phase;
+    m_phase.reset();
+    time.durationMs = m_runTimer.elapsed() - time.startMs;
+    time.items = items;
+    time.bytes = m_report.stats.bytesSent + m_report.stats.bytesReceived - m_phaseBytes;
+    m_report.phases.append(time);
+    if (lcSync().isDebugEnabled()) {
+        QString detail = u"%1 item(s)"_s.arg(items);
+        if (time.bytes > 0)
+            detail += u", "_s + formatBytes(time.bytes);
+        qCDebug(lcSync).noquote() << u"%1 %2 %3: %4"_s.arg(tag(), syncPhaseName(time.phase), formatMs(time.durationMs),
+                                                           detail);
+    }
+}
+
+void SyncRun::onExchange(const HttpExchange &exchange)
+{
+    // Time without any answer while requests were open (best effort: since the last activity).
+    m_report.stats.longestStallMs = qMax(m_report.stats.longestStallMs, m_activityTimer.elapsed());
+    m_activityTimer.start();
+    SyncStats &st = m_report.stats;
+    ++st.requests;
+    ++st.requestsByMethod[exchange.method];
+    st.requestMs += exchange.elapsedMs;
+    st.bytesSent += exchange.bytesSent;
+    st.bytesReceived += exchange.bytesReceived;
+    if (exchange.method == "PROPFIND")
+        st.listingBytes += exchange.bytesReceived;
+    if (exchange.timedOut)
+        ++st.timeouts;
+    const bool expected = exchange.status == 404 || exchange.status == 412
+                          || (exchange.method == "MKCOL" && (exchange.status == 405 || exchange.status == 409));
+    if (exchange.status == 0 || (exchange.status >= 400 && !expected))
+        ++st.failedRequests;
+    if (!exchange.protocol.isEmpty())
+        st.protocol = exchange.protocol;
+    const SyncRequestTime request{exchange.method, client() ? client()->relativePath(exchange.url) : QString(),
+                                  exchange.status, exchange.elapsedMs, exchange.bytesSent + exchange.bytesReceived};
+    const auto at = std::find_if(st.slowest.begin(), st.slowest.end(),
+                                 [&](const SyncRequestTime &r) { return r.ms < request.ms; });
+    if (at != st.slowest.end() || st.slowest.size() < kSlowestKept) {
+        st.slowest.insert(at, request);
+        if (st.slowest.size() > kSlowestKept)
+            st.slowest.removeLast();
+    }
+}
+
+void SyncRun::notePreconditionRetry(const VaultPath &path, int attempt)
+{
+    ++m_report.stats.preconditionRetries;
+    if (attempt >= kMaxMergeAttempts)
+        return; // reconcile() gives up (remote-busy)
+    qCInfo(lcSync).noquote() << u"%1 %2 changed on the server meanwhile: merging again (attempt %3 of %4)"_s.arg(
+            tag(), path, QString::number(attempt + 1), QString::number(kMaxMergeAttempts));
+}
+
+void SyncRun::progress(SyncProgress::Phase phase, int done, int total, const VaultPath &path)
+{
+    SyncProgress p;
+    p.phase = phase;
+    p.done = done;
+    p.total = total;
+    p.path = path;
+    p.active = m_active;
+    p.remoteEntries = m_remoteEntries;
+    p.bytesDone = m_report.stats.bytesSent + m_report.stats.bytesReceived;
+    p.changes = m_report.changeCount();
+    p.errors = int(m_report.errors.size());
+    p.elapsedMs = m_runTimer.elapsed();
+    report(p);
+}
+
+QString SyncRun::summary() const
+{
+    const SyncReport &r = m_report;
+    const QString trigger = syncTriggerName(r.trigger);
+    QString head;
+    if (r.cancelled) {
+        head = u"%1 cancelled after %2 (%3); %4 change(s) were synced"_s.arg(tag(), formatMs(r.durationMs), trigger)
+                       .arg(r.changeCount());
+    } else if (r.syncError.isError()) {
+        head = u"%1 refused after %2 (%3): %4 — %5"_s.arg(tag(), formatMs(r.durationMs), trigger,
+                                                          errorCodeName(r.syncError.code), r.syncError.message);
+    } else if (r.remoteError.isError()) {
+        head = u"%1 failed after %2 (%3): %4 — %5"_s.arg(tag(), formatMs(r.durationMs), trigger,
+                                                         errorCodeName(r.remoteError.code), r.remoteError.message);
+    } else {
+        head = u"%1 ok in %2 (%3)"_s.arg(tag(), formatMs(r.durationMs), trigger);
+    }
+    QString counts;
+    const bool nothing =
+            r.changeCount() == 0 && r.errors.isEmpty() && r.pendingDeletions.isEmpty() && r.skipped.isEmpty();
+    if (nothing && (r.failed() || r.cancelled)) {
+        // A run that stopped early changed nothing: the head says why.
+    } else if (nothing) {
+        counts = u"nothing to change"_s;
+    } else {
+        counts = u"up %1, down %2, merged %3, deleted %4/%5, conflicts %6, errors %7"_s.arg(r.uploaded)
+                         .arg(r.downloaded)
+                         .arg(r.merged)
+                         .arg(r.deletedLocal)
+                         .arg(r.deletedRemote)
+                         .arg(r.conflicts.size())
+                         .arg(r.errors.size());
+        if (!r.skipped.isEmpty())
+            counts += u", skipped %1"_s.arg(r.skipped.size());
+        if (r.needsConfirmation)
+            counts += u", %1 deletion(s) wait for confirmation"_s.arg(r.pendingDeletions.size());
+    }
+    QStringList phases;
+    for (const SyncPhaseTime &p : r.phases) {
+        switch (p.phase) {
+        case SyncPhase::Connect:
+            if (p.durationMs >= 100)
+                phases.append(u"connect "_s + formatMs(p.durationMs));
+            break;
+        case SyncPhase::ListRemote:
+            if (r.stats.remoteFolders == 0) { // the listing did not complete
+                phases.append(u"remote "_s + formatMs(p.durationMs));
+                break;
+            }
+            phases.append(u"remote %1 (%2 folders, %3 files, %4)"_s.arg(formatMs(p.durationMs))
+                                  .arg(r.stats.remoteFolders)
+                                  .arg(r.stats.remoteFiles)
+                                  .arg(formatBytes(r.stats.listingBytes)));
+            break;
+        case SyncPhase::ListLocal:
+            phases.append(u"local %1 (%2 files)"_s.arg(formatMs(p.durationMs)).arg(p.items));
+            break;
+        case SyncPhase::Compare: phases.append(u"compare "_s + formatMs(p.durationMs)); break;
+        case SyncPhase::Transfer:
+            phases.append(
+                    u"transfer %1 (%2 paths, %3)"_s.arg(formatMs(p.durationMs)).arg(p.items).arg(formatBytes(p.bytes)));
+            break;
+        case SyncPhase::SaveState: phases.append(u"save "_s + formatMs(p.durationMs)); break;
+        }
+    }
+    QString line = counts.isEmpty() ? head : head + u": "_s + counts;
+    if (!phases.isEmpty())
+        line += u" | "_s + phases.join(u" · "_s);
+    const SyncStats &st = r.stats;
+    if (st.requests > 0) {
+        QStringList methods;
+        for (auto it = st.requestsByMethod.cbegin(); it != st.requestsByMethod.cend(); ++it)
+            methods.append(u"%1 %2"_s.arg(QString::fromLatin1(it.key())).arg(it.value()));
+        QString requests = u" | %1 requests (%2), avg %3"_s.arg(st.requests)
+                                   .arg(methods.join(u", "_s), formatMs(st.requestMs / st.requests));
+        if (st.failedRequests > 0)
+            requests += u", %1 failed"_s.arg(st.failedRequests);
+        if (st.timeouts > 0)
+            requests += u", %1 timed out"_s.arg(st.timeouts);
+        if (st.preconditionRetries > 0)
+            requests += u", %1 merged again (412)"_s.arg(st.preconditionRetries);
+        if (!st.slowest.isEmpty()) {
+            const SyncRequestTime &slow = st.slowest.first();
+            requests += u", slowest %1 %2 %3"_s.arg(QString::fromLatin1(slow.method),
+                                                    slow.path.isEmpty() ? u"(base)"_s : slow.path, formatMs(slow.ms));
+        }
+        if (!st.protocol.isEmpty())
+            requests += u", "_s + QString::fromLatin1(st.protocol);
+        line += requests;
+    }
+    return line;
 }
 
 template <typename F>
@@ -127,6 +340,7 @@ bool SyncRun::abandoned() const
 
 void SyncRun::report(const SyncProgress &progress)
 {
+    m_activityTimer.start();
     if (m_options.onProgress)
         m_options.onProgress(progress);
     if (m_engine)
@@ -140,6 +354,7 @@ void SyncRun::report(const SyncProgress &progress)
 void SyncRun::start()
 {
     m_report.started = now();
+    qCInfo(lcSync).noquote() << u"%1 started (%2)"_s.arg(tag(), syncTriggerName(m_report.trigger));
     if (!vault() || !vault()->isOpen() || !client() || !store()) {
         m_report.syncError = SyncError{SyncErrorCode::NotReady, u"Sync needs an open vault, a WebDAV client and a store"_s};
         if (m_engine)
@@ -154,9 +369,16 @@ void SyncRun::start()
         detail::post(m_engine, [self = shared_from_this()] { self->finish(); });
         return;
     }
-    report(SyncProgress{SyncProgress::Phase::Connecting, 0, 0, {}});
+    m_exchangeConnection = QObject::connect(client(), &WebDavClient::exchanged, m_engine,
+                                            [weak = weak_from_this()](const HttpExchange &exchange) {
+                                                if (const std::shared_ptr<SyncRun> self = weak.lock())
+                                                    self->onExchange(exchange);
+                                            });
+    beginPhase(SyncPhase::Connect);
+    progress(SyncProgress::Phase::Connecting);
     checkRemoteIdentity();
-    report(SyncProgress{SyncProgress::Phase::Listing, 0, 0, {}});
+    beginPhase(SyncPhase::ListRemote);
+    progress(SyncProgress::Phase::Listing, 0, 1);
     listRemote();
 }
 
@@ -184,8 +406,11 @@ void SyncRun::checkRemoteIdentity()
     const QString identity = client()->identity();
     if (meta.toObject().value(u"remote"_s).toString() == identity && meta.isObject())
         return;
-    if (!meta.isUndefined())
+    if (!meta.isUndefined()) {
+        qCInfo(lcSync).noquote()
+                << u"%1 account or folder changed: sync bookkeeping reset (first-sync rules apply)"_s.arg(tag());
         m_engine->resetState();
+    }
     store()->set(SyncEngine::metaKey(), QJsonObject{{u"remote"_s, identity}});
 }
 
@@ -197,6 +422,13 @@ void SyncRun::listRemote()
         const std::shared_ptr<SyncRun> self = weak.lock();
         return !self || self->m_cancelled || self->abandoned();
     };
+    options.onProgress = [weak = weak_from_this()](int done, int known, int entries) {
+        const std::shared_ptr<SyncRun> self = weak.lock();
+        if (!self || self->m_finished || self->abandoned())
+            return;
+        self->m_remoteEntries = entries;
+        self->progress(SyncProgress::Phase::Listing, done, known);
+    };
     client()->list(options, guarded([this](const ListResult &result) {
         if (m_cancelled || result.error.is(WebDavErrorCode::Cancelled)) {
             m_cancelled = true;
@@ -205,6 +437,7 @@ void SyncRun::listRemote()
         }
         if (result.error.is(WebDavErrorCode::NotFound)) {
             // First sync into a folder that does not exist yet.
+            qCInfo(lcSync).noquote() << u"%1 server folder missing: creating it"_s.arg(tag());
             client()->ensureBase(guarded([this](const WebDavError &error) {
                 if (error.isError()) {
                     m_report.remoteError = error;
@@ -226,12 +459,25 @@ void SyncRun::listRemote()
 
 void SyncRun::onListed(const QList<RemoteEntry> &entries)
 {
+    int folders = 1;
     for (const RemoteEntry &entry : entries) {
+        if (entry.isDir)
+            ++folders;
         if (!entry.isDir && isSyncablePath(entry.path))
             m_remote.insert(entry.path, entry);
     }
+    m_report.stats.remoteFolders = folders;
+    m_report.stats.remoteFiles = int(m_remote.size());
+    endPhase(folders);
+    beginPhase(SyncPhase::ListLocal);
+    progress(SyncProgress::Phase::ListingLocal);
     listLocal();
+    m_report.stats.localFiles = int(m_local.size());
+    endPhase(int(m_local.size()));
+    beginPhase(SyncPhase::Compare);
+    progress(SyncProgress::Phase::Comparing);
     loadStates();
+    m_report.stats.trackedFiles = int(m_states.size());
     if (m_cancelled) {
         finish();
         return;
@@ -241,6 +487,7 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         return;
     }
     guardMassDeletion();
+    endPhase(int(m_states.size()));
     processAll();
 }
 
@@ -338,8 +585,9 @@ void SyncRun::guardMassDeletion()
     m_holdDeletions = tripsMassDeletionGuard(localDeletions, countWithoutConfig(m_local))
                       || tripsMassDeletionGuard(remoteDeletions, countWithoutConfig(m_remote));
     if (m_holdDeletions) {
-        qCInfo(detail::lcSync).noquote()
-                << u"Mass deletion held back for confirmation: %1 local and %2 remote file(s) would be deleted"_s
+        qCInfo(lcSync).noquote()
+                << u"%1 mass deletion held back for confirmation: %2 local and %3 remote file(s) would be deleted"_s
+                           .arg(tag())
                            .arg(localDeletions)
                            .arg(remoteDeletions);
     }
@@ -357,7 +605,9 @@ void SyncRun::processAll()
     QStringList paths(all.cbegin(), all.cend());
     std::sort(paths.begin(), paths.end());
     m_total = static_cast<int>(paths.size());
-    report(SyncProgress{SyncProgress::Phase::Syncing, 0, m_total, {}});
+    m_report.stats.pathsChecked = m_total;
+    beginPhase(SyncPhase::Transfer);
+    progress(SyncProgress::Phase::Syncing, 0, m_total);
 
     const QList<QStringList> groups = groupByCase(
         paths, [this](const VaultPath &p) { return m_local.contains(p); },
@@ -383,26 +633,40 @@ void SyncRun::runGroup(const QStringList &group, qsizetype index, std::function<
         return;
     }
     const VaultPath path = group.at(index);
+    m_active.append(path);
     syncPath(path, guarded([this, group, index, groupDone, path](const Outcome &outcome) {
-        switch (outcome.kind) {
-        case Outcome::Kind::Done:
-        case Outcome::Kind::Skipped: break; // skipped: changed locally meanwhile, next sync
-        case Outcome::Kind::Failed: m_report.errors.append(SyncFileError{path, outcome.message}); break;
-        case Outcome::Kind::Fatal:
-            if (!m_report.remoteError.isError())
-                m_report.remoteError = outcome.error;
-            if (m_pool)
-                m_pool->stop();
-            break;
-        }
-        ++m_done;
-        report(SyncProgress{SyncProgress::Phase::Syncing, m_done, m_total, path});
-        if (outcome.kind == Outcome::Kind::Fatal) {
-            groupDone();
-            return;
-        }
-        runGroup(group, index + 1, groupDone);
-    }));
+                 m_active.removeOne(path);
+                 switch (outcome.kind) {
+                 case Outcome::Kind::Done:
+                 case Outcome::Kind::Skipped: break; // skipped: changed locally meanwhile, next sync
+                 case Outcome::Kind::Failed: {
+                     const SyncFileError error{path, logging::redact(outcome.message), outcome.code, outcome.status};
+                     m_report.errors.append(error);
+                     if (++m_loggedErrors <= kMaxLoggedErrors) {
+                         // A server answer is told by its code and status (the URL is in the record); a
+                         // local failure by its message.
+                         const QString detail =
+                                 error.status > 0 ? u" (HTTP %1)"_s.arg(error.status) : u" — "_s + error.message;
+                         qCWarning(lcSync).noquote()
+                                 << u"%1 %2 not synced: %3%4"_s.arg(tag(), path, error.code, detail);
+                     }
+                     break;
+                 }
+                 case Outcome::Kind::Fatal:
+                     if (!m_report.remoteError.isError())
+                         m_report.remoteError = outcome.error;
+                     if (m_pool)
+                         m_pool->stop();
+                     break;
+                 }
+                 ++m_done;
+                 progress(SyncProgress::Phase::Syncing, m_done, m_total, path);
+                 if (outcome.kind == Outcome::Kind::Fatal) {
+                     groupDone();
+                     return;
+                 }
+                 runGroup(group, index + 1, groupDone);
+             }));
 }
 
 void SyncRun::finish()
@@ -415,15 +679,37 @@ void SyncRun::finish()
         m_pool->stop();
         m_pool.reset();
     }
-    m_report.finished = now();
     m_report.cancelled = m_cancelled;
     std::sort(m_report.pendingDeletions.begin(), m_report.pendingDeletions.end(),
               [](const SyncChange &a, const SyncChange &b) { return a.path < b.path; });
     m_report.needsConfirmation = !m_report.pendingDeletions.isEmpty();
+    if (m_phase && m_phase->phase == SyncPhase::Transfer)
+        endPhase(m_done);
+    else
+        endPhase(0);
+    if (store()) {
+        beginPhase(SyncPhase::SaveState);
+        progress(SyncProgress::Phase::Saving, m_done, m_total);
+        if (!store()->flush())
+            qCWarning(lcSync).noquote() << tag() << "could not save the sync state:" << store()->errorString();
+        endPhase(0);
+    }
+    QObject::disconnect(m_exchangeConnection);
+    m_report.finished = now();
+    m_report.durationMs = m_runTimer.elapsed();
     if (!m_report.failed() && !m_cancelled)
-        report(SyncProgress{SyncProgress::Phase::Done, m_done, m_total, {}});
-    if (store() && !store()->flush())
-        qCWarning(detail::lcSync).noquote() << "Could not save the sync state:" << store()->errorString();
+        progress(SyncProgress::Phase::Done, m_done, m_total);
+    if (m_report.remoteError.isError())
+        m_report.remoteError.message = logging::redact(m_report.remoteError.message);
+    if (m_report.syncError.isError())
+        m_report.syncError.message = logging::redact(m_report.syncError.message);
+    if (m_loggedErrors > kMaxLoggedErrors)
+        qCWarning(lcSync).noquote() << u"%1 … and %2 more file(s) not synced"_s.arg(tag()).arg(m_loggedErrors
+                                                                                               - kMaxLoggedErrors);
+    if (m_report.failed() && !m_cancelled)
+        qCWarning(lcSync).noquote() << summary();
+    else
+        qCInfo(lcSync).noquote() << summary();
     if (m_engine)
         m_engine->runFinished(m_report);
 }
@@ -447,6 +733,9 @@ void SyncRun::syncPath(const VaultPath &path, Done done)
     const qint64 maxSize = m_engine->maxFileSize();
     if ((localStat && localStat->size > maxSize) || (ctx.remote && ctx.remote->size > maxSize)) {
         m_report.skipped.append(path);
+        const qint64 size = qMax(localStat ? localStat->size : 0, ctx.remote ? ctx.remote->size : 0);
+        qCInfo(lcSync).noquote() << u"%1 skipped %2: %3 is above the %4 limit"_s.arg(tag(), path, formatBytes(size),
+                                                                                     formatBytes(maxSize));
         done(Outcome::done());
         return;
     }
@@ -458,7 +747,7 @@ void SyncRun::syncPath(const VaultPath &path, Done done)
             return;
         }
         if (!read.error.isEmpty()) {
-            done(Outcome::failed(read.error));
+            done(Outcome::failed(u"read-failed"_s, read.error));
             return;
         }
         ctx.snap = read.snap;
@@ -567,10 +856,12 @@ std::optional<SyncRun::Outcome> SyncRun::checkLocalUnchanged(const VaultPath &pa
             });
             if (other != files.cend()) {
                 return Outcome::failed(
-                    u"%1: a local file whose name differs only in letter case exists (%2); rename one of them"_s
-                        .arg(path, other->path));
+                        u"case-clash"_s,
+                        u"%1: a local file whose name differs only in letter case exists (%2); rename one of them"_s
+                                .arg(path, other->path));
             }
-            return Outcome::failed(u"%1: a local file exists that the vault has not seen yet; will retry"_s.arg(path));
+            return Outcome::failed(u"unseen-local-file"_s,
+                                   u"%1: a local file exists that the vault has not seen yet; will retry"_s.arg(path));
         }
         return std::nullopt;
     }
@@ -686,7 +977,7 @@ void SyncRun::upload(const PathCtx &ctx, Done done)
     QString error;
     const std::optional<QByteArray> bytes = localBytes(ctx.path, *ctx.snap, &error);
     if (!bytes) {
-        done(Outcome::failed(error));
+        done(Outcome::failed(u"read-failed"_s, error));
         return;
     }
     PutOptions options;
@@ -698,6 +989,7 @@ void SyncRun::upload(const PathCtx &ctx, Done done)
     client()->put(ctx.path, *bytes, options, guarded([this, ctx, done](const PutResult &result) {
         if (result.error.is(WebDavErrorCode::Precondition)) {
             // Someone changed / created the remote file since we listed it: compare and merge.
+            notePreconditionRetry(ctx.path, 1);
             PathCtx fresh = ctx;
             fresh.remote.reset();
             reconcile(fresh, 1, done);
@@ -741,7 +1033,7 @@ void SyncRun::download(const PathCtx &ctx, Done done)
         }
         // The exact remote bytes (BOM, line endings, legacy encodings stay as they are).
         if (!vault()->writeBinary(ctx.path, remote.data, ChangeSource::Sync)) {
-            done(Outcome::failed(vault()->errorString()));
+            done(Outcome::failed(u"write-failed"_s, vault()->errorString()));
             return;
         }
         saveState(ctx.path, content.hash, remote.version, content.text, std::nullopt);
@@ -753,7 +1045,8 @@ void SyncRun::download(const PathCtx &ctx, Done done)
 void SyncRun::reconcile(const PathCtx &ctx, int attempt, Done done)
 {
     if (attempt >= kMaxMergeAttempts) {
-        done(Outcome::failed(u"%1 keeps changing on the server; will retry on the next sync"_s.arg(ctx.path)));
+        done(Outcome::failed(errorCodeName(SyncErrorCode::RemoteBusy),
+                             u"%1 keeps changing on the server; will retry on the next sync"_s.arg(ctx.path)));
         return;
     }
     fetchRemote(ctx.path, ctx.remote, [this, ctx, attempt, done](const RemoteContent &remote) {
@@ -775,6 +1068,7 @@ void SyncRun::reconcile(const PathCtx &ctx, int attempt, Done done)
 
 void SyncRun::reconcileAgain(const PathCtx &ctx, int attempt, Done done)
 {
+    notePreconditionRetry(ctx.path, attempt);
     // The remote file changed again while we merged: start over with fresh local content.
     const std::optional<FileStat> current = vault()->stat(ctx.path);
     if (!current) {
@@ -787,7 +1081,7 @@ void SyncRun::reconcileAgain(const PathCtx &ctx, int attempt, Done done)
         return;
     }
     if (!fresh.error.isEmpty()) {
-        done(Outcome::failed(fresh.error));
+        done(Outcome::failed(u"read-failed"_s, fresh.error));
         return;
     }
     PathCtx next = ctx;
@@ -832,7 +1126,7 @@ void SyncRun::publishMerge(const PathCtx &ctx, const RemoteContent &remote, cons
         return;
     }
     if (merged != snap.text && !vault()->writeText(ctx.path, merged, ChangeSource::Sync)) {
-        done(Outcome::failed(vault()->errorString()));
+        done(Outcome::failed(u"write-failed"_s, vault()->errorString()));
         return;
     }
     const SyncAction action = merged == remoteText ? SyncAction::Download
@@ -903,13 +1197,13 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
     bool created = false;
     const std::optional<VaultPath> copy = keepRemoteCopy(ctx.path, remote.data, &created, &error);
     if (!copy) {
-        done(Outcome::failed(error));
+        done(Outcome::failed(u"conflict-copy-failed"_s, error));
         return;
     }
     // 2. The local version wins at the original path.
     const std::optional<QByteArray> bytes = localBytes(ctx.path, *ctx.snap, &error);
     if (!bytes) {
-        done(Outcome::failed(error));
+        done(Outcome::failed(u"read-failed"_s, error));
         return;
     }
     PutOptions options;
@@ -930,6 +1224,8 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
                           saveState(ctx.path, snap.hash, version,
                                     snap.isText ? std::optional<QString>(snap.text) : std::nullopt, snap.stat);
                           record(ctx.path, SyncAction::Conflict);
+                          qCInfo(lcSync).noquote()
+                                  << u"%1 conflict in %2: the server's version kept as %3"_s.arg(tag(), ctx.path, copy);
                           // 3. Upload a new copy right away so other devices see both versions. An
                           //    older copy is a normal local file of this run (or the next).
                           if (created)
@@ -950,8 +1246,8 @@ void SyncRun::uploadConflictCopy(const VaultPath &copy, const QByteArray &data, 
                 done(Outcome::fromError(result.error));
                 return;
             }
-            qCWarning(detail::lcSync).noquote()
-                << "The conflict copy" << copy << "will be uploaded on the next sync:" << result.error.message;
+            qCWarning(lcSync).noquote() << tag() << "the conflict copy" << copy
+                                        << "will be uploaded on the next sync:" << result.error.message;
             done(Outcome::done());
             return;
         }
@@ -971,6 +1267,7 @@ void SyncRun::deleteRemote(const PathCtx &ctx, Done done)
     client()->remove(ctx.path, options, guarded([this, ctx, done](const WebDavError &error) {
         if (error.is(WebDavErrorCode::Precondition)) {
             // Changed on the server since we listed it: the modification wins, restore it locally.
+            ++m_report.stats.preconditionRetries;
             PathCtx fresh = ctx;
             fresh.snap.reset();
             fresh.remote.reset();
@@ -994,7 +1291,7 @@ void SyncRun::deleteLocal(const PathCtx &ctx, Done done)
         return;
     }
     if (!vault()->remove(ctx.path, ChangeSource::Sync)) {
-        done(Outcome::failed(vault()->errorString()));
+        done(Outcome::failed(u"write-failed"_s, vault()->errorString()));
         return;
     }
     forget(ctx.path);

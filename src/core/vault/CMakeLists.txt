@@ -10,4 +10,4 @@ brulion_add_core_module(vault
         history.h history.cpp
         localstore.h localstore.cpp
         vaultutil_p.h vaultutil.cpp
-    DEPS util text)
+    DEPS util text log)

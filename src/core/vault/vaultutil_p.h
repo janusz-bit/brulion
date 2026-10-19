@@ -2,6 +2,7 @@
 // unit-tested in tst_vault_paths) and the module's logging category. Not part of the public API.
 #pragma once
 
+#include "log/categories.h"
 #include "types.h"
 
 #include <QDateTime>
@@ -12,7 +13,8 @@
 
 namespace brulion {
 
-Q_DECLARE_LOGGING_CATEGORY(lcVault)
+/// "brulion.vault" (the log module's category).
+using logging::lcVault;
 
 namespace vaultutil {
 

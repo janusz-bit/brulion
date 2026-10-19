@@ -1,11 +1,13 @@
 #include "sync/webdavclient.h"
 
+#include "log/slowscope.h"
 #include "sync/pool_p.h"
 #include "sync/request_p.h"
 #include "sync/url.h"
 #include "sync/util_p.h"
 #include "util/paths.h"
 
+#include <QPointer>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -24,6 +26,8 @@ using Header = QPair<QByteArray, QByteArray>;
 constexpr int kUnknownSizeFactor = 10;
 /// Bound for creating missing ancestors of the base URL.
 constexpr int kMaxBaseDepth = 32;
+/// Answers slower than this get an info line in the log (normal mode).
+constexpr qint64 kSlowAnswerMs = 5000;
 
 /// "https://h/a/b/" -> "https://h/a/"; std::nullopt at the root.
 std::optional<QString> parentUrl(const QString &url)
@@ -60,6 +64,8 @@ struct WebDavClient::ListRun {
     QList<RemoteEntry> entries;
     QSet<VaultPath> seen;
     WebDavError error;
+    int foldersDone = 0;
+    int foldersKnown = 1; ///< the base folder
 };
 
 WebDavClient::WebDavClient(const QString &baseUrl, const QString &username, const QString &password,
@@ -68,6 +74,8 @@ WebDavClient::WebDavClient(const QString &baseUrl, const QString &username, cons
     , m_baseUrl(trimTrailingSlashes(baseUrl.trimmed()))
     , m_username(username)
     , m_authorization(basicAuth(username, password))
+    , m_secretPassword(password)
+    , m_secretToken(QString::fromLatin1(m_authorization.mid(m_authorization.indexOf(' ') + 1)))
     , m_transport(transport)
     , m_basePathname(urlPathname(m_baseUrl))
 {
@@ -93,6 +101,37 @@ void WebDavClient::setMinBytesPerSecond(qint64 bytesPerSecond)
 void WebDavClient::setListConcurrency(int count)
 {
     m_listConcurrency = qMax(1, count);
+}
+
+void WebDavClient::setLogTag(const QString &tag)
+{
+    m_logTag = tag;
+}
+
+qint64 WebDavClient::idleMs() const
+{
+    if (m_inFlight.isEmpty() || !m_lastActivity.isValid())
+        return 0;
+    return m_lastActivity.elapsed();
+}
+
+QStringList WebDavClient::inFlight(int max) const
+{
+    QStringList out;
+    for (auto it = m_inFlight.cbegin(); it != m_inFlight.cend() && out.size() < max; ++it)
+        out.append(it.value());
+    return out;
+}
+
+QString WebDavClient::relativePath(const QUrl &url) const
+{
+    const QString full = url.toString(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment);
+    const std::optional<QString> rel = relativeTo(urlPathname(full), m_basePathname);
+    if (!rel)
+        return full;
+    if (!rel->isEmpty() && url.path().endsWith(u'/'))
+        return *rel + u'/';
+    return *rel;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -148,6 +187,7 @@ void WebDavClient::list(const ListOptions &options, ListCallback done)
                 }
                 const VaultPath folder = paths::normalize(raw);
                 m_knownDirs.insert(folder);
+                ++run->foldersDone;
                 const QString requestUrl = joinUrl(m_baseUrl, raw, true);
                 const auto recurse = weakList.lock();
                 for (const DavResource &res : resources) {
@@ -163,10 +203,14 @@ void WebDavClient::list(const ListOptions &options, ListCallback done)
                     run->entries.append(entryFor(path, res));
                     if (res.isCollection) {
                         m_knownDirs.insert(path);
-                        if (recurse && !(run->options.skipDir && run->options.skipDir(path)))
+                        if (recurse && !(run->options.skipDir && run->options.skipDir(path))) {
+                            ++run->foldersKnown;
                             (*recurse)(*rawRel, false);
+                        }
                     }
                 }
+                if (run->options.onProgress)
+                    run->options.onProgress(run->foldersDone, run->foldersKnown, int(run->entries.size()));
                 jobDone();
             });
         });
@@ -363,7 +407,53 @@ void WebDavClient::request(const QByteArray &method, const QString &url, QList<Q
     req.headers += headers;
     req.body = body;
     req.timeoutMs = timeoutMs;
-    detail::sendRequest(m_transport, this, req, std::move(done));
+    const quint64 id = ++m_nextRequestId;
+    if (m_inFlight.isEmpty())
+        m_lastActivity.start(); // idle time counts from the first open request
+    const QString shown = relativePath(req.url);
+    m_inFlight.insert(id, QString::fromLatin1(method) + u' ' + (shown.isEmpty() ? u"(base)"_s : shown));
+    req.onProgress = [self = QPointer<WebDavClient>(this)](qint64, qint64) {
+        if (self)
+            self->m_lastActivity.start();
+    };
+    detail::sendRequest(m_transport, this, req, std::move(done), [this, id](const HttpExchange &exchange) {
+        m_inFlight.remove(id);
+        m_lastActivity.start();
+        logExchange(exchange);
+        Q_EMIT exchanged(exchange);
+    });
+}
+
+void WebDavClient::logExchange(const HttpExchange &exchange) const
+{
+    const QString prefix = m_logTag.isEmpty() ? QString() : m_logTag + u' ';
+    const QString path = relativePath(exchange.url);
+    const QString what = QString::fromLatin1(exchange.method) + u' ' + (path.isEmpty() ? u"(base)"_s : path);
+    if (exchange.status == 0) {
+        if (exchange.timedOut) {
+            qCWarning(detail::lcNet).noquote()
+                    << u"%1%2 timed out after %3"_s.arg(prefix, what, logging::formatMs(exchange.elapsedMs));
+        } else {
+            qCWarning(detail::lcNet).noquote() << u"%1%2 failed after %3: %4"_s.arg(
+                    prefix, what, logging::formatMs(exchange.elapsedMs),
+                    exchange.networkError.isEmpty() ? u"no response"_s : exchange.networkError);
+        }
+        return;
+    }
+    if (exchange.elapsedMs >= kSlowAnswerMs) {
+        qCInfo(detail::lcNet).noquote() << u"%1slow answer: %2 -> %3 in %4 (%5)"_s.arg(
+                prefix, what, QString::number(exchange.status), logging::formatMs(exchange.elapsedMs),
+                logging::formatBytes(exchange.bytesSent + exchange.bytesReceived));
+        return;
+    }
+    if (!detail::lcNet().isDebugEnabled())
+        return;
+    QString details = u"sent %1, received %2"_s.arg(logging::formatBytes(exchange.bytesSent),
+                                                    logging::formatBytes(exchange.bytesReceived));
+    if (!exchange.protocol.isEmpty())
+        details += u", "_s + QString::fromLatin1(exchange.protocol);
+    qCDebug(detail::lcNet).noquote() << u"%1%2 -> %3 in %4 (%5)"_s.arg(prefix, what, QString::number(exchange.status),
+                                                                       logging::formatMs(exchange.elapsedMs), details);
 }
 
 WebDavError WebDavClient::check(const HttpResponse &response, const QByteArray &method, const QString &url,
@@ -398,6 +488,12 @@ void WebDavClient::propfindRaw(const QString &rawPath, int depth, PropfindCallba
                 }
                 const MultistatusResult parsed = parseMultistatus(response.body);
                 if (!parsed.ok()) {
+                    const QString path = relativePath(QUrl(url, QUrl::TolerantMode));
+                    qCInfo(detail::lcNet).noquote()
+                            << u"%1PROPFIND %2 -> %3 %4: not a WebDAV answer (a login page? check the server address)"_s
+                                       .arg(m_logTag.isEmpty() ? QString() : m_logTag + u' ',
+                                            path.isEmpty() ? u"(base)"_s : path, QString::number(response.status),
+                                            QString::fromLatin1(response.header("content-type").left(60)));
                     done(WebDavError{WebDavErrorCode::Parse, response.status, parsed.error, url}, {});
                     return;
                 }

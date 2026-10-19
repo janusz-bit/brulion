@@ -3,16 +3,19 @@
 #include "fakewebdavserver.h"
 #include "synctest.h"
 
+#include "log/redact.h"
 #include "sync/http.h"
 #include "sync/webdavclient.h"
 
+#include <QLoggingCategory>
 #include <QNetworkAccessManager>
-#include <QRegularExpression>
-#include <QTimeZone>
 #include <QNetworkProxy>
+#include <QRegularExpression>
+#include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTest>
+#include <QTimeZone>
 #include <QTimer>
 
 #include <limits>
@@ -828,6 +831,167 @@ private Q_SLOTS:
         QVERIFY2(!r.error.isError(), qPrintable(r.error.message));
         QCOMPARE(r.entries, (QList<RemoteEntry>{RemoteEntry{u"ż.md"_s, false, u"7"_s, 0, 2}}));
         QCOMPARE(http.requests.first().headers.value("authorization"), sync::basicAuth(u"jan"_s, u"hasło"_s));
+    }
+
+    // --- instrumentation: exchanges, in-flight requests, listing progress, log lines ----------
+    void emitsAnExchangePerRequest()
+    {
+        Setup s;
+        s.server.putText(u"Notatki/Dziennik/2026-10-14.md"_s, u"wpis"_s);
+        QList<HttpExchange> exchanges;
+        QObject::connect(&s.client, &WebDavClient::exchanged, &s.client,
+                         [&](const HttpExchange &e) { exchanges.append(e); });
+        const ListResult l = await<ListResult>([&](auto cb) { s.client.list({}, cb); });
+        QVERIFY(!l.error.isError());
+        const GetResult g = await<GetResult>([&](auto cb) { s.client.get(u"Dziennik/2026-10-14.md"_s, {}, cb); });
+        QCOMPARE(g.data, QByteArray("wpis"));
+        const PutResult p = await<PutResult>([&](auto cb) { s.client.put(u"Zażółć.md"_s, "gęślą", {}, cb); });
+        QVERIFY(!p.error.isError());
+        QCOMPARE(exchanges.size(), int(s.server.logSize()));
+        QCOMPARE(exchanges.at(0).method, QByteArray("PROPFIND"));
+        QCOMPARE(exchanges.at(0).status, 207);
+        QVERIFY(exchanges.at(0).bytesReceived > 0);
+        QVERIFY(exchanges.at(0).bytesSent > 0); // the PROPFIND body
+        QVERIFY(exchanges.at(0).url.userInfo().isEmpty());
+        const HttpExchange &get = exchanges.at(2);
+        QCOMPARE(get.method, QByteArray("GET"));
+        QCOMPARE(get.bytesReceived, 4);
+        QCOMPARE(s.client.relativePath(get.url), u"Dziennik/2026-10-14.md"_s);
+        QCOMPARE(s.client.relativePath(exchanges.at(1).url), u"Dziennik/"_s);
+        QCOMPARE(s.client.relativePath(exchanges.at(0).url), QString());
+        const HttpExchange &put = exchanges.last();
+        QCOMPARE(put.method, QByteArray("PUT"));
+        QCOMPARE(put.bytesSent, QByteArray("gęślą").size());
+        QCOMPARE(s.client.relativePath(put.url), u"Zażółć.md"_s);
+        for (const HttpExchange &e : exchanges)
+            QVERIFY(e.elapsedMs >= 0);
+        QCOMPARE(s.client.requestsInFlight(), 0);
+        QCOMPARE(s.client.idleMs(), 0);
+        QVERIFY(s.client.inFlight().isEmpty());
+        // Elsewhere than below the base: the full URL without user info.
+        QCOMPARE(s.client.relativePath(QUrl(u"https://jan:x@other.example/a"_s)), u"https://other.example/a"_s);
+    }
+
+    void tracksRequestsInFlight()
+    {
+        Setup s;
+        s.server.setLatency("GET", 300);
+        s.server.putText(u"Notatki/a.md"_s, u"a"_s);
+        s.server.putText(u"Notatki/Folder z ę/b.md"_s, u"b"_s);
+        std::optional<GetResult> a;
+        std::optional<GetResult> b;
+        s.client.get(u"a.md"_s, {}, [&](const GetResult &r) { a = r; });
+        s.client.get(u"Folder z ę/b.md"_s, {}, [&](const GetResult &r) { b = r; });
+        QCOMPARE(s.client.requestsInFlight(), 2);
+        QCOMPARE(s.client.inFlight(), (QStringList{u"GET a.md"_s, u"GET Folder z ę/b.md"_s}));
+        QCOMPARE(s.client.inFlight(1), QStringList{u"GET a.md"_s});
+        QTest::qWait(50);
+        QVERIFY(s.client.idleMs() >= 40);
+        QVERIFY(waitFor([&] { return a && b; }));
+        QCOMPARE(s.client.requestsInFlight(), 0);
+        QCOMPARE(s.client.idleMs(), 0);
+    }
+
+    void reportsListingProgress()
+    {
+        Setup s;
+        for (const QString &f : {u"A"_s, u"B"_s, u"A/Ż"_s})
+            s.server.mkdir(u"Notatki/"_s + f);
+        s.server.putText(u"Notatki/A/Ż/x.md"_s, u"x"_s);
+        QList<std::tuple<int, int, int>> steps;
+        ListOptions options;
+        options.onProgress = [&](int done, int known, int entries) { steps.append({done, known, entries}); };
+        const ListResult l = await<ListResult>([&](auto cb) { s.client.list(options, cb); });
+        QVERIFY(!l.error.isError());
+        QCOMPARE(steps.size(), 4);
+        QCOMPARE(std::get<0>(steps.last()), 4);
+        QCOMPARE(std::get<1>(steps.last()), 4);
+        QCOMPARE(std::get<2>(steps.last()), 4); // A, B, A/Ż, A/Ż/x.md
+        for (const auto &[done, known, entries] : steps)
+            QVERIFY(done <= known);
+    }
+
+    void logsEachRequestWithoutSecrets()
+    {
+        static QStringList lines;
+        lines.clear();
+        QLoggingCategory::setFilterRules(u"brulion.net.debug=true"_s);
+        const QtMessageHandler previous =
+                qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &message) {
+                    if (context.category && QByteArrayView(context.category) == "brulion.net")
+                        lines.append(QString::number(int(type)) + u' ' + message);
+                });
+        {
+            Setup s;
+            s.client.setLogTag(u"#42"_s);
+            s.server.putText(u"Notatki/Dziennik/a.md"_s, u"wpis"_s);
+            await<ListResult>([&](auto cb) { s.client.list({}, cb); });
+            s.server.hooks.append([](const HttpRequest &request, const QString &) -> std::optional<HttpResponse> {
+                if (request.method == "GET")
+                    return FakeWebDavServer::noResponse();
+                return std::nullopt;
+            });
+            s.client.setTimeout(30);
+            await<GetResult>([&](auto cb) { s.client.get(u"Dziennik/a.md"_s, GetOptions{qint64(4)}, cb); });
+            s.server.hooks = {[](const HttpRequest &, const QString &) -> std::optional<HttpResponse> {
+                HttpResponse r = FakeWebDavServer::status(200);
+                r.headers.insert("content-type", "text/html; charset=UTF-8");
+                r.body = "<html>login</html>";
+                return r;
+            }};
+            await<WebDavTestResult>([&](auto cb) { s.client.test(cb); });
+        }
+        qInstallMessageHandler(previous);
+        QLoggingCategory::setFilterRules(QString());
+        const QString all = lines.join(u'\n');
+        QVERIFY2(all.contains(QRegularExpression(
+                         u"^0 #42 PROPFIND \\(base\\) -> 207 in \\d+ ms \\(sent \\d+ B, received [0-9.]+ (B|KB)\\)$"_s,
+                         QRegularExpression::MultilineOption)),
+                 qPrintable(all));
+        QVERIFY2(all.contains(u"#42 PROPFIND Dziennik/ -> 207"_s), qPrintable(all));
+        QVERIFY2(all.contains(u"#42 GET Dziennik/a.md timed out after"_s), qPrintable(all));
+        QVERIFY2(all.contains(u"#42 PROPFIND (base) -> 200 text/html; charset=UTF-8: not a WebDAV answer"_s),
+                 qPrintable(all));
+        QVERIFY(!all.contains(u"hasło"_s));
+        QVERIFY(!all.contains(u"Authorization"_s, Qt::CaseInsensitive));
+        QVERIFY(!all.contains(u"wpis"_s)); // never bodies
+    }
+
+    void registersItsSecrets()
+    {
+        const int before = logging::secretCount();
+        {
+            WebDavClient client(u"https://h/dav"_s, u"jan"_s, u"Zażółć-Gęślą-42"_s, nullptr);
+            QCOMPARE(logging::secretCount(), before + 2);
+            QCOMPARE(logging::redact(u"x Zażółć-Gęślą-42 y"_s), u"x *** y"_s);
+            const QString token = QString::fromLatin1(sync::basicAuth(u"jan"_s, u"Zażółć-Gęślą-42"_s).mid(6));
+            QCOMPARE(logging::redact(token), u"***"_s);
+        }
+        QCOMPARE(logging::secretCount(), before);
+    }
+
+    void networkTransportReportsProtocolAndProgress()
+    {
+        MiniHttpServer http;
+        http.handler = [](const MiniHttpServer::Request &) { return rawResponse(200, "OK", QByteArray(5000, 'x')); };
+        QNetworkAccessManager manager;
+        manager.setProxy(QNetworkProxy::NoProxy);
+        NetworkHttpTransport transport(&manager);
+        HttpRequest request;
+        request.method = "PUT";
+        request.url = QUrl(http.url(u"/dav/a.md"_s));
+        request.body = QByteArray(3000, 'y');
+        qint64 lastSent = 0;
+        qint64 lastReceived = 0;
+        request.onProgress = [&](qint64 sent, qint64 received) {
+            lastSent = qMax(lastSent, sent);
+            lastReceived = qMax(lastReceived, received);
+        };
+        const HttpResponse r = await<HttpResponse>([&](auto cb) { transport.send(request, cb); });
+        QCOMPARE(r.status, 200);
+        QCOMPARE(r.protocol, QByteArray("http/1.1"));
+        QCOMPARE(lastReceived, 5000);
+        QCOMPARE(lastSent, 3000);
     }
 };
 

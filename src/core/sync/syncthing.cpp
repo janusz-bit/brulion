@@ -1,7 +1,9 @@
 #include "sync/syncthing.h"
 
+#include "log/slowscope.h"
 #include "sync/request_p.h"
 #include "sync/url.h"
+#include "sync/util_p.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -154,6 +156,7 @@ QString stignoreTemplate()
 SyncthingClient::SyncthingClient(const QString &apiKey, HttpTransport *transport, const QString &url, QObject *parent)
     : QObject(parent)
     , m_apiKey(apiKey)
+    , m_secretApiKey(apiKey)
     , m_transport(transport)
     , m_url(trimTrailingSlashes(url.trimmed()))
 {
@@ -170,25 +173,34 @@ void SyncthingClient::getJson(const QString &path, JsonCallback done)
     request.url = QUrl(m_url + path, QUrl::TolerantMode);
     request.headers = {{"X-API-Key", m_apiKey.toUtf8()}, {"Accept", "application/json"}};
     request.timeoutMs = m_timeoutMs;
-    detail::sendRequest(m_transport, this, request, [this, path, done = std::move(done)](const HttpResponse &response) {
-        if (response.status == 0) {
-            done({}, SyncthingError{0, u"Syncthing is not reachable at %1: %2"_s.arg(m_url, response.networkError)});
-            return;
-        }
-        if (response.status < 200 || response.status >= 300) {
-            const QString hint = response.status == 401 || response.status == 403 ? u" (wrong API key?)"_s : QString();
-            done({}, SyncthingError{response.status,
-                                    u"GET %1 failed: HTTP %2%3"_s.arg(path, QString::number(response.status), hint)});
-            return;
-        }
-        QJsonParseError error;
-        const QJsonDocument doc = QJsonDocument::fromJson(response.body, &error);
-        if (error.error != QJsonParseError::NoError) {
-            done({}, SyncthingError{response.status, u"GET %1: invalid JSON"_s.arg(path)});
-            return;
-        }
-        done(doc, {});
-    });
+    detail::sendRequest(
+            m_transport, this, request,
+            [this, path, done = std::move(done)](const HttpResponse &response) {
+                if (response.status == 0) {
+                    done({}, SyncthingError{
+                                     0, u"Syncthing is not reachable at %1: %2"_s.arg(m_url, response.networkError)});
+                    return;
+                }
+                if (response.status < 200 || response.status >= 300) {
+                    const QString hint =
+                            response.status == 401 || response.status == 403 ? u" (wrong API key?)"_s : QString();
+                    done({}, SyncthingError{response.status, u"GET %1 failed: HTTP %2%3"_s.arg(
+                                                                     path, QString::number(response.status), hint)});
+                    return;
+                }
+                QJsonParseError error;
+                const QJsonDocument doc = QJsonDocument::fromJson(response.body, &error);
+                if (error.error != QJsonParseError::NoError) {
+                    done({}, SyncthingError{response.status, u"GET %1: invalid JSON"_s.arg(path)});
+                    return;
+                }
+                done(doc, {});
+            },
+            [](const HttpExchange &exchange) {
+                qCDebug(detail::lcNet).noquote() << u"syncthing GET %1 -> %2 in %3"_s.arg(
+                        exchange.url.path(), exchange.status ? QString::number(exchange.status) : exchange.networkError,
+                        logging::formatMs(exchange.elapsedMs));
+            });
 }
 
 void SyncthingClient::ping(std::function<void(bool)> done)

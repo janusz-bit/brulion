@@ -76,6 +76,9 @@ public:
     bool cancelCompletes = true; ///< cancelSync() finishes a pending run (cancelled) right away
     SyncRunOptions lastOptions;
     std::function<SyncReport()> result;
+    SyncActivity act; ///< what activity() reports
+
+    SyncActivity activity() const override { return act; }
 
     void startSync(const SyncRunOptions &options, SyncDoneCallback done) override
     {
@@ -467,7 +470,8 @@ private Q_SLOTS:
         Fixture f;
         f.runner.result = [] {
             SyncReport r;
-            r.errors = {SyncFileError{u"zły.md"_s, u"HTTP 500"_s}, SyncFileError{u"b.md"_s, u"x"_s}};
+            r.errors = {SyncFileError{u"zły.md"_s, u"HTTP 500"_s, u"server"_s, 500},
+                        SyncFileError{u"b.md"_s, u"x"_s, u"http"_s, 0}};
             return r;
         };
         QSignalSpy synced(&f.scheduler, &SyncScheduler::synced);
@@ -577,15 +581,26 @@ private Q_SLOTS:
     void passesProgressIntoTheStatus()
     {
         Fixture f;
-        f.runner.result = [&f] {
-            f.runner.lastOptions.onProgress(SyncProgress{SyncProgress::Phase::Syncing, 1, 3, u"a.md"_s});
+        SyncProgress progress;
+        progress.phase = SyncProgress::Phase::Syncing;
+        progress.done = 1;
+        progress.total = 3;
+        progress.path = u"a.md"_s;
+        f.runner.result = [&f, progress] {
+            f.runner.lastOptions.onProgress(progress);
             return SyncReport{};
         };
+        // Progress goes to progressChanged, not statusChanged (the UI throttles it).
+        QList<SyncStatus> seenOnProgress;
+        QObject::connect(&f.scheduler, &SyncScheduler::progressChanged, &f.scheduler,
+                         [&] { seenOnProgress.append(f.scheduler.status()); });
         f.scheduler.syncNow();
-        bool seen = false;
+        QCOMPARE(seenOnProgress.size(), 1);
+        QVERIFY(seenOnProgress.first().progress);
+        QCOMPARE(seenOnProgress.first().progress->path, u"a.md"_s);
+        QCOMPARE(seenOnProgress.first().state, SyncState::Syncing);
         for (const SyncStatus &s : f.statuses)
-            seen = seen || (s.progress && s.progress->path == u"a.md"_s && s.state == SyncState::Syncing);
-        QVERIFY(seen);
+            QVERIFY(!s.progress); // never through statusChanged
         QVERIFY(!f.scheduler.status().progress);
     }
 
@@ -676,6 +691,235 @@ private Q_SLOTS:
         QVERIFY(!confirmedDone);
         f.runner.release();
         QVERIFY(confirmedDone);
+    }
+
+    // ---- Triggers, runFinished, retry status, stall watchdog --------------------------------
+
+    void reportsWhyEachRunStarted()
+    {
+        Fixture f(300'000, 20'000);
+        QList<SyncTrigger> started;
+        QObject::connect(&f.scheduler, &SyncScheduler::runStarted, &f.scheduler,
+                         [&](SyncTrigger t) { started.append(t); });
+        f.scheduler.start();
+        f.timers->advance(0);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Start);
+        QCOMPARE(f.scheduler.status().trigger, SyncTrigger::Start);
+        f.timers->advance(300'000);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Timer);
+        f.scheduler.notifyLocalChange();
+        f.timers->advance(20'000);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::LocalChange);
+        f.scheduler.networkOnline();
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::NetworkBack);
+        f.timers->advance(61'000);
+        f.scheduler.setAppActive(true);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Foreground);
+        f.scheduler.notifyLocalChange();
+        f.scheduler.setAppActive(false);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Background);
+        f.scheduler.syncNow();
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Manual);
+        f.scheduler.syncNowConfirmingDeletions();
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Confirmation);
+        f.runner.result = [] { return failedReport(WebDavErrorCode::Timeout, 0, u"PROPFIND timed out"_s); };
+        f.scheduler.syncNow();
+        f.runner.result = nullptr;
+        f.timers->advance(30'000);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Retry);
+        QCOMPARE(started.size(), f.runner.calls);
+        QCOMPARE(started.first(), SyncTrigger::Start);
+        f.scheduler.stop();
+        QCOMPARE(syncTriggerName(SyncTrigger::LocalChange), u"edit"_s);
+        for (int i = int(SyncTrigger::Unknown); i <= int(SyncTrigger::Confirmation); ++i)
+            QCOMPARE(syncTriggerFromName(syncTriggerName(SyncTrigger(i))), SyncTrigger(i));
+        QCOMPARE(syncTriggerFromName(u"nope"), std::nullopt);
+    }
+
+    void aChangeDuringARunReRunsAsAnEdit()
+    {
+        Fixture f(300'000, 20'000);
+        f.runner.autoComplete = false;
+        f.scheduler.start();
+        f.timers->advance(0);
+        f.scheduler.notifyLocalChange();
+        f.runner.release();
+        f.timers->advance(20'000);
+        QCOMPARE(f.runner.calls, 2);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::LocalChange);
+        f.scheduler.stop();
+    }
+
+    void runFinishedForEveryRun()
+    {
+        Fixture f;
+        QList<QPair<SyncReport, bool>> finished;
+        QObject::connect(&f.scheduler, &SyncScheduler::runFinished, &f.scheduler,
+                         [&](const SyncReport &r, bool stalled) { finished.append({r, stalled}); });
+        QSignalSpy synced(&f.scheduler, &SyncScheduler::synced);
+        // ok
+        f.scheduler.syncNow();
+        // failed
+        f.runner.result = [] { return failedReport(WebDavErrorCode::Auth, 401, u"HTTP 401"_s); };
+        f.scheduler.syncNow();
+        // refused
+        f.runner.result = [] {
+            SyncReport r;
+            r.syncError = SyncError{SyncErrorCode::LocalEmpty, u"pusto"_s};
+            return r;
+        };
+        f.scheduler.syncNow();
+        // cancelled
+        f.runner.result = nullptr;
+        f.runner.autoComplete = false;
+        f.scheduler.syncNow();
+        f.runner.finishCancelled();
+        QCOMPARE(finished.size(), 4);
+        QCOMPARE(synced.size(), 1);
+        QVERIFY(!finished.at(0).first.failed());
+        QVERIFY(finished.at(1).first.remoteError.is(WebDavErrorCode::Auth));
+        QVERIFY(finished.at(2).first.syncError.is(SyncErrorCode::LocalEmpty));
+        QVERIFY(finished.at(3).first.cancelled);
+        for (const auto &f2 : finished)
+            QVERIFY(!f2.second);
+    }
+
+    void retryStatusAndFailureCount()
+    {
+        Fixture f(300'000);
+        f.runner.result = [] { return failedReport(WebDavErrorCode::Network, 0, u"Host chmura.invalid not found"_s); };
+        f.scheduler.start();
+        f.timers->advance(0);
+        SyncStatus s = f.scheduler.status();
+        QVERIFY(s.retrying);
+        QCOMPARE(s.failures, 1);
+        QCOMPARE(s.nextSync.toMSecsSinceEpoch(), f.timers->t + 30'000);
+        f.timers->advance(30'000);
+        s = f.scheduler.status();
+        QVERIFY(s.retrying);
+        QCOMPARE(s.failures, 2);
+        QCOMPARE(s.nextSync.toMSecsSinceEpoch(), f.timers->t + 60'000);
+        f.runner.result = nullptr;
+        f.timers->advance(60'000);
+        s = f.scheduler.status();
+        QVERIFY(!s.retrying);
+        QCOMPARE(s.failures, 0);
+        QVERIFY(!s.runStarted.isValid());
+        f.scheduler.stop();
+        QVERIFY(!f.scheduler.status().retrying);
+    }
+
+    void noPollTimerWhileIdle()
+    {
+        Fixture f;
+        QCOMPARE(f.timers->count(), 0);
+        f.scheduler.syncNow(); // not started: completes, no periodic timer either
+        QCOMPARE(f.timers->count(), 0);
+        f.runner.autoComplete = false;
+        f.scheduler.syncNow();
+        QCOMPARE(f.timers->count(), 1); // the stall poll, only while running
+        QVERIFY(f.scheduler.status().runStarted.isValid());
+        f.runner.release();
+        QCOMPARE(f.timers->count(), 0);
+    }
+
+    void detectsAStallAndTheRecovery()
+    {
+        static QStringList lines;
+        lines.clear();
+        const QtMessageHandler previous =
+                qInstallMessageHandler([](QtMsgType, const QMessageLogContext &context, const QString &message) {
+                    if (context.category && QByteArrayView(context.category) == "brulion.sync")
+                        lines.append(message);
+                });
+        Fixture f;
+        f.runner.autoComplete = false;
+        f.scheduler.setStallThreshold(20'000);
+        f.scheduler.setStallLimit(180'000);
+        f.scheduler.setStallPollInterval(2'000);
+        f.scheduler.syncNow();
+        f.runner.act = SyncActivity{true, 7, 5'000, 1, {u"PROPFIND Dziennik/"_s}};
+        f.timers->advance(2'000);
+        QVERIFY(!f.scheduler.status().stalled);
+        const qsizetype before = f.statuses.size();
+        f.runner.act.idleMs = 25'000;
+        f.timers->advance(2'000);
+        SyncStatus s = f.scheduler.status();
+        QVERIFY(s.stalled);
+        QCOMPARE(s.stalledMs, 25'000);
+        QCOMPARE(s.waitingFor, QStringList{u"PROPFIND Dziennik/"_s});
+        QVERIFY(f.statuses.size() > before);
+        QCOMPARE(s.state, SyncState::Syncing);
+        f.runner.act.idleMs = 27'000;
+        f.timers->advance(2'000);
+        QCOMPARE(f.scheduler.status().stalledMs, 27'000);
+        f.runner.act.idleMs = 300;
+        f.timers->advance(2'000);
+        QVERIFY(!f.scheduler.status().stalled);
+        // The heartbeat after 30 s of running.
+        f.timers->advance(24'000);
+        f.runner.release();
+        qInstallMessageHandler(previous);
+        const QString all = lines.join(u'\n');
+        QCOMPARE(all.count(u"#7 no answer from the server for 25 s (waiting for: PROPFIND Dziennik/)"_s), 1);
+        QVERIFY2(all.contains(u"#7 the server answered again after 27 s"_s), qPrintable(all));
+        QVERIFY2(all.contains(u"#7 still running after 30.0 s"_s), qPrintable(all));
+        QVERIFY(!f.scheduler.status().stalled);
+        QCOMPARE(f.runner.cancels, 0);
+    }
+
+    void theWatchdogStopsAStuckRun()
+    {
+        Fixture f(300'000);
+        f.runner.autoComplete = false;
+        QList<bool> stalledFlags;
+        QObject::connect(&f.scheduler, &SyncScheduler::runFinished, &f.scheduler,
+                         [&](const SyncReport &, bool stalled) { stalledFlags.append(stalled); });
+        f.scheduler.setStallLimit(60'000);
+        f.scheduler.start();
+        f.timers->advance(0);
+        QCOMPARE(f.runner.calls, 1);
+        // The run ends only after the watchdog asked (open requests time out).
+        f.runner.cancelCompletes = false;
+        f.runner.act = SyncActivity{true, 3, 61'000, 2, {u"GET a.md"_s, u"GET b.md"_s}};
+        f.timers->advance(2'000);
+        QCOMPARE(f.runner.cancels, 1);
+        QVERIFY(f.scheduler.status().abandoning);
+        QCOMPARE(f.scheduler.state(), SyncState::Syncing);
+        f.timers->advance(2'000);
+        QCOMPARE(f.runner.cancels, 1); // asked once
+        f.runner.finishCancelled();
+        const SyncStatus s = f.scheduler.status();
+        QCOMPARE(s.state, SyncState::Error);
+        QCOMPARE(s.lastErrorCode, u"stalled"_s);
+        QVERIFY2(s.lastError.contains(u"61 s"_s), qPrintable(s.lastError));
+        QVERIFY(!s.abandoning);
+        QVERIFY(!s.stalled);
+        QVERIFY(s.retrying);
+        QCOMPARE(s.failures, 1);
+        QCOMPARE(stalledFlags, QList<bool>{true});
+        // Retried with the back-off; a good run clears it.
+        f.runner.autoComplete = true;
+        f.runner.act = SyncActivity();
+        f.timers->advance(30'000);
+        QCOMPARE(f.runner.calls, 2);
+        QCOMPARE(f.runner.lastOptions.trigger, SyncTrigger::Retry);
+        QCOMPARE(f.scheduler.state(), SyncState::Idle);
+        QVERIFY(f.scheduler.status().lastErrorCode.isEmpty());
+        f.scheduler.stop();
+    }
+
+    void theWatchdogCanBeOff()
+    {
+        Fixture f;
+        f.runner.autoComplete = false;
+        f.scheduler.setStallLimit(0);
+        f.scheduler.syncNow();
+        f.runner.act = SyncActivity{true, 1, 10'000'000, 1, {}};
+        f.timers->advance(10'000);
+        QCOMPARE(f.runner.cancels, 0);
+        QVERIFY(f.scheduler.status().stalled);
+        f.runner.release();
     }
 };
 

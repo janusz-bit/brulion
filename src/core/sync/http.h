@@ -8,6 +8,7 @@
 #include <QByteArrayView>
 #include <QHash>
 #include <QList>
+#include <QMetaType>
 #include <QObject>
 #include <QPair>
 #include <QPointer>
@@ -29,6 +30,10 @@ struct HttpRequest {
     /// Time limit in ms for the whole exchange; 0 = none. Transports that support it abort
     /// the request when it expires; WebDavClient enforces it independently as well.
     int timeoutMs = 0;
+    /// Transfer progress (payload bytes sent, bytes received so far), called by transports that
+    /// know it (NetworkHttpTransport: uploadProgress / downloadProgress) from the event loop.
+    /// Counts as activity for stall detection; never needed for correctness.
+    std::function<void(qint64 sent, qint64 received)> onProgress;
 
     /// Value of a request header (case-insensitive name), empty when absent.
     QByteArray header(QByteArrayView name) const;
@@ -41,12 +46,27 @@ struct HttpResponse {
     QByteArray body;
     QString networkError;                  ///< transport failure (DNS, refused, TLS, timeout)
     bool timedOut = false;                 ///< the time limit expired
+    QByteArray protocol;                   ///< "h2" / "http/1.1" when the transport knows it
 
     /// Value of a response header (any case), empty when absent.
     QByteArray header(QByteArrayView name) const;
 };
 
 using HttpCallback = std::function<void(const HttpResponse &)>;
+
+/// One finished request, for statistics and logs (no headers, no bodies).
+struct HttpExchange {
+    QByteArray method;
+    QUrl url;       ///< user info removed
+    int status = 0; ///< 0: no HTTP answer
+    bool timedOut = false;
+    QString networkError; ///< transport failure text (redacted)
+    qint64 elapsedMs = 0;
+    qint64 bytesSent = 0;     ///< request body
+    qint64 bytesReceived = 0; ///< response body
+    QByteArray contentType;   ///< of the answer ("text/html" helps with Parse errors)
+    QByteArray protocol;      ///< "h2" / "http/1.1" / ""
+};
 
 /// Sends HTTP requests. Implementations must call `done` exactly once, from the event loop of
 /// the calling thread (WebDavClient tolerates a synchronous call, but real transports never
@@ -85,3 +105,5 @@ private:
 };
 
 } // namespace brulion::sync
+
+Q_DECLARE_METATYPE(brulion::sync::HttpExchange)

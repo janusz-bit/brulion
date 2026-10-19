@@ -99,6 +99,12 @@ QString nextcloudDavUrl(const QString &server, const QString &user, const QStrin
     if (!hasScheme(s))
         s = u"https://"_s + s.remove(leadingSlashes);
     s = stripQueryAndFragment(s);
+    // "https://jan:secret@host": credentials typed into the address never become part of the
+    // WebDAV URL (they would end up in every error message); the account's user and app
+    // password are sent as Basic auth.
+    static const QRegularExpression userInfo(u"^([a-z][a-z0-9+.\\-]*://)[^/?#@]*@"_s,
+                                             QRegularExpression::CaseInsensitiveOption);
+    s.replace(userInfo, u"\\1"_s);
     s.remove(entryPoint);
     // Web UI pages pasted from the address bar: ".../apps/files/", ".../login".
     s = trimTrailingSlashes(s).remove(webUiPage);

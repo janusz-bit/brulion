@@ -5,6 +5,6 @@ target_link_libraries(brulion_sync_testsupport PUBLIC brulion_core_sync Qt6::Tes
 target_include_directories(brulion_sync_testsupport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 brulion_set_warnings(brulion_sync_testsupport)
 
-foreach(_t url xml diff merge webdav engine devices scheduler syncthing massdelete)
+foreach(_t url xml diff merge webdav engine devices scheduler syncthing massdelete history secrets)
     brulion_add_test(tst_sync_${_t} SOURCES tst_sync_${_t}.cpp LIBS brulion_sync_testsupport)
 endforeach()

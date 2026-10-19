@@ -215,13 +215,34 @@ bool SyncEngine::isSyncing() const
     return m_run != nullptr;
 }
 
+void SyncEngine::setNextRunNumber(int number)
+{
+    m_nextRunNumber = qMax(1, number);
+}
+
+SyncActivity SyncEngine::activity() const
+{
+    return m_run ? m_run->activity() : SyncActivity();
+}
+
 bool SyncEngine::sync(const SyncRunOptions &options, SyncDoneCallback done)
 {
     if (done)
         m_waiters.append(std::move(done));
     if (m_run)
         return false;
-    const std::shared_ptr<SyncRun> run = std::make_shared<SyncRun>(this, options);
+    const int number = m_nextRunNumber++;
+    if (m_client) {
+        m_client->setLogTag(u"#%1"_s.arg(number));
+        // Once per session (and after an account change): where this device syncs to.
+        if (m_loggedIdentity != m_client->identity()) {
+            m_loggedIdentity = m_client->identity();
+            qCInfo(detail::lcSync).noquote() << u"#%1 account %2 at %3, concurrency %4, device %5"_s.arg(
+                    QString::number(number), m_client->username(), m_client->baseUrl(), QString::number(m_concurrency),
+                    m_device);
+        }
+    }
+    const std::shared_ptr<SyncRun> run = std::make_shared<SyncRun>(this, options, number);
     m_run = run;
     Q_EMIT started();
     run->start();

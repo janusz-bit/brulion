@@ -135,6 +135,12 @@ public:
 
     bool isSyncing() const;
 
+    /// Number of the next run (the app seeds it from SyncHistory::nextNumber(); default 1).
+    void setNextRunNumber(int number);
+    int nextRunNumber() const { return m_nextRunNumber; }
+    /// What the running run waits for (the client's open requests, the last progress).
+    SyncActivity activity() const override;
+
     /// Start a run, or join the running one (then `options` are ignored). `done` gets the
     /// report — also when cancelled or failed — after finished() is emitted. Returns true when a
     /// new run started.
@@ -172,6 +178,8 @@ private:
     qint64 m_maxBaseSize = 2LL * 1024 * 1024;
     std::shared_ptr<SyncRun> m_run;
     QList<SyncDoneCallback> m_waiters;
+    int m_nextRunNumber = 1;
+    QString m_loggedIdentity; ///< account + folder announced in the log
 };
 
 } // namespace brulion::sync

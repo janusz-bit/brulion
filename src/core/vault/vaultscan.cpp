@@ -9,6 +9,8 @@
 #include "vault/vault.h"
 #include "vault/vault_p.h"
 
+#include "log/slowscope.h"
+
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -804,10 +806,12 @@ QList<VaultChange> Vault::rescan()
     d->pendingDirs.clear();
     d->pendingFiles.clear();
     d->batchTimer.stop();
+    logging::SlowScope slow(lcVault(), "Rescan", 1000);
     ScanScope scope;
     scope.trees.insert(QString());
     const QList<VaultChange> changes = d->reconcile(scope, ChangeSource::External);
     d->finish(changes);
+    slow.setDetail(u"%1 changes, %2 files"_s.arg(changes.size()).arg(d->files.size()));
     return changes;
 }
 

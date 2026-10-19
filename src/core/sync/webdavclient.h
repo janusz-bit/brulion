@@ -2,12 +2,14 @@
 // Paths are vault paths relative to the base URL; every segment is percent-encoded.
 #pragma once
 
+#include "log/redact.h"
 #include "sync/davxml.h"
 #include "sync/errors.h"
 #include "sync/http.h"
 #include "sync/synctypes.h"
 
 #include <QByteArray>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -29,6 +31,8 @@ struct ListOptions {
     std::function<bool(const VaultPath &)> skipDir;
     /// Polled before each folder request; true stops listing (error Cancelled).
     std::function<bool()> cancelled;
+    /// After each folder answered: folders answered, folders found so far, entries found so far.
+    std::function<void(int done, int known, int entries)> onProgress;
 };
 
 struct ListResult {
@@ -106,6 +110,28 @@ public:
     /// Parallel PROPFIND requests while listing (default 4).
     void setListConcurrency(int count);
 
+    /// Prefix of this client's log lines ("#42" during sync run 42, "test" for a connection
+    /// test; "" = none). Every finished request is logged to brulion.net: a debug line per
+    /// request (method, path relative to the base, status, ms, bytes — never headers or
+    /// bodies; only in the detailed mode), an info line for answers slower than 5 s, a warning
+    /// for timeouts and network failures.
+    void setLogTag(const QString &tag);
+    QString logTag() const { return m_logTag; }
+    /// Requests sent and not answered yet.
+    int requestsInFlight() const { return int(m_inFlight.size()); }
+    /// ms since the last answer or transfer progress while requests are open (0 when none is).
+    qint64 idleMs() const;
+    /// The open requests as "PROPFIND Dziennik/", "GET Projekty/Plan.md", oldest first.
+    QStringList inFlight(int max = 4) const;
+    /// `url` relative to the base folder ("" = the base; the full URL, user info removed, when
+    /// it lies elsewhere) — for log lines and statistics.
+    QString relativePath(const QUrl &url) const;
+
+Q_SIGNALS:
+    /// Every finished request (the engine collects SyncStats from it).
+    void exchanged(const brulion::sync::HttpExchange &exchange);
+
+public:
     /// Check that the base folder is reachable with these credentials (PROPFIND Depth 0).
     void test(TestCallback done);
     /// Recursive listing of everything below the base folder, one PROPFIND Depth 1 per folder
@@ -150,10 +176,19 @@ private:
                            DoneCallback done);
     void mkcolUrl(const QString &url, int depth, DoneCallback done);
     void fail(const WebDavError &error, DoneCallback done);
+    void logExchange(const HttpExchange &exchange) const;
 
     QString m_baseUrl;
     QString m_username;
     QByteArray m_authorization;
+    /// The password and the Basic token are masked in every log line and shown error.
+    logging::ScopedSecret m_secretPassword;
+    logging::ScopedSecret m_secretToken;
+    QString m_logTag;
+    /// Open requests: id -> "METHOD path", in sending order.
+    QMap<quint64, QString> m_inFlight;
+    quint64 m_nextRequestId = 0;
+    QElapsedTimer m_lastActivity;
     HttpTransport *m_transport;
     QString m_basePathname;
     int m_timeoutMs = 60'000;

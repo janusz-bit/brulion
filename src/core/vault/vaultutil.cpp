@@ -10,8 +10,6 @@ using namespace Qt::StringLiterals;
 
 namespace brulion {
 
-Q_LOGGING_CATEGORY(lcVault, "brulion.vault")
-
 namespace vaultutil {
 
 QString configFolder()

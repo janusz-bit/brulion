@@ -29,6 +29,8 @@ QByteArray findHeader(const Headers &headers, QByteArrayView name)
 struct ReplyState {
     bool timedOut = false;
     QString refusedRedirect; ///< target of a redirect we refused to follow
+    qint64 sent = 0;
+    qint64 received = 0;
 };
 
 } // namespace
@@ -118,6 +120,19 @@ void NetworkHttpTransport::send(const HttpRequest &request, HttpCallback done)
             reply->abort();
         }
     });
+    if (request.onProgress) {
+        // Progress counts as activity (stall detection): a big transfer is not a stalled one.
+        connect(reply, &QNetworkReply::uploadProgress, reply,
+                [state, onProgress = request.onProgress](qint64 sent, qint64) {
+                    state->sent = sent;
+                    onProgress(state->sent, state->received);
+                });
+        connect(reply, &QNetworkReply::downloadProgress, reply,
+                [state, onProgress = request.onProgress](qint64 received, qint64) {
+                    state->received = received;
+                    onProgress(state->sent, state->received);
+                });
+    }
     if (request.timeoutMs > 0) {
         QTimer::singleShot(request.timeoutMs, reply, [reply, state] {
             state->timedOut = true;
@@ -154,6 +169,7 @@ void NetworkHttpTransport::finish(QNetworkReply *reply, bool timedOut, const Htt
         response.networkError = reply->errorString();
     } else {
         response.status = status.toInt();
+        response.protocol = reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool() ? "h2" : "http/1.1";
         for (const auto &[name, value] : reply->rawHeaderPairs())
             response.headers.insert(name.toLower(), value);
         response.body = reply->readAll();

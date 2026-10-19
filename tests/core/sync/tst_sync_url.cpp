@@ -56,6 +56,13 @@ private Q_SLOTS:
                                     << nc + u"jan/N"_s;
         QTest::newRow("dot segments") << u"h.pl"_s << u"jan"_s << u"./a/../b//c"_s
                                       << u"https://h.pl/remote.php/dav/files/jan/b/c"_s;
+        // Credentials typed into the address never become part of the WebDAV URL.
+        QTest::newRow("user info dropped")
+                << u"https://jan:Zażółć-tajne@cloud.example.com/"_s << u"jan"_s << u"N"_s << nc + u"jan/N"_s;
+        QTest::newRow("user info, no scheme")
+                << u"jan:tajne@cloud.example.com"_s << u"jan"_s << u"N"_s << nc + u"jan/N"_s;
+        QTest::newRow("user only, port") << u"http://jan@192.168.1.10:8080/nc"_s << u"jan"_s << u"N"_s
+                                         << u"http://192.168.1.10:8080/nc/remote.php/dav/files/jan/N"_s;
     }
     void nextcloudDavUrl()
     {

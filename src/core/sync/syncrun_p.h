@@ -4,7 +4,9 @@
 #include "sync/syncengine.h"
 #include "sync/webdavclient.h"
 
+#include <QElapsedTimer>
 #include <QHash>
+#include <QMetaObject>
 #include <QPointer>
 
 #include <functional>
@@ -27,7 +29,7 @@ class JobPool;
 /// abandon(). Per-path work runs through a JobPool (one job per group of case-variant paths).
 class SyncRun : public std::enable_shared_from_this<SyncRun> {
 public:
-    SyncRun(SyncEngine *engine, SyncRunOptions options);
+    SyncRun(SyncEngine *engine, SyncRunOptions options, int number);
 
     void start();
     void cancel();
@@ -36,6 +38,9 @@ public:
     /// The vault, client or store went away: finish now with SyncErrorCode::NotReady (pending
     /// callbacks of a destroyed client would never come).
     void dependencyLost();
+    /// What the run waits for (SyncEngine::activity()).
+    SyncActivity activity() const;
+    int number() const { return m_report.runNumber; }
 
 private:
     /// The local file as read for this run.
@@ -54,10 +59,15 @@ private:
         Kind kind = Kind::Done;
         QString message;
         WebDavError error; ///< Fatal
+        QString code;      ///< Failed: SyncFileError::code
+        int status = 0;    ///< Failed: HTTP status, when there was one
 
         static Outcome done() { return {}; }
-        static Outcome skipped(const QString &why) { return Outcome{Kind::Skipped, why, {}}; }
-        static Outcome failed(const QString &message) { return Outcome{Kind::Failed, message, {}}; }
+        static Outcome skipped(const QString &why) { return Outcome{Kind::Skipped, why, {}, {}, 0}; }
+        static Outcome failed(const QString &code, const QString &message, int status = 0)
+        {
+            return Outcome{Kind::Failed, message, {}, code, status};
+        }
         static Outcome fromError(const WebDavError &error);
     };
     using Done = std::function<void(const Outcome &)>;
@@ -98,6 +108,16 @@ private:
     LocalStore *store() const;
     QDateTime now() const;
     void report(const SyncProgress &progress);
+    /// A progress update with the run's counters filled in.
+    void progress(SyncProgress::Phase phase, int done = 0, int total = 0, const VaultPath &path = {});
+
+    // Instrumentation (phases, request statistics, log lines)
+    void beginPhase(SyncPhase phase);
+    void endPhase(int items = 0);
+    void onExchange(const HttpExchange &exchange);
+    void notePreconditionRetry(const VaultPath &path, int attempt);
+    QString tag() const;
+    QString summary() const;
 
     /// Wrap a continuation: runs only while the engine lives (keeps this run alive meanwhile).
     template <typename F>
@@ -159,6 +179,16 @@ private:
     bool m_cancelled = false;
     bool m_finished = false;
     bool m_holdDeletions = false; ///< the mass-deletion guard tripped: no deletions this run
+
+    // Instrumentation
+    QElapsedTimer m_runTimer;
+    QElapsedTimer m_activityTimer;        ///< restarted by every answer and progress update
+    std::optional<SyncPhaseTime> m_phase; ///< the phase running now
+    qint64 m_phaseBytes = 0;              ///< payload bytes when the current phase began
+    QMetaObject::Connection m_exchangeConnection;
+    QList<VaultPath> m_active; ///< paths being processed
+    int m_remoteEntries = 0;
+    int m_loggedErrors = 0;
 };
 
 } // namespace brulion::sync
