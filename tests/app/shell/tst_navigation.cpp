@@ -631,6 +631,41 @@ private Q_SLOTS:
         QVERIFY(app->workspace()->exists(u"Spis treści.md"_s));
     }
 
+    void switchingNotebooksDoesNotCarrySyncOver()
+    {
+        // Syncing belongs to one notebook: switching to the documentation (or another notebook)
+        // must not point the same server folder at it — notes would flow between notebooks.
+        auto app = openApp(u"synced"_s);
+        const QString mine = QDir::cleanPath(m_tmp.filePath(u"synced"_s));
+        AppSettings *settings = app->settings();
+        settings->setNextcloudUrl(u"https://chmura.example.pl"_s);
+        settings->setNextcloudUser(u"Łucja"_s);
+        QVERIFY(settings->setNextcloudPassword(u"hasło-aplikacji"_s));
+        settings->setNextcloudFolder(u"Notatki"_s);
+        settings->setNextcloudEnabled(true);
+        QVERIFY(app->workspace()->sync()->active());
+
+        app->openDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(app->docsVaultPath()).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!settings->nextcloudEnabled());
+        QVERIFY(!app->workspace()->sync()->active());
+
+        app->toggleDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(mine).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(settings->nextcloudEnabled());
+        QCOMPARE(settings->nextcloudFolder(), u"Notatki"_s);
+        QVERIFY(app->workspace()->sync()->active());
+
+        // Another notebook of the user starts without sync as well.
+        app->openVault(m_tmp.filePath(u"other"_s));
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(m_tmp.filePath(u"other"_s)).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!settings->nextcloudEnabled());
+        QVERIFY(!app->workspace()->sync()->active());
+    }
+
     void documentationNotebookWithoutOtherNotebook()
     {
         // Started in the documentation with no other notebook known: "back" shows the start screen.

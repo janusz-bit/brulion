@@ -3,6 +3,7 @@
 #include "appsettings.h"
 
 #include <QFile>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -88,6 +89,56 @@ private Q_SLOTS:
         QCOMPARE(s.syncIntervalMinutes(), 30);
         QCOMPARE(s.value(u"views/tasks/showDone"_s).toBool(), true);
         QCOMPARE(s.value(u"views/missing"_s, 7).toInt(), 7);
+    }
+
+    void nextcloudBelongsToNotebook()
+    {
+        // Syncing and the server folder are the notebook's: a second notebook (or the
+        // documentation) must not inherit them, or its notes would flow into the first one.
+        AppSettings s(nextFile(), m_tmp.path());
+        s.setCurrentVault(u"/notes/a"_s);
+        s.setNextcloudUrl(u"https://chmura.example.pl"_s);
+        s.setNextcloudEnabled(true);
+        s.setNextcloudFolder(u"Notatki"_s);
+        QVERIFY(s.nextcloudEnabled());
+        QSignalSpy changed(&s, &AppSettings::nextcloudChanged);
+        s.setCurrentVault(u"/notes/b"_s);
+        QVERIFY(!changed.isEmpty());
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Brulion"_s);
+        QCOMPARE(s.nextcloudUrl(), u"https://chmura.example.pl"_s); // the account is shared
+        s.setNextcloudFolder(u"Zażółć"_s);
+        s.setCurrentVault(u"/notes/a"_s);
+        QVERIFY(s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+        s.setCurrentVault(u"/notes/b"_s);
+        QCOMPARE(s.nextcloudFolder(), u"Zażółć"_s);
+        QVERIFY(!s.nextcloudEnabled());
+    }
+
+    void sharedNextcloudGoesToTheFirstNotebook()
+    {
+        // Settings written by 0.3.0 and older (one switch and folder for all notebooks).
+        const QString file = nextFile();
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"sync/nextcloud/enabled"_s, true);
+            raw.setValue(u"sync/nextcloud/folder"_s, u"Notatki"_s);
+            raw.setValue(u"sync/nextcloud/url"_s, u"https://chmura.example.pl"_s);
+            raw.setValue(u"vaults/current"_s, u"/notes/a"_s);
+        }
+        AppSettings s(file, m_tmp.path());
+        QVERIFY(!s.nextcloudEnabled()); // nobody owns it yet: nothing syncs by accident
+        s.claimSharedNextcloud(u"/notes/a"_s);
+        QVERIFY(s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+        s.claimSharedNextcloud(u"/notes/b"_s); // once only
+        s.setCurrentVault(u"/notes/b"_s);
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Brulion"_s);
+        s.setCurrentVault(u"/notes/a"_s);
+        QVERIFY(s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
     }
 
     void validation()

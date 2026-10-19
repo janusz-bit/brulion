@@ -74,6 +74,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool notifyMissed READ notifyMissed WRITE setNotifyMissed NOTIFY notifyMissedChanged FINAL)
 
     // ---- Nextcloud (WebDAV) sync --------------------------------------------------------
+    // Whether it syncs and the server folder are per notebook (the current one); the server,
+    // the user and the password are shared.
     Q_PROPERTY(bool nextcloudEnabled READ nextcloudEnabled WRITE setNextcloudEnabled NOTIFY nextcloudChanged FINAL)
     /// Server address, e.g. "https://cloud.example.com".
     Q_PROPERTY(QString nextcloudUrl READ nextcloudUrl WRITE setNextcloudUrl NOTIFY nextcloudChanged FINAL)
@@ -138,6 +140,8 @@ public:
     void setNextcloudUser(const QString &user);
     QString nextcloudFolder() const;
     void setNextcloudFolder(const QString &folder);
+    /// Move the pre-0.3.1 shared switch and folder (one for all notebooks) to `notebook`, once.
+    void claimSharedNextcloud(const QString &notebook);
     int syncIntervalMinutes() const;
     void setSyncIntervalMinutes(int minutes);
 

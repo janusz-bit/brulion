@@ -16,6 +16,8 @@ Opcjonalnie Brulion pokazuje stan z API Syncthinga.
 ## Nextcloud (WebDAV)
 *Ustawienia → Synchronizacja* (albo centrum synchronizacji): adres serwera, użytkownik i **hasło aplikacji** wygenerowane w Nextcloudzie. Zmiany z wielu urządzeń scalane są trójstronnie, więc zwykle nic nie ginie i nie musisz nic robić. Gdy scalenie jest niemożliwe, zostają obie wersje i dostajesz widok scalania.
 
+Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwerze należą do notatnika**: inny notatnik (także ta dokumentacja) startuje bez synchronizacji. Dzięki temu notatki z jednego notatnika nie trafią do drugiego; jeden folder na serwerze synchronizuj tylko z jednym notatnikiem.
+
 Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz — to zabezpieczenie przed pomyłką.
 
 ## Centrum synchronizacji

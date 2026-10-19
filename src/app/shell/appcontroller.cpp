@@ -680,7 +680,13 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     // shell is gone by now — its editors saved into the old vault before it closes below.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QString error;
+    // The sync settings are the notebook's: the previous notebook is closed and the new one is
+    // current before sync attaches to the new folder, never the old notebook's server folder.
+    const QString previousVault = m_settings->currentVault();
+    m_workspace->close();
+    m_settings->setCurrentVault(path);
     if (!m_workspace->open(path, deviceStatePath(path), &error)) {
+        m_settings->setCurrentVault(previousVault);
         m_routeAfterOpen.clear();
         m_failedPath = path;
         m_failedSeedDemo = seedDemo;
@@ -688,6 +694,13 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         return;
     }
     m_failedPath.clear();
+    // The documentation (and the sample notebook) are not the user's notes: they never take
+    // over the sync settings of the notebook that was synced before 0.3.1.
+    const QString cleanPath = QDir::cleanPath(path);
+    const bool sample = (!docsVaultPath().isEmpty() && cleanPath == docsVaultPath())
+                        || (cleanPath == demoVaultPath() && demoVaultPath() != defaultVaultPath());
+    if (!sample)
+        m_settings->claimSharedNextcloud(path);
     bool showWelcome = false;
     bool docs = false;
     if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
