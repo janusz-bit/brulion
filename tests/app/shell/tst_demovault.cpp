@@ -231,7 +231,8 @@ private Q_SLOTS:
         QStringList missing;
         for (const MissingPage &m : index.missingPages())
             missing.append(m.name);
-        QCOMPARE(missing, QStringList{ u"Pomysły na prezenty"_s });
+        missing.sort();
+        QCOMPARE(missing, (QStringList{ u"Notatka do utworzenia"_s, u"Pomysły na prezenty"_s }));
         QVERIFY(index.blockById(u"budzet1"_s).has_value());
         QCOMPARE(index.resolveLink(u"plan-mieszkania.svg"_s).value_or(QString()), u"assets/plan-mieszkania.svg"_s);
         QCOMPARE(index.journals().size(), 3);
@@ -307,7 +308,7 @@ private Q_SLOTS:
         }
         QVERIFY(calcLines >= 20);
         QVERIFY(formulas >= 10);
-        QCOMPARE(queries, 2);
+        QCOMPARE(queries, 3); // the guide page, the renovation page, the documentation
         QVERIFY(rules >= 2);
     }
 

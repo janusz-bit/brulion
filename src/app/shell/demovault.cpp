@@ -3,7 +3,12 @@
 #include "markdown/journal.h"
 #include "vault/vault.h"
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
 #include <QHash>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -37,6 +42,23 @@ QString fill(QString text, const QHash<QString, QString> &vars)
     for (auto it = vars.constBegin(); it != vars.constEnd(); ++it)
         text.replace(u'{' + it.key() + u'}', it.value());
     return text;
+}
+
+/// The documentation pages (src/app/shell/guide/Dokumentacja/*.md, embedded as :/guide/...),
+/// written in Brulion's own Markdown; they land in the folder "Dokumentacja/".
+QList<DemoFile> guideFiles(const QHash<QString, QString> &vars)
+{
+    QList<DemoFile> out;
+    QDirIterator it(u":/guide"_s, { u"*.md"_s }, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QFile file(it.next());
+        if (!file.open(QIODevice::ReadOnly))
+            continue;
+        const QString path = it.filePath().mid(QStringLiteral(":/guide/").size());
+        out.append({ path, fill(QString::fromUtf8(file.readAll()), vars) });
+    }
+    std::sort(out.begin(), out.end(), [](const DemoFile &a, const DemoFile &b) { return a.path < b.path; });
+    return out;
 }
 
 // ---- Content ------------------------------------------------------------------------------------
@@ -171,6 +193,9 @@ type:tasks status:open due:<=+7d sort:due
 ## Import i eksport
 - Import z Obsidiana, Logseqa, Notion, Evernote, Google Keep, Joplina, Simplenote, Roama, Beara oraz plików Markdown, TXT i HTML.
 - Eksport do archiwum ZIP z Markdownem, strony HTML, JSON, iCalendar (zadania i przypomnienia), OPML i CSV.
+
+## Dokumentacja
+Pełna dokumentacja jest w tym brulionie: zacznij od [[Dokumentacja/Spis treści|Dokumentacji]] — strony o trybach, linkach, zadaniach, przypomnieniach, obliczeniach, zapytaniach, synchronizacji i skrótach.
 
 ## Skróty klawiszowe
 | Skrót | Działanie |
@@ -395,7 +420,7 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now)
     };
     const VaultConfig config;
     const auto journal = [&](QDate d) { return markdown::journalPathForDate(d, config); };
-    return {
+    QList<DemoFile> files = {
         { demoWelcomePage(), fill(kWelcome, vars) },
         { journal(today), fill(kToday, vars) },
         { journal(today.addDays(-1)), fill(kYesterday, vars) },
@@ -407,6 +432,8 @@ QList<DemoFile> demoVaultFiles(const QDateTime &now)
         { u"templates/Spotkanie.md"_s, kMeetingTemplate },
         { u"assets/plan-mieszkania.svg"_s, kPlanSvg },
     };
+    files.append(guideFiles(vars));
+    return files;
 }
 
 int seedDemoVault(Vault &vault, const QDateTime &now)

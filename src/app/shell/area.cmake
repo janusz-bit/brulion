@@ -53,6 +53,13 @@ if(NOT ANDROID AND NOT EMSCRIPTEN)
     target_sources(brulion_shell PRIVATE
         ${_brulion_shell_dir}/singleinstance.h ${_brulion_shell_dir}/singleinstance.cpp)
 endif()
+# The documentation pages of the sample notebook (guide/Dokumentacja/*.md, Brulion notes about
+# Brulion) as :/guide/Dokumentacja/<name>.md; demovault.cpp seeds them into "Dokumentacja/".
+file(GLOB_RECURSE _brulion_guide_files CONFIGURE_DEPENDS ${_brulion_shell_dir}/guide/*.md)
+qt_add_resources(brulion_shell brulion_guide
+    PREFIX /guide
+    BASE ${_brulion_shell_dir}/guide
+    FILES ${_brulion_guide_files})
 target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
