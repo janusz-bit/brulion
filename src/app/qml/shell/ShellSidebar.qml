@@ -338,12 +338,16 @@ Rectangle {
             model: AppSettings.recentVaults.filter(v => v.path !== notebookMenu.docsPath)
             delegate: BMenuItem {
                 required property var modelData
+                // Not `checked`: a checkable item has already toggled it when onTriggered runs,
+                // so the first click on another notebook would do nothing.
+                readonly property bool isCurrent: modelData.path === notebookMenu.current
                 text: modelData.name
                 iconName: "folder"
                 checkable: true
-                checked: modelData.path === notebookMenu.current
+                checked: isCurrent
                 onTriggered: {
-                    if (!checked)
+                    checked = Qt.binding(() => isCurrent)
+                    if (!isCurrent)
                         AppController.openVault(modelData.path)
                     sidebar.navigated()
                 }
@@ -355,10 +359,12 @@ Rectangle {
             height: visible ? implicitHeight : 0
             text: qsTr("Brulion documentation")
             iconName: "book-open"
+            readonly property bool isCurrent: notebookMenu.docsPath === notebookMenu.current
             checkable: true
-            checked: notebookMenu.docsPath === notebookMenu.current
+            checked: isCurrent
             onTriggered: {
-                if (!checked)
+                checked = Qt.binding(() => isCurrent)
+                if (!isCurrent)
                     AppController.openDocsVault()
                 sidebar.navigated()
             }

@@ -2,6 +2,7 @@
 
 **Nowości w {{VERSION}}**
 
+* **Poprawka — przełączanie notatników jednym kliknięciem:** w menu ⇄ pierwsze kliknięcie innego notatnika nic nie robiło, dopiero drugie go otwierało.
 * **Poprawka — notatki nie przechodzą między notatnikami:** synchronizacja Nextcloud była ustawieniem wspólnym dla wszystkich notatników, więc po przełączeniu notatnika (np. do dokumentacji) ten sam folder na serwerze synchronizował się z drugim notatnikiem i notatki jednego trafiały do drugiego. Teraz włączenie synchronizacji i folder na serwerze należą do notatnika; dotychczasowe ustawienie przejmuje pierwszy notatnik otwarty po aktualizacji (zwykle ten, który synchronizowałeś), a pozostałe — także dokumentacja — startują bez synchronizacji.
 * **Dokumentacja napisana w Brulionie:** osobny notatnik „Dokumentacja Brulionu” — 14 stron (tryby, linki, tagi, zadania, przypomnienia, obliczenia, zapytania, dziennik i szablony, synchronizacja, import i eksport, skróty, format plików) z żywymi przykładami. Powstaje przy pierwszym otwarciu i można go dowolnie edytować.
 * **Szybkie przełączanie notatników:** przycisk ⇄ obok nazwy notatnika w pasku bocznym (ostatnie notatniki, dokumentacja, „Otwórz inny notatnik…”), polecenie w palecie (Ctrl+K) i skrót **Ctrl+Shift+B**, który skacze do dokumentacji i z powrotem do poprzedniego notatnika. W wersji przeglądarkowej jest jeden notatnik, więc dokumentacji tam nie ma.
