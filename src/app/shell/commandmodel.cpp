@@ -107,6 +107,10 @@ static QList<Command> buildCommands(const AppController *app)
         { u"language.switch"_s, CommandModel::tr("Change language"), english ? u"Polski"_s : u"English"_s,
           u"keyboard"_s, {}, true },
         { u"go.settings"_s, CommandModel::tr("Settings"), {}, u"settings"_s, u"Ctrl+,"_s, ready },
+        { u"vault.docs"_s,
+          app->inDocsVault() ? CommandModel::tr("Back to my notebook") : CommandModel::tr("Brulion documentation"),
+          CommandModel::tr("Switch notebook"), u"book-open"_s, u"Ctrl+Shift+B"_s,
+          !app->docsVaultPath().isEmpty() },
         { u"vault.switch"_s, CommandModel::tr("Open another notebook…"), {}, u"folder-open"_s, {}, ready },
         { u"about"_s, CommandModel::tr("About Brulion"), {}, u"info"_s, {}, true },
     };
@@ -197,6 +201,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"toggleTheme"_s);
     else if (id == u"language.switch")
         m_app->settings()->setLanguage(m_app->settings()->language() == u"en" ? u"pl"_s : u"en"_s);
+    else if (id == u"vault.docs")
+        m_app->toggleDocsVault();
     else if (id == u"vault.switch")
         m_app->closeVault();
     else if (id == u"about")

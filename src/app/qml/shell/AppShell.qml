@@ -316,6 +316,7 @@ FocusScope {
     Shortcut { sequence: "Ctrl+J"; onActivated: AppController.openToday() }
     Shortcut { sequence: "Ctrl+N"; onActivated: shell.openNewPage("") }
     Shortcut { sequence: "Ctrl+Shift+N"; onActivated: shell.openCapture() }
+    Shortcut { sequence: "Ctrl+Shift+B"; onActivated: AppController.toggleDocsVault() }
     Shortcut { sequence: "Ctrl+,"; onActivated: AppController.navigate({ view: "settings" }) }
     Shortcut {
         sequence: "Ctrl+\\"

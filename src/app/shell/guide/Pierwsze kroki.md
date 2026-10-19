@@ -7,7 +7,7 @@ brulion: document
 ## Brulion i foldery
 Brulion przechowuje notatki jako zwykłe pliki `.md` w wybranym folderze — tym folderem jest Twój **brulion** (notatnik). Nie ma konta ani bazy danych; kopię zapasową zrobisz kopiując folder, a ten sam folder otworzysz w Obsidianie czy Logsequ.
 
-Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy albo otwierasz ten przykładowy. Między brulionami przełączasz się przyciskiem ⇄ obok nazwy brulionu na górze paska bocznego: lista ostatnich brulionów, Dokumentacja Brulionu i „Otwórz inny brulion…”.
+Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy albo otwierasz ten przykładowy. Między brulionami przełączasz się przyciskiem ⇄ (albo Ctrl+Shift+B, który skacze do dokumentacji i z powrotem) obok nazwy brulionu na górze paska bocznego: lista ostatnich brulionów, Dokumentacja Brulionu i „Otwórz inny brulion…”.
 
 ## Pierwszy wpis
 1. Otwórz **Dziennik** (Ctrl+J) — to strona na dziś.

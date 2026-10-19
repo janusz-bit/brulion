@@ -218,6 +218,10 @@ public:
     Q_INVOKABLE void openDemoVault();
     /// Opens the documentation notebook, seeding it on first use (no-op in the browser).
     Q_INVOKABLE void openDocsVault();
+    /// True while the documentation notebook is the open one.
+    bool inDocsVault() const;
+    /// The documentation notebook, or back to the notebook used before it (Ctrl+Shift+B).
+    Q_INVOKABLE void toggleDocsVault();
     /// Show onboarding and close the vault (a moment later: the shell's editors save first).
     Q_INVOKABLE void closeVault();
     /// "Try again" after an error: open failedVaultPath() again (else the current vault).

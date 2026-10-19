@@ -15,6 +15,7 @@ Skróty komputerowe. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, 
 | Ctrl+J | dzisiejszy dziennik |
 | Ctrl+N | nowa strona |
 | Ctrl+Shift+N | szybka notatka do dziennika |
+| Ctrl+Shift+B | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | Alt+← / Alt+→ | wstecz / dalej |
 | Ctrl+\ | panel boczny (szerokie okno) |
 | F2 | zmiana nazwy strony |

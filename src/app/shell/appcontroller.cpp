@@ -596,6 +596,28 @@ void AppController::openDocsVault()
     scheduleOpening(docsVaultPath(), true);
 }
 
+bool AppController::inDocsVault() const
+{
+    return !docsVaultPath().isEmpty() && QDir::cleanPath(m_settings->currentVault()) == docsVaultPath();
+}
+
+void AppController::toggleDocsVault()
+{
+    if (!inDocsVault()) {
+        openDocsVault();
+        return;
+    }
+    const QVariantList recent = m_settings->recentVaults();
+    for (const QVariant &v : recent) {
+        const QString path = v.toMap().value(u"path"_s).toString();
+        if (QDir::cleanPath(path) != docsVaultPath()) {
+            openVault(path);
+            return;
+        }
+    }
+    closeVault(); // no other notebook known: the start screen
+}
+
 void AppController::openDemoVault()
 {
     m_routeAfterOpen.clear(); // the sample notebook opens on its welcome page

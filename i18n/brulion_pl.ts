@@ -9791,6 +9791,18 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message>
+        <source>Back to my notebook</source>
+        <translation>Wróć do mojego notatnika</translation>
+    </message>
+    <message>
+        <source>Brulion documentation</source>
+        <translation>Dokumentacja Brulionu</translation>
+    </message>
+    <message>
+        <source>Switch notebook</source>
+        <translation>Przełącz notatnik</translation>
+    </message>
+    <message>
         <location filename="../src/app/shell/commandmodel.cpp" line="76"/>
         <source>Today&apos;s journal</source>
         <translation>Dzisiejszy dziennik</translation>
