@@ -2,13 +2,12 @@
 
 **Nowości w {{VERSION}}**
 
-* **Płynne przewijanie.** Bloki tworzone w trakcie przewijania są dużo lżejsze, a wiersze mają ostateczną wysokość od razu, więc treść nie skacze (wcześniej w długim dzienniku nawet o ponad 1500 px). Na Androidzie rzut palcem startuje z prędkością palca (Qt dawał 0,7×), a złapanie trwającego rzutu nie szarpie.
-* **Szybciej, zwłaszcza na telefonie.** Przy 10 tys. notatek na Raspberry Pi 4 (zbliżonym do słabego telefonu) okno pojawia się po 0,5 s zamiast 2,4 s. Autozapis dużej strony nie zawiesza aplikacji (13–18 s → 0,2 s), a graf jest gotowy po 2,6 s zamiast 45 s. Do tego szybsze zadania, kalendarz i pisanie w długich stronach. Szczegóły: `docs/PERFORMANCE.md`.
-* **Android: HTTPS i Nextcloud działają.** Do APK brakowało OpenSSL, więc każde połączenie HTTPS się nie udawało. Teraz APK zawiera OpenSSL 3, a mimo to jest mniejszy niż w 0.1.1.
-* **Import z Trilium** (eksport ZIP w HTML albo Markdown z Trilium 0.10x, TriliumNext 0.9x i zadam/trilium 0.6x): drzewo notatek, linki, etykiety, notatki dzienne, załączniki.
-* Na klawiaturze dotykowej wpisana data i godzina przypomnienia są przyjmowane od razu, a okno zapisu przy eksporcie podpowiada nazwę pliku.
-* W przeglądarce indeks notatek kończy się sam, bez ruszania myszą, a ponowne otwarcie strony jest szybsze.
-* Dla programistów: APK można zbudować przez Nix (`nix build github:{{REPO}}/{{TAG}}#brulion-android`).
+* **Rejestr zdarzeń** (*Ustawienia → Aplikacja → Rejestr zdarzeń* albo przycisk w *Ustawienia → Synchronizacja*): co aplikacja robiła, z filtrami i wyszukiwaniem, także z poprzednich uruchomień. Przyciski Kopiuj, Udostępnij, Zapisz w Pobranych i Zapisz jako — gdy coś nie działa, wyślij ten plik. Hasła, tokeny i dane logowania są z niego zawsze usuwane; rejestr zostaje na urządzeniu.
+* **Widać, co robi synchronizacja:** etap i postęp na żywo („Sprawdzanie plików na serwerze… folder 12 z ok. 40”), czas, przycisk „Zatrzymaj”. Gdy serwer nie odpowiada, po ok. 20 s pojawia się ostrzeżenie, a gdy nie odpowie wcale, przebieg kończy się błędem z powodem i ponowieniem („Kolejna próba za 25 s”, „Spróbuj teraz”) — już nigdy „synchronizuję…” bez końca.
+* **Historia synchronizacji:** ostatnie 20 przebiegów z wynikiem po polsku, a w „Szczegółach” czasy etapów, liczba zapytań, pliki z błędami i ich przyczyny. Konflikty i masowe usuwanie są oznaczone jako „Czeka na Twoją decyzję”.
+* NixOS: instalacja z flake'a nie uruchamia już testów (szybsza instalacja).
+
+Z wersji 0.2.0: płynne przewijanie, dużo szybsza praca na telefonie, HTTPS i Nextcloud na Androidzie, import z Trilium.
 
 **Najważniejsze**
 
