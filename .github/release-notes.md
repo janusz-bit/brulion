@@ -2,12 +2,10 @@
 
 **Nowości w {{VERSION}}**
 
-* **Poprawka — przełączanie notatników jednym kliknięciem:** w menu ⇄ pierwsze kliknięcie innego notatnika nic nie robiło, dopiero drugie go otwierało.
-* **Poprawka — notatki nie przechodzą między notatnikami:** synchronizacja Nextcloud była ustawieniem wspólnym dla wszystkich notatników, więc po przełączeniu notatnika (np. do dokumentacji) ten sam folder na serwerze synchronizował się z drugim notatnikiem i notatki jednego trafiały do drugiego. Teraz włączenie synchronizacji i folder na serwerze należą do notatnika; dotychczasowe ustawienie przejmuje pierwszy notatnik otwarty po aktualizacji (zwykle ten, który synchronizowałeś), a pozostałe — także dokumentacja — startują bez synchronizacji.
-* **Dokumentacja napisana w Brulionie:** osobny notatnik „Dokumentacja Brulionu” — 14 stron (tryby, linki, tagi, zadania, przypomnienia, obliczenia, zapytania, dziennik i szablony, synchronizacja, import i eksport, skróty, format plików) z żywymi przykładami. Powstaje przy pierwszym otwarciu i można go dowolnie edytować.
-* **Szybkie przełączanie notatników:** przycisk ⇄ obok nazwy notatnika w pasku bocznym (ostatnie notatniki, dokumentacja, „Otwórz inny notatnik…”), polecenie w palecie (Ctrl+K) i skrót **Ctrl+Shift+B**, który skacze do dokumentacji i z powrotem do poprzedniego notatnika. W wersji przeglądarkowej jest jeden notatnik, więc dokumentacji tam nie ma.
+* **Wzory matematyczne:** LaTeX w notatkach (`$E = mc^2$`, `$$\frac{a}{b}$$`, blok ` ```math `) jest od razu rysowany jako wzór — greckie litery, ułamki, pierwiastki, macierze i układy równań. Plik zachowuje źródło LaTeX, eksport HTML pokazuje gotowe wzory, a import z Trilium nie zamienia ich już w kod.
+* **Dokumentacja:** nowa strona „Wzory matematyczne” w dokumentacji Brulionu — z żywymi przykładami i opisem obsługiwanej składni.
 
-Z wersji 0.2.1: rejestr zdarzeń, podgląd synchronizacji na żywo i jej historia. Z wersji 0.2.0: płynne przewijanie, dużo szybsza praca na telefonie, HTTPS i Nextcloud na Androidzie, import z Trilium.
+Z wersji 0.3.2: przełączanie notatników jednym kliknięciem i synchronizacja Nextcloud przypisana do notatnika. Z wersji 0.3.0: dokumentacja napisana w Brulionie i szybkie przełączanie notatników. Z wersji 0.2.1: rejestr zdarzeń, podgląd synchronizacji na żywo i jej historia. Z wersji 0.2.0: płynne przewijanie, dużo szybsza praca na telefonie, HTTPS i Nextcloud na Androidzie, import z Trilium.
 
 **Najważniejsze**
 
