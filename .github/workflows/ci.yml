@@ -1,4 +1,4 @@
-# Checks for every push to main and every pull request:
+# Checks for every push to main and release and every pull request:
 #  * nix     — `nix flake check` + `nix build .#brulion` (builds the package; tests run in linux) on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
@@ -13,7 +13,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
   workflow_dispatch:
 

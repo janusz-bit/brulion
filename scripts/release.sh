@@ -5,6 +5,9 @@
 # v<version>. Pushing the tag starts .github/workflows/release.yml (Android APK, Linux
 # AppImages, web zip, source tarball -> GitHub release).
 #
+# Run it on the release branch: main holds the development, release holds the releases —
+# switch to release and merge main into it first (release.sh refuses any other branch).
+#
 # Usage: scripts/release.sh <X.Y.Z[-pre] | major | minor | patch> [--push] [--yes] [--dry-run]
 #   X.Y.Z[-pre]  the new version; a suffix (0.2.0-rc.1) only marks the tag as a pre-release
 #                (CMake and the Android versionName keep 0.2.0)
@@ -87,7 +90,11 @@ if git remote get-url origin >/dev/null 2>&1 &&
 fi
 
 branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
-[[ $branch == main ]] || echo "warning: releasing from '$branch', not main" >&2
+if [[ $branch != release ]]; then
+  # A dry run may show what would happen from anywhere; a real run only releases from release.
+  msg="releases go on the 'release' branch, not '$branch' (git switch release && git merge main)"
+  if ((dry)); then echo "warning: $msg" >&2; else die "$msg"; fi
+fi
 
 files=()
 if [[ $release != "$current" || $nix_current != "$release" ]]; then

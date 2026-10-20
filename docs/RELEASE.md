@@ -7,7 +7,7 @@ Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryp
 
 | Plik | Kiedy | Co robi |
 |---|---|---|
-| `.github/workflows/ci.yml` | każdy push na `main`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
+| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
 | `.github/workflows/android.yml` | push na `main` (zmiany w `src/`, `android/`…), ręcznie, z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
 | `.github/workflows/wasm.yml` | push na `main` (zmiany w `src/`, `wasm/`…), ręcznie, z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** |
 | `.github/workflows/appimage.yml` | push na `main` (zmiany w `src/`, `tests/`…), ręcznie, z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
@@ -44,6 +44,19 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 
 ## Wydanie
 
+Releasy idą na osobnej gałęzi `release` (utworzonej z main przy v0.3.4): `main` to rozwój, a
+`release` zbiera wszystko, co release'owe — notatki wydaniowe, commit z wersją i tag. Przed
+kolejnym wydaniem brać zmiany z main na `release`:
+
+```sh
+git switch release && git merge main     # stan main na release
+# .github/release-notes.md -> commit "Update release notes for vX.Y.Z"
+scripts/release.sh patch --push          # bump + commit "Release vX.Y.Z" + tag, push atomowo
+git switch main
+```
+
+Argumenty `scripts/release.sh`:
+
 ```sh
 scripts/release.sh minor --push        # 0.1.0 -> 0.2.0: commit "Release v0.2.0" + tag v0.2.0, push
 scripts/release.sh 0.1.0 --push        # pierwsze wydanie: wersja już jest w plikach — sam tag
@@ -54,7 +67,8 @@ scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił
 `scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
 biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
 minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. Wymaga czystego
-drzewa roboczego. Push taga uruchamia `release.yml`:
+drzewa roboczego i gałęzi `release` (z innej umiera; `--dry-run` pokazuje, co by zrobił, z
+każdej). Push taga uruchamia `release.yml`:
 
 1. **draft** — tag musi się zgadzać z wersją w `CMakeLists.txt` i `nix/package.nix`; powstaje
    szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,
