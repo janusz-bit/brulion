@@ -190,6 +190,11 @@ public:
     Q_INVOKABLE QString pageTitle(const QString &path) const;
     /// "Projekty/Dom.md" -> "Projekty".
     Q_INVOKABLE QString folderOf(const QString &path) const;
+    /// An attachment picture (png, jpg, ...): PageView shows it as a picture, not as text.
+    Q_INVOKABLE bool isPicture(const QString &path) const;
+    /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
+    /// header has none): the picture view's own-pixels size, without decoding the picture.
+    Q_INVOKABLE QSize pictureSize(const QString &path) const;
     /// Is `path` a daily note? Returns its date "YYYY-MM-DD" or "".
     Q_INVOKABLE QString journalDate(const QString &path) const;
 

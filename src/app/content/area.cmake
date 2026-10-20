@@ -15,6 +15,7 @@ qt_target_qml_sources(brulion
         qml/content/ContentRefRow.qml
         qml/content/ContentRefGroupHeader.qml
         qml/content/ContentPageHeader.qml
+        qml/content/ContentPictureView.qml
         qml/content/ContentSidePanel.qml
         qml/content/ContentOutline.qml
         qml/content/ContentMiniCalendar.qml

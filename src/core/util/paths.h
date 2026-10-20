@@ -18,6 +18,9 @@ QString basename(const VaultPath &path);
 /// "a/b/c.md" -> ".md" (lower-case), "" when none.
 QString extension(const VaultPath &path);
 bool isMarkdown(const VaultPath &path);
+/// An attachment picture (png, jpg, jpeg, gif, webp, svg, bmp, avif): opened as a picture, not
+/// as text (the file's bytes are not a note).
+bool isPicturePath(const VaultPath &path);
 /// "a/b/Page.md" -> "a/b/Page".
 QString stripMarkdownExtension(const VaultPath &path);
 /// "a/b/Page.md" -> "Page".

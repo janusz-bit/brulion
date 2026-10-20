@@ -480,6 +480,11 @@ QString Workspace::folderOf(const QString &path) const
     return paths::dirname(path);
 }
 
+bool Workspace::isPicture(const QString &path) const
+{
+    return paths::isPicturePath(path);
+}
+
 QString Workspace::journalDate(const QString &path) const
 {
     if (!m_vault)
@@ -648,6 +653,17 @@ QSize Workspace::assetPixelSize(const QString &path) const
     if (!m_dataUrls.contains(key))
         assetUrl(path);
     return m_dataUrlSizes.value(key);
+}
+
+QSize Workspace::pictureSize(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    const QSize pixels = assetPixelSize(path); // WebAssembly: the data URL's bytes (cached above)
+    if (pixels.isValid() && !pixels.isEmpty())
+        return pixels;
+    const QUrl url = assetUrl(path); // desktop / Android: the file on disk
+    return url.isLocalFile() ? editor::localPictureSize(url.toLocalFile()) : QSize();
 }
 
 QString Workspace::saveAttachment(const QString &fileName, const QByteArray &data)

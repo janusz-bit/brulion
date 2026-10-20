@@ -14,7 +14,12 @@ import Brulion
 //     breadcrumb is the editor's), fold state kept per device (Workspace.foldState);
 //   * the references below the blocks (ContentBacklinks: linked references grouped by page,
 //     unlinked mentions with "Połącz"), scrolling with the page;
-//   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz).
+//   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz);
+//   * a picture attachment (assets/photo.png) as a picture (ContentPictureView: fitted into the
+//     view, a click — or the size button — its own pixels; "Pokaż jako tekst" in its bar,
+//     "Pokaż obraz" in the page menu and Ctrl+E switch to the alternative view, the file read as
+//     text — the older one, mojibake for a binary picture, kept for text-like assets and the old
+//     habit; its bytes never reach the editor until that view is asked for).
 // Kept from the first version (and checked by the shell's self-test, objectNames "pageController"
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
@@ -44,13 +49,19 @@ FocusScope {
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
-    /// A block (or the source) is being edited: the shell hides its floating capture button.
-    readonly property bool editing: page.editingRow >= 0 || page.sourceMode
+    /// A block (or the source) is being edited, or a picture fills the view: the shell hides
+    /// its floating capture button (it would float over the photo).
+    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureShown
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     readonly property alias controller: page
     readonly property alias editor: editor
 
     readonly property string routePath: route && route.path ? route.path : ""
+    /// A picture attachment opens as a picture (its bytes are not a note); the file read as
+    /// text — the older view — only when asked for ("Pokaż jako tekst", "Pokaż obraz", Ctrl+E).
+    readonly property bool pictureRoute: Workspace.isPicture(root.routePath)
+    property bool pictureAsText: false
+    readonly property bool pictureShown: root.pictureRoute && !root.pictureAsText
     property string _revealed: ""
     property string _opened: ""
     property bool _openedMissing: false
@@ -80,6 +91,8 @@ FocusScope {
     // Workspace.pathRenamed reaches followRename() below; setting the new path first would save
     // unsaved edits under the old name and bring that page back as a duplicate.
     onRouteChanged: Qt.callLater(root.applyRoute)
+    // A new path: a picture opens as a picture again (before applyRoute, called later).
+    onRoutePathChanged: root.pictureAsText = false
     Component.onCompleted: applyRoute()
     // The editor's delegates go first, while the editor still exists (they read its geometry).
     Component.onDestruction: editor.controller = null
@@ -87,11 +100,16 @@ FocusScope {
     function applyRoute() {
         if (root.routePath === "")
             return
-        if (page.path !== root.routePath) {
+        // A picture's bytes are not a note: the editor stays unloaded while the picture is
+        // shown (page.path "" saves the previous page without loading anything).
+        const target = root.pictureShown ? "" : root.routePath
+        if (page.path !== target) {
             root._revealed = ""
             root._opened = ""
             root._foldsFor = ""
-            page.path = root.routePath // saves the previous page, loads this one
+            page.path = target // saves the previous page, loads this one
+            if (target === "")
+                return
             root.restoreFolds()
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
@@ -103,6 +121,20 @@ FocusScope {
         }
         revealTarget()
         openRequested()
+    }
+
+    /// The picture's two views: the picture itself ⇄ the file read as text in the editor.
+    function showPictureAsText() {
+        if (!root.pictureRoute || root.pictureAsText)
+            return
+        root.pictureAsText = true
+        root.applyRoute() // loads the file's text into the editor
+    }
+    function showPictureView() {
+        if (!root.pictureRoute || !root.pictureAsText)
+            return
+        root.pictureAsText = false
+        root.applyRoute() // page.path = "" unloads the editor
     }
 
     function restoreFolds() {
@@ -281,6 +313,8 @@ FocusScope {
         id: editor
         objectName: "pageEditor"
         anchors.fill: parent
+        // A picture fills the view instead (its bytes are never loaded while it is shown).
+        visible: !root.pictureShown
         controller: page
         // Problems the editor reports (a picture that could not be added) as the window's toast.
         onNotice: (text, kind) => AppController.toast(text, kind)
@@ -306,6 +340,15 @@ FocusScope {
                 Component.onDestruction: if (root.pageHeader === pageHeader) root.pageHeader = null
             }
         }
+    }
+
+    // A picture attachment: the picture itself (the editor behind it holds the alternative
+    // view, the file read as text, and stays unloaded — page.path "" — while this shows).
+    ContentPictureView {
+        anchors.fill: parent
+        visible: root.pictureShown
+        path: root.pictureRoute ? root.routePath : ""
+        onShowTextRequested: root.showPictureAsText()
     }
 
     // The references live in the editor's scrolling content, right under the blocks (in the
@@ -377,6 +420,13 @@ FocusScope {
             onTriggered: root.toggleNoteMode()
         }
         BMenuItem {
+            visible: root.pictureRoute && root.pictureAsText
+            height: visible ? implicitHeight : 0
+            text: qsTr("Show picture")
+            iconName: "image"
+            onTriggered: root.showPictureView()
+        }
+        BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
             iconName: "code"
             shortcut: root.inSidePanel ? "" : "Ctrl+E"
@@ -439,9 +489,13 @@ FocusScope {
     Connections {
         target: AppController
         function onUiActionRequested(action) {
-            if (action === "toggleSourceMode" && root.visible && !root.inSidePanel)
-                editor.toggleSourceMode()
-            else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel)
+            if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
+                // A picture shows the picture: Ctrl+E / "Markdown source" opens the file's text.
+                if (root.pictureShown)
+                    root.showPictureAsText()
+                else
+                    editor.toggleSourceMode()
+            } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel)
                 root.toggleNoteMode()
         }
     }
@@ -449,6 +503,7 @@ FocusScope {
     Shortcut {
         sequence: "Ctrl+E"
         enabled: root.visible && !root.inSidePanel // one per window (two would be ambiguous)
-        onActivated: editor.toggleSourceMode()
+        // A picture shows the picture: Ctrl+E opens the file's text (the alternative view).
+        onActivated: root.pictureShown ? root.showPictureAsText() : editor.toggleSourceMode()
     }
 }

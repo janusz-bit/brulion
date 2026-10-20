@@ -29,6 +29,15 @@ private Q_SLOTS:
         QCOMPARE(c->device, QStringLiteral("ABCDEFG"));
         QVERIFY(!paths::parseSyncthingConflict(QStringLiteral("a/Notatka.md")).has_value());
     }
+    void picturePaths()
+    {
+        QVERIFY(paths::isPicturePath(QStringLiteral("assets/foto.JPG")));
+        QVERIFY(paths::isPicturePath(QStringLiteral("assets/plan-mieszkania.svg")));
+        QVERIFY(paths::isPicturePath(QStringLiteral("zdj.avif")));
+        QVERIFY(!paths::isPicturePath(QStringLiteral("notatka.md")));
+        QVERIFY(!paths::isPicturePath(QStringLiteral("assets/archiwum.zip")));
+        QVERIFY(!paths::isPicturePath(QStringLiteral("assets/svg"))); // a name, not an extension
+    }
     void uniquePath()
     {
         const QSet<QString> taken = {QStringLiteral("żółw.md"), QStringLiteral("żółw 2.md")};

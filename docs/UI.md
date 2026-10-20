@@ -156,7 +156,15 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
   highlighting.
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
-  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files.
+  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files. Opening
+  one (a click on the embed, a link to the file) shows the picture itself
+  (`ContentPictureView`, `PageView.pictureRoute`): fitted into the view with its aspect ratio
+  kept, a click on it or the "Pokaż naturalny rozmiar" button its own pixels (then draggable), the
+  button back to the fitted view. The bar's "Pokaż jako tekst", the page menu's "Pokaż obraz"
+  and Ctrl+E switch to the alternative view — the file read as text in the block editor (the
+  older behaviour, mojibake for a binary picture, kept for text-like assets). While the picture
+  shows, the editor stays unloaded (`page.path` ""): a picture's bytes are not a note
+  (`paths::isPicturePath`, `Workspace.isPicture`).
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
   Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie, Link do strony (`[[`), Tag
   (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów, Ukryj klawiaturę.

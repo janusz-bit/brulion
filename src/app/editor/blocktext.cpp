@@ -7,6 +7,7 @@
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
 #include "text/text.h"
+#include "util/paths.h"
 
 #include <QRegularExpression>
 
@@ -74,12 +75,8 @@ bool looksLikeTable(QStringView body)
 
 bool isImageExtension(QStringView target)
 {
-    const qsizetype dot = target.lastIndexOf(u'.');
-    if (dot < 0)
-        return false;
-    const QString ext = target.sliced(dot + 1).toString().toLower();
-    static const QStringList images{u"png"_s, u"jpg"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"svg"_s, u"bmp"_s, u"avif"_s};
-    return images.contains(ext);
+    // The same pictures paths::isPicturePath opens as a picture (PageView).
+    return paths::isPicturePath(target.toString());
 }
 
 bool isAttachmentTarget(QStringView target)

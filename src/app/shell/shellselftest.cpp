@@ -1032,6 +1032,59 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                 check(app->workspace()->readFile(renamed).contains(u"Rower dla Oli i Kuby"_s),
                       "the text typed before the rename is saved under the new name");
             }
+
+            // A picture opens as a picture: its bytes are not a note (the older view read them
+            // as text — mojibake for a binary picture). "Pokaż jako tekst" brings that view
+            // back, the view's own switch (the page menu's "Pokaż obraz") the picture.
+            const QString picture = u"assets/plan-mieszkania.svg"_s;
+            app->openPage(picture);
+            QQuickItem *pictureView = nullptr;
+            check(waitFor([&] {
+                      pictureView = nullptr;
+                      for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
+                          if (v->property("visible").toBool()) {
+                              pictureView = v;
+                              break;
+                          }
+                      }
+                      return app->currentRoute().value(u"path"_s).toString() == picture && pictureView
+                             && pictureView->property("pictureLoaded").toBool();
+                  }),
+                  "a picture opens as a picture, loaded and shown");
+            check(controllerFor(picture) == nullptr, "the picture's bytes are not loaded into the block editor");
+            if (pictureView) {
+                // "Pokaż jako tekst" in the picture's bar: the file read as text in the editor.
+                if (QQuickItem *button = pictureView->findChild<QQuickItem *>(u"pictureTextButton"_s)) {
+                    const QPointF at = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
+                    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+                    if (touch)
+                        touchTap(window, at, 30);
+                    else
+                        mouseClick(window, at);
+                    check(waitFor([&] {
+                              QObject *textPage = controllerFor(picture);
+                              return textPage && textPage->property("loaded").toBool()
+                                     && !pictureView->property("visible").toBool();
+                          }),
+                          "“Pokaż jako tekst” shows the file's text in the editor, the alternative view");
+                } else {
+                    check(false, "the picture view has its text button");
+                }
+                // Back to the picture (the page menu's "Pokaż obraz" calls the same switch).
+                if (QQuickItem *pageView = pictureView->parentItem()) {
+                    QMetaObject::invokeMethod(pageView, "showPictureView");
+                    check(waitFor([&] {
+                              return pictureView->property("visible").toBool()
+                                     && pictureView->property("pictureLoaded").toBool()
+                                     && controllerFor(picture) == nullptr;
+                          }),
+                          "the picture comes back and the editor is unloaded again");
+                } else {
+                    check(false, "the picture view lives in the page view");
+                }
+            } else {
+                check(false, "the page view has a picture view");
+            }
         } else {
             check(false, "the page view has an editor");
         }

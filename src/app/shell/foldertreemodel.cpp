@@ -89,11 +89,7 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
             return m_expanded.contains(e.path) ? u"folder-open"_s : u"folder"_s;
         if (paths::isMarkdown(e.path))
             return u"file-text"_s;
-        {
-            static const QStringList images{ u".png"_s, u".jpg"_s, u".jpeg"_s, u".gif"_s,
-                                             u".svg"_s, u".webp"_s, u".bmp"_s };
-            return images.contains(paths::extension(e.path)) ? u"image"_s : u"file"_s;
-        }
+        return paths::isPicturePath(e.path) ? u"image"_s : u"file"_s;
     default:
         return {};
     }

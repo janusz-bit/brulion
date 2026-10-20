@@ -875,65 +875,65 @@
 <context>
     <name>BlockDelegate</name>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="202"/>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="492"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="203"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="498"/>
         <source>Expand</source>
         <translation>Rozwiń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="202"/>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="492"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="203"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="498"/>
         <source>Collapse</source>
         <translation>Zwiń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="238"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="239"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="686"/>
         <source>Zoom into block</source>
         <translation>Przybliż blok</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="238"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="239"/>
         <source>List item</source>
         <translation>Punkt listy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="485"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="491"/>
         <source>Zoom in</source>
         <translation>Przybliż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="498"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="504"/>
         <source>Copy block reference</source>
         <translation>Kopiuj odwołanie do bloku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="503"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="509"/>
         <source>Insert picture…</source>
         <translation>Wstaw obraz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="511"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="517"/>
         <source>Indent</source>
         <translation>Zwiększ wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="519"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="525"/>
         <source>Outdent</source>
         <translation>Zmniejsz wcięcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="525"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="531"/>
         <source>Move up</source>
         <translation>Przenieś w górę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="531"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="537"/>
         <source>Move down</source>
         <translation>Przenieś w dół</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="538"/>
+        <location filename="../src/app/qml/editor/BlockDelegate.qml" line="544"/>
         <source>Delete block</source>
         <translation>Usuń blok</translation>
     </message>
@@ -994,7 +994,7 @@
 <context>
     <name>BlockText</name>
     <message>
-        <location filename="../src/app/qml/editor/BlockText.qml" line="94"/>
+        <location filename="../src/app/qml/editor/BlockText.qml" line="103"/>
         <source>Type / for commands</source>
         <translation>Wpisz „/”, aby wybrać polecenie</translation>
     </message>
@@ -1835,6 +1835,29 @@
         <location filename="../src/app/qml/content/ContentPageHeader.qml" line="319"/>
         <source>Start writing</source>
         <translation>Zacznij pisać</translation>
+    </message>
+</context>
+<context>
+    <name>ContentPictureView</name>
+    <message>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="124"/>
+        <source>Fit to view</source>
+        <translation>Dopasuj do widoku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="124"/>
+        <source>Zoom to actual size</source>
+        <translation>Pokaż naturalny rozmiar</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="133"/>
+        <source>Show as text</source>
+        <translation>Pokaż jako tekst</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentPictureView.qml" line="186"/>
+        <source>Cannot load %1</source>
+        <translation>Nie można wczytać %1</translation>
     </message>
 </context>
 <context>
@@ -3332,47 +3355,47 @@
         <translation>Logseq (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="97"/>
+        <location filename="../src/core/io/export_html.cpp" line="98"/>
         <source>Exported from Brulion on %1</source>
         <translation>Wyeksportowano z Brulionu: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="98"/>
+        <location filename="../src/core/io/export_html.cpp" line="99"/>
         <source>Exported from Brulion</source>
         <translation>Wyeksportowano z Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="272"/>
+        <location filename="../src/core/io/export_html.cpp" line="273"/>
         <source>Linked references</source>
         <translation>Odnośniki</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="305"/>
+        <location filename="../src/core/io/export_html.cpp" line="306"/>
         <source>HTML website (ZIP)</source>
         <translation>Witryna HTML (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="396"/>
+        <location filename="../src/core/io/export_html.cpp" line="397"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="399"/>
+        <location filename="../src/core/io/export_html.cpp" line="400"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="405"/>
+        <location filename="../src/core/io/export_html.cpp" line="406"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="415"/>
+        <location filename="../src/core/io/export_html.cpp" line="416"/>
         <source>HTML document</source>
         <translation>Dokument HTML</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="452"/>
+        <location filename="../src/core/io/export_html.cpp" line="453"/>
         <source>Contents</source>
         <translation>Spis treści</translation>
     </message>
@@ -4348,83 +4371,88 @@
 <context>
     <name>PageView</name>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="199"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="231"/>
         <source>The note mode could not be changed: the page&apos;s properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E).</source>
         <translation>Nie udało się zmienić trybu notatki: właściwości strony mają postać, której Brulion nie potrafi bezpiecznie zmienić. Zmień je w źródle Markdown (Ctrl+E).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="205"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="237"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="221"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="253"/>
         <source>Merged changes made elsewhere into this page</source>
         <translation>Scalono z tą stroną zmiany z innego miejsca</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="343"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="386"/>
         <source>Version history</source>
         <translation>Historia wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="349"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="392"/>
         <source>Copy link %1</source>
         <translation>Kopiuj link %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="354"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="397"/>
         <source>Export page…</source>
         <translation>Eksportuj stronę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="362"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="405"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="369"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="412"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="374"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="417"/>
         <source>Switch to outline</source>
         <translation>Przełącz na konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="374"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="417"/>
         <source>Switch to document</source>
         <translation>Przełącz na dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="380"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="425"/>
+        <source>Show picture</source>
+        <translation>Pokaż obraz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/PageView.qml" line="430"/>
         <source>Edit as blocks</source>
         <translation>Edytuj jako bloki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="380"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="430"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="387"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="410"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="437"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="460"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="407"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="457"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="408"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="458"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="415"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="465"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
@@ -5720,17 +5748,17 @@
 <context>
     <name>ShellSidebar</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="85"/>
         <source>Switch notebook</source>
         <translation>Przełącz notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="360"/>
         <source>Brulion documentation</source>
         <translation>Dokumentacja Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="1"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="373"/>
         <source>Open another notebook…</source>
         <translation>Otwórz inny notatnik…</translation>
     </message>
@@ -5740,124 +5768,124 @@
         <translation>Pasek boczny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="84"/>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="248"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="91"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="255"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="125"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="132"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="126"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="133"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="127"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="134"/>
         <source>Tasks</source>
         <translation>Zadania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="128"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="135"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="129"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="136"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="130"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="137"/>
         <source>Graph</source>
         <translation>Graf</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="131"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="138"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="164"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="171"/>
         <source>Favorites</source>
         <translation>Ulubione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="182"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="189"/>
         <source>Pages you star appear here.</source>
         <translation>Tu pojawiają się strony oznaczone gwiazdką.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="213"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="220"/>
         <source>Recent</source>
         <translation>Ostatnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="243"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="250"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="273"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="280"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="533"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="277"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="284"/>
         <source>expanded folder</source>
         <translation>folder rozwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="277"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="284"/>
         <source>collapsed folder</source>
         <translation>folder zwinięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="333"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="393"/>
         <source>New page here</source>
         <translation>Nowa strona tutaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="340"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="400"/>
         <source>New folder…</source>
         <translation>Nowy folder…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="347"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="407"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="354"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="414"/>
         <source>Remove from favorites</source>
         <translation>Usuń z ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="354"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="414"/>
         <source>Add to favorites</source>
         <translation>Dodaj do ulubionych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="359"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="419"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="366"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="426"/>
         <source>Page history</source>
         <translation>Historia strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="372"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="432"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="154"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="161"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
@@ -8681,22 +8709,22 @@
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2488"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2489"/>
         <source>Pictures (*.png *.jpg *.jpeg *.gif *.webp *.svg *.bmp *.avif)</source>
         <translation>Obrazy (*.png *.jpg *.jpeg *.gif *.webp *.svg *.bmp *.avif)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2488"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2489"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2541"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2542"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2605"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2606"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -9738,52 +9766,52 @@
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="646"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="693"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="653"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="711"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="798"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="856"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="799"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="857"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="817"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="875"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="819"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="877"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="822"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="880"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="829"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="887"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="899"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="957"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="900"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="958"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
@@ -9791,14 +9819,17 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="111"/>
         <source>Back to my notebook</source>
         <translation>Wróć do mojego notatnika</translation>
     </message>
     <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="111"/>
         <source>Brulion documentation</source>
         <translation>Dokumentacja Brulionu</translation>
     </message>
     <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="112"/>
         <source>Switch notebook</source>
         <translation>Przełącz notatnik</translation>
     </message>
@@ -9898,22 +9929,22 @@
         <translation>Przełącz między blokami a tekstem strony</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="134"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="138"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="135"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="139"/>
         <source>Logs, diagnostics, sync problems</source>
         <translation>Logi, diagnostyka, problemy z synchronizacją</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="125"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="129"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="126"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="130"/>
         <source>Document (like Obsidian) or outline (like Logseq)</source>
         <translation>Dokument (jak Obsidian) albo konspekt (jak Logseq)</translation>
     </message>
@@ -9973,12 +10004,12 @@
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="110"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="114"/>
         <source>Open another notebook…</source>
         <translation>Otwórz inny notatnik…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="111"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="115"/>
         <source>About Brulion</source>
         <translation>O Brulionie</translation>
     </message>
@@ -10019,53 +10050,53 @@
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="674"/>
+        <location filename="../src/app/shell/workspace.cpp" line="690"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="743"/>
+        <location filename="../src/app/shell/workspace.cpp" line="759"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="849"/>
+        <location filename="../src/app/shell/workspace.cpp" line="865"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="863"/>
+        <location filename="../src/app/shell/workspace.cpp" line="879"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="899"/>
-        <location filename="../src/app/shell/workspace.cpp" line="908"/>
+        <location filename="../src/app/shell/workspace.cpp" line="915"/>
+        <location filename="../src/app/shell/workspace.cpp" line="924"/>
         <source>A page named “%1” already exists here.</source>
         <translation>Strona o nazwie „%1” już tu istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="916"/>
+        <location filename="../src/app/shell/workspace.cpp" line="932"/>
         <source>Could not rename the page: %1</source>
         <translation>Nie udało się zmienić nazwy strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="961"/>
+        <location filename="../src/app/shell/workspace.cpp" line="977"/>
         <source>Could not rename the folder: %1</source>
         <translation>Nie udało się zmienić nazwy folderu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="992"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1008"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1012"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1028"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1070"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1086"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>

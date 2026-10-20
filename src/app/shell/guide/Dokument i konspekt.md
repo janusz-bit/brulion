@@ -56,4 +56,6 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…`. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
 
+Kliknięcie osadzonego obrazu pokazuje samo zdjęcie: dopasowane do widoku, a kliknięcie na nim (albo przycisk „Pokaż naturalny rozmiar”) — naturalną wielkość z możliwością przeciągania. „Pokaż jako tekst” w pasku, „Pokaż obraz” w menu strony i Ctrl+E pokazują plik jako tekst w edytorze — to starszy widok, przydatny dla plików tekstowych (treść binarnego obrazu to tylko nieczytelne znaki).
+
 Zobacz też: [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]], [[Skróty klawiszowe|Skróty klawiszowe]].
