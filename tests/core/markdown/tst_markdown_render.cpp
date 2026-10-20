@@ -229,6 +229,7 @@ private Q_SLOTS:
         QTest::newRow("not inside words") << u"aw b, ż c, ów d"_s << u"aw b, ż c, ów d"_s;
         QTest::newRow("before a link") << u"w [[Domu]]"_s << u"w~"_s + link(u"page:Domu"_s, u"L"_s, u"Domu"_s);
         QTest::newRow("before emphasis") << u"i **dalej**"_s << u"i~<b>dalej</b>"_s;
+        QTest::newRow("before a formula") << u"i $x$"_s << u"i~<i>x</i>"_s;
         QTest::newRow("line end") << u"jest w\ndomu"_s << u"jest w<br/>domu"_s;
         QTest::newRow("last word") << u"mam i"_s << u"mam i"_s;
         QTest::newRow("two spaces") << u"w  domu"_s << u"w  domu"_s;
@@ -240,6 +241,38 @@ private Q_SLOTS:
         QFETCH(QString, input);
         QFETCH(QString, expected);
         QCOMPARE(render(input).replace(QChar(0x00A0), u'~'), expected);
+    }
+
+    void formulas_data()
+    {
+        // Formulas in a block body (docs/SYNTAX.md §11): the LaTeX source becomes rich text, the
+        // delimiters vanish; text that only looks like a formula stays as written.
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("inline") << u"Pole koła: $\\pi r^2$."_s << u"Pole koła: <i>π</i><i>r</i><sup>2</sup>."_s;
+        QTest::newRow("display inline") << u"$$\\frac{1}{2}$$"_s << u"½"_s;
+        QTest::newRow("parens delimiter") << u"\\(x \\le y\\)"_s << u"<i>x</i> ≤ <i>y</i>"_s;
+        QTest::newRow("brackets delimiter") << u"\\[x = y\\]"_s << u"<i>x</i> = <i>y</i>"_s;
+        QTest::newRow("display keeps lines") << u"$$\na \\\\ b\n$$"_s << u"<i>a</i><br/><i>b</i>"_s;
+        QTest::newRow("emphasis is math") << u"$a*b*c$"_s << u"<i>a</i> ∗ <i>b</i> ∗ <i>c</i>"_s;
+        QTest::newRow("underscore is a subscript") << u"$x_1$ i $y$"_s << u"<i>x</i><sub>1</sub> i\u00a0<i>y</i>"_s;
+        QTest::newRow("two formulas") << u"$x$ oraz $y^2$"_s << u"<i>x</i> oraz <i>y</i><sup>2</sup>"_s;
+        QTest::newRow("in a link label") << u"[$x^2$](https://e.pl)"_s
+                                         << link(u"ext:https://e.pl"_s, u"L"_s, u"<i>x</i><sup>2</sup>"_s);
+
+        // Not formulas.
+        QTest::newRow("prices") << u"kosztuje $5 i $10"_s << u"kosztuje $5 i\u00a0$10"_s;
+        QTest::newRow("escaped dollar") << u"cena \\$100, a $x$ tyle"_s << u"cena $100, a\u00a0<i>x</i> tyle"_s;
+        QTest::newRow("code span") << u"`$x$`"_s << Code + u"$x$</code>"_s;
+        QTest::newRow("comment") << u"a %%$x$%% b"_s << u"a  b"_s;
+        QTest::newRow("property line") << u"autor:: $x$"_s << u"<span style=\"color:M\">autor:</span> <i>x</i>"_s;
+    }
+
+    void formulas()
+    {
+        QFETCH(QString, input);
+        QFETCH(QString, expected);
+        QCOMPARE(render(input), expected);
     }
 
     void hostileInput_data()

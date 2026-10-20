@@ -5,6 +5,7 @@
 
 #include "calc/calc.h"
 #include "markdown/inline.h"
+#include "markdown/math.h"
 #include "util/paths.h"
 
 #include "picturesize.h"
@@ -137,6 +138,11 @@ QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const
     case BlockView::Quote: html = renderer.renderBlock(e.body, BlockKind::Quote); break;
     case BlockView::Callout: html = renderer.renderBlock(e.body, BlockKind::Callout); break;
     case BlockView::Html: html = markdown::InlineRenderer::escape(e.body); break;
+    case BlockView::Math:
+        // ```math / ```latex / ```tex: the LaTeX source stays in the file, the delegate shows
+        // the formula (docs/SYNTAX.md §11, markdown/math.h).
+        html = markdown::renderMath(s.editText, true);
+        break;
     default: break;
     }
     if (renderOffset)

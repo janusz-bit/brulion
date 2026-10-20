@@ -441,7 +441,7 @@ private Q_SLOTS:
                 u"> Wskazówka: podlewaj rano."_s,
                 u"> [!warning]"_s,
                 u"> Uwaga na **przymrozki**!"_s,
-                u"Wzór w linii `$E=mc^2$` i blokowy:"_s,
+                u"Wzór w linii $E=mc^2$ i blokowy:"_s,
                 u"```math"_s,
                 u"\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}"_s,
                 u"Przypis do tekstu[^1]."_s,
@@ -598,13 +598,13 @@ private Q_SLOTS:
                 << u"Tekst **pogrubiony**, *kursywa*, podkreślenie, ~~przekreślenie~~, `kod()`, H2O, ==zaznaczenie==, "
                    "czerwony 🌱."_s;
         QTest::newRow("0.63 html math") << u"0.63-html.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
-                                        << u"Wzór `$E=mc^2$`."_s;
+                                        << u"Wzór $E=mc^2$."_s;
         QTest::newRow("0.63 markdown strike and literal tag")
                 << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                 << u"Tekst **pogrubiony**, _kursywa_, podkreślenie, ~~przekreślenie~~, `kod()`, H2O, zaznaczenie, "
                    "czerwony 🌱."_s;
         QTest::newRow("0.63 markdown math")
-                << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s << u"Wzór `$E=mc^2$`."_s;
+                << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s << u"Wzór $E=mc^2$."_s;
         // Attachment names with spaces, unencoded (not valid CommonMark).
         QTest::newRow("0.63 markdown raw attachment names")
                 << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
@@ -1558,8 +1558,8 @@ private Q_SLOTS:
         QTest::newRow("task states") << u"- [?] może\n- [/] w toku\n    - [!] własny"_s
                                      << u"- [ ] może\n- [/] w toku\n    - [ ] własny"_s;
         QTest::newRow("math") << u"Wzór $E=mc^2$ i $$a$$, ale $5 i $10.\n\n$$\\sum x$$"_s
-                              << u"Wzór `$E=mc^2$` i `$$a$$`, ale $5 i $10.\n\n```math\n\\sum x\n```"_s;
-        QTest::newRow("math of 0.63") << u"Wzór \\\\(E=mc^2\\\\)."_s << u"Wzór `$E=mc^2$`."_s;
+                              << u"Wzór $E=mc^2$ i $$a$$, ale $5 i $10.\n\n```math\n\\sum x\n```"_s;
+        QTest::newRow("math of 0.63") << u"Wzór \\\\(E=mc^2\\\\)."_s << u"Wzór $E=mc^2$."_s;
         QTest::newRow("single tilde strike")
                 << u"~skreślone~ i ~~podwójne~~, około ~5 km"_s << u"~~skreślone~~ i ~~podwójne~~, około ~5 km"_s;
         QTest::newRow("raw html escaped, autolinks kept")
@@ -1588,13 +1588,13 @@ private Q_SLOTS:
         // zadam/trilium 0.6x: Turndown escaped the TeX (`\` -> `\\`, `_` -> `\_`, `[` -> `\[`).
         QTest::newRow("math of 0.63 unescaped")
                 << u"Makro \\\\(% \\\\f is #1f(#2) \\\\int\\_{-\\\\infty}^\\\\infty \\\\hat\\\\xi\\\\,e^{2 \\\\pi i}\\\\) koniec"_s
-                << u"Makro `$% \\f is #1f(#2) \\int_{-\\infty}^\\infty \\hat\\xi\\,e^{2 \\pi i}$` koniec"_s;
+                << u"Makro $% \\f is #1f(#2) \\int_{-\\infty}^\\infty \\hat\\xi\\,e^{2 \\pi i}$ koniec"_s;
         QTest::newRow("display math of 0.63") << u"Przed\n\n\\\\\\[\\\\displaystyle \\\\frac{1}{2\\_a}\\\\\\]\n\nPo"_s
                                               << u"Przed\n\n```math\n\\displaystyle \\frac{1}{2_a}\n```\n\nPo"_s;
         QTest::newRow("display math blocks on one line")
                 << u"$$a$$ $$\\Gamma(n)$$"_s << u"```math\na\n```\n\n```math\n\\Gamma(n)\n```"_s;
-        QTest::newRow("inline math before a letter") << u"$x$y oraz $5 i $10"_s << u"`$x$`y oraz $5 i $10"_s;
-        QTest::newRow("math with angle brackets") << u"$a<b$ i <b>x</b> <i"_s << u"`$a<b$` i **x** \\<i"_s;
+        QTest::newRow("inline math before a letter") << u"$x$y oraz $5 i $10"_s << u"$x$y oraz $5 i $10"_s;
+        QTest::newRow("math with angle brackets") << u"$a<b$ i <b>x</b> <i"_s << u"$a<b$ i **x** \\<i"_s;
         QTest::newRow("footnotes of an imported note")
                 << u"Tekst.[<sup>[1]</sup>](#fn2b8)\n\n1.  [**<sup>^</sup>**](#fnref2b8)\n    \n    "
                    "[https://x.org/a](https://x.org/a)"_s

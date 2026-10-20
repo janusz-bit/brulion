@@ -336,7 +336,7 @@ private:
             const bool onlyNested = !nested.isEmpty() && onlyEmbeds(e.body, true);
             QString html;
             QString view = viewName(s.view);
-            if (textLike || s.view == BlockView::Html) {
+            if (textLike || s.view == BlockView::Html || s.view == BlockView::Math) {
                 const markdown::InlineRenderer renderer(m_model.renderContextFor(r.src.path, r.src.content, e.line));
                 html = detail::renderBodyHtml(e, s, renderer);
             } else if (s.view == BlockView::Rule) {

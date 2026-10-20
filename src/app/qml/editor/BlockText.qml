@@ -6,7 +6,9 @@ import Brulion
 // InlineRenderer: links, tags, chips) while the block is not edited, an InlineEditor with the raw
 // Markdown while it is. Both use the same font and fixed line height, so the block does not
 // move when it switches (the rendered text's height is counted in whole lines: a rich-text Text
-// gives its last line the font's own height, the editor the fixed one). Clicks on links are handled (page:, tag:, block:, ext:, task:,
+// gives its last line the font's own height, the editor the fixed one). `centered` centres both
+// (a formula block: the rendered formula and, while it is edited, its LaTeX source).
+// Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:); a click elsewhere starts editing with the caret at the clicked position.
 Item {
     id: root
@@ -14,6 +16,8 @@ Item {
     property BlockDelegate block
     /// Quote style (muted, italic) for blockquotes.
     property bool quoted: false
+    /// Centres the text (a formula block: ```math, MathBlockView).
+    property bool centered: false
     /// Shows and edits the block's text (BlockDelegate keeps one for text blocks; false while the
     /// block is shown by another view or hidden: no text, no inline editor).
     property bool live: true
@@ -25,6 +29,7 @@ Item {
     readonly property real firstLineCenter: editor.firstLineCenter(level)
     readonly property bool mono: block.view === "html"
     readonly property bool editing: live && block.editing
+    readonly property int align: root.centered ? Text.AlignHCenter : Text.AlignLeft
 
     /// The rendered text's height in whole fixed-height lines.
     readonly property real renderedHeight: lineHeightPx > 0 ? Math.max(1, Math.round(rendered.implicitHeight / lineHeightPx)) * lineHeightPx
@@ -39,6 +44,7 @@ Item {
         textFormat: Text.RichText
         text: root.live ? root.block.model.html : ""
         wrapMode: Text.Wrap
+        horizontalAlignment: root.align
         font.family: root.mono ? Theme.fontMono : Theme.fontEditor
         font.pixelSize: root.mono ? Theme.textSm : root.fontSize
         font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
@@ -90,8 +96,11 @@ Item {
             font.weight: root.level > 0 ? Theme.weightSemiBold : Theme.weightNormal
             lineHeightPx: root.lineHeightPx
             multiline: root.block.view === "html" || root.block.view === "quote" || root.block.view === "callout"
+                       || root.block.view === "math"
             continuation: root.block.view === "quote" || root.block.view === "callout" ? "> " : ""
-            placeholderText: root.block.listItem || root.block.view === "text" ? qsTr("Type / for commands") : ""
+            horizontalAlignment: root.align
+            placeholderText: root.block.view === "math" ? "LaTeX"
+                             : root.block.listItem || root.block.view === "text" ? qsTr("Type / for commands") : ""
         }
     }
 }

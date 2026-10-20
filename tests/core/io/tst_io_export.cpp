@@ -435,6 +435,26 @@ private Q_SLOTS:
         QVERIFY(page.contains(u"<a class=\"block-ref\" href=\"Inna.html#block-b1\">Strona i #wewnątrz</a>"_s));
     }
 
+    void htmlMath()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Wzory.md"_s, u"Pole koła: $\\pi r^2$, źródło: $\\sqrt{2}$.\n"
+                                                "\n"
+                                                "$$\\frac{a}{b}$$\n"
+                                                "\n"
+                                                "```math\n"
+                                                "\\sum_{i=1}^{n} i\n"
+                                                "```\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString page = textOf(entries, u"Brulion/Wzory.html"_s);
+        QVERIFY2(page.contains(u"Pole koła: <span class=\"math\"><i>π</i><i>r</i><sup>2</sup></span>, źródło: "
+                               "<span class=\"math\">√<span style=\"text-decoration:overline\">2</span></span>."_s),
+                 qPrintable(page));
+        QVERIFY(page.contains(u"<span class=\"math display\"><sup><i>a</i></sup>&#8260;<sub><i>b</i></sub></span>"_s));
+        QVERIFY(page.contains(u"<div class=\"math\">∑<sub><i>i</i> = 1</sub><sup><i>n</i></sup> <i>i</i></div>"_s));
+        QVERIFY(!page.contains(u"language-math"_s));
+    }
+
     void htmlSingle()
     {
         const ExportedFile f = exportWith(u"html-single"_s);

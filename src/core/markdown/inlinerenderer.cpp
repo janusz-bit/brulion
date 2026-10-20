@@ -5,6 +5,7 @@
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
 #include "markdown/lines_p.h"
+#include "markdown/math.h"
 #include "markdown/properties.h"
 #include "markdown/structure_p.h"
 #include "markdown/tasks.h"
@@ -312,8 +313,8 @@ bool isOpening(QChar c)
 
 /// Polish typography: a one-letter word (a, i, o, u, w, z) never ends a line — the space after
 /// it becomes a no-break space when a word follows (a letter, a digit, an opening bracket or
-/// quote, a link or emphasis: "w [[Domu]]", "i **dalej**"; not "a = b"). `i` is the position of
-/// a space in `text`.
+/// quote, a link, emphasis or a formula: "w [[Domu]]", "i **dalej**", "i $x$"; not "a = b").
+/// `i` is the position of a space in `text`.
 bool joinsNextWord(QStringView text, qsizetype i)
 {
     if (i < 1 || i + 1 >= text.size() || text[i] != u' ')
@@ -325,7 +326,7 @@ bool joinsNextWord(QStringView text, qsizetype i)
     if (i >= 2 && !text[i - 2].isSpace() && !isOpening(text[i - 2]))
         return false;
     const QChar next = text[i + 1];
-    static const QString markup = QStringLiteral("*_[`!#");
+    static const QString markup = QStringLiteral("*_[`!#$");
     return next.isLetterOrNumber() || isOpening(next) || markup.contains(next);
 }
 
@@ -484,6 +485,14 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         atoms.append({span.from, span.to,
                       u"<code style=\"background-color:"_s + safeColor(pal.codeBackground) + u"\">"_s + esc(content)
                               + u"</code>"_s});
+    }
+
+    // Formulas: $…$, $$…$$, \(…\) and \[…\] (docs/SYNTAX.md §11, markdown/math.h). The scan runs
+    // on the masked text, so a formula inside a code span or a comment is not one; like emphasis,
+    // a formula works in a link label too.
+    for (const MathSpan &span : findMathSpans(masked)) {
+        atoms.append({span.from, span.to,
+                      renderMath(text.sliced(span.contentFrom, span.contentTo - span.contentFrom), span.display)});
     }
 
     std::optional<TaskStatus> taskStatus;

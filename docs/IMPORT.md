@@ -92,7 +92,7 @@ Treść notatek:
 | uwaga (*admonition*: notatka, wskazówka, ważne, ostrożnie, ostrzeżenie) | callout `> [!tip]`, `> [!warning]` … |
 | blok zwijany | zwinięty callout `> [!note]- Tytuł` (rozwinięty: `+`) |
 | przypisy (także w notatkach zaimportowanych do Trilium z Markdowna) | `[^1]` w tekście, treść przypisów na końcu strony |
-| wzór w tekście / blokowy | `` `$E=mc^2$` `` / blok ```` ```math ```` — Brulion nie składa wzorów, źródło LaTeX zostaje bez zmian |
+| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku |
 | link referencyjny do notatki | `[[Import/Trilium/Projekty/Strona\|Strona]]` (pokazuje tytuł z Trilium) |
 | link z własnym tekstem | `[[Import/Trilium/Projekty/Strona\|tekst]]`; link do notatki dnia — `[[2026-10-16]]` |
 | link do notatki spoza eksportu, wykluczonej albo chronionej | sam tekst linku (ostrzeżenie) |

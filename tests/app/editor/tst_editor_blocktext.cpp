@@ -87,6 +87,13 @@ private Q_SLOTS:
         QTest::newRow("code") << u"```js\nlet a = 1\n```\n"_s << 0 << u"code"_s << u"let a = 1"_s << 6 << QString();
         QTest::newRow("calc") << u"```calc\nx = 2\n```\n"_s << 0 << u"calc"_s << u"x = 2"_s << 8 << QString();
         QTest::newRow("query") << u"```query\ntag:dom\n```\n"_s << 0 << u"query"_s << u"tag:dom"_s << 9 << QString();
+        QTest::newRow("math") << u"```math\n\\frac{1}{2}\n```\n"_s << 0 << u"math"_s << u"\\frac{1}{2}"_s << 8
+                              << QString();
+        QTest::newRow("latex fence") << u"```latex\nE = mc^2\n```\n"_s << 0 << u"math"_s << u"E = mc^2"_s << 9
+                                     << QString();
+        QTest::newRow("tex fence") << u"```tex\nx^2\n```\n"_s << 0 << u"math"_s << u"x^2"_s << 7 << QString();
+        QTest::newRow("list math") << u"- ```math\n  a^2 + b^2 = c^2\n  ```\n"_s << 0 << u"math"_s
+                                   << u"a^2 + b^2 = c^2"_s << 8 << QString();
         QTest::newRow("lone fence") << u"```calc\n"_s << 0 << u"text"_s << u"```calc"_s << 0 << QString();
         QTest::newRow("lone fence item") << u"- ```js\n"_s << 0 << u"text"_s << u"```js"_s << 0 << QString();
         QTest::newRow("list calc") << u"- ```calc\n  a = 1\n  ```\n"_s << 0 << u"calc"_s << u"a = 1"_s << 8 << QString();
@@ -153,6 +160,9 @@ private Q_SLOTS:
         const markdown::BlockEntry code = entryOf(u"```calc\na = 1\n```\n"_s);
         QCOMPARE(bodyWithEditText(code, u"a = 2\nb = a * 3"_s), u"```calc\na = 2\nb = a * 3\n```"_s);
         QCOMPARE(bodyWithEditText(code, QString()), u"```calc\n\n```"_s);
+        const markdown::BlockEntry math = entryOf(u"```math\nx = 1\n```\n"_s);
+        QCOMPARE(bodyWithEditText(math, u"x = 2\\\\y = 3"_s), u"```math\nx = 2\\\\y = 3\n```"_s);
+        QCOMPARE(bodyWithEditText(math, QString()), u"```math\n\n```"_s);
         const markdown::BlockEntry openFence = entryOf(u"```js\nlet a\n"_s);
         QCOMPARE(bodyWithEditText(openFence, u"x"_s), u"```js\nx"_s);
         const markdown::BlockEntry loneFence = entryOf(u"```js\n"_s); // text until Enter
@@ -436,6 +446,10 @@ private Q_SLOTS:
         QTest::newRow("table") << u"tab"_s << u"table"_s;
         QTest::newRow("tabela") << u"tabe"_s << u"table"_s;
         QTest::newRow("calc") << u"oblicz"_s << u"calc"_s;
+        QTest::newRow("wzór") << u"wzor"_s << u"math"_s;
+        QTest::newRow("równanie") << u"równanie"_s << u"math"_s;
+        QTest::newRow("latex") << u"latex"_s << u"math"_s;
+        QTest::newRow("formula") << u"formula"_s << u"math"_s;
         QTest::newRow("powtarzaj") << u"powt"_s << u"recurrence"_s;
         QTest::newRow("termin") << u"termin"_s << u"due"_s;
         QTest::newRow("zaplanuj") << u"zapl"_s << u"scheduled"_s;
@@ -475,6 +489,9 @@ private Q_SLOTS:
         int cursor = -1;
         QCOMPARE(slashTemplate(u"calc", false, &cursor), u"```calc\n\n```"_s);
         QCOMPARE(cursor, 8);
+        QCOMPARE(slashTemplate(u"math", false, &cursor), u"```math\n\n```"_s);
+        QCOMPARE(cursor, 8);
+        QCOMPARE(slashCommand(u"math"_s)->namePl, u"Wzór matematyczny"_s);
         QVERIFY(slashTemplate(u"table", false, &cursor).contains(u"Kolumna 1"_s));
         QVERIFY(slashTemplate(u"table", true, &cursor).contains(u"Column 1"_s));
         QVERIFY(slashTemplate(u"reminder", false, &cursor).isEmpty());

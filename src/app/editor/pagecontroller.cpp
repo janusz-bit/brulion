@@ -2121,7 +2121,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         focus = {currentRow(), cursor + int(prefix.size())};
         // Quote/callout views edit the raw body.
         focus.cursor = std::clamp(focus.cursor, 0, int(m_model->editTextAt(focus.row).size()));
-    } else if (cmd == u"table" || cmd == u"calc" || cmd == u"query" || cmd == u"code" || cmd == u"rule") {
+    } else if (cmd == u"table" || cmd == u"calc" || cmd == u"math" || cmd == u"query" || cmd == u"code"
+               || cmd == u"rule") {
         int templateCursor = 0;
         const QString tpl = slashTemplate(cmd, m_english, &templateCursor);
         const int r = currentRow();

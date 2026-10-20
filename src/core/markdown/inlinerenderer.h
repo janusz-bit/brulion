@@ -4,9 +4,9 @@
 //
 // Security: notes come from anywhere, so everything that is not recognised syntax is escaped —
 // raw HTML in a note is shown as text, never interpreted. The output only contains <b>, <i>,
-// <s>, <code>, <sup>, <br/>, <span style>, <a href> and <hr/> (renderBlock) with attribute values
-// built by the renderer. No <img> is ever emitted (embeds and images become placeholder links,
-// the editor delegate shows the pictures), so rendering never loads anything.
+// <s>, <code>, <sup>, <sub>, <br/>, <span style>, <a href> and <hr/> (renderBlock) with attribute
+// values built by the renderer. No <img> is ever emitted (embeds and images become placeholder
+// links, the editor delegate shows the pictures), so rendering never loads anything.
 //
 // Links (handled by the QML delegate's onLinkActivated):
 //   page:<target>[#<heading> | #^<id>]  wiki links, embeds, relative Markdown links
@@ -101,7 +101,8 @@ public:
     /// Render inline Markdown (one or more lines, e.g. BlockEntry::body of a list item or a
     /// paragraph): **bold**, *italic*, ~~strike~~, ==highlight==, `code`, links, tags, block
     /// references, embeds (placeholders), task tokens as chips, reminders as amber chips,
-    /// `key:: value` with a muted key; block ids, `id::`/`collapsed::` lines, Logseq drawers and
+    /// `key:: value` with a muted key; formulas (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) as rich text
+    /// (markdown/math.h); block ids, `id::`/`collapsed::` lines, Logseq drawers and
     /// %%comments%% are hidden; line breaks become <br/>. Polish typography: the space after a
     /// one-letter word (a, i, o, u, w, z — "w domu", "i dalej") is a no-break space (U+00A0) in
     /// the output, so such a word never ends a line (display only; the note keeps its spaces).

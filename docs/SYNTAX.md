@@ -395,6 +395,31 @@ type:tasks ref:this status:open group:page
 strikethrough, autolinks. Raw HTML in notes is rendered as escaped text (never
 executed).
 
+### Math formulas
+
+Formulas are written as LaTeX and drawn by Brulion as Unicode rich text (no KaTeX, no web
+view, nothing is executed); the note keeps the LaTeX source. Inline: `$E = mc^2$` or
+`\(\pi r^2\)`. Display, also over several lines: `$$\frac{a}{b}$$` or `\[ … \]`. A fenced
+block:
+
+````
+```math
+\sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+```
+````
+
+The fence languages are `math`, `latex` and `tex`; such a block is edited in place (the
+LaTeX source while editing, the formula otherwise), and Enter starts a new formula line.
+Supported: Greek letters, common operators, arrows and set symbols; `^` and `_` (also
+`^{…}`, `_{…}`); `\frac`/`\dfrac`/`\tfrac` (vulgar fractions where one exists),
+`\sqrt[n]{…}`; `\text`, `\operatorname`, `\mathbf`, `\mathbb`, `\boldsymbol`/`\bm`,
+`\vec`, `\hat`, `\bar`, accents; `\left…\right`; matrices (`pmatrix`, `bmatrix`,
+`Bmatrix`, `vmatrix`, `Vmatrix`), `cases`, `aligned` and `array`. Unknown commands stay as
+written. Spaces between atoms are ignored as in LaTeX (`\ `, `\,`, `\quad` are explicit
+spaces); lowercase Greek is italic, uppercase upright. A formula is not recognised when the
+opening `$` is followed by a space or the closing `$` is followed by a digit (`$5 i $10`);
+`\$` is a literal dollar. The HTML export shows the formula (display formulas are centred).
+
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.
 

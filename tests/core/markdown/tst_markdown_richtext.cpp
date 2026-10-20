@@ -52,6 +52,16 @@ const Fragment *find(const QList<Fragment> &frags, const QString &text)
     return nullptr;
 }
 
+/// The fragment whose text is exactly `text` ("a" would otherwise find "oraz").
+const Fragment *findExact(const QList<Fragment> &frags, const QString &text)
+{
+    for (const Fragment &f : frags) {
+        if (f.text == text)
+            return &f;
+    }
+    return nullptr;
+}
+
 InlineRenderer renderer()
 {
     RenderContext c;
@@ -122,6 +132,32 @@ private Q_SLOTS:
         QCOMPARE(code->format.background().color(), QColor(p.codeBackground));
         QVERIFY(code->format.fontFixedPitch()
                 || code->format.fontFamilies().toStringList().join(u',').contains(u"mono"));
+    }
+
+    void formulas()
+    {
+        // A formula as Qt's rich-text engine sees it: Unicode symbols, italic variables (lowercase
+        // Greek too, as in TeX), raised scripts (verticalAlignment), an overline for a radical;
+        // no delimiters and no LaTeX source left.
+        const auto frags = fragments(renderer().render(u"Pole: $\\pi r^2$ i $\\sqrt{x}$ oraz $\\frac{a}{b}$"));
+        const Fragment *pi = find(frags, u"π"_s);
+        QVERIFY(pi);
+        QVERIFY(pi->format.fontItalic());
+        const Fragment *r = find(frags, u"r"_s);
+        QVERIFY(r->format.fontItalic());
+        const Fragment *square = find(frags, u"2"_s);
+        QCOMPARE(square->format.verticalAlignment(), QTextCharFormat::AlignSuperScript);
+        const Fragment *root = find(frags, u"√"_s);
+        QVERIFY(root);
+        const Fragment *radicand = find(frags, u"x"_s);
+        QVERIFY(radicand->format.fontOverline());
+        const Fragment *numerator = findExact(frags, u"a"_s);
+        QVERIFY(numerator);
+        QCOMPARE(numerator->format.verticalAlignment(), QTextCharFormat::AlignSuperScript);
+        const Fragment *denominator = findExact(frags, u"b"_s);
+        QVERIFY(denominator);
+        QCOMPARE(denominator->format.verticalAlignment(), QTextCharFormat::AlignSubScript);
+        QCOMPARE(plainText(renderer().render(u"$\\alpha \\le \\beta$")), u"α ≤ β"_s);
     }
 
     void escapedInputStaysText()

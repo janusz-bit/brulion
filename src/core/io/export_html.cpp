@@ -45,6 +45,7 @@ code,pre{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.
 code{padding:.1em .3em}
 pre{padding:.75rem 1rem;overflow:auto}
 pre code{padding:0;background:none}
+div.math,.math.display{display:block;margin:1rem 0;text-align:center}
 mark{background:var(--mark);color:inherit}
 blockquote{margin:1rem 0;padding:.25rem 1rem;border-left:3px solid var(--line);color:var(--muted)}
 .callout{margin:1rem 0;padding:.5rem 1rem;border:1px solid var(--line);border-left:4px solid var(--link);border-radius:6px;background:var(--card)}

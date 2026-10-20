@@ -138,15 +138,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `@` also offers the journal link and a reminder).
 * Slash commands (`/`, Polish and English names, diacritic-insensitive filter): Zadanie,
   Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś, Jutro, Data…, Tabela,
-  Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Szablon…, Obraz…, Osadź,
-  Odwołanie do bloku, Priorytet wysoki / niski, Linia pozioma, Aktualna godzina. Under each
-  name: the syntax it writes ("⏰ data godzina", "- [ ] zadanie", "blok ```calc").
+  Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór matematyczny, Szablon…,
+  Obraz…, Osadź, Odwołanie do bloku, Priorytet wysoki / niski, Linia pozioma, Aktualna
+  godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ] zadanie", "blok
+  ```calc").
 * A day without a note (journal stream or a single day) starts from the journal template; the
   note is created by the first change (`PageController.startNewPage`), never by looking at it.
 * Special block delegates: code (monospace), `calc` (input lines with right-aligned results),
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
-  results with checkable tasks), callout, embeds/transclusions (`![[…]]`, `!((…))`), images,
-  headings, horizontal rule, properties / frontmatter ("Właściwości" panel).
+  results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
+  the LaTeX source), callout, embeds/transclusions (`![[…]]`, `!((…))`), images, headings,
+  horizontal rule, properties / frontmatter ("Właściwości" panel).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in Polish words. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete). "dziś"/"jutro" and overdue colours of open pages move on at

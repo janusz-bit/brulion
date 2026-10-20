@@ -2,6 +2,7 @@
 
 #include "dates/recurrence.h"
 #include "markdown/inline.h"
+#include "markdown/math.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -481,6 +482,19 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
     QList<Atom> atoms;
     codeAndCommentAtoms(text, masked, atoms);
 
+    // Formulas: $…$, $$…$$, \(…\) and \[…\] (docs/SYNTAX.md §11). The scan runs on the masked
+    // text, so a formula inside code or a comment is not one; a link label gets one through
+    // renderInline() of the label.
+    for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
+        const QString cls = span.display ? u"math display"_s : u"math"_s;
+        atoms.append(
+                Atom{span.from, span.to,
+                     u"<span class=\""_s + cls + u"\">"_s
+                             + markdown::renderMath(text.sliced(span.contentFrom, span.contentTo - span.contentFrom),
+                                                    span.display)
+                             + u"</span>"_s});
+    }
+
     // Links, embeds, block references, URLs.
     const markdown::InlineScan scan = markdown::extractInline(text);
     for (const Link &l : scan.links) {
@@ -810,6 +824,10 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
     }
     case BlockKind::Code: {
         const QString lang = b.lang.section(u' ', 0, 0);
+        // Fenced math is display-only: the export shows the formula, not its LaTeX source.
+        if (lang == u"math" || lang == u"latex" || lang == u"tex") {
+            return u"<div class=\"math\""_s + id + u'>' + markdown::renderMath(b.text, true) + u"</div>"_s;
+        }
         const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
         return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(b.text) + u"</code></pre>"_s;
     }

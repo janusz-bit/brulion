@@ -6,7 +6,7 @@ import Brulion
 // thin vertical guide lines (one per ancestor level, continuous across rows), the fold arrow
 // (on hover; always shown when folded or on touch), the round bullet of list items (click:
 // zoom into the block; right click / long press: block menu), the task checkbox, and the
-// content for the block's `view` (rendered text / inline editor, code, calc, table, query,
+// content for the block's `view` (rendered text / inline editor, code, calc, math, table, query,
 // callout, quote, rule, frontmatter) with image embeds and embedded pages / sections / blocks
 // (TransclusionView) below.
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
@@ -53,8 +53,8 @@ Item {
     readonly property real contentLeft: levelX + (isTask && !doc ? editor.taskBoxWidth : 0)
     readonly property real contentRight: editor.contentX + editor.contentWidth
     // Vertical rhythm: headings get air above them, framed blocks a little on both sides.
-    readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "table"
-                                   || view === "callout" || view === "frontmatter"
+    readonly property bool framed: view === "code" || view === "calc" || view === "query" || view === "math"
+                                   || view === "table" || view === "callout" || view === "frontmatter"
     // The title shown above the properties panel (see the file comment).
     readonly property bool titleFirst: editor.titleFirst && index === editor.controller.titleRow
     readonly property bool propertiesAfterTitle: editor.titleFirst && index === editor.controller.titleRow - 1
@@ -105,8 +105,9 @@ Item {
     readonly property bool noTextLine: onlyTransclusions || onlyPictures
     /// Paragraphs, list items, headings (most blocks): their text is created with the block, not
     /// through the content Loader — the Loader's own work was a large part of creating a block.
-    readonly property bool textView: view !== "code" && view !== "calc" && view !== "query" && view !== "table"
-                                     && view !== "quote" && view !== "callout" && view !== "rule" && view !== "frontmatter"
+    readonly property bool textView: view !== "code" && view !== "calc" && view !== "query" && view !== "math"
+                                     && view !== "table" && view !== "quote" && view !== "callout" && view !== "rule"
+                                     && view !== "frontmatter"
     readonly property real contentHeight: noTextLine ? 0 : textView ? textContent.height : content.height
     readonly property real embedsY: topPad + contentHeight + (contentHeight > 0 && !model.onlyEmbeds ? Theme.space2 : 0)
     readonly property real transclusionsY: (hasEmbeds ? embedsY + embedView.height : topPad + contentHeight)
@@ -346,6 +347,7 @@ Item {
             case "code": return codeComponent
             case "calc": return calcComponent
             case "query": return queryComponent
+            case "math": return mathComponent
             case "table": return tableComponent
             case "quote":
             case "callout": return calloutComponent
@@ -430,6 +432,10 @@ Item {
     Component {
         id: queryComponent
         QueryBlockView { block: block }
+    }
+    Component {
+        id: mathComponent
+        MathBlockView { block: block }
     }
     Component {
         id: tableComponent

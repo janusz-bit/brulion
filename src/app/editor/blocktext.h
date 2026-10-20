@@ -5,8 +5,8 @@
 //
 // Inline editing never shows the parts of a block's body that the delegate draws itself:
 //   * the task marker of a list item ("[ ] ", "TODO ") — the delegate draws a checkbox;
-//   * the opening and closing fence lines of code/calc/query blocks and the `---` lines of YAML
-//     frontmatter — the delegate draws a frame with the language label.
+//   * the opening and closing fence lines of code/calc/query/math blocks and the `---` lines of
+//     YAML frontmatter — the delegate draws a frame with the language label.
 // EditMapping describes that split: body = body.left(offset) + editText + body.right(suffix).
 #pragma once
 
@@ -26,9 +26,9 @@
 namespace brulion::editor {
 
 /// The delegate a block is shown with.
-enum class BlockView { Text, Heading, Code, Calc, Query, Table, Quote, Callout, Rule, Frontmatter, Html };
+enum class BlockView { Text, Heading, Code, Calc, Query, Math, Table, Quote, Callout, Rule, Frontmatter, Html };
 
-/// "text", "heading", "code", "calc", "query", "table", "quote", "callout", "rule",
+/// "text", "heading", "code", "calc", "query", "math", "table", "quote", "callout", "rule",
 /// "frontmatter", "html" (the `view` role of BlockListModel).
 QString viewName(BlockView view);
 /// "listItem", "paragraph", "heading", "code", "table", "quote", "callout", "rule", "html",

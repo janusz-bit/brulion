@@ -5,6 +5,7 @@
 #include "io/importutil_p.h"
 #include "io/links_p.h"
 #include "markdown/inline.h"
+#include "markdown/math.h"
 
 #include <QHash>
 #include <QRegularExpression>
@@ -433,15 +434,48 @@ std::pair<QString, bool> mathSource(const QString &text)
     return {t, false};
 }
 
+/// `source` when the editor sees it as one formula covering the whole string, otherwise a code
+/// span. TeX that Markdown would break (a backtick, a `$`, a trailing backslash) keeps the old
+/// behaviour: a code span with the LaTeX source as written.
+QString formulaOrCode(const QString &source)
+{
+    const QString masked = markdown::maskInlineCode(source);
+    if (masked == source && !source.contains(u'`')) {
+        const QList<markdown::MathSpan> spans = markdown::findMathSpans(masked);
+        if (spans.size() == 1 && spans.first().from == 0 && spans.first().to == source.size())
+            return source;
+    }
+    return codeSpan(source);
+}
+
 QString inlineMath(const QString &tex)
 {
-    return codeSpan(u'$' + tex + u'$');
+    return formulaOrCode(u'$' + tex + u'$');
+}
+
+/// Display math that is not a block of its own (inside a line, a table cell): `$$…$$`, with the
+/// same fallback as inlineMath().
+QString inlineDisplayMath(const QString &tex)
+{
+    return formulaOrCode(u"$$"_s + tex + u"$$"_s);
 }
 
 QString displayMath(const QString &tex)
 {
     const QString f = codeFenceFor(tex);
     return f + u"math\n"_s + tex + u'\n' + f;
+}
+
+/// Code spans and formulas blanked: their text is neither Markdown nor HTML to convert (a `<b>`
+/// or `#tag` inside a formula is part of the formula).
+QString maskCodeAndMath(const QString &line)
+{
+    QString masked = markdown::maskInlineCode(line);
+    for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
+        for (qsizetype i = span.from; i < span.to; ++i)
+            masked[i] = u' ';
+    }
+    return masked;
 }
 
 const QString RawScheme = u"trilium-raw:"_s;
@@ -1452,7 +1486,7 @@ QString convertLine(const QString &line, const Resolver &resolver, int &budget)
     static const QRegularExpression footnoteRef(
             u"^<sup>\\s*<a\\s+href=\"#fn([^\"]*)\"\\s*>\\s*\\[(\\d{1,6})\\]\\s*</a>\\s*</sup>"_s,
             QRegularExpression::CaseInsensitiveOption);
-    const QString masked = markdown::maskInlineCode(line);
+    const QString masked = maskCodeAndMath(line);
     if (line.size() > MaxIslandLine || !masked.contains(u'<'))
         return escapeAngles(line, masked);
     QHash<QString, QList<Element>> elements; // per tag name, found once per line
@@ -1526,9 +1560,9 @@ QString unescapeMarkdown(QStringView text)
     return out;
 }
 
-/// Inline math of the Markdown export -> code spans: `$…$` and `$$…$$` (0.10x, the TeX as
+/// Inline math of the Markdown export -> a formula: `$…$` and `$$…$$` (0.10x, the TeX as
 /// written), `\\(…\\)` and `\\\[…\\\]` (0.6x: the TeX escaped by Turndown). A `$` before a
-/// digit does not close math ("$5 i $10").
+/// digit does not close math ("$5 i $10"). TeX that Markdown would break stays a code span.
 QString convertInlineMath(const QString &line)
 {
     static const QRegularExpression math(
@@ -1545,13 +1579,13 @@ QString convertInlineMath(const QString &line)
             continue; // touches code
         out += QStringView(line).sliced(last, m.capturedStart() - last);
         if (m.capturedLength(1) > 0)
-            out += codeSpan(u"$$"_s + m.captured(1).trimmed() + u"$$"_s);
+            out += inlineDisplayMath(m.captured(1).trimmed());
         else if (m.capturedLength(2) > 0)
             out += inlineMath(m.captured(2));
         else if (m.capturedLength(3) > 0)
             out += inlineMath(unescapeMarkdown(m.captured(3)).trimmed());
         else
-            out += codeSpan(u"$$"_s + unescapeMarkdown(m.captured(4)).trimmed() + u"$$"_s);
+            out += inlineDisplayMath(unescapeMarkdown(m.captured(4)).trimmed());
         last = m.capturedEnd();
     }
     if (last == 0)
@@ -1618,7 +1652,7 @@ QString convertStrike(const QString &line)
     static const QRegularExpression strike(u"(?<![~\\\\\\w])~(?=[^\\s~])([^~\\n]*?[^\\s~\\\\])~(?![~\\w])"_s);
     if (!line.contains(u'~'))
         return line;
-    const QString masked = markdown::maskInlineCode(line);
+    const QString masked = maskCodeAndMath(line);
     QString out;
     qsizetype last = 0;
     for (auto it = strike.globalMatch(masked); it.hasNext();) {
@@ -1688,7 +1722,7 @@ QString convertFootnoteRefs(const QString &line)
                                         QRegularExpression::CaseInsensitiveOption);
     if (!line.contains(u"](#fn"_s))
         return line;
-    const QString masked = markdown::maskInlineCode(line);
+    const QString masked = maskCodeAndMath(line);
     QString out;
     qsizetype last = 0;
     for (auto it = ref.globalMatch(masked); it.hasNext();) {
@@ -1806,18 +1840,19 @@ QString escapeHashtags(const QString &markdown)
     return mapLinesOutsideCode(markdown, [](const QString &line, const QString &masked) -> QString {
         if (!masked.contains(u'#'))
             return line;
+        const QString plain = maskCodeAndMath(line);
         QString out;
         qsizetype last = 0;
         bool changed = false;
         bool wiki = false;
-        for (qsizetype i = 0; i < masked.size(); ++i) {
-            const QChar c = masked[i];
-            if (c == u'[' && i + 1 < masked.size() && masked[i + 1] == u'[') {
+        for (qsizetype i = 0; i < plain.size(); ++i) {
+            const QChar c = plain[i];
+            if (c == u'[' && i + 1 < plain.size() && plain[i + 1] == u'[') {
                 wiki = true;
                 ++i;
                 continue;
             }
-            if (c == u']' && i + 1 < masked.size() && masked[i + 1] == u']') {
+            if (c == u']' && i + 1 < plain.size() && plain[i + 1] == u']') {
                 wiki = false;
                 ++i;
                 continue;

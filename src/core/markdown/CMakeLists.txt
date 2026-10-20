@@ -12,6 +12,7 @@ brulion_add_core_module(markdown
         inlinerenderer.h inlinerenderer.cpp
         journal.h journal.cpp
         lines_p.h lines.cpp
+        math.h math.cpp
         notemode.h notemode.cpp
         parse.h parse_p.h parse.cpp
         properties.h properties.cpp

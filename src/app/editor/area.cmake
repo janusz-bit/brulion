@@ -18,6 +18,7 @@ qt_target_qml_sources(brulion
         qml/editor/CalcBlockView.qml
         qml/editor/TableBlockView.qml
         qml/editor/QueryBlockView.qml
+        qml/editor/MathBlockView.qml
         qml/editor/FrontmatterView.qml
         qml/editor/EmbedView.qml
         qml/editor/TransclusionView.qml

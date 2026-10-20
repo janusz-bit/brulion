@@ -14,6 +14,7 @@ Ta dokumentacja jest zwykłymi notatkami Brulionu — osobnym brulionem „Dokum
 ## Pisanie i porządkowanie
 - [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]] — `[[strony]]`, odwołania do bloków, osadzenia.
 - [[Tagi i właściwości|Tagi i właściwości]] — `#tagi`, nagłówek YAML, `klucz:: wartość`.
+- [[Wzory matematyczne|Wzory matematyczne]] — LaTeX w tekście i blokach: ułamki, pierwiastki, macierze.
 - [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]] — codzienne strony i szablony.
 
 ## Planowanie

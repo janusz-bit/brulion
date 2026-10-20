@@ -101,6 +101,7 @@ QString viewName(BlockView view)
     case BlockView::Code: return u"code"_s;
     case BlockView::Calc: return u"calc"_s;
     case BlockView::Query: return u"query"_s;
+    case BlockView::Math: return u"math"_s;
     case BlockView::Table: return u"table"_s;
     case BlockView::Quote: return u"quote"_s;
     case BlockView::Callout: return u"callout"_s;
@@ -210,7 +211,12 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
     s.lang = e.lang;
     const auto fenced = [&](const Fence &f) {
         s.lang = f.lang;
-        s.view = f.lang == u"calc" ? BlockView::Calc : f.lang == u"query" ? BlockView::Query : BlockView::Code;
+        // ```math / ```latex / ```tex: a formula block (docs/SYNTAX.md §11).
+        const bool math = f.lang == u"math" || f.lang == u"latex" || f.lang == u"tex";
+        s.view = math                 ? BlockView::Math
+                 : f.lang == u"calc"  ? BlockView::Calc
+                 : f.lang == u"query" ? BlockView::Query
+                                      : BlockView::Code;
         s.editOffset = f.innerOffset;
         s.editText = f.inner;
         // Body = open + '\n' + inner + '\n' + close ("```\n```": no inner line at all).
@@ -310,7 +316,7 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
     QString head = e.body.left(s.editOffset);
     const QString tail = e.body.right(s.editSuffix);
     if (s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
-        || s.view == BlockView::Frontmatter) {
+        || s.view == BlockView::Math || s.view == BlockView::Frontmatter) {
         // Keep the hidden fence lines on lines of their own.
         if (!head.isEmpty() && !head.endsWith(u'\n'))
             head += u'\n';
@@ -340,7 +346,8 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
     switch (s.view) {
     case BlockView::Code:
     case BlockView::Calc:
-    case BlockView::Query: t = s.editText; break;
+    case BlockView::Query:
+    case BlockView::Math: t = s.editText; break;
     case BlockView::Rule: return u"―"_s;
     default: t = markdown::stripTokens(s.editText); break;
     }
@@ -805,7 +812,11 @@ const QList<SlashCommand> &slashCommands()
              {u"tabelka"_s, u"grid"_s, u"arkusz"_s, u"spreadsheet"_s}},
             {u"calc"_s, u"Obliczenia"_s, u"Calculation"_s, u"calculator"_s, u"```calc"_s,
              u"blok ```calc"_s, u"```calc block"_s,
-             {u"kalkulator"_s, u"liczenie"_s, u"math"_s, u"matematyka"_s, u"oblicz"_s}},
+             {u"kalkulator"_s, u"liczenie"_s, u"oblicz"_s}},
+            {u"math"_s, u"Wzór matematyczny"_s, u"Math formula"_s, u"sigma"_s, u"```math"_s,
+             u"blok ```math (LaTeX)"_s, u"```math block (LaTeX)"_s,
+             {u"wzór"_s, u"równanie"_s, u"latex"_s, u"formuła"_s, u"math"_s, u"matematyka"_s,
+              u"formula"_s, u"equation"_s, u"tex"_s}},
             {u"query"_s, u"Zapytanie"_s, u"Query"_s, u"filter"_s, u"```query"_s,
              u"blok ```query"_s, u"```query block"_s,
              {u"kwerenda"_s, u"wyszukaj"_s, u"lista zadań"_s, u"filtr"_s, u"search"_s}},
@@ -909,6 +920,9 @@ QString slashTemplate(QStringView id, bool english, int *cursor)
         c = 2;
     } else if (id == u"calc") {
         text = u"```calc\n\n```"_s;
+        c = 8;
+    } else if (id == u"math") {
+        text = u"```math\n\n```"_s;
         c = 8;
     } else if (id == u"query") {
         text = u"```query\ntype:tasks status:open\n```"_s;
