@@ -104,26 +104,34 @@ Item {
         }
     }
 
-    /// A text field that saves one key of the vault config when editing finishes.
+    /// A text field that saves one key of the vault config when editing finishes. Its text stays
+    /// bound to the config: a change made on another device (sync) shows.
     component ConfigField: BTextField {
         id: field
         required property string key
         property string invalidText: qsTr("This value cannot be used.")
+        readonly property string configText: Workspace.config[key] !== undefined ? String(Workspace.config[key]) : ""
         Layout.preferredWidth: Theme.compact ? -1 : 260
         Layout.fillWidth: Theme.compact
-        text: Workspace.config[key] !== undefined ? String(Workspace.config[key]) : ""
+        text: configText
         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
         function save() {
-            if (text === String(Workspace.config[key]))
+            if (text === configText)
                 return
             const change = {}
             change[key] = text.trim()
             errorText = Workspace.setConfig(change) ? "" : invalidText
         }
-        /// Set a value picked elsewhere (a clock dialog) and save it at once.
+        /// Save a value picked elsewhere (a clock dialog) at once. The text is not assigned —
+        /// that would end its binding to the config, and a value changed later elsewhere would
+        /// no longer show (and be written back on the next edit): the binding shows the value.
         function applyValue(value) {
-            text = value
-            save()
+            const change = {}
+            change[key] = value
+            errorText = Workspace.setConfig(change) ? "" : invalidText
+            // Typed text the pick replaces, when the config already had that value.
+            if (text !== configText)
+                text = Qt.binding(() => field.configText)
         }
         onEditingFinished: save()
     }
@@ -441,6 +449,7 @@ Item {
                 description: qsTr("For reminders written without a time (⏰ 2026-10-15).")
                 ConfigField {
                     id: defaultReminderTimeField
+                    objectName: "defaultReminderTimeField" // (the shell's self-test)
                     key: "defaultReminderTime"
                     leadingIcon: "clock"
                     invalidText: qsTr("Use HH:mm, e.g. 09:00.")
@@ -457,6 +466,7 @@ Item {
 
                     BTimePickerDialog {
                         id: defaultReminderTimeDialog
+                        objectName: "defaultReminderTimeDialog" // (the shell's self-test)
                         onPicked: (value) => defaultReminderTimeField.applyValue(value)
                     }
                 }

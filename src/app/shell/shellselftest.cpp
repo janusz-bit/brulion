@@ -878,6 +878,64 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
           "the picture comes back and the editor stays unloaded");
 }
 
+/// 5e. The default reminder time in the notebook's settings, set on the clock: saved at once, and
+/// the field keeps following the notebook's config afterwards — a value synced from another
+/// device shows (assigning the picked text once ended that binding: the field kept the old value
+/// and wrote it back with the next edit).
+void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    const QString key = u"defaultReminderTime"_s;
+    const QString original = workspace->vaultConfig().value(key).toString();
+    const auto configValue = [&] { return workspace->vaultConfig().value(key).toString(); };
+    // Through the visual tree: phones list every section from a Repeater, whose items are not
+    // QObject children of the window. Shown, but maybe scrolled out of the view.
+    const auto shownNamed = [window](const QString &name) -> QQuickItem * {
+        std::function<QQuickItem *(QQuickItem *)> visit = [&](QQuickItem *item) -> QQuickItem * {
+            if (!item->isVisible())
+                return nullptr;
+            if (item->objectName() == name)
+                return item;
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children) {
+                if (QQuickItem *found = visit(child))
+                    return found;
+            }
+            return nullptr;
+        };
+        return visit(window->contentItem());
+    };
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
+    QQuickItem *field = nullptr;
+    QQuickItem *button = nullptr;
+    check(waitFor([&] {
+              field = shownNamed(u"defaultReminderTimeField"_s);
+              button = shownNamed(u"defaultReminderTimeClock"_s);
+              return field && button && field->property("text").toString() == original;
+          }),
+          "the notebook settings show the default reminder time and its clock button");
+    QObject *dialog = button ? button->findChild<QObject *>(u"defaultReminderTimeDialog"_s) : nullptr;
+    if (!field || !button || !dialog) {
+        check(false, "the default reminder time has its clock");
+        return;
+    }
+    QMetaObject::invokeMethod(button, "clicked");
+    check(waitFor([&] { return dialog->property("opened").toBool(); }), "the clock button opens the clock");
+    auto *picker = dialog->property("picker").value<QQuickItem *>();
+    QMetaObject::invokeMethod(picker, "commitTime", Q_ARG(QVariant, 7), Q_ARG(QVariant, 35));
+    QMetaObject::invokeMethod(dialog, "tryAccept");
+    check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
+          "a time picked on the clock is saved as the default reminder time");
+    waitFor([&] { return !dialog->property("visible").toBool(); });
+    workspace->setConfig({{key, u"10:05"_s}});
+    check(waitFor([&] { return field->property("text").toString() == u"10:05"; }),
+          "after a clock pick the field still follows the notebook's config (a synced change shows)");
+    workspace->setConfig({{key, original}});
+    check(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original,
+          "the default reminder time is back");
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -1204,6 +1262,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
+            // 5e. The default reminder time set on a clock in the settings.
+            checkSettingsClock(window, app, check);
         } else {
             check(false, "the page view has an editor");
         }
