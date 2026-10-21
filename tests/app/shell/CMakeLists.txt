@@ -2,7 +2,7 @@
 # history, settings persistence, the Workspace's EditorHost implementation against a real vault
 # folder, the sample vault, commands, the folder tree and (desktop) single-instance messages.
 brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell)
-brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell)
+brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
     LIBS brulion_shell brulion_core_vault brulion_core_markdown brulion_core_index brulion_core_calc
@@ -80,6 +80,11 @@ brulion_add_test(tst_shell_workspace_wiring SOURCES tst_workspace_wiring.cpp
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
         LIBS brulion_shell brulion_sync_testsupport)
+    # Nextcloud per notebook through AppController and the in-memory server: the settings of
+    # 0.3.0 and older going to the notebook that was synced (never mixing two notebooks in one
+    # server folder), the same notebook through a symlink or a relative path, the start screen.
+    brulion_add_test(tst_shell_nextcloud SOURCES tst_nextcloud.cpp
+        LIBS brulion_shell brulion_sync_testsupport brulion_core_vault)
 endif()
 
 # Start-up of a 3000-note notebook (Workspace::open, chunked indexing on the event loop, the

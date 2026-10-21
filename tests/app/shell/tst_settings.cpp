@@ -1,7 +1,12 @@
-// AppSettings: defaults, validation, persistence in an INI file, recent vaults and the Nextcloud
-// app password kept outside QSettings in an owner-only file.
+// AppSettings: defaults, validation, persistence in an INI file, recent vaults, the Nextcloud
+// app password kept outside QSettings in an owner-only file, and the Nextcloud switch and server
+// folder of each notebook: none without a notebook, keyed by the notebook folder's id, the
+// settings of 0.3.0 and older going to one notebook.
 #include "appsettings.h"
 
+#include "text/text.h"
+
+#include <QDir>
 #include <QFile>
 #include <QSettings>
 #include <QSignalSpy>
@@ -11,12 +16,42 @@
 using namespace Qt::StringLiterals;
 using brulion::shell::AppSettings;
 
+namespace {
+
+constexpr auto kServer = "https://chmura.example.pl";
+
+} // namespace
+
 class TestSettings : public QObject {
     Q_OBJECT
 
     QTemporaryDir m_tmp;
     int m_n = 0;
     QString nextFile() { return m_tmp.filePath(u"s%1.ini"_s.arg(++m_n)); }
+
+    /// Settings as 0.3.0 and older wrote them: one switch and one folder for every notebook.
+    QString oldSettings(const QString &current, const QVariant &enabled = true, const QVariant &folder = u"Notatki"_s)
+    {
+        const QString file = nextFile();
+        QSettings raw(file, QSettings::IniFormat);
+        if (enabled.isValid())
+            raw.setValue(u"sync/nextcloud/enabled"_s, enabled);
+        if (folder.isValid())
+            raw.setValue(u"sync/nextcloud/folder"_s, folder);
+        raw.setValue(u"sync/nextcloud/url"_s, QString::fromLatin1(kServer));
+        raw.setValue(u"sync/nextcloud/user"_s, u"jan"_s);
+        if (!current.isEmpty())
+            raw.setValue(u"vaults/current"_s, current);
+        return file;
+    }
+
+    /// A notebook folder that exists.
+    QString notebook(const QString &name)
+    {
+        const QString path = QDir::cleanPath(m_tmp.filePath(name));
+        QDir().mkpath(path);
+        return path;
+    }
 
 private Q_SLOTS:
     void initTestCase() { QVERIFY(m_tmp.isValid()); }
@@ -48,6 +83,7 @@ private Q_SLOTS:
         const QString file = nextFile();
         {
             AppSettings s(file, m_tmp.path());
+            s.setCurrentVault(u"/home/łucja/Notatki"_s);
             s.setThemeMode(u"dark"_s);
             s.setLanguage(u"en"_s);
             s.setFontScale(1.15);
@@ -116,6 +152,29 @@ private Q_SLOTS:
         QVERIFY(!s.nextcloudEnabled());
     }
 
+    void nextcloudNeedsANotebook()
+    {
+        // With no notebook open (the start screen) nothing syncs and nothing can be switched on;
+        // the settings of 0.3.0 still waiting for their notebook are not read either.
+        const QString file = oldSettings(QString());
+        AppSettings s(file, m_tmp.path());
+        QVERIFY(s.currentVault().isEmpty());
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Brulion"_s);
+        QSignalSpy changed(&s, &AppSettings::nextcloudChanged);
+        s.setNextcloudEnabled(true);
+        s.setNextcloudFolder(u"Gdzie indziej"_s);
+        QVERIFY(changed.isEmpty());
+        QVERIFY(!s.nextcloudEnabled());
+        s.sync();
+        QSettings raw(file, QSettings::IniFormat);
+        QCOMPARE(raw.value(u"sync/nextcloud/enabled"_s).toBool(), true);
+        QCOMPARE(raw.value(u"sync/nextcloud/folder"_s).toString(), u"Notatki"_s);
+        QVERIFY(raw.childGroups().contains(u"sync"_s));
+        raw.beginGroup(u"sync/nextcloud/notebooks"_s);
+        QVERIFY(raw.childGroups().isEmpty());
+    }
+
     void sharedNextcloudGoesToTheFirstNotebook()
     {
         // Settings written by 0.3.0 and older (one switch and folder for all notebooks).
@@ -139,6 +198,49 @@ private Q_SLOTS:
         s.setCurrentVault(u"/notes/a"_s);
         QVERIFY(s.nextcloudEnabled());
         QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+    }
+
+    void notebookSettingsFollowTheFolder()
+    {
+        // One folder reached through a symlink or a relative path is one notebook: one switch
+        // and folder (as it has one sync bookkeeping). Settings 0.3.1–0.3.5 wrote under the path
+        // as written move to the folder's id.
+        const QString real = notebook(u"Dropbox/Notatnik źródłowy"_s);
+        const QString link = QDir::cleanPath(m_tmp.filePath(u"Notatnik-skrót"_s));
+        QVERIFY(QFile::link(real, link));
+        const QString file = nextFile();
+        const QString legacy = u"sync/nextcloud/notebooks/"_s + brulion::text::fnv1a64Hex(link.toUtf8());
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(legacy + u"/enabled"_s, true);
+            raw.setValue(legacy + u"/folder"_s, u"Notatki"_s);
+            raw.setValue(u"vaults/current"_s, link);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QVERIFY(s.nextcloudEnabled());
+            QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+            s.setCurrentVault(real);
+            QVERIFY(s.nextcloudEnabled());
+            QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+            const QString cwd = QDir::currentPath();
+            QVERIFY(QDir::setCurrent(m_tmp.path()));
+            s.setCurrentVault(u"Dropbox/Notatnik źródłowy"_s);
+            const bool relativeEnabled = s.nextcloudEnabled();
+            QDir::setCurrent(cwd);
+            QVERIFY(relativeEnabled);
+            // Changed through one path, seen through the other.
+            s.setCurrentVault(link);
+            s.setNextcloudFolder(u"Notatki/Nowe"_s);
+            s.setCurrentVault(real);
+            QCOMPARE(s.nextcloudFolder(), u"Notatki/Nowe"_s);
+        }
+        QSettings raw(file, QSettings::IniFormat);
+        QVERIFY(!raw.contains(legacy + u"/enabled"_s)); // moved
+        raw.beginGroup(u"sync/nextcloud/notebooks"_s);
+        const QStringList groups = raw.childGroups();
+        QCOMPARE(groups.size(), 1);
+        QCOMPARE(raw.value(groups.first() + u"/path"_s).toString(), real); // the last path written
     }
 
     void validation()

@@ -74,13 +74,16 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool notifyMissed READ notifyMissed WRITE setNotifyMissed NOTIFY notifyMissedChanged FINAL)
 
     // ---- Nextcloud (WebDAV) sync --------------------------------------------------------
-    // Whether it syncs and the server folder are per notebook (the current one); the server,
-    // the user and the password are shared.
+    // Whether it syncs and the server folder are per notebook (the current one; with no notebook
+    // open nothing syncs); the server, the user and the password are shared. A notebook's are
+    // stored under the id of its folder ("sync/nextcloud/notebooks/<Vault::idForPath>/…", the id
+    // its device state and sync bookkeeping have: a symlink or a relative path is the same
+    // notebook), with the notebook's path.
     Q_PROPERTY(bool nextcloudEnabled READ nextcloudEnabled WRITE setNextcloudEnabled NOTIFY nextcloudChanged FINAL)
     /// Server address, e.g. "https://cloud.example.com".
     Q_PROPERTY(QString nextcloudUrl READ nextcloudUrl WRITE setNextcloudUrl NOTIFY nextcloudChanged FINAL)
     Q_PROPERTY(QString nextcloudUser READ nextcloudUser WRITE setNextcloudUser NOTIFY nextcloudChanged FINAL)
-    /// Folder on the server, relative to the user's files (default "Brulion").
+    /// Folder on the server, relative to the user's files ("Brulion" when the notebook has none).
     Q_PROPERTY(QString nextcloudFolder READ nextcloudFolder WRITE setNextcloudFolder NOTIFY nextcloudChanged FINAL)
     /// Automatic sync interval in minutes (0 = only manually / after edits; default 15).
     Q_PROPERTY(int syncIntervalMinutes READ syncIntervalMinutes WRITE setSyncIntervalMinutes NOTIFY nextcloudChanged FINAL)
@@ -187,6 +190,17 @@ Q_SIGNALS:
 private:
     template<typename T>
     bool store(const QString &key, const T &value, const T &current);
+
+    /// The key of setting `name` of `notebook` ("" without a notebook): in its group, or where
+    /// 0.3.1–0.3.5 wrote it (the hash of the path as written) until it is moved.
+    QString notebookKey(const QString &notebook, QStringView name) const;
+    bool hasNotebookValue(const QString &notebook, QStringView name) const;
+    void setNotebookValue(const QString &notebook, QStringView name, const QVariant &value);
+    template<typename T>
+    bool storeNotebookValue(const QString &notebook, QStringView name, const T &value, const T &current);
+    /// Move the settings 0.3.1–0.3.5 wrote for `notebook` under the hash of its path as written
+    /// into its group (when its folder exists: the id is the canonical path), and record its path.
+    void adoptNotebookKeys(const QString &notebook);
 
     std::unique_ptr<QSettings> m_settings;
     QString m_dataDir;

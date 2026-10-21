@@ -747,11 +747,12 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     }
     m_failedPath.clear();
     // The documentation (and the sample notebook) are not the user's notes: they never take
-    // over the sync settings of the notebook that was synced before 0.3.1.
+    // over the sync settings of the notebook that was synced before 0.3.1. Under the path the
+    // notebook is current with (the requested one may be relative).
     const QString cleanPath = QDir::cleanPath(path);
     const bool sample = docs || (cleanPath == demoVaultPath() && demoVaultPath() != defaultVaultPath());
     if (!sample)
-        m_settings->claimSharedNextcloud(path);
+        m_settings->claimSharedNextcloud(m_workspace->rootPath());
     bool showWelcome = false;
     if (docs) {
         // Written on first use and brought up to date with every version of the app, without

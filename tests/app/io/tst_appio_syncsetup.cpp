@@ -35,11 +35,22 @@ class TestAppIoSyncSetup : public QObject {
     QTemporaryDir m_tmp;
     int m_n = 0;
 
+    /// Settings with a notebook open (the sync switch and folder are the notebook's).
     std::unique_ptr<AppSettings> settings()
     {
         ++m_n;
-        return std::make_unique<AppSettings>(m_tmp.filePath(u"settings-%1.ini"_s.arg(m_n)),
-                                             m_tmp.filePath(u"data-%1"_s.arg(m_n)));
+        auto s = std::make_unique<AppSettings>(m_tmp.filePath(u"settings-%1.ini"_s.arg(m_n)),
+                                               m_tmp.filePath(u"data-%1"_s.arg(m_n)));
+        s->setCurrentVault(notebook(u"Notatnik %1"_s.arg(m_n)));
+        return s;
+    }
+
+    /// A notebook folder that exists.
+    QString notebook(const QString &name)
+    {
+        const QString path = QDir::cleanPath(m_tmp.filePath(name));
+        QDir().mkpath(path);
+        return path;
     }
 
     static void fill(NextcloudSetup &form, const QString &password = u"hasło-źdźbło"_s)
