@@ -536,6 +536,11 @@ private Q_SLOTS:
                                                << QString() << QString() << QStringList();
         QTest::newRow("code in an item") << u"- a $x\n  ```\n  kod\n  ```\n  #tag$"_s << QStringList({u"tag"_s})
                                          << QStringList() << QString() << QString() << QStringList();
+        // Table cells are shown one by one: no formula spans cells or rows.
+        QTest::newRow("table cells")
+                << u"| Usługa | Cena |\n|---|---|\n| [[Netflix]] | $15 |\n| [[Spotify]] #muzyka | 10$ |\n| $x #y$ | =A1 |"_s
+                << QStringList({u"muzyka"_s}) << QStringList({u"Netflix"_s, u"Spotify"_s}) << QString() << QString()
+                << QStringList();
         QTest::newRow("display formula over a blank line")
                 << u"- $$a\n\n  #b [[Ukryta]]$$ #c"_s << QStringList({u"c"_s}) << QStringList() << QString()
                 << QString() << QStringList();

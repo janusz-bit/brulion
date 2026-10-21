@@ -193,6 +193,38 @@ QList<MathSpan> blockFormulas(const ScannedText &scan)
     return spans;
 }
 
+/// The formulas of a table's rows: each cell is rendered on its own (a formula never spans cells
+/// or rows: "| $15 |" and "| 10$ |" are prices), a formula cell (`=…`) shows its result.
+QList<MathSpan> cellFormulas(const ScannedText &scan)
+{
+    QList<MathSpan> out;
+    if (!scan.masked.contains(u'$'))
+        return out;
+    const QStringView masked = scan.masked;
+    for (qsizetype k = 0; k < scan.seg.pos.size(); ++k) {
+        const qsizetype rowFrom = scan.seg.pos[k];
+        const qsizetype rowTo = k + 1 < scan.seg.pos.size() ? scan.seg.pos[k + 1] - 1 : masked.size();
+        for (qsizetype from = rowFrom; from < rowTo;) {
+            qsizetype to = from;
+            while (to < rowTo && masked[to] != u'|') {
+                to += masked[to] == u'\\' && to + 1 < rowTo ? 2 : 1;
+            }
+            const QStringView cell = masked.sliced(from, std::min(to, rowTo) - from);
+            if (!cell.trimmed().startsWith(u'=')) {
+                for (MathSpan s : findMathSpans(cell)) {
+                    s.from += from;
+                    s.to += from;
+                    s.contentFrom += from;
+                    s.contentTo += from;
+                    out.append(s);
+                }
+            }
+            from = to + 1;
+        }
+    }
+    return out;
+}
+
 /// Blank the formulas `formulas` (positions in the scanned text) in each scanned line's masked
 /// text: metadata tokens, properties and block ids are not read inside formulas (SYNTAX §11).
 void maskFormulas(const ScannedText &scan, const QList<MathSpan> &formulas)
@@ -618,7 +650,8 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const ScannedText scan = maskScannedLines(st, infos);
     // Links and tags; what starts inside a formula is part of the formula (SYNTAX §11), for the
     // tokens, properties and block ids of the lines too.
-    const ScanResult inl = scanInline(scan.orig, scan.masked, scan.seg, blockFormulas(scan));
+    const ScanResult inl = scanInline(scan.orig, scan.masked, scan.seg,
+                                      node.kind == BlockKind::Table ? cellFormulas(scan) : blockFormulas(scan));
     maskFormulas(scan, inl.formulas);
     std::optional<TaskMarker> marker;
     if (node.kind == BlockKind::ListItem && !infos.isEmpty() && infos.first().cls == LineClass::Text) {
