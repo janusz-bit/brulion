@@ -4,8 +4,13 @@
 #include "markdown/inlinerenderer.h"
 #include "markdown/math.h"
 
+#include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QTest>
+#include <QThread>
+
+#include <functional>
+#include <memory>
 
 using namespace brulion;
 using namespace brulion::markdown;
@@ -78,6 +83,25 @@ QString foreignMarkup(const QString &html)
     if (!open.isEmpty())
         return u"unclosed %1"_s.arg(open.join(u','));
     return {};
+}
+
+QString nested(const QString &open, const QString &inner, const QString &close, int levels)
+{
+    return open.repeated(levels) + inner + close.repeated(levels);
+}
+
+/// `work` on a thread with half the stack of an Android thread (about 1 MB; more in sanitizer
+/// builds, whose frames are larger); false when it did not finish in time.
+bool runOnASmallStack(const std::function<void()> &work)
+{
+    std::unique_ptr<QThread> thread(QThread::create(work));
+    thread->setStackSize(512 * 1024 * BRULION_TEST_SLOWDOWN);
+    thread->start();
+    if (!thread->wait(QDeadlineTimer(300'000))) {
+        (void)thread.release(); // still running: left alone rather than aborting the test run
+        return false;
+    }
+    return true;
 }
 
 /// Commands followed by a delimiter character: \left, \right, \middle and the size commands.
@@ -195,6 +219,62 @@ private Q_SLOTS:
             QVERIFY2(foreignMarkup(html).isEmpty(),
                      qPrintable(input + u" -> "_s + html + u": "_s + foreignMarkup(html)));
         }
+    }
+
+    void deepNesting_data()
+    {
+        QTest::addColumn<QString>("latex");
+        QTest::newRow("braces") << nested(u"{"_s, u"x"_s, u"}"_s, 100'000);
+        QTest::newRow("fractions") << nested(u"\\frac{"_s, u"x"_s, u"}{y}"_s, 100'000);
+        QTest::newRow("denominators") << nested(u"\\frac{1}{"_s, u"x"_s, u"}"_s, 20'000);
+        QTest::newRow("roots") << nested(u"\\sqrt{"_s, u"x"_s, u"}"_s, 20'000);
+        QTest::newRow("root indices") << nested(u"\\sqrt["_s, u"x"_s, u"]{y}"_s, 20'000);
+        QTest::newRow("superscripts") << nested(u"x^{"_s, u"y"_s, u"}"_s, 20'000);
+        QTest::newRow("subscripts") << nested(u"x_{"_s, u"ż"_s, u"}"_s, 20'000);
+        QTest::newRow("bold") << nested(u"\\mathbf{"_s, u"x"_s, u"}"_s, 20'000);
+        QTest::newRow("matrices") << nested(u"\\begin{matrix}"_s, u"x"_s, u"\\end{matrix}"_s, 10'000);
+        QTest::newRow("unclosed matrices") << u"\\begin{pmatrix}a&"_s.repeated(10'000);
+        QTest::newRow("cases in fractions")
+                << nested(u"\\frac{\\begin{cases}"_s, u"x"_s, u"\\end{cases}}{y}"_s, 10'000);
+        QTest::newRow("delimiters") << nested(u"\\left("_s, u"x"_s, u"\\right)"_s, 20'000);
+        QTest::newRow("spaces in text") << u"\\text{"_s + QString(200'000, u' ') + u"a}"_s;
+    }
+
+    void deepNesting()
+    {
+        // A note nesting tens of thousands of levels renders on a small stack in bounded time; the
+        // part deeper than the limit shows as its source.
+        QFETCH(QString, latex);
+        QString html;
+        qint64 ms = -1;
+        QVERIFY(runOnASmallStack([&] {
+            QElapsedTimer timer;
+            timer.start();
+            html = renderMath(latex, true);
+            ms = timer.elapsed();
+        }));
+        QVERIFY(!html.isEmpty());
+        QVERIFY2(foreignMarkup(html).isEmpty(), qPrintable(foreignMarkup(html)));
+        QVERIFY2(ms < 5000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(ms)));
+    }
+
+    void deepNestingInANote()
+    {
+        // The same through the editor's renderer: a journal note opened at start must not crash.
+        const QString note = u"Notatka $$"_s + nested(u"\\frac{"_s, u"x"_s, u"}{y}"_s, 20'000) + u"$$ koniec"_s;
+        QString html;
+        QVERIFY(runOnASmallStack([&] { html = InlineRenderer().render(note); }));
+        QVERIFY2(html.startsWith(u"Notatka "_s) && html.endsWith(u" koniec"_s), qPrintable(html.left(100)));
+    }
+
+    void nestingPastTheLimitShowsTheSource()
+    {
+        const auto braces = [](int levels) { return nested(u"{"_s, u"x^2"_s, u"}"_s, levels); };
+        QCOMPARE(renderMath(braces(20)), u"<i>x</i><sup>2</sup>"_s);
+        QCOMPARE(renderMath(nested(u"\\frac{"_s, u"x"_s, u"}{y}"_s, 8)).count(u"&#8260;"_s), 8);
+        const QString deep = renderMath(braces(1000));
+        QVERIFY2(deep.contains(u"{{{x^2}}}"_s), qPrintable(deep.left(200)));
+        QVERIFY(!deep.contains(u"<sup>"_s));
     }
 
     void injectionThroughTheEditor()

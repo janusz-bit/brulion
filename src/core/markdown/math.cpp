@@ -3,6 +3,7 @@
 #include "markdown/lines_p.h" // isAsciiPunct
 
 #include <QHash>
+#include <QScopeGuard>
 #include <QStringList>
 
 namespace brulion::markdown {
@@ -112,6 +113,11 @@ struct Arg {
     QString html;
     bool simple = true;
 };
+
+/// Formulas nested deeper than this (braces, \frac, \sqrt, ^{…}, environments) show the rest as
+/// their source. A level takes up to about 3 KB of stack: the limit keeps a formula far below the
+/// 1 MB of Android's GUI thread, and real formulas stay well within it.
+constexpr int MaxMathDepth = 48;
 
 /// An argument that fits in a superscript / subscript: no scripts, decorations or line breaks of
 /// its own and at most a few characters ("a", "12", "n+1"; not "<i>x</i><sup>2</sup>").
@@ -693,6 +699,14 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
 
 QList<Node> parseRange(QStringView s, bool upright, bool display)
 {
+    // Every nesting ({…}, arguments, scripts, environments) passes through here: deeper parts are
+    // shown as their escaped source, so a hostile note cannot overflow the stack.
+    static thread_local int depth = 0;
+    if (depth >= MaxMathDepth)
+        return {Node{escaped(s), Kind::Atom, {}, {}}};
+    ++depth;
+    const auto restore = qScopeGuard([] { --depth; });
+
     QList<Node> nodes;
     qsizetype i = 0;
     while (i < s.size()) {
