@@ -97,6 +97,10 @@ private Q_SLOTS:
         QTest::newRow("text") << u"```js\nx\n```\nopis [[Inna]] #tag"_s << u"```"_s << u"opis [[Inna]] #tag"_s << false;
         QTest::newRow("second fence") << u"```js\nx\n```\n```py\ny\n```"_s << u"```"_s << u"```py\ny\n```"_s << false;
         QTest::newRow("id after text") << u"```js\nx\n```\nżółw\n^kod123"_s << u"```"_s << u"żółw\n^kod123"_s << false;
+        // The parser reads a block id or a property after spaces and tabs only.
+        QTest::newRow("nbsp before id") << u"```js\nx\n```\n\u00a0^kod123"_s << u"```"_s << u"\u00a0^kod123"_s << false;
+        QTest::newRow("indented property") << u"```js\nx\n```\n \tid:: 650f1c2a-0000-4000-8000-000000000001"_s
+                                           << u"```"_s << u" \tid:: 650f1c2a-0000-4000-8000-000000000001"_s << true;
     }
 
     void fenceLinesAfterClosing()

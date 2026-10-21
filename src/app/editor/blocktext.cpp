@@ -203,11 +203,12 @@ int closingFenceRun(QStringView line, QChar marker)
 
 /// Lines a code block keeps hidden after its closing fence: blank lines, a standalone block id
 /// (`^kod123`, Obsidian; Brulion writes it there for code blocks) and `key:: value` properties
-/// (Logseq's `id:: …`, `collapsed:: true`).
+/// (Logseq's `id:: …`, `collapsed:: true`). Indented by spaces and tabs only, as the parser reads
+/// them: after a no-break space they are text.
 bool isMetadataLine(QStringView line)
 {
     qsizetype k = 0;
-    while (k < line.size() && line[k].isSpace())
+    while (k < line.size() && isSpaceOrTab(line[k]))
         ++k;
     const QStringView t = line.sliced(k);
     return t.isEmpty() || !markdown::standaloneBlockId(t).isEmpty() || markdown::matchPropertyLine(t).has_value();
