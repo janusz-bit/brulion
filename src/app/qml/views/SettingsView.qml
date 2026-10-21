@@ -113,13 +113,19 @@ Item {
         Layout.fillWidth: Theme.compact
         text: Workspace.config[key] !== undefined ? String(Workspace.config[key]) : ""
         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-        onEditingFinished: {
+        function save() {
             if (text === String(Workspace.config[key]))
                 return
             const change = {}
             change[key] = text.trim()
             errorText = Workspace.setConfig(change) ? "" : invalidText
         }
+        /// Set a value picked elsewhere (a clock dialog) and save it at once.
+        function applyValue(value) {
+            text = value
+            save()
+        }
+        onEditingFinished: save()
     }
 
     /// Granted / not granted, with a button to ask.
@@ -434,11 +440,25 @@ Item {
                 title: qsTr("Default reminder time")
                 description: qsTr("For reminders written without a time (⏰ 2026-10-15).")
                 ConfigField {
+                    id: defaultReminderTimeField
                     key: "defaultReminderTime"
                     leadingIcon: "clock"
                     invalidText: qsTr("Use HH:mm, e.g. 09:00.")
-                    Layout.preferredWidth: 140
+                    Layout.preferredWidth: 112
                     inputMethodHints: Qt.ImhPreferNumbers
+                }
+                BIconButton {
+                    objectName: "defaultReminderTimeClock"
+                    iconName: "clock"
+                    label: qsTr("Pick a time on a clock")
+                    variant: "secondary"
+                    onClicked: defaultReminderTimeDialog.openFor(Workspace.config.defaultReminderTime
+                                                                || "09:00")
+
+                    BTimePickerDialog {
+                        id: defaultReminderTimeDialog
+                        onPicked: (value) => defaultReminderTimeField.applyValue(value)
+                    }
                 }
             }
             ShellSettingRow {

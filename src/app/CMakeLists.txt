@@ -73,6 +73,8 @@ set(BRULION_UI_QML
     qml/components/BText.qml
     qml/components/BTextArea.qml
     qml/components/BTextField.qml
+    qml/components/BTimePicker.qml
+    qml/components/BTimePickerDialog.qml
     qml/components/BToast.qml
     qml/components/BToastHost.qml
     qml/components/BToolTip.qml

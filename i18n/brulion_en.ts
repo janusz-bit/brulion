@@ -31,7 +31,7 @@
 <context>
     <name>BDatePicker</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/components/BDatePicker.qml" line="371"/>
+        <location filename="../src/app/qml/components/BDatePicker.qml" line="384"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n item</numerusform>
@@ -609,7 +609,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="603"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="623"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>

@@ -36,6 +36,7 @@ ApplicationWindow {
         { id: "dialog", title: "Okno dialogowe", icon: "panel-right", popup: true },
         { id: "confirm", title: "Potwierdzenie", icon: "triangle-alert", popup: true },
         { id: "datepicker", title: "Wybór daty", icon: "calendar", popup: false },
+        { id: "timepicker", title: "Wybór godziny", icon: "clock", popup: true },
         { id: "reminder", title: "Przypomnienie", icon: "alarm-clock", popup: true },
         { id: "diff", title: "Porównanie wersji", icon: "file-diff", popup: false },
         { id: "merge", title: "Scalanie konfliktów", icon: "git-merge", popup: false },
@@ -213,6 +214,7 @@ ApplicationWindow {
                     case "dialog": return dialogSection
                     case "confirm": return confirmSection
                     case "datepicker": return datePickerSection
+                    case "timepicker": return timePickerSection
                     case "reminder": return reminderSection
                     case "diff": return diffSection
                     case "merge": return mergeSection
@@ -1194,6 +1196,55 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    Component {
+        id: timePickerSection
+        GallerySection {
+            title: "Wybór godziny"
+            description: "Zegar 24-godzinny do klikania i przeciągania, jak w Androidzie. Godziny 00–11 są na zewnętrznym pierścieniu, 12–23 na wewnętrznym; po wybraniu godziny zegar przechodzi do minut. U góry można przełączać godziny i minuty, a strzałki zmieniają wartość z klawiatury."
+            Component.onCompleted: if (window.autoOpen) timeDialog.openFor(galleryClock.time)
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: Theme.compact ? 1 : 2
+                columnSpacing: Theme.space6
+                rowSpacing: Theme.space6
+
+                BCard {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.fillWidth: Theme.compact
+                    contentItem: BTimePicker {
+                        id: galleryClock
+                        time: "18:30"
+                    }
+                }
+                ColumnLayout {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.fillWidth: true
+                    spacing: Theme.space3
+                    BText { variant: "label"; text: "Wybrana godzina" }
+                    BChip { variant: "reminder"; text: galleryClock.displayTime }
+                    BText { variant: "mono"; text: galleryClock.displayTime }
+                    BButton {
+                        text: "Otwórz zegar w oknie"
+                        iconName: "clock"
+                        onClicked: timeDialog.openFor(galleryClock.time)
+                    }
+                    BText {
+                        Layout.fillWidth: true
+                        variant: "muted"
+                        wrapMode: Text.Wrap
+                        text: "Strzałki ↑/↓ zmieniają wartość, PageUp/PageDown o pięć, ←/→ przełączają godziny i minuty. Zegar otwiera się też przyciskiem „Zegar” w wyborze daty i w oknie przypomnienia."
+                    }
+                }
+            }
+
+            BTimePickerDialog {
+                id: timeDialog
+                onPicked: (value) => galleryClock.time = value
             }
         }
     }

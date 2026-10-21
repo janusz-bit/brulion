@@ -498,9 +498,10 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`),
 `BToolTip`, `BEmptyState`, `BProgressBar`, `BSpinner`, `BScrollBar`, `BSplitHandle`,
 `BShadow`, `BFocusRing`, `BDatePicker` (month grid, Polish names, natural-language input with
-live preview), `BReminderDialog` (date/time, alarm switch, recurrence picker, quick picks: za
-10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`, `BMergeView`
-(per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
+live preview), `BTimePicker`/`BTimePickerDialog` (a round 24-hour clock: tap or drag hours
+and minutes, keyboard arrows), `BReminderDialog` (date/time, alarm switch, recurrence picker,
+quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
+`BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher`. Icons: SVGs in `assets/icons/` (Lucide, ISC licence) via `BIcon`.
 
 ## Strings

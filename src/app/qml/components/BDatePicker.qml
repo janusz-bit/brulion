@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// BDatePicker — month calendar with natural-language input and an optional 24-hour time.
+// BDatePicker — month calendar with natural-language input and an optional 24-hour time
+// (typed, or picked on a round clock like Android's).
 //
 //   BDatePicker {
 //       selectedDate: "2026-10-15"; time: "09:00"; withTime: true
@@ -24,7 +25,8 @@ import Brulion
 //   ±1 year), Home/End start/end of week, T today, Enter/Space select.
 // * Time (withTime): "9", "930", "18.30" are normalised to "HH:mm" when editing finishes (Enter,
 //   Done, leaving the field, hiding the touch keyboard); a time that is not one stays in the
-//   field with a hint (timeInvalid).
+//   field with a hint (timeInvalid). The clock button opens BTimePickerDialog — a round dial
+//   for tapping hours and minutes.
 // * In a dialog with an OK button, call commitPending() before accepting: it applies what is
 //   still being typed (the field may keep the focus on OK: Ctrl+Enter, a touch keyboard).
 //
@@ -77,6 +79,17 @@ T.Control {
         if (selectedDate !== date)
             selectedDate = date
         if (time !== newTime)
+            time = newTime
+    }
+    /// Apply a time chosen elsewhere (the clock): with a date set, commit() it (emits picked()
+    /// first, keeping a consumer's binding); without one, just the time, as a typed one does.
+    function applyTime(newTime) {
+        if (!withTime)
+            return
+        timeField.invalid = false
+        if (selectedDate !== "")
+            commit(selectedDate, newTime)
+        else if (time !== newTime)
             time = newTime
     }
     function selectDate(date) {
@@ -499,6 +512,19 @@ T.Control {
                     restoreMode: Binding.RestoreNone
                 }
             }
+            BButton {
+                objectName: "datePickerClock"
+                text: qsTr("Clock")
+                iconName: "clock"
+                size: "small"
+                variant: "secondary"
+                Accessible.name: qsTr("Pick a time on a clock")
+                onClicked: {
+                    if (timeField.text.trim() !== "")
+                        timeField.commitTyped()
+                    clockDialog.openFor(control.time !== "" ? control.time : control.defaultTime)
+                }
+            }
         }
         Text {
             Layout.fillWidth: true
@@ -510,5 +536,10 @@ T.Control {
             horizontalAlignment: Text.AlignRight
             wrapMode: Text.Wrap
         }
+    }
+
+    BTimePickerDialog {
+        id: clockDialog
+        onPicked: (value) => control.applyTime(value)
     }
 }

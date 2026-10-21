@@ -4,9 +4,9 @@ import QtQuick.Layouts
 import Brulion
 
 // CalendarAddDialog — "Add task" / "Add reminder" for a day of the calendar: what (one line) and,
-// for reminders, the time (quick picks or typed, 24-hour) and whether it is a loud alarm. "More
-// options…" hands the draft to BReminderDialog (any date, recurrence). The view writes the
-// result into that day's journal.
+// for reminders, the time (quick picks, a typed 24-hour time or a round clock like Android's)
+// and whether it is a loud alarm. "More options…" hands the draft to BReminderDialog (any date,
+// recurrence). The view writes the result into that day's journal.
 //
 //   CalendarAddDialog { id: add; onTaskAdded: (text, date) => …
 //                       onReminderAdded: (text, at, alarm) => …
@@ -84,14 +84,35 @@ BDialog {
         visible: control.mode === "reminder"
         spacing: Theme.space2
 
-        Text {
+        RowLayout {
             Layout.fillWidth: true
             Layout.topMargin: Theme.space1
-            text: qsTr("Time")
-            font.family: Theme.fontUi
-            font.pixelSize: Theme.textSm
-            font.weight: Theme.weightMedium
-            color: Theme.fgMuted
+            spacing: Theme.space2
+
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Time")
+                font.family: Theme.fontUi
+                font.pixelSize: Theme.textSm
+                font.weight: Theme.weightMedium
+                color: Theme.fgMuted
+            }
+            BButton {
+                objectName: "calendarAddClock"
+                text: control.time
+                iconName: "clock"
+                size: "small"
+                variant: "secondary"
+                Accessible.name: qsTr("Pick a time on a clock, now %1").arg(control.time)
+                onClicked: {
+                    if (timeField.text.trim() !== "") {
+                        const typed = DatesHelper.normalizeTime(timeField.text)
+                        if (typed !== "")
+                            control.time = typed
+                    }
+                    clockDialog.openFor(control.time)
+                }
+            }
         }
         Flow {
             Layout.fillWidth: true
@@ -147,5 +168,13 @@ BDialog {
         font.pixelSize: Theme.textSm
         color: Theme.fgFaint
         wrapMode: Text.Wrap
+    }
+
+    BTimePickerDialog {
+        id: clockDialog
+        onPicked: (value) => {
+            control.time = value
+            timeField.text = ""
+        }
     }
 }

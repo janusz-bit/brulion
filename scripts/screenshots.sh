@@ -30,7 +30,7 @@ read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
 all_sections=(foundations icons buttons inputs selection chips lists feedback menus dialog confirm
-  datepicker reminder diff merge palette switcher split)
+  datepicker timepicker reminder diff merge palette switcher split)
 if [[ $# -gt 0 ]]; then sections=("$@"); else sections=("${all_sections[@]}"); fi
 
 if [[ ! -x "$bin" ]]; then
