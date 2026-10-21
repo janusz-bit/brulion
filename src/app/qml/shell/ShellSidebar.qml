@@ -348,7 +348,7 @@ Rectangle {
                 onTriggered: {
                     checked = Qt.binding(() => isCurrent)
                     if (!isCurrent)
-                        AppController.openVault(modelData.path)
+                        AppController.openRecentVault(modelData.path)
                     sidebar.navigated()
                 }
             }

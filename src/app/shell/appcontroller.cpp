@@ -400,11 +400,12 @@ void AppController::applyPendingNotification()
         return;
     const QString path = m_pendingNotePath;
     const int line = m_pendingNoteLine;
-    if (!m_workspace->exists(path) && inDocsVault() && !lastUserVault().isEmpty()) {
+    if (!m_workspace->exists(path) && inDocsVault()) {
         // The documentation arms no reminders: this one belongs to the user's notebook (Android
         // kept its alarms armed while the documentation was open). Open it there.
-        openVault(lastUserVault());
-        return;
+        const QString back = lastUserVault();
+        if (!back.isEmpty() && openRecentVault(back))
+            return;
     }
     m_pendingNotePath.clear();
     m_pendingNoteLine = -1;
@@ -584,6 +585,26 @@ void AppController::openVault(const QString &rawPath)
     scheduleOpening(path, false);
 }
 
+bool AppController::openRecentVault(const QString &rawPath)
+{
+    const QString path = cleanLocalPath(rawPath);
+#ifdef Q_OS_ANDROID
+    // Without "All files access" a folder on shared storage only looks missing: openVault() asks
+    // for the permission and opens it then.
+    if (needsStoragePermission(path) && !platform::AndroidBridge::instance()->hasAllFilesAccess()) {
+        openVault(path);
+        return true;
+    }
+#endif
+    if (!path.isEmpty() && !isWasm() && !QFileInfo(path).isDir()) {
+        m_settings->forgetRecentVault(path);
+        toast(tr("The notebook folder %1 is not available.").arg(QDir::toNativeSeparators(path)), u"warning"_s);
+        return false;
+    }
+    openVault(path);
+    return true;
+}
+
 void AppController::openVaultAt(const QString &path, const QVariantMap &route)
 {
     m_routeAfterOpen = normalizeRoute(route);
@@ -640,7 +661,7 @@ void AppController::toggleDocsVault()
     if (back.isEmpty())
         closeVault(); // no other notebook known: the start screen
     else
-        openVault(back);
+        openRecentVault(back); // a folder that is gone: a warning, and the documentation stays
 }
 
 void AppController::openDemoVault()
@@ -938,8 +959,8 @@ void AppController::quickCapture()
             toast(tr("Quick capture writes into your own notebook. Open or create one first."), u"warning"_s);
             return;
         }
-        m_startCapture = true;
-        openVault(back);
+        if (openRecentVault(back))
+            m_startCapture = true;
         return;
     }
     requestUiAction(u"capture"_s);

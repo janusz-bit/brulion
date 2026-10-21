@@ -12,7 +12,8 @@
 //
 // Vault lifecycle: start() opens the last vault (or shows onboarding); openVault(path)
 // (created when missing), openDemoVault() ("Przykładowy brulion", seeded with the sample notes),
-// closeVault(). The documentation notebook (openDocsVault(), toggleDocsVault()) is for reading:
+// closeVault(); openRecentVault(path) for a known notebook (never recreates a missing folder).
+// The documentation notebook (openDocsVault(), toggleDocsVault()) is for reading:
 // it never becomes the start notebook or a recent one, arms no reminders (the user's notebook
 // keeps its armed set), and quick capture and reminder taps go back to the user's notebook.
 // Android: a vault on shared storage first needs "All files access" —
@@ -217,6 +218,10 @@ public:
     /// Open (or create) the vault folder `path` (a local path or a file:// URL). Asynchronous:
     /// status becomes "loading", then "ready" or "error".
     Q_INVOKABLE void openVault(const QString &path);
+    /// Open a notebook known from before (the recent list, "back" from the documentation). Like
+    /// start(), never creates its folder when it is gone (deleted, moved, an unmounted card):
+    /// says so, drops it from the recent list and returns false.
+    Q_INVOKABLE bool openRecentVault(const QString &path);
     /// openVault(), then show `route` instead of the home view (onboarding's "Import notes":
     /// the import screen of the new notebook). Kept while Android asks for "All files access".
     Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);

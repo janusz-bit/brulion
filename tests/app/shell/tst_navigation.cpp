@@ -825,6 +825,43 @@ private Q_SLOTS:
         QVERIFY(QFile::exists(mine + u"/journals/2026-10-14.md"_s));
     }
 
+    void backToAMissingNotebookCreatesNothing()
+    {
+        // The user's folder is deleted (moved, on an unplugged card) while the documentation is
+        // open: "back" must not create an empty notebook there, as start() never does.
+        auto app = openApp(u"USB/Notatki"_s);
+        const QString mine = QDir(m_tmp.filePath(u"USB/Notatki"_s)).absolutePath();
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(QDir(m_tmp.filePath(u"USB"_s)).removeRecursively());
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        app->toggleDocsVault(); // Ctrl+Shift+B
+        QCOMPARE(app->status(), u"ready"_s);
+        QTest::qWait(50);
+        QCOMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->inDocsVault());
+        QVERIFY(!QDir(mine).exists());
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(toasts.first().first().toString().contains(QDir::toNativeSeparators(mine)));
+        QVERIFY(app->lastUserVault().isEmpty()); // dropped from the list
+
+        // The same for the switcher in the sidebar and the start screen's list.
+        auto other = makeApp();
+        const QString gone = QDir(m_tmp.filePath(u"usunięty notatnik"_s)).absolutePath();
+        const QString kept = QDir(m_tmp.filePath(u"istniejący notatnik"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(kept));
+        other->settings()->addRecentVault(kept);
+        other->settings()->addRecentVault(gone);
+        QVERIFY(!other->openRecentVault(gone));
+        QVERIFY(!QFileInfo::exists(gone));
+        QCOMPARE(other->settings()->recentVaults().size(), 1);
+        QCOMPARE(other->status(), u"boot"_s);
+        QVERIFY(other->openRecentVault(kept));
+        QTRY_COMPARE(other->status(), u"ready"_s);
+        QCOMPARE(other->workspace()->rootPath(), kept);
+    }
+
     void reminderTapLeavesTheDocumentation()
     {
         // Android rings the user's alarms while the documentation is open: tapping one opens its
