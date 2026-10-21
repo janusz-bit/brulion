@@ -140,7 +140,13 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   written about or pasted without breaking the page). A fence that is not closed (a file written
   elsewhere) is not widened: a closing fence typed into it closes it. A list item with more text
   after its code block edits the closing fence and that text with the code, nothing hidden or
-  widened.
+  widened. A fence opened in a text block (```` ``` ```` typed on a new line of a paragraph or list
+  item, fenced text pasted without its closing line) gets its closing fence at the end of the
+  block, so the code never runs on into the following blocks in the saved file; only a lone
+  opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
+  it a code block. The two lines then act as a pair: a longer opening fence lengthens the closing
+  one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
+  deleted or changed closing fence is added again at the end of the block.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";

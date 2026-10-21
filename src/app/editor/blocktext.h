@@ -64,6 +64,11 @@ struct Fence {
 /// and tabs around it — exactly where the core parser (markdown::parseNote) ends the block.
 std::optional<Fence> parseFence(QStringView body);
 
+/// The closing fence line `body` lacks when it ends inside a fenced code block opened in it
+/// (```` ``` ```` for "Text\n```js\ncode"), found line by line like the core parser does; "" when
+/// every fence in it is closed.
+QString missingClosingFence(QStringView body);
+
 /// How a block is shown and which part of its body is edited inline.
 struct BlockShape {
     BlockView view = BlockView::Text;
@@ -84,9 +89,16 @@ BlockShape shapeOf(const markdown::BlockEntry &entry);
 
 /// The new body for `editText` (the inverse of shapeOf().editText): the hidden prefix and
 /// suffix of the current body are kept; the unchanged edit text gives the body itself. A task
-/// marker without a trailing space gets one when text follows it. In a closed code block a
-/// line that would close it is code: the hidden opening and closing fences are widened past
-/// it, so the block stays one block in the saved file.
+/// marker without a trailing space gets one when text follows it. The result stays one block
+/// in the saved file:
+///   * in a closed code block a line that would close it is code — the hidden opening and
+///     closing fences are widened past it;
+///   * a fence the edit leaves open at the end of the block (```` ``` ```` typed on a new line of
+///     a paragraph, a closing fence deleted) is closed, so the code never runs on into the blocks
+///     after it: a closing fence is appended, or the one on the last line follows its opening
+///     fence (lengthened with it, removed with it). Not for a body that is just an opening fence
+///     line (a code block being typed, made by Enter) or that ended inside an open fence already
+///     (a file written elsewhere: a typed closing fence closes it).
 QString bodyWithEditText(const markdown::BlockEntry &entry, const QString &editText);
 
 /// Body without the leading task marker (and its spacing); unchanged when there is none.

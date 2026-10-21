@@ -1127,6 +1127,72 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         verifyReload(item);
     }
 
+    void fenceTypedInTextBlockIsClosed()
+    {
+        // ``` typed on a new line of a paragraph (Shift+Enter) opens a fence: its closing fence
+        // is added at the end of the block, so the task after it stays a task in the file.
+        Fixture f(u"Akapit\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        QCOMPARE(f.text(), u"Akapit\n```\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"Akapit\n```\n```"_s);
+        // The caret stays where the user typed, before the added fence.
+        QCOMPARE(textResets.size(), 1);
+        QCOMPARE(textResets[0].at(1).toString(), u"Akapit\n```\n```"_s);
+        QCOMPARE(textResets[0].at(2).toInt(), 10);
+        QCOMPARE(f.page.cursorPosition(), 10);
+        // The pair follows the opening fence: one backtick more, then Backspace over all three.
+        f.page.setEditText(0, u"Akapit\n````\n```"_s, 11);
+        QCOMPARE(f.edit(0), u"Akapit\n````\n````"_s);
+        QCOMPARE(f.page.cursorPosition(), 11);
+        f.page.setEditText(0, u"Akapit\n```\n````"_s, 10);
+        f.page.setEditText(0, u"Akapit\n``\n````"_s, 9);
+        QCOMPARE(f.edit(0), u"Akapit\n``"_s);
+        QCOMPARE(f.page.cursorPosition(), 9);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        QCOMPARE(f.edit(0), u"Akapit\n```\n```"_s);
+        f.page.setEditText(0, u"Akapit\n```js\n```"_s, 12);
+        QCOMPARE(f.text(), u"Akapit\n```js\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        const ParsedNote n = markdown::parseNote(Page, f.text());
+        QCOMPARE(n.tasks.size(), 1);
+        QCOMPARE(n.reminders.size(), 1);
+        QCOMPARE(markdown::BlockDocument(f.text()).count(), 3);
+        // A whole block typed as a fenced snippet becomes a code block.
+        Fixture code(u"Akapit\n\n- [ ] zadanie\n"_s);
+        code.page.setEditText(0, u"```js\nkod"_s);
+        QCOMPARE(code.text(), u"```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(code.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(code.edit(0), u"kod"_s);
+        verifyReload(code);
+        // A lone opening fence stays text while it is typed; the next line makes it a code block.
+        Fixture lone(u"Akapit\n\n- [ ] zadanie\n"_s);
+        lone.page.setEditText(0, u"```js"_s);
+        QCOMPARE(lone.text(), u"```js\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(lone.role(0, "view").toString(), u"text"_s);
+        lone.page.setEditText(0, u"```js\n"_s);
+        QCOMPARE(lone.text(), u"```js\n\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(lone.role(0, "view").toString(), u"code"_s);
+        verifyReload(lone);
+        // In a list item the fence would take the item's children.
+        Fixture item(u"- a\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- b\n"_s);
+        item.page.setEditText(0, u"a\n```"_s);
+        QCOMPARE(item.text(), u"- a\n  ```\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- b\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        QCOMPARE(blocksOf(markdown::BlockDocument(item.text())).size(), 3);
+        // Pasted fenced text without its closing fence gets one too.
+        Fixture paste(u"Akapit\n\nx\n\n- [ ] zadanie\n"_s);
+        paste.page.startEditing(1, 1);
+        paste.page.pasteText(1, 0, 1, u"```js\nkod"_s);
+        QCOMPARE(paste.text(), u"Akapit\n\n```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(markdown::BlockDocument(paste.text()).count(), 3);
+        Fixture mid(u"- abc\n- z\n"_s);
+        mid.page.startEditing(0, 1);
+        mid.page.pasteText(0, 1, 1, u"x\n\n```js\nkod ąę"_s);
+        QCOMPARE(mid.text(), u"- ax\n- ```js\n  kod ąę\n  ```\n- bc\n- z\n"_s);
+        verifyReload(mid);
+    }
+
     // --- tables ----------------------------------------------------------------------------------------
 
     void tables()

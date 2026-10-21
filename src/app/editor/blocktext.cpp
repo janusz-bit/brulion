@@ -264,6 +264,39 @@ std::optional<Fence> parseFence(QStringView body)
 
 namespace {
 
+/// A fence still open after the last of `lines`: its character, length and opening line.
+struct OpenFence {
+    QChar marker;
+    int length = 0;
+    qsizetype line = -1;
+};
+
+/// Scans `lines` like the core parser: an opening fence line outside a fence, the first
+/// matching closing line inside one.
+std::optional<OpenFence> openFenceAtEnd(const QList<text::Line> &lines)
+{
+    std::optional<OpenFence> open;
+    for (qsizetype i = 0; i < lines.size(); ++i) {
+        if (open) {
+            if (closingFenceRun(lines[i].text, open->marker) >= open->length)
+                open.reset();
+        } else if (const auto o = openingFence(lines[i].text)) {
+            open = OpenFence{o->first, o->second, i};
+        }
+    }
+    return open;
+}
+
+} // namespace
+
+QString missingClosingFence(QStringView body)
+{
+    const auto open = openFenceAtEnd(text::splitLines(body));
+    return open ? QString(open->length, open->marker) : QString();
+}
+
+namespace {
+
 /// A fence line rewritten to `length` markers, keeping its indentation and info string.
 QString fenceLineWithLength(QStringView line, QChar marker, int length)
 {
@@ -284,6 +317,33 @@ int longestClosingFence(QStringView inner, QChar marker)
     for (const text::Line &line : text::splitLines(inner))
         longest = std::max(longest, closingFenceRun(line.text, marker));
     return longest;
+}
+
+/// `body`, the edited text of a block that was `before`, without a fence left open at its end
+/// (it would run on into the following blocks of the saved file). Fence lines typed in a text
+/// block behave as a pair:
+///   * an opening fence made longer (```` ``` ```` + one more backtick) lengthens the closing
+///     fence after it on the last line;
+///   * a removed opening fence (Backspace over ```` ``` ````, its line deleted) removes the
+///     closing fence on the last line, which would open a fence itself now;
+///   * otherwise (a fence opened, a closing fence changed or deleted) a closing fence is appended.
+QString withFenceClosed(const QString &body, const QString &before)
+{
+    const QList<text::Line> lines = text::splitLines(body);
+    const auto open = openFenceAtEnd(lines);
+    if (!open)
+        return body;
+    const qsizetype last = lines.size() - 1;
+    if (closingFenceRun(lines[last].text, open->marker) > 0) {
+        const TextDelta delta = TextDelta::between(before, body);
+        const bool lastLineKept = delta.from + delta.inserted.size() < lines[last].start;
+        if (open->line < last && lastLineKept)
+            return body.left(lines[last].start) + fenceLineWithLength(lines[last].text, open->marker, open->length);
+        if (open->line == last && last > 0 && missingClosingFence(before).isEmpty()
+            && (lastLineKept || lines.size() < text::splitLines(before).size()))
+            return body.left(lines[last - 1].start + lines[last - 1].text.size());
+    }
+    return body + u'\n' + QString(open->length, open->marker);
 }
 
 } // namespace
@@ -445,6 +505,14 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
             head += u' ';
         out = head + editText + tail;
     }
+    // A fence this edit leaves open is closed (withFenceClosed()): an unclosed fence would run
+    // on into the following blocks of the saved file (a paragraph's, to the end of the page; a
+    // list item's, over its children). Not for a lone opening fence line ("```js" being typed:
+    // Enter makes it a code block), for a body that ended inside an open fence already (written
+    // elsewhere: a typed closing line closes it), for frontmatter or HTML.
+    if (s.view != BlockView::Frontmatter && s.view != BlockView::Html && out.contains(u'\n')
+        && (!e.body.contains(u'\n') || missingClosingFence(e.body).isEmpty()))
+        out = withFenceClosed(out, e.body);
     return out;
 }
 

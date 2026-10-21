@@ -1033,11 +1033,17 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     m_typingUid = uid;
     m_typingCell = QPoint(-1, -2);
     markDirty();
-    // Normalisation: "[ ] " typed at the start turns into a checkbox, etc.
+    // Normalisation: "[ ] " typed at the start turns into a checkbox, a closing fence is added
+    // after a fence typed in a text block, etc. The caret keeps its place when the text before
+    // it did not change; otherwise it moves with the text after it.
     const QString now = m_model->editTextAt(row);
     if (now != edit && editingRow() == row) {
+        const int at = std::clamp(cursor >= 0 ? cursor : int(edit.size()), 0, int(edit.size()));
+        int same = 0;
+        while (same < at && same < now.size() && edit[same] == now[same])
+            ++same;
         const int delta = int(edit.size() - now.size());
-        m_cursor = std::clamp((cursor >= 0 ? cursor : int(edit.size())) - delta, 0, int(now.size()));
+        m_cursor = same == at ? at : std::clamp(at - delta, 0, int(now.size()));
         Q_EMIT editTextReset(row, now, m_cursor);
     }
 }
@@ -1767,7 +1773,12 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
         const markdown::BlockEntry &e = pasteDoc.at(k);
         const int depth = baseDepth + std::max(0, e.depth - firstDepth);
         const bool listItem = intoList || e.kind == BlockKind::ListItem;
-        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, e.body, depth, listItem); });
+        // A pasted snippet whose fence is not closed gets its closing fence: on the page, blocks
+        // follow it that the fence would turn into code.
+        QString body = e.body;
+        if (const QString closing = missingClosingFence(body); !closing.isEmpty())
+            body += u'\n' + closing;
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, body, depth, listItem); });
         if (r.focus >= 0)
             last = r.focus;
     }

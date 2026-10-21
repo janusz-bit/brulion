@@ -114,6 +114,29 @@ private Q_SLOTS:
         QCOMPARE(f->onlyMetadataAfter, onlyMetadata);
     }
 
+    void missingClosingFences_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("closing");
+        QTest::newRow("no fence") << u"Zażółć gęślą jaźń\n`kod`"_s << QString();
+        QTest::newRow("closed") << u"Akapit\n```js\nkod\n```"_s << QString();
+        QTest::newRow("opened in a paragraph") << u"Akapit\n```js\nkod"_s << u"```"_s;
+        QTest::newRow("lone opening line") << u"```js"_s << u"```"_s;
+        QTest::newRow("longer tilde fence") << u"tekst\n  ~~~~~ py\ny\n~~~"_s << u"~~~~~"_s;
+        QTest::newRow("second fence open") << u"```\na\n```\n````\nb"_s << u"````"_s;
+        QTest::newRow("nbsp closing is code") << u"```\na\n```\u00a0"_s << u"```"_s;
+        QTest::newRow("quoted fence") << u"> ```js\n> kod"_s << QString();
+        QTest::newRow("backtick in info") << u"``` a`b\nx"_s << QString();
+        QTest::newRow("task text") << u"[ ] ```js"_s << QString();
+    }
+
+    void missingClosingFences()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, closing);
+        QCOMPARE(missingClosingFence(body), closing);
+    }
+
     void fences()
     {
         QFETCH(QString, body);
@@ -283,6 +306,64 @@ private Q_SLOTS:
                     QCOMPARE(indexedOf(saved), indexedOf(content));
             }
         }
+    }
+
+    // A fence opened by an edit of a text block is closed at the end of the block, so the saved
+    // file keeps the blocks after it (docs/UI.md).
+    void fenceOpenedInTextIsClosed_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("editText");
+        QTest::addColumn<QString>("body");
+        QTest::newRow("fence line in a paragraph")
+                << u"Akapit\n\n- [ ] zadanie\n"_s << u"Akapit\n```"_s << u"Akapit\n```\n```"_s;
+        QTest::newRow("code in a paragraph")
+                << u"Akapit\n"_s << u"Akapit\n```js\nkod"_s << u"Akapit\n```js\nkod\n```"_s;
+        QTest::newRow("whole paragraph") << u"Akapit\n"_s << u"```js\nkod"_s << u"```js\nkod\n```"_s;
+        QTest::newRow("list item") << u"- a\n  - dziecko\n"_s << u"a\n~~~~"_s << u"a\n~~~~\n~~~~"_s;
+        QTest::newRow("task") << u"- [ ] zadanie\n"_s << u"zadanie\n```"_s << u"[ ] zadanie\n```\n```"_s;
+        QTest::newRow("heading") << u"# Tytuł\n"_s << u"# Tytuł\n```"_s << u"# Tytuł\n```\n```"_s;
+        QTest::newRow("quote") << u"> cytat\n"_s << u"> cytat\n```py"_s << u"> cytat\n```py\n```"_s;
+        QTest::newRow("longer tilde fence")
+                << u"tekst\n"_s << u"tekst\n~~~~~ py\ny\n~~~"_s << u"tekst\n~~~~~ py\ny\n~~~\n~~~~~"_s;
+        QTest::newRow("nbsp closing is code")
+                << u"tekst\n"_s << u"tekst\n```\ny\n```\u00a0"_s << u"tekst\n```\ny\n```\u00a0\n```"_s;
+        QTest::newRow("closing deleted") << u"- a\n  ```\n  b\n  ```\n"_s << u"a\n```\nbc"_s << u"a\n```\nbc\n```"_s;
+        QTest::newRow("fence typed after a closed one")
+                << u"- a\n  ```\n  b\n  ```\n"_s << u"a\n```\nb\n```\n```"_s << u"a\n```\nb\n```\n```\n```"_s;
+        // Fence lines in a text block are a pair: a longer opening fence lengthens the closing
+        // one, a removed opening fence removes it.
+        QTest::newRow("opening fence lengthened")
+                << u"- Akapit\n  ```\n  ```\n"_s << u"Akapit\n````\n```"_s << u"Akapit\n````\n````"_s;
+        QTest::newRow("backspace over the opening fence")
+                << u"- Akapit\n  ```\n  ```\n"_s << u"Akapit\n``\n```"_s << u"Akapit\n``"_s;
+        QTest::newRow("opening line deleted") << u"- a\n  ```js\n  kod\n  ```\n"_s << u"a\nkod\n```"_s << u"a\nkod"_s;
+        QTest::newRow("opening fence broken")
+                << u"- a\n  ```\n  b\n  ```\n"_s << u"a\nx```\nb\n```"_s << u"a\nx```\nb"_s;
+        QTest::newRow("closing fence shortened")
+                << u"- a\n  ````\n  b\n  ````\n"_s << u"a\n````\nb\n```"_s << u"a\n````\nb\n```\n````"_s;
+        QTest::newRow("new line after a lone fence") << u"```js\n"_s << u"```js\n"_s << u"```js\n\n```"_s;
+        QTest::newRow("lone fence item") << u"- ```js\n"_s << u"```js\nkod"_s << u"```js\nkod\n```"_s;
+        // A lone opening fence line is a code block being typed (Enter makes it one).
+        QTest::newRow("lone fence line") << u"Akapit\n"_s << u"```js"_s << u"```js"_s;
+        // Fences inside a quote end with it.
+        QTest::newRow("quoted fence") << u"> cytat\n"_s << u"> cytat\n> ```"_s << u"> cytat\n> ```"_s;
+        // Closed fences need nothing.
+        QTest::newRow("closed") << u"Akapit\n"_s << u"Akapit\n```js\nkod\n```"_s << u"Akapit\n```js\nkod\n```"_s;
+        QTest::newRow("task text") << u"- [ ] a\n"_s << u"```js\nb"_s << u"[ ] ```js\nb"_s;
+        // A fence that ended the body unclosed before the edit (a file written elsewhere) stays
+        // as it is.
+        QTest::newRow("unclosed in the file") << u"- a\n  ```\n  b\n"_s << u"a\n```\nbc"_s << u"a\n```\nbc"_s;
+        QTest::newRow("unclosed code block") << u"```js\nkod\n"_s << u"kod\nwięcej"_s << u"```js\nkod\nwięcej"_s;
+    }
+
+    void fenceOpenedInTextIsClosed()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, editText);
+        QFETCH(QString, body);
+        const markdown::BlockEntry e = entryOf(content);
+        QCOMPARE(bodyWithEditText(e, editText), body);
     }
 
     void shapes_data()
