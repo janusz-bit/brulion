@@ -509,6 +509,34 @@ QString toggleTask(const QString &content, int line, QDate today)
     return applyStatus(content, *t, marker, open ? TaskStatus::Done : TaskStatus::Todo, today);
 }
 
+QString removeTaskMarker(const QString &content, int line)
+{
+    const auto t = resolveTarget(content, line);
+    if (!t)
+        return content;
+    const auto marker = markerOf(t->text, t->masked);
+    // Edit only the visible part of the line; a comment running past its end is kept as is.
+    const qsizetype tailAt = hiddenTailStart(*t);
+    if (!marker || marker->contentStart > tailAt)
+        return content;
+    const QString visible = t->text.first(tailAt);
+    QList<Edit> edits{Edit{marker->from, marker->contentStart, QString()}};
+    for (const Token &tok : findTokens(maskInline(visible))) {
+        if (tok.kind != TokenKind::Done && tok.kind != TokenKind::Cancelled)
+            continue;
+        // The whitespace before a date right after the marker is the marker's own.
+        Edit e = removal(visible, tok.from, tok.to);
+        e.from = std::max(e.from, marker->contentStart);
+        edits.append(e);
+    }
+    const QString out = applyEdits(visible, edits);
+    const QString tail = t->text.sliced(tailAt);
+    const bool glue = !tail.isEmpty() && !isSpaceOrTab(charAt(out, out.size() - 1)) && !isSpaceOrTab(tail[0]);
+    const QString docLine = t->st.lines[t->line].text;
+    return replaceLine(content, t->st.lines, t->line,
+                       {docLine.first(t->prefix) + out + (glue ? u" "_s : QString()) + tail});
+}
+
 QString generateBlockId()
 {
     static constexpr char16_t Alphabet[] = u"abcdefghijklmnopqrstuvwxyz0123456789";
