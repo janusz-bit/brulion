@@ -101,6 +101,13 @@ first-seen casing.
   child must be indented past the parent's marker). Markers: `-`, `*`, `+`, `1.`, `1)`.
 * Outside lists, each paragraph, heading, fenced code, table, blockquote/callout, `---`
   rule is a top-level block (depth 0).
+* **Fenced code**: three or more backticks or tildes at any indentation (also as the text of a
+  list item); a backtick fence's info string has no backtick. The block ends at the first line
+  with the same character, at least as many of them and nothing else but spaces and tabs (a
+  no-break space makes it a code line). Without one it runs to the end of its container: the
+  page, a quote, or a list item up to the next line indented no deeper than its marker. A longer
+  outer fence (````` ```` `````) holds ```` ``` ```` lines as code. A code block's id is a standalone
+  `^id` line after its closing fence (in a list item also `id::`).
 * **Block id**: ` ^abc-123` (caret + `[A-Za-z0-9-]+`) at the end of a block's first or last
   line (Obsidian style; Brulion writes it at the end of the first line for list items and
   at the end of the last line for paragraphs). Generated ids are 6 chars `[a-z0-9]`.

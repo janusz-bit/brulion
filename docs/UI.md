@@ -131,10 +131,14 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way. Code fences are
-  hidden: a ```` ``` ```` line typed inside a code block stays code, and the outer fence is
-  widened when needed (so a fenced example can be written about or pasted without breaking the
-  page).
+  and on focus loss / suspend / quit, and merges external changes three-way.
+* Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
+  exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
+  are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
+  `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a code
+  block stays code: the hidden fences are widened when needed (so a fenced example can be written
+  about or pasted without breaking the page). A list item with more text after its code block
+  edits the closing fence and that text with the code, nothing hidden or widened.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";

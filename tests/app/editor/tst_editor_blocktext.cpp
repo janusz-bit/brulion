@@ -3,6 +3,7 @@
 #include "blocktext.h"
 
 #include "markdown/blockdocument.h"
+#include "markdown/parse.h"
 
 #include <QTest>
 
@@ -16,6 +17,33 @@ markdown::BlockEntry entryOf(const QString &content, int index = 0)
 {
     const markdown::BlockDocument doc(content);
     return doc.at(index);
+}
+
+/// The blocks of a document as a reload sees them: kind, depth, block id and body of each.
+QStringList blocksOf(const markdown::BlockDocument &doc)
+{
+    QStringList out;
+    for (int i = 0; i < doc.count(); ++i) {
+        const markdown::BlockEntry &e = doc.at(i);
+        out.append(kindName(e.kind) + u'/' + QString::number(e.depth) + u'/' + e.blockId + u'/' + e.body);
+    }
+    return out;
+}
+
+/// What the index takes from a note: tasks, block ids, links, tags and reminders.
+QString indexedOf(const QString &content)
+{
+    const ParsedNote n = markdown::parseNote(u"Notatki/Strona.md"_s, content);
+    QStringList tasks;
+    for (const Task &t : n.tasks)
+        tasks.append(t.text);
+    QStringList ids = n.blockIds.keys();
+    ids.sort();
+    QStringList links;
+    for (const Link &l : n.links)
+        links.append(l.target);
+    return u"tasks="_s + tasks.join(u'|') + u" ids="_s + ids.join(u',') + u" links="_s + links.join(u',') + u" tags="_s
+           + n.tags.join(u',') + u" reminders="_s + QString::number(n.reminders.size());
 }
 
 } // namespace
@@ -42,6 +70,48 @@ private Q_SLOTS:
         QTest::newRow("two backticks") << u"``\nx\n``"_s << false << QString() << QString() << false;
         QTest::newRow("backtick in info") << u"``` a`b\nx\n```"_s << false << QString() << QString() << false;
         QTest::newRow("paragraph") << u"zwykły tekst"_s << false << QString() << QString() << false;
+        // The first closing line ends the block (as in the core parser), not the last line.
+        QTest::newRow("id after closing") << u"```js\nlet a\n```\n^kod123"_s << true << u"js"_s << u"let a"_s << true;
+        QTest::newRow("first of two closings") << u"```\na\n```\nb\n```"_s << true << QString() << u"a"_s << true;
+        // Only spaces and tabs may surround a closing fence (a no-break space makes it code).
+        QTest::newRow("nbsp after closing")
+                << u"```js\nx\n```\u00a0"_s << true << u"js"_s << u"x\n```\u00a0"_s << false;
+        QTest::newRow("nbsp before closing")
+                << u"```js\nx\n\u00a0```"_s << true << u"js"_s << u"x\n\u00a0```"_s << false;
+        QTest::newRow("spaces and tabs around closing")
+                << u"```js\nx\n \t```\t "_s << true << u"js"_s << u"x"_s << true;
+    }
+
+    void fenceLinesAfterClosing_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("closeLine");
+        QTest::addColumn<QString>("after");
+        QTest::addColumn<bool>("onlyMetadata");
+        QTest::newRow("nothing") << u"```js\nx\n```"_s << u"```"_s << QString() << true;
+        QTest::newRow("block id") << u"```js\nx\n```\n^kod123"_s << u"```"_s << u"^kod123"_s << true;
+        QTest::newRow("blank line and id") << u"```js\nx\n```\n\n^kod123"_s << u"```"_s << u"\n^kod123"_s << true;
+        QTest::newRow("logseq properties")
+                << u"~~~\nx\n~~~~\nid:: 650f1c2a-0000-4000-8000-000000000001\ncollapsed:: true"_s << u"~~~~"_s
+                << u"id:: 650f1c2a-0000-4000-8000-000000000001\ncollapsed:: true"_s << true;
+        QTest::newRow("text") << u"```js\nx\n```\nopis [[Inna]] #tag"_s << u"```"_s << u"opis [[Inna]] #tag"_s << false;
+        QTest::newRow("second fence") << u"```js\nx\n```\n```py\ny\n```"_s << u"```"_s << u"```py\ny\n```"_s << false;
+        QTest::newRow("id after text") << u"```js\nx\n```\nżółw\n^kod123"_s << u"```"_s << u"żółw\n^kod123"_s << false;
+    }
+
+    void fenceLinesAfterClosing()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, closeLine);
+        QFETCH(QString, after);
+        QFETCH(bool, onlyMetadata);
+        const auto f = parseFence(body);
+        QVERIFY(f.has_value());
+        QVERIFY(f->closed);
+        QCOMPARE(f->inner, u"x"_s);
+        QCOMPARE(f->closeLine, closeLine);
+        QCOMPARE(f->after, after);
+        QCOMPARE(f->onlyMetadataAfter, onlyMetadata);
     }
 
     void fences()
@@ -91,6 +161,21 @@ private Q_SLOTS:
         // An unclosed fence gets a wider opening (there is no closing line yet).
         const markdown::BlockEntry open = entryOf(u"```js\na\n"_s);
         QCOMPARE(bodyWithEditText(open, u"a\n```"_s), u"````js\na\n```"_s);
+        // A block id or properties after the closing fence stay after it; the closing fence is
+        // the one widened.
+        const markdown::BlockEntry withId = entryOf(u"```js\na\n```\n^kod123\n\nPo\n"_s);
+        QCOMPARE(bodyWithEditText(withId, u"b\n```"_s), u"````js\nb\n```\n````\n^kod123"_s);
+        const markdown::BlockEntry withProperty =
+                entryOf(u"- ```js\n  a\n  ```\n  id:: 650f1c2a-0000-4000-8000-000000000001\n"_s);
+        QCOMPARE(bodyWithEditText(withProperty, u"a\n```"_s),
+                 u"````js\na\n```\n````\nid:: 650f1c2a-0000-4000-8000-000000000001"_s);
+        // A closing fence long enough already stays as it is.
+        const markdown::BlockEntry longClose = entryOf(u"```\na\n``````\n"_s);
+        QCOMPARE(bodyWithEditText(longClose, u"a\n```"_s), u"````\na\n```\n``````"_s);
+        // Text after the closing fence (in a list item) is edited with the fence: nothing widens.
+        const markdown::BlockEntry mixed = entryOf(u"- ```js\n  a\n  ```\n  opis #tag\n"_s);
+        QCOMPARE(shapeOf(mixed).editText, u"a\n```\nopis #tag"_s);
+        QCOMPARE(bodyWithEditText(mixed, u"b\n```\nopis #tag"_s), u"```js\nb\n```\nopis #tag"_s);
         // A fence stays wide when the line that needed it is removed (no hidden bytes rewritten).
         const markdown::BlockEntry wide = entryOf(u"````\na\n```\nb\n````\n"_s);
         QCOMPARE(bodyWithEditText(wide, u"a\nb"_s), u"````\na\nb\n````"_s);
@@ -103,6 +188,100 @@ private Q_SLOTS:
         // A tab-indented closing fence stays a fence when it is widened.
         const markdown::BlockEntry tabClose = entryOf(u"```\na\n\t```\n"_s);
         QCOMPARE(bodyWithEditText(tabClose, u"a\n```"_s), u"````\na\n```\n\t````"_s);
+    }
+
+    // The edit mapping of every block agrees with the core parser (markdown::parseNote): the
+    // hidden prefix + edit text + hidden suffix is the body, the same edit text gives the same
+    // body, and typing in a block — also a fence-like line in a code block — keeps the blocks a
+    // reload sees; a block id, properties and the text after a code block stay where they are.
+    void editMappingKeepsBlocks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::newRow("code with id, task after")
+                << u"```js\nlet a = 1;\n```\n^kod123\n\n- [ ] Zadzwonić do mamy #praca ⏰ 2026-10-22 09:00\n- Spotkanie [[Inna]]\n"_s;
+        QTest::newRow("id after a blank line") << u"```js\nx\n```\n\n^kod123\n\nPo #tag\n"_s;
+        QTest::newRow("logseq id:: and a child")
+                << u"- ```js\n  let a = 1;\n  ```\n  id:: 650f1c2a-0000-4000-8000-000000000001\n  - [ ] dziecko #ważne ⏰ 2026-10-22 09:00\n- dalej [[Inna]]\n"_s;
+        QTest::newRow("item with id and a child")
+                << u"- ```js\n  let a = 1;\n  ```\n  ^kod123\n  - [ ] dziecko\n- dalej\n"_s;
+        QTest::newRow("item properties")
+                << u"- ```py\n  x = 1\n  ```\n  collapsed:: true\n  tags:: [[Projekt]], #kod\n  - dziecko\n"_s;
+        QTest::newRow("item text after code")
+                << u"- ```js\n  let a = 1;\n  ```\n  opis [[Inna]] #tag\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej\n"_s;
+        QTest::newRow("item with two fences") << u"- ```js\n  x\n  ```\n  #tag\n  ```py\n  y\n  ```\n- Po\n"_s;
+        QTest::newRow("crlf") << u"```js\r\nx\r\n```\r\n^kod123\r\n\r\n- [ ] zadanie\r\n- [[Inna]]\r\n"_s;
+        QTest::newRow("crlf item")
+                << u"- ```js\r\n  a\r\n  ```\r\n  id:: 650f1c2a-0000-4000-8000-000000000001\r\n  - dziecko\r\n- b\r\n"_s;
+        QTest::newRow("tabs")
+                << u"- rodzic\n\t- ```js\n\t  a\n\t  ```\n\t  ^tab1\n\t\t- [ ] wnuk #praca\n\t- dalej\n"_s;
+        QTest::newRow("tildes with info") << u"~~~python {.numberLines}\nprint('żółw')\n~~~\n^t1\n\nPo\n"_s;
+        QTest::newRow("backticks inside tildes") << u"~~~\n```\nx\n```\n~~~\n\nPo\n"_s;
+        QTest::newRow("four backticks around three") << u"````md\n```js\nx\n```\n````\n^md1\n\nPo\n"_s;
+        QTest::newRow("longer closing") << u"```\nx\n`````\n^id1\n\nPo\n"_s;
+        QTest::newRow("spaces around closing") << u"```\nx\n  ```  \n\nPo\n"_s;
+        QTest::newRow("nbsp after closing") << u"```js\nx\n```\u00a0\n\nPo #tag\n"_s;
+        QTest::newRow("unclosed at the end") << u"Akapit\n\n```js\nkod\n"_s;
+        QTest::newRow("unclosed mid page") << u"Akapit\n\n```js\nkod\n\n- [ ] zadanie\n"_s;
+        QTest::newRow("item unclosed until dedent") << u"- ```\n  code\n- next\n"_s;
+        QTest::newRow("calc with id") << u"```calc\nx = 2\n```\n^calc1\n\n- [ ] zadanie\n"_s;
+        QTest::newRow("math item with id") << u"- ```math\n  x^2\n  ```\n  ^wzor1\n"_s;
+        QTest::newRow("query") << u"```query\ntag:praca\n```\n"_s;
+        QTest::newRow("nested item") << u"- a\n  - ```js\n    b\n    ```\n    ^zag1\n  - c\n"_s;
+        QTest::newRow("quoted code") << u"> ```js\n> x\n> ```\n\nPo\n"_s;
+        QTest::newRow("text") << u"Akapit ąę\n\n- [ ] zadanie\n\t- dziecko\n"_s;
+        QTest::newRow("frontmatter") << u"---\ntitle: Żółw\n---\n\n- a\n"_s;
+        QTest::newRow("empty code") << u"```\n```\n\nPo\n"_s;
+    }
+
+    void editMappingKeepsBlocks()
+    {
+        QFETCH(QString, content);
+        const markdown::BlockDocument doc(content);
+        QCOMPARE(doc.toString(), content);
+        for (int i = 0; i < doc.count(); ++i) {
+            const markdown::BlockEntry &e = doc.at(i);
+            const BlockShape s = shapeOf(e);
+            const QString head = e.body.left(s.editOffset);
+            const QString tail = e.body.right(s.editSuffix);
+            QCOMPARE(head + s.editText + tail, e.body);
+            QCOMPARE(bodyWithEditText(e, s.editText), e.body);
+            const bool fenced = s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
+                                || s.view == BlockView::Math;
+            const auto fence = parseFence(e.body);
+            const bool closedFence = fenced && fence && fence->closed && fence->onlyMetadataAfter;
+            const bool mixed = fenced && fence && fence->closed && !fence->onlyMetadataAfter;
+            if (fence && fence->closed && fence->onlyMetadataAfter && e.body.contains(u'\n'))
+                QVERIFY2(fenced, qPrintable(e.body)); // a closed code block shows as code
+            // A character typed at the start of the code, at the end of the block (not after the
+            // last fence of a code block with text after it: that would open a new fence), and in
+            // a closed code block lines that would close it.
+            QStringList edits;
+            if (fenced)
+                edits.append(u"ą"_s + s.editText);
+            if (!mixed)
+                edits.append(s.editText + u"ż"_s);
+            const QString widening = s.editText + u"\n```\n~~~~~\n````\n```"_s;
+            if (closedFence)
+                edits.append(widening);
+            for (const QString &edit : std::as_const(edits)) {
+                const QString body = bodyWithEditText(e, edit);
+                if (edit != widening) { // only the edit text changes
+                    QVERIFY2(body.startsWith(head), qPrintable(body));
+                    QVERIFY2(body.endsWith(tail), qPrintable(body));
+                }
+                markdown::BlockDocument edited(content);
+                edited.setBody(i, body);
+                QCOMPARE(edited.at(i).body, body);
+                QCOMPARE(shapeOf(edited.at(i)).editText, edit);
+                QCOMPARE(edited.at(i).blockId, e.blockId);
+                // A reload sees the blocks the editor has; nothing of the page became code.
+                const QString saved = edited.toString();
+                QCOMPARE(blocksOf(markdown::BlockDocument(saved)), blocksOf(edited));
+                QCOMPARE(markdown::BlockDocument(saved).count(), doc.count());
+                if (fenced) // the code is not indexed: tasks, ids, links and reminders stay
+                    QCOMPARE(indexedOf(saved), indexedOf(content));
+            }
+        }
     }
 
     void shapes_data()
@@ -140,6 +319,14 @@ private Q_SLOTS:
         QTest::newRow("tex fence") << u"```tex\nx^2\n```\n"_s << 0 << u"math"_s << u"x^2"_s << 7 << QString();
         QTest::newRow("list math") << u"- ```math\n  a^2 + b^2 = c^2\n  ```\n"_s << 0 << u"math"_s
                                    << u"a^2 + b^2 = c^2"_s << 8 << QString();
+        QTest::newRow("code with id") << u"```js\nlet a = 1\n```\n^kod123\n"_s << 0 << u"code"_s << u"let a = 1"_s << 6
+                                      << QString();
+        QTest::newRow("calc with id") << u"```calc\nx = 2\n```\n\n^calc1\n"_s << 0 << u"calc"_s << u"x = 2"_s << 8
+                                      << QString();
+        QTest::newRow("list code with id::") << u"- ```js\n  a\n  ```\n  id:: 650f1c2a-0000-4000-8000-000000000001\n"_s
+                                             << 0 << u"code"_s << u"a"_s << 6 << QString();
+        QTest::newRow("list code with text") << u"- ```js\n  a\n  ```\n  opis #tag\n"_s << 0 << u"code"_s
+                                             << u"a\n```\nopis #tag"_s << 6 << QString();
         QTest::newRow("lone fence") << u"```calc\n"_s << 0 << u"text"_s << u"```calc"_s << 0 << QString();
         QTest::newRow("lone fence item") << u"- ```js\n"_s << 0 << u"text"_s << u"```js"_s << 0 << QString();
         QTest::newRow("list calc") << u"- ```calc\n  a = 1\n  ```\n"_s << 0 << u"calc"_s << u"a = 1"_s << 8 << QString();

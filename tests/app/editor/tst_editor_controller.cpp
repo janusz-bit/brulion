@@ -6,6 +6,7 @@
 #include "blocktext.h"
 #include "dayclock.h"
 #include "fakeeditorhost.h"
+#include "markdown/parse.h"
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
@@ -63,6 +64,52 @@ struct Fixture {
         return out;
     }
 };
+
+/// The blocks of a document: kind, depth, block id and body of each.
+QStringList blocksOf(const markdown::BlockDocument &doc)
+{
+    QStringList out;
+    for (int i = 0; i < doc.count(); ++i) {
+        const markdown::BlockEntry &e = doc.at(i);
+        out.append(kindName(e.kind) + u'/' + QString::number(e.depth) + u'/' + e.blockId + u'/' + e.body);
+    }
+    return out;
+}
+
+/// What the index takes from a note: tasks, block ids, links, tags and reminders.
+QString indexedOf(const QString &content)
+{
+    const ParsedNote n = markdown::parseNote(Page, content);
+    QStringList tasks;
+    for (const Task &t : n.tasks)
+        tasks.append(t.text);
+    QStringList ids = n.blockIds.keys();
+    ids.sort();
+    QStringList links;
+    for (const Link &l : n.links)
+        links.append(l.target);
+    QStringList reminders;
+    for (const Reminder &r : n.reminders)
+        reminders.append(r.text);
+    return u"tasks="_s + tasks.join(u'|') + u" ids="_s + ids.join(u',') + u" links="_s + links.join(u',') + u" tags="_s
+           + n.tags.join(u',') + u" reminders="_s + reminders.join(u'|');
+}
+
+/// The page saved and opened again in a new controller: its blocks are the ones the editor had.
+void verifyReload(Fixture &f)
+{
+    QVERIFY(f.page.save());
+    const QString saved = f.host.file(Page);
+    QCOMPARE(saved, f.text());
+    QCOMPARE(blocksOf(markdown::BlockDocument(saved)), blocksOf(f.model()->document()));
+    PageController reopened;
+    reopened.setNow(Now);
+    reopened.setHost(&f.host);
+    reopened.setPath(Page);
+    QCOMPARE(reopened.blocks()->rowCount(), f.count());
+    for (int r = 0; r < f.count(); ++r)
+        QCOMPARE(reopened.blocks()->editTextAt(r), f.edit(r));
+}
 
 } // namespace
 
@@ -970,6 +1017,83 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(adjacent.count(), 3);
     }
 
+    // One keystroke in the code of a code block followed by its block id, properties or more
+    // text of its list item changes that character in the file and nothing else: the tasks,
+    // ids, links and reminders after the code stay in the index, and a reload sees the blocks
+    // the editor has.
+    void typingInCodeKeepsWhatFollowsIt_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("editText");
+        QTest::newRow("code with id, task after")
+                << u"```js\nlet a = 1;\n```\n^kod123\n\n- [ ] Zadzwonić do mamy #praca ⏰ 2026-10-22 09:00\n- Spotkanie [[Inna]]\n"_s
+                << 0 << u"let a = 1;"_s;
+        QTest::newRow("id after a blank line")
+                << u"```js\nlet a = 1;\n```\n\n^kod123\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("logseq id:: and a child task")
+                << u"- ```js\n  let a = 1;\n  ```\n  id:: 650f1c2a-0000-4000-8000-000000000001\n  - [ ] dziecko #ważne ⏰ 2026-10-22 09:00\n- dalej [[Inna]]\n"_s
+                << 0 << u"let a = 1;"_s;
+        QTest::newRow("item with id and a child")
+                << u"- ```js\n  let a = 1;\n  ```\n  ^kod123\n  - [ ] dziecko #ważne\n- dalej\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("item text after code")
+                << u"- ```js\n  let a = 1;\n  ```\n  opis [[Inna]] #tag\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej\n"_s
+                << 0 << u"let a = 1;\n```\nopis [[Inna]] #tag"_s;
+        QTest::newRow("item with two fences")
+                << u"- ```js\n  let a = 1;\n  ```\n  #tag\n  ```py\n  b = 2\n  ```\n  - [ ] dziecko\n- dalej\n"_s << 0
+                << u"let a = 1;\n```\n#tag\n```py\nb = 2\n```"_s;
+        QTest::newRow("crlf")
+                << u"```js\r\nlet a = 1;\r\n```\r\n^kod123\r\n\r\n- [ ] zadanie #praca\r\n- [[Inna]]\r\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("tabs")
+                << u"- rodzic\n\t- ```js\n\t  let a = 1;\n\t  ```\n\t  ^kod123\n\t\t- [ ] wnuk #praca\n\t- dalej [[Inna]]\n"_s
+                << 1 << u"let a = 1;"_s;
+        QTest::newRow("tildes with info")
+                << u"~~~python {.numberLines}\nlet a = 1;\n~~~\n^kod123\n\n- [ ] zadanie\n"_s << 0 << u"let a = 1;"_s;
+    }
+
+    void typingInCodeKeepsWhatFollowsIt()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(QString, editText);
+        Fixture f(content);
+        const QString indexed = indexedOf(content);
+        QVERIFY(!markdown::parseNote(Page, content).tasks.isEmpty());
+        f.page.startEditing(row, 9);
+        f.page.setEditText(row, f.edit(row).replace(u"let a = 1;"_s, u"let a = 2;"_s), 9);
+        QCOMPARE(f.text(), QString(content).replace(u"let a = 1;"_s, u"let a = 2;"_s));
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // The code editor shows the code: no fence lines, no block id or properties.
+        QCOMPARE(f.edit(row), QString(editText).replace(u"1;"_s, u"2;"_s));
+    }
+
+    void codeBlockReferenceThenTyping()
+    {
+        // "Copy block reference" writes the id on its own line after the closing fence; typing in
+        // the code afterwards — a fence-like line too — keeps it and the task after the block.
+        Fixture f(u"```js\nlet a = 1;\n```\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        const QString id = f.page.ensureBlockRef(0);
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(f.text(), u"```js\nlet a = 1;\n```\n^"_s + id + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        f.page.setEditText(0, u"// komentarz\n"_s + f.edit(0));
+        QCOMPARE(f.text(),
+                 u"```js\n// komentarz\nlet a = 1;\n```\n^"_s + id + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"// komentarz\nlet a = 1;"_s);
+        f.page.setEditText(0, u"// komentarz\nlet a = 1;\n```"_s);
+        QCOMPARE(f.text(), u"````js\n// komentarz\nlet a = 1;\n```\n````\n^"_s + id
+                                   + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"// komentarz\nlet a = 1;\n```"_s);
+        const ParsedNote n = markdown::parseNote(Page, f.text());
+        QVERIFY(n.blockIds.contains(id));
+        QCOMPARE(n.tasks.size(), 1);
+        QCOMPARE(n.reminders.size(), 1);
+        verifyReload(f);
+    }
+
     // --- tables ----------------------------------------------------------------------------------------
 
     void tables()
@@ -1122,6 +1246,20 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(blocks[1].toMap().value(u"html"_s).toString(), u"<pre>b</pre>"_s);
         QCOMPARE(blocks[2].toMap().value(u"view"_s).toString(), u"code"_s);
         QCOMPARE(blocks[2].toMap().value(u"html"_s).toString(), u"<pre>x = 2</pre>"_s);
+        // A code block embedded by its id: the code only, without the fences and the id line.
+        Fixture byId(u"- ![[Inna#^kod123]]\n- ![[Inna#^kod456]]\n"_s);
+        byId.host.setFile(u"Inna.md"_s,
+                          u"```js\nlet a = 1 < 2;\n```\n^kod123\n\n- ```py\n  b = 2\n  ```\n  ^kod456\n"_s);
+        byId.model()->invalidateRendering();
+        for (int r = 0; r < 2; ++r) {
+            const QVariantList embeds = byId.role(r, "transclusions").toList();
+            QCOMPARE(embeds.size(), 1);
+            const QVariantList shown = embeds[0].toMap().value(u"blocks"_s).toList();
+            QCOMPARE(shown.size(), 1);
+            QCOMPARE(shown[0].toMap().value(u"view"_s).toString(), u"code"_s);
+            QCOMPARE(shown[0].toMap().value(u"html"_s).toString(),
+                     r == 0 ? u"<pre>let a = 1 &lt; 2;</pre>"_s : u"<pre>b = 2</pre>"_s);
+        }
     }
 
     void transclusionsOfThisPageAndCycles()

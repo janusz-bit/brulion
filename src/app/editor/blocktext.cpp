@@ -155,51 +155,110 @@ std::optional<TaskStatus> taskStatusFromName(QStringView name)
     return std::nullopt;
 }
 
+namespace {
+
+bool isSpaceOrTab(QChar c)
+{
+    return c == u' ' || c == u'\t';
+}
+
+/// An opening code fence line (markdown's fenceOpen()): 3+ backticks or tildes after any
+/// spaces and tabs; a backtick fence's info string has no backtick. Returns the fence character
+/// and the run length, or nullopt.
+std::optional<std::pair<QChar, int>> openingFence(QStringView line)
+{
+    qsizetype k = 0;
+    while (k < line.size() && isSpaceOrTab(line[k]))
+        ++k;
+    if (k >= line.size() || (line[k] != u'`' && line[k] != u'~'))
+        return std::nullopt;
+    const QChar marker = line[k];
+    qsizetype n = 0;
+    while (k + n < line.size() && line[k + n] == marker)
+        ++n;
+    if (n < 3 || (marker == u'`' && line.sliced(k + n).contains(u'`')))
+        return std::nullopt;
+    return std::pair{marker, int(n)};
+}
+
+/// The run length when `line` is a closing fence of `marker` (markdown's isFenceClose(): spaces
+/// and tabs before and after a run of 3+ markers and nothing else — a no-break space or any
+/// other character makes it a code line), else 0.
+int closingFenceRun(QStringView line, QChar marker)
+{
+    qsizetype k = 0;
+    while (k < line.size() && isSpaceOrTab(line[k]))
+        ++k;
+    qsizetype run = 0;
+    while (k + run < line.size() && line[k + run] == marker)
+        ++run;
+    if (run < 3)
+        return 0;
+    for (qsizetype j = k + run; j < line.size(); ++j) {
+        if (!isSpaceOrTab(line[j]))
+            return 0;
+    }
+    return int(run);
+}
+
+/// Lines a code block keeps hidden after its closing fence: blank lines, a standalone block id
+/// (`^kod123`, Obsidian; Brulion writes it there for code blocks) and `key:: value` properties
+/// (Logseq's `id:: …`, `collapsed:: true`).
+bool isMetadataLine(QStringView line)
+{
+    qsizetype k = 0;
+    while (k < line.size() && line[k].isSpace())
+        ++k;
+    const QStringView t = line.sliced(k);
+    return t.isEmpty() || !markdown::standaloneBlockId(t).isEmpty() || markdown::matchPropertyLine(t).has_value();
+}
+
+} // namespace
+
 std::optional<Fence> parseFence(QStringView body)
 {
     const QList<text::Line> lines = text::splitLines(body);
     const QString &first = lines.first().text;
-    qsizetype k = 0;
     // Brulion's parser accepts a fence at any indentation (also inside list items), unlike
     // CommonMark's three spaces; the editor has to agree or a code block would render as text.
-    while (k < first.size() && (first[k] == u' ' || first[k] == u'\t'))
-        ++k;
-    if (k >= first.size() || (first[k] != u'`' && first[k] != u'~'))
-        return std::nullopt;
-    const QChar fc = first[k];
-    qsizetype n = 0;
-    while (k + n < first.size() && first[k + n] == fc)
-        ++n;
-    if (n < 3)
-        return std::nullopt;
-    const QString info = first.sliced(k + n).trimmed();
-    if (fc == u'`' && info.contains(u'`'))
+    const auto open = openingFence(first);
+    if (!open)
         return std::nullopt;
     Fence f;
     f.openLine = first;
-    f.marker = fc;
-    f.length = int(n);
+    f.marker = open->first;
+    f.length = open->second;
+    qsizetype k = 0;
+    while (k < first.size() && isSpaceOrTab(first[k]))
+        ++k;
+    const QString info = first.sliced(k + f.length).trimmed();
     f.lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
     // Strip attribute braces of "{.lang}" style info strings.
     if (f.lang.startsWith(u'{'))
         f.lang.clear();
-    f.innerOffset = int(first.size() + (lines.size() > 1 ? 1 : 0));
-    qsizetype last = lines.size() - 1;
-    if (lines.size() >= 2) {
-        const QString t = lines[last].text.trimmed();
-        qsizetype c = 0;
-        while (c < t.size() && t[c] == fc)
-            ++c;
-        if (c >= n && c == t.size()) {
-            f.closed = true;
-            f.closeLine = lines[last].text;
-        }
+    f.innerOffset = int(lines.size() > 1 ? lines[1].start : first.size());
+    // The first closing line ends the block, as in the core parser: lines after it are not code
+    // (a block id, properties or more text of a list item).
+    qsizetype close = -1;
+    for (qsizetype i = 1; i < lines.size() && close < 0; ++i) {
+        if (closingFenceRun(lines[i].text, f.marker) >= f.length)
+            close = i;
     }
     QStringList inner;
-    const qsizetype end = f.closed ? last : lines.size();
+    const qsizetype end = close >= 0 ? close : lines.size();
     for (qsizetype i = 1; i < end; ++i)
         inner.append(lines[i].text);
     f.inner = inner.join(u'\n');
+    if (close >= 0) {
+        f.closed = true;
+        f.closeLine = lines[close].text;
+        QStringList after;
+        for (qsizetype i = close + 1; i < lines.size(); ++i) {
+            after.append(lines[i].text);
+            f.onlyMetadataAfter = f.onlyMetadataAfter && isMetadataLine(lines[i].text);
+        }
+        f.after = after.join(u'\n');
+    }
     return f;
 }
 
@@ -209,7 +268,7 @@ namespace {
 QString fenceLineWithLength(QStringView line, QChar marker, int length)
 {
     qsizetype start = 0;
-    while (start < line.size() && (line[start] == u' ' || line[start] == u'\t'))
+    while (start < line.size() && isSpaceOrTab(line[start]))
         ++start;
     qsizetype end = start;
     while (end < line.size() && line[end] == marker)
@@ -217,21 +276,13 @@ QString fenceLineWithLength(QStringView line, QChar marker, int length)
     return line.first(start).toString() + QString(length, marker) + line.sliced(end).toString();
 }
 
-/// The longest run of `marker` on a line of `inner` that consists of nothing else. Such a line
-/// closes a fence of that length or shorter; the opening fence has to be longer.
+/// The longest run of `marker` on a line of `inner` that would close a fence of that length or
+/// shorter; the opening fence has to be longer.
 int longestClosingFence(QStringView inner, QChar marker)
 {
     int longest = 0;
-    for (const text::Line &line : text::splitLines(inner)) {
-        const QString trimmed = line.text.trimmed();
-        if (trimmed.size() < 3 || trimmed.front() != marker)
-            continue;
-        qsizetype run = 0;
-        while (run < trimmed.size() && trimmed[run] == marker)
-            ++run;
-        if (run == trimmed.size())
-            longest = std::max(longest, int(run));
-    }
+    for (const text::Line &line : text::splitLines(inner))
+        longest = std::max(longest, closingFenceRun(line.text, marker));
     return longest;
 }
 
@@ -253,8 +304,17 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
                  : f.lang == u"query" ? BlockView::Query
                                       : BlockView::Code;
         s.editOffset = f.innerOffset;
+        if (f.closed && !f.onlyMetadataAfter) {
+            // More text after the closing fence (a list item with a description, a second fence):
+            // hiding it would hide text, so everything after the opening line is edited as it is
+            // — the closing fence included, never widened (bodyWithEditText()).
+            s.editText = e.body.sliced(f.innerOffset);
+            s.editSuffix = 0;
+            return;
+        }
         s.editText = f.inner;
-        // Body = open + '\n' + inner + '\n' + close ("```\n```": no inner line at all).
+        // Body = open + '\n' + inner + '\n' + close + after ("```\n```": no inner line at all);
+        // a block id or properties after the closing fence stay hidden with it.
         s.editSuffix = int(e.body.size() - f.innerOffset - f.inner.size());
     };
     // A lone opening fence ("```calc" being typed) stays text until Enter turns it into a block.
@@ -348,44 +408,43 @@ BlockShape shapeOf(const markdown::BlockEntry &e)
 QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
 {
     const BlockShape s = shapeOf(e);
+    if (editText == s.editText)
+        return e.body; // nothing edited: no hidden byte is rewritten either
     QString head = e.body.left(s.editOffset);
     QString tail = e.body.right(s.editSuffix);
+    QString out;
     if (s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
         || s.view == BlockView::Math || s.view == BlockView::Frontmatter) {
         // The fence lines are hidden, so every line typed between them is code. A line that would
         // close the fence (``` alone on its line, say, when writing about fenced code) must not
         // end the block: widen the opening and closing fence past the longest such line. Keeping
-        // the wider fence is harmless when that line is removed again.
-        if (const auto f = parseFence(e.body)) {
+        // the wider fence is harmless when that line is removed again. A body with text after its
+        // closing fence shows that fence as code text: nothing is widened there.
+        const auto f = parseFence(e.body);
+        if (f && f->onlyMetadataAfter) {
             const int needed = longestClosingFence(editText, f->marker) + 1;
             if (needed > f->length) {
-                const qsizetype openEnd = head.indexOf(u'\n');
-                if (openEnd >= 0)
-                    head = fenceLineWithLength(head.left(openEnd), f->marker, needed) + head.mid(openEnd);
-                else if (!head.isEmpty())
-                    head = fenceLineWithLength(head, f->marker, needed);
-                if (!tail.isEmpty()) {
-                    const qsizetype closeStart = tail.lastIndexOf(u'\n');
-                    if (closeStart >= 0) {
-                        tail = tail.left(closeStart + 1)
-                               + fenceLineWithLength(QStringView(tail).sliced(closeStart + 1), f->marker, needed);
-                    } else {
-                        tail = fenceLineWithLength(tail, f->marker, needed);
-                    }
+                // head = the opening line + '\n'; tail = ['\n'] + the closing line + ['\n' + after].
+                head = fenceLineWithLength(f->openLine, f->marker, needed) + head.sliced(f->openLine.size());
+                if (f->closed && closingFenceRun(f->closeLine, f->marker) < needed) {
+                    const qsizetype at = tail.startsWith(u'\n') ? 1 : 0;
+                    tail = tail.first(at) + fenceLineWithLength(f->closeLine, f->marker, needed)
+                           + tail.sliced(at + f->closeLine.size());
                 }
             }
         }
         // Keep the hidden fence lines on lines of their own.
         if (!head.isEmpty() && !head.endsWith(u'\n'))
             head += u'\n';
-        QString out = head + editText;
+        out = head + editText;
         if (!tail.isEmpty())
             out += (tail.startsWith(u'\n') ? QString() : u"\n"_s) + tail;
-        return out;
+    } else {
+        if (!head.isEmpty() && !editText.isEmpty() && !head.endsWith(u' ') && !head.endsWith(u'\t'))
+            head += u' ';
+        out = head + editText + tail;
     }
-    if (!head.isEmpty() && !editText.isEmpty() && !head.endsWith(u' ') && !head.endsWith(u'\t'))
-        head += u' ';
-    return head + editText + tail;
+    return out;
 }
 
 QString withoutTaskMarker(const markdown::BlockEntry &e)
