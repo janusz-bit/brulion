@@ -959,13 +959,17 @@ ApplicationWindow {
     // ---- Self test of the round clock (`--editor-script clock`, tst_editor_qml_clock*) -------
     // BTimePicker on its own: the value of every position, taps and drags with a finger (touch
     // UI) or the mouse — also drags that start on a number or the chosen value's bubble —, keys
-    // and the focus ring; BTimePickerDialog: open, set, cancel, the whole dial in a short window.
-    // Real input through QtTest's TestEvent.
+    // and the focus ring; BTimePickerDialog: open, set, cancel, the whole dial in a short window;
+    // the clock buttons of the reminder's date picker and of the calendar's add dialog (a typed
+    // time first; the clock created only when asked for). Real input through QtTest's TestEvent.
     property var clockEvents: null
     property BTimePicker clock: null
     property BTimePickerDialog clockDialog: null
     property var clockPicks: []
     property var dialogPicks: []
+    property var datePicker: null
+    property var addDialog: null
+    property var reminderDialog: null
 
     /// A point of the face (its coordinates) at `radius` from the centre, `deg` from 12 o'clock.
     function clockPoint(c, radius, deg) {
@@ -1008,6 +1012,25 @@ ApplicationWindow {
     }
     function clockRing(c) {
         return findItem(c, "clockFocusRing")
+    }
+    /// Scroll a dialog's body so that `item` shows, then tap it.
+    function tapInDialog(dialog, item) {
+        const body = dialog.contentItem
+        const at = item.mapToItem(body.contentItem, 0, 0)
+        body.contentY = Math.max(0, Math.min(at.y - (body.height - item.height) / 2, body.contentHeight - body.height))
+        tapAt(item, item.width / 2, item.height / 2)
+    }
+    /// The clock dialogs `object` holds (created ones: BDatePicker creates its clock on demand).
+    function clockDialogsIn(object) {
+        const found = []
+        for (const list of [object.resources, object.data]) {
+            for (let i = 0; list && i < list.length; ++i) {
+                const o = list[i]
+                if (o && o.openFor !== undefined && o.picked !== undefined && found.indexOf(o) < 0)
+                    found.push(o)
+            }
+        }
+        return found.length
     }
     /// Repeat the current step until `ready` (an asynchronous popup), at most 6 s.
     function waitUntil(ready) {
@@ -1182,11 +1205,108 @@ ApplicationWindow {
                     return
                 check(clockDialog.picker.time === "10:00", "no time: the dialog opens on the current time: " + clockDialog.picker.time)
                 clockDialog.reject()
+            },
+            // ---- The date picker's clock: created when asked for, after the typed time ---------
+            () => {
+                if (!waitUntil(!clockDialog.visible))
+                    return
+                const plain = Qt.createQmlObject('import QtQuick; import Brulion; BDatePicker { withTime: false }', window.contentItem, "plainDatePicker")
+                check(clockDialogsIn(plain) === 0, "a date picker without a time creates no clock")
+                plain.destroy()
+                page.stopEditing()
+                editor.dialogs.createReminder(rowOf("Zadzwonić do hydraulika"), false)
+            },
+            () => {
+                reminderDialog = editor.dialogs.reminderDialog
+                if (!waitUntil(reminderDialog && reminderDialog.opened))
+                    return
+                window.timeField = findItem(reminderDialog.contentItem, "datePickerTime") as BTextField
+                window.dateField = findItem(reminderDialog.contentItem, "datePickerNatural") as BTextField
+                datePicker = window.timeField
+                while (datePicker && datePicker.applyTime === undefined)
+                    datePicker = datePicker.parent
+                check(datePicker !== null && clockDialogsIn(datePicker) === 0, "the reminder's date picker has no clock until it is asked for")
+                window.timeField.forceActiveFocus()
+                window.timeField.selectAll()
+            },
+            () => typeKeys("2346"),
+            () => tapInDialog(reminderDialog, findItem(reminderDialog.contentItem, "datePickerClock")),
+            () => {
+                const clk = datePicker.clockDialog
+                if (!waitUntil(clk && clk.opened))
+                    return
+                check(reminderDialog.at === "2026-10-16 23:46" && clk.picker.time === "23:46",
+                      "the Clock button applies the typed time first and opens the clock on it: " + reminderDialog.at)
+                window.firstClock = clk
+            },
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 5 * 30),
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 15 * 6),
+            () => datePicker.clockDialog.tryAccept(),
+            () => check(reminderDialog.at === "2026-10-16 05:15", "Set on the clock changes the reminder's time: " + reminderDialog.at),
+            () => {
+                if (!waitUntil(!datePicker.clockDialog.visible))
+                    return
+                check(window.timeField.text === "05:15", "the time field shows the clock's time: " + window.timeField.text)
+                window.dateField.forceActiveFocus()
+            },
+            () => check(reminderDialog.at === "2026-10-16 05:15", "leaving the time field keeps it: " + reminderDialog.at),
+            () => { window.timeField.forceActiveFocus(); window.timeField.selectAll() },
+            () => typeKeys("25:99"),
+            () => tapInDialog(reminderDialog, findItem(reminderDialog.contentItem, "datePickerClock")),
+            () => {
+                const clk = datePicker.clockDialog
+                if (!waitUntil(clk.opened))
+                    return
+                check(datePicker.timeInvalid && clk.picker.time === "05:15",
+                      "after an invalid typed time the clock opens on the last good one: " + clk.picker.time)
+                check(datePicker.clockDialog === window.firstClock, "the date picker keeps its one clock")
+                clockTap(clk.picker, clk.picker.innerRadius, 7 * 30)
+            },
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 0),
+            () => datePicker.clockDialog.tryAccept(),
+            () => {
+                if (!waitUntil(!datePicker.clockDialog.visible))
+                    return
+                check(reminderDialog.at === "2026-10-16 19:00" && !datePicker.timeInvalid && window.timeField.text === "19:00"
+                      && reminderDialog.acceptEnabled, "a time from the clock replaces an invalid typed one: " + reminderDialog.at)
+                reminderDialog.reject()
+            },
+            // ---- The calendar's add dialog ------------------------------------------------------
+            () => {
+                if (!waitUntil(!reminderDialog.visible))
+                    return
+                addDialog = Qt.createQmlObject('import QtQuick; import Brulion; CalendarAddDialog {}', window.contentItem, "addDialog")
+                check(addDialog.clockDialog === null, "the calendar's add dialog creates no clock until it is asked for")
+                addDialog.openFor("reminder", "2026-10-16")
+            },
+            () => {
+                if (!waitUntil(addDialog.opened))
+                    return
+                findItem(addDialog.contentItem, "calendarAddTime").forceActiveFocus()
+            },
+            () => typeKeys("2346"),
+            () => tapInDialog(addDialog, findItem(addDialog.contentItem, "calendarAddClock")),
+            () => {
+                const clk = addDialog.clockDialog
+                if (!waitUntil(clk && clk.opened))
+                    return
+                check(addDialog.time === "23:46" && clk.picker.time === "23:46", "the add dialog's clock opens on the typed time: " + clk.picker.time)
+                clockTap(clk.picker, clk.picker.outerRadius, 30)
+            },
+            () => clockTap(addDialog.clockDialog.picker, addDialog.clockDialog.picker.outerRadius, 10 * 6),
+            () => addDialog.clockDialog.tryAccept(),
+            () => {
+                if (!waitUntil(!addDialog.clockDialog.visible))
+                    return
+                check(addDialog.time === "01:10" && findItem(addDialog.contentItem, "calendarAddTime").text === "",
+                      "a time picked on the clock replaces the typed one: " + addDialog.time)
+                addDialog.reject()
             }
         ]
         stepIndex = 0
         stepTimer.start()
     }
+    property var firstClock: null
 
     function runScript(name) {
         switch (name) {
