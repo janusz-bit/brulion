@@ -661,6 +661,8 @@ QString environmentHtml(QStringView body, const QString &env, bool display)
 }
 
 /// A delimiter after \left, \right, \big…: the character itself or its command ("\langle").
+/// Always text the renderer escaped or built itself, never a raw character of the note: a raw
+/// '<' … '>' pair around \text{…} would be a real HTML element (an image loaded from anywhere).
 QString delimiterAt(QStringView s, qsizetype &i)
 {
     while (i < s.size() && s[i].isSpace())
@@ -678,7 +680,12 @@ QString delimiterAt(QStringView s, qsizetype &i)
     const QChar c = s[i++];
     if (c == u'.')
         return {}; // \left. / \right.: no delimiter
-    return QString(c);
+    // \left< … \right> are angle brackets, as in LaTeX.
+    if (c == u'<')
+        return u"⟨"_s;
+    if (c == u'>')
+        return u"⟩"_s;
+    return escaped(QString(c));
 }
 
 /// The next command or character as a formula, for `\not` and the argument of a command.
