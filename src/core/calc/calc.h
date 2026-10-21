@@ -36,7 +36,9 @@
 //     findUnit("km"), Unit; CalcError{code, arg}.message(locale)
 //
 // Calc language (one expression or `;`-separated statements per line):
-//   numbers   12.5 · 12,5 (decimal comma outside function arguments, or inside calls using ';')
+//   numbers   12.5 · 12,5 (decimal comma outside function arguments, or inside calls using ';';
+//             in calls without ';' when only that fits the function: sqrt(2,25) = 1.5, pow(2,5)
+//             = 32, and round(2,5) / max(1,5) are errors, never a guess)
 //             · 1 000 000 · 1e3 · English 1,000.5 · 15% · ∞ π e
 //   operators + - * / ^ ** × ÷ − · mod and % between operands (10 % 3) · n! · √x · x² ·
 //             comparisons == != <> < <= > >= = ≤ ≥ ≠ (chained) · and or xor not && || ! · c ? a : b

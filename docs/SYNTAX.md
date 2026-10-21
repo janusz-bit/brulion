@@ -273,8 +273,15 @@ sum                   → 139
   `pow`, `exp`, `ln`, `log`, trigonometry, `if(cond, a[, b])`/`jeżeli`/`jeśli`, …
 * `#` or `//` start a comment (a whole line or after an expression); text before `:` is a
   label (`Czynsz: 1800` → 1800).
-* Decimal comma is accepted (`12,5`) outside function arguments (inside calls use `;` between
-  arguments: `round(2,345; 2)`); also `1 000 000`, `1e3`, English `1,000.5`.
+* Decimal comma is accepted (`12,5`) outside function arguments, and everywhere in a call that
+  uses `;` between its arguments (`round(2,345; 2)`, `max(1,5; 2)`). In a call without `;` a
+  comma written between digits without spaces (`2,5`) is read the way the builtin function
+  allows: a decimal comma when only that gives a valid number of arguments (`sqrt(2,25)` = 1,5,
+  `floor(1,5)` = 1), a separator when only that does (`pow(2,5)` = 32); when both fit
+  (`round(2,5)`, `zaokr(netto * 1,23)`, `max(1,5)`) the line is an error ("Niejednoznaczny
+  przecinek…") instead of a guess. `round(2, 5)` with a space, runs like `sum(1,2,3)` and calls
+  of the notebook's own functions take the commas as separators. Also `1 000 000`, `1e3`,
+  English `1,000.5`.
 * Display rounding — only the display, values keep full precision (`5 km to mi to km` is
   `5 km` again): plain numbers up to 10 significant digits; **quantities with a unit at most
   2 decimals** (`3,11 mi`, `3,33 h`; magnitudes below 1 keep two significant digits:

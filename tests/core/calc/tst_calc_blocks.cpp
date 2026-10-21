@@ -313,8 +313,11 @@ private Q_SLOTS:
 
     void decimalCommas()
     {
-        QCOMPARE(results(u"12,5 * 2\nmax(1,5)\n(12,5 + 1) * 2\nround(2,3456; 2)\nmax(1,5; 2,5)"_s),
-                 (QStringList{u"25"_s, u"5"_s, u"27"_s, u"2,35"_s, u"2,5"_s}));
+        QCOMPARE(results(u"12,5 * 2\nmax(1, 5)\n(12,5 + 1) * 2\nround(2,3456; 2)\nmax(1,5; 2,5)\nsqrt(2,25)"_s),
+                 (QStringList{u"25"_s, u"5"_s, u"27"_s, u"2,35"_s, u"2,5"_s, u"1,5"_s}));
+        // 1.5 or 1 and 5? Never a guess (tst_calc_engine: decimalCommaInCalls).
+        QCOMPARE(last(u"max(1,5)"_s),
+                 u"!Niejednoznaczny przecinek w max(…): ułamek zapisz z kropką, a argumenty rozdziel średnikiem"_s);
     }
 
     void thousandsSeparators()
@@ -331,7 +334,9 @@ private Q_SLOTS:
         QCOMPARE(results(u"1,000 + 0.5\n12345.5 * 2\n5 > 3\n12,5 * 2"_s, En),
                  (QStringList{u"1,000.5"_s, u"24,691"_s, u"true"_s, u"25"_s}));
         QCOMPARE(last(u"1,000,000.5 * 2"_s, En), u"2,000,001"_s);
-        QCOMPARE(last(u"max(1,000)"_s, En), u"1"_s); // ',' separates arguments
+        QCOMPARE(last(u"max(1, 000)"_s, En), u"1"_s); // ',' separates arguments
+        QCOMPARE(last(u"max(1,000)"_s, En),           // 1000, or 1 and 0?
+                 u"!Ambiguous comma in max(…): write decimals with a dot or separate arguments with “;”"_s);
     }
 
     void specialValues()
@@ -587,7 +592,7 @@ private Q_SLOTS:
         QCOMPARE(last(u"s = \"zażółć   gęślą\"\ns"_s), u"zażółć   gęślą"_s);
         QCOMPARE(inl(u"concat(\"x\", \"  \", \"y\")"_s), u"x  y"_s);
         QCOMPARE(inl(u"concat(\"a\"; 1,5; \" \"; 2 km)"_s), u"a1,5 2 km"_s);
-        QCOMPARE(inl(u"concat(\"a\", 1,5)"_s), u"a15"_s); // ',' separates arguments without ';'
+        QCOMPARE(inl(u"concat(\"a\", 1, 5)"_s), u"a15"_s); // ',' separates arguments without ';'
         QCOMPARE(inl(u"'pojedyncze'"_s), u"pojedyncze"_s);
         QCOMPARE(inl(u"\"cytat \\\" w środku\""_s), u"cytat \" w środku"_s);
         QCOMPARE(inl(u"\"12\" * 2"_s), u"24"_s);

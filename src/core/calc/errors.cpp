@@ -74,6 +74,9 @@ Message messageFor(CalcErrorCode code)
     case CalcErrorCode::ListNotAllowed:
         return {u"Zakres lub lista może być tylko argumentem funkcji",
                 u"A range or list can only be a function argument"};
+    case CalcErrorCode::AmbiguousComma:
+        return {u"Niejednoznaczny przecinek w %1(…): ułamek zapisz z kropką, a argumenty rozdziel średnikiem",
+                u"Ambiguous comma in %1(…): write decimals with a dot or separate arguments with “;”"};
     }
     return {u"Błąd obliczenia", u"Calculation error"};
 }

@@ -230,6 +230,19 @@ private Q_SLOTS:
         QCOMPARE(evaluateTable(model).values[2][1], expected);
     }
 
+    void ambiguousDecimalComma()
+    {
+        // `=zaokr(netto * 1,23)` never shows the net amount silently (2 places, or 1.23?).
+        const QString md =
+                u"| Cena | Brutto |\n|---|---|\n| 100 | =zaokr([Cena] * 1,23) |\n| 100 | =zaokr([Cena] * 1,23; 2) |"_s;
+        const TableEval eval = evaluate(md);
+        QCOMPARE(evaluate(u"| a |\n|---|\n| =sqrt(2,25) |"_s).values[0][0], u"1,5"_s);
+        QCOMPARE(eval.values[0][1], kErrorMarker.toString());
+        QCOMPARE(eval.errors[0][1],
+                 u"Niejednoznaczny przecinek w zaokr(…): ułamek zapisz z kropką, a argumenty rozdziel średnikiem"_s);
+        QCOMPARE(eval.values[1][1], u"123"_s);
+    }
+
     void pageScopeVariables()
     {
         Scope scope;

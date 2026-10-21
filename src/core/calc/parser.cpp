@@ -628,6 +628,7 @@ private:
 
     NodePtr parseCall(const QString &name)
     {
+        const bool ambiguousComma = peek() && peek()->ambiguousComma;
         ++m_pos; // (
         m_ternaries.append(0);
         std::vector<NodePtr> args;
@@ -657,8 +658,10 @@ private:
         }
         m_ternaries.removeLast();
         NodePtr node = make(NodeKind::Call, std::move(args));
-        if (node)
+        if (node) {
             node->text = name;
+            node->ambiguousComma = ambiguousComma;
+        }
         return node;
     }
 
