@@ -506,6 +506,38 @@ private Q_SLOTS:
         QTest::newRow("obraz") << u"obraz"_s << u"image"_s;
         QTest::newRow("zdjęcie") << u"zdjecie"_s << u"image"_s;
         QTest::newRow("image") << u"image"_s << u"image"_s;
+        // Task statuses: Polish and English names and aliases (the filter is one word).
+        QTest::newRow("zadanie") << u"zadanie"_s << u"task"_s;
+        QTest::newRow("todo") << u"todo"_s << u"task"_s;
+        QTest::newRow("do zrobienia") << u"zrobienia"_s << u"task"_s;
+        QTest::newRow("to do") << u"task"_s << u"task"_s;
+        QTest::newRow("w toku") << u"toku"_s << u"taskDoing"_s;
+        QTest::newRow("doing") << u"doing"_s << u"taskDoing"_s;
+        QTest::newRow("in progress") << u"progress"_s << u"taskDoing"_s;
+        QTest::newRow("zrobione") << u"zrobione"_s << u"taskDone"_s;
+        QTest::newRow("done") << u"done"_s << u"taskDone"_s;
+        QTest::newRow("gotowe") << u"gotowe"_s << u"taskDone"_s;
+        QTest::newRow("czeka") << u"czeka"_s << u"taskWaiting"_s;
+        QTest::newRow("odłożone") << u"odlozone"_s << u"taskWaiting"_s;
+        QTest::newRow("oczekujące") << u"oczekujące"_s << u"taskWaiting"_s;
+        QTest::newRow("waiting") << u"waiting"_s << u"taskWaiting"_s;
+        QTest::newRow("anulowane") << u"anul"_s << u"taskCancelled"_s;
+        QTest::newRow("cancel") << u"cancel"_s << u"taskCancelled"_s;
+        QTest::newRow("bez statusu") << u"bez"_s << u"taskNone"_s;
+        QTest::newRow("no status") << u"none"_s << u"taskNone"_s;
+    }
+
+    void slashTaskStatuses()
+    {
+        // "/zad" lists all six statuses, in the order of the status menu.
+        QStringList ids;
+        for (const SlashCommand *c : filterSlashCommands(u"zad"_s))
+            ids.append(c->id);
+        QCOMPARE(ids.mid(0, 6), QStringList({u"task"_s, u"taskDoing"_s, u"taskDone"_s, u"taskWaiting"_s,
+                                             u"taskCancelled"_s, u"taskNone"_s}));
+        QCOMPARE(slashCommand(u"task"_s)->namePl, u"Zadanie: do zrobienia"_s);
+        QCOMPARE(slashCommand(u"taskNone"_s)->nameEn, u"Task: no status"_s);
+        QCOMPARE(slashCommand(u"taskDone"_s)->syntaxPl, u"- [x] zadanie ✅ data"_s);
     }
 
     void slash()

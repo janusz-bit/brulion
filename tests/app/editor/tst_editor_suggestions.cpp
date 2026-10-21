@@ -290,7 +290,7 @@ private Q_SLOTS:
             for (int i = 0; i < std::min(3, m.count()); ++i)
                 QCOMPARE(rowText(view.get(), i), titles(m).at(i));
         }
-        QCOMPARE(titles(m).at(0), u"Zadanie"_s);
+        QCOMPARE(titles(m).at(0), u"Zadanie: do zrobienia"_s);
         // Scrolling builds the rows as they come into view, at once.
         m.setFilter(QString());
         QMetaObject::invokeMethod(view.get(), "positionViewAtEnd");

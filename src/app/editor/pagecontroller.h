@@ -182,6 +182,10 @@ public:
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
     /// The status a checkbox click gives: todo/doing/deferred -> "done", done/cancelled -> "todo".
     static QString toggledStatus(const QString &status);
+    /// The status a task slash command sets ("task" -> "todo", "taskDoing" -> "doing", "taskDone",
+    /// "taskWaiting" -> "deferred", "taskCancelled", "taskNone" -> "" = no status); nullopt for
+    /// other commands.
+    static std::optional<QString> slashTaskStatus(const QString &command);
 
     /// Three-way merge used for external changes while dirty (base, local, remote). Defaults to
     /// sync::merge3 when the sync module is available; without one, conflicts keep local.
@@ -255,7 +259,9 @@ public:
     Q_INVOKABLE void toggleTask(int row);
     /// Ctrl+Enter: none -> todo -> doing -> done -> none.
     Q_INVOKABLE void cycleTask(int row);
-    /// Set a task status ("todo", "doing", "done", "cancelled", "deferred"; "" removes the marker).
+    /// Set a task status ("todo", "doing", "done", "cancelled", "deferred"; "" removes the marker)
+    /// as one undo step: the status menu, Ctrl+Enter. A block that is no task becomes one. The
+    /// caret of the block being edited stays in its words.
     Q_INVOKABLE void setTaskStatus(int row, const QString &status);
     /// Remove the task marker (the block stays a plain bullet).
     Q_INVOKABLE void removeTaskMarker(int row);
@@ -476,6 +482,8 @@ private:
     void beginCommand();
     void endCommand(const Focus &after);
     bool inCommand() const { return m_commandDepth > 0; }
+    /// setTaskStatus() inside the current command (also the task slash commands).
+    void applyTaskStatus(int row, const QString &status);
     /// Restore a text snapshot (undo/redo) and focus.
     void restore(const QString &text, const Focus &focus);
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);

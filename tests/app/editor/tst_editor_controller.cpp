@@ -853,6 +853,125 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(rule.text(), u"- a\n- /lin\n"_s);
     }
 
+    void taskStatusSlashCommands_data()
+    {
+        // The block, the row being edited, the typed "/command" (it is found in the row's edit
+        // text), the command; the page and the caret (edit text position) after it.
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("command");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("cursor");
+        QTest::newRow("list item becomes a task")
+                << u"- Kupić mleko /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] Kupić mleko \n"_s << 12;
+        QTest::newRow("paragraph becomes a done task") << u"Kupić mleko /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                                       << u"- [x] Kupić mleko ✅ 2026-10-15\n"_s << 12;
+        QTest::newRow("command between words")
+                << u"- Kupić /toku mleko\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- [/] Kupić  mleko\n"_s << 6;
+        QTest::newRow("done task back to do")
+                << u"- [x] Zapłacić ✅ 2026-10-14 /do\n"_s << 0 << u"/do"_s << u"task"_s << u"- [ ] Zapłacić \n"_s << 9;
+        QTest::newRow("waiting") << u"- [ ] Odpisać Żanecie /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                 << u"- [>] Odpisać Żanecie \n"_s << 16;
+        QTest::newRow("cancelled") << u"- [/] Wizyta /anul u dentysty\n"_s << 0 << u"/anul"_s << u"taskCancelled"_s
+                                   << u"- [-] Wizyta  u dentysty ❌ 2026-10-15\n"_s << 7;
+        QTest::newRow("no status on a task")
+                << u"- [/] Pisać raport /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać raport \n"_s << 13;
+        QTest::newRow("no status on a done task")
+                << u"- [x] Pranie ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pranie \n"_s << 7;
+        QTest::newRow("no status on a plain item")
+                << u"- Pisać /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać \n"_s << 6;
+        QTest::newRow("no status on a paragraph")
+                << u"Akapit /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"Akapit \n"_s << 7;
+        QTest::newRow("same status") << u"- [/] W toku /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                     << u"- [/] W toku \n"_s << 7;
+        QTest::newRow("nested item") << u"- rodzic\n\t- dziecko /zad\n"_s << 1 << u"/zad"_s << u"task"_s
+                                     << u"- rodzic\n\t- [ ] dziecko \n"_s << 8;
+        QTest::newRow("numbered item") << u"1. pierwszy /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                       << u"1. [x] pierwszy ✅ 2026-10-15\n"_s << 9;
+        QTest::newRow("first line of a multi-line item")
+                << u"- pierwsza /zrob\n  druga\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                << u"- [x] pierwsza ✅ 2026-10-15\n  druga\n"_s << 9;
+        QTest::newRow("second line of a multi-line item") << u"- pierwsza\n  druga /zad\n"_s << 0 << u"/zad"_s
+                                                          << u"task"_s << u"- [ ] pierwsza\n  druga \n"_s << 15;
+        QTest::newRow("Logseq todo to doing") << u"- TODO Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                              << u"- DOING Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq later to now")
+                << u"- LATER Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- NOW Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq waiting") << u"- TODO Paczka /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                        << u"- WAITING Paczka \n"_s << 7;
+        QTest::newRow("Logseq no status")
+                << u"- DONE Paczka ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Paczka \n"_s << 7;
+        QTest::newRow("crlf kept") << u"- a\r\n- b /zad\r\n- c\r\n"_s << 1 << u"/zad"_s << u"task"_s
+                                   << u"- a\r\n- [ ] b \r\n- c\r\n"_s << 2;
+        QTest::newRow("empty block") << u"- /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] \n"_s << 0;
+    }
+
+    void taskStatusSlashCommands()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(QString, typed);
+        QFETCH(QString, command);
+        QFETCH(QString, expected);
+        QFETCH(int, cursor);
+        Fixture f(content);
+        const int from = int(f.edit(row).indexOf(typed));
+        QVERIFY(from >= 0);
+        const int to = from + int(typed.size());
+        f.page.startEditing(row, to);
+        const QVariantMap r = f.page.applySlashCommand(row, from, to, command);
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(r.value(u"action"_s).toString(), QString());
+        // Still editing that block, the caret where the command was (in edit text coordinates).
+        QCOMPARE(r.value(u"row"_s).toInt(), row);
+        QCOMPARE(f.page.editingRow(), row);
+        QCOMPARE(f.page.cursorPosition(), cursor);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), cursor);
+        // One undo step, the command's text back.
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        f.page.redo();
+        QCOMPARE(f.text(), expected);
+    }
+
+    void taskStatusSlashCommandNames()
+    {
+        QCOMPARE(PageController::slashTaskStatus(u"task"_s), std::optional<QString>(u"todo"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDoing"_s), std::optional<QString>(u"doing"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDone"_s), std::optional<QString>(u"done"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskWaiting"_s), std::optional<QString>(u"deferred"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskCancelled"_s), std::optional<QString>(u"cancelled"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskNone"_s), std::optional<QString>(QString()));
+        QVERIFY(!PageController::slashTaskStatus(u"reminder"_s));
+        QVERIFY(!PageController::slashTaskStatus(QString()));
+        // Each of them is a command of the "/" menu.
+        for (const QString &id :
+             {u"task"_s, u"taskDoing"_s, u"taskDone"_s, u"taskWaiting"_s, u"taskCancelled"_s, u"taskNone"_s})
+            QVERIFY2(slashCommand(id), qPrintable(id));
+    }
+
+    void taskStatusKeepsTheCaret()
+    {
+        // The status menu / Ctrl+Enter while editing: the caret stays in its words when a date
+        // before it goes or one after it comes.
+        Fixture f(u"- [x] Kupić ✅ 2026-10-01 mleko\n"_s);
+        f.page.startEditing(0, 20); // after "mleko"'s "m"
+        QCOMPARE(f.edit(0).mid(20), u"leko"_s);
+        f.page.setTaskStatus(0, u"doing"_s);
+        QCOMPARE(f.text(), u"- [/] Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        f.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(f.text(), u"- [x] Kupić mleko ✅ 2026-10-15\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko ✅ 2026-10-15"_s);
+        f.page.setTaskStatus(0, QString());
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        QCOMPARE(f.page.editingRow(), 0);
+        f.page.setTaskStatus(0, u"bogus"_s); // nothing happens
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+    }
+
     void pasting()
     {
         // A list pasted into an empty block becomes blocks, nesting kept.
