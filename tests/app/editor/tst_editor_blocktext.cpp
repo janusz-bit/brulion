@@ -158,9 +158,10 @@ private Q_SLOTS:
         const markdown::BlockEntry tilde = entryOf(u"~~~\na\n~~~\n"_s);
         QCOMPARE(bodyWithEditText(tilde, u"a\n~~~"_s), u"~~~~\na\n~~~\n~~~~"_s);
         QCOMPARE(bodyWithEditText(tilde, u"a\n```"_s), u"~~~\na\n```\n~~~"_s);
-        // An unclosed fence gets a wider opening (there is no closing line yet).
+        // A fence that is not closed yet (a file written elsewhere) is closed by a typed closing
+        // line: it is not widened.
         const markdown::BlockEntry open = entryOf(u"```js\na\n"_s);
-        QCOMPARE(bodyWithEditText(open, u"a\n```"_s), u"````js\na\n```"_s);
+        QCOMPARE(bodyWithEditText(open, u"a\n```"_s), u"```js\na\n```"_s);
         // A block id or properties after the closing fence stay after it; the closing fence is
         // the one widened.
         const markdown::BlockEntry withId = entryOf(u"```js\na\n```\n^kod123\n\nPo\n"_s);

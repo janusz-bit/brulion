@@ -1094,6 +1094,35 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         verifyReload(f);
     }
 
+    void typedClosingFenceClosesUnclosedCode()
+    {
+        // A code block whose fence was never closed (a file written elsewhere) runs on over the
+        // task after it; typing the closing fence closes it, as before widening existed.
+        Fixture f(u"Akapit\n\n```js\nkod\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.edit(1), u"kod\n\n- [ ] zadanie"_s);
+        f.page.setEditText(1, u"kod\n```\n\n- [ ] zadanie"_s);
+        QCOMPARE(f.text(), u"Akapit\n\n```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        const markdown::BlockDocument reloaded(f.text());
+        QCOMPARE(reloaded.count(), 3);
+        QCOMPARE(reloaded.at(2).kind, BlockKind::ListItem);
+        QCOMPARE(markdown::parseNote(Page, f.text()).tasks.size(), 1);
+        // At the end of the page: the typed fence becomes the hidden closing fence.
+        Fixture end(u"Akapit\n\n```js\nkod\n"_s);
+        end.page.startEditing(1, 3);
+        end.page.setEditText(1, u"kod\n```"_s, 7);
+        QCOMPARE(end.text(), u"Akapit\n\n```js\nkod\n```\n"_s);
+        QCOMPARE(end.edit(1), u"kod"_s);
+        QCOMPARE(end.page.cursorPosition(), 3);
+        verifyReload(end);
+        // In a list item (where the fence ended at the next item).
+        Fixture item(u"- ```\n  code\n- next\n"_s);
+        item.page.setEditText(0, u"code\n```"_s);
+        QCOMPARE(item.text(), u"- ```\n  code\n  ```\n- next\n"_s);
+        QCOMPARE(item.edit(0), u"code"_s);
+        verifyReload(item);
+    }
+
     // --- tables ----------------------------------------------------------------------------------------
 
     void tables()

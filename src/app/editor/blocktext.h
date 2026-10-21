@@ -84,7 +84,7 @@ BlockShape shapeOf(const markdown::BlockEntry &entry);
 
 /// The new body for `editText` (the inverse of shapeOf().editText): the hidden prefix and
 /// suffix of the current body are kept; the unchanged edit text gives the body itself. A task
-/// marker without a trailing space gets one when text follows it. In a code block a
+/// marker without a trailing space gets one when text follows it. In a closed code block a
 /// line that would close it is code: the hidden opening and closing fences are widened past
 /// it, so the block stays one block in the saved file.
 QString bodyWithEditText(const markdown::BlockEntry &entry, const QString &editText);

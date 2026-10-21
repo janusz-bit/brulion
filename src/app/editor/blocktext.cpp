@@ -418,15 +418,16 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
         // The fence lines are hidden, so every line typed between them is code. A line that would
         // close the fence (``` alone on its line, say, when writing about fenced code) must not
         // end the block: widen the opening and closing fence past the longest such line. Keeping
-        // the wider fence is harmless when that line is removed again. A body with text after its
-        // closing fence shows that fence as code text: nothing is widened there.
+        // the wider fence is harmless when that line is removed again. Only a fence the editor
+        // hides as closed is widened: in a fence that is not closed yet a typed closing line
+        // closes it, and a body with text after its closing fence shows that fence as text.
         const auto f = parseFence(e.body);
-        if (f && f->onlyMetadataAfter) {
+        if (f && f->closed && f->onlyMetadataAfter) {
             const int needed = longestClosingFence(editText, f->marker) + 1;
             if (needed > f->length) {
                 // head = the opening line + '\n'; tail = ['\n'] + the closing line + ['\n' + after].
                 head = fenceLineWithLength(f->openLine, f->marker, needed) + head.sliced(f->openLine.size());
-                if (f->closed && closingFenceRun(f->closeLine, f->marker) < needed) {
+                if (closingFenceRun(f->closeLine, f->marker) < needed) {
                     const qsizetype at = tail.startsWith(u'\n') ? 1 : 0;
                     tail = tail.first(at) + fenceLineWithLength(f->closeLine, f->marker, needed)
                            + tail.sliced(at + f->closeLine.size());

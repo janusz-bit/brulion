@@ -135,10 +135,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
   exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
   are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
-  `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a code
-  block stays code: the hidden fences are widened when needed (so a fenced example can be written
-  about or pasted without breaking the page). A list item with more text after its code block
-  edits the closing fence and that text with the code, nothing hidden or widened.
+  `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a closed
+  code block stays code: the hidden fences are widened when needed (so a fenced example can be
+  written about or pasted without breaking the page). A fence that is not closed (a file written
+  elsewhere) is not widened: a closing fence typed into it closes it. A list item with more text
+  after its code block edits the closing fence and that text with the code, nothing hidden or
+  widened.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";
