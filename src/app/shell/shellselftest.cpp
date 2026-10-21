@@ -9,11 +9,14 @@
 #include "log/logger.h"
 #include "log/redact.h"
 #include "sync/synchistory.h"
+#include "vault/vault.h"
 
+#include <QBuffer>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QGuiApplication>
+#include <QImage>
 #include <QInputDevice>
 #include <QKeyEvent>
 #include <QQmlApplicationEngine>
@@ -709,6 +712,172 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     }
 }
 
+/// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
+/// never reach the editor — the older view read them as text there, mojibake for a binary picture,
+/// and a typed character was saved over it. "Pokaż jako tekst" (a real tap / click) and Ctrl+E
+/// show the file's text, read-only, and back; the notes that embed the picture are listed under it
+/// and in the side panel; fitting never enlarges a small picture; a file name is never markup; a
+/// format the device cannot decode is named.
+void checkPictureView(QQuickWindow *window, AppController *app, const Check &check,
+                      const std::function<QObject *(const QString &)> &controllerFor)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    const auto pictureView = [window]() -> QQuickItem * {
+        for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
+            if (v->isVisible())
+                return v;
+        }
+        return nullptr;
+    };
+    // The shown one: a Loader's earlier items are only deleted once this test returns to the
+    // event loop (they stay, hidden, among the view's children until then).
+    const auto child = [](QQuickItem *view, const char *name) -> QQuickItem * {
+        if (!view)
+            return nullptr;
+        const QList<QQuickItem *> found = view->findChildren<QQuickItem *>(QString::fromLatin1(name));
+        for (QQuickItem *item : found) {
+            if (item->isVisible())
+                return item;
+        }
+        return found.value(0);
+    };
+    const auto opened = [&](const QString &path) {
+        return app->currentRoute().value(u"path"_s).toString() == path && pictureView()
+               && pictureView()->property("path").toString() == path;
+    };
+    const auto textShown = [&] {
+        QQuickItem *text = child(pictureView(), "pictureText");
+        return text && text->isVisible();
+    };
+    const auto pictureShown = [&] {
+        QQuickItem *view = pictureView();
+        return view && !textShown() && view->property("pictureLoaded").toBool();
+    };
+
+    const QString picture = u"assets/plan-mieszkania.svg"_s;
+    const QString bytes = workspace->readFile(picture);
+    app->openPage(picture);
+    check(waitFor([&] { return opened(picture) && pictureShown(); }), "a picture opens as a picture, loaded and shown");
+    check(controllerFor(picture) == nullptr, "the picture's bytes are not loaded into the block editor");
+    QQuickItem *view = pictureView();
+    if (!view) {
+        check(false, "the page view has a picture view");
+        return;
+    }
+
+    // The two notes of the sample notebook that embed it, under the picture (scrolled to).
+    QQuickItem *refs = child(view, "pictureReferences");
+    check(refs && waitFor([&] { return refs->isVisible() && refs->property("linkedCount").toInt() >= 2; }),
+          "the notes that embed the picture are listed under it");
+
+    // "Pokaż jako tekst" in the picture's bar: the file's text, read-only; the editor stays
+    // unloaded.
+    if (QQuickItem *button = child(view, "pictureTextButton")) {
+        tapOrClick(window, pointIn(button), touch);
+        check(waitFor(textShown) && controllerFor(picture) == nullptr,
+              "“Pokaż jako tekst” shows the file's text without loading it into the editor");
+    } else {
+        check(false, "the picture view has its text button");
+    }
+    QQuickItem *textEdit = child(view, "pictureTextEdit");
+    check(textEdit && textEdit->property("readOnly").toBool()
+                  && textEdit->property("text").toString().contains(u"<svg"_s),
+          "the text view shows the file's text, read-only");
+    if (textEdit) {
+        // Keys typed there change nothing: a picture's bytes are never rewritten as text.
+        tapOrClick(window, pointIn(textEdit, 0.2, 0.1), touch);
+        textEdit->forceActiveFocus();
+        sendKey(window, 0, Qt::NoModifier, u"Ż"_s);
+        sendKey(window, Qt::Key_Backspace);
+        settle(300);
+        check(textEdit->property("text").toString().startsWith(bytes.left(200)) && workspace->readFile(picture) == bytes
+                      && controllerFor(picture) == nullptr,
+              "typing in the text view changes neither the view nor the file");
+    }
+
+    // Ctrl+E (the same branch as the "Markdown source" command) switches back and forth.
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(pictureShown) && controllerFor(picture) == nullptr,
+          "Ctrl+E in the text view shows the picture again");
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(textShown) && controllerFor(picture) == nullptr, "Ctrl+E on the picture shows its text");
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(pictureShown), "and Ctrl+E once more the picture");
+
+    // route.open on a picture: "text" opens its text view, "links" (wide windows) the side panel
+    // with the picture's references.
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, picture}, {u"open"_s, u"text"_s}});
+    check(waitFor([&] { return opened(picture) && textShown(); }), "route.open \"text\" opens a picture's text view");
+    if (window->width() >= 900) {
+        app->setSidePanelVisible(false);
+        app->goHome();
+        waitFor([&] { return !pictureView(); });
+        app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, picture}, {u"open"_s, u"links"_s}});
+        QQuickItem *panel = nullptr;
+        check(waitFor([&] {
+                  panel = findShown(window->contentItem(),
+                                    [](QQuickItem *item) { return isA(item, "ContentSidePanel"); });
+                  return app->sidePanelVisible() && panel && panel->property("path").toString() == picture;
+              }),
+              "route.open \"links\" opens the side panel with the picture's references");
+        app->setSidePanelVisible(false);
+    }
+
+    // A small picture keeps its own pixels: fitting only shrinks (no blurry enlargement, no
+    // pointless "actual size" that would make it smaller).
+    {
+        QImage small(40, 30, QImage::Format_RGB32);
+        small.fill(Qt::darkGreen);
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        small.save(&buffer, "PNG");
+        const QString icon = u"assets/mała ikona.png"_s;
+        check(workspace->vault()->writeBinary(icon, buffer.data()), "a small picture is added to the notebook");
+        app->openPage(icon);
+        check(waitFor([&] { return opened(icon) && pictureShown(); }), "the small picture opens");
+        QQuickItem *image = child(pictureView(), "pictureImage");
+        QQuickItem *size = child(pictureView(), "pictureSizeButton");
+        check(image && qRound(image->width()) == 40 && qRound(image->height()) == 30 && size && !size->isVisible(),
+              "a picture smaller than the view is shown at its own size, without a size toggle");
+    }
+
+    // A file name that looks like markup is shown as written (one line, not a line break).
+    {
+        const QString odd = u"assets/a<br>b <i>szkic.svg"_s;
+        check(workspace->writeFile(odd, bytes), "a picture with markup in its name is added to the notebook");
+        app->openPage(odd);
+        check(waitFor([&] { return opened(odd) && pictureShown(); }), "the picture with markup in its name opens");
+        QQuickItem *name = child(pictureView(), "pictureName");
+        check(name && name->property("lineCount").toInt() == 1
+                      && name->property("text").toString() == u"a<br>b <i>szkic.svg"_s
+                      && name->property("textFormat").toInt() == 0 /* Text.PlainText */,
+              "a picture's file name is shown as plain text");
+    }
+
+    // A format this device cannot decode is named (WebP and AVIF need Qt's image plugins); one
+    // it can is loaded (these bytes are no picture: "Nie można wczytać").
+    {
+        const QString webp = u"assets/łąka.webp"_s;
+        check(workspace->vault()->writeBinary(webp, QByteArray("RIFF\x00\x00\x00\x00WEBPVP8 ", 16)),
+              "a WebP picture is added to the notebook");
+        app->openPage(webp);
+        const bool decodable = workspace->canDecodePicture(webp);
+        std::fprintf(stderr, "selftest: this build %s decode WebP\n", decodable ? "can" : "cannot");
+        QQuickItem *message = nullptr;
+        check(waitFor([&] {
+                  message = opened(webp) ? child(pictureView(), "pictureMessage") : nullptr;
+                  return message && message->isVisible();
+              }) && message->property("text").toString().contains(decodable ? u"łąka.webp"_s : u"WEBP"_s),
+              "a picture that cannot be shown says why");
+    }
+
+    // Back to the sample picture: the picture, the editor still unloaded.
+    app->openPage(picture);
+    check(waitFor([&] { return opened(picture) && pictureShown(); }) && controllerFor(picture) == nullptr,
+          "the picture comes back and the editor stays unloaded");
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -1033,58 +1202,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the text typed before the rename is saved under the new name");
             }
 
-            // A picture opens as a picture: its bytes are not a note (the older view read them
-            // as text — mojibake for a binary picture). "Pokaż jako tekst" brings that view
-            // back, the view's own switch (the page menu's "Pokaż obraz") the picture.
-            const QString picture = u"assets/plan-mieszkania.svg"_s;
-            app->openPage(picture);
-            QQuickItem *pictureView = nullptr;
-            check(waitFor([&] {
-                      pictureView = nullptr;
-                      for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
-                          if (v->property("visible").toBool()) {
-                              pictureView = v;
-                              break;
-                          }
-                      }
-                      return app->currentRoute().value(u"path"_s).toString() == picture && pictureView
-                             && pictureView->property("pictureLoaded").toBool();
-                  }),
-                  "a picture opens as a picture, loaded and shown");
-            check(controllerFor(picture) == nullptr, "the picture's bytes are not loaded into the block editor");
-            if (pictureView) {
-                // "Pokaż jako tekst" in the picture's bar: the file read as text in the editor.
-                if (QQuickItem *button = pictureView->findChild<QQuickItem *>(u"pictureTextButton"_s)) {
-                    const QPointF at = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
-                    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-                    if (touch)
-                        touchTap(window, at, 30);
-                    else
-                        mouseClick(window, at);
-                    check(waitFor([&] {
-                              QObject *textPage = controllerFor(picture);
-                              return textPage && textPage->property("loaded").toBool()
-                                     && !pictureView->property("visible").toBool();
-                          }),
-                          "“Pokaż jako tekst” shows the file's text in the editor, the alternative view");
-                } else {
-                    check(false, "the picture view has its text button");
-                }
-                // Back to the picture (the page menu's "Pokaż obraz" calls the same switch).
-                if (QQuickItem *pageView = pictureView->parentItem()) {
-                    QMetaObject::invokeMethod(pageView, "showPictureView");
-                    check(waitFor([&] {
-                              return pictureView->property("visible").toBool()
-                                     && pictureView->property("pictureLoaded").toBool()
-                                     && controllerFor(picture) == nullptr;
-                          }),
-                          "the picture comes back and the editor is unloaded again");
-                } else {
-                    check(false, "the picture view lives in the page view");
-                }
-            } else {
-                check(false, "the page view has a picture view");
-            }
+            // 5b. A picture opens as a picture (checkPictureView).
+            checkPictureView(window, app, check, controllerFor);
         } else {
             check(false, "the page view has an editor");
         }

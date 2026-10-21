@@ -85,7 +85,8 @@ created on click (in `newPagesFolder`).
 **Pictures:** an attachment whose extension is `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`,
 `.bmp`, `.avif` or `.ico` (any case; `paths::pictureExtensions()`, the one list the editor, the
 picture view, the file dialog and the HTML export share) is embedded as a picture; any other
-attachment as a file.
+attachment as a file. Whether the app can draw it depends on the device's image decoders (WebP
+and AVIF are often missing): the picture view then names the format instead of a load error.
 
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;

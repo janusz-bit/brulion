@@ -192,6 +192,10 @@ public:
     Q_INVOKABLE QString folderOf(const QString &path) const;
     /// An attachment picture (png, jpg, ...): PageView shows it as a picture, not as text.
     Q_INVOKABLE bool isPicture(const QString &path) const;
+    /// A picture whose format this device can decode (QImageReader's formats: WebP and AVIF need
+    /// Qt's image plugins, which Android, the browser and some desktops lack); false for files
+    /// that are no picture. The picture view names a format it cannot show.
+    Q_INVOKABLE bool canDecodePicture(const QString &path) const;
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
     /// header has none): the picture view's own-pixels size, without decoding the picture.
     Q_INVOKABLE QSize pictureSize(const QString &path) const;

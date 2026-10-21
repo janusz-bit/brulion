@@ -159,15 +159,24 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
   highlighting.
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
-  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files. Opening
-  one (a click on the embed, a link to the file) shows the picture itself
-  (`ContentPictureView`, `PageView.pictureRoute`): fitted into the view with its aspect ratio
-  kept, a click on it or the "Pokaż naturalny rozmiar" button its own pixels (then draggable), the
-  button back to the fitted view. The bar's "Pokaż jako tekst", the page menu's "Pokaż obraz"
-  and Ctrl+E switch to the alternative view — the file read as text in the block editor (the
-  older behaviour, mojibake for a binary picture, kept for text-like assets). While the picture
-  shows, the editor stays unloaded (`page.path` ""): a picture's bytes are not a note
-  (`paths::isPicturePath`, `Workspace.isPicture`).
+  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
+  pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
+  a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
+  `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
+  raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
+  view —; when the fitted picture differs from its own pixels, a click on it or the "Pokaż
+  naturalny rozmiar" button shows those pixels (then draggable), the button goes back. Under the
+  fitted picture (it moves to the top then) the notes that embed or link it (`ContentBacklinks`);
+  the side panel's Odnośniki list them too. The bar shows the file name as plain text. Its
+  "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (and the palette's "Markdown source") switch
+  between the picture and the file read as text — read-only and at most 200 000 characters, for
+  text-like assets such as SVG (a binary picture is mojibake). The editor never loads a picture
+  (`page.path` stays ""): its bytes are not a note, and a character typed into them used to be
+  saved over the picture. A format the device has no decoder for (`Workspace.canDecodePicture`,
+  QImageReader's formats: WebP and AVIF need Qt's image plugins, missing on Android, in the
+  browser and in the Nix package) says so ("Obrazów w formacie WEBP nie można wyświetlić na tym
+  urządzeniu") instead of a load error. `route.open` on a picture: `text`, `links` | `outline` |
+  `calendar`.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
   Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie, Link do strony (`[[`), Tag
   (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów, Ukryj klawiaturę.
@@ -590,7 +599,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; a picture attachment (its view, the text view read-only, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder); the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -607,7 +616,9 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 * `tests/app/shell/screenshots.sh` — the real app: onboarding, journals, the guide page and
   its editor states (`page-editing`, `page-slash`, `page-reminder`, `page-doc-paragraph`,
   `page-doc-list`, `page-doc-heading`, `page-doc-outline`, …), the page menu (`page-menu`), the
-  renovation project as an outline (`page-project`), the document mode on a long Obsidian-like
+  renovation project as an outline (`page-project`), a picture attachment (`page-picture`, its
+  text view `page-picture-text`, its references in the side panel `page-picture-links`), the
+  document mode on a long Obsidian-like
   note (`tests/app/shell/notemode/`: `doc-long`, editing a paragraph / list item / task / heading
   / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
   outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,
