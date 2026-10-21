@@ -854,9 +854,16 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
         check(waitFor([&] {
                   panel = findShown(window->contentItem(),
                                     [](QQuickItem *item) { return isA(item, "ContentSidePanel"); });
-                  return app->sidePanelVisible() && panel && panel->property("path").toString() == picture;
+                  return app->sidePanelVisible() && panel && panel->property("path").toString() == picture
+                         && pictureShown();
               }),
-              "route.open \"links\" opens the side panel with the picture's references");
+              "route.open \"links\" opens the side panel with the references of the picture shown");
+        const auto isRefs = [](QQuickItem *item) { return isA(item, "ContentBacklinks"); };
+        check(waitFor([&] {
+                  QQuickItem *panelRefs = panel ? findShown(panel, isRefs) : nullptr;
+                  return panelRefs && panelRefs->property("linkedCount").toInt() >= 2;
+              }),
+              "the side panel lists the notes that embed the picture");
         app->setSidePanelVisible(false);
     }
 
