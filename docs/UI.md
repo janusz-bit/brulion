@@ -146,7 +146,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
   it a code block. The two lines then act as a pair: a longer opening fence lengthens the closing
   one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
-  deleted or changed closing fence is added again at the end of the block.
+  deleted or changed closing fence is added again at the end of the block. Between them Enter and
+  paste work as in a code block: a line break, the pasted text as code (a split would leave half
+  a fence in each block).
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";

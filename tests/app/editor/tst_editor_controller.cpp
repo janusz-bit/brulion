@@ -1193,6 +1193,101 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         verifyReload(mid);
     }
 
+    void enterBetweenFenceLinesOfTextBlock()
+    {
+        // Shift+Enter, ```js (its closing fence is added), then Enter: a line break between the
+        // fence lines, as in a code block. A split would leave "```js" unclosed in one block and
+        // a lone "```" in the next, and typing the code there would turn the task into code.
+        Fixture f(u"Akapit\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        f.page.setEditText(0, u"Akapit\n```js\n```"_s, 12);
+        QCOMPARE(f.page.split(0, 12), (QVariantMap{{u"row"_s, 0}, {u"cursor"_s, 13}}));
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.edit(0), u"Akapit\n```js\n\n```"_s);
+        QCOMPARE(f.page.cursorPosition(), 13);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s, 16);
+        // Enter in the code adds a line too.
+        f.page.split(0, 16);
+        QCOMPARE(f.edit(0), u"Akapit\n```js\nkod\n\n```"_s);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\nżółw\n```"_s, 21);
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\nżółw\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        // Enter after the closing fence starts the next block.
+        QCOMPARE(f.page.split(0, int(f.edit(0).size())).value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        // Each Enter is one undo step.
+        f.page.undo(); // the new block
+        f.page.undo(); // "żółw"
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.undo(); // the line break
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        // Enter before the opening fence splits the code off into a code block of its own.
+        Fixture start(u"Akapit\n"_s);
+        start.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s);
+        start.page.split(0, 7);
+        QCOMPARE(start.count(), 2);
+        QCOMPARE(start.role(1, "view").toString(), u"code"_s);
+        QCOMPARE(start.edit(1), u"kod"_s);
+        verifyReload(start);
+        // In a list item the child task stays a child.
+        Fixture item(u"- Przykład:\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej #tag\n"_s);
+        item.page.startEditing(0, 9);
+        item.page.setEditText(0, u"Przykład:\n```"_s, 13);
+        item.page.setEditText(0, u"Przykład:\n```js\n```"_s, 15);
+        QCOMPARE(item.page.split(0, 15).value(u"row"_s).toInt(), 0);
+        item.page.setEditText(0, u"Przykład:\n```js\nkod\n```"_s, 19);
+        QCOMPARE(item.text(),
+                 u"- Przykład:\n  ```js\n  kod\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej #tag\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+        // A snippet pasted between the fence lines goes in as code, blank lines and all.
+        Fixture paste(u"- Przykład:\n- dalej\n"_s);
+        paste.page.startEditing(0, 9);
+        paste.page.setEditText(0, u"Przykład:\n```py\n```"_s, 15);
+        paste.page.split(0, 15);
+        QCOMPARE(paste.page.cursorPosition(), 16);
+        paste.page.pasteText(0, 16, 16, u"a = 1\n\nb = 2"_s);
+        QCOMPARE(paste.count(), 2);
+        QCOMPARE(paste.edit(0), u"Przykład:\n```py\na = 1\n\nb = 2\n```"_s);
+        QCOMPARE(paste.page.cursorPosition(), 28);
+        verifyReload(paste);
+        // A fence that was open in the file already (it ends at the next item): Enter splits.
+        Fixture open(u"- a\n  ```\n  b\n- c\n"_s);
+        QCOMPARE(open.page.split(0, 7).value(u"row"_s).toInt(), 1);
+        QCOMPARE(open.count(), 3);
+    }
+
+    void mergeKeepsClosingFenceOnItsLine()
+    {
+        // Backspace at the start of the block after code written in a text block: the text goes on
+        // the line after the closing fence ("```b" closes nothing: the task after it would become
+        // code).
+        Fixture f(u"Akapit\n\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s, 20);
+        f.page.startEditing(1, 0);
+        QCOMPARE(f.page.mergeWithPrevious(1), (QVariantMap{{u"row"_s, 0}, {u"cursor"_s, 21}}));
+        QCOMPARE(f.edit(0), u"Akapit\n```js\nkod\n```\nb"_s);
+        QCOMPARE(f.page.cursorPosition(), 21);
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        f.page.undo(); // one step
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\n\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        // Delete at the end of a list item whose code (from the file) ends it.
+        Fixture item(u"- a\n  ```\n  kod\n  ```\n- b\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.startEditing(0, 13);
+        QCOMPARE(item.page.mergeNext(0).value(u"cursor"_s).toInt(), 14);
+        QCOMPARE(item.edit(0), u"a\n```\nkod\n```\nb"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+        // Other text joins as before.
+        Fixture plain(u"- a ```\n- b\n"_s);
+        plain.page.mergeWithPrevious(1);
+        QCOMPARE(plain.text(), u"- a ```b\n"_s);
+    }
+
     // --- tables ----------------------------------------------------------------------------------------
 
     void tables()
