@@ -27,8 +27,10 @@ struct DemoFile {
 /// The guide page every sample vault opens with.
 QString demoWelcomePage();
 
-/// Files of the sample vault (journal paths use the default "journals/yyyy-MM-dd.md").
-QList<DemoFile> demoVaultFiles(const QDateTime &now);
+/// Files of the sample vault (journal paths use the default "journals/yyyy-MM-dd.md"). Without
+/// `docsNotebook` (the browser has no documentation notebook) the welcome page sends readers to
+/// the documentation online instead of the notebook switcher.
+QList<DemoFile> demoVaultFiles(const QDateTime &now, bool docsNotebook = true);
 
 /// The first page of the documentation notebook "Dokumentacja Brulionu" and all its files.
 QString docsWelcomePage();
@@ -54,6 +56,6 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages = docsVaul
 
 /// Write the sample files into an open vault; files that already exist are left alone.
 /// Returns how many files were written (-1 when a write failed).
-int seedDemoVault(Vault &vault, const QDateTime &now);
+int seedDemoVault(Vault &vault, const QDateTime &now, bool docsNotebook = true);
 
 } // namespace brulion::shell

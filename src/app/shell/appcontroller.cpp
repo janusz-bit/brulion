@@ -760,7 +760,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
             toast(tr("Could not update the documentation: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true; // it is for reading: its table of contents, not a journal
     } else if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        if (seedDemoVault(*m_workspace->vault(), now()) < 0)
+        if (seedDemoVault(*m_workspace->vault(), now(), !docsVaultPath().isEmpty()) < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }

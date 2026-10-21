@@ -198,7 +198,7 @@ type:tasks status:open due:<=+7d sort:due
 - Eksport do archiwum ZIP z Markdownem, strony HTML, JSON, iCalendar (zadania i przypomnienia), OPML i CSV.
 
 ## Dokumentacja
-Pełna dokumentacja jest w osobnym brulionie „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Przełączysz się do niego przyciskiem ⇄ obok nazwy brulionu w pasku bocznym — i tak samo wrócisz.
+{docs}
 
 ## Skróty klawiszowe
 | Skrót | Działanie |
@@ -216,6 +216,13 @@ Pełna dokumentacja jest w osobnym brulionie „Dokumentacja Brulionu” (tryby,
 %%Ten komentarz widać tylko podczas edycji.%%
 ==Zakreślenie== i ~~przekreślenie~~ też działają.
 )md"_s;
+
+/// The welcome page's "Dokumentacja" section: where the documentation notebook is ...
+const auto kDocsNotebook =
+        uR"md(Pełna dokumentacja jest w osobnym notatniku „Dokumentacja Brulionu” (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty). Otworzysz go przyciskiem „Przełącz notatnik” (dwie strzałki) obok nazwy notatnika w pasku bocznym albo skrótem Ctrl+Shift+B — i tak samo wrócisz.)md"_s;
+/// ... and where it is read without one (the browser).
+const auto kDocsOnline =
+        uR"md(Pełna dokumentacja (tryby, linki, zadania, przypomnienia, obliczenia, zapytania, synchronizacja, skróty) jest częścią aplikacji na komputer i na Androida, gdzie tworzy osobny notatnik „Dokumentacja Brulionu”. W przeglądarce przeczytasz ją na [stronie projektu](https://github.com/janusz-bit/brulion/tree/main/src/app/shell/guide).)md"_s;
 
 const auto kToday = uR"md(- Pierwszy dzień z [[Witaj w Brulionie|Brulionem]] #przewodnik
 - [ ] Przejrzeć [[Remont mieszkania]] i zamówić farbę 📅 {in2}
@@ -406,20 +413,21 @@ QString demoWelcomePage()
     return u"Witaj w Brulionie.md"_s;
 }
 
-QList<DemoFile> demoVaultFiles(const QDateTime &now)
+QList<DemoFile> demoVaultFiles(const QDateTime &now, bool docsNotebook)
 {
     const QDate today = now.date();
     const QHash<QString, QString> vars{
-        { u"today"_s, iso(today) },
-        { u"yesterday"_s, iso(today.addDays(-1)) },
-        { u"weekAgo"_s, iso(today.addDays(-7)) },
-        { u"tomorrow"_s, iso(today.addDays(1)) },
-        { u"in2"_s, iso(today.addDays(2)) },
-        { u"in3"_s, iso(today.addDays(3)) },
-        { u"in5"_s, iso(today.addDays(5)) },
-        { u"nextMonday"_s, iso(nextWeekday(today, Qt::Monday)) },
-        { u"nextSaturday"_s, iso(nextWeekday(today, Qt::Saturday)) },
-        { u"next10th"_s, iso(nextTenth(today)) },
+            {u"today"_s, iso(today)},
+            {u"yesterday"_s, iso(today.addDays(-1))},
+            {u"weekAgo"_s, iso(today.addDays(-7))},
+            {u"tomorrow"_s, iso(today.addDays(1))},
+            {u"in2"_s, iso(today.addDays(2))},
+            {u"in3"_s, iso(today.addDays(3))},
+            {u"in5"_s, iso(today.addDays(5))},
+            {u"nextMonday"_s, iso(nextWeekday(today, Qt::Monday))},
+            {u"nextSaturday"_s, iso(nextWeekday(today, Qt::Saturday))},
+            {u"next10th"_s, iso(nextTenth(today))},
+            {u"docs"_s, docsNotebook ? kDocsNotebook : kDocsOnline},
     };
     const VaultConfig config;
     const auto journal = [&](QDate d) { return markdown::journalPathForDate(d, config); };
@@ -603,9 +611,9 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
     return result;
 }
 
-int seedDemoVault(Vault &vault, const QDateTime &now)
+int seedDemoVault(Vault &vault, const QDateTime &now, bool docsNotebook)
 {
-    return seedFiles(vault, demoVaultFiles(now));
+    return seedFiles(vault, demoVaultFiles(now, docsNotebook));
 }
 
 } // namespace brulion::shell

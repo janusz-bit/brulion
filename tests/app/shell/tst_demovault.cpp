@@ -177,6 +177,33 @@ private Q_SLOTS:
         QVERIFY(recipeHeadings.contains(u"Szarlotka babci"_s));
     }
 
+    void welcomePageFindsTheDocumentation()
+    {
+        // Desktop and Android: the documentation notebook, through the switcher or Ctrl+Shift+B.
+        // The browser has none: the documentation online. The rest of the sample is the same.
+        const auto withNotebook = shell::demoVaultFiles(kNow, true);
+        const auto browser = shell::demoVaultFiles(kNow, false);
+        QCOMPARE(withNotebook.size(), browser.size());
+        for (qsizetype i = 0; i < browser.size(); ++i) {
+            QCOMPARE(browser.at(i).path, withNotebook.at(i).path);
+            if (browser.at(i).path != shell::demoWelcomePage())
+                QCOMPARE(browser.at(i).content, withNotebook.at(i).content);
+        }
+        const QString local = filesByPath(kNow).value(shell::demoWelcomePage());
+        QCOMPARE(local, withNotebook.first().content);
+        QVERIFY(local.contains(u"„Dokumentacja Brulionu”"_s));
+        QVERIFY(local.contains(u"„Przełącz notatnik”"_s) && local.contains(u"Ctrl+Shift+B"_s));
+        const QString web = browser.first().content;
+        QCOMPARE(browser.first().path, shell::demoWelcomePage());
+        QVERIFY(!web.contains(u"Przełącz notatnik"_s) && !web.contains(u"Ctrl+Shift+B"_s));
+        QVERIFY(!web.contains(u"{docs}"_s) && !local.contains(u"{docs}"_s));
+        const ParsedNote note = markdown::parseNote(shell::demoWelcomePage(), web);
+        bool online = false;
+        for (const Link &l : note.links)
+            online |= l.target.startsWith(u"https://github.com/janusz-bit/brulion/"_s);
+        QVERIFY(online);
+    }
+
     void showsBothNoteModes()
     {
         // The guide reads as a document, the renovation project and the journal as outlines
