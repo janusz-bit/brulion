@@ -2483,7 +2483,12 @@ QList<QUrl> copiedFiles(const QMimeData *data)
 
 QStringList PageController::imageNameFilters() const
 {
-    return {tr("Pictures (*.png *.jpg *.jpeg *.gif *.webp *.svg *.bmp *.avif)"), tr("All files (*)")};
+    // The pictures the editor embeds as pictures (one list: paths::pictureExtensions()).
+    QStringList patterns;
+    for (const QString &ext : paths::pictureExtensions())
+        patterns.append(u'*' + ext);
+    //: %1: the file name patterns of pictures, e.g. "*.png *.jpg *.jpeg"
+    return {tr("Pictures (%1)").arg(patterns.join(u' ')), tr("All files (*)")};
 }
 
 bool PageController::clipboardHasImage() const

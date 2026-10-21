@@ -82,6 +82,11 @@ match (case-insensitive, Unicode NFC); if several, the one with the shortest pat
 alphabetical; 4) frontmatter `aliases`. Unresolved links point to a page that will be
 created on click (in `newPagesFolder`).
 
+**Pictures:** an attachment whose extension is `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`,
+`.bmp`, `.avif` or `.ico` (any case; `paths::pictureExtensions()`, the one list the editor, the
+picture view, the file dialog and the HTML export share) is embedded as a picture; any other
+attachment as a file.
+
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;
 with the year when it is not the current one). The file keeps `[[2026-10-13]]`.

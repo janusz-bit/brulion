@@ -1347,6 +1347,12 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- Zdjęcie \n"_s);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 8);
         QVERIFY(!f.page.imageNameFilters().isEmpty());
+        // The file dialog offers the pictures the editor embeds as pictures (paths::pictureExtensions):
+        // .ico too, which the HTML export already showed as a picture.
+        const QString filter = f.page.imageNameFilters().constFirst();
+        for (const QString &ext : {u"png"_s, u"jpg"_s, u"jpeg"_s, u"webp"_s, u"svg"_s, u"avif"_s, u"ico"_s})
+            QVERIFY2(filter.contains(u"*."_s + ext + u' ') || filter.contains(u"*."_s + ext + u')'),
+                     qPrintable(filter));
         QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FileDialog outside the browser
     }
 
