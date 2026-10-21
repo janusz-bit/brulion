@@ -488,6 +488,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         nested.page.startEditing(1, 0);
         nested.page.split(1, 0);
         QCOMPARE(nested.text(), u"- a\n- \n"_s);
+        // A task's text is not a fence: Enter starts the next task.
+        Fixture task(u"- [ ] ```js\n"_s);
+        task.page.split(0, 5);
+        QCOMPARE(task.text(), u"- [ ] ```js\n- [ ] \n"_s);
         // Code blocks do not split.
         Fixture code(u"```\nx\n```\n"_s);
         QCOMPARE(code.page.split(0, 1).value(u"row"_s).toInt(), 0);

@@ -1055,8 +1055,9 @@ QVariantMap PageController::split(int row, int cursor)
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
 
     // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
+    // Not after a task marker: "- [ ] ```js" is a task's text, not a fence.
     const QString opening = shape.editText.trimmed();
-    if (cursor == len && !opening.contains(u'\n')) {
+    if (cursor == len && !shape.task && !opening.contains(u'\n')) {
         if (const auto fence = parseFence(opening); fence && !fence->closed) {
             const QString closing(fence->length, fence->marker);
             beginCommand();
