@@ -172,6 +172,53 @@ private Q_SLOTS:
         QVERIFY(inlineFound);
     }
 
+    void reportedSampleCodeBlocks()
+    {
+        // The reported note (trimmed): inline code with '#', a code block followed directly by a
+        // paragraph, consecutive fences, trailing backslashes and a blank line before the close.
+        const QString sample = uR"(paczka llama.cpp: `github:janusz-bit/nixos#llama-cpp-prism`
+
+```
+nix shell nixpkgs#python314Packages.huggingface-hub.out -c hf download prism-ml/Ternary-Bonsai-2-27B-gguf Ternary-Bonsai-2-27B-PQ2_0.gguf --local-dir . \
+                                     --ctx-size 200000 \
+                                     -ctk q8_0 -ctv q8_0
+```
+Udało się zmieścić model na GPU!!!!
+
+Dokumentacja mówi:
+
+```
+llama serve -m Ternary-Bonsai-2-27B-PQ2_0.gguf \
+    -ngl 99 -fa on -c 32768 \
+    -p "Explain quantum computing in simple terms." -n 16384
+```
+
+
+ja będę robić tak:
+
+```
+GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.gguf \
+-ngl 99 -fa on -c 65536 \
+-ctk q8_0 -ctv q4_0 \
+
+```
+)"_s;
+        Fixture f(sample);
+        QCOMPARE(f.text(), sample);
+        QStringList views;
+        for (int r = 0; r < f.count(); ++r)
+            views.append(f.role(r, "view").toString());
+        QCOMPARE(views, (QStringList{u"text"_s, u"code"_s, u"text"_s, u"text"_s, u"code"_s,
+                                     u"text"_s, u"code"_s}));
+        QCOMPARE(f.edit(0), u"paczka llama.cpp: `github:janusz-bit/nixos#llama-cpp-prism`"_s);
+        QVERIFY(f.edit(1).endsWith(u"-ctk q8_0 -ctv q8_0"_s));
+        QCOMPARE(f.edit(2), u"Udało się zmieścić model na GPU!!!!"_s);
+        QCOMPARE(f.edit(3), u"Dokumentacja mówi:"_s);
+        QVERIFY(f.edit(4).contains(uR"(-p "Explain quantum computing in simple terms.")"_s));
+        QCOMPARE(f.edit(5), u"ja będę robić tak:"_s);
+        QVERIFY(f.edit(6).endsWith(u"\\\n"_s)); // the blank line before the closing fence
+    }
+
     void unresolvedLinksAndPalette()
     {
         Fixture f(u"- [[Inna]] i [[Nie istnieje]]\n"_s);
@@ -374,6 +421,21 @@ private Q_SLOTS:
         QCOMPARE(fence.text(), u"- ```calc\n\n  ```\n"_s);
         QCOMPARE(fence.role(0, "view").toString(), u"calc"_s);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        // Any fence length and info string Markdown accepts opens a block; the closing fence
+        // matches the opening one.
+        Fixture four(u"````\n"_s);
+        QCOMPARE(four.page.split(0, 4).value(u"row"_s).toInt(), 0);
+        QCOMPARE(four.text(), u"````\n\n````\n"_s);
+        QCOMPARE(four.role(0, "view").toString(), u"code"_s);
+        Fixture sharp(u"```c#\n"_s);
+        sharp.page.split(0, 5);
+        QCOMPARE(sharp.text(), u"```c#\n\n```\n"_s);
+        QCOMPARE(sharp.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(sharp.role(0, "lang").toString(), u"c#"_s);
+        Fixture tildes(u"~~~~ js\n"_s);
+        tildes.page.split(0, 7);
+        QCOMPARE(tildes.text(), u"~~~~ js\n\n~~~~\n"_s);
+        QCOMPARE(tildes.role(0, "view").toString(), u"code"_s);
         // Enter on an empty nested item outdents it.
         Fixture nested(u"- a\n\t- \n"_s);
         nested.page.startEditing(1, 0);
@@ -820,6 +882,14 @@ private Q_SLOTS:
         Fixture code(u"```\nx\n```\n"_s);
         code.page.pasteText(0, 1, 1, u"\n- a\n- b"_s);
         QCOMPARE(code.text(), u"```\nx\n- a\n- b\n```\n"_s);
+        // Pasting a fenced example into a code block widens the hidden fence instead of ending
+        // the block at the pasted ``` line (and keeps the next block out of it).
+        Fixture nested(u"```\nold\n```\n\nPo\n"_s);
+        nested.page.startEditing(0, 3);
+        nested.page.pasteText(0, 3, 3, u"\n```\nnew\n```"_s);
+        QCOMPARE(nested.text(), u"````\nold\n```\nnew\n```\n````\n\nPo\n"_s);
+        QCOMPARE(nested.count(), 2);
+        QCOMPARE(nested.edit(0), u"old\n```\nnew\n```"_s);
     }
 
     void pastingCodeBlocksMidText()
@@ -858,6 +928,46 @@ private Q_SLOTS:
         QCOMPARE(e.role(0, "view").toString(), u"code"_s);
         QCOMPARE(e.edit(1), u"tekst"_s);
         QCOMPARE(e.count(), 2);
+    }
+
+    void editingCodeBlocksWithFenceLinesInside()
+    {
+        // Two code blocks one after another, edited from the block view: the fence lines are
+        // hidden, so ``` typed as content must not close either block (a reload would split it
+        // into extra blocks and swallow the text after it).
+        Fixture f(u"```\nfirst\n```\n\n```\nsecond\n```\n\nPo\n"_s);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(f.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(f.role(1, "view").toString(), u"code"_s);
+        f.page.setEditText(0, u"first\n```\nstill code"_s);
+        QCOMPARE(f.text(), u"````\nfirst\n```\nstill code\n````\n\n```\nsecond\n```\n\nPo\n"_s);
+        QCOMPARE(f.count(), 3);
+        // The widened fences are part of the edit and undo as one step.
+        f.page.undo();
+        QCOMPARE(f.text(), u"```\nfirst\n```\n\n```\nsecond\n```\n\nPo\n"_s);
+        f.page.redo();
+        QCOMPARE(f.text(), u"````\nfirst\n```\nstill code\n````\n\n```\nsecond\n```\n\nPo\n"_s);
+        f.page.setEditText(1, u"second\n```\nstill code too"_s);
+        QCOMPARE(f.text(), u"````\nfirst\n```\nstill code\n````\n\n````\nsecond\n```\nstill code too\n````\n\nPo\n"_s);
+        QCOMPARE(f.count(), 3);
+        // A fresh parse (reopening the page) sees exactly the same blocks.
+        const markdown::BlockDocument reloaded(f.text());
+        QCOMPARE(reloaded.count(), 3);
+        QCOMPARE(reloaded.at(0).kind, BlockKind::Code);
+        QCOMPARE(reloaded.at(1).kind, BlockKind::Code);
+        QCOMPARE(reloaded.at(2).kind, BlockKind::Paragraph);
+        QCOMPARE(reloaded.at(2).body, u"Po"_s);
+        QCOMPARE(f.edit(0), u"first\n```\nstill code"_s);
+        QCOMPARE(f.edit(1), u"second\n```\nstill code too"_s);
+        // Fences are enough of a separator themselves: no blank line between two code blocks is
+        // not a reason to merge them or insert one when one of them is edited.
+        Fixture adjacent(u"```\nfirst\n```\n```\nsecond\n```\n\nPo\n"_s);
+        QCOMPARE(adjacent.count(), 3);
+        QCOMPARE(adjacent.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(adjacent.role(1, "view").toString(), u"code"_s);
+        adjacent.page.setEditText(0, u"first\n```\nstill code"_s);
+        QCOMPARE(adjacent.text(), u"````\nfirst\n```\nstill code\n````\n```\nsecond\n```\n\nPo\n"_s);
+        QCOMPARE(adjacent.count(), 3);
     }
 
     // --- tables ----------------------------------------------------------------------------------------
@@ -995,6 +1105,23 @@ private Q_SLOTS:
         blocks = f.role(1, "transclusions").toList()[0].toMap().value(u"blocks"_s).toList();
         QCOMPARE(blocks.size(), 1);
         QVERIFY(blocks[0].toMap().value(u"html"_s).toString().contains(u"1900"_s));
+    }
+
+    void transcludedCodeBlocksShowTheirTextOnly()
+    {
+        Fixture f(u"- ![[Inna]]\n"_s);
+        f.host.setFile(u"Inna.md"_s,
+                       u"```js\nlet a = 1 < 2;\n```\n\n~~~\nb\n~~~\n\n```calc\nx = 2\n```\n"_s);
+        f.model()->invalidateRendering();
+        const QVariantList t = f.role(0, "transclusions").toList();
+        QCOMPARE(t.size(), 1);
+        const QVariantList blocks = t[0].toMap().value(u"blocks"_s).toList();
+        QCOMPARE(blocks.size(), 3);
+        QCOMPARE(blocks[0].toMap().value(u"view"_s).toString(), u"code"_s);
+        QCOMPARE(blocks[0].toMap().value(u"html"_s).toString(), u"<pre>let a = 1 &lt; 2;</pre>"_s);
+        QCOMPARE(blocks[1].toMap().value(u"html"_s).toString(), u"<pre>b</pre>"_s);
+        QCOMPARE(blocks[2].toMap().value(u"view"_s).toString(), u"code"_s);
+        QCOMPARE(blocks[2].toMap().value(u"html"_s).toString(), u"<pre>x = 2</pre>"_s);
     }
 
     void transclusionsOfThisPageAndCycles()

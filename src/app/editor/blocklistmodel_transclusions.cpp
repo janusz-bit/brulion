@@ -343,7 +343,9 @@ private:
                 html.clear();
             } else {
                 // Code, calculations, queries and tables: their source as preformatted text.
-                html = u"<pre>"_s + e.body.toHtmlEscaped() + u"</pre>"_s;
+                // Code-like blocks hide their fence lines in the delegate; an embed shows the
+                // same text (`editText`), never the fences.
+                html = u"<pre>"_s + s.editText.toHtmlEscaped() + u"</pre>"_s;
                 view = u"code"_s;
             }
             if (!onlyNested && (!html.isEmpty() || s.view == BlockView::Rule)) {

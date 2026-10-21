@@ -131,7 +131,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way.
+  and on focus loss / suspend / quit, and merges external changes three-way. Code fences are
+  hidden: a ```` ``` ```` line typed inside a code block stays code, and the outer fence is
+  widened when needed (so a fenced example can be written about or pasted without breaking the
+  page).
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";

@@ -37,6 +37,7 @@ private Q_SLOTS:
         QTest::newRow("empty closed") << u"```\n```"_s << true << QString() << QString() << true;
         QTest::newRow("empty inner line") << u"```calc\n\n```"_s << true << u"calc"_s << QString() << true;
         QTest::newRow("longer closing") << u"```\nx\n`````"_s << true << QString() << u"x"_s << true;
+        QTest::newRow("tab-indented fence") << u"\t```js\n\tx\n\t```"_s << true << u"js"_s << u"\tx"_s << true;
         QTest::newRow("shorter closing is content") << u"````\nx\n```"_s << true << QString() << u"x\n```"_s << false;
         QTest::newRow("two backticks") << u"``\nx\n``"_s << false << QString() << QString() << false;
         QTest::newRow("backtick in info") << u"``` a`b\nx\n```"_s << false << QString() << QString() << false;
@@ -57,6 +58,51 @@ private Q_SLOTS:
         QCOMPARE(f->lang, lang);
         QCOMPARE(f->inner, inner);
         QCOMPARE(f->closed, closed);
+    }
+
+    void fenceMarkersAndLengths()
+    {
+        const auto backtick = parseFence(u"````js\nx\n````"_s);
+        QVERIFY(backtick.has_value());
+        QCOMPARE(backtick->marker, u'`');
+        QCOMPARE(backtick->length, 4);
+        QCOMPARE(backtick->lang, u"js"_s);
+        const auto tilde = parseFence(u"~~~~\nx\n~~~"_s);
+        QVERIFY(tilde.has_value());
+        QVERIFY(!tilde->closed);
+        QCOMPARE(tilde->marker, u'~');
+        QCOMPARE(tilde->length, 4);
+    }
+
+    void codeFenceWidening()
+    {
+        const markdown::BlockEntry plain = entryOf(u"```\na\n```\n"_s);
+        // A closing fence typed between the hidden fences is code: the fences grow around it.
+        QCOMPARE(bodyWithEditText(plain, u"a\n```\nb"_s), u"````\na\n```\nb\n````"_s);
+        QCOMPARE(bodyWithEditText(plain, u"```\n``````\n```"_s),
+                 u"```````\n```\n``````\n```\n```````"_s);
+        // The info string and the indentation of the opening fence are kept.
+        const markdown::BlockEntry js = entryOf(u"```js\na\n```\n"_s);
+        QCOMPARE(bodyWithEditText(js, u"a\n```"_s), u"````js\na\n```\n````"_s);
+        // Backticks and tildes are independent fence characters.
+        const markdown::BlockEntry tilde = entryOf(u"~~~\na\n~~~\n"_s);
+        QCOMPARE(bodyWithEditText(tilde, u"a\n~~~"_s), u"~~~~\na\n~~~\n~~~~"_s);
+        QCOMPARE(bodyWithEditText(tilde, u"a\n```"_s), u"~~~\na\n```\n~~~"_s);
+        // An unclosed fence gets a wider opening (there is no closing line yet).
+        const markdown::BlockEntry open = entryOf(u"```js\na\n"_s);
+        QCOMPARE(bodyWithEditText(open, u"a\n```"_s), u"````js\na\n```"_s);
+        // A fence stays wide when the line that needed it is removed (no hidden bytes rewritten).
+        const markdown::BlockEntry wide = entryOf(u"````\na\n```\nb\n````\n"_s);
+        QCOMPARE(bodyWithEditText(wide, u"a\nb"_s), u"````\na\nb\n````"_s);
+        // Two backticks do not close a three-backtick fence.
+        QCOMPARE(bodyWithEditText(plain, u"a\n``"_s), u"```\na\n``\n```"_s);
+        // The same works for a code block inside a list item (the marker stays outside the body).
+        const markdown::BlockEntry item = entryOf(u"- ```\n  a\n  ```\n"_s);
+        QCOMPARE(item.kind, BlockKind::ListItem);
+        QCOMPARE(bodyWithEditText(item, u"a\n```"_s), u"````\na\n```\n````"_s);
+        // A tab-indented closing fence stays a fence when it is widened.
+        const markdown::BlockEntry tabClose = entryOf(u"```\na\n\t```\n"_s);
+        QCOMPARE(bodyWithEditText(tabClose, u"a\n```"_s), u"````\na\n```\n\t````"_s);
     }
 
     void shapes_data()

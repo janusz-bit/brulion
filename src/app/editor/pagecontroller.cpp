@@ -132,12 +132,6 @@ int lineCount(const QString &s)
     return int(text::splitLines(s).size());
 }
 
-bool isFenceOpener(const QString &s)
-{
-    static const QRegularExpression re(u"^(```|~~~)[A-Za-z0-9_+-]*$"_s);
-    return re.match(s).hasMatch();
-}
-
 /// Markdown of a heading level `n` for an edit text that may already start with one.
 QString withHeading(const QString &text, int level)
 {
@@ -1060,17 +1054,20 @@ QVariantMap PageController::split(int row, int cursor)
     const int len = int(shape.editText.size());
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
 
-    // "```calc" + Enter opens a code block.
-    if (cursor == len && isFenceOpener(shape.editText.trimmed())) {
-        const QString fence = shape.editText.trimmed().left(3);
-        beginCommand();
-        applyOp([&](BlockDocument &d) {
-            return d.setBody(row, bodyWithEditText(entry, shape.editText.trimmed() + u"\n\n"_s + fence));
-        });
-        const Focus f{row, 0};
-        endCommand(f);
-        setFocus(f, true);
-        return result(f.row, f.cursor);
+    // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
+    const QString opening = shape.editText.trimmed();
+    if (cursor == len && !opening.contains(u'\n')) {
+        if (const auto fence = parseFence(opening); fence && !fence->closed) {
+            const QString closing(fence->length, fence->marker);
+            beginCommand();
+            applyOp([&](BlockDocument &d) {
+                return d.setBody(row, bodyWithEditText(entry, opening + u"\n\n"_s + closing));
+            });
+            const Focus f{row, 0};
+            endCommand(f);
+            setFocus(f, true);
+            return result(f.row, f.cursor);
+        }
     }
 
     // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves

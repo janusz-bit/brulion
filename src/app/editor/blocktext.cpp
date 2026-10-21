@@ -160,7 +160,9 @@ std::optional<Fence> parseFence(QStringView body)
     const QList<text::Line> lines = text::splitLines(body);
     const QString &first = lines.first().text;
     qsizetype k = 0;
-    while (k < first.size() && k < 3 && first[k] == u' ')
+    // Brulion's parser accepts a fence at any indentation (also inside list items), unlike
+    // CommonMark's three spaces; the editor has to agree or a code block would render as text.
+    while (k < first.size() && (first[k] == u' ' || first[k] == u'\t'))
         ++k;
     if (k >= first.size() || (first[k] != u'`' && first[k] != u'~'))
         return std::nullopt;
@@ -175,6 +177,8 @@ std::optional<Fence> parseFence(QStringView body)
         return std::nullopt;
     Fence f;
     f.openLine = first;
+    f.marker = fc;
+    f.length = int(n);
     f.lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
     // Strip attribute braces of "{.lang}" style info strings.
     if (f.lang.startsWith(u'{'))
@@ -198,6 +202,40 @@ std::optional<Fence> parseFence(QStringView body)
     f.inner = inner.join(u'\n');
     return f;
 }
+
+namespace {
+
+/// A fence line rewritten to `length` markers, keeping its indentation and info string.
+QString fenceLineWithLength(QStringView line, QChar marker, int length)
+{
+    qsizetype start = 0;
+    while (start < line.size() && (line[start] == u' ' || line[start] == u'\t'))
+        ++start;
+    qsizetype end = start;
+    while (end < line.size() && line[end] == marker)
+        ++end;
+    return line.first(start).toString() + QString(length, marker) + line.sliced(end).toString();
+}
+
+/// The longest run of `marker` on a line of `inner` that consists of nothing else. Such a line
+/// closes a fence of that length or shorter; the opening fence has to be longer.
+int longestClosingFence(QStringView inner, QChar marker)
+{
+    int longest = 0;
+    for (const text::Line &line : text::splitLines(inner)) {
+        const QString trimmed = line.text.trimmed();
+        if (trimmed.size() < 3 || trimmed.front() != marker)
+            continue;
+        qsizetype run = 0;
+        while (run < trimmed.size() && trimmed[run] == marker)
+            ++run;
+        if (run == trimmed.size())
+            longest = std::max(longest, int(run));
+    }
+    return longest;
+}
+
+} // namespace
 
 BlockShape shapeOf(const markdown::BlockEntry &e)
 {
@@ -311,9 +349,32 @@ QString bodyWithEditText(const markdown::BlockEntry &e, const QString &editText)
 {
     const BlockShape s = shapeOf(e);
     QString head = e.body.left(s.editOffset);
-    const QString tail = e.body.right(s.editSuffix);
+    QString tail = e.body.right(s.editSuffix);
     if (s.view == BlockView::Code || s.view == BlockView::Calc || s.view == BlockView::Query
         || s.view == BlockView::Math || s.view == BlockView::Frontmatter) {
+        // The fence lines are hidden, so every line typed between them is code. A line that would
+        // close the fence (``` alone on its line, say, when writing about fenced code) must not
+        // end the block: widen the opening and closing fence past the longest such line. Keeping
+        // the wider fence is harmless when that line is removed again.
+        if (const auto f = parseFence(e.body)) {
+            const int needed = longestClosingFence(editText, f->marker) + 1;
+            if (needed > f->length) {
+                const qsizetype openEnd = head.indexOf(u'\n');
+                if (openEnd >= 0)
+                    head = fenceLineWithLength(head.left(openEnd), f->marker, needed) + head.mid(openEnd);
+                else if (!head.isEmpty())
+                    head = fenceLineWithLength(head, f->marker, needed);
+                if (!tail.isEmpty()) {
+                    const qsizetype closeStart = tail.lastIndexOf(u'\n');
+                    if (closeStart >= 0) {
+                        tail = tail.left(closeStart + 1)
+                               + fenceLineWithLength(QStringView(tail).sliced(closeStart + 1), f->marker, needed);
+                    } else {
+                        tail = fenceLineWithLength(tail, f->marker, needed);
+                    }
+                }
+            }
+        }
         // Keep the hidden fence lines on lines of their own.
         if (!head.isEmpty() && !head.endsWith(u'\n'))
             head += u'\n';

@@ -45,6 +45,8 @@ struct Fence {
     QString lang;         ///< first word of the info string, lower-case ("calc", "query", "js")
     QString inner;        ///< content lines joined by '\n'
     int innerOffset = 0;  ///< index of `inner` in the body
+    QChar marker;         ///< '`' or '~'
+    int length = 3;       ///< number of markers in the opening fence
     bool closed = false;
 
     friend bool operator==(const Fence &, const Fence &) = default;
