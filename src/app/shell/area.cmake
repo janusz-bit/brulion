@@ -54,8 +54,8 @@ if(NOT ANDROID AND NOT EMSCRIPTEN)
         ${_brulion_shell_dir}/singleinstance.h ${_brulion_shell_dir}/singleinstance.cpp)
 endif()
 # The documentation (guide/*.md, Brulion notes about Brulion) as :/guide/<name>.md;
-# demovault.cpp (seedDocsVault) writes them at the root of the separate notebook
-# "Dokumentacja Brulionu".
+# demovault.cpp (updateDocsVault) writes them at the root of the separate notebook
+# "Dokumentacja Brulionu" and keeps them up to date.
 file(GLOB_RECURSE _brulion_guide_files CONFIGURE_DEPENDS ${_brulion_shell_dir}/guide/*.md)
 qt_add_resources(brulion_shell brulion_guide
     PREFIX /guide

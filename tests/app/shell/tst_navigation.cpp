@@ -4,7 +4,9 @@
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "commandmodel.h"
+#include "demovault.h"
 #include "navigation.h"
+#include "olddocs.h"
 #include "workspace.h"
 
 #include "reminders/notifications.h"
@@ -644,6 +646,9 @@ private Q_SLOTS:
         QVERIFY(app->workspace()->exists(u"Format plików.md"_s));
         QVERIFY(title() != toDocs); // "Back to my notebook"
         QCOMPARE(app->settings()->recentVaults().size(), 1); // the documentation is not a recent notebook
+        // It is the user's copy: edits and deletions are theirs.
+        QVERIFY(app->workspace()->write(u"Zadania.md"_s, u"- [ ] moja wersja zadań\n"_s));
+        QVERIFY(!app->workspace()->deletePage(u"Obliczenia.md"_s).isEmpty());
 
         // Back: the notebook used before, on its usual home route.
         app->toggleDocsVault();
@@ -653,11 +658,36 @@ private Q_SLOTS:
         QVERIFY(!app->workspace()->exists(u"Spis treści.md"_s));
         QCOMPARE(title(), toDocs);
 
-        // The second visit does not seed again over the user's edits.
+        // The second visit brings the documentation up to date, but never over the user's edits
+        // and without bringing back what the user deleted.
         app->toggleDocsVault();
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
         QTRY_COMPARE(app->status(), u"ready"_s);
         QVERIFY(app->workspace()->exists(u"Spis treści.md"_s));
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moja wersja zadań\n"_s);
+        QVERIFY(!app->workspace()->exists(u"Obliczenia.md"_s));
+    }
+
+    void documentationNotebookFromAnOlderVersion()
+    {
+        // Opened in 0.3.0–0.3.2, before "Wzory matematyczne" existed (the user has kept only the
+        // table of contents and changed "Zadania"): the new page arrives, the unchanged table of
+        // contents is replaced by this version's, the changed page stays.
+        auto app = openApp(u"aktualizacja"_s);
+        const QString docs = app->docsVaultPath();
+        QVERIFY(writeFile(QDir(docs).filePath(docsWelcomePage()), olddocs::kTableOfContents030.toUtf8()));
+        QVERIFY(writeFile(QDir(docs).filePath(u"Zadania.md"_s), "- [ ] moje zadania\n"));
+        app->openDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->workspace()->exists(u"Wzory matematyczne.md"_s));
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage());
+        for (const DemoFile &f : docsVaultFiles()) {
+            if (f.path == docsWelcomePage())
+                QCOMPARE(app->workspace()->readFile(f.path), f.content);
+        }
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moje zadania\n"_s);
+        QVERIFY(!app->workspace()->exists(u"Obliczenia.md"_s)); // deleted back then: stays deleted
     }
 
     void switchingNotebooksDoesNotCarrySyncOver()

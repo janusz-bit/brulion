@@ -1,12 +1,15 @@
 #include "demovault.h"
 
 #include "markdown/journal.h"
+#include "text/text.h"
 #include "vault/vault.h"
 
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QHash>
+#include <QJsonObject>
+#include <QSet>
 
 #include <algorithm>
 
@@ -458,9 +461,146 @@ QList<DemoFile> docsVaultFiles()
     return guideFiles();
 }
 
-int seedDocsVault(Vault &vault)
+namespace {
+
+/// LocalStore key of the record of written pages: { path: hash of the content written, or "" for
+/// a page that was written once but is the user's now (changed or deleted) }.
+const QString kDocsRecordKey = u"docs/written"_s;
+
+/// A page as 0.3.0–0.3.5 wrote it (they kept no record): the hash (text::contentHash) of one of
+/// its versions and the releases that shipped that version (bit 0 = 0.3.0 … bit 5 = 0.3.5).
+struct LegacyPage {
+    QStringView path;
+    QStringView hash;
+    quint8 releases;
+};
+constexpr quint8 kAllLegacyReleases = 0x3f;
+constexpr LegacyPage kLegacyPages[] = {
+        {u"Dokument i konspekt.md", u"1a3847db096a68cc", 0x0f},
+        {u"Dokument i konspekt.md", u"07a2aa74245cccc9", 0x30},
+        {u"Dziennik, kalendarz i szablony.md", u"25c46ab029055233", 0x3f},
+        {u"Format plików.md", u"19e3690de1791371", 0x3f},
+        {u"Import i eksport.md", u"c778d68e43a33134", 0x3f},
+        {u"Linki i odnośniki zwrotne.md", u"85f966d27af2b5da", 0x3f},
+        {u"Obliczenia.md", u"157be2d7a7f72eb8", 0x07},
+        {u"Obliczenia.md", u"a2a05af0f93b43ca", 0x38},
+        {u"Pierwsze kroki.md", u"c95401dd7e00e3f6", 0x3f},
+        {u"Przypomnienia i alarmy.md", u"070fac78559b6e07", 0x3f},
+        {u"Skróty klawiszowe.md", u"4bc3730c7547924a", 0x3f},
+        {u"Spis treści.md", u"47118489593860e9", 0x07},
+        {u"Spis treści.md", u"02940f35c901e2a7", 0x38},
+        {u"Synchronizacja.md", u"eb52f80bdfbc9f04", 0x01},
+        {u"Synchronizacja.md", u"beeea9683e9bd3ba", 0x3e},
+        {u"Tagi i właściwości.md", u"eda9f43c799b509f", 0x3f},
+        {u"Wzory matematyczne.md", u"e2b44d31e1d076f9", 0x38},
+        {u"Zadania.md", u"5a963851985af0cf", 0x3f},
+        {u"Zapytania.md", u"8aaa9a048057db33", 0x3f},
+};
+
+/// Releases that shipped `path` with content `hash` (0 = none: changed by the user).
+quint8 legacyReleases(const QString &path, const QString &hash)
 {
-    return seedFiles(vault, docsVaultFiles());
+    quint8 releases = 0;
+    for (const LegacyPage &p : kLegacyPages) {
+        if (p.path == path && p.hash == hash)
+            releases |= p.releases;
+    }
+    return releases;
+}
+
+/// The record a notebook written by 0.3.0–0.3.5 would have: a page still as one of those
+/// versions wrote it is recorded with its hash (so it is updated), any other content of a
+/// page they wrote as the user's. A missing page counts as deleted by the user when every
+/// release that may have written this notebook (judged by the versions of the unchanged pages)
+/// shipped it; a page only some of them had (added later) is left out, so it gets written.
+QJsonObject legacyRecord(Vault &vault)
+{
+    QHash<QString, quint8> shipped; // path -> releases with any version of it
+    for (const LegacyPage &p : kLegacyPages)
+        shipped[p.path.toString()] |= p.releases;
+    QHash<QString, QString> onDisk; // path -> content hash
+    quint8 possible = kAllLegacyReleases;
+    for (auto it = shipped.cbegin(); it != shipped.cend(); ++it) {
+        if (!vault.exists(it.key()))
+            continue;
+        const QString hash = text::contentHash(vault.readText(it.key()));
+        onDisk.insert(it.key(), hash);
+        if (const quint8 releases = legacyReleases(it.key(), hash))
+            possible &= releases;
+    }
+    if (!possible) // versions that never shipped together: no conclusion
+        possible = kAllLegacyReleases;
+    QJsonObject record;
+    for (auto it = shipped.cbegin(); it != shipped.cend(); ++it) {
+        if (const auto disk = onDisk.constFind(it.key()); disk != onDisk.cend())
+            record.insert(it.key(), legacyReleases(it.key(), *disk) ? *disk : QString());
+        else if ((it.value() & possible) == possible)
+            record.insert(it.key(), QString());
+    }
+    return record;
+}
+
+} // namespace
+
+DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
+{
+    DocsUpdate result;
+    LocalStore *store = vault.store();
+    QJsonObject record; // none: a new notebook, or one emptied to start over
+    if (!vault.markdownFiles().isEmpty()) {
+        record = store->contains(kDocsRecordKey) ? store->get(kDocsRecordKey).toObject()
+                                                 : legacyRecord(vault); // written by 0.3.0–0.3.5
+    }
+    const auto write = [&](const DemoFile &page) {
+        if (vault.writeText(page.path, page.content, ChangeSource::Import))
+            return true;
+        result.ok = false;
+        return false;
+    };
+
+    QSet<QString> current;
+    for (const DemoFile &page : pages) {
+        current.insert(page.path);
+        const QString hash = text::contentHash(page.content);
+        if (!vault.exists(page.path)) {
+            if (record.contains(page.path))
+                continue; // written before and deleted by the user: stays deleted
+            if (!write(page))
+                break;
+            record.insert(page.path, hash);
+            ++result.added;
+            continue;
+        }
+        const QString onDisk = text::contentHash(vault.readText(page.path));
+        if (onDisk == hash) {
+            record.insert(page.path, hash);
+        } else if (record.value(page.path).toString() == onDisk) {
+            if (!write(page))
+                break;
+            record.insert(page.path, hash);
+            ++result.updated;
+        } else {
+            ++result.kept; // the user's text: never overwritten
+        }
+    }
+    if (result.ok) {
+        for (const QString &path : record.keys()) {
+            if (current.contains(path))
+                continue;
+            // No longer part of the documentation: gone unless the user changed it (then it is
+            // simply the user's page from now on).
+            if (vault.exists(path) && text::contentHash(vault.readText(path)) == record.value(path).toString()) {
+                if (!vault.remove(path, ChangeSource::Import)) {
+                    result.ok = false;
+                    break;
+                }
+                ++result.removed;
+            }
+            record.remove(path);
+        }
+    }
+    store->set(kDocsRecordKey, record);
+    return result;
 }
 
 int seedDemoVault(Vault &vault, const QDateTime &now)

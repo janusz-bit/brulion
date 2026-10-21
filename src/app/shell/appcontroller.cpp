@@ -753,10 +753,14 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     if (!sample)
         m_settings->claimSharedNextcloud(path);
     bool showWelcome = false;
-    if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        const int written = docs ? seedDocsVault(*m_workspace->vault())
-                                 : seedDemoVault(*m_workspace->vault(), now());
-        if (written < 0)
+    if (docs) {
+        // Written on first use and brought up to date with every version of the app, without
+        // touching the pages the user changed (updateDocsVault()).
+        if (!updateDocsVault(*m_workspace->vault()).ok)
+            toast(tr("Could not update the documentation: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
+        showWelcome = true; // it is for reading: its table of contents, not a journal
+    } else if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
+        if (seedDemoVault(*m_workspace->vault(), now()) < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }

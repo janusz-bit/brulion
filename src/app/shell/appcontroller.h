@@ -227,7 +227,8 @@ public:
     Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);
     /// Create (first time) and open "Przykładowy brulion" with the sample notes.
     Q_INVOKABLE void openDemoVault();
-    /// Opens the documentation notebook, seeding it on first use (no-op in the browser).
+    /// Opens the documentation notebook, writing it on first use and updating the pages nobody
+    /// changed to this version (updateDocsVault(); no-op in the browser).
     Q_INVOKABLE void openDocsVault();
     /// True while the documentation notebook is the open one.
     bool inDocsVault() const;
