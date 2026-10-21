@@ -91,9 +91,9 @@ with the year when it is not the current one). The file keeps `[[2026-10-13]]`.
 `#tag`, `#nested/tag`, `#[[tag with spaces]]`. Tag body: Unicode letters/digits, `_`,
 `-`, `/`; must contain at least one non-digit (`#1` is not a tag); must be preceded by
 start of line, whitespace or `(`. Never recognised inside code spans, fenced code,
-URLs or link targets. A heading `# Title` is not a tag. Frontmatter `tags: [a, b]` or
-`tags: a, b` also tags the page. Tags compare case-insensitively; display keeps the
-first-seen casing.
+formulas (§11), URLs or link targets. A heading `# Title` is not a tag. Frontmatter
+`tags: [a, b]` or `tags: a, b` also tags the page. Tags compare case-insensitively; display
+keeps the first-seen casing.
 
 ## 4. Blocks and outline
 
@@ -175,8 +175,9 @@ Logseq markers are also tasks: `- TODO`/`- LATER` → todo, `- DOING`/`- NOW` �
 `- DONE` → done, `- CANCELED`/`- CANCELLED` → cancelled, `- WAITING` → deferred.
 Logseq priorities `[#A]`/`[#B]`/`[#C]` map to high/medium/low.
 
-Metadata tokens anywhere on the task's first line (Obsidian Tasks signifiers); dates are
-`YYYY-MM-DD`, Brulion additionally allows an optional ` HH:mm` after due/scheduled/start:
+Metadata tokens anywhere on the task's first line, outside code spans and formulas (Obsidian
+Tasks signifiers); dates are `YYYY-MM-DD`, Brulion additionally allows an optional ` HH:mm`
+after due/scheduled/start:
 
 | Token | Field |
 |---|---|
@@ -206,11 +207,11 @@ completed line gets `✅ <today>`.
 | `⏰! 2026-10-15 06:30` | **alarm**: loud, high-priority, stays until dismissed |
 | `(@2026-10-15 09:00)` | obsidian-reminder plugin syntax, read-only compatibility |
 
-Reminders may appear in any block (not only tasks). A block may carry several. A `🔁` rule
-in the same block makes the reminder recur. A reminder on a task whose status is `done`
-or `cancelled` never fires. Times are **local wall-clock time** (no time zone stored).
-The notification title is the block text with all tokens stripped; tapping it opens the
-note at that block.
+Reminders may appear in any block (not only tasks), outside code spans and formulas. A block
+may carry several. A `🔁` rule in the same block makes the reminder recur. A reminder on a
+task whose status is `done` or `cancelled` never fires. Times are **local wall-clock time**
+(no time zone stored). The notification title is the block text with all tokens stripped;
+tapping it opens the note at that block.
 
 ## 7. Recurrence rules
 
@@ -435,6 +436,12 @@ Where a formula is (in a block's inline text, after code spans and comments are 
   formula may go on to the next line of the same block but never crosses a blank line. Text,
   not formulas: `$5 i $10`, `15$, 10$`, `10$/h … 15$/h`, `$PATH:$HOME`, `Niech$x$`.
 * A `$` or `$$` without a partner is text and hides no later formula.
+* What starts inside a formula belongs to it — in the editor, the HTML export and the index
+  (tags, backlinks, tasks, reminders) alike, as with a code span: a `#tag`, `[[link]]`, URL,
+  task date (`📅 …`), reminder (`⏰ …`) or `key:: value` there is part of the formula. Whatever
+  starts first wins: a formula in a link label (`[$x^2$](Wykres.md)`) leaves the link a link.
+  The formula is found in the block's text as the editor shows it: a list item's blank lines
+  and code lines end an inline formula like a blank line.
 * `\$` is a literal dollar. `\(`, `\)`, `\[` and `\]` are ordinary escapes (literal brackets,
   as the importers write them), not math delimiters — as in Obsidian. (Brulion 0.3.3–0.3.5
   read `\(…\)` and `\[…\]` as formulas; such notes now show the brackets and should use

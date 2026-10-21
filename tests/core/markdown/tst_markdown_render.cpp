@@ -1,5 +1,6 @@
 // InlineRenderer: exact Qt rich text for inline Markdown, chips, links, hidden syntax, escaping
 // of hostile input, block-level rendering.
+#include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/tokens.h"
 
@@ -290,6 +291,29 @@ private Q_SLOTS:
         QFETCH(QString, input);
         QFETCH(QString, expected);
         QCOMPARE(render(input), expected);
+    }
+
+    // The index (extractInline) counts exactly the tags and links the editor shows next to a
+    // formula: what starts inside one is part of it (SYNTAX §11).
+    void indexAgreesAboutFormulas_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::newRow("tag and link in formulas") << u"$x \\in A #B$ oraz $[[Strona]]$ i #poza [[Łąka]]"_s;
+        QTest::newRow("link starts before the formula") << u"[[a $b]] c$ #d"_s;
+        QTest::newRow("formula in a link label") << u"[$\\alpha$ i #tag](Wzory.md) #źródło"_s;
+        QTest::newRow("url in a formula") << u"$f(https://example.org)$ i https://brulion.pl"_s;
+        QTest::newRow("not over a blank line") << u"$a\n\n#b$"_s;
+        QTest::newRow("display") << u"$$\n#b [[S]]\n$$ #d ((abc))"_s;
+    }
+
+    void indexAgreesAboutFormulas()
+    {
+        QFETCH(QString, input);
+        const QString html = render(input);
+        const InlineScan scan = extractInline(input);
+        const qsizetype tags = html.count(u"<a href=\"tag:"_s);
+        QCOMPARE(tags, scan.tags.size());
+        QCOMPARE(html.count(u"<a href=\""_s) - tags, scan.links.size());
     }
 
     void hostileInput_data()

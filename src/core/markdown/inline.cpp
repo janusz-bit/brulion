@@ -651,6 +651,38 @@ void lexInline(QStringView orig, QStringView masked, const std::function<void(co
     }
 }
 
+void lexInlineOutsideMath(QStringView orig, QStringView masked, const QList<MathSpan> &formulas,
+                          const std::function<void(const InlineItem &)> &visit, QList<MathSpan> *kept)
+{
+    if (formulas.isEmpty()) {
+        lexInline(orig, masked, visit);
+        return;
+    }
+    QList<InlineItem> items;
+    lexInline(orig, masked, [&items](const InlineItem &item) { items.append(item); });
+    // Items and formulas each come in order without overlaps: merged by position, whatever starts
+    // inside the one kept before it is dropped (the InlineRenderer's "earliest atom wins").
+    qsizetype end = 0;
+    qsizetype k = 0;
+    const auto formulasBefore = [&](qsizetype pos) {
+        for (; k < formulas.size() && formulas[k].from < pos; ++k) {
+            if (formulas[k].from < end)
+                continue;
+            end = formulas[k].to;
+            if (kept)
+                kept->append(formulas[k]);
+        }
+    };
+    for (const InlineItem &item : std::as_const(items)) {
+        formulasBefore(item.from);
+        if (item.from < end)
+            continue;
+        end = item.to;
+        visit(item);
+    }
+    formulasBefore(masked.size() + 1);
+}
+
 Segments segmentsForText(QStringView text, qsizetype base, int line)
 {
     Segments seg;
@@ -700,11 +732,11 @@ private:
 
 } // namespace
 
-ScanResult scanInline(QStringView orig, QStringView masked, const Segments &seg)
+ScanResult scanInline(QStringView orig, QStringView masked, const Segments &seg, const QList<MathSpan> &formulas)
 {
     ScanResult out;
     PosMap map(seg);
-    lexInline(orig, masked, [&](const InlineItem &item) {
+    const auto visit = [&](const InlineItem &item) {
         if (item.kind == InlineKind::Tag) {
             out.tags.append(TagHit{item.target, map.offset(item.from), map.offset(item.to), map.line(item.from)});
             return;
@@ -744,7 +776,8 @@ ScanResult scanInline(QStringView orig, QStringView masked, const Segments &seg)
         case InlineKind::Tag: break;
         }
         out.links.append(std::move(link));
-    });
+    };
+    lexInlineOutsideMath(orig, masked, formulas, visit, &out.formulas);
     return out;
 }
 
@@ -778,7 +811,7 @@ QList<TagSpan> findTags(QStringView text)
 {
     const QString masked = maskInline(text);
     QList<TagSpan> out;
-    lexInline(text, masked, [&out](const InlineItem &item) {
+    lexInlineOutsideMath(text, masked, findMathSpans(masked), [&out](const InlineItem &item) {
         if (item.kind == InlineKind::Tag)
             out.append(TagSpan{item.target, item.from, item.to});
     });
@@ -788,7 +821,7 @@ QList<TagSpan> findTags(QStringView text)
 InlineScan extractInline(QStringView text, qsizetype baseOffset, int line)
 {
     const QString masked = maskInline(text);
-    ScanResult res = scanInline(text, masked, segmentsForText(text, baseOffset, line));
+    ScanResult res = scanInline(text, masked, segmentsForText(text, baseOffset, line), findMathSpans(masked));
     InlineScan out;
     out.links = std::move(res.links);
     QStringList names;

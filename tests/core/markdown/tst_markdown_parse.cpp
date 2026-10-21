@@ -510,6 +510,68 @@ private Q_SLOTS:
                               u"2026-10-16 06:30|alarm|Akapit\ndruga linia|3|every day"_s}));
     }
 
+    // What starts inside a formula is part of the formula for the index as in the editor
+    // (SYNTAX §11): tags, links, task dates and reminders there do not count; outside they do.
+    void formulasHideIndexedSyntax_data()
+    {
+        QTest::addColumn<QString>("src");
+        QTest::addColumn<QStringList>("tags");
+        QTest::addColumn<QStringList>("links");
+        QTest::addColumn<QString>("taskText");
+        QTest::addColumn<QString>("due");
+        QTest::addColumn<QStringList>("reminders");
+        QTest::newRow("tags and links") << u"Wzór $x \\in A #B$ i $[[Strona]]$, poza nim #pilne i [[Budżet]]"_s
+                                        << QStringList({u"pilne"_s}) << QStringList({u"Budżet"_s}) << QString()
+                                        << QString() << QStringList();
+        QTest::newRow("task date inside")
+                << u"- [ ] Zapłacić $📅 2026-10-30$ do końca"_s << QStringList() << QStringList()
+                << u"Zapłacić $📅 2026-10-30$ do końca"_s << QString() << QStringList();
+        QTest::newRow("task date and reminder outside")
+                << u"- [ ] Zapłacić $x$ 📅 2026-10-30 ⏰ 2026-10-22 09:00"_s << QStringList() << QStringList()
+                << u"Zapłacić $x$"_s << u"2026-10-30"_s << QStringList({u"2026-10-22 09:00"_s});
+        QTest::newRow("reminder inside") << u"Spotkanie $⏰ 2026-10-22 09:00$ #ważne"_s << QStringList({u"ważne"_s})
+                                         << QStringList() << QString() << QString() << QStringList();
+        // The editor shows a list item with its blank lines and code: they end an inline formula.
+        QTest::newRow("blank line in an item") << u"- a $x\n\n  #tag$"_s << QStringList({u"tag"_s}) << QStringList()
+                                               << QString() << QString() << QStringList();
+        QTest::newRow("code in an item") << u"- a $x\n  ```\n  kod\n  ```\n  #tag$"_s << QStringList({u"tag"_s})
+                                         << QStringList() << QString() << QString() << QStringList();
+        QTest::newRow("display formula over a blank line")
+                << u"- $$a\n\n  #b [[Ukryta]]$$ #c"_s << QStringList({u"c"_s}) << QStringList() << QString()
+                << QString() << QStringList();
+    }
+
+    void formulasHideIndexedSyntax()
+    {
+        QFETCH(QString, src);
+        QFETCH(QStringList, tags);
+        QFETCH(QStringList, links);
+        QFETCH(QString, taskText);
+        QFETCH(QString, due);
+        QFETCH(QStringList, reminders);
+        const ParsedNote n = parseNote(u"a.md"_s, src);
+        QCOMPARE(n.tags, tags);
+        QStringList targets;
+        for (const Link &l : n.links)
+            targets.append(l.target);
+        QCOMPARE(targets, links);
+        QCOMPARE(n.tasks.isEmpty() ? QString() : n.tasks.first().text, taskText);
+        QCOMPARE(n.tasks.isEmpty() ? QString() : spec(n.tasks.first().due), due);
+        QStringList at;
+        for (const Reminder &r : n.reminders)
+            at.append(r.at.toString());
+        QCOMPARE(at, reminders);
+    }
+
+    void formulaLinesAreNoProperties()
+    {
+        const ParsedNote n = parseNote(u"a.md"_s, u"$$\nf:: x \\cdot y\n$$\n\nklucz:: wartość"_s);
+        QCOMPARE(n.blocks.size(), 2);
+        QVERIFY(n.blocks[0].properties.isEmpty());
+        QCOMPARE(n.blocks[0].text, u"$$\nf:: x \\cdot y\n$$"_s);
+        QCOMPARE(n.blocks[1].properties.value(u"klucz"_s).toString(), u"wartość"_s);
+    }
+
     void polishAndNestedTags()
     {
         const ParsedNote n = parseNote(u"a.md"_s, u"Lista #zakupy/spożywcze i #Żółw oraz #[[Lista życzeń]]");

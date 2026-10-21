@@ -13,6 +13,8 @@ Wzór może stać w środku zdania: pole koła to $\pi r^2$, a pierwiastek z dw�
 
 Żeby kwoty i zmienne nie zamieniały się we wzory, zaraz po otwierającym `$` musi stać znak (nie spacja), a tuż przed nim nie może być litery ani cyfry. Tuż przed zamykającym `$` nie może być spacji, a zaraz po nim litery ani cyfry. Dlatego `koszt $5 i $10`, `Netflix 15$, Spotify 10$`, `10$/h` czy `$PATH:$HOME` zostają zwykłym tekstem. Wzór może przejść do następnej linii, ale nie przez pustą linię. Jeśli chcesz napisać sam znak dolara, poprzedź go ukośnikiem: `\$100`.
 
+To, co zaczyna się wewnątrz wzoru, należy do wzoru — jak w kodzie: `#tag`, `[[link]]`, termin zadania czy przypomnienie wpisane między dolarami nie trafią do tagów, odnośników ani kalendarza.
+
 Ukośnik przed nawiasem oznacza zwykły nawias, jak w Obsidianie: `\(…\)` i `\[…\]` to nie wzory (tak zapisują nawiasy importy z innych programów). Wzory pisz między `$…$` albo `$$…$$`.
 
 ## Osobna linia

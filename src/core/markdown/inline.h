@@ -18,7 +18,8 @@ struct InlineScan {
 };
 
 /// Extract links and tags from inline Markdown `text` (one or more lines). Inline code,
-/// `%%comments%%` and HTML comments are skipped. `baseOffset` / `line` position the text in its
+/// `%%comments%%` and HTML comments are skipped, and so is what starts inside a formula (`$…$`,
+/// `$$…$$`: SYNTAX §11), as the editor shows it. `baseOffset` / `line` position the text in its
 /// document: Link::from/to are absolute offsets, Link::line is 0-based. Same-page links
 /// (`[[#^id]]`) have an empty target. Linear time, never fails.
 InlineScan extractInline(QStringView text, qsizetype baseOffset = 0, int line = 0);
