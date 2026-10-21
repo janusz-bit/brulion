@@ -1,8 +1,9 @@
 // AppSettings: defaults, validation, persistence in an INI file, recent vaults, the Nextcloud
 // app password kept outside QSettings in an owner-only file, and the Nextcloud switch and server
-// folder of each notebook: none without a notebook, keyed by the notebook folder's id, the
-// settings of 0.3.0 and older going to one notebook.
+// folder of each notebook: keyed by the notebook folder's id, folders another notebook syncs
+// with, and the settings of 0.3.0 and older going to the notebook they belong to.
 #include "appsettings.h"
+#include "workspacesync.h"
 
 #include "text/text.h"
 
@@ -19,6 +20,12 @@ using brulion::shell::AppSettings;
 namespace {
 
 constexpr auto kServer = "https://chmura.example.pl";
+
+/// What the sync bookkeeping of a notebook synced with this folder of jan's account records.
+QString remoteOf(const QString &folder)
+{
+    return u"jan@https://chmura.example.pl/remote.php/dav/files/jan/"_s + folder;
+}
 
 } // namespace
 
@@ -175,29 +182,171 @@ private Q_SLOTS:
         QVERIFY(raw.childGroups().isEmpty());
     }
 
-    void sharedNextcloudGoesToTheFirstNotebook()
+    void sharedNextcloudWaitsForItsNotebook()
     {
-        // Settings written by 0.3.0 and older (one switch and folder for all notebooks).
-        const QString file = nextFile();
-        {
-            QSettings raw(file, QSettings::IniFormat);
-            raw.setValue(u"sync/nextcloud/enabled"_s, true);
-            raw.setValue(u"sync/nextcloud/folder"_s, u"Notatki"_s);
-            raw.setValue(u"sync/nextcloud/url"_s, u"https://chmura.example.pl"_s);
-            raw.setValue(u"vaults/current"_s, u"/notes/a"_s);
-        }
-        AppSettings s(file, m_tmp.path());
+        // 0.3.0 synced notebook A. At the first start A is missing (an unmounted card), and the
+        // user opens C: C must not take A's server folder (their notes would mix there). A gets
+        // it back when it returns.
+        const QString a = u"/media/karta/Notatnik A"_s;
+        AppSettings s(oldSettings(a), m_tmp.path());
+        QVERIFY(s.hasSharedNextcloud());
+        s.recordSharedNextcloudOwner(s.currentVault()); // what AppController does at start
         QVERIFY(!s.nextcloudEnabled()); // nobody owns it yet: nothing syncs by accident
-        s.claimSharedNextcloud(u"/notes/a"_s);
-        QVERIFY(s.nextcloudEnabled());
-        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
-        s.claimSharedNextcloud(u"/notes/b"_s); // once only
-        s.setCurrentVault(u"/notes/b"_s);
+
+        const QString c = notebook(u"C-nowy"_s);
+        s.setCurrentVault(c);
+        s.notebookOpened(c, QString());
         QVERIFY(!s.nextcloudEnabled());
-        QCOMPARE(s.nextcloudFolder(), u"Brulion"_s);
-        s.setCurrentVault(u"/notes/a"_s);
+        QVERIFY(s.hasSharedNextcloud());
+        QVERIFY(!s.hasOwnNextcloudFolder());
+        // Started again later: the owner stays the one recorded first.
+        s.recordSharedNextcloudOwner(c);
+        s.notebookOpened(c, QString());
+        QVERIFY(!s.nextcloudEnabled());
+
+        s.setCurrentVault(a);
+        QSignalSpy changed(&s, &AppSettings::nextcloudChanged);
+        s.notebookOpened(a, QString());
+        QCOMPARE(changed.size(), 1);
         QVERIFY(s.nextcloudEnabled());
         QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+        QVERIFY(!s.hasSharedNextcloud());
+
+        // Taken over once: C, and any notebook after it, stay without sync.
+        s.setCurrentVault(c);
+        s.notebookOpened(c, remoteOf(u"Notatki"_s));
+        QVERIFY(!s.nextcloudEnabled());
+    }
+
+    void sharedNextcloudGoesToTheSyncedNotebook_data()
+    {
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QString>("remote");
+        QTest::addColumn<bool>("claims");
+        QTest::newRow("its bookkeeping names the folder") << u"Notatki"_s << remoteOf(u"Notatki"_s) << true;
+        QTest::newRow("diacritics") << u"Zażółć gęślą"_s
+                                    << remoteOf(u"Za%C5%BC%C3%B3%C5%82%C4%87%20g%C4%99%C5%9Bl%C4%85"_s) << true;
+        QTest::newRow("no folder: Brulion") << QString() << remoteOf(u"Brulion"_s) << true;
+        QTest::newRow("another folder") << u"Notatki"_s << remoteOf(u"Notatki/Praca"_s) << false;
+        QTest::newRow("another user") << u"Notatki"_s
+                                      << u"ola@https://chmura.example.pl/remote.php/dav/files/ola/Notatki"_s << false;
+        QTest::newRow("another server") << u"Notatki"_s
+                                        << u"jan@https://inna.example.pl/remote.php/dav/files/jan/Notatki"_s << false;
+        QTest::newRow("never synced") << u"Notatki"_s << QString() << false;
+    }
+    void sharedNextcloudGoesToTheSyncedNotebook()
+    {
+        // 0.3.0 users who quit in the documentation have no notebook to record: the notebook
+        // whose sync bookkeeping names exactly the old account and folder is the synced one.
+        QFETCH(QString, folder);
+        QFETCH(QString, remote);
+        QFETCH(bool, claims);
+        AppSettings s(oldSettings(QString(), true, folder.isEmpty() ? QVariant() : QVariant(folder)), m_tmp.path());
+        s.recordSharedNextcloudOwner(QString());
+        const QString n = notebook(u"zsynchronizowany-%1"_s.arg(m_n));
+        s.setCurrentVault(n);
+        s.notebookOpened(n, remote);
+        QCOMPARE(s.nextcloudEnabled(), claims);
+        QCOMPARE(s.hasSharedNextcloud(), !claims);
+        if (claims) {
+            // Its folder is written, also the default one: it is never offered another folder.
+            QVERIFY(s.hasOwnNextcloudFolder());
+            QCOMPARE(s.nextcloudFolder(), folder.isEmpty() ? u"Brulion"_s : folder);
+        }
+    }
+
+    void sampleNotebookTakesItsSyncBack()
+    {
+        // Whoever used the sample notebook as their notebook (it was current, its bookkeeping
+        // names the folder) keeps syncing it; the documentation is never offered the settings
+        // (AppController does not call notebookOpened() for it).
+        const QString sample = notebook(u"data/Przykładowy brulion"_s);
+        AppSettings s(oldSettings(sample), m_tmp.path());
+        s.recordSharedNextcloudOwner(sample);
+        s.setCurrentVault(sample);
+        s.notebookOpened(sample, QString());
+        QVERIFY(s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+    }
+
+    void sharedFolderAlreadyTaken()
+    {
+        // Meanwhile another notebook here syncs with the old folder: the owner gets its folder,
+        // but sync stays off — two notebooks never sync with one folder.
+        const QString a = u"/media/karta/A"_s;
+        AppSettings s(oldSettings(a), m_tmp.path());
+        s.recordSharedNextcloudOwner(a);
+        const QString c = notebook(u"C-zajęty"_s);
+        s.setCurrentVault(c);
+        s.setNextcloudFolder(u"notatki/"_s);
+        s.setNextcloudEnabled(true);
+        s.setCurrentVault(a);
+        s.notebookOpened(a, QString());
+        QVERIFY(!s.hasSharedNextcloud());
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
+    }
+
+    void notebookKeepsTheFolderItSyncedWith_data()
+    {
+        QTest::addColumn<QString>("remote");
+        QTest::addColumn<QString>("folder");
+        QTest::newRow("this account") << remoteOf(u"Notatki"_s) << u"Notatki"_s;
+        QTest::newRow("nested, diacritics") << remoteOf(u"Dom/Pi%C4%99tro"_s) << u"Dom/Piętro"_s;
+        QTest::newRow("another account") << u"ola@https://chmura.example.pl/remote.php/dav/files/ola/Notatki"_s
+                                         << QString();
+        QTest::newRow("malformed") << u"jan@"_s << QString();
+        QTest::newRow("never synced") << QString() << QString();
+    }
+    void notebookKeepsTheFolderItSyncedWith()
+    {
+        // The notebook synced in 0.3.0 whose settings 0.3.1–0.3.5 gave to another notebook: when
+        // the user turns sync on again, the form offers its old folder, not a new one.
+        QFETCH(QString, remote);
+        QFETCH(QString, folder);
+        AppSettings s(nextFile(), m_tmp.path());
+        s.setNextcloudUrl(QString::fromLatin1(kServer));
+        s.setNextcloudUser(u"jan"_s);
+        const QString n = notebook(u"dawny-%1"_s.arg(m_n));
+        s.setCurrentVault(n);
+        s.notebookOpened(n, remote);
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.hasOwnNextcloudFolder(), !folder.isEmpty());
+        if (!folder.isEmpty())
+            QCOMPARE(s.nextcloudFolder(), folder);
+        // A folder of its own is never replaced.
+        s.setNextcloudFolder(u"Wybrany"_s);
+        s.notebookOpened(n, remoteOf(u"Notatki"_s));
+        QCOMPARE(s.nextcloudFolder(), u"Wybrany"_s);
+    }
+
+    void nextcloudRemote_data()
+    {
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("user");
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QString>("remote");
+        QTest::newRow("plain") << u"https://chmura.example.pl"_s << u"jan"_s << u"Notatki"_s << remoteOf(u"Notatki"_s);
+        QTest::newRow("no folder") << u"chmura.example.pl/"_s << u" jan "_s << QString() << remoteOf(u"Brulion"_s);
+        QTest::newRow("slashes") << u"https://chmura.example.pl"_s << u"jan"_s << u"/Notatki/Dom/"_s
+                                 << remoteOf(u"Notatki/Dom"_s);
+        QTest::newRow("diacritics")
+                << u"https://example.pl/nextcloud/"_s << u"Łucja"_s << u"Zażółć"_s
+                << u"Łucja@https://example.pl/nextcloud/remote.php/dav/files/%C5%81ucja/Za%C5%BC%C3%B3%C5%82%C4%87"_s;
+        QTest::newRow("no server") << QString() << u"jan"_s << u"Notatki"_s << QString();
+    }
+    void nextcloudRemote()
+    {
+        QFETCH(QString, url);
+        QFETCH(QString, user);
+        QFETCH(QString, folder);
+        QFETCH(QString, remote);
+        QCOMPARE(brulion::shell::nextcloudRemote(url, user, folder), remote);
+        if (!remote.isEmpty()) {
+            const QString back = brulion::shell::nextcloudRemoteFolder(url, user, remote);
+            QCOMPARE(back,
+                     folder.isEmpty() ? u"Brulion"_s : QDir::cleanPath(folder).mid(folder.startsWith(u'/') ? 1 : 0));
+        }
     }
 
     void notebookSettingsFollowTheFolder()
@@ -241,6 +390,47 @@ private Q_SLOTS:
         const QStringList groups = raw.childGroups();
         QCOMPARE(groups.size(), 1);
         QCOMPARE(raw.value(groups.first() + u"/path"_s).toString(), real); // the last path written
+    }
+
+    void folderUsedByAnotherNotebook_data()
+    {
+        QTest::addColumn<QString>("theirs");
+        QTest::addColumn<bool>("theirsOn");
+        QTest::addColumn<bool>("theirsExists");
+        QTest::addColumn<QString>("mine");
+        QTest::addColumn<bool>("conflict");
+        QTest::newRow("same folder") << u"Notatki"_s << true << true << u"Notatki"_s << true;
+        QTest::newRow("other case, slashes") << u"Notatki"_s << true << true << u"/notatki/"_s << true;
+        QTest::newRow("diacritics") << u"Zażółć"_s << true << true << u"ZAŻÓŁĆ"_s << true;
+        QTest::newRow("inside theirs") << u"Notatki"_s << true << true << u"Notatki/Praca"_s << true;
+        QTest::newRow("around theirs") << u"Notatki/Dom"_s << true << true << u"Notatki"_s << true;
+        QTest::newRow("their default") << QString() << true << true << u"Brulion"_s << true;
+        QTest::newRow("a similar name") << u"Notatki"_s << true << true << u"Notatki 2"_s << false;
+        QTest::newRow("theirs is off") << u"Notatki"_s << false << true << u"Notatki"_s << false;
+        QTest::newRow("their folder is gone") << u"Notatki"_s << true << false << u"Notatki"_s << false;
+    }
+    void folderUsedByAnotherNotebook()
+    {
+        QFETCH(QString, theirs);
+        QFETCH(bool, theirsOn);
+        QFETCH(bool, theirsExists);
+        QFETCH(QString, mine);
+        QFETCH(bool, conflict);
+        AppSettings s(nextFile(), m_tmp.path());
+        const QString other = m_tmp.filePath(u"ich-%1"_s.arg(m_n));
+        if (theirsExists)
+            QDir().mkpath(other);
+        s.setCurrentVault(other);
+        if (!theirs.isEmpty())
+            s.setNextcloudFolder(theirs);
+        s.setNextcloudEnabled(theirsOn);
+        const QString me = notebook(u"mój-%1"_s.arg(m_n));
+        s.setCurrentVault(me);
+        QCOMPARE(s.nextcloudFolderUser(mine), conflict ? QDir::cleanPath(other) : QString());
+        // Never itself, also through another path.
+        s.setCurrentVault(other);
+        QCOMPARE(s.nextcloudFolderUser(mine), QString());
+        QCOMPARE(s.nextcloudFolderUser(mine, me), conflict ? QDir::cleanPath(other) : QString());
     }
 
     void validation()

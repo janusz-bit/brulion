@@ -103,6 +103,13 @@ struct SyncthingSettings {
 /// ever sent to the account it was saved for.
 bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser);
 
+/// What the sync bookkeeping of a notebook (its LocalStore's "sync/meta" "remote", the
+/// WebDavClient's identity) records after syncing with this account and server folder:
+/// "<user>@<WebDAV address of the folder>"; "" without a server or user.
+QString nextcloudRemote(const QString &url, const QString &user, const QString &folder);
+/// The server folder such a record names on this account ("" when it names another account).
+QString nextcloudRemoteFolder(const QString &url, const QString &user, const QString &remote);
+
 /// The GUI address and API key of a Syncthing config.xml; std::nullopt without an API key.
 /// "0.0.0.0:8384" / "[::]:8384" mean this machine; tls="true" gives https.
 std::optional<SyncthingSettings> parseSyncthingConfig(const QByteArray &xml);

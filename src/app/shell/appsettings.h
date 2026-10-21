@@ -143,8 +143,31 @@ public:
     void setNextcloudUser(const QString &user);
     QString nextcloudFolder() const;
     void setNextcloudFolder(const QString &folder);
-    /// Move the pre-0.3.1 shared switch and folder (one for all notebooks) to `notebook`, once.
-    void claimSharedNextcloud(const QString &notebook);
+    /// The current notebook has a server folder of its own (chosen, or kept from its last sync).
+    bool hasOwnNextcloudFolder() const;
+    /// Another notebook on this device that syncs with `folder`, a folder inside it or around it
+    /// (its switch is on and its folder exists; not `except`, default: the current notebook): its
+    /// path, "" when none. Their notes would mix on the server.
+    QString nextcloudFolderUser(const QString &folder) const;
+    QString nextcloudFolderUser(const QString &folder, const QString &except) const;
+
+    // Up to 0.3.0 one switch and one server folder applied to every notebook ("sync/nextcloud/
+    // enabled", "…/folder"). They wait, read by nothing but notebookOpened(), for the notebook
+    // they belong to.
+    /// The settings of 0.3.0 or older wait for their notebook.
+    bool hasSharedNextcloud() const;
+    /// Remember `notebook` as theirs: the notebook that was current when they were first seen
+    /// (AppController: not the documentation, then the last other notebook). Once; "" records
+    /// that none is.
+    void recordSharedNextcloudOwner(const QString &notebook);
+    /// `notebook` was opened (never called for the documentation). `syncedRemote`: what its sync
+    /// bookkeeping names ("remote" of "sync/meta" in its LocalStore, nextcloudRemote()). It takes
+    /// over the settings of 0.3.0 when they are its own: its bookkeeping names exactly that
+    /// account and folder, or it is the recorded notebook — any other notebook never does (its
+    /// notes would flow into that folder). The switch stays off when another notebook syncs with
+    /// that folder meanwhile. A notebook with sync off and no server folder of its own keeps the
+    /// folder its bookkeeping names on this account, so turning sync on continues there.
+    void notebookOpened(const QString &notebook, const QString &syncedRemote);
     int syncIntervalMinutes() const;
     void setSyncIntervalMinutes(int minutes);
 
@@ -191,6 +214,15 @@ private:
     template<typename T>
     bool store(const QString &key, const T &value, const T &current);
 
+    /// The sync settings of one notebook's group in "sync/nextcloud/notebooks".
+    struct NotebookSync {
+        QString id;
+        QString path; ///< "" when unknown (written by 0.3.1–0.3.5 for a notebook no longer recent)
+        bool enabled = false;
+        bool hasFolder = false;
+        QString folder;
+    };
+    QList<NotebookSync> notebookSyncs() const;
     /// The key of setting `name` of `notebook` ("" without a notebook): in its group, or where
     /// 0.3.1–0.3.5 wrote it (the hash of the path as written) until it is moved.
     QString notebookKey(const QString &notebook, QStringView name) const;
@@ -201,6 +233,7 @@ private:
     /// Move the settings 0.3.1–0.3.5 wrote for `notebook` under the hash of its path as written
     /// into its group (when its folder exists: the id is the canonical path), and record its path.
     void adoptNotebookKeys(const QString &notebook);
+    bool claimSharedNextcloud(const QString &notebook, const QString &syncedRemote);
 
     std::unique_ptr<QSettings> m_settings;
     QString m_dataDir;

@@ -93,7 +93,7 @@ for shot in "${shots[@]}"; do
     for theme in "${themes[@]}"; do
       file="$out/io-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"
-      io_nextcloud_home "$home"
+      io_nextcloud_home "$home" "$home/Przykładowy brulion"
       cp -a "$template" "$home/Przykładowy brulion"
       io_history_base "$home" "$home/Przykładowy brulion"
       io_sync_history "$home" "$home/Przykładowy brulion"

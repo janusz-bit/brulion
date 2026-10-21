@@ -8,6 +8,8 @@
 #include "workspace.h"
 #include "workspaceintegration.h"
 
+#include "sync/syncengine.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
 #include <QCoreApplication>
@@ -88,6 +90,10 @@ AppController::AppController(const Options &options, QObject *parent)
         g_instance = this;
 
     m_settings = std::make_unique<AppSettings>(options.settingsFile, m_dataDir);
+    // The Nextcloud switch and folder of 0.3.0 and older (one for all notebooks) belong to the
+    // notebook that was open then — not the documentation: then the last notebook before it.
+    const QString current = m_settings->currentVault();
+    m_settings->recordSharedNextcloudOwner(isDocsPath(current) ? lastUserVault() : current);
     m_workspace = std::make_unique<Workspace>();
     m_workspace->setUiLanguage(m_settings->language());
     m_commands = std::make_unique<CommandModel>(this);
@@ -746,13 +752,13 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
         return;
     }
     m_failedPath.clear();
-    // The documentation (and the sample notebook) are not the user's notes: they never take
-    // over the sync settings of the notebook that was synced before 0.3.1. Under the path the
-    // notebook is current with (the requested one may be relative).
-    const QString cleanPath = QDir::cleanPath(path);
-    const bool sample = docs || (cleanPath == demoVaultPath() && demoVaultPath() != defaultVaultPath());
-    if (!sample)
-        m_settings->claimSharedNextcloud(m_workspace->rootPath());
+    if (!docs) {
+        // The sync settings of 0.3.0 and older go to the notebook they belong to (the one its
+        // sync bookkeeping or the start says was synced, also the sample notebook), never to the
+        // documentation; a notebook keeps the server folder it last synced with (appsettings.h).
+        const QJsonObject meta = m_workspace->vault()->store()->get(sync::SyncEngine::metaKey()).toObject();
+        m_settings->notebookOpened(m_workspace->rootPath(), meta.value(u"remote"_s).toString());
+    }
     bool showWelcome = false;
     if (docs) {
         // Written on first use and brought up to date with every version of the app, without

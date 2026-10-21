@@ -61,6 +61,30 @@ bool sameNextcloudAccount(const QString &url, const QString &user, const QString
     return !url.trimmed().isEmpty() && server(url) == server(otherUrl);
 }
 
+QString nextcloudRemote(const QString &url, const QString &user, const QString &folder)
+{
+    // As WorkspaceSync::rebuild() builds the client (davUrlFor()) and WebDavClient::identity().
+    if (url.trimmed().isEmpty() || user.trimmed().isEmpty())
+        return {};
+    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), defaultFolder(folder));
+    while (base.endsWith(u'/'))
+        base.chop(1);
+    return user.trimmed() + u'@' + base;
+}
+
+QString nextcloudRemoteFolder(const QString &url, const QString &user, const QString &remote)
+{
+    if (url.trimmed().isEmpty() || user.trimmed().isEmpty() || remote.isEmpty())
+        return {};
+    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), QString());
+    while (base.endsWith(u'/'))
+        base.chop(1);
+    const QString prefix = user.trimmed() + u'@' + base + u'/';
+    if (!remote.startsWith(prefix) || remote.size() == prefix.size())
+        return {};
+    return QUrl::fromPercentEncoding(remote.mid(prefix.size()).toUtf8());
+}
+
 bool NextcloudSettings::isComplete() const
 {
     return enabled && !url.trimmed().isEmpty() && !user.trimmed().isEmpty() && !password.isEmpty();
