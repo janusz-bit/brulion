@@ -7,6 +7,7 @@
 #include "io/trilium_p.h"
 #include "io/zip.h"
 #include "markdown/frontmatter.h"
+#include "markdown/inline.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -1443,6 +1444,26 @@ private Q_SLOTS:
         QTest::newRow("math") << u"<p>a <span class=\"math-tex\">\\(x_1 &lt; y`\\)</span></p><span "
                                  "class=\"math-tex\">\\[\\int_0^1 x\\,dx\\]</span>"_s
                               << u"a `` $x_1 < y`$ ``\n\n```math\n\\int_0^1 x\\,dx\n```"_s;
+        // A formula is checked in its paragraph as the editor reads it: where a `$` of the text or
+        // a letter or digit right after it would pair the delimiters differently, the formulas
+        // of that line stay code with their LaTeX source.
+        QTest::newRow("formulas next to prices")
+                << u"<p>Cena $5, a wzór <span class=\"math-tex\">\\(x^2\\)</span>. Kosztuje 5$.<span "
+                   "class=\"math-tex\">\\(y\\)</span></p>"_s
+                << u"Cena $5, a wzór $x^2$. Kosztuje 5$.$y$"_s;
+        QTest::newRow("formula after a dollar of the text")
+                << u"<p>Zmienna $b,<span class=\"math-tex\">\\(x\\)</span> koniec</p>"_s
+                << u"Zmienna $b,`$x$` koniec"_s;
+        QTest::newRow("formula before a digit")
+                << u"<p><span class=\"math-tex\">\\(x\\)</span>2 i <span class=\"math-tex\">\\(y\\)</span></p>"_s
+                << u"`$x$`2 i `$y$`"_s;
+        QTest::newRow("dollar on the line before")
+                << u"<p>Cena $b<br>wzór,<span class=\"math-tex\">\\(x\\)</span></p><p>Dalej <span "
+                   "class=\"math-tex\">\\(y\\)</span>.</p>"_s
+                << u"Cena $b\nwzór,`$x$`\n\nDalej $y$."_s;
+        // Text that only looks like a formula to the editor is text: its hashtags are escaped.
+        QTest::newRow("hashtag between dollars")
+                << u"<p>Plik $a$b #pilne$ koniec</p>"_s << u"Plik $a$b \\#pilne$ koniec"_s;
         QTest::newRow("footnotes")
                 << u"<p>tekst<span class=\"footnote-reference\" data-footnote-index=\"2\" data-footnote-id=\"ab\"><sup>"
                    "<a href=\"#fnab\">[2]</a></sup></span></p><ol class=\"footnote-section footnotes\"><li "
@@ -1593,7 +1614,13 @@ private Q_SLOTS:
                                               << u"Przed\n\n```math\n\\displaystyle \\frac{1}{2_a}\n```\n\nPo"_s;
         QTest::newRow("display math blocks on one line")
                 << u"$$a$$ $$\\Gamma(n)$$"_s << u"```math\na\n```\n\n```math\n\\Gamma(n)\n```"_s;
-        QTest::newRow("inline math before a letter") << u"$x$y oraz $5 i $10"_s << u"$x$y oraz $5 i $10"_s;
+        QTest::newRow("inline math before a letter") << u"$x$y oraz $5 i $10"_s << u"`$x$`y oraz $5 i $10"_s;
+        QTest::newRow("inline math after a dollar of the text")
+                << u"Zmienna $b,\\\\(x\\\\) koniec"_s << u"Zmienna $b,`$x$` koniec"_s;
+        QTest::newRow("inline math after a dollar on the line before")
+                << u"Cena $b\nwzór,$x$ i $y$"_s << u"Cena $b\nwzór,`$x$` i `$y$`"_s;
+        QTest::newRow("hashtag after a formula and a letter")
+                << u"Wzór $a$b #pilne$ koniec"_s << u"Wzór `$a$`b \\#pilne$ koniec"_s;
         QTest::newRow("math with angle brackets") << u"$a<b$ i <b>x</b> <i"_s << u"$a<b$ i **x** \\<i"_s;
         QTest::newRow("footnotes of an imported note")
                 << u"Tekst.[<sup>[1]</sup>](#fn2b8)\n\n1.  [**<sup>^</sup>**](#fnref2b8)\n    \n    "
@@ -1619,6 +1646,20 @@ private Q_SLOTS:
         QFETCH(QString, markdown);
         QFETCH(QString, expected);
         QCOMPARE(trilium::markdownNoteToMarkdown(markdown, u"Tytuł"_s, testResolver()), expected);
+    }
+
+    // A formula's `#` is part of the formula: no tag for the imported note (SYNTAX §11), and the
+    // importer's marks never reach a note, also when the export holds those characters itself.
+    void formulasGiveNoTags()
+    {
+        const QString md = trilium::markdownNoteToMarkdown(
+                u"Makro \\\\(% \\\\f is #1f(#2) \\\\int\\_{-\\\\infty}^\\\\infty\\\\) koniec"_s, QString(),
+                testResolver());
+        QCOMPARE(md, u"Makro $% \\f is #1f(#2) \\int_{-\\infty}^\\infty$ koniec"_s);
+        QVERIFY(markdown::extractInline(md).tags.isEmpty());
+        const QString marks = QString(QChar(0xE0F2)) + u"$x$"_s + QChar(0xE0F3);
+        QCOMPARE(trilium::markdownNoteToMarkdown(u"a "_s + marks + u"2"_s, QString(), testResolver()), u"a $x$2"_s);
+        QCOMPARE(trilium::htmlNoteToMarkdown(u"<p>a "_s + marks + u"2</p>"_s, testResolver()), u"a $x$2"_s);
     }
 
     void pathologicalContent_data()
