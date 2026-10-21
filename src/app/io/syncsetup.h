@@ -12,6 +12,8 @@
 //               a folder another notebook on this device syncs with at once, and saving is
 //               refused while sync is on), urlWarning (plain http), davUrl (the WebDAV address the
 //               form leads to)
+//   account     the account is shared by the notebooks: signing out, or saving another server or
+//               user, switches sync off in every other notebook
 //   test        testConnection() with the drafts — its own WebDavClient, nothing saved — gives
 //               testResult { ok, code, title, message, hint, details, canCreateFolder,
 //               securityUrl }: 401 → how to create an app password (Nextcloud: Settings →
@@ -155,7 +157,8 @@ public:
     Q_INVOKABLE void testConnection();
     /// Create the missing server folder (after testResult.canCreateFolder).
     Q_INVOKABLE void createFolder();
-    /// Stop syncing with this account: off, the app password forgotten (address and user stay).
+    /// Stop syncing with this account: off in every notebook (they share it), the app password
+    /// forgotten (address and user stay).
     Q_INVOKABLE void disconnectAccount();
     Q_INVOKABLE void clearTestResult();
 

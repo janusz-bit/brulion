@@ -622,6 +622,23 @@ QString AppSettings::nextcloudFolderUser(const QString &folder, const QString &e
     return {};
 }
 
+void AppSettings::disableNextcloudEverywhere(bool exceptCurrent)
+{
+    const bool wasOn = nextcloudEnabled();
+    const QString current = currentVault();
+    const QString currentId = notebookId(current);
+    const QString currentLegacy = legacyNotebookId(current);
+    for (const NotebookSync &n : notebookSyncs()) {
+        const bool isCurrent = !currentId.isEmpty() && (n.id == currentId || n.id == currentLegacy);
+        if (n.enabled && !(exceptCurrent && isCurrent))
+            m_settings->setValue(groupKey(n.id, u"enabled"), false);
+    }
+    if (m_settings->value(key(kNcSharedEnabled), false).toBool())
+        m_settings->setValue(key(kNcSharedEnabled), false); // its folder still goes to its notebook
+    if (wasOn != nextcloudEnabled())
+        Q_EMIT nextcloudChanged();
+}
+
 bool AppSettings::hasSharedNextcloud() const
 {
     return m_settings->contains(key(kNcSharedEnabled)) || m_settings->contains(key(kNcSharedFolder));

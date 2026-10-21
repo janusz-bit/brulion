@@ -1,8 +1,8 @@
 // AppSettings: defaults, validation, persistence in an INI file, recent vaults, the Nextcloud
 // app password kept outside QSettings in an owner-only file, and the Nextcloud switch and server
 // folder of each notebook: keyed by the notebook folder's id, the folder proposed for a notebook,
-// folders another notebook syncs with, and the settings of 0.3.0 and older going to the notebook
-// they belong to.
+// folders another notebook syncs with, switching sync off everywhere, and the settings of 0.3.0
+// and older going to the notebook they belong to.
 #include "appsettings.h"
 #include "workspacesync.h"
 
@@ -489,6 +489,37 @@ private Q_SLOTS:
         s.setCurrentVault(other);
         QCOMPARE(s.nextcloudFolderUser(mine), QString());
         QCOMPARE(s.nextcloudFolderUser(mine, me), conflict ? QDir::cleanPath(other) : QString());
+    }
+
+    void disableNextcloudEverywhere()
+    {
+        // The account is shared: signing out (or another account) stops every notebook, also
+        // the 0.3.0 switch still waiting for its notebook (its folder still goes to it).
+        AppSettings s(oldSettings(u"/media/karta/A"_s), m_tmp.path());
+        s.recordSharedNextcloudOwner(u"/media/karta/A"_s);
+        const QStringList notebooks{notebook(u"wszędzie-1"_s), notebook(u"wszędzie-2"_s), u"/nie/ma/takiego"_s};
+        for (const QString &n : notebooks) {
+            s.setCurrentVault(n);
+            s.setNextcloudFolder(QFileInfo(n).fileName());
+            s.setNextcloudEnabled(true);
+        }
+        s.disableNextcloudEverywhere(true);
+        QVERIFY(s.nextcloudEnabled()); // the current one, when asked
+        s.setCurrentVault(notebooks.at(0));
+        QVERIFY(!s.nextcloudEnabled());
+        QSignalSpy changed(&s, &AppSettings::nextcloudChanged);
+        s.setCurrentVault(notebooks.at(2));
+        s.disableNextcloudEverywhere();
+        QCOMPARE(changed.size(), 2); // the current notebook's switch changed
+        for (const QString &n : notebooks) {
+            s.setCurrentVault(n);
+            QVERIFY(!s.nextcloudEnabled());
+            QCOMPARE(s.nextcloudFolder(), QFileInfo(n).fileName());
+        }
+        s.setCurrentVault(u"/media/karta/A"_s);
+        s.notebookOpened(u"/media/karta/A"_s, QString());
+        QVERIFY(!s.nextcloudEnabled());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki"_s);
     }
 
     void validation()

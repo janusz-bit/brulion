@@ -158,6 +158,10 @@ public:
     /// path, "" when none. Their notes would mix on the server.
     QString nextcloudFolderUser(const QString &folder) const;
     QString nextcloudFolderUser(const QString &folder, const QString &except) const;
+    /// Switch Nextcloud sync off in every notebook (`exceptCurrent`: but the current one), also
+    /// the 0.3.0 switch still waiting for its notebook. The account is shared: without it (signed
+    /// out) or with another one, the others must not sync by themselves.
+    void disableNextcloudEverywhere(bool exceptCurrent = false);
 
     // Up to 0.3.0 one switch and one server folder applied to every notebook ("sync/nextcloud/
     // enabled", "…/folder"). They wait, read by nothing but notebookOpened(), for the notebook

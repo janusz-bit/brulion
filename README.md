@@ -152,7 +152,8 @@ pierwszym koncie proponowany `Notatki`, dla kolejnych notatników ich nazwa); �
 połączenie” wyjaśnia ewentualne błędy. Serwer i konto są wspólne, ale włączenie synchronizacji
 i folder na serwerze należą do notatnika: inny notatnik (także dokumentacja) startuje bez
 synchronizacji, a folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu,
-Brulion nie zapisze. Brulion synchronizuje w tle
+Brulion nie zapisze. „Wyloguj” wyłącza synchronizację we wszystkich notatnikach, a zapisanie
+innego serwera lub użytkownika — w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej

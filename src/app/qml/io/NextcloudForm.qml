@@ -388,7 +388,7 @@ IoCard {
     BConfirmDialog {
         id: signOut
         title: qsTr("Sign out of Nextcloud?")
-        message: qsTr("Syncing stops and this device forgets the app password. The notes stay here and on the server.")
+        message: qsTr("Syncing stops in every notebook and this device forgets the app password. The notes stay here and on the server.")
         confirmText: qsTr("Sign out")
         destructive: true
         onAccepted: form.setup.disconnectAccount()

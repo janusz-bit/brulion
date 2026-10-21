@@ -475,8 +475,9 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   never a folder another notebook has, holds or is inside); one synced before keeps the folder
   its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
   exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
-  się już z tym folderem…") and is not saved while sync is on. The switch and folder of 0.3.0
-  and older go to the notebook they belong to (AppSettings).
+  się już z tym folderem…") and is not saved while sync is on. "Wyloguj" switches sync off in
+  every notebook (the dialog says so), saving another server or user in all the others. The
+  switch and folder of 0.3.0 and older go to the notebook they belong to (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i

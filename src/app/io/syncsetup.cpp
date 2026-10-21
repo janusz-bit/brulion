@@ -506,6 +506,8 @@ bool NextcloudSetup::save()
     // Switching off never needs a complete form.
     if (m_enabled && !valid())
         return false;
+    // The other notebooks synced with the saved account: never with another one by themselves.
+    const bool otherAccount = !sameAccount() && !(m_url.trimmed().isEmpty() && m_settings->nextcloudUrl().isEmpty());
     if (!m_password.isEmpty() && !m_settings->setNextcloudPassword(m_password))
         return false;
     // Another server or user without a new password (only possible while switched off): the
@@ -514,6 +516,8 @@ bool NextcloudSetup::save()
         && !m_settings->setNextcloudPassword(QString()))
         return false;
     m_password.clear();
+    if (otherAccount)
+        m_settings->disableNextcloudEverywhere(true);
     m_settings->setNextcloudUrl(m_url.trimmed());
     m_settings->setNextcloudUser(m_user.trimmed());
     m_settings->setNextcloudFolder(m_folder.trimmed());
@@ -530,7 +534,9 @@ void NextcloudSetup::disconnectAccount()
 {
     if (!m_settings)
         return;
-    m_settings->setNextcloudEnabled(false);
+    // The password is the account's, shared by the notebooks: every one of them stops (they
+    // would start again with whatever account is signed in next).
+    m_settings->disableNextcloudEverywhere();
     m_settings->setNextcloudPassword(QString());
     reload();
 }

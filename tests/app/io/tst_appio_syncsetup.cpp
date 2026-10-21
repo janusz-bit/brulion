@@ -3,13 +3,15 @@
 // not WebDAV); NextcloudSetup against the core's in-memory Nextcloud (connected, wrong password,
 // missing folder -> create it, missing account), drafts vs. saved settings (default folder
 // "Notatki", the password stays out of the drafts), switching off; several notebooks on one
-// account (a folder of their own proposed, a folder another notebook syncs with refused);
-// SyncthingSetup and the .stignore helpers (create, keep the user's rules, append what is
-// missing, CRLF).
+// account (a folder of their own proposed, a folder another notebook syncs with refused, signing
+// out or another account stopping every notebook); SyncthingSetup and the .stignore helpers
+// (create, keep the user's rules, append what is missing, CRLF).
 #include "syncsetup.h"
 
+#include "appcontroller.h"
 #include "appsettings.h"
 #include "fakewebdavserver.h"
+#include "synctest.h"
 #include "workspace.h"
 #include "workspaceintegration.h"
 
@@ -90,7 +92,12 @@ class TestAppIoSyncSetup : public QObject {
     }
 
 private Q_SLOTS:
-    void initTestCase() { QVERIFY(m_tmp.isValid()); }
+    void initTestCase()
+    {
+        QVERIFY(m_tmp.isValid());
+        // AppController's reminders without a desktop notification service, whatever the machine has.
+        qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/brulion-test-bus");
+    }
 
     // ---- Validation ---------------------------------------------------------------------------------
 
@@ -353,6 +360,106 @@ private Q_SLOTS:
         form.setFolder(u"Przeniesiony"_s);
         QVERIFY(form.folderError().isEmpty());
         QVERIFY(form.save());
+    }
+
+    void signingOutStopsEveryNotebook()
+    {
+        // The app password is the account's, shared by the notebooks: after "Sign out" in one of
+        // them, none syncs — or each would start again with whatever account signs in next.
+        auto s = settings();
+        account(s.get());
+        const QString a = notebook(u"A %1"_s.arg(m_n));
+        const QString b = notebook(u"B %1"_s.arg(m_n));
+        syncs(s.get(), b, u"Dom"_s);
+        syncs(s.get(), a, u"Notatki"_s);
+        NextcloudSetup form;
+        form.setSettings(s.get());
+        form.disconnectAccount();
+        QVERIFY(!s->hasNextcloudPassword());
+        QVERIFY(!s->nextcloudEnabled());
+        s->setCurrentVault(b);
+        QVERIFY(!s->nextcloudEnabled());
+        QCOMPARE(s->nextcloudFolder(), u"Dom"_s); // turned on again, it continues there
+    }
+
+    void anotherAccountStopsTheOtherNotebooks()
+    {
+        // Saving another server or user in one notebook: the others synced with the old account
+        // and never move to the new one by themselves. The same account changes nothing for them.
+        auto s = settings();
+        account(s.get());
+        const QString a = notebook(u"A %1"_s.arg(m_n));
+        const QString b = notebook(u"B %1"_s.arg(m_n));
+        syncs(s.get(), b, u"Dom"_s);
+        syncs(s.get(), a, u"Notatki"_s);
+        NextcloudSetup form;
+        form.setSettings(s.get());
+        form.setInterval(60);
+        QVERIFY(form.save());
+        s->setCurrentVault(b);
+        QVERIFY(s->nextcloudEnabled());
+        s->setCurrentVault(a);
+        form.reload();
+        form.setUrl(u"https://praca.example.pl"_s);
+        form.setPassword(u"inne-hasło"_s);
+        QVERIFY(form.save());
+        QVERIFY(s->nextcloudEnabled());
+        s->setCurrentVault(b);
+        QVERIFY(!s->nextcloudEnabled());
+    }
+
+    void signOutThenAnotherAccountUploadsNothingElse()
+    {
+        // End to end: B syncs with the old account; the user signs out in A and signs in to
+        // another account there. B's private note never reaches the new account.
+        FakeWebDavServer server; // the new account
+        brulion::shell::AppController::Options o;
+        o.settingsFile = m_tmp.filePath(u"app-%1.ini"_s.arg(++m_n));
+        o.dataDir = m_tmp.filePath(u"app-data-%1"_s.arg(m_n));
+        brulion::shell::AppController app(o);
+        brulion::shell::WorkspaceSync *sync = app.workspace()->sync();
+        sync->setSyncthingDiscovery(false);
+        sync->setAutomatic(false);
+        sync->setOnlineCheck([] { return true; });
+        sync->setTransport(&server);
+        app.start();
+        const auto openAndWait = [&](const QString &path) {
+            app.openVault(path);
+            return synctest::waitFor([&] { return app.status() == u"ready" && app.workspace()->rootPath() == path; });
+        };
+        const QString a = notebook(u"A-konto %1"_s.arg(m_n));
+        const QString b = notebook(u"B-dom %1"_s.arg(m_n));
+        QVERIFY(synctest::writeFileBehind(b, u"Dom prywatny.md"_s, "- hasło do wifi\n"));
+        AppSettings *s = app.settings();
+        QVERIFY(openAndWait(a));
+        s->setNextcloudUrl(u"https://stary.example.pl"_s); // the old account
+        s->setNextcloudUser(u"jan"_s);
+        QVERIFY(s->setNextcloudPassword(u"stare-hasło"_s));
+        s->setNextcloudFolder(u"Notatki"_s);
+        s->setNextcloudEnabled(true);
+        QVERIFY(openAndWait(b));
+        s->setNextcloudFolder(u"Dom"_s);
+        s->setNextcloudEnabled(true);
+        QVERIFY(sync->active());
+
+        QVERIFY(openAndWait(a));
+        {
+            NextcloudSetup form;
+            form.setSettings(s);
+            form.disconnectAccount();
+            form.setUrl(server.options().origin);
+            form.setUser(server.options().username);
+            form.setPassword(server.options().password);
+            form.setFolder(u"Praca"_s);
+            form.setEnabled(true);
+            QVERIFY(form.save());
+        }
+        QVERIFY(openAndWait(b));
+        QVERIFY(!s->nextcloudEnabled());
+        QVERIFY(!sync->active());
+        sync->syncNow();
+        QTest::qWait(100);
+        QVERIFY(server.files().isEmpty());
     }
 
     void storedPasswordNotSentElsewhere()
