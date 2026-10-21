@@ -11,11 +11,13 @@ import Brulion
 //
 // `--editor-script <name>` puts the editor into a state for screenshots (see runScript()):
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
-// table, calc, query, embeds, title, empty, conflict, markup; the document mode on the sample
-// trip plan (FakeEditorHost.documentPath): document (reading), document-paragraph,
-// document-list, document-heading, document-task (editing one), document-outline (the same page
-// switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
-// mode) and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
+// table, calc, query, embeds, title, empty, conflict, markup, task-menu (a checkbox's status
+// menu), task-menu-query (a query result's), task-slash (the status commands); the document
+// mode on the sample trip plan (FakeEditorHost.documentPath): document (reading),
+// document-paragraph, document-list, document-heading, document-task (editing one),
+// document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
+// mode) and exits; `taskstatus` checks the task status menu and commands (taskStatusTest()) and
+// exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
 ApplicationWindow {
     id: window
 
@@ -282,6 +284,18 @@ ApplicationWindow {
             if (edit)
                 edit.insert(edit.cursorPosition, pending)
         }
+    }
+
+    /// Runs `fn` once, 400 ms later (a scripted state that waits for the list's layout).
+    Timer {
+        id: scriptLater
+        property var fn: null
+        interval: 400
+        function run(f) {
+            fn = f
+            start()
+        }
+        onTriggered: if (fn) fn()
     }
 
     Timer {
@@ -885,11 +899,436 @@ ApplicationWindow {
         stepTimer.start()
     }
 
+    // ---- Self test of task statuses (`--editor-script taskstatus`, tst_editor_qml_taskstatus*) ---
+    // The status menu with real input — a right-click (mouse) or a long press (finger, --touch) —
+    // on the checkboxes of the editor, a query result and an embedded section, a menu item clicked
+    // or tapped; a plain click / tap still toggles; Ctrl+Shift+Enter while editing and on a
+    // selected block (menu keys, Escape, the caret kept); the "/" commands typed with real keys
+    // (list item, paragraph, Logseq keyword, undo); the touch toolbar's task button held down.
+    // QtTest's TestEvent sends the pointer events through the window like a real device.
+    property var taskEvents: null
+    property int taskRow: -1
+    property string taskText: ""
+    property TaskStatusMenu ownMenu: null
+    /// A row's TaskBox (the editor's, objectName "taskBox"), or null.
+    function blockTaskBox(row) {
+        const item = editor.listView.itemAtIndex(row)
+        return item ? findItem(item, "taskBox") : null
+    }
+    /// Every item named `name` under `item`.
+    function findAll(item, name, out) {
+        out = out || []
+        if (!item)
+            return out
+        if (item.objectName === name)
+            out.push(item)
+        for (let i = 0; i < item.children.length; ++i)
+            findAll(item.children[i], name, out)
+        return out
+    }
+    /// A query result's TaskBox for the task whose text starts with `prefix`.
+    function resultTaskBox(prefix) {
+        const item = editor.listView.itemAtIndex(viewRow("query"))
+        const boxes = findAll(item, "queryTaskBox")
+        for (const box of boxes) {
+            const resultRow = box.parent ? box.parent.parent : null
+            if (resultRow && String(resultRow.text).indexOf(prefix) === 0)
+                return box
+        }
+        return null
+    }
+    function menuIndexOf(menu, name) {
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.objectName === name)
+                return i
+        }
+        return -1
+    }
+    function menuItemNamed(menu, name) {
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.objectName === name)
+                return item
+        }
+        return null
+    }
+    /// A tap with a finger on touch UIs, else a left click, in the middle of `item`.
+    function tapItem(item) {
+        if (!item)
+            return
+        const x = item.width / 2
+        const y = item.height / 2
+        if (Theme.touchUi) {
+            taskEvents.touchEvent(item).press(0, item, x, y).commit()
+            taskEvents.touchEvent(item).release(0, item, x, y).commit()
+        } else {
+            taskEvents.mouseClick(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    /// The steps of the context-menu gesture on `target()`: a right-click, or on touch UIs a finger
+    /// held down for a second (TaskBox's press-and-hold) and lifted.
+    function menuGesture(target) {
+        if (!Theme.touchUi) {
+            return [() => {
+                const item = target()
+                check(item !== null, "the checkbox is there for the right-click")
+                if (item)
+                    taskEvents.mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            }]
+        }
+        const steps = [() => {
+            const item = target()
+            check(item !== null, "the checkbox is there for the long press")
+            if (item)
+                taskEvents.touchEvent(item).press(0, item, item.width / 2, item.height / 2).commit()
+        }]
+        for (let i = 0; i < 9; ++i)
+            steps.push(() => {})
+        steps.push(() => {
+            const item = target()
+            if (item)
+                taskEvents.touchEvent(item).release(0, item, item.width / 2, item.height / 2).commit()
+        })
+        return steps
+    }
+    /// Steps that wait until `ready()` (at most ~3 s), then go on. `what`: the check's text, or a
+    /// function giving it (read when the step runs).
+    function waitUntil(ready, what) {
+        return () => {
+            if (!ready() && window.waits++ < 25) {
+                window.stepIndex -= 1
+                return
+            }
+            window.waits = 0
+            check(ready(), typeof what === "function" ? what() : what)
+        }
+    }
+    /// The page's text as saved.
+    function pageText() {
+        page.save()
+        return host.file(page.path)
+    }
+    /// The shown TaskBox of the embedded section under the block "Budżet na październik".
+    function embedTaskBox() {
+        const boxes = findAll(editor.listView.itemAtIndex(rowOf("Budżet na październik") + 1), "embedTaskBox")
+        for (const box of boxes) {
+            if (box.visible)
+                return box
+        }
+        return null
+    }
+    function fileLine(path, prefix) {
+        const lines = host.file(path).split("\n")
+        for (const line of lines) {
+            if (line.indexOf(prefix) >= 0)
+                return line
+        }
+        return ""
+    }
+
+    function taskStatusTest() {
+        taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "taskEvents")
+        const gesture = Theme.touchUi ? "a long press" : "a right-click"
+        const tap = Theme.touchUi ? "a tap" : "a click"
+        steps = [
+            () => {
+                window.taskRow = rowOf("Kupić płytki")
+                editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
+            },
+            () => check(info(window.taskRow).taskStatus === "todo" && blockTaskBox(window.taskRow) !== null,
+                        "the block shows its checkbox"),
+            // ---- The editor's checkbox: the menu, a status, undo, a plain click, no status ---------
+            ...menuGesture(() => blockTaskBox(window.taskRow)),
+            waitUntil(() => editor.taskMenu !== null && editor.taskMenu.opened, gesture + " on a checkbox opens the status menu"),
+            () => {
+                const menu = editor.taskMenu
+                check(info(window.taskRow).taskStatus === "todo", gesture + " does not toggle the task")
+                const todo = menuItemNamed(menu, "taskStatus_todo")
+                const doing = menuItemNamed(menu, "taskStatus_doing")
+                check(todo !== null && todo.checked && doing !== null && !doing.checked
+                      && menuItemNamed(menu, "taskStatus_none") !== null, "the current status is checked")
+                tapItem(doing)
+            },
+            waitUntil(() => !editor.taskMenu.visible, "choosing a status closes the menu"),
+            () => {
+                check(info(window.taskRow).taskStatus === "doing" && pageText().indexOf("\t- [/] Kupić płytki 📅 2026-10-16") > 0,
+                      "the chosen status is written: " + fileLineOf(pageText(), "Kupić płytki"))
+                page.undo()
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "one undo step puts the status back"),
+            () => tapItem(blockTaskBox(window.taskRow)),
+            () => {
+                check(info(window.taskRow).taskStatus === "done" && !editor.taskMenu.visible,
+                      tap + " on the checkbox still toggles, without a menu")
+                page.undo()
+            },
+            ...menuGesture(() => blockTaskBox(window.taskRow)),
+            waitUntil(() => editor.taskMenu.opened, "the menu opens again"),
+            () => {
+                const doing = menuItemNamed(editor.taskMenu, "taskStatus_doing")
+                check(!doing.checked && menuItemNamed(editor.taskMenu, "taskStatus_todo").checked,
+                      "the check marks follow the status (not the last click)")
+                tapItem(menuItemNamed(editor.taskMenu, "taskStatus_none"))
+            },
+            waitUntil(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "",
+                      "“No status” removes the checkbox"),
+            () => {
+                check(info(window.taskRow).kind === "listItem" && info(window.taskRow).plainText.indexOf("Kupić płytki") === 0
+                      && pageText().indexOf("\t- Kupić płytki 📅 2026-10-16") > 0, "the text stays a list item: "
+                      + fileLineOf(pageText(), "Kupić płytki"))
+                check(blockTaskBox(window.taskRow) === null, "the checkbox is gone")
+                page.undo()
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "undo brings the checkbox back"),
+            // ---- Ctrl+Shift+Enter while editing: the menu at the caret, keys, the caret kept -------
+            () => {
+                window.taskRow = rowOf("Wywieźć gruz")
+                editor.startEditing(window.taskRow, 3)
+            },
+            () => {
+                window.taskText = editor.activeEditor.plain()
+                realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+            },
+            waitUntil(() => editor.taskMenu.opened, "Ctrl+Shift+Enter opens the status menu of the edited block"),
+            () => {
+                check(info(window.taskRow).taskStatus === "todo", "Ctrl+Shift+Enter does not cycle the status")
+                taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1)
+            },
+            waitUntil(() => !editor.taskMenu.visible && editor.activeEditor !== null && editor.activeEditor.activeFocus,
+                      "Escape closes the menu and the block has the keyboard again"),
+            () => {
+                check(editor.activeEditor.row === window.taskRow && editor.activeEditor.cursorPosition === 3
+                      && info(window.taskRow).taskStatus === "todo", "nothing changed, the caret is where it was")
+                realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+                window.waits = 0
+            },
+            waitUntil(() => editor.taskMenu.opened, "the menu opens again"),
+            () => {
+                // Down until "Oczekujące" is highlighted, then Enter.
+                const target = menuIndexOf(editor.taskMenu, "taskStatus_deferred")
+                if (editor.taskMenu.currentIndex !== target && window.waits++ < 12) {
+                    taskEvents.keyClick(Qt.Key_Down, Qt.NoModifier, -1)
+                    window.stepIndex -= 1
+                    return
+                }
+                window.waits = 0
+                check(editor.taskMenu.currentIndex === target, "Down moves through the statuses: "
+                      + editor.taskMenu.currentIndex + " (" + target + ")")
+                taskEvents.keyClick(Qt.Key_Return, Qt.NoModifier, -1)
+            },
+            waitUntil(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "deferred",
+                      "Enter on “Oczekujące” sets the status"),
+            waitUntil(() => editor.activeEditor !== null && editor.activeEditor.activeFocus
+                      && editor.activeEditor.row === window.taskRow, "the edited block gets the keyboard back"),
+            () => {
+                check(editor.activeEditor.cursorPosition === 3 && editor.activeEditor.plain() === window.taskText,
+                      "the text and the caret are kept: " + editor.activeEditor.cursorPosition)
+                check(pageText().indexOf("\t- [>] Wywieźć gruz ⏳ 2026-10-18") > 0, "written as [>]")
+                realKey(Qt.Key_Return, Qt.ControlModifier)
+            },
+            () => check(info(window.taskRow).taskStatus !== "deferred" && !editor.taskMenu.visible,
+                        "Ctrl+Enter still cycles, without the menu: " + info(window.taskRow).taskStatus),
+            // A selected block (Esc): Ctrl+Shift+Enter opens its menu too, the selection keeps the keys.
+            () => { realKey(Qt.Key_Escape) },
+            () => {
+                check(page.selectedRow === window.taskRow, "Esc selects the block")
+                EditorInput.sendKey(editor.listView, Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitUntil(() => editor.taskMenu.opened, "Ctrl+Shift+Enter on a selected block opens its menu"),
+            () => tapItem(menuItemNamed(editor.taskMenu, "taskStatus_cancelled")),
+            waitUntil(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "cancelled",
+                      "a status for the selected block"),
+            waitUntil(() => editor.listView.activeFocus && page.selectedRow === window.taskRow,
+                      "the selected block keeps the keyboard"),
+            () => { page.selectedRow = -1 },
+            // ---- "/" commands typed with real keys -----------------------------------------------
+            () => { window.taskRow = page.insertBlockAfter(rowOf("Ekipa może"), "") },
+            () => typeKeys("Zadzwonić do Żanety /czeka"),
+            waitUntil(() => editor.suggestionsOpen && editor.suggestions.model.count > 0
+                      && editor.suggestions.model.get(0).command === "taskWaiting",
+                      "“/czeka” offers “Zadanie: oczekujące” first"),
+            () => realKey(Qt.Key_Return),
+            () => {
+                check(info(window.taskRow).taskStatus === "deferred" && editor.activeEditor.plain() === "Zadzwonić do Żanety "
+                      && editor.activeEditor.cursorPosition === 20 && !editor.suggestionsOpen,
+                      "the command sets the status, its text goes, the caret stays: " + editor.activeEditor.plain())
+                page.undo()
+            },
+            () => check(editor.activeEditor.plain() === "Zadzwonić do Żanety /czeka" && info(window.taskRow).taskStatus === "",
+                        "one undo step brings the command text back: " + editor.activeEditor.plain()),
+            () => {
+                const e = editor.activeEditor
+                e.cursorPosition = e.length
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                typeKeys("zrob")
+            },
+            waitUntil(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "task",
+                      "“/zrob” offers the statuses (to do first)"),
+            () => {
+                // Down to "Zadanie: zrobione", Enter.
+                let done = -1
+                for (let i = 0; i < editor.suggestions.model.count; ++i) {
+                    if (editor.suggestions.model.get(i).command === "taskDone")
+                        done = i
+                }
+                check(done > 0, "“Zadanie: zrobione” is listed")
+                for (let i = 0; i < done; ++i)
+                    realKey(Qt.Key_Down)
+                realKey(Qt.Key_Return)
+            },
+            () => check(info(window.taskRow).taskStatus === "done" && pageText().indexOf("- [x] Zadzwonić do Żanety ✅ 2026-10-15") > 0,
+                        "“Zadanie: zrobione” completes the task: " + fileLineOf(pageText(), "Żanety")),
+            () => typeKeys(" /bez"),
+            waitUntil(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "taskNone",
+                      "“/bez” offers “Zadanie: bez statusu”"),
+            () => realKey(Qt.Key_Return),
+            () => check(info(window.taskRow).taskStatus === "" && fileLineOf(pageText(), "Żanety").indexOf("\t- Zadzwonić do Żanety") === 0,
+                        "“Zadanie: bez statusu” removes the checkbox and its date: " + fileLineOf(pageText(), "Żanety")),
+            // A paragraph becomes a task; a Logseq keyword keeps its workflow.
+            () => {
+                page.stopEditing()
+                window.taskRow = page.insertMarkdown(page.lastVisibleRow(), "Akapit o płytkach")
+            },
+            () => editor.startEditing(rowOf("Akapit o płytkach"), -1),
+            () => typeKeys(" /zadanie"),
+            waitUntil(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "task",
+                      "“/zadanie” offers “Zadanie: do zrobienia”"),
+            () => realKey(Qt.Key_Return),
+            () => {
+                const r = rowOf("Akapit o płytkach")
+                check(r >= 0 && info(r).taskStatus === "todo" && info(r).kind === "listItem"
+                      && pageText().indexOf("- [ ] Akapit o płytkach") >= 0, "a paragraph becomes a task")
+                page.stopEditing()
+                window.taskRow = page.insertBlockAfter(rowOf("Ekipa może"), "TODO Odebrać kafelki")
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "a Logseq TODO is a task"),
+            () => typeKeys(" /toku"),
+            waitUntil(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "taskDoing",
+                      "“/toku” offers “Zadanie: w toku”"),
+            () => realKey(Qt.Key_Return),
+            () => check(info(window.taskRow).taskStatus === "doing" && pageText().indexOf("- DOING Odebrać kafelki") > 0,
+                        "the Logseq keyword follows: " + fileLineOf(pageText(), "kafelki")),
+            () => page.stopEditing(),
+            // ---- A query result's checkbox: its own menu, the task in its own file ----------------
+            () => editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning),
+            waitUntil(() => resultTaskBox("Mleko") !== null && resultTaskBox("Śrubki") !== null,
+                      "the query block lists the shopping tasks"),
+            ...menuGesture(() => resultTaskBox("Mleko")),
+            waitUntil(() => resultTaskBox("Mleko") !== null && resultTaskBox("Mleko").statusMenu !== null
+                      && resultTaskBox("Mleko").statusMenu.opened, gesture + " on a query result's checkbox opens its menu"),
+            () => {
+                window.ownMenu = resultTaskBox("Mleko").statusMenu
+                check(host.file("Zakupy.md").indexOf("- [ ] Mleko") === 0, gesture + " does not toggle the result")
+                check(menuItemNamed(window.ownMenu, "taskStatus_todo").checked, "its status is checked")
+                tapItem(menuItemNamed(window.ownMenu, "taskStatus_deferred"))
+            },
+            waitUntil(() => host.file("Zakupy.md").indexOf("- [>] Mleko #zakupy") === 0,
+                      () => "a result's status is written in its own file: " + host.file("Zakupy.md").split("\n")[0]),
+            ...menuGesture(() => resultTaskBox("Śrubki")),
+            waitUntil(() => resultTaskBox("Śrubki") !== null && resultTaskBox("Śrubki").statusMenu !== null
+                      && resultTaskBox("Śrubki").statusMenu.opened, "the next result's menu opens"),
+            () => tapItem(menuItemNamed(resultTaskBox("Śrubki").statusMenu, "taskStatus_none")),
+            waitUntil(() => fileLine("Zakupy.md", "Śrubki") === "- Śrubki do półki #zakupy",
+                      () => "“No status” on a result removes the task's checkbox in its file: " + fileLine("Zakupy.md", "Śrubki")),
+            waitUntil(() => resultTaskBox("Śrubki") === null, "the result is no task any more"),
+            // ---- An embedded section's task (Budżet domowy#Październik) --------------------------
+            () => editor.listView.positionViewAtIndex(rowOf("Budżet na październik") + 1, ListView.Center),
+            waitUntil(() => embedTaskBox() !== null, "the embedded section shows its task's checkbox"),
+            ...menuGesture(() => embedTaskBox()),
+            waitUntil(() => embedTaskBox() !== null && embedTaskBox().statusMenu !== null && embedTaskBox().statusMenu.opened,
+                      gesture + " on an embedded task opens its menu"),
+            () => tapItem(menuItemNamed(embedTaskBox().statusMenu, "taskStatus_done")),
+            waitUntil(() => fileLine("Budżet domowy.md", "czynsz") === "- [x] Opłacić czynsz 📅 2026-10-20 #finanse ✅ 2026-10-15",
+                      () => "an embedded task's status is written in its own file: " + fileLine("Budżet domowy.md", "czynsz")),
+            // ---- The touch toolbar: the task button held down opens the menu above it --------------
+            () => {
+                Theme.forceTouch = true
+                window.taskRow = rowOf("Położyć hydroizolację")
+                editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
+                editor.startEditing(window.taskRow, -1)
+            },
+            waitUntil(() => {
+                const writing = findItem(editor, "toolbarWriting")
+                const button = writing ? findItem(writing, "toolbarTask") : null
+                return editor.toolbarVisible && button !== null && button.width > 0
+            }, "the touch toolbar shows its task button"),
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                taskEvents.touchEvent(button).press(0, button, button.width / 2, button.height / 2).commit()
+            },
+            () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                taskEvents.touchEvent(button).release(0, button, button.width / 2, button.height / 2).commit()
+            },
+            waitUntil(() => editor.taskMenu.opened, "holding the toolbar's task button opens the status menu"),
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                const menuBottom = editor.taskMenu.contentItem.mapToItem(null, 0, editor.taskMenu.contentItem.height).y
+                const buttonTop = button.mapToItem(null, 0, 0).y
+                check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
+                check(info(window.taskRow).taskStatus === "todo", "holding the button does not cycle the status")
+                tapItem(menuItemNamed(editor.taskMenu, "taskStatus_done"))
+            },
+            waitUntil(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "done",
+                      "a status from the toolbar's menu"),
+            () => tapItem(findItem(findItem(editor, "toolbarWriting"), "toolbarTask")),
+            () => check(info(window.taskRow).taskStatus === "", "a tap on the task button cycles (done → none)"),
+            () => {
+                page.stopEditing()
+                Theme.forceTouch = DevTools.touch
+            }
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
+    function fileLineOf(text, needle) {
+        const lines = text.split("\n")
+        for (const line of lines) {
+            if (line.indexOf(needle) >= 0)
+                return line
+        }
+        return ""
+    }
+
     function runScript(name) {
         switch (name) {
         case "selftest":
             selfTest()
             break
+        case "taskstatus":
+            taskStatusTest()
+            break
+        case "task-menu": {
+            // The status menu of a block's checkbox (screenshots).
+            const row = rowOf("Kupić płytki")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            scriptLater.run(() => {
+                const box = blockTaskBox(row)
+                if (box)
+                    editor.openTaskStatusMenu(row, box, 0, box.height)
+            })
+            break
+        }
+        case "task-menu-query":
+            // The status menu of a query result's checkbox (screenshots).
+            editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
+            scriptLater.run(() => {
+                const box = resultTaskBox("Mleko")
+                if (box)
+                    box.openMenu()
+            })
+            break
+        case "task-slash": {
+            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
+            typeInto(row, "Odebrać płytki /zad")
+            break
+        }
         case "editing": {
             const row = rowOf("Kupić płytki")
             editor.startEditing(row, -1)

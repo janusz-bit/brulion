@@ -6,7 +6,7 @@ import Brulion
 // QueryBlockView — a ```query block (docs/SYNTAX.md §10) with its live results: the query's
 // filters as chips ("typ: zadania", "tag: zakupy"), then the matches from the vault index
 // (QueryResultModel over the host's QueryHost): tasks with a checkbox that changes the task in
-// its own file (this page: an undoable edit), blocks and pages rendered like the editor renders
+// its own file (this page: an undoable edit; right-click / long press: the status menu), blocks and pages rendered like the editor renders
 // them (links, tags, date chips), `group:` results under group headers, the page of each item
 // (unless grouped by page) as a quiet link. A click on an item opens it at its block; the
 // results follow the index (other devices, edits elsewhere). The header, the filters (or Enter
@@ -351,11 +351,13 @@ Rectangle {
                     Loader {
                         active: !row.group && row.isTask
                         sourceComponent: TaskBox {
+                            objectName: "queryTaskBox"
                             x: -Math.round((width - boxSize) / 2) + 2
                             y: Math.round(row.pad + root.itemLineHeight / 2 - height / 2)
                             status: row.status
                             Accessible.name: qsTr("Task: %1").arg(row.text)
                             onToggled: results.toggleTask(row.index)
+                            onStatusChosen: (status) => results.setTaskStatus(row.index, status)
                         }
                     }
 

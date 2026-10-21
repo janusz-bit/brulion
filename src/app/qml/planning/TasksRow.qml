@@ -11,8 +11,9 @@ import Brulion
 //   TasksRow { task: model; onTaskToggled: …; onOpened: …; onLinkActivated: (url) => …
 //              onStatusRequested: (status) => … }
 //
-// Click / Enter opens the note at the task's line; Space toggles; the context menu (right
-// click, long press, Menu key) sets any status.
+// Click / Enter opens the note at the task's line; Space toggles; the context menu — "Otwórz" and
+// the statuses (TaskStatusMenu; "Bez statusu" makes it a plain list item) — opens with a right
+// click or long press on the row or its checkbox, or the Menu key.
 T.ItemDelegate {
     id: control
 
@@ -89,9 +90,12 @@ T.ItemDelegate {
 
         TaskBox {
             id: box
+            objectName: "tasksRowTaskBox"
             status: control.task.status || "todo"
             Accessible.name: qsTr("Done: %1").arg(control.task.text || "")
             onToggled: control.taskToggled()
+            ownMenu: false // the row's menu, "Otwórz" first
+            onMenuRequested: control.openMenu(box, 0, box.height)
         }
 
         // The text and its chips, vertically centred below their top margin (as a Layout would).
@@ -222,11 +226,12 @@ T.ItemDelegate {
 
     /// The status menu, created when it is first opened: built with every row, it made each
     /// row several times as costly to create while scrolling (docs/UI.md "Scrolling performance").
-    property BMenu statusMenu: null
+    property TaskStatusMenu statusMenu: null
     /// Opens the menu like BMenu.popup() with the same arguments: (), (x, y) or (item, x, y).
     function openMenu(a, b, c) {
         if (!statusMenu)
-            statusMenu = menuComponent.createObject(control) as BMenu
+            statusMenu = menuComponent.createObject(control) as TaskStatusMenu
+        statusMenu.status = control.task.status || "todo"
         if (a === undefined)
             statusMenu.popup()
         else if (c === undefined)
@@ -237,42 +242,12 @@ T.ItemDelegate {
 
     Component {
         id: menuComponent
-        BMenu {
-            BMenuItem {
-                text: qsTr("Open")
-                iconName: "file-text"
-                onTriggered: control.opened()
-            }
-            BMenuSeparator {}
-            BMenuItem {
-                text: qsTr("To do")
-                checkable: true
-                checked: control.task.status === "todo"
-                onTriggered: control.statusRequested("todo")
-            }
-            BMenuItem {
-                text: qsTr("In progress")
-                checkable: true
-                checked: control.task.status === "doing"
-                onTriggered: control.statusRequested("doing")
-            }
-            BMenuItem {
-                text: qsTr("Done")
-                checkable: true
-                checked: control.task.status === "done"
-                onTriggered: control.statusRequested("done")
-            }
-            BMenuItem {
-                text: qsTr("Waiting")
-                checkable: true
-                checked: control.task.status === "deferred"
-                onTriggered: control.statusRequested("deferred")
-            }
-            BMenuItem {
-                text: qsTr("Cancelled")
-                checkable: true
-                checked: control.task.status === "cancelled"
-                onTriggered: control.statusRequested("cancelled")
+        TaskStatusMenu {
+            showOpen: true
+            onOpenRequested: control.opened()
+            onStatusChosen: (status) => {
+                if (status !== (control.task.status || "todo"))
+                    control.statusRequested(status)
             }
         }
     }

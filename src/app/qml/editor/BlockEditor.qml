@@ -22,9 +22,10 @@ import Brulion
 // Keys (inline editor): Enter split · Shift+Enter line break · Backspace at start merge (a task
 // first loses its checkbox) · Delete at end merge next · Tab / Shift+Tab indent / outdent ·
 // Alt+Up/Down move · Up/Down at the first/last line go to the previous/next block · Ctrl+Enter
-// cycle task · Ctrl+. fold · Esc stop editing (select block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
-// undo/redo · Ctrl+E source mode. Selected block (after Esc): Up/Down select, Enter edit,
-// Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter, Ctrl+., Esc clear.
+// cycle task · Ctrl+Shift+Enter the task's status menu · Ctrl+. fold · Esc stop editing (select
+// block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo/redo · Ctrl+E source mode. Selected block (after
+// Esc): Up/Down select, Enter edit, Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter,
+// Ctrl+Shift+Enter, Ctrl+., Esc clear.
 // Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
 // that need input open EditorDialogs; on touch UIs MobileEditToolbar sits above the keyboard.
 // Pictures: Ctrl+V pastes a copied picture (or copied files) as an attachment `![[…]]`, files
@@ -506,7 +507,11 @@ FocusScope {
             case Qt.Key_Period: controller.toggleFold(row); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
-                controller.cycleTask(row)
+                // Ctrl+Shift+Enter: the status menu; Ctrl+Enter: the next status.
+                if (shift)
+                    openTaskStatusMenuFor(row)
+                else
+                    controller.cycleTask(row)
                 return true
             }
             return false
@@ -642,7 +647,12 @@ FocusScope {
             case Qt.Key_E: toggleSourceMode(); return true
             case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
             case Qt.Key_Return:
-            case Qt.Key_Enter: if (row >= 0) controller.cycleTask(row); return true
+            case Qt.Key_Enter:
+                if (row >= 0 && shift)
+                    openTaskStatusMenuFor(row)
+                else if (row >= 0)
+                    controller.cycleTask(row)
+                return true
             }
             return false
         }
@@ -1041,6 +1051,93 @@ FocusScope {
             editor: editor
             model: suggestionModel
             onActivated: (index) => editor.acceptSuggestion(index)
+        }
+    }
+
+    // ---- The status menu of a block's task ----------------------------------------------------
+    /// TaskStatusMenu for a block: its checkbox's right-click / long press, Ctrl+Shift+Enter, the
+    /// touch toolbar's task button held down. Created when first opened. The block is tracked while
+    /// the menu is open (sync or undo may move it); the choice is one undo step
+    /// (PageController.setTaskStatus) and the block being edited gets the keyboard back.
+    property TaskStatusMenu taskMenu: null
+    property int taskMenuBlock: -1
+    /// Where the keyboard goes when the menu closes: "edit" (the block being edited), "list" (the
+    /// selected block, Ctrl+Shift+Enter) or "" (opened with the pointer: wherever it was).
+    property string taskMenuReturn: ""
+    function openTaskStatusMenu(row, item, x, y) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        if (!taskMenu)
+            taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        if (taskMenuBlock >= 0)
+            controller.untrack(taskMenuBlock)
+        taskMenuBlock = controller.trackBlock(row)
+        // The block being edited (this one or another) keeps its editing when the menu closes.
+        const editing = controller.editingRow >= 0 && activeEditor !== null && activeEditor.row === controller.editingRow
+                        && activeEditor.activeFocus
+        taskMenuReturn = editing ? "edit" : list.activeFocus ? "list" : ""
+        taskMenu.status = taskStatusOf(row)
+        closeSuggestions()
+        // A word the keyboard is still composing becomes text first (the status resets the text).
+        if (editing)
+            EditorInput.commitPreedit(activeEditor)
+        if (item)
+            taskMenu.popup(item, x, y)
+        else
+            taskMenu.popup()
+    }
+    /// Ctrl+Shift+Enter: the menu under the caret of the block being edited, else under the
+    /// selected block's first line.
+    function openTaskStatusMenuFor(row) {
+        const edit = activeEditor
+        const item = list.itemAtIndex(row) as BlockDelegate
+        if (edit && edit.row === row && edit.active) {
+            const r = edit.cursorRectangle
+            openTaskStatusMenu(row, edit, r.x, r.y + r.height)
+        } else if (item) {
+            openTaskStatusMenu(row, item, item.contentLeft, item.firstLineCenter + lineHeight / 2)
+        } else {
+            openTaskStatusMenu(row, null, 0, 0)
+        }
+        if (taskMenu)
+            taskMenu.highlightStatus()
+    }
+    /// The touch toolbar's task button held down: the menu right above the button (the toolbar
+    /// sits on the keyboard, the window goes on under it).
+    function openTaskStatusMenuAbove(row, item) {
+        if (!taskMenu)
+            taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        openTaskStatusMenu(row, item, 0, -taskMenu.openHeight() - Theme.space1)
+    }
+    /// The status of a block's task as the menu shows it ("" = none).
+    function taskStatusOf(row) {
+        const info = controller.blocks.get(row)
+        return info.kind === "listItem" ? info.taskStatus : ""
+    }
+    function chooseTaskStatus(status) {
+        if (!controller || taskMenuBlock < 0)
+            return
+        const row = controller.trackedRow(taskMenuBlock)
+        controller.untrack(taskMenuBlock)
+        taskMenuBlock = -1
+        if (row >= 0 && status !== taskStatusOf(row))
+            controller.setTaskStatus(row, status)
+    }
+    Component {
+        id: taskMenuComponent
+        TaskStatusMenu {
+            onStatusChosen: (status) => editor.chooseTaskStatus(status)
+            // The menu had the keyboard: back to the block's text (the caret where it was) or to
+            // the selected block.
+            onClosed: {
+                const back = editor.taskMenuReturn
+                editor.taskMenuReturn = ""
+                if (back === "edit" && editor.activeEditor && editor.controller
+                        && editor.activeEditor.row === editor.controller.editingRow)
+                    editor.activeEditor.ensureFocus()
+                else if (back === "list")
+                    list.forceActiveFocus()
+            }
         }
     }
 

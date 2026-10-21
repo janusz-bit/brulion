@@ -9,9 +9,11 @@ import Brulion
 // daily note) and the kind of date as a small chip.
 //
 //   PlanningItemRow { entry: modelData; onTaskToggled: actions.toggleTask(entry.path, entry.line, entry.title)
+//                     onStatusRequested: (status) => actions.setTaskStatus(entry.path, entry.line, status, entry.title)
 //                     onOpened: AppController.openPage(entry.path, entry.line) }
 //
-// Click / Enter opens the note at the entry; the checkbox (Space when focused) toggles the task.
+// Click / Enter opens the note at the entry; the checkbox (Space when focused) toggles the task, a
+// right-click or long press on it opens the status menu (statusRequested()).
 T.ItemDelegate {
     id: control
 
@@ -20,6 +22,8 @@ T.ItemDelegate {
     property bool showDate: false
 
     signal taskToggled()
+    /// The checkbox's status menu (right-click / long press): "todo" … "cancelled", "" = none.
+    signal statusRequested(string status)
     signal opened()
 
     readonly property bool isTask: entry.isTask === true
@@ -93,11 +97,16 @@ T.ItemDelegate {
             width: Theme.touchUi ? Theme.touchTarget : 24
             height: width
             TaskBox {
+                objectName: "planningTaskBox"
                 anchors.centerIn: parent
                 visible: control.isTask
                 status: control.entry.status || "todo"
                 Accessible.name: qsTr("Done: %1").arg(control.entry.title || "")
                 onToggled: control.taskToggled()
+                onStatusChosen: (status) => {
+                    if (status !== (control.entry.status || "todo"))
+                        control.statusRequested(status)
+                }
             }
             BIcon {
                 anchors.centerIn: parent

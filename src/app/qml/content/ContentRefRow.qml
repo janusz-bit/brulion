@@ -13,10 +13,12 @@ import Brulion
 //       sourcePath: model.path; line: model.line; taskStatus: model.taskStatus
 //       onOpened: (newPane) => AppController.openPage(model.path, model.line, newPane)
 //       onTaskToggled: refs.toggleTask(index)
+//       onTaskStatusRequested: (status) => refs.setTaskStatus(index, status)
 //   }
 //
 // A click on a link follows it (`tools`: PageTools.openLink, resolved from `sourcePath`), a click on the
-// task checkbox emits taskToggled(), a click anywhere else opens the block in its page.
+// task checkbox emits taskToggled() (a right-click or long press on it: the status menu,
+// taskStatusRequested()), a click anywhere else opens the block in its page.
 // Keyboard: focusable, Enter opens, Ctrl+Enter opens in the side panel (wide windows).
 FocusScope {
     id: row
@@ -38,6 +40,8 @@ FocusScope {
 
     signal opened(bool newPane)
     signal taskToggled()
+    /// The checkbox's status menu (right-click / long press): "todo" … "cancelled", "" = none.
+    signal taskStatusRequested(string status)
     signal actionTriggered()
 
     readonly property bool closed: taskStatus === "done" || taskStatus === "cancelled"
@@ -87,10 +91,15 @@ FocusScope {
                 color: Theme.fgFaint
             }
             TaskBox {
+                objectName: "refTaskBox"
                 visible: row.taskStatus !== ""
                 anchors.centerIn: parent
                 status: row.taskStatus || "todo"
                 onToggled: row.taskToggled()
+                onStatusChosen: (status) => {
+                    if (status !== row.taskStatus)
+                        row.taskStatusRequested(status)
+                }
             }
         }
 

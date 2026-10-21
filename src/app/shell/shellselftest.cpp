@@ -297,6 +297,255 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
 
 using Check = std::function<void(bool, const char *)>;
 
+/// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
+///     long press (--touch) on the checkbox opens the status menu with the task's status checked
+///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
+///     page, the calendar's agenda and a journal day's editor; "No status" removes the checkbox;
+///     "/zrobione" typed into a journal day completes its block. The notes are put back afterwards.
+void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const auto total = [ws](const QString &status) {
+        return ws->runQuery(u"type:tasks status:"_s + status).value(u"total"_s).toInt();
+    };
+    // Every note with a task, as it was (restored at the end).
+    QHash<QString, QString> notes;
+    for (const QVariant &v : ws->runQuery(u"type:tasks status:all"_s).value(u"items"_s).toList()) {
+        const QString path = v.toMap().value(u"path"_s).toString();
+        if (!notes.contains(path))
+            notes.insert(path, ws->readFile(path));
+    }
+    const QString today = ws->journalPath(app->today(0));
+    notes.insert(today, ws->readFile(today));
+    const auto restore = [&] {
+        closeMenus(window);
+        for (auto it = notes.cbegin(); it != notes.cend(); ++it) {
+            if (ws->readFile(it.key()) != it.value())
+                ws->writeFile(it.key(), it.value());
+        }
+        settle(200);
+    };
+    const auto shownWhere = [](QQuickItem *root, const std::function<bool(QQuickItem *)> &pred) {
+        QQuickItem *found = nullptr;
+        waitFor([&] { return (found = findShown(root, pred)) != nullptr; });
+        return found;
+    };
+    const auto named = [&](QQuickItem *root, const QString &name) {
+        return shownWhere(root, [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    // A visible item of the visual tree (list delegates are not in the QObject tree), on screen or
+    // not (a day of the journal is taller than a phone's screen).
+    std::function<QQuickItem *(QQuickItem *, const std::function<bool(QQuickItem *)> &)> visual =
+            [&visual](QQuickItem *item, const std::function<bool(QQuickItem *)> &pred) -> QQuickItem * {
+        if (!item->isVisible())
+            return nullptr;
+        if (pred(item))
+            return item;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children) {
+            if (QQuickItem *found = visual(child, pred))
+                return found;
+        }
+        return nullptr;
+    };
+    // The context gesture on a checkbox, and a status of the menu it opened.
+    const auto openStatusMenu = [&](QQuickItem *box) {
+        if (!box)
+            return false;
+        if (qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG")) {
+            QString chain;
+            for (const QQuickItem *p = box; p; p = p->parentItem())
+                chain += QString::fromLatin1(p->metaObject()->className()).section(u'_', 0, 0) + u' ';
+            const QPointF at = pointIn(box);
+            std::fprintf(stderr, "selftest: status menu gesture at %.0f,%.0f on %s\n", at.x(), at.y(),
+                         qPrintable(chain));
+        }
+        if (touch)
+            touchTap(window, pointIn(box), 1000);
+        else
+            mouseClick(window, pointIn(box), Qt::RightButton);
+        return waitFor([&] { return openMenus(window) == 1; });
+    };
+    const auto statusItem = [&](const char *status) {
+        return named(window->contentItem(), u"taskStatus_"_s + QLatin1String(status));
+    };
+    const auto choose = [&](const char *status) {
+        QQuickItem *item = statusItem(status);
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+        return item != nullptr && waitFor([&] { return openMenus(window) == 0; });
+    };
+    const auto checked = [&](const char *status) {
+        QQuickItem *item = statusItem(status);
+        return item && item->property("checked").toBool();
+    };
+
+    // ---- Tasks: the row's checkbox opens the row's menu; a status, then "No status".
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    const int allBefore = total(u"all"_s);
+    QQuickItem *box = named(window->contentItem(), u"tasksRowTaskBox"_s);
+    check(box != nullptr, "the tasks view shows task checkboxes");
+    if (box) {
+        const QString status = box->property("status").toString();
+        // A status the task does not have yet.
+        const char *target = status == u"doing" ? "deferred" : "doing";
+        const int targetBefore = total(QLatin1String(target));
+        const int openBefore = total(u"open"_s);
+        check(openStatusMenu(box) && total(u"open"_s) == openBefore && total(QLatin1String(target)) == targetBefore,
+              "a long press or right-click on a task's checkbox in Tasks opens the status menu (and does not toggle)");
+        check(statusItem("todo") != nullptr && checked(status.toLatin1().constData()) && !checked(target),
+              "the task's status is checked in the menu");
+        check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
+              "choosing another status in Tasks writes it");
+        // The same row may now sit elsewhere (sections); any task's checkbox will do.
+        box = named(window->contentItem(), u"tasksRowTaskBox"_s);
+        check(openStatusMenu(box) && choose("none") && waitFor([&] { return total(u"all"_s) == allBefore - 1; }),
+              "“Bez statusu” in Tasks removes a task's checkbox");
+    }
+    restore();
+
+    // ---- The backlinks under a page: today's "Przejrzeć [[Remont mieszkania]]…" task.
+    const QString remont = u"Projekty/Remont mieszkania.md"_s;
+    app->openPage(remont);
+    QQuickItem *editor = nullptr;
+    waitFor([&] {
+        editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c =
+                    item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
+            return c && c->property("path").toString() == remont && c->property("loaded").toBool();
+        });
+        return editor != nullptr;
+    });
+    if (auto *list = editor ? editor->property("listView").value<QQuickItem *>() : nullptr) {
+        QMetaObject::invokeMethod(list, "positionViewAtEnd");
+        settle(300);
+        // Below the blocks: scroll until the reference's checkbox is on screen.
+        for (int i = 0; i < 20
+                        && !findShown(
+                                window->contentItem(),
+                                [](QQuickItem *item) {
+                                    return item->objectName() == u"refTaskBox"
+                                           && item->property("status").toString() == u"todo";
+                                });
+             ++i) {
+            list->setProperty("contentY", list->property("contentY").toReal() + 200);
+            settle(60);
+        }
+    }
+    box = shownWhere(window->contentItem(), [](QQuickItem *item) {
+        return item->objectName() == u"refTaskBox" && item->property("status").toString() == u"todo";
+    });
+    check(box != nullptr, "the page's linked references show a task's checkbox");
+    if (box) {
+        const QString before = ws->readFile(today);
+        check(openStatusMenu(box) && ws->readFile(today) == before && checked("todo"),
+              "a long press or right-click on a backlink's checkbox opens the status menu (and does not toggle)");
+        check(choose("deferred") && waitFor([&] {
+                  return ws->readFile(today).contains(u"- [>] Przejrzeć [[Remont mieszkania]]"_s);
+              }),
+              "choosing “Oczekujące” on a backlink writes the status in its note");
+    }
+    restore();
+
+    // ---- The calendar's agenda: a task with a date (the agenda scrolls to today first).
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"agenda"_s}});
+    settle(600);
+    // Inside the list's own area (a row half under the top bar is still "in the window").
+    QQuickItem *agenda =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarAgendaList"); });
+    box = agenda ? named(agenda, u"planningTaskBox"_s) : nullptr;
+    check(box != nullptr, "the agenda shows task checkboxes");
+    if (box) {
+        const char *target = box->property("status").toString() == u"cancelled" ? "deferred" : "cancelled";
+        const int targetBefore = total(QLatin1String(target));
+        const int closedBefore = total(u"closed"_s);
+        check(openStatusMenu(box) && total(u"closed"_s) == closedBefore,
+              "a long press or right-click on a checkbox in the agenda opens the status menu (and does not toggle)");
+        check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
+              "choosing another status in the agenda writes it");
+    }
+    restore();
+
+    // ---- A day of the journal stream: its checkbox's menu, and a "/" command typed into a block.
+    app->goHome();
+    QObject *day = nullptr;
+    QQuickItem *dayEditor = nullptr;
+    waitFor([&] {
+        dayEditor = visual(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
+                                                                      : nullptr;
+            return c && c->property("path").toString() == today && c->property("loaded").toBool();
+        });
+        day = dayEditor ? dayEditor->property("controller").value<QObject *>() : nullptr;
+        return day != nullptr;
+    });
+    if (!day && qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG")) {
+        std::fprintf(stderr, "selftest: no day editor for %s, view %s\n", qPrintable(today),
+                     qPrintable(app->currentView()));
+        std::function<void(QQuickItem *, int)> dump = [&](QQuickItem *item, int depth) {
+            if (item->objectName() == u"journalDayEditor") {
+                const auto *c = item->property("controller").value<QObject *>();
+                std::fprintf(stderr, "selftest: day editor %s loaded %d visible %d depth %d\n",
+                             qPrintable(c ? c->property("path").toString() : u"-"_s),
+                             c && c->property("loaded").toBool(), item->isVisible(), depth);
+            }
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children)
+                dump(child, depth + 1);
+        };
+        dump(window->contentItem(), 0);
+    }
+    check(day != nullptr, "today's journal day is shown with its editor");
+    if (!day) {
+        restore();
+        app->goHome();
+        return;
+    }
+    const auto saved = [&] {
+        bool ok = false;
+        QMetaObject::invokeMethod(day, "save", qReturnArg(ok));
+        return ws->readFile(today);
+    };
+    box = named(dayEditor, u"taskBox"_s);
+    check(box != nullptr, "today's task has its checkbox");
+    if (box) {
+        const QString before = saved();
+        check(openStatusMenu(box) && saved() == before && checked("todo"),
+              "a long press or right-click on a journal task's checkbox opens the status menu (and does not toggle)");
+        check(choose("doing") && waitFor([&] { return saved().contains(u"- [/] Przejrzeć [[Remont mieszkania]]"_s); }),
+              "choosing “W toku” in a journal day writes the status");
+    }
+    const QStringList lines = ws->readFile(today).split(u'\n');
+    qsizetype ideaLine = -1;
+    for (qsizetype i = 0; i < lines.size() && ideaLine < 0; ++i) {
+        if (lines.at(i).startsWith(u"- Pomysł na obiad"_s))
+            ideaLine = i;
+    }
+    int row = -1;
+    QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(row), int(ideaLine));
+    check(row >= 0, "today's journal has its dinner idea");
+    if (row >= 0) {
+        QMetaObject::invokeMethod(dayEditor, "startEditing", QVariant(row), QVariant(-1));
+        const bool editing = waitFor([&] {
+            const QQuickItem *f = window->activeFocusItem();
+            return day->property("editingRow").toInt() == row && f
+                   && QByteArray(f->metaObject()->className()).contains("InlineEditor");
+        });
+        for (const QChar ch : u" /zrobione"_s)
+            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        check(editing && waitFor([&] { return dayEditor->property("suggestionsOpen").toBool(); }),
+              "“/zrobione” typed into a journal day opens the commands");
+        sendKey(window, Qt::Key_Return);
+        check(waitFor([&] { return saved().contains(u"\n- [x] Pomysł na obiad"_s) && saved().contains(u"✅"_s); })
+                      && !saved().contains(u"/zrobione"_s),
+              "the command completes the journal's block, its text gone");
+        QMetaObject::invokeMethod(day, "stopEditing");
+    }
+    restore();
+    app->goHome();
+}
+
 /// 5c. The event log ("Rejestr zdarzeń") and the details of a sync run, with real taps / clicks:
 ///     lines logged anywhere reach the page (a secret never does), the search ignores diacritics,
 ///     an area chip filters, the detailed mode switches the Logger; the sync center's history
@@ -778,6 +1027,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
     // 3b. Rows with context menus: taps / clicks act, long presses / right-clicks open the menu.
     checkRowsAndMenus(window, app, check);
+    // 3c. The task status menus (Tasks, backlinks, the agenda, a journal day) and "/" commands.
+    checkTaskStatusMenus(window, app, check);
     closeMenus(window); // whatever a failed check left open
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");

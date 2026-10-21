@@ -4,8 +4,8 @@ import Brulion
 
 // MobileEditToolbar — the editing toolbar of touch UIs, sitting right above the virtual
 // keyboard (Qt.inputMethod.keyboardRectangle; at the bottom when the window is resized for the
-// keyboard): outdent, indent, move up/down, task, [[, #, /, date, reminder, picture, undo, redo,
-// hide keyboard. In the document mode the writing tools come first — a list button (paragraph ↔
+// keyboard): outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
+// status menu), [[, #, /, date, reminder, picture, undo, redo, hide keyboard. In the document mode the writing tools come first — a list button (paragraph ↔
 // list item), task, [[, #, / — then outdent / indent (list items only) and move up/down, so a
 // phone's first screen of buttons holds no outline tools that are disabled in a paragraph.
 // Buttons never take focus, so the caret stays in the block being edited. Scrolls sideways when
@@ -103,9 +103,15 @@ Rectangle {
     component WritingTools: Row {
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         ToolButton {
+            id: taskButton
+            objectName: "toolbarTask"
             iconName: "square-check-big"
             label: qsTr("Task")
+            // A tap: the next status (Ctrl+Enter); held down: the status menu (instead of the
+            // label's tooltip).
+            showToolTip: false
             onClicked: { bar.commitComposition(); bar.controller.cycleTask(bar.row) }
+            onPressAndHold: { bar.commitComposition(); bar.editor.openTaskStatusMenuAbove(bar.row, taskButton) }
         }
         ToolButton {
             iconName: "link"
