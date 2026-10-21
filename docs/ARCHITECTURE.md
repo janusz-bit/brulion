@@ -198,7 +198,8 @@ app; these guards keep data from being lost:
 * Tests: QtTest via CTest (`brulion_add_test`), core in `tests/core/<module>`, app areas in
   `tests/app/<area>` (`QT_QPA_PLATFORM=offscreen`), plus headless QML checks of the real app:
   `tst_shell_qml` (`--selftest-shell`), `tst_shell_journey*` (`--journey`), `tst_*_qml` smoke
-  tests. Development builds: `scripts/remote-build.sh` (x86_64 laptop) or
+  tests; shell scripts in `tests/scripts` (`tst_scripts_release`: `scripts/release.sh` in
+  throwaway git repositories). Development builds: `scripts/remote-build.sh` (x86_64 laptop) or
   `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
   `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
   and worker-thread stack sizes by it (1 otherwise).

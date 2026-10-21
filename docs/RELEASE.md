@@ -67,8 +67,10 @@ scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił
 `scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
 biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
 minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. Wymaga czystego
-drzewa roboczego i gałęzi `release` (z innej umiera; `--dry-run` pokazuje, co by zrobił, z
-każdej). Push taga uruchamia `release.yml`:
+drzewa roboczego i gałęzi `release` (z innej umiera od razu). `--dry-run` niczego nie zmienia
+i działa z każdej gałęzi: poza `release` najpierw ostrzega, a potem pokazuje, co zrobiłby
+prawdziwy przebieg na `release` — wersje czyta z gałęzi `release` (lokalnej, a bez niej
+z `origin/release`), nie z bieżącej. Push taga uruchamia `release.yml`:
 
 1. **draft** — tag musi się zgadzać z wersją w `CMakeLists.txt` i `nix/package.nix`; powstaje
    szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,

@@ -14,7 +14,8 @@
 #   major|minor|patch  bump that part of the current version
 #   --push     push the commit and the tag to origin right away (atomically)
 #   --yes      do not ask for confirmation
-#   --dry-run  show what would change, change nothing
+#   --dry-run  show what a real run would do, change nothing; from another branch it shows what a
+#              real run on the release branch would do (the versions come from that branch)
 #
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
@@ -54,16 +55,40 @@ done
 }
 
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git repository"
+
+# The branch first, so that nothing below hides this message. A real run only releases from
+# release; a dry run elsewhere shows what a real run on release would do, so it reads the
+# versions from the release branch (the local one, else origin's) instead of this checkout.
+branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
+from=$branch src_ref=''
+if [[ $branch != release ]]; then
+  msg="releases go on the 'release' branch, not '$branch' (git switch release && git merge main)"
+  ((dry)) || die "$msg"
+  echo "warning: $msg" >&2
+  for ref in refs/heads/release refs/remotes/origin/release; do
+    if git rev-parse -q --verify "$ref^{commit}" >/dev/null; then
+      src_ref=$ref from=${ref#refs/*/}
+      break
+    fi
+  done
+  [[ -n $src_ref ]] || echo "warning: no release branch here: the versions below come from '$branch'" >&2
+fi
+
 if ((!dry)) && { ! git diff --quiet || ! git diff --cached --quiet; }; then
   die "the working tree has uncommitted changes (commit or stash them first)"
 fi
 
 cmake_file=CMakeLists.txt
 nix_file=nix/package.nix
-current=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' "$cmake_file" | head -n 1)
+version_file() { # <path>: the file as the release would start from it
+  if [[ -n $src_ref ]]; then git show "$src_ref:$1"; else cat -- "$1"; fi
+}
+cmake_text=$(version_file "$cmake_file") || die "cannot read $cmake_file"
+nix_text=$(version_file "$nix_file") || die "cannot read $nix_file"
+current=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$/\1/p' <<<"$cmake_text" | head -n 1)
 [[ $current =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || die "no project VERSION X.Y.Z found in $cmake_file"
 major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
-nix_current=$(sed -nE 's/^[[:space:]]*version = "([^"]+)";.*/\1/p' "$nix_file" | head -n 1)
+nix_current=$(sed -nE 's/^[[:space:]]*version = "([^"]+)";.*/\1/p' <<<"$nix_text" | head -n 1)
 [[ -n $nix_current ]] || die "no version = \"...\"; found in $nix_file"
 [[ $nix_current == "$current" ]] ||
   echo "warning: $nix_file has version $nix_current, $cmake_file $current; both get the new version" >&2
@@ -89,18 +114,11 @@ if git remote get-url origin >/dev/null 2>&1 &&
   die "tag $tag already exists on origin"
 fi
 
-branch=$(git symbolic-ref --short -q HEAD || echo "(detached)")
-if [[ $branch != release ]]; then
-  # A dry run may show what would happen from anywhere; a real run only releases from release.
-  msg="releases go on the 'release' branch, not '$branch' (git switch release && git merge main)"
-  if ((dry)); then echo "warning: $msg" >&2; else die "$msg"; fi
-fi
-
 files=()
 if [[ $release != "$current" || $nix_current != "$release" ]]; then
   files=("$cmake_file" "$nix_file")
 fi
-echo "Brulion $current -> $new (tag $tag, from $branch)"
+echo "Brulion $current -> $new (tag $tag, from $from)"
 if ((${#files[@]})); then
   echo "Updates ${files[*]} to $release, commits \"Release $tag\" and tags it."
 else
