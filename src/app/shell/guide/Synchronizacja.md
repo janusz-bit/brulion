@@ -24,6 +24,9 @@ Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwer
 
 Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz — to zabezpieczenie przed pomyłką.
 
+> [!note] Strony dokumentacji w Twoim notatniku
+> W wersji 0.3.0 otwarcie tej dokumentacji przy włączonym Nextcloudzie synchronizowało ją z Twoim folderem na serwerze. Jej strony (np. „Spis treści”, „Synchronizacja”) mogły więc trafić do Twojego notatnika na wszystkich urządzeniach, a do dokumentacji — kopie Twoich notatek. Strony dokumentacji znajdziesz w swoim notatniku w widoku **Tagi**, pod tagiem `dokumentacja`, i możesz je tam usunąć: dokumentacja ma własne. Twoje notatki, które pojawiły się w dokumentacji, to tylko kopie.
+
 ## Centrum synchronizacji
 Menu **Więcej** (⋮) → *Centrum synchronizacji*, albo kliknięcie stanu synchronizacji na dole paska bocznego. Zakładki: Przegląd, Syncthing, Nextcloud, Konflikty.
 
