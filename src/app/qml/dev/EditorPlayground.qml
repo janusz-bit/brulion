@@ -15,7 +15,8 @@ import Brulion
 // trip plan (FakeEditorHost.documentPath): document (reading), document-paragraph,
 // document-list, document-heading, document-task (editing one), document-outline (the same page
 // switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
-// mode) and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
+// mode) and exits; `clock` checks the round clock and its buttons (clockTest()) and exits. The
+// in-memory vault runs ```query blocks on the real index (FakeEditorHost).
 ApplicationWindow {
     id: window
 
@@ -955,10 +956,245 @@ ApplicationWindow {
         stepTimer.start()
     }
 
+    // ---- Self test of the round clock (`--editor-script clock`, tst_editor_qml_clock*) -------
+    // BTimePicker on its own: the value of every position, taps and drags with a finger (touch
+    // UI) or the mouse — also drags that start on a number or the chosen value's bubble —, keys
+    // and the focus ring; BTimePickerDialog: open, set, cancel, the whole dial in a short window.
+    // Real input through QtTest's TestEvent.
+    property var clockEvents: null
+    property BTimePicker clock: null
+    property BTimePickerDialog clockDialog: null
+    property var clockPicks: []
+    property var dialogPicks: []
+
+    /// A point of the face (its coordinates) at `radius` from the centre, `deg` from 12 o'clock.
+    function clockPoint(c, radius, deg) {
+        const a = (deg - 90) * Math.PI / 180
+        return { x: c.center + Math.cos(a) * radius, y: c.center + Math.sin(a) * radius }
+    }
+    /// A tap (a finger on touch UIs, else a click) at (x, y) of `item`.
+    function tapAt(item, x, y) {
+        if (Theme.touchUi) {
+            clockEvents.touchEvent(item).press(0, item, x, y).commit()
+            clockEvents.touchEvent(item).release(0, item, x, y).commit()
+        } else {
+            clockEvents.mouseClick(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    function clockTap(c, radius, deg) {
+        const p = clockPoint(c, radius, deg)
+        tapAt(c.focusItem, p.x, p.y)
+    }
+    /// A drag along the circle of `radius` from `fromDeg` to `toDeg`, in twelve moves.
+    function clockDrag(c, radius, fromDeg, toDeg) {
+        const face = c.focusItem
+        const touch = Theme.touchUi
+        let p = clockPoint(c, radius, fromDeg)
+        if (touch)
+            clockEvents.touchEvent(face).press(0, face, p.x, p.y).commit()
+        else
+            clockEvents.mousePress(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+        for (let i = 1; i <= 12; ++i) {
+            p = clockPoint(c, radius, fromDeg + (toDeg - fromDeg) * i / 12)
+            if (touch)
+                clockEvents.touchEvent(face).move(0, face, p.x, p.y).commit()
+            else
+                clockEvents.mouseMove(face, p.x, p.y, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (touch)
+            clockEvents.touchEvent(face).release(0, face, p.x, p.y).commit()
+        else
+            clockEvents.mouseRelease(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function clockRing(c) {
+        return findItem(c, "clockFocusRing")
+    }
+    /// Repeat the current step until `ready` (an asynchronous popup), at most 6 s.
+    function waitUntil(ready) {
+        if (ready || window.waits++ >= 50) {
+            window.waits = 0
+            return true
+        }
+        window.stepIndex -= 1
+        return false
+    }
+
+    function clockTest() {
+        clockEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "clockEvents")
+        clock = Qt.createQmlObject('import QtQuick; import Brulion; BTimePicker { x: 40; y: 40; z: 100000; time: "18:30" }',
+                                   window.contentItem, "clock") as BTimePicker
+        clock.picked.connect((v) => window.clockPicks.push(v))
+        const c = clock
+        steps = [
+            () => check(c.focusItem.width === c.dialSize && c.focusItem.height === c.dialSize,
+                        "the face is the dial's size: " + c.focusItem.width + "×" + c.focusItem.height + ", dial " + c.dialSize),
+            // ---- The value of every position --------------------------------------------------
+            () => {
+                c.mode = "hour"
+                const bad = []
+                for (let h = 0; h < 24; ++h) {
+                    c.time = "12:34"
+                    const p = clockPoint(c, h < 12 ? c.outerRadius : c.innerRadius, (h % 12) * 30)
+                    c.pickAt(p.x, p.y)
+                    if (c.time !== c.pad(h) + ":34")
+                        bad.push(h + "→" + c.time)
+                }
+                check(bad.length === 0, "every hour's number gives that hour (00–11 outside, 12–23 inside) " + bad)
+            },
+            () => {
+                c.mode = "hour"
+                let outerFrom = -1
+                for (let r = 13; r < c.center && outerFrom < 0; ++r) {
+                    c.time = "06:00"
+                    const p = clockPoint(c, r, 90)
+                    c.pickAt(p.x, p.y)
+                    if (c.selectedHour === 3)
+                        outerFrom = r
+                }
+                check(outerFrom > c.innerRadius && outerFrom < c.outerRadius,
+                      "the outer ring starts between the rings: r " + outerFrom + " (inner " + c.innerRadius + ", outer " + c.outerRadius + ")")
+            },
+            () => {
+                c.mode = "minute"
+                const bad = []
+                for (let m = 0; m < 60; ++m) {
+                    for (const r of [20, c.innerRadius, c.outerRadius, c.center - 2]) {
+                        c.time = "10:" + (m === 7 ? "08" : "07")
+                        const p = clockPoint(c, r, m * 6)
+                        c.pickAt(p.x, p.y)
+                        if (c.selectedMinute !== m || c.selectedHour !== 10)
+                            bad.push(m + "@" + Math.round(r) + "→" + c.time)
+                    }
+                }
+                const at = (deg) => {
+                    c.time = "10:30"
+                    const p = clockPoint(c, c.outerRadius, deg)
+                    c.pickAt(p.x, p.y)
+                    return c.time
+                }
+                check(bad.length === 0 && at(359.9) === "10:00" && at(2.9) === "10:00" && at(3.1) === "10:01",
+                      "every minute comes from its angle, at any distance from the centre " + bad)
+            },
+            () => {
+                c.mode = "hour"
+                c.time = "18:30"
+                window.clockPicks = []
+                const p = clockPoint(c, 5, 0)
+                c.pickAt(p.x, p.y)
+                check(c.time === "18:30" && window.clockPicks.length === 0, "the hub is no value")
+            },
+            // ---- Taps and drags (a finger on touch UIs, the mouse elsewhere) ------------------
+            () => { c.time = "18:30"; c.mode = "hour"; clockTap(c, c.outerRadius, 7 * 30) },
+            () => check(c.time === "07:30" && c.mode === "minute", "a tap on 07 (outer ring) picks it and moves on to the minutes: " + c.time + " " + c.mode),
+            () => { c.mode = "hour"; clockTap(c, c.innerRadius, 9 * 30) },
+            () => check(c.time === "21:30" && c.mode === "minute", "a tap on 21 (inner ring): " + c.time + " " + c.mode),
+            () => clockTap(c, c.outerRadius, 37 * 6),
+            () => check(c.time === "21:37", "a tap between the minute numbers gives that minute: " + c.time),
+            () => clockTap(c, c.outerRadius - 4, 45 * 6 + 3),
+            () => check(c.time === "21:45", "a tap a little off the number 45 gives 45: " + c.time),
+            () => { c.time = "18:30"; c.mode = "hour"; clockTap(c, 4, 0) },
+            () => check(c.time === "18:30" && c.mode === "hour", "a tap on the hub changes nothing: " + c.time + " " + c.mode),
+            () => { c.time = "18:30"; c.mode = "minute"; window.clockPicks = []; clockDrag(c, c.outerRadius, 180, 270) },
+            () => check(c.time === "18:45" && window.clockPicks.length > 1,
+                        "dragging the minute hand by its bubble (on the number 30) to 45: " + c.time + " via " + window.clockPicks),
+            () => { c.time = "18:30"; c.mode = "hour"; clockDrag(c, c.innerRadius, 180, 270) },
+            () => check(c.time === "21:30" && c.mode === "minute",
+                        "dragging the hour bubble (on 18) to 21, then on to the minutes: " + c.time + " " + c.mode),
+            () => { c.time = "11:30"; c.mode = "hour"; clockDrag(c, c.outerRadius, 330, 390) },
+            () => check(c.time === "01:30", "a drag from the number 11 across 12 o'clock to 01: " + c.time),
+            () => { c.time = "18:30"; c.mode = "minute"; clockDrag(c, 60, 180, 270) },
+            () => check(c.time === "18:45", "a drag inside the ring, off the numbers: " + c.time),
+            () => { c.time = "18:32"; c.mode = "minute"; clockDrag(c, c.outerRadius, 32 * 6, 44 * 6) },
+            () => check(c.time === "18:44", "a drag from between the numbers (32) to 44: " + c.time),
+            // ---- Keys, and the focus ring for the keyboard only --------------------------------
+            () => { c.mode = "hour"; c.time = "23:59"; c.focusItem.forceActiveFocus(Qt.MouseFocusReason) },
+            () => check(c.focusItem.activeFocus && !clockRing(c).visible, "the face has the keyboard, without a focus ring after a tap"),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_Up),
+            () => check(c.time === "00:59" && clockRing(c).visible, "Up from 23 wraps to 00, and keys show the focus ring: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_Down),
+            () => check(c.time === "23:59", "Down from 00 wraps to 23: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_PageUp),
+            () => check(c.time === "04:59", "PageUp: five hours on: " + c.time),
+            () => { EditorInput.sendKey(c.focusItem, Qt.Key_Right); EditorInput.sendKey(c.focusItem, Qt.Key_Up) },
+            () => check(c.mode === "minute" && c.time === "04:00", "Right, then Up: minute 59 wraps to 00: " + c.time + " " + c.mode),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_PageDown),
+            () => check(c.time === "04:55", "PageDown: five minutes back: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_End),
+            () => check(c.time === "04:59", "End: the last minute: " + c.time),
+            () => { EditorInput.sendKey(c.focusItem, Qt.Key_Left); EditorInput.sendKey(c.focusItem, Qt.Key_Home) },
+            () => check(c.mode === "hour" && c.time === "00:59", "Left, then Home: hour 00: " + c.time + " " + c.mode),
+            () => clockTap(c, c.outerRadius, 90),
+            () => check(c.focusItem.activeFocus && !clockRing(c).visible && c.time === "03:59", "a tap hides the focus ring again: " + c.time),
+            // ---- The dialog -----------------------------------------------------------------------
+            () => {
+                c.visible = false
+                clockDialog = Qt.createQmlObject('import QtQuick; import Brulion; BTimePickerDialog {}', window.contentItem,
+                                                 "clockDialog") as BTimePickerDialog
+                clockDialog.picked.connect((v) => window.dialogPicks.push(v))
+                clockDialog.openFor("7")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                const p = clockDialog.picker
+                check(p.time === "07:00" && p.mode === "hour", "the dialog opens on 07:00 for \"7\", on the hours: " + p.time)
+                check(p.focusItem.activeFocus && !clockRing(p).visible, "the dial has the keyboard when the dialog opens, without a focus ring")
+                const body = clockDialog.contentItem
+                check(body.contentHeight <= body.height + 1,
+                      "the whole dial shows in the dialog in a " + window.width + "×" + window.height + " window: body " + body.height
+                      + ", clock " + body.contentHeight + ", dial " + p.dialSize + (p.horizontal ? ", the fields beside it" : ""))
+                check(p.dialSize >= 180 && 2 * Math.PI * p.innerRadius / 12 >= Theme.textSm * 1.6,
+                      "the inner ring's numbers have room: dial " + p.dialSize + ", " + (2 * Math.PI * p.innerRadius / 12).toFixed(1)
+                      + " px apart")
+            },
+            () => clockTap(clockDialog.picker, clockDialog.picker.innerRadius, 90),
+            () => clockTap(clockDialog.picker, clockDialog.picker.outerRadius, 45 * 6),
+            () => check(clockDialog.picker.time === "15:45" && window.dialogPicks.length === 0, "picked on the dial, not set yet: " + clockDialog.picker.time),
+            () => {
+                // A drag on the dial moves the hand and never scrolls the dialog.
+                const body = clockDialog.contentItem
+                const before = body.contentY
+                clockDrag(clockDialog.picker, 60, 0, 170)
+                check(clockDialog.picker.time === "15:28" && body.contentY === before,
+                      "a drag down the dial in the dialog moves the hand, not the dialog: " + clockDialog.picker.time + ", scrolled " + (body.contentY - before))
+                clockDialog.picker.time = "15:45"
+            },
+            () => clockDialog.tryAccept(),
+            () => check(window.dialogPicks.join() === "15:45", "Set gives the time: " + window.dialogPicks),
+            () => {
+                if (waitUntil(!clockDialog.visible))
+                    clockDialog.openFor("")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                check(clockDialog.picker.time === "10:00", "nothing given: the dialog opens on the current time: " + clockDialog.picker.time)
+                clockTap(clockDialog.picker, clockDialog.picker.outerRadius, 30)
+            },
+            () => clockDialog.reject(),
+            () => check(window.dialogPicks.join() === "15:45", "Cancel gives nothing: " + window.dialogPicks),
+            () => {
+                if (waitUntil(!clockDialog.visible))
+                    clockDialog.openFor("25:00")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                check(clockDialog.picker.time === "10:00", "no time: the dialog opens on the current time: " + clockDialog.picker.time)
+                clockDialog.reject()
+            }
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
+
     function runScript(name) {
         switch (name) {
         case "selftest":
             selfTest()
+            break
+        case "clock":
+            clockTest()
             break
         case "editing": {
             const row = rowOf("Kupić płytki")

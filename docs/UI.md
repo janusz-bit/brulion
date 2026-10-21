@@ -511,7 +511,10 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 `BToolTip`, `BEmptyState`, `BProgressBar`, `BSpinner`, `BScrollBar`, `BSplitHandle`,
 `BShadow`, `BFocusRing`, `BDatePicker` (month grid, Polish names, natural-language input with
 live preview), `BTimePicker`/`BTimePickerDialog` (a round 24-hour clock: tap or drag hours
-and minutes, keyboard arrows), `BReminderDialog` (date/time, alarm switch, recurrence picker,
+and minutes — the face takes every press, so a drag may start on a number or the chosen value's
+bubble —, keyboard arrows; the focus ring shows for the keyboard only; in a window too short
+for it, a phone held sideways, the dial shrinks and the hours / minutes fields go beside it),
+`BReminderDialog` (date/time, alarm switch, recurrence picker,
 quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher`. Icons: SVGs in `assets/icons/` (Lucide, ISC licence) via `BIcon`.
@@ -591,7 +594,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline` |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input, its dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
@@ -611,7 +614,8 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 `tests/screenshots/`, git-ignored):
 
 * `scripts/screenshots.sh [sections…]` — gallery sections × {desktop 1280×800, phone 412×915
-  `--touch`} × {light, dark}; `SIZES="desktop-tall phone-tall"` captures long sections whole.
+  `--touch`} × {light, dark}; `SIZES="desktop-tall phone-tall"` captures long sections whole,
+  `SIZES=phone-landscape` (915×412 `--touch`) a phone held sideways.
 * `tests/app/editor/editor-screenshots.sh` — the editor playground states.
 * `tests/app/shell/screenshots.sh` — the real app: onboarding, journals, the guide page and
   its editor states (`page-editing`, `page-slash`, `page-reminder`, `page-doc-paragraph`,

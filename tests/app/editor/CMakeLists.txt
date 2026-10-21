@@ -59,4 +59,21 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
     set_tests_properties(tst_editor_qml PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
         TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
+    # The round clock (BTimePicker, BTimePickerDialog) and the clock buttons of the reminder's date
+    # picker and the calendar's add dialog (`--editor-script clock`), with real mouse or touch input
+    # (QtTest's TestEvent): on a desktop, a phone, and a phone held sideways (the dial has to fit).
+    if(EXISTS "${_brulion_qt_qml_root}/QtTest")
+        foreach(_clock "tst_editor_qml_clock;1280x800;" "tst_editor_qml_clock_phone;412x915;--touch"
+                       "tst_editor_qml_clock_landscape;915x412;--touch")
+            list(GET _clock 0 _clock_test)
+            list(GET _clock 1 _clock_size)
+            list(GET _clock 2 _clock_touch)
+            add_test(NAME ${_clock_test}
+                COMMAND brulion --editor --editor-script clock --no-single-instance
+                    --size ${_clock_size} ${_clock_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_clock_test} PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
+        endforeach()
+    endif()
 endif()
