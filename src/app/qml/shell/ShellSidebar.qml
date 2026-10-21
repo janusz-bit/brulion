@@ -81,6 +81,7 @@ Rectangle {
             }
             BIconButton {
                 id: switchButton
+                objectName: "notebookSwitch"
                 iconName: "repeat"
                 label: qsTr("Switch notebook")
                 size: "small"
@@ -338,6 +339,7 @@ Rectangle {
             model: AppSettings.recentVaults.filter(v => v.path !== notebookMenu.docsPath)
             delegate: BMenuItem {
                 required property var modelData
+                objectName: "notebookMenuRecent"
                 // Not `checked`: a checkable item has already toggled it when onTriggered runs,
                 // so the first click on another notebook would do nothing.
                 readonly property bool isCurrent: modelData.path === notebookMenu.current
@@ -355,6 +357,7 @@ Rectangle {
         }
         BMenuSeparator {}
         BMenuItem {
+            objectName: "notebookMenuDocs"
             visible: notebookMenu.docsPath !== ""
             height: visible ? implicitHeight : 0
             text: qsTr("Brulion documentation")
