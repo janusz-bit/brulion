@@ -93,6 +93,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_commands = std::make_unique<CommandModel>(this);
     m_syncStatus = { { u"state"_s, u"disabled"_s }, { u"text"_s, QString() }, { u"lastSync"_s, QString() } };
 
+    connect(m_settings.get(), &AppSettings::currentVaultChanged, this, &AppController::inDocsVaultChanged);
     connect(m_settings.get(), &AppSettings::languageChanged, this, [this] {
         // First the translation (main.cpp: DevTools::setLanguage swaps the translator), then the
         // workspace, whose texts (sync status, reminders) are rebuilt with tr() in the new language.
@@ -199,7 +200,13 @@ void AppController::start()
         setStatus(u"onboarding"_s);
         return;
     }
-    const QString current = m_settings->currentVault();
+    QString current = m_settings->currentVault();
+    if (isDocsPath(current)) {
+        // Left in the documentation (0.3.0–0.3.5 also stored it as the start notebook): start in
+        // the user's own notebook, where quick capture, the journal and the reminders belong.
+        current = lastUserVault();
+        m_settings->setCurrentVault(current);
+    }
     if (current.isEmpty()) {
         setStatus(u"onboarding"_s);
         return;
@@ -393,6 +400,12 @@ void AppController::applyPendingNotification()
         return;
     const QString path = m_pendingNotePath;
     const int line = m_pendingNoteLine;
+    if (!m_workspace->exists(path) && inDocsVault() && !lastUserVault().isEmpty()) {
+        // The documentation arms no reminders: this one belongs to the user's notebook (Android
+        // kept its alarms armed while the documentation was open). Open it there.
+        openVault(lastUserVault());
+        return;
+    }
     m_pendingNotePath.clear();
     m_pendingNoteLine = -1;
     if (m_workspace->exists(path))
@@ -596,9 +609,25 @@ void AppController::openDocsVault()
     scheduleOpening(docsVaultPath(), true);
 }
 
+bool AppController::isDocsPath(const QString &path) const
+{
+    return !docsVaultPath().isEmpty() && !path.isEmpty() && QDir::cleanPath(path) == docsVaultPath();
+}
+
 bool AppController::inDocsVault() const
 {
-    return !docsVaultPath().isEmpty() && QDir::cleanPath(m_settings->currentVault()) == docsVaultPath();
+    return isDocsPath(m_settings->currentVault());
+}
+
+QString AppController::lastUserVault() const
+{
+    const QVariantList recent = m_settings->recentVaults();
+    for (const QVariant &v : recent) {
+        const QString path = v.toMap().value(u"path"_s).toString();
+        if (!isDocsPath(path)) // 0.3.0–0.3.5 listed the documentation among the recent notebooks
+            return path;
+    }
+    return {};
 }
 
 void AppController::toggleDocsVault()
@@ -607,15 +636,11 @@ void AppController::toggleDocsVault()
         openDocsVault();
         return;
     }
-    const QVariantList recent = m_settings->recentVaults();
-    for (const QVariant &v : recent) {
-        const QString path = v.toMap().value(u"path"_s).toString();
-        if (QDir::cleanPath(path) != docsVaultPath()) {
-            openVault(path);
-            return;
-        }
-    }
-    closeVault(); // no other notebook known: the start screen
+    const QString back = lastUserVault();
+    if (back.isEmpty())
+        closeVault(); // no other notebook known: the start screen
+    else
+        openVault(back);
 }
 
 void AppController::openDemoVault()
@@ -680,8 +705,14 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     // shell is gone by now — its editors saved into the old vault before it closes below.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     QString error;
+    const bool docs = isDocsPath(path);
+    // The documentation has no reminders: its scheduler must not replace the armed set of the
+    // user's notebook with an empty one (Android would cancel every alarm of it).
+    m_workspace->setRemindersPaused(docs);
     // The sync settings are the notebook's: the previous notebook is closed and the new one is
     // current before sync attaches to the new folder, never the old notebook's server folder.
+    // The documentation is current while it is open (its sync settings, the switcher), but it
+    // never becomes a recent notebook, and start() never reopens it.
     const QString previousVault = m_settings->currentVault();
     m_workspace->close();
     m_settings->setCurrentVault(path);
@@ -697,21 +728,21 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     // The documentation (and the sample notebook) are not the user's notes: they never take
     // over the sync settings of the notebook that was synced before 0.3.1.
     const QString cleanPath = QDir::cleanPath(path);
-    const bool sample = (!docsVaultPath().isEmpty() && cleanPath == docsVaultPath())
-                        || (cleanPath == demoVaultPath() && demoVaultPath() != defaultVaultPath());
+    const bool sample = docs || (cleanPath == demoVaultPath() && demoVaultPath() != defaultVaultPath());
     if (!sample)
         m_settings->claimSharedNextcloud(path);
     bool showWelcome = false;
-    bool docs = false;
     if (seedDemo && m_workspace->vault()->markdownFiles().isEmpty()) {
-        docs = !docsVaultPath().isEmpty() && QDir::cleanPath(path) == docsVaultPath();
         const int written = docs ? seedDocsVault(*m_workspace->vault())
                                  : seedDemoVault(*m_workspace->vault(), now());
         if (written < 0)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }
-    m_settings->addRecentVault(m_workspace->rootPath());
+    if (docs)
+        m_settings->forgetRecentVault(path); // listed by 0.3.0–0.3.5
+    else
+        m_settings->addRecentVault(m_workspace->rootPath());
     m_history.reset();
     m_sideRoute.clear();
     Q_EMIT sidePanelRouteChanged();
@@ -899,12 +930,24 @@ void AppController::quickCapture()
         m_startCapture = true;
         return;
     }
+    if (inDocsVault()) {
+        // Notes go into the user's journal, never into the documentation: back to the user's
+        // notebook, and the dialog opens there.
+        const QString back = lastUserVault();
+        if (back.isEmpty()) {
+            toast(tr("Quick capture writes into your own notebook. Open or create one first."), u"warning"_s);
+            return;
+        }
+        m_startCapture = true;
+        openVault(back);
+        return;
+    }
     requestUiAction(u"capture"_s);
 }
 
 bool AppController::capture(const QString &text)
 {
-    if (!m_workspace->isOpen())
+    if (!m_workspace->isOpen() || inDocsVault())
         return false;
     // A date in the text makes it a task with a reminder / due date (workspacecapture.h).
     return !m_workspace->quickCapture(text).isEmpty();

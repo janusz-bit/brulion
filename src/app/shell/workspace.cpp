@@ -323,8 +323,10 @@ void Workspace::indexingFinished()
         m_indexClock.invalidate();
     }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built
-    // index would make reminders look deleted).
-    m_reminders->start();
+    // index would make reminders look deleted). A vault with paused reminders never starts its
+    // scheduler: an empty schedule() would cancel what the previous notebook armed.
+    if (!m_remindersPaused)
+        m_reminders->start();
     setReady(false);
 #ifdef Q_OS_WASM
     platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks

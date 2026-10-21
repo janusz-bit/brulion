@@ -128,6 +128,11 @@ public:
     qreal indexProgress() const;
     bool ready() const { return isOpen() && !indexing(); }
     WorkspaceReminders *reminders() const { return m_reminders; }
+    /// Vaults opened from now on arm no reminders (the documentation notebook, which has none):
+    /// their scheduler never starts, so nothing replaces what the platform armed for the
+    /// notebook before (Android keeps its alarms) — see AppController::finishOpening().
+    void setRemindersPaused(bool paused) { m_remindersPaused = paused; }
+    bool remindersPaused() const { return m_remindersPaused; }
     WorkspaceSync *sync() const { return m_sync; }
     int journalCount() const;
     int trashCount() const;
@@ -371,6 +376,7 @@ private:
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;
+    bool m_remindersPaused = false;
     bool m_wasInactive = false; ///< the app left the foreground since the last rescan
     mutable QHash<QString, QUrl> m_dataUrls;
     mutable QHash<QString, QSize> m_dataUrlSizes; // pictures among them (picturesize.h)
