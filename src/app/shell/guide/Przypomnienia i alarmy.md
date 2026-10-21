@@ -33,9 +33,9 @@ Jeśli blok ma też regułę `🔁` (zobacz [[Zadania|Zadania]]), przypomnienie 
 ## Który notatnik przypomina
 Przypomnienia i alarmy pochodzą z otwartego notatnika. Gdy przełączysz się na inny swój notatnik, Brulion odlicza już tylko jego przypomnienia, a poprzedniego czekają, aż do niego wrócisz:
 - na Androidzie alarmy poprzedniego notatnika zostają wyłączone, a te, których czas minie, zanim wrócisz, przepadają — nie zadzwonią ani nie pojawią się później;
-- na komputerze i w przeglądarce po powrocie te spóźnione najwyżej kilka godzin pojawią się od razu, a starsze trafią na listę przegapionych.
+- na komputerze po powrocie od razu pojawią się przypomnienia spóźnione najwyżej 6 godzin i alarmy spóźnione nie dłużej, niż alarm dzwoni; starsze trafią na listę przegapionych.
 
-Wyjątkiem jest ta dokumentacja: nie ma własnych przypomnień, więc gdy ją czytasz, na Androidzie alarmy Twojego notatnika dzwonią dalej, a dotknięcie powiadomienia otwiera notatkę w Twoim notatniku. Na komputerze i w przeglądarce przypomnienia, które minęły w tym czasie, pokażą się po powrocie, jak wyżej.
+Wyjątkiem jest ta dokumentacja: nie ma własnych przypomnień, więc gdy ją czytasz, na Androidzie alarmy Twojego notatnika dzwonią dalej, a dotknięcie powiadomienia otwiera notatkę w Twoim notatniku. Na komputerze przypomnienia, które minęły w tym czasie, pokażą się po powrocie, jak wyżej.
 
 ## Gdzie je znajdziesz
 Przypomnienia i alarmy widać w **Kalendarzu** (miesiąc, tydzień, agenda) i w zapytaniach: `type:reminders remind:this-week` — zobacz [[Zapytania|Zapytania]]. Domyślną godzinę ustawisz w *Ustawienia → Notatnik*.
