@@ -307,6 +307,7 @@ ApplicationWindow {
     property BTextField timeField: null
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
+    property var crumbsProbe: null
     function check(ok, what) {
         if (!ok)
             failures += 1
@@ -331,6 +332,43 @@ ApplicationWindow {
                 return found
         }
         return null
+    }
+    /// The Text under `item` that shows `text`, or null.
+    function textShowing(item, text) {
+        if (!item)
+            return null
+        if (item.text === text && item.textFormat !== undefined)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = textShowing(item.children[i], text)
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// The Text under `item` whose text contains `needle`, or null.
+    function textContaining(item, needle) {
+        if (!item || !item.visible)
+            return null
+        if (item.textFormat !== undefined && String(item.text).indexOf(needle) >= 0)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = textContaining(item.children[i], needle)
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// `label` is as wide as `text` written out in plain text (markup not interpreted).
+    function showsAsWritten(label, text) {
+        if (!label)
+            return false
+        const plain = Qt.createQmlObject('import QtQuick; Text { textFormat: Text.PlainText }', window.contentItem, "plainText")
+        plain.font = label.font
+        plain.text = text
+        const same = Math.abs(plain.implicitWidth - label.implicitWidth) < 1
+        plain.destroy()
+        return same
     }
     /// A real key press (through the window, Keys handlers and TextEdit) to the focused item.
     function realKey(k, modifiers, text) {
@@ -879,7 +917,39 @@ ApplicationWindow {
                 ed.controller.load()
             },
             () => check(window.probe === null, "the probe editor is gone"),
-            () => check(page.loaded && editor.alive, "the page's own editor still works")
+            () => check(page.loaded && editor.alive, "the page's own editor still works"),
+            // ---- Names in menus and breadcrumbs are shown as written -------------------------------
+            () => {
+                const markup = "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"
+                const item = Qt.createQmlObject('import QtQuick; import Brulion; BMenuItem {}', window.contentItem, "menuItemProbe")
+                item.text = markup
+                check(showsAsWritten(textShowing(item, markup), markup), "a menu item shows a name with markup as written")
+                item.destroy()
+                const crumbs = Qt.createQmlObject('import QtQuick; import Brulion; BBreadcrumb { width: 900 }', window.contentItem, "crumbsProbe")
+                crumbs.model = [{ title: "Projekty" }, { title: markup }]
+                window.crumbsProbe = crumbs
+            },
+            () => {
+                check(showsAsWritten(textShowing(window.crumbsProbe, "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"),
+                                     "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"),
+                      "a breadcrumb shows a name with markup as written")
+                window.crumbsProbe.destroy()
+                page.save()
+                page.path = host.samplePath
+            },
+            () => {
+                // A block zoomed into: its text in the breadcrumb above the blocks, as written.
+                window.realRow = page.insertBlockAfter(rowOf("Ekipa może"), "Tekst z <b>HTML</b> & <i>kursywą</i>")
+                page.stopEditing()
+                page.zoomInto(window.realRow)
+            },
+            () => {
+                const label = textContaining(editor, "<b>HTML</b>")
+                check(label !== null && showsAsWritten(label, label.text), "the zoom breadcrumb shows a block's markup as written: "
+                      + (label ? label.text : "none"))
+                page.zoomOut()
+                page.undo()
+            }
         ]
         stepIndex = 0
         stepTimer.start()

@@ -10,13 +10,7 @@ Item {
     id: root
 
     property PageController controller
-    property BlockEditor editor
     readonly property var crumbs: controller ? controller.breadcrumb : []
-
-    // BBreadcrumb shows titles with Text.AutoText: block text must not become markup.
-    function safe(s) {
-        return editor ? editor.autoTextSafe(s) : s
-    }
 
     implicitHeight: row.implicitHeight + Theme.space2
 
@@ -35,9 +29,9 @@ Item {
             Layout.fillWidth: true
             rootIcon: "file-text"
             model: {
-                const out = [{ title: root.safe(root.controller ? root.controller.title : "") }]
+                const out = [{ title: root.controller ? root.controller.title : "" }]
                 for (let i = 0; i < root.crumbs.length; ++i)
-                    out.push({ title: root.crumbs[i].title !== "" ? root.safe(root.crumbs[i].title) : "…" })
+                    out.push({ title: root.crumbs[i].title !== "" ? root.crumbs[i].title : "…" })
                 return out
             }
             onActivated: (index) => {

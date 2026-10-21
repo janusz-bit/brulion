@@ -12,7 +12,8 @@ import Brulion
 //       onActivated: (index) => navigateTo(index)
 //   }
 //
-// model: array of { title, icon? } or strings. When it does not fit, the middle parts
+// model: array of { title, icon? } or strings, shown as plain text (folder names, page titles
+// and zoomed blocks' text never turn into markup). When it does not fit, the middle parts
 // collapse into a "…" button that opens a menu with the hidden parts.
 Item {
     id: root
@@ -128,6 +129,7 @@ Item {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: crumb.text
+                            textFormat: Text.PlainText
                             font.family: Theme.fontUi
                             font.pixelSize: Theme.textSm
                             font.weight: part.last ? Theme.weightSemiBold : Theme.weightNormal

@@ -389,7 +389,7 @@ FocusScope {
             onTriggered: AppController.navigate({ view: "history", path: page.path })
         }
         BMenuItem {
-            text: qsTr("Copy link %1").arg(editor.autoTextSafe(tools.wikiLink(page.path)))
+            text: qsTr("Copy link %1").arg(tools.wikiLink(page.path))
             iconName: "link"
             onTriggered: root.copyLink()
         }
