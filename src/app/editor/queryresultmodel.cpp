@@ -379,6 +379,23 @@ bool QueryResultModel::toggleTask(int row)
     return true;
 }
 
+bool QueryResultModel::setTaskStatus(int row, const QString &status)
+{
+    if (row < 0 || row >= m_rows.size() || !m_controller)
+        return false;
+    Row &r = m_rows[row];
+    if (r.group || r.status.isEmpty() || r.status == status)
+        return false;
+    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(),
+                                                       r.item.value(u"line"_s, -1).toInt(), status);
+    if (!changed)
+        return false;
+    r.status = status;
+    Q_EMIT dataChanged(index(row), index(row), {StatusRole, IsTaskRole, OverdueRole});
+    m_timer.start();
+    return true;
+}
+
 QVariantMap QueryResultModel::open(int row, bool newPane)
 {
     if (row < 0 || row >= m_rows.size() || !m_controller)

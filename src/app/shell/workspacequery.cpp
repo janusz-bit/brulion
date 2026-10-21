@@ -323,15 +323,17 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
 
 bool Workspace::setTaskStatus(const QString &rawPath, int line, const QString &status)
 {
+    // "" = no status: the task marker goes (status menus' "No status").
     const std::optional<TaskStatus> wanted = statusFromName(status);
     const QString path = paths::normalize(rawPath);
-    if (!m_vault || !wanted || line < 0 || !paths::isMarkdown(path))
+    if (!m_vault || (!wanted && !status.isEmpty()) || line < 0 || !paths::isMarkdown(path))
         return false;
     bool ok = false;
     const QString content = m_vault->readText(path, &ok);
     if (!ok)
         return false;
-    const QString edited = markdown::setTaskStatus(content, line, *wanted, now().date());
+    const QString edited = wanted ? markdown::setTaskStatus(content, line, *wanted, now().date())
+                                  : markdown::removeTaskMarker(content, line);
     if (edited == content)
         return false;
     return write(path, edited);

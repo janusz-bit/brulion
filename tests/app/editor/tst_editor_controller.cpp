@@ -1241,6 +1241,17 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(f.page.toggleTaskAt(u"Zakupy.md"_s, 0, u"todo"_s));
         QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [x] Mleko ✅ 2026-10-15\n"_s);
         QVERIFY(!f.page.toggleTaskAt(u"Nie ma.md"_s, 0, u"todo"_s));
+        // The status menu: any status, "" = no status (the marker goes), here and elsewhere.
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, u"deferred"_s));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [>] Mleko\n"_s);
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString()));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- Mleko\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString())); // nothing left to remove
+        QVERIFY(f.page.setTaskStatusAt(Page, 0, QString()));
+        QCOMPARE(f.text(), u"- Tutaj 📅 2026-10-20\n- zwykły\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(Page, 0, QString()));
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
         QCOMPARE(PageController::toggledStatus(u"doing"_s), u"done"_s);
         QCOMPARE(PageController::toggledStatus(u"cancelled"_s), u"todo"_s);
         QCOMPARE(PageController::toggledStatus(QString()), QString());

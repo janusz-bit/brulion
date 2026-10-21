@@ -2394,7 +2394,7 @@ QString PageController::toggledStatus(const QString &status)
 
 bool PageController::setTaskStatusAt(const QString &path, int line, const QString &status)
 {
-    if (path.isEmpty() || line < 0 || !taskStatusFromName(status))
+    if (path.isEmpty() || line < 0 || (!status.isEmpty() && !taskStatusFromName(status)))
         return false;
     if (path == m_path) {
         const int row = rowOfLine(line);

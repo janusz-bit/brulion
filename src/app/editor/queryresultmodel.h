@@ -3,9 +3,9 @@
 // the shell's Workspace, the playground's FakeEditorHost), flattens `group:` results into group
 // header rows followed by their items, renders each item's Markdown with the page's renderer
 // colours (links, tags, date chips; the task marker is drawn by the delegate), and runs the
-// query again — debounced — when the index or the query changes. Tasks are checked through
-// PageController::setTaskStatusAt (this page: an undoable edit; other files: the host), with the
-// new status shown at once until the index catches up.
+// query again — debounced — when the index or the query changes. Tasks are checked (and get a
+// status from their menu) through PageController::setTaskStatusAt (this page: an undoable edit;
+// other files: the host), with the new status shown at once until the index catches up.
 //
 //   QueryResultModel { id: results; controller: block.controller; source: block.model.editText }
 //   Repeater { model: results; delegate: … }   // roles below
@@ -132,6 +132,10 @@ public:
     /// Checkbox click on an item: todo/doing/deferred -> done, done/cancelled -> todo. False when
     /// the row is no task or the file could not be changed.
     Q_INVOKABLE bool toggleTask(int row);
+    /// The status menu on an item: set its task's status ("todo", "doing", "done", "deferred",
+    /// "cancelled"; "" = no status, the row stops being a task). False when the row is no task,
+    /// has that status already, or the file could not be changed.
+    Q_INVOKABLE bool setTaskStatus(int row, const QString &status);
     /// Open the item's page at its block: { action: "scrollTo", row } when it is on this page
     /// (for BlockEditor.revealRow), else navigated through the host.
     Q_INVOKABLE QVariantMap open(int row, bool newPane = false);

@@ -377,9 +377,9 @@ public:
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
     // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------
-    /// Set the status of the task on `line` (0-based) of `path`: on this page as an editing
-    /// command (undo), in other files through the host's QueryHost. False when nothing changed or
-    /// the host cannot edit other files.
+    /// Set the status of the task on `line` (0-based) of `path` ("" = no status: the marker goes):
+    /// on this page as an editing command (undo), in other files through the host's QueryHost.
+    /// False when nothing changed or the host cannot edit other files.
     Q_INVOKABLE bool setTaskStatusAt(const QString &path, int line, const QString &status);
     /// A checkbox click on a task shown elsewhere: toggledStatus(currentStatus) at path:line.
     Q_INVOKABLE bool toggleTaskAt(const QString &path, int line, const QString &currentStatus);
