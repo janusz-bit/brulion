@@ -24,6 +24,7 @@
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
+#include <QWheelEvent>
 #include <qtestsupport_gui.h>
 
 #include <cstdio>
@@ -804,6 +805,41 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     check(waitFor(textShown) && controllerFor(picture) == nullptr, "Ctrl+E on the picture shows its text");
     app->requestUiAction(u"toggleSourceMode"_s);
     check(waitFor(pictureShown), "and Ctrl+E once more the picture");
+
+    // A long text view scrolls: with a finger on phones (a TextEdit that selects by dragging
+    // kept the finger, the text never moved), with the wheel on desktops; nothing gets selected.
+    {
+        QString svg = u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">\n"_s;
+        for (int i = 0; i < 300; ++i)
+            svg += u"  <rect x=\"%1\" y=\"1\" width=\"1\" height=\"1\"/> <!-- żółw %1 -->\n"_s.arg(i);
+        svg += u"</svg>\n"_s;
+        const QString longSvg = u"assets/długi szkic.svg"_s;
+        check(workspace->writeFile(longSvg, svg), "a long SVG is added to the notebook");
+        app->openPage(longSvg);
+        check(waitFor([&] { return opened(longSvg) && pictureShown(); }), "the long SVG opens");
+        app->requestUiAction(u"toggleSourceMode"_s);
+        QQuickItem *flick = nullptr;
+        QQuickItem *edit = nullptr;
+        check(waitFor([&] {
+                  flick = textShown() ? child(pictureView(), "pictureText") : nullptr;
+                  edit = flick ? child(pictureView(), "pictureTextEdit") : nullptr;
+                  return edit && flick->property("contentHeight").toReal() > 2 * flick->height();
+              }),
+              "the long SVG's text view is longer than the window");
+        if (flick && edit) {
+            const QPointF at = flick->mapToScene(QPointF(flick->width() / 2, flick->height() * 0.7));
+            if (touch) {
+                touchDrag(window, at, QPointF(0, -300));
+            } else {
+                QWheelEvent wheel(at, window->mapToGlobal(at), QPoint(), QPoint(0, -360), Qt::NoButton, Qt::NoModifier,
+                                  Qt::NoScrollPhase, false);
+                QCoreApplication::sendEvent(window, &wheel);
+            }
+            check(waitFor([&] { return flick->property("contentY").toReal() > 100; })
+                          && edit->property("selectedText").toString().isEmpty(),
+                  touch ? "a finger scrolls the text view and selects nothing" : "the wheel scrolls the text view");
+        }
+    }
 
     // route.open on a picture: "text" opens its text view, "links" (wide windows) the side panel
     // with the picture's references.

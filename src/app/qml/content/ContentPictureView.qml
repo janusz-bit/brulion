@@ -303,7 +303,9 @@ Item {
                     objectName: "pictureTextEdit" // (the shell's self-test)
                     width: parent.width
                     readOnly: true
-                    selectByMouse: true
+                    // Not on touch UIs: a TextEdit that selects by dragging keeps the finger,
+                    // and the text could not be scrolled at all.
+                    selectByMouse: !Theme.touchUi
                     textFormat: TextEdit.PlainText
                     wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
                     text: textFlick.truncated ? textFlick.fileText.slice(0, root.textLimit) : textFlick.fileText
