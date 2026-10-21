@@ -19,8 +19,8 @@
 #   --yes      do not ask for confirmation
 #   --dry-run  show what a real run would do, change nothing; from another branch it shows what a
 #              real run on the release branch would do (the versions come from that branch)
-#   --allow-stale  release even though main, origin/main or origin/release has commits that
-#              the release branch lacks
+#   --allow-stale  release even though main or origin/main has commits that the release branch
+#              lacks (never without origin/release's: origin would reject the push)
 #
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
@@ -147,18 +147,29 @@ known() { git rev-parse -q --verify "$1^{commit}" || true; }
 lacks main "$(known refs/heads/main)" "git merge main"
 if ((reached)); then
   lacks origin/main "$(remote_commit refs/heads/main)" "git fetch origin && git merge origin/main"
-  lacks origin/release "$(remote_commit refs/heads/release)" "git fetch origin && git merge origin/release"
 else
   lacks origin/main "$(known refs/remotes/origin/main)" "git merge origin/main"
+fi
+# Main's commits may wait for the next release (--allow-stale); origin/release's may not: origin
+# would reject the push of the release branch, after the release commit and the tag were made.
+on_main=${#stale[@]}
+if ((reached)); then
+  lacks origin/release "$(remote_commit refs/heads/release)" "git fetch origin && git merge origin/release"
+else
   lacks origin/release "$(known refs/remotes/origin/release)" "git merge origin/release"
 fi
+behind=$((${#stale[@]} > on_main))
 if ((${#stale[@]})); then
   report="'$from' lacks commits that are on"$'\n'"$(printf '  %s\n' "${stale[@]}")"
-  if ((!dry && !allow_stale)); then
+  if ((!dry && behind)); then
+    die "$report"$'\n'"Merge them first (--allow-stale does not skip origin/release: origin would reject the push)."
+  elif ((!dry && !allow_stale)); then
     die "$report"$'\n'"Merge them first, or pass --allow-stale to release without them."
   fi
   echo "warning: $report" >&2
-  if ((dry)); then
+  if ((dry && behind)); then
+    echo "A real run refuses to release without them." >&2
+  elif ((dry)); then
     echo "A real run refuses to release without them (unless --allow-stale)." >&2
   else
     echo "Releasing without them (--allow-stale)." >&2

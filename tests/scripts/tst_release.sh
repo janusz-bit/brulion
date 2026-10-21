@@ -126,7 +126,8 @@ expect "... names main and how to merge it" has "main: 1 commit (git merge main)
 expect "... mentions --allow-stale" has "--allow-stale"
 expect "... creates no tag" test "$(git -C "$work" tag -l v0.3.6)" = ""
 expect "... and no commit" test "$(sha "$work" HEAD)" = "$head"
-expect "... and pushes nothing" same "$origin" release "$work" HEAD
+expect "... and pushes nothing" test "$(sha "$origin" release)" = "$head"
+expect "... not even a tag" test "$(git -C "$origin" tag -l v0.3.6)" = ""
 rel "$work" --dry-run patch
 expect "a dry run warns about it" has "A real run refuses to release without them"
 expect "... and still shows the plan" has "Brulion 0.3.5 -> 0.3.6 (tag v0.3.6, from release)"
@@ -148,7 +149,7 @@ git -C "$work" fetch -q origin
 rel "$work" patch --yes
 expect "fetched but not merged: origin/main, 1 commit" has "origin/main: 1 commit (git fetch origin && git merge origin/main)"
 
-echo "--- ... and when origin/release moved on"
+echo "--- ... and when origin/release moved on, even with --allow-stale"
 git -C "$work" merge -q --no-edit origin/main
 git -C "$other" switch -q release
 commit "$other" .github/release-notes.md '* Inna notatka' "Notes from elsewhere"
@@ -156,12 +157,28 @@ git -C "$other" push -q origin release
 rel "$work" patch --yes
 expect "a real run fails" test "$status" != 0
 expect "... naming origin/release" has "origin/release: commits not fetched yet (git fetch origin && git merge origin/release)"
+rel "$work" --dry-run patch --allow-stale
+expect "a dry run says --allow-stale would not help" has "A real run refuses to release without them."
+head=$(sha "$work" HEAD)
+rel "$work" patch --yes --push --allow-stale
+expect "--allow-stale does not skip it (origin would reject the push)" test "$status" != 0
+expect "... says so" has "--allow-stale does not skip origin/release"
+expect "... creates no tag" test "$(git -C "$work" tag -l v0.3.6)" = ""
+expect "... and no commit" test "$(sha "$work" HEAD)" = "$head"
 
-echo "--- --allow-stale releases anyway"
-rel "$work" patch --yes --allow-stale
+echo "--- --allow-stale releases without main's newest commits"
+git -C "$work" fetch -q origin
+git -C "$work" merge -q --no-edit origin/release
+git -C "$work" switch -q main
+commit "$work" later.txt 'na później' "Work for the next release"
+git -C "$work" switch -q release
+rel "$work" patch --yes --push --allow-stale
 expect "the run succeeds" test "$status" = 0
 expect "... with a warning" has "Releasing without them (--allow-stale)."
+expect "... about main only" test "$(grep -c '^  origin/' <<<"$out")" = 0
 expect "... and the tag" test "$(git -C "$work" tag -l v0.3.6)" = v0.3.6
+expect "... pushed with the branch" same "$origin" release "$work" HEAD
+expect "... without main's commit" test "$(git -C "$work" merge-base --is-ancestor main v0.3.6 && echo yes)" = ""
 
 echo "--- unchanged release notes are pointed out"
 fixture notes

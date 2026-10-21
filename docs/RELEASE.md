@@ -7,7 +7,7 @@ Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryp
 
 | Plik | Kiedy | Co robi |
 |---|---|---|
-| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
+| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
 | `.github/workflows/android.yml` | push na `main` (zmiany w `src/`, `android/`…), ręcznie, z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
 | `.github/workflows/wasm.yml` | push na `main` (zmiany w `src/`, `wasm/`…), ręcznie, z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** |
 | `.github/workflows/appimage.yml` | push na `main` (zmiany w `src/`, `tests/`…), ręcznie, z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
@@ -91,9 +91,11 @@ Przed wydaniem skrypt sprawdza, czy `release` zawiera wszystkie commity z `main`
 i `origin/main`) oraz z `origin/release`. Gdy czegoś brakuje, odmawia i pisze, co scalić
 (`git merge main`, `git fetch origin && git merge origin/main`, `… origin/release`) —
 inaczej wydanie wyszłoby bez najnowszych poprawek albo push zostałby odrzucony już po
-utworzeniu taga. `--allow-stale` wydaje mimo to (np. gdy zmiany na main celowo czekają na
-następne wydanie); `--dry-run` tylko ostrzega. Ostrzega też, gdy `.github/release-notes.md`
-nie zmienił się od ostatniego taga (wydanie powtórzyłoby poprzednie notatki).
+utworzeniu taga. `--allow-stale` wydaje mimo brakujących commitów z main (np. gdy zmiany na
+main celowo czekają na następne wydanie), ale nie z `origin/release` — tamte trzeba scalić,
+bo origin odrzuciłby push. `--dry-run` tylko ostrzega. Ostrzega też, gdy
+`.github/release-notes.md` nie zmienił się od ostatniego taga (wydanie powtórzyłoby poprzednie
+notatki).
 
 Push taga uruchamia `release.yml`:
 

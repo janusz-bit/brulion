@@ -134,8 +134,8 @@ jobs:
       - name: actionlint
         run: actionlint -color
 
-      - name: shellcheck scripts/*.sh
-        run: shellcheck scripts/*.sh
+      - name: shellcheck scripts/*.sh tests/scripts/*.sh
+        run: shellcheck scripts/*.sh tests/scripts/*.sh
 
       # Only the lines a push or pull request changes (the existing code is not reformatted
       # wholesale). Pull requests fail on a diff; pushes to main only warn.
