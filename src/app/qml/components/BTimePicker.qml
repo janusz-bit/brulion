@@ -386,7 +386,7 @@ T.Control {
                     if (faceInput.pressedLabel >= 0) {
                         const dx = mouse.x - faceInput.pressPoint.x
                         const dy = mouse.y - faceInput.pressPoint.y
-                        const slop = Qt.styleHints.startDragDistance
+                        const slop = Application.styleHints.startDragDistance
                         if (dx * dx + dy * dy <= slop * slop)
                             return
                         faceInput.pressedLabel = -1 // a drag: the hand follows the pointer now
