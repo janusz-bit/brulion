@@ -32,6 +32,8 @@ albo w bloku `math`:
 
 Blok `math` (także `latex` i `tex`) jest edytowany w miejscu: kliknij go, żeby zobaczyć i poprawić źródło LaTeX; Enter dodaje kolejną linię wzoru (przydaje się w macierzach i układach). Wstawisz go poleceniem `/Wzór matematyczny`.
 
+Gdy każdy `$$` stoi w osobnej linii, wszystkie linie między nimi należą do wzoru, także te zaczynające się od `+`, `-`, `>` albo `1.` — nie zamienią się w listę ani cytat, również w punkcie konspektu. Pusta linia przerywa taki wzór (LaTeX też jej nie dopuszcza).
+
 ## Co Brulion rozumie
 - greckie litery i symbole: `\alpha`, `\pi`, `\infty`, `\leq`, `\to`, `\in`;
 - indeksy i potęgi: `x_i`, `x^{n+1}`, `a_1^2`;

@@ -165,6 +165,7 @@ QStringList fixtures()
             u"\n\n\n- zaczyna się od pustych linii\n"_s,
             u"10. dziesięć\n11. jedenaście\n"_s,
             u"- \n-\n- [ ] \n"_s,
+            u"$$\nf(x) = a\n + b\n - c\n$$\n\n- Wzór:\n  $$\n  a\n  + b\n  $$\n- dalej\n"_s,
     };
 }
 
@@ -313,6 +314,20 @@ private Q_SLOTS:
         const BlockDocument doc(u"> [!todo] Lista\n> - [ ] a\n>   - [ ] b\n\n> cytat\n> - x\n"_s);
         QCOMPARE(entries(doc),
                  QStringList({u"callout:0:|> [!todo] Lista⏎> - [ ] a⏎>   - [ ] b"_s, u"quote:0:|> cytat⏎> - x"_s}));
+    }
+
+    // A display formula between `$$` lines is one block, also when its lines look like list items
+    // or quotes (SYNTAX §11): the editor's blocks and the parser's agree, also after an edit.
+    void displayMathIsOneBlock()
+    {
+        BlockDocument doc(u"$$\nf(x) = a\n+ b\n- c\n$$\n\n- Wzór:\n  $$\n  a\n  > b\n  1. c\n  $$\n- dalej\n"_s);
+        QCOMPARE(entries(doc), QStringList({u"p:0:|$$⏎f(x) = a⏎+ b⏎- c⏎$$"_s, u"li:0:- |Wzór:⏎$$⏎a⏎> b⏎1. c⏎$$"_s,
+                                            u"li:0:- |dalej"_s}));
+        QVERIFY(doc.setBody(1, u"Wzór:\n$$\nx\n+ y\n- z\n$$"_s).changed());
+        QCOMPARE(doc.toString(), u"$$\nf(x) = a\n+ b\n- c\n$$\n\n- Wzór:\n  $$\n  x\n  + y\n  - z\n  $$\n- dalej\n"_s);
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        // Without a closing `$$` line the lines are blocks of their own.
+        QCOMPARE(entries(BlockDocument(u"$$\na\n- b\n"_s)), QStringList({u"p:0:|$$⏎a"_s, u"li:0:- |b"_s}));
     }
 
     void propertiesOnlyAtTheTop()

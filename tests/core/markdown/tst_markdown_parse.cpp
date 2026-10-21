@@ -999,6 +999,26 @@ private Q_SLOTS:
         QTest::newRow("frontmatter") << u"---\na: 1\n---\n\ntitle:: X\ntags:: a\n\n- first"_s
                                      << u"frontmatter@0-2:d0, frontmatter@4-5:d0, listItem@7-7:d0"_s;
         QTest::newRow("properties only at top") << u"- a\nkey:: v"_s << u"listItem@0-1:d0"_s;
+        // A line that is only `$$` opens a display formula up to the next such line (SYNTAX §11).
+        QTest::newRow("display math") << u"$$\nf(x) = a\n + b\n - c\n$$\n"_s << u"paragraph@0-4:d0"_s;
+        QTest::newRow("display math with block syntax")
+                << u"$$\nf(x) = a\n+ b\n> c\n1. d\n# e\n---\n```\n$$\npo\n\n- x"_s
+                << u"paragraph@0-9:d0, listItem@11-11:d0"_s;
+        QTest::newRow("display math after text")
+                << u"Tekst:\n$$\na\n- b\n$$\n- c"_s << u"paragraph@0-4:d0, listItem@5-5:d0"_s;
+        QTest::newRow("display math unclosed") << u"$$\na\n- b"_s << u"paragraph@0-1:d0, listItem@2-2:d0"_s;
+        QTest::newRow("display math ends at a blank line")
+                << u"$$\na\n\n- b\n$$"_s << u"paragraph@0-1:d0, listItem@3-4:d0"_s;
+        QTest::newRow("display math in an item")
+                << u"- Wzór:\n  $$\n  f(x) = a\n  + b\n  - c\n  $$\n- dalej"_s << u"listItem@0-5:d0, listItem@6-6:d0"_s;
+        QTest::newRow("item opening display math")
+                << u"- $$\n  a\n  - b\n  $$\n- c"_s << u"listItem@0-3:d0, listItem@4-4:d0"_s;
+        QTest::newRow("lazy display math in an item")
+                << u"- Wzór:\n$$\na\n+ b\n$$\n- c"_s << u"listItem@0-4:d0, listItem@5-5:d0"_s;
+        QTest::newRow("display math in a quote") << u"> $$\n> a\n> - b\n> $$"_s << u"quote@0-3:d0"_s;
+        QTest::newRow("two display formulas")
+                << u"$$\na\n$$\n\n$$\n- b\n$$"_s << u"paragraph@0-2:d0, paragraph@4-6:d0"_s;
+        QTest::newRow("$$ inside a line is no fence") << u"Wzór $$a\n+ b$$"_s << u"paragraph@0-0:d0, listItem@1-1:d0"_s;
     }
 
     void structureNesting()
@@ -1006,6 +1026,19 @@ private Q_SLOTS:
         QFETCH(QString, src);
         QFETCH(QString, expected);
         QCOMPARE(outline(src), expected);
+    }
+
+    void displayMathKeepsItsLines()
+    {
+        const ParsedNote n = parseNote(u"a.md"_s, u"- Wzór #wzory:\n  $$\n  f(x) = a\n  + b\n  - c\n  $$\n- dalej"_s);
+        QCOMPARE(n.blocks.size(), 2);
+        QCOMPARE(n.blocks[0].text, u"Wzór #wzory:\n$$\nf(x) = a\n+ b\n- c\n$$"_s);
+        QCOMPARE(n.blocks[0].tags, QStringList({u"wzory"_s}));
+        QCOMPARE(n.blocks[1].text, u"dalej"_s);
+        const ParsedNote top = parseNote(u"a.md"_s, u"$$\nf(x) = a\n + b\n - c\n$$\n"_s);
+        QCOMPARE(top.blocks.size(), 1);
+        QCOMPARE(top.blocks[0].kind, BlockKind::Paragraph);
+        QCOMPARE(top.blocks[0].text, u"$$\nf(x) = a\n+ b\n- c\n$$"_s);
     }
 
     void continuationAndLazyLines()

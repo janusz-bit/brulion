@@ -2,6 +2,7 @@
 // of hostile input, block-level rendering.
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
+#include "markdown/math.h"
 #include "markdown/tokens.h"
 
 #include <QElapsedTimer>
@@ -314,6 +315,19 @@ private Q_SLOTS:
         const qsizetype tags = html.count(u"<a href=\"tag:"_s);
         QCOMPARE(tags, scan.tags.size());
         QCOMPARE(html.count(u"<a href=\""_s) - tags, scan.links.size());
+    }
+
+    // A quote shows "- x" lines as bullets, but not inside a display formula between `$$` lines
+    // (SYNTAX §11): there "- b" is part of the formula.
+    void quotedDisplayFormulaKeepsItsLines()
+    {
+        const QString html =
+                InlineRenderer(context()).renderBlock(u"> $$\n> a\n> - b\n> $$\n> - punkt"_s, BlockKind::Quote);
+        QVERIFY2(html.contains(renderMath(u"\na\n- b\n"_s, true)), qPrintable(html));
+        QCOMPARE(html.count(u"•"_s), 1);
+        QVERIFY(html.contains(u"• punkt"_s));
+        // Without a closing `$$` line the lines are bullets as before.
+        QCOMPARE(InlineRenderer(context()).renderBlock(u"> $$\n> - b"_s, BlockKind::Quote).count(u"•"_s), 1);
     }
 
     void hostileInput_data()

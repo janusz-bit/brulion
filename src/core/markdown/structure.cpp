@@ -323,6 +323,37 @@ private:
         return int(m_st.nodes.size() - 1);
     }
 
+    /// A line that is only `$$` (`opener`: the line's content) opens a display formula up to the
+    /// next line that is only `$$` (SYNTAX §11): the lines between are formula, not block syntax
+    /// (`+ b`, `- c`, `> d`, `1. e`, `# f`). The closing line's index, or -1 when no such line comes
+    /// before a blank line or the end of the container (the `$$` is then text). A search that
+    /// fails passes no other `$$` line, so the lines of a container are searched at most twice.
+    qsizetype displayMathClose(qsizetype k, QStringView opener) const
+    {
+        if (opener.trimmed() != u"$$")
+            return -1;
+        for (qsizetype j = k + 1; j < m_views.size(); ++j) {
+            const QStringView t = masked(j);
+            if (isBlank(t))
+                return -1;
+            if (t.trimmed() == u"$$")
+                return j;
+        }
+        return -1;
+    }
+
+    /// The lines after a `$$` line up to its closing line `close` as text of node `idx`, from
+    /// `contentCol` columns of indentation on (list items), else after all of it; m_i moves past.
+    void takeDisplayMath(int idx, qsizetype close, int contentCol = -1)
+    {
+        for (; m_i <= close; ++m_i) {
+            const LineView w = m_views[m_i];
+            const QStringView u = m_st.maskedText(w);
+            const qsizetype start = contentCol >= 0 ? charsForColumns(u, contentCol) : indentOf(u).chars;
+            node(idx).own.append(OwnLine{w, start, LineRole::Text});
+        }
+    }
+
     void openListItem(const LineView &v, const ListMarker &lm)
     {
         while (!m_stack.isEmpty() && lm.indent.col <= node(m_stack.last()).markerCol)
@@ -341,11 +372,14 @@ private:
         m_pendingBlanks.clear();
         m_stack.append(idx);
         ++m_i;
-        if (const auto fo = fenceOpen(m_st.maskedText(v).sliced(lm.contentStart))) {
+        const QStringView content = m_st.maskedText(v).sliced(lm.contentStart);
+        if (const auto fo = fenceOpen(content)) {
             node(idx).own.first().role = LineRole::Fence;
             consumeItemFence(idx, *fo);
             m_lazyOk = false;
         } else {
+            if (const qsizetype close = displayMathClose(m_i - 1, content); close >= 0)
+                takeDisplayMath(idx, close, lm.contentCol);
             m_lazyOk = true;
         }
     }
@@ -378,12 +412,19 @@ private:
                 return true;
             }
             node(item).own.append(OwnLine{v, start, LineRole::Text});
+            if (const qsizetype close = displayMathClose(m_i - 1, t); close >= 0) {
+                takeDisplayMath(item, close, node(item).contentCol);
+                m_lazyOk = true;
+                return true;
+            }
             m_lazyOk = !isThematicBreak(t) && !matchAtxHeading(t.sliced(start));
             return true;
         }
         if (m_lazyOk && m_pendingBlanks.isEmpty() && !interruptsParagraph(t, nextMasked())) {
             node(m_stack.last()).own.append(OwnLine{v, ind.chars, LineRole::Text});
             ++m_i;
+            if (const qsizetype close = displayMathClose(m_i - 1, t); close >= 0)
+                takeDisplayMath(m_stack.last(), close);
             return true;
         }
         return false;
@@ -623,28 +664,36 @@ private:
                 return;
             }
         }
-        QList<OwnLine> own{OwnLine{v, indentOf(m_st.maskedText(v)).chars, LineRole::Text}};
+        const int idx = newNode(BlockKind::Paragraph, v.line);
+        node(idx).own.append(OwnLine{v, indentOf(m_st.maskedText(v)).chars, LineRole::Text});
         ++m_i;
+        if (const qsizetype close = displayMathClose(m_i - 1, m_st.maskedText(v)); close >= 0)
+            takeDisplayMath(idx, close);
         int headingLevel = 0;
         while (m_i < m_views.size()) {
             const LineView w = m_views[m_i];
             const QStringView u = m_st.maskedText(w);
             if (isBlank(u))
                 break;
+            if (const qsizetype close = displayMathClose(m_i, u); close >= 0) {
+                takeDisplayMath(idx, close);
+                continue;
+            }
             if (const int level = setextLevel(u)) {
                 headingLevel = level;
-                own.append(OwnLine{w, 0, LineRole::Meta});
+                node(idx).own.append(OwnLine{w, 0, LineRole::Meta});
                 ++m_i;
                 break;
             }
             if (interruptsParagraph(u, nextMasked()))
                 break;
-            own.append(OwnLine{w, indentOf(u).chars, LineRole::Text});
+            node(idx).own.append(OwnLine{w, indentOf(u).chars, LineRole::Text});
             ++m_i;
         }
-        const int idx = newNode(headingLevel ? BlockKind::Heading : BlockKind::Paragraph, v.line);
-        node(idx).headingLevel = headingLevel;
-        node(idx).own = own;
+        if (headingLevel) {
+            node(idx).kind = BlockKind::Heading;
+            node(idx).headingLevel = headingLevel;
+        }
         m_roots.append(idx);
     }
 

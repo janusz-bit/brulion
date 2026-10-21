@@ -100,7 +100,8 @@ keeps the first-seen casing.
 * Every **list item** is a block. Nesting by indentation (tab = one level; for spaces the
   child must be indented past the parent's marker). Markers: `-`, `*`, `+`, `1.`, `1)`.
 * Outside lists, each paragraph, heading, fenced code, table, blockquote/callout, `---`
-  rule is a top-level block (depth 0).
+  rule is a top-level block (depth 0). A display formula between two lines that are only `$$`
+  stays in one block whatever its lines start with (§11).
 * **Block id**: ` ^abc-123` (caret + `[A-Za-z0-9-]+`) at the end of a block's first or last
   line (Obsidian style; Brulion writes it at the end of the first line for list items and
   at the end of the last line for paragraphs). Generated ids are 6 chars `[a-z0-9]`.
@@ -428,6 +429,14 @@ export shows the formula (display formulas are centred).
 Where a formula is (in a block's inline text, after code spans and comments are masked):
 
 * `$$…$$` runs to the next `$$`, also over several lines; content of spaces only is no formula.
+* For the block structure (§4), a line that is only `$$` (any indentation, also inside a list
+  item or a quote) opens a display formula that runs to the next line that is only `$$`, like a
+  fence: the lines between belong to the formula and its block even when they look like block
+  syntax (`+ b`, `- c`, `> d`, `1. e`, `# f`, `---`). A blank line before that closing line ends
+  it (TeX allows none in a formula): the `$$` line is then ordinary text and the following lines
+  are blocks as usual. A `$$` that shares its line with the formula does not hold the lines
+  together (`$$a` / `+ b$$` breaks at `+ b`) — write such formulas between `$$` lines or in a
+  ```` ```math ```` block.
 * Inline `$…$` follows pandoc's `tex_math_dollars`, tightened for prices and variables: the
   opening `$` has a non-space character right after it and does not directly follow a letter
   or digit; the closing `$` has a non-space character right before it and is not followed by

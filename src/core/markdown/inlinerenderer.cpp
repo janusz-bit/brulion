@@ -728,6 +728,24 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
     // The lines from `from` on without their quote prefixes (bullets shown as "•"), plus the
     // runs mapping the result back to the body.
     const auto stripQuotes = [&](qsizetype from, SourceRuns &runs) {
+        // Lines of a display formula between `$$` lines (SYNTAX §11) keep their "- " / "+ ".
+        QList<bool> formula(lines.size(), false);
+        const auto unquoted = [&](qsizetype k) {
+            const QStringView t = QStringView(lines[k].text);
+            return t.sliced(quotePrefixOf(t).length).trimmed();
+        };
+        for (qsizetype k = from; k < lines.size(); ++k) {
+            if (unquoted(k) != u"$$")
+                continue;
+            qsizetype j = k + 1;
+            while (j < lines.size() && !unquoted(j).isEmpty() && unquoted(j) != u"$$")
+                ++j;
+            if (j == lines.size() || unquoted(j) != u"$$")
+                continue; // no closing line before a blank one: text
+            for (qsizetype m = k + 1; m < j; ++m)
+                formula[m] = true;
+            k = j;
+        }
         QString out;
         for (qsizetype k = from; k < lines.size(); ++k) {
             if (k > from)
@@ -737,7 +755,7 @@ QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const
             t = t.sliced(q);
             const qsizetype lineStart = lines[k].start + q;
             runs.append({out.size(), lineStart});
-            if (const auto lm = matchListMarker(t); lm && !lm->ordered) {
+            if (const auto lm = formula[k] ? std::nullopt : matchListMarker(t); lm && !lm->ordered) {
                 out += t.first(lm->indent.chars) + u"• "_s;
                 runs.append({out.size(), lineStart + lm->contentStart});
                 out += t.sliced(lm->contentStart);
