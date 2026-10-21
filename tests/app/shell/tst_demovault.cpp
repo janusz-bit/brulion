@@ -11,6 +11,7 @@
 #include "index/vaultindex.h"
 #include "markdown/markdown.h"
 #include "util/paths.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
 #include <QDir>
@@ -437,6 +438,8 @@ private Q_SLOTS:
             Vault vault(root, state);
             QVERIFY(vault.open());
             QCOMPARE(shell::updateDocsVault(vault, v1).added, 5);
+            // On disk at once, not only after the store's delay: the app may be killed meanwhile.
+            QVERIFY(LocalStore(vault.store()->filePath()).contains(u"docs/written"_s));
             QVERIFY(vault.writeText(u"Zadania.md"_s, u"- [ ] moje zadanie\n"_s)); // the user's version
             QVERIFY(vault.writeText(u"Żółw.md"_s, u"mój żółw\n"_s));
             QVERIFY(vault.removePermanently(u"Obliczenia.md"_s)); // deleted on purpose

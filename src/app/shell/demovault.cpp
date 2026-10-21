@@ -608,6 +608,9 @@ DocsUpdate updateDocsVault(Vault &vault, const QList<DemoFile> &pages)
         }
     }
     store->set(kDocsRecordKey, record);
+    // At once, not after the store's usual delay: pages updated to this version but missing from
+    // a lost record would count as the user's (no known hash) and never be updated again.
+    store->flush();
     return result;
 }
 
