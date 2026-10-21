@@ -1,6 +1,7 @@
 // markdown/math.h against hostile notes: whatever a note writes between `$`, renderMath() emits
 // only the tags and attributes it builds itself (a synced or imported note must never get an
-// <img>, <a> or <script> into the editor's rich text or the HTML export).
+// <img>, <a> or <script> into the editor's rich text or the HTML export), deep nesting needs a
+// bounded stack and time, and findMathSpans() stays linear with well-formed spans.
 #include "markdown/inlinerenderer.h"
 #include "markdown/math.h"
 
@@ -275,6 +276,55 @@ private Q_SLOTS:
         const QString deep = renderMath(braces(1000));
         QVERIFY2(deep.contains(u"{{{x^2}}}"_s), qPrintable(deep.left(200)));
         QVERIFY(!deep.contains(u"<sup>"_s));
+    }
+
+    void spansAreOrderedAndInRange()
+    {
+        // Random text of delimiters, escapes and line breaks: spans never overlap, always start at a
+        // `$`, and hold non-empty content.
+        static const QStringList tokens{u"$"_s,   u"$"_s,   u"$$"_s,   u"\\"_s, u"\\("_s, u"\\)"_s,
+                                        u"\\["_s, u"\\]"_s, u"\\$"_s,  u"x"_s,  u"ą"_s,   u"1"_s,
+                                        u" "_s,   u"\n"_s,  u"\n\n"_s, u"("_s,  u"."_s};
+        QRandomGenerator rng(7);
+        for (int n = 0; n < 20000; ++n) {
+            QString text;
+            const int length = 1 + int(rng.bounded(25));
+            for (int k = 0; k < length; ++k)
+                text += tokens[int(rng.bounded(qsizetype(tokens.size())))];
+            qsizetype last = 0;
+            for (const MathSpan &s : findMathSpans(text)) {
+                QVERIFY2(s.from >= last && s.from < s.contentFrom && s.contentFrom < s.contentTo && s.contentTo < s.to
+                                 && s.to <= text.size() && text[s.from] == u'$'
+                                 && !QStringView(text)
+                                             .sliced(s.contentFrom, s.contentTo - s.contentFrom)
+                                             .trimmed()
+                                             .isEmpty(),
+                         qPrintable(text));
+                last = s.to;
+            }
+        }
+    }
+
+    void spansInLinearTime_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::newRow("openings") << u"$a "_s.repeated(100'000);
+        QTest::newRow("prices") << u"1$ $2 "_s.repeated(50'000);
+        QTest::newRow("lone display") << u"$$"_s + u"$a "_s.repeated(100'000);
+        QTest::newRow("display") << u"$$x "_s.repeated(100'000);
+        QTest::newRow("escapes") << u"\\("_s.repeated(100'000) + u"$x$"_s;
+        QTest::newRow("blank lines") << u"$x\n \n"_s.repeated(60'000);
+        QTest::newRow("line of spaces") << u"$x\n"_s + QString(300'000, u' ') + u"$"_s;
+    }
+
+    void spansInLinearTime()
+    {
+        QFETCH(QString, text);
+        QElapsedTimer timer;
+        timer.start();
+        const QList<MathSpan> spans = findMathSpans(text);
+        QVERIFY2(timer.elapsed() < 1000 * BRULION_TEST_SLOWDOWN, qPrintable(u"%1 ms"_s.arg(timer.elapsed())));
+        QVERIFY(spans.size() <= text.size());
     }
 
     void injectionThroughTheEditor()

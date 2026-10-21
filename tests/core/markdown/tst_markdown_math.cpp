@@ -1,5 +1,5 @@
-// markdown/math.h: where a note's text holds a formula (findMathSpans: `$…$`, `$$…$$`, `\(…\)`,
-// `\[…\]` — what only looks like one is not) and how a formula's LaTeX becomes Qt rich text
+// markdown/math.h: where a note's text holds a formula (findMathSpans: `$…$`, `$$…$$` — what only
+// looks like one is not, `\(` and `\[` are escapes) and how a formula's LaTeX becomes Qt rich text
 // (renderMath: Unicode symbols, <sup>/<sub>, fractions, radicals, matrices, \text; everything
 // else escaped). Exact strings: the tests are the specification of the dialect (docs/SYNTAX.md §11).
 #include "markdown/math.h"
@@ -46,22 +46,51 @@ private Q_SLOTS:
         QTest::addColumn<QString>("input");
         QTest::addColumn<QString>("expected");
         QTest::newRow("inline dollars") << u"$x$"_s << u"0..3 1..2 inline"_s;
-        QTest::newRow("inline parens") << u"\\(x\\)"_s << u"0..5 2..3 inline"_s;
         QTest::newRow("display dollars") << u"$$x$$"_s << u"0..5 2..3 display"_s;
-        QTest::newRow("display brackets") << u"\\[x\\]"_s << u"0..5 2..3 display"_s;
         QTest::newRow("in a sentence") << u"Pole koła: $\\pi r^2$, prawda?"_s << u"11..20 12..19 inline"_s;
         QTest::newRow("two formulas") << u"$x$ i $y$"_s << u"0..3 1..2 inline; 6..9 7..8 inline"_s;
         QTest::newRow("display lines") << u"$$\na = b\n$$"_s << u"0..11 2..9 display"_s;
         QTest::newRow("after an escape") << u"\\$5 i $x$"_s << u"6..9 7..8 inline"_s;
+        QTest::newRow("power") << u"$x^2$"_s << u"0..5 1..4 inline"_s;
+        QTest::newRow("sum and a letter") << u"$a+b$ i $c$"_s << u"0..5 1..4 inline; 8..11 9..10 inline"_s;
+        QTest::newRow("in parentheses") << u"($x$)"_s << u"1..4 2..3 inline"_s;
+        QTest::newRow("before a full stop") << u"$x$."_s << u"0..3 1..2 inline"_s;
+        QTest::newRow("command before a comma") << u"$\\alpha$,"_s << u"0..8 1..7 inline"_s;
+        QTest::newRow("in a Polish sentence") << u"wzór $E=mc^2$ działa"_s << u"5..13 6..12 inline"_s;
+        QTest::newRow("over a line break") << u"Wzór $a +\nb$ w dwóch liniach"_s << u"5..12 6..11 inline"_s;
+        // A `$` after a space never closes: it ends the attempt and may open a formula itself.
+        QTest::newRow("dollar after a space") << u"$5 a wzór $x$"_s << u"10..13 11..12 inline"_s;
+        QTest::newRow("after a blank line") << u"$x\n\n$y$"_s << u"4..7 5..6 inline"_s;
+        // A delimiter without a partner (or an escaped bracket) hides no later formula.
+        QTest::newRow("lone display before") << u"Drogo $$ i wzór $x^2$"_s << u"16..21 17..20 inline"_s;
+        QTest::newRow("escaped bracket before") << u"\\[1] przypis, wzór $x^2$"_s << u"19..24 20..23 inline"_s;
+        QTest::newRow("escaped paren before") << u"Uwaga \\( i wzór $x^2$"_s << u"16..21 17..20 inline"_s;
+        QTest::newRow("escaped footnote before") << u"Zobacz \\[^1\\] i $x$ potem"_s << u"16..19 17..18 inline"_s;
 
         // Not formulas: nothing to render, the text stays as written.
         QTest::newRow("prices") << u"kosztuje $5 i $10"_s << QString();
+        QTest::newRow("prices after the number") << u"Netflix 15$, Spotify 10$"_s << QString();
+        QTest::newRow("hourly rates") << u"Stawka 10$/h, w weekend 15$/h."_s << QString();
+        QTest::newRow("shell variables") << u"$PATH:$HOME"_s << QString();
+        QTest::newRow("shell command") << u"export PATH=$PATH:$HOME/bin"_s << QString();
+        QTest::newRow("glued to a word") << u"Niech$x$ będzie"_s << QString();
+        QTest::newRow("letter after closing") << u"$x$y"_s << QString();
         QTest::newRow("space after opening") << u"$ x $"_s << QString();
+        QTest::newRow("space before closing") << u"$x $"_s << QString();
         QTest::newRow("digit after closing") << u"$x$5"_s << QString();
         QTest::newRow("unclosed") << u"cena $x"_s << QString();
         QTest::newRow("escaped") << u"\\$100"_s << QString();
         QTest::newRow("empty") << u"$$"_s << QString();
         QTest::newRow("empty content") << u"$ $"_s << QString();
+        QTest::newRow("empty display") << u"$$ $$"_s << QString();
+        QTest::newRow("across a blank line") << u"Koszt $x\n\ny$"_s << QString();
+        QTest::newRow("across a line of spaces") << u"Koszt $x\r\n \t\r\ny$"_s << QString();
+        // `\(…\)` and `\[…\]` are escaped brackets, as the importers write them (CommonMark).
+        QTest::newRow("escaped parens") << u"\\(x\\)"_s << QString();
+        QTest::newRow("escaped brackets") << u"\\[x\\]"_s << QString();
+        QTest::newRow("importer brackets") << u"Indeks\\[2\\] i \\[\\[Nie link\\]\\]"_s << QString();
+        QTest::newRow("importer link label") << u"[\\[1\\]](https://example.org)"_s << QString();
+        QTest::newRow("importer parens") << u"\\((x))"_s << QString();
         QTest::newRow("no delimiters") << u"zwykły tekst 2 * 3"_s << QString();
         QTest::newRow("backslash alone") << u"C:\\Users"_s << QString();
         // A code span is the caller's to mask (InlineRenderer masks before asking).

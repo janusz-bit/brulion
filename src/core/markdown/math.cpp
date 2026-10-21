@@ -1217,81 +1217,106 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
 
 } // namespace
 
+namespace {
+
+/// Whether a blank line (spaces or tabs only) follows the line break at `nl`.
+bool blankLineAfter(QStringView text, qsizetype nl)
+{
+    for (qsizetype k = nl + 1; k < text.size(); ++k) {
+        const QChar c = text[k];
+        if (c == u'\n')
+            return true;
+        if (c != u' ' && c != u'\t' && c != u'\r')
+            return false;
+    }
+    return false;
+}
+
+} // namespace
+
 QList<MathSpan> findMathSpans(QStringView text)
 {
     QList<MathSpan> spans;
-    if (text.indexOf(u'$') < 0 && text.indexOf(u'\\') < 0)
+    if (!text.contains(u'$'))
         return spans;
+    // No `$$` closes after the current position: every later `$$` is text as well.
+    bool noDisplayClose = false;
     for (qsizetype i = 0; i < text.size();) {
         const QChar c = text[i];
-        if (c == u'\\' && i + 1 < text.size()) {
-            const QChar next = text[i + 1];
-            if (next == u'(' || next == u'[') {
-                const QChar close = next == u'(' ? u')' : u']';
-                qsizetype end = -1;
-                for (qsizetype j = i + 2; j + 1 < text.size();) {
-                    if (text[j] == u'\\' && isAsciiPunct(text[j + 1])) {
-                        if (text[j + 1] == close) {
-                            end = j;
-                            break;
-                        }
-                        j += 2;
-                        continue;
-                    }
-                    ++j;
-                }
-                if (end < 0)
-                    break; // no closing \(… anywhere after this one either
-                if (end > i + 2 && !text.sliced(i + 2, end - i - 2).trimmed().isEmpty()) {
-                    spans.append(MathSpan{i, end + 2, i + 2, end, next == u'['});
-                    i = end + 2;
-                    continue;
-                }
-                i += 2;
-                continue;
-            }
-            i += isAsciiPunct(next) ? 2 : 1;
+        if (c == u'\\') {
+            // An escape is text: `\$` is a dollar, `\(` / `\[` are brackets (no math delimiters).
+            i += i + 1 < text.size() && isAsciiPunct(text[i + 1]) ? 2 : 1;
             continue;
         }
         if (c != u'$') {
             ++i;
             continue;
         }
-        const bool display = i + 1 < text.size() && text[i + 1] == u'$';
-        const qsizetype open = i + (display ? 2 : 1);
-        // `$ x $` is not a formula (a space follows the opening `$`); `$$…$$` may span lines.
-        if (!display && (open >= text.size() || text[open].isSpace())) {
+
+        if (i + 1 < text.size() && text[i + 1] == u'$') {
+            // Display `$$…$$`: up to the next `$$`, also over several lines.
+            const qsizetype open = i + 2;
+            qsizetype end = -1;
+            for (qsizetype j = open; !noDisplayClose && j + 1 < text.size();) {
+                if (text[j] == u'\\' && isAsciiPunct(text[j + 1])) {
+                    j += 2;
+                    continue;
+                }
+                if (text[j] == u'$' && text[j + 1] == u'$') {
+                    end = j;
+                    break;
+                }
+                ++j;
+            }
+            if (end < 0) {
+                // A lone `$$` is text; a later `$…$` is still a formula.
+                noDisplayClose = true;
+                i = open;
+                continue;
+            }
+            if (!text.sliced(open, end - open).trimmed().isEmpty())
+                spans.append(MathSpan{i, end + 2, open, end, true});
+            i = end + 2;
+            continue;
+        }
+
+        // Inline `$…$`: the opening `$` is followed by a non-space and does not follow a letter or
+        // digit ("15$", "x$" are no openings); the closing `$` follows a non-space and is not
+        // followed by a letter or digit. A `$` after a space never closes and ends the attempt,
+        // as does a blank line ("$5 a wzór $x$": only "$x$").
+        const qsizetype open = i + 1;
+        if (open >= text.size() || text[open].isSpace() || (i > 0 && text[i - 1].isLetterOrNumber())) {
             i = open;
             continue;
         }
         qsizetype end = -1;
-        for (qsizetype j = open; j < text.size();) {
-            if (text[j] == u'\\' && j + 1 < text.size() && isAsciiPunct(text[j + 1])) {
+        qsizetype j = open;
+        while (j < text.size()) {
+            const QChar d = text[j];
+            if (d == u'\\' && j + 1 < text.size() && isAsciiPunct(text[j + 1])) {
                 j += 2;
                 continue;
             }
-            if (text[j] == u'$') {
-                if (display) {
-                    if (j + 1 < text.size() && text[j + 1] == u'$') {
-                        end = j;
-                        break;
-                    }
-                } else if (j > open && !text[j - 1].isSpace() && (j + 1 >= text.size() || !text[j + 1].isDigit())) {
+            if (d == u'\n' && blankLineAfter(text, j))
+                break;
+            if (d == u'$') {
+                if (text[j - 1].isSpace())
+                    break;
+                if (j + 1 >= text.size() || !text[j + 1].isLetterOrNumber()) {
                     end = j;
                     break;
                 }
             }
             ++j;
         }
-        if (end < 0)
-            break; // an unclosed delimiter: no `$…$` later either (the closing rules are local)
-        const qsizetype closeLen = display ? 2 : 1;
-        if (text.sliced(open, end - open).trimmed().isEmpty()) {
-            i = end + closeLen;
+        if (end < 0) {
+            // Not a formula. An opening `$` before j would meet the same end of the attempt with
+            // no closing `$` either: the scan goes on from j (linear even for a hostile note).
+            i = j;
             continue;
         }
-        spans.append(MathSpan{i, end + closeLen, open, end, display});
-        i = end + closeLen;
+        spans.append(MathSpan{i, end + 1, open, end, false});
+        i = end + 1;
     }
     return spans;
 }

@@ -251,8 +251,6 @@ private Q_SLOTS:
         QTest::addColumn<QString>("expected");
         QTest::newRow("inline") << u"Pole koła: $\\pi r^2$."_s << u"Pole koła: <i>π</i><i>r</i><sup>2</sup>."_s;
         QTest::newRow("display inline") << u"$$\\frac{1}{2}$$"_s << u"½"_s;
-        QTest::newRow("parens delimiter") << u"\\(x \\le y\\)"_s << u"<i>x</i> ≤ <i>y</i>"_s;
-        QTest::newRow("brackets delimiter") << u"\\[x = y\\]"_s << u"<i>x</i> = <i>y</i>"_s;
         QTest::newRow("display keeps lines") << u"$$\na \\\\ b\n$$"_s << u"<i>a</i><br/><i>b</i>"_s;
         QTest::newRow("emphasis is math") << u"$a*b*c$"_s << u"<i>a</i> ∗ <i>b</i> ∗ <i>c</i>"_s;
         QTest::newRow("underscore is a subscript") << u"$x_1$ i $y$"_s << u"<i>x</i><sub>1</sub> i\u00a0<i>y</i>"_s;
@@ -263,6 +261,25 @@ private Q_SLOTS:
         // Not formulas.
         QTest::newRow("prices") << u"kosztuje $5 i $10"_s << u"kosztuje $5 i\u00a0$10"_s;
         QTest::newRow("escaped dollar") << u"cena \\$100, a $x$ tyle"_s << u"cena $100, a\u00a0<i>x</i> tyle"_s;
+        QTest::newRow("prices after the number") << u"Netflix 15$, Spotify 10$"_s << u"Netflix 15$, Spotify 10$"_s;
+        QTest::newRow("hourly rates around a link")
+                << u"Stawka 10$/h — patrz [[Plan]] w weekend 15$/h."_s
+                << u"Stawka 10$/h — patrz "_s + link(u"page:Plan"_s, u"L"_s, u"Plan"_s) + u" w\u00a0weekend 15$/h."_s;
+        QTest::newRow("shell variables") << u"export PATH=$PATH:$HOME/bin"_s << u"export PATH=$PATH:$HOME/bin"_s;
+        QTest::newRow("dollar after a space") << u"$5 a wzór $x$"_s << u"$5 a\u00a0wzór <i>x</i>"_s;
+        QTest::newRow("lone display") << u"Drogo $$ i wzór $x^2$"_s << u"Drogo $$ i\u00a0wzór <i>x</i><sup>2</sup>"_s;
+
+        // `\(…\)` and `\[…\]` are escaped brackets (CommonMark), as the importers write them for
+        // literal brackets: the brackets are shown, a later formula still renders.
+        QTest::newRow("escaped parens") << u"\\(x \\le y\\)"_s << u"(x \\le y)"_s;
+        QTest::newRow("escaped brackets") << u"\\[x = y\\]"_s << u"[x = y]"_s;
+        QTest::newRow("importer index") << u"Indeks\\[2\\] i H2O"_s << u"Indeks[2] i\u00a0H2O"_s;
+        QTest::newRow("importer double brackets") << u"\\[\\[Nie link\\]\\]"_s << u"[[Nie link]]"_s;
+        QTest::newRow("importer link label") << u"Zob. [\\[1\\]](https://example.org)"_s
+                                             << u"Zob. "_s + link(u"ext:https://example.org"_s, u"L"_s, u"[1]"_s);
+        QTest::newRow("importer parens") << u"\\((x)) i $x$"_s << u"((x)) i\u00a0<i>x</i>"_s;
+        QTest::newRow("importer footnote")
+                << u"Zobacz \\[^1\\] i $x$ potem"_s << u"Zobacz [^1] i\u00a0<i>x</i> potem"_s;
         QTest::newRow("code span") << u"`$x$`"_s << Code + u"$x$</code>"_s;
         QTest::newRow("comment") << u"a %%$x$%% b"_s << u"a  b"_s;
         QTest::newRow("property line") << u"autor:: $x$"_s << u"<span style=\"color:M\">autor:</span> <i>x</i>"_s;

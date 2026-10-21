@@ -398,9 +398,8 @@ executed).
 ### Math formulas
 
 Formulas are written as LaTeX and drawn by Brulion as Unicode rich text (no KaTeX, no web
-view, nothing is executed); the note keeps the LaTeX source. Inline: `$E = mc^2$` or
-`\(\pi r^2\)`. Display, also over several lines: `$$\frac{a}{b}$$` or `\[ … \]`. A fenced
-block:
+view, nothing is executed); the note keeps the LaTeX source. Inline: `$E = mc^2$`. Display,
+also over several lines: `$$\frac{a}{b}$$`. A fenced block:
 
 ````
 ```math
@@ -422,10 +421,24 @@ none), an escaped one (`\{`, `\}`, `\|` is ‖) or a command (`\langle`); matric
 an environment's own `&` and `\\` separate its cells and rows, not those in braces or escaped).
 Unknown commands stay as written; a part nested deeper than 48 levels (braces, arguments,
 environments) is shown as its source. Spaces between atoms are ignored as in LaTeX (`\ `,
-`\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. A formula
-is not recognised when the opening `$` is followed by a space or the closing `$` is followed
-by a digit (`$5 i $10`); `\$` is a literal dollar. The HTML export shows the formula (display
-formulas are centred).
+`\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. The HTML
+export shows the formula (display formulas are centred).
+
+Where a formula is (in a block's inline text, after code spans and comments are masked):
+
+* `$$…$$` runs to the next `$$`, also over several lines; content of spaces only is no formula.
+* Inline `$…$` follows pandoc's `tex_math_dollars`, tightened for prices and variables: the
+  opening `$` has a non-space character right after it and does not directly follow a letter
+  or digit; the closing `$` has a non-space character right before it and is not followed by
+  a letter or digit. A `$` with a space before it never closes a formula: the attempt ends
+  there, and that `$` may open a formula itself (`$5 a wzór $x$`: only `$x$`). An inline
+  formula may go on to the next line of the same block but never crosses a blank line. Text,
+  not formulas: `$5 i $10`, `15$, 10$`, `10$/h … 15$/h`, `$PATH:$HOME`, `Niech$x$`.
+* A `$` or `$$` without a partner is text and hides no later formula.
+* `\$` is a literal dollar. `\(`, `\)`, `\[` and `\]` are ordinary escapes (literal brackets,
+  as the importers write them), not math delimiters — as in Obsidian. (Brulion 0.3.3–0.3.5
+  read `\(…\)` and `\[…\]` as formulas; such notes now show the brackets and should use
+  `$…$` / `$$…$$`.)
 
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.

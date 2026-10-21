@@ -7,11 +7,13 @@ brulion: document
 Wzory piszesz w notatce jak w LaTeXu, a Brulion od razu pokazuje je jako czytelny wzór — bez internetu i bez uruchamiania kodu. W pliku zostaje samo źródło LaTeX, więc notatka dalej jest zwykłym Markdownem.
 
 ## W tekście
-Formułę otaczasz znakami `$`: `$E = mc^2$` wygląda tak: $E = mc^2$. Działają też nawiasy `\(…\)`.
+Formułę otaczasz znakami `$`: `$E = mc^2$` wygląda tak: $E = mc^2$.
 
 Wzór może stać w środku zdania: pole koła to $\pi r^2$, a pierwiastek z dwóch to $\sqrt{2}$.
 
-Uwaga: `$5 i $10` to nie wzory (po otwierającym `$` jest spacja, a po zamykającym cyfra). Jeśli chcesz napisać sam znak dolara, poprzedź go ukośnikiem: `\$100`.
+Żeby kwoty i zmienne nie zamieniały się we wzory, zaraz po otwierającym `$` musi stać znak (nie spacja), a tuż przed nim nie może być litery ani cyfry. Tuż przed zamykającym `$` nie może być spacji, a zaraz po nim litery ani cyfry. Dlatego `koszt $5 i $10`, `Netflix 15$, Spotify 10$`, `10$/h` czy `$PATH:$HOME` zostają zwykłym tekstem. Wzór może przejść do następnej linii, ale nie przez pustą linię. Jeśli chcesz napisać sam znak dolara, poprzedź go ukośnikiem: `\$100`.
+
+Ukośnik przed nawiasem oznacza zwykły nawias, jak w Obsidianie: `\(…\)` i `\[…\]` to nie wzory (tak zapisują nawiasy importy z innych programów). Wzory pisz między `$…$` albo `$$…$$`.
 
 ## Osobna linia
 Dłuższy wzór możesz zapisać między podwójnymi dolarami:
