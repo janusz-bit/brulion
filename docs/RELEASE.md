@@ -67,7 +67,10 @@ scripts/release.sh patch --allow-stale # mimo commitów z main, których release
 
 `scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
 biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
-minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. Wymaga czystego
+minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. `--push` wysyła
+atomowo gałąź `release` razem z tagiem — także wtedy, gdy wersja już jest w plikach i powstaje
+sam tag (np. kolejne `-rc.N`), więc tag nigdy nie wskazuje commitów, których nie ma na żadnej
+gałęzi w origin (bez `--push` skrypt wypisuje to samo polecenie). Wymaga czystego
 drzewa roboczego i gałęzi `release` (z innej umiera od razu). `--dry-run` niczego nie zmienia
 i działa z każdej gałęzi: poza `release` najpierw ostrzega, a potem pokazuje, co zrobiłby
 prawdziwy przebieg na `release` — wersje czyta z gałęzi `release` (lokalnej, a bez niej

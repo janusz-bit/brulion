@@ -171,6 +171,27 @@ commit "$work" .github/release-notes.md '* Nowość (0.3.6)' "Update release not
 rel "$work" --dry-run patch
 expect "changed notes: no warning" test "$(grep -c 'has not changed' <<<"$out")" = 0
 
+echo "--- a release of the recorded version pushes the branch with the tag"
+fixture rc
+commit "$work" .github/release-notes.md '* Wydanie testowe' "Update release notes for v0.4.0-rc.1"
+rel "$work" 0.4.0-rc.1 --yes --push
+expect "rc.1 bumps and pushes" same "$origin" release "$work" HEAD
+expect "... with its tag" same "$origin" v0.4.0-rc.1 "$work" HEAD
+git -C "$work" switch -q main
+commit "$work" fix.txt 'poprawka do rc' "Fix for rc.2"
+git -C "$work" push -q origin main
+git -C "$work" switch -q release
+git -C "$work" merge -q --no-edit main
+commit "$work" .github/release-notes.md '* Drugie wydanie testowe' "Update release notes for v0.4.0-rc.2"
+rel "$work" 0.4.0-rc.2 --yes --push
+expect "rc.2 only tags" has "CMakeLists.txt already has 0.4.0: only the tag is created."
+expect "... and pushes the branch too" same "$origin" release "$work" HEAD
+expect "... with the tag on it" same "$origin" v0.4.0-rc.2 "$origin" release
+expect "the tag is on a branch of origin" test -n "$(git -C "$origin" branch --contains v0.4.0-rc.2)"
+commit "$work" .github/release-notes.md '* Trzecie' "Update release notes for v0.4.0-rc.3"
+rel "$work" 0.4.0-rc.3 --yes
+expect "without --push: the hint pushes the branch with the tag" has "git push --atomic origin release v0.4.0-rc.3"
+
 echo
 if ((failed)); then
   echo "Totals: $failed failed"

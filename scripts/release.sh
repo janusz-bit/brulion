@@ -14,7 +14,7 @@
 #   X.Y.Z[-pre]  the new version; a suffix (0.2.0-rc.1) only marks the tag as a pre-release
 #                (CMake and the Android versionName keep 0.2.0)
 #   major|minor|patch  bump that part of the current version
-#   --push     push the commit and the tag to origin right away (atomically)
+#   --push     push the release branch and the tag to origin right away (atomically)
 #   --yes      do not ask for confirmation
 #   --dry-run  show what a real run would do, change nothing; from another branch it shows what a
 #              real run on the release branch would do (the versions come from that branch)
@@ -24,7 +24,8 @@
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
 # nix/package.nix (`version = "...";`). Releasing the version that is already recorded (e.g. the
-# first release, or a further pre-release) only creates the tag.
+# first release, or a further pre-release) only creates the tag; the branch is still pushed with
+# it, so the tag never points at commits that no branch on origin has.
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -209,16 +210,9 @@ fi
 git tag -a "$tag" -m "Brulion $new"
 echo "Created tag $tag at $(git rev-parse --short HEAD)."
 
+# Always the branch with the tag: also a tag-only release has the merge and notes commits.
 if ((push)); then
-  if ((${#files[@]})); then
-    git push --atomic origin HEAD "refs/tags/$tag"
-  else
-    git push origin "refs/tags/$tag"
-  fi
+  git push --atomic origin HEAD "refs/tags/$tag"
 else
-  if ((${#files[@]})); then
-    echo "Publish it with:  git push --atomic origin HEAD $tag"
-  else
-    echo "Publish it with:  git push origin $tag"
-  fi
+  echo "Publish it with:  git push --atomic origin release $tag"
 fi
