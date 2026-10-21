@@ -7,7 +7,7 @@ brulion: document
 Brulion nie ma własnego serwera. Notatki to zwykły folder, więc synchronizujesz go tym, czym lubisz. Zapis jest zawsze lokalny i natychmiastowy; synchronizacja dzieje się w tle i nie blokuje pisania.
 
 ## Syncthing (polecane do pracy offline)
-1. Udostępnij folder brulionu w Syncthing (na Androidzie: Syncthing-Fork).
+1. Udostępnij folder notatnika w Syncthing (na Androidzie: Syncthing-Fork).
 2. Na każdym urządzeniu wskaż w Brulionie ten sam folder (na Androidzie np. `/storage/emulated/0/Brulion` i zgoda „Dostęp do wszystkich plików”).
 3. Gdy ta sama notatka zmieni się na dwóch urządzeniach, Syncthing zostawia kopię `*.sync-conflict-*`. Brulion nie pokazuje jej jako strony, tylko w centrum synchronizacji jako **konflikt do scalenia**.
 
@@ -34,6 +34,6 @@ Gdy coś nie działa, zajrzyj do **Rejestru zdarzeń** (*Ustawienia → Aplikacj
 ## Historia wersji i kosz
 - Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia do historii na urządzeniu. Menu strony → **Historia** pozwala porównać wersje i przywrócić dowolną.
 - Usunięte strony wpadają do **Kosza**, skąd można je odzyskać.
-- Dane robocze synchronizacji (historia, ślady scalania) leżą poza folderem brulionu, więc nie synchronizują się między urządzeniami.
+- Dane robocze synchronizacji (historia, ślady scalania) leżą poza folderem notatnika, więc nie synchronizują się między urządzeniami.
 
 Zobacz też [[Format plików|Format plików]].

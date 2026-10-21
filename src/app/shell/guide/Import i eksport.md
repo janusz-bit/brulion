@@ -4,7 +4,7 @@ brulion: document
 ---
 # Import i eksport
 
-Widok **Import i eksport** otwierasz z menu **Więcej** (⋮) albo z palety poleceń. Import jest też na stronie startowej pustego brulionu („Importuj notatki”).
+Widok **Import i eksport** otwierasz z menu **Więcej** (⋮) albo z palety poleceń. Import jest też na stronie startowej pustego notatnika („Importuj notatki”).
 
 ## Import
 Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, pliki Markdown, TXT i HTML oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.
@@ -15,7 +15,7 @@ Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin,
 
 Importowane strony nie nadpisują istniejących — gdy nazwa się powtarza, nowa dostaje końcówkę ` 2`. Przed zmianami poprzednie wersje trafiają do historii.
 
-Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po prostu otworzyć ich folder jako brulion. Notatki z Obsidiana (nagłówki i akapity) otworzą się jako dokumenty, a z Logseqa (same punkty) jako konspekty.
+Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po prostu otworzyć ich folder jako notatnik. Notatki z Obsidiana (nagłówki i akapity) otworzą się jako dokumenty, a z Logseqa (same punkty) jako konspekty.
 
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
@@ -25,6 +25,6 @@ Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po p
 - **OPML** — konspekt,
 - **CSV** — lista zadań.
 
-Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu brulionu.
+Ponieważ notatki to zwykłe pliki, najprostszą kopią zapasową jest skopiowanie folderu notatnika.
 
 Wróć do [[Spis treści|spisu treści]]. Jeśli chcesz zrozumieć, co leży w plikach, zobacz [[Format plików|Format plików]].

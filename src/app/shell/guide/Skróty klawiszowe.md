@@ -4,7 +4,7 @@ brulion: document
 ---
 # Skróty klawiszowe
 
-Skróty komputerowe. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi nad klawiaturą.
+Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi nad klawiaturą.
 
 ## Ogólne
 | Skrót | Działanie |

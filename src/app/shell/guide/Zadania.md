@@ -44,6 +44,6 @@ Po polsku reguły można wpisać tak: „codziennie”, „co 3 dni”, „w dni
 Po odhaczeniu zadania cyklicznego Brulion dopisuje jego następne wystąpienie nad ukończonym.
 
 ## Widok Zadania
-Widok **Zadania** zbiera zadania z całego brulionu: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki.
+Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki.
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).
