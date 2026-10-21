@@ -4,6 +4,7 @@
 
 #include <QHash>
 #include <QScopeGuard>
+#include <QSet>
 #include <QStringList>
 
 namespace brulion::markdown {
@@ -84,6 +85,12 @@ QString assemble(const QList<Node> &nodes)
 void push(QList<Node> &nodes, const QString &html, Kind kind)
 {
     nodes.append(Node{html, kind, {}, {}});
+}
+
+/// UTF-16 units of the character at `i`: 2 for a surrogate pair (😀, 𝔸), which is never split.
+qsizetype charLength(QStringView s, qsizetype i)
+{
+    return s[i].isHighSurrogate() && i + 1 < s.size() && s[i + 1].isLowSurrogate() ? 2 : 1;
 }
 
 /// The number of characters `html` shows: a tag or an entity counts as one character. Decides
@@ -178,12 +185,13 @@ Arg parseArg(QStringView s, qsizetype &i, bool display)
             while (i < s.size() && s[i].isLetter())
                 ++i;
         } else if (i < s.size()) {
-            ++i;
+            i += charLength(s, i);
         }
         a.html = assemble(parseRange(s.sliced(start, i - start), false, display));
     } else {
-        a.html = assemble(parseRange(s.sliced(i, 1), false, display));
-        ++i;
+        const qsizetype length = charLength(s, i);
+        a.html = assemble(parseRange(s.sliced(i, length), false, display));
+        i += length;
     }
     return a;
 }
@@ -428,6 +436,10 @@ const QHash<QString, Symbol> &symbols()
         s(u"bigodot"_s, u"⨀"_s, Kind::Big);
         s(u"biguplus"_s, u"⨄"_s, Kind::Big);
         s(u"bigsqcup"_s, u"⨆"_s, Kind::Big);
+        s(u"bigstar"_s, u"★"_s);
+        s(u"bigcirc"_s, u"◯"_s, Kind::Bin);
+        s(u"bigtriangleup"_s, u"△"_s, Kind::Bin);
+        s(u"bigtriangledown"_s, u"▽"_s, Kind::Bin);
 
         // Function names (upright, a thin space before their argument).
         s(u"sin"_s, u"sin"_s, Kind::Func);
@@ -467,6 +479,8 @@ const QHash<QString, Symbol> &symbols()
         // Delimiters.
         s(u"lbrace"_s, u"{"_s, Kind::Open);
         s(u"rbrace"_s, u"}"_s, Kind::Close);
+        s(u"lbrack"_s, u"["_s, Kind::Open);
+        s(u"rbrack"_s, u"]"_s, Kind::Close);
         s(u"langle"_s, u"⟨"_s, Kind::Open);
         s(u"rangle"_s, u"⟩"_s, Kind::Close);
         s(u"lfloor"_s, u"⌊"_s, Kind::Open);
@@ -598,6 +612,58 @@ QString radicalHtml(const QString &index, const QString &body)
     return head + u"<span style=\"text-decoration:overline\">"_s + body + u"</span>"_s;
 }
 
+/// The rows of an environment's body and the cells of each row. Only the body's own `\\` and
+/// `&` separate them, not those inside braces (`{a & b}`), nested environments or escapes (`\&`).
+QList<QList<QStringView>> environmentCells(QStringView body)
+{
+    QList<QList<QStringView>> rows;
+    QList<QStringView> cells;
+    qsizetype cellStart = 0;
+    int braces = 0;
+    int environments = 0;
+    for (qsizetype i = 0; i < body.size();) {
+        const QChar c = body[i];
+        if (c == u'\\' && i + 1 < body.size()) {
+            const QChar next = body[i + 1];
+            if (next == u'\\' && braces == 0 && environments == 0) {
+                cells.append(body.sliced(cellStart, i - cellStart));
+                rows.append(cells);
+                cells.clear();
+                i += 2;
+                cellStart = i;
+                continue;
+            }
+            if (next.isLetter()) {
+                qsizetype j = i + 1;
+                while (j < body.size() && body[j].isLetter())
+                    ++j;
+                const QStringView name = body.sliced(i + 1, j - i - 1);
+                if (name == u"begin")
+                    ++environments;
+                else if (name == u"end" && environments > 0)
+                    --environments;
+                i = j;
+                continue;
+            }
+            i += 1 + charLength(body, i + 1); // an escaped character: \&, \{, \}
+            continue;
+        }
+        if (c == u'{') {
+            ++braces;
+        } else if (c == u'}') {
+            if (braces > 0)
+                --braces;
+        } else if (c == u'&' && braces == 0 && environments == 0) {
+            cells.append(body.sliced(cellStart, i - cellStart));
+            cellStart = i + 1;
+        }
+        ++i;
+    }
+    cells.append(body.sliced(cellStart));
+    rows.append(cells);
+    return rows;
+}
+
 /// `\begin{env} … \end{env}`: a matrix, `cases`, `aligned` or an `array` as plain rich text
 /// (cells separated by spaces, rows by "; "). No stacking — a formula is one line here.
 QString environmentHtml(QStringView body, const QString &env, bool display)
@@ -632,23 +698,21 @@ QString environmentHtml(QStringView body, const QString &env, bool display)
         matrix = true;
         // The column specification {ccc} is not part of the cells.
         if (source.startsWith(u'{')) {
-            const qsizetype close = source.indexOf(u'}');
+            const qsizetype close = matchingBrace(source, 0);
             if (close > 0)
                 source = source.mid(close + 1);
         }
     }
-    const QStringList lines = source.split(u"\\\\"_s, Qt::SkipEmptyParts);
     // `aligned`, `gather`…: the alignment point (&) is where the rows line up — one space between
     // the cells reads "a = b", a grid (array, matrix) keeps its columns apart.
     const bool aligned = env == u"aligned" || env == u"align" || env == u"alignedat" || env == u"gathered"
                          || env == u"split" || env == u"multline";
     const QString separator = env == u"cases" ? u", "_s : aligned ? u" "_s : u"&nbsp;&nbsp;"_s;
     QStringList rows;
-    for (const QString &line : lines) {
-        const QStringList cells = line.split(u'&');
+    for (const QList<QStringView> &cells : environmentCells(source)) {
         QStringList rendered;
-        for (const QString &cell : cells) {
-            const QString html = assemble(parseRange(QStringView(cell.trimmed()), false, display));
+        for (const QStringView cell : cells) {
+            const QString html = assemble(parseRange(cell.trimmed(), false, display));
             if (!html.isEmpty())
                 rendered.append(html);
         }
@@ -666,6 +730,27 @@ QString environmentHtml(QStringView body, const QString &env, bool display)
     return joined;
 }
 
+/// Position of the `\end{env}` that closes an environment whose body starts at `from`, skipping
+/// nested `\begin{env}` … `\end{env}` pairs; -1 when the environment is not closed.
+qsizetype matchingEnd(QStringView s, qsizetype from, const QString &env)
+{
+    const QString begin = u"\\begin{"_s + env + u'}';
+    const QString end = u"\\end{"_s + env + u'}';
+    int open = 1;
+    for (qsizetype pos = from;;) {
+        const qsizetype nextEnd = s.indexOf(end, pos);
+        if (nextEnd < 0)
+            return -1;
+        // Each part of the text is searched once: linear even for a hostile note.
+        const QStringView before = s.first(nextEnd);
+        for (qsizetype b = before.indexOf(begin, pos); b >= 0; b = before.indexOf(begin, b + begin.size()))
+            ++open;
+        if (--open == 0)
+            return nextEnd;
+        pos = nextEnd + end.size();
+    }
+}
+
 /// A delimiter after \left, \right, \big…: the character itself or its command ("\langle").
 /// Always text the renderer escaped or built itself, never a raw character of the note: a raw
 /// '<' … '>' pair around \text{…} would be a real HTML element (an image loaded from anywhere).
@@ -677,21 +762,53 @@ QString delimiterAt(QStringView s, qsizetype &i)
         return {};
     if (s[i] == u'\\') {
         const qsizetype start = ++i;
+        if (i < s.size() && !s[i].isLetter()) {
+            // An escaped character: \{ and \} are braces, \| a double bar.
+            i += charLength(s, i);
+            const QStringView c = s.sliced(start, i - start);
+            return c == u"|" ? u"‖"_s : escaped(c);
+        }
         while (i < s.size() && s[i].isLetter())
             ++i;
         const QString name = s.sliced(start, i - start).toString();
         const auto it = symbols().constFind(name);
-        return it != symbols().constEnd() ? it->text : QString();
+        // An unknown command stays as written.
+        return it != symbols().constEnd() ? it->text : escaped(QString(u'\\' + name));
     }
-    const QChar c = s[i++];
-    if (c == u'.')
+    const qsizetype start = i;
+    i += charLength(s, i);
+    const QStringView c = s.sliced(start, i - start);
+    if (c == u".")
         return {}; // \left. / \right.: no delimiter
     // \left< … \right> are angle brackets, as in LaTeX.
-    if (c == u'<')
+    if (c == u"<")
         return u"⟨"_s;
-    if (c == u'>')
+    if (c == u">")
         return u"⟩"_s;
-    return escaped(QString(c));
+    return escaped(c);
+}
+
+/// The text of \text{…}: its escaped characters (\& \{ \} \$ \% \# \_) as themselves.
+QString textCharacters(QStringView inner)
+{
+    QString out;
+    out.reserve(inner.size());
+    for (qsizetype i = 0; i < inner.size(); ++i) {
+        if (inner[i] == u'\\' && i + 1 < inner.size() && QStringView(u"{}$&%#_").contains(inner[i + 1]))
+            ++i;
+        out += inner[i];
+    }
+    return out;
+}
+
+/// \big, \Big, \bigg, \Bigg and their l / r / m forms: a larger delimiter follows. Exact names —
+/// \bigcup, \bigoplus, \bigstar… are symbols.
+bool isSizeCommand(const QString &name)
+{
+    static const QSet<QString> sizes{u"big"_s,   u"Big"_s,   u"bigg"_s,  u"Bigg"_s, u"bigl"_s,  u"bigr"_s,
+                                     u"bigm"_s,  u"Bigl"_s,  u"Bigr"_s,  u"Bigm"_s, u"biggl"_s, u"biggr"_s,
+                                     u"biggm"_s, u"Biggl"_s, u"Biggr"_s, u"Biggm"_s};
+    return sizes.contains(name);
 }
 
 /// The next command or character as a formula, for `\not` and the argument of a command.
@@ -829,10 +946,10 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
             html = u"]"_s;
             break;
         case u'~': html = u"&nbsp;"_s; break;
-        default: html = escaped(QString(c)); break;
+        default: html = escaped(s.sliced(i, charLength(s, i))); break;
         }
         push(nodes, html, kind);
-        ++i;
+        i += charLength(s, i);
     }
     return nodes;
 }
@@ -847,7 +964,9 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
     }
     const QChar c = s[i];
     if (!c.isLetter()) {
-        ++i;
+        const qsizetype length = charLength(s, i);
+        const QStringView character = s.sliced(i, length);
+        i += length;
         switch (c.unicode()) {
         case u',': pushN(u"&#8201;"_s, Kind::Atom); break; // thin space
         case u':': pushN(u"&#8197;"_s, Kind::Atom); break; // medium space
@@ -856,7 +975,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
         case u' ': pushN(u"&nbsp;"_s, Kind::Atom); break;
         case u'\\': pushN(u"<br/>"_s, Kind::Atom); break; // a row / line of its own
         case u'|': pushN(u"‖"_s, Kind::Atom); break;
-        default: pushN(escaped(QString(c)), Kind::Atom); break;
+        default: pushN(escaped(character), Kind::Atom); break;
         }
         return i;
     }
@@ -870,7 +989,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
             pushN(delim, name == u"left" ? Kind::Open : name == u"right" ? Kind::Close : Kind::Atom);
         return i;
     }
-    if (name.startsWith(u"big"_s) || name.startsWith(u"Big"_s)) {
+    if (isSizeCommand(name)) {
         const QString delim = delimiterAt(s, i);
         if (!delim.isEmpty())
             pushN(delim, name.endsWith(u"l"_s) ? Kind::Open : name.endsWith(u"r"_s) ? Kind::Close : Kind::Atom);
@@ -927,8 +1046,8 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
             i = close + 1;
             if (rawText) {
                 // The text keeps its own spaces ("\text{jeśli } x" separates the words); a line
-                // break inside becomes a space.
-                QString html = escaped(inner).replace(u'\n', u' ');
+                // break inside becomes a space, and \{ \} \$ \& \% \# \_ are the characters.
+                QString html = escaped(textCharacters(inner)).replace(u'\n', u' ');
                 if (name == u"textbf")
                     html = u"<b>"_s + html + u"</b>"_s;
                 else if (name == u"textit")
@@ -1070,16 +1189,21 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
             if (close > i) {
                 const QString env = s.sliced(i + 1, close - i - 1).toString();
                 i = close + 1;
-                const QString marker = u"\\end{"_s + env + u'}';
-                const qsizetype end = s.indexOf(marker, i);
+                const qsizetype end = matchingEnd(s, i, env);
                 const QStringView body = end < 0 ? s.sliced(i) : s.sliced(i, end - i);
-                i = end < 0 ? s.size() : end + marker.size();
+                i = end < 0 ? s.size() : end + (u"\\end{"_s + env + u'}').size();
                 pushN(environmentHtml(body, env, display), Kind::Atom);
                 return i;
             }
         }
         return i;
     }
+
+    // Limits placement and math styles: nothing to show here, and the ^ / _ after them still
+    // belong to the operator before (\sum\limits_{i=1}^n).
+    if (name == u"limits" || name == u"nolimits" || name == u"displaystyle" || name == u"textstyle"
+        || name == u"scriptstyle" || name == u"scriptscriptstyle")
+        return i;
 
     const auto it = symbols().constFind(name);
     if (it != symbols().constEnd()) {

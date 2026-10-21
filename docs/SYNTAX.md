@@ -410,15 +410,22 @@ block:
 
 The fence languages are `math`, `latex` and `tex`; such a block is edited in place (the
 LaTeX source while editing, the formula otherwise), and Enter starts a new formula line.
-Supported: Greek letters, common operators, arrows and set symbols; `^` and `_` (also
-`^{…}`, `_{…}`); `\frac`/`\dfrac`/`\tfrac` (vulgar fractions where one exists),
-`\sqrt[n]{…}`; `\text`, `\operatorname`, `\mathbf`, `\mathbb`, `\boldsymbol`/`\bm`,
-`\vec`, `\hat`, `\bar`, accents; `\left…\right`; matrices (`pmatrix`, `bmatrix`,
-`Bmatrix`, `vmatrix`, `Vmatrix`), `cases`, `aligned` and `array`. Unknown commands stay as
-written. Spaces between atoms are ignored as in LaTeX (`\ `, `\,`, `\quad` are explicit
-spaces); lowercase Greek is italic, uppercase upright. A formula is not recognised when the
-opening `$` is followed by a space or the closing `$` is followed by a digit (`$5 i $10`);
-`\$` is a literal dollar. The HTML export shows the formula (display formulas are centred).
+Supported: Greek letters, common operators, arrows and set symbols; big operators (`\sum`,
+`\int`, `\bigcup`, `\bigoplus`…; `\limits`, `\nolimits` and the styles `\displaystyle`…
+are accepted and show nothing); `^` and `_` (also `^{…}`, `_{…}`); `\frac`/`\dfrac`/`\tfrac`
+(vulgar fractions where one exists), `\sqrt[n]{…}`; `\text` (with `\&`, `\%`, `\$`, `\#`,
+`\_`, `\{`, `\}`), `\operatorname`, `\mathbf`, `\mathbb`, `\boldsymbol`/`\bm`, `\vec`,
+`\hat`, `\bar`, accents; `\left…\right`, `\middle` and the sizes `\big`, `\Big`, `\bigg`,
+`\Bigg` (also with `l`, `r`, `m`) before a delimiter: a character (`<` and `>` are ⟨ ⟩, `.` is
+none), an escaped one (`\{`, `\}`, `\|` is ‖) or a command (`\langle`); matrices (`pmatrix`,
+`bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`), `cases`, `aligned` and `array`, also nested (only
+an environment's own `&` and `\\` separate its cells and rows, not those in braces or escaped).
+Unknown commands stay as written; a part nested deeper than 48 levels (braces, arguments,
+environments) is shown as its source. Spaces between atoms are ignored as in LaTeX (`\ `,
+`\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. A formula
+is not recognised when the opening `$` is followed by a space or the closing `$` is followed
+by a digit (`$5 i $10`); `\$` is a literal dollar. The HTML export shows the formula (display
+formulas are centred).
 
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.

@@ -106,6 +106,46 @@ private Q_SLOTS:
         QTest::newRow("left right") << u"\\left( \\frac{a}{b} \\right)"_s
                                     << u"(<sup><i>a</i></sup>&#8260;<sub><i>b</i></sub>)"_s;
         QTest::newRow("spaces") << u"a \\quad b"_s << u"<i>a</i>&#8195;<i>b</i>"_s;
+
+        // \left, \right and the size commands take a character, an escaped one or a command.
+        QTest::newRow("left brace") << u"\\left\\{ x \\in \\mathbb{R} : x > 0 \\right\\}"_s
+                                    << u"{<i>x</i> ∈ ℝ : <i>x</i> &gt; 0}"_s;
+        QTest::newRow("left norm") << u"\\left\\| v \\right\\|"_s << u"‖<i>v</i>‖"_s;
+        QTest::newRow("left angle") << u"\\left< a, b \\right>"_s << u"⟨<i>a</i>, <i>b</i>⟩"_s;
+        QTest::newRow("left dot") << u"\\left. x \\right\\}"_s << u"<i>x</i>}"_s;
+        QTest::newRow("left brackets") << u"\\left\\lbrack x \\right\\rbrack"_s << u"[<i>x</i>]"_s;
+        QTest::newRow("left unknown") << u"\\left\\foo x \\right)"_s << u"\\foo<i>x</i>)"_s;
+        QTest::newRow("big braces") << u"\\bigl\\{ a \\bigr\\}"_s << u"{<i>a</i>}"_s;
+        QTest::newRow("big brace") << u"\\big\\{ a \\big\\}"_s << u"{<i>a</i>}"_s;
+        QTest::newRow("sizes") << u"\\bigl( x \\bigr) \\Big[ y \\Big] \\biggl\\langle z \\biggr\\rangle"_s
+                               << u"(<i>x</i>)[<i>y</i>]⟨<i>z</i>⟩"_s;
+        QTest::newRow("emoji delimiter") << u"\\left😀 x \\right)"_s << u"😀<i>x</i>)"_s;
+
+        // Big operators whose names start like a size command.
+        QTest::newRow("bigcup") << u"\\bigcup_{i=1}^{n} A_i"_s
+                                << u"⋃<sub><i>i</i> = 1</sub><sup><i>n</i></sup> <i>A</i><sub><i>i</i></sub>"_s;
+        QTest::newRow("bigcap") << u"\\bigcap_i B_i"_s << u"⋂<sub><i>i</i></sub> <i>B</i><sub><i>i</i></sub>"_s;
+        QTest::newRow("bigoplus") << u"\\bigoplus_k V_k"_s << u"⨁<sub><i>k</i></sub> <i>V</i><sub><i>k</i></sub>"_s;
+        QTest::newRow("bigvee bigwedge")
+                << u"\\bigvee_i p_i \\bigwedge_j q_j"_s
+                << u"⋁<sub><i>i</i></sub> <i>p</i><sub><i>i</i></sub>⋀<sub><i>j</i></sub> <i>q</i><sub><i>j</i></sub>"_s;
+        QTest::newRow("bigotimes bigodot") << u"\\bigotimes \\bigodot \\biguplus \\bigsqcup"_s << u"⨂⨀⨄⨆"_s;
+        QTest::newRow("bigstar") << u"\\bigstar"_s << u"★"_s;
+
+        // Limits placement and styles show nothing: the scripts stay with the operator.
+        QTest::newRow("limits") << u"\\sum\\limits_{i=1}^{n} i"_s
+                                << u"∑<sub><i>i</i> = 1</sub><sup><i>n</i></sup> <i>i</i>"_s;
+        QTest::newRow("nolimits") << u"\\int\\nolimits_0^1 x"_s << u"∫<sub>0</sub><sup>1</sup> <i>x</i>"_s;
+        QTest::newRow("lim limits") << u"\\lim\\limits_{x \\to 0} f(x)"_s
+                                    << u"lim<sub><i>x</i> → 0</sub> <i>f</i>(<i>x</i>)"_s;
+        QTest::newRow("displaystyle") << u"\\displaystyle\\int_0^1 x \\, dx"_s
+                                      << u"∫<sub>0</sub><sup>1</sup> <i>x</i>&#8201;<i>dx</i>"_s;
+        QTest::newRow("textstyle") << u"\\textstyle \\frac{1}{2} \\scriptstyle x"_s << u"½<i>x</i>"_s;
+
+        // A character outside the BMP is one character (a surrogate pair is never split).
+        QTest::newRow("emoji superscript") << u"x^😀"_s << u"<i>x</i><sup>😀</sup>"_s;
+        QTest::newRow("double-struck subscript")
+                << u"x_𝔸 + y^\\😀"_s << u"<i>x</i><sub>𝔸</sub> + <i>y</i><sup>😀</sup>"_s;
     }
 
     void renderSymbols()
@@ -151,6 +191,7 @@ private Q_SLOTS:
                 << u"\\sqrt{\\frac{1}{2}}"_s << u"√<span style=\"text-decoration:overline\">½</span>"_s;
         QTest::newRow("text") << u"\\text{jeśli } x > 0"_s << u"jeśli <i>x</i> &gt; 0"_s;
         QTest::newRow("text escapes") << u"\\text{<b>albo</b>}"_s << u"&lt;b&gt;albo&lt;/b&gt;"_s;
+        QTest::newRow("text escaped characters") << u"\\text{100\\% \\& \\$5 \\{ż\\}}"_s << u"100% &amp; $5 {ż}"_s;
         QTest::newRow("operatorname") << u"\\operatorname{argmax} f"_s << u"argmax <i>f</i>"_s;
         QTest::newRow("mathbf") << u"\\mathbf{v}"_s << u"<b>v</b>"_s; // upright bold, as in TeX
         QTest::newRow("mathbb") << u"\\mathbb{R}^n"_s << u"ℝ<sup><i>n</i></sup>"_s;
@@ -180,6 +221,21 @@ private Q_SLOTS:
         QTest::newRow("aligned display") << u"\\begin{aligned} a &= b \\\\ c &= d \\end{aligned}"_s
                                          << u"<i>a</i> = <i>b</i><br/><i>c</i> = <i>d</i>"_s;
         QTest::newRow("array") << u"\\begin{array}{cc} 1 & 2 \\end{array}"_s << u"1&nbsp;&nbsp;2"_s;
+        QTest::newRow("array column braces") << u"\\begin{array}{@{}cc@{}} 1 & 2 \\end{array}"_s << u"1&nbsp;&nbsp;2"_s;
+        QTest::newRow("piecewise")
+                << u"f(x) = \\left\\{ \\begin{array}{ll} 1 & x > 0 \\\\ 0 & x \\le 0 \\end{array} \\right."_s
+                << u"<i>f</i>(<i>x</i>) = {1&nbsp;&nbsp;<i>x</i> &gt; 0; 0&nbsp;&nbsp;<i>x</i> ≤ 0"_s;
+
+        // Only the environment's own & and \\ separate cells and rows.
+        QTest::newRow("escaped ampersand")
+                << u"\\begin{matrix} a \\& b & c \\end{matrix}"_s << u"<i>a</i>&amp;<i>b</i>&nbsp;&nbsp;<i>c</i>"_s;
+        QTest::newRow("ampersand in text")
+                << u"\\begin{matrix} \\text{A \\& B} & c \\end{matrix}"_s << u"A &amp; B&nbsp;&nbsp;<i>c</i>"_s;
+        QTest::newRow("nested matrix") << u"\\begin{matrix} \\begin{matrix} a \\end{matrix} & b \\end{matrix}"_s
+                                       << u"<i>a</i>&nbsp;&nbsp;<i>b</i>"_s;
+        QTest::newRow("nested rows")
+                << u"\\begin{pmatrix} \\begin{matrix} a \\\\ b \\end{matrix} & c \\\\ d & e \\end{pmatrix}"_s
+                << u"( <i>a</i>; <i>b</i>&nbsp;&nbsp;<i>c</i>; <i>d</i>&nbsp;&nbsp;<i>e</i> )"_s;
     }
 
     void renderEnvironments()
@@ -201,6 +257,8 @@ private Q_SLOTS:
                  u"&lt; <i>script</i> &gt; <i>alert</i>(1) &lt; /<i>script</i> &gt;"_s);
         QCOMPARE(math(u"\\text{<img src=x onerror=y>}"_s), u"&lt;img src=x onerror=y&gt;"_s);
         QCOMPARE(math(u"100\\%"_s), u"100%"_s);
+        // A command that only starts like \big is not a size command: it keeps the next character.
+        QCOMPARE(math(u"\\bigfoo x"_s), u"\\bigfoo<i>x</i>"_s);
     }
 
     void displayKeepsLines()

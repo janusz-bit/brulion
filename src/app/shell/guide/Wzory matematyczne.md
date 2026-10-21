@@ -32,6 +32,8 @@ Blok `math` (także `latex` i `tex`) jest edytowany w miejscu: kliknij go, żeby
 - greckie litery i symbole: `\alpha`, `\pi`, `\infty`, `\leq`, `\to`, `\in`;
 - indeksy i potęgi: `x_i`, `x^{n+1}`, `a_1^2`;
 - ułamki, pierwiastki i funkcje: `\frac{a}{b}`, `\sqrt{x}`, `\sqrt[3]{x}`, `\sin`, `\log`;
+- duże operatory: `\sum_{i=1}^{n}`, `\int_0^1`, `\bigcup_i` (także z `\limits`);
+- nawiasy dopasowane do wzoru: `\left( … \right)`, `\left\{ … \right\}`, `\big[ … \big]`;
 - tekst we wzorze: `\text{gdy } x > 0`;
 - macierze, układy równań i wyrównanie: `pmatrix`, `cases`, `aligned`.
 
