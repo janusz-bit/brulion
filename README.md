@@ -83,8 +83,11 @@
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
   powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
-  widok kalendarza i listy zadań. Przypomnienia, które minęły przy wyłączonym urządzeniu,
-  czekają w dzienniku. Daty wpisujesz po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
+  widok kalendarza i listy zadań. Stan zadania (do zrobienia, w toku, zrobione, oczekujące,
+  anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
+  przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku.
+  Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
+  po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
@@ -195,11 +198,12 @@ usuwa go w całości.
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
 | `Ctrl+Enter` | zmiana stanu zadania (do zrobienia → w toku → zrobione) |
+| `Ctrl+Shift+Enter` | menu stanu zadania (dowolny stan albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
 | `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
-| `/` | menu poleceń (zadanie, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
+| `/` | menu poleceń (stan zadania, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
 
 W trybie dokumentu `Tab` / `Shift+Tab` działa tylko na punktach listy, `Enter` na pustym
 punkcie kończy listę (w liście zagnieżdżonej: wysuwa punkt o poziom), a `Backspace` na początku
@@ -265,6 +269,9 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   a page is created and switchable at any time; stored in the note as `brulion: document` /
   `brulion: outline` frontmatter, and notes from Obsidian or Logseq open in the right mode
   without it.
+* Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
+  waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
+  wherever a task is shown — or a `/` command.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
