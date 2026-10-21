@@ -107,7 +107,12 @@ Push taga uruchamia `release.yml`:
    `brulion-<wersja>-arm64-v8a.apk`, `Brulion-<wersja>-x86_64.AppImage`,
    `Brulion-<wersja>-aarch64.AppImage` (+ `.zsync` do aktualizacji przez AppImageUpdate),
    `brulion-web-<wersja>.zip`, `brulion-<wersja>-source.tar.gz`, `SHA256SUMS.txt`; potem
-   szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release).
+   szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release). Wcześniej
+   `scripts/appimage-update-check.sh` sprawdza, że każdy AppImage ma swój `.zsync`, który go
+   wskazuje, i że informacja o aktualizacji wbudowana w AppImage
+   (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) pasuje
+   dokładnie do tego pliku — AppImageUpdate, Gear Lever i AppImageLauncher pobierają go
+   z najnowszego wydania.
 
 Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
 ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba
@@ -123,6 +128,7 @@ przy publikacji.
 podman run --rm -v "$PWD:/src:Z" -w /src docker.io/library/ubuntu:22.04 \
   bash -c 'scripts/appimage-build.sh --install-deps && scripts/appimage-build.sh'
 # wynik: dist-appimage/Brulion-<wersja>-x86_64.AppImage
+# (z LDAI_UPDATE_INFORMATION, jak w CI, także Brulion-<wersja>-x86_64.AppImage.zsync obok)
 ```
 
 Na hoście NixOS z `programs.appimage.binfmt` jądro przekazuje każdy AppImage do interpretera,
@@ -140,7 +146,9 @@ na Ubuntu 24.04).
 
 ```sh
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
-nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh
+nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh tests/scripts/*.sh
+tests/scripts/tst_release.sh                  # release.sh w jednorazowych repozytoriach
+tests/scripts/tst_appimage_update_check.sh    # (oba też w ctest: tst_scripts_*)
 ```
 
 Na Raspberry Pi shellcheck 0.11 potrafi się zawiesić (losowo, 100% CPU) — pomaga przypięcie do

@@ -178,6 +178,10 @@ jobs:
       RELEASE_ID: ${{ needs.draft.outputs.release-id }}
       FILE_VERSION: ${{ needs.draft.outputs.file-version }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -187,6 +191,8 @@ jobs:
           mkdir assets
           cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-source/* assets/
           (cd artifacts/brulion-web && zip -q -r -X "$GITHUB_WORKSPACE/assets/brulion-web-$FILE_VERSION.zip" .)
+          # The AppImages update themselves from their .zsync files in the latest release.
+          scripts/appimage-update-check.sh assets "$GH_REPO"
           (cd assets && sha256sum -- * > SHA256SUMS.txt)
           cat assets/SHA256SUMS.txt
           {

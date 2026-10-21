@@ -199,7 +199,8 @@ app; these guards keep data from being lost:
   `tests/app/<area>` (`QT_QPA_PLATFORM=offscreen`), plus headless QML checks of the real app:
   `tst_shell_qml` (`--selftest-shell`), `tst_shell_journey*` (`--journey`), `tst_*_qml` smoke
   tests; shell scripts in `tests/scripts` (`tst_scripts_release`: `scripts/release.sh` in
-  throwaway git repositories). Development builds: `scripts/remote-build.sh` (x86_64 laptop) or
+  throwaway git repositories; `tst_scripts_appimage_update_check`). Development builds:
+  `scripts/remote-build.sh` (x86_64 laptop) or
   `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
   `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
   and worker-thread stack sizes by it (1 otherwise).
@@ -208,7 +209,8 @@ app; these guards keep data from being lost:
   metainfo); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
   `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check`.
 * Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy) → AppImage x86_64 +
-  aarch64; desktop entry and metainfo in `packaging/`.
+  aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
+  `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
 * Android: `scripts/android-build.sh` — Qt 6.11.2 for Android from aqt with host tools of the
   same version, NDK r27c, JDK 21; ABIs `BRULION_ANDROID_ABIS` (default arm64-v8a; armeabi-v7a,
   x86_64, x86 → one multi-ABI APK); `android/` holds the manifest, resources and Kotlin
