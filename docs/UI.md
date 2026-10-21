@@ -467,6 +467,16 @@ Choosing and switching the mode:
 The user must always be able to tell what the sync is doing, whether something failed and
 why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 
+* **The Nextcloud account and the notebooks** (`qml/io/NextcloudForm.qml` over
+  `NextcloudSetup`, in the sync center and Settings → Synchronizacja): the server, the user and
+  the app password are shared, the switch and the server folder belong to the open notebook (no
+  notebook open: nothing syncs). A notebook without a folder of its own is offered "Notatki"
+  for the first account on the device, else its own name ("Praca", "Praca 2" when taken —
+  never a folder another notebook has, holds or is inside); one synced before keeps the folder
+  its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
+  exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
+  się już z tym folderem…") and is not saved while sync is on. The switch and folder of 0.3.0
+  and older go to the notebook they belong to (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i

@@ -4,11 +4,14 @@
 // applies saved settings to Workspace.sync.
 //
 // NextcloudSetup (QML: `NextcloudSetup { settings: AppSettings }`)
-//   drafts      enabled, url, user, password ("" keeps the stored app password), folder (default
-//               "Notatki" for a new account), interval (minutes, 0 = after changes only),
-//               deviceName (names conflict copies)
-//   validation  urlError / userError / passwordError / folderError (shown once `showErrors`),
-//               urlWarning (plain http), davUrl (the WebDAV address the form leads to)
+//   drafts      enabled, url, user, password ("" keeps the stored app password), folder (the
+//               notebook's; for one without: "Notatki" for a new account, else the notebook's
+//               name — AppSettings::proposedNextcloudFolder()), interval (minutes, 0 = after
+//               changes only), deviceName (names conflict copies)
+//   validation  urlError / userError / passwordError / folderError (shown once `showErrors`;
+//               a folder another notebook on this device syncs with at once, and saving is
+//               refused while sync is on), urlWarning (plain http), davUrl (the WebDAV address the
+//               form leads to)
 //   test        testConnection() with the drafts — its own WebDavClient, nothing saved — gives
 //               testResult { ok, code, title, message, hint, details, canCreateFolder,
 //               securityUrl }: 401 → how to create an app password (Nextcloud: Settings →
@@ -102,8 +105,6 @@ class NextcloudSetup : public QObject {
     Q_PROPERTY(bool browser READ browser WRITE setBrowser NOTIFY settingsChanged FINAL)
 
 public:
-    static constexpr auto DefaultFolder = "Notatki";
-
     explicit NextcloudSetup(QObject *parent = nullptr);
     ~NextcloudSetup() override;
 
@@ -169,6 +170,10 @@ Q_SIGNALS:
 private:
     sync::HttpTransport *transport();
     QString effectivePassword() const;
+    /// The drafts keep the saved account (no other server or user).
+    bool sameAccount() const;
+    /// Another notebook syncs with the drafted folder (while switched on, on the same account).
+    QString folderConflict() const;
     void setTestResult(const QVariantMap &result);
     void finishTest(const QVariantMap &result);
 

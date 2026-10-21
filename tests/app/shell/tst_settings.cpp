@@ -1,7 +1,8 @@
 // AppSettings: defaults, validation, persistence in an INI file, recent vaults, the Nextcloud
 // app password kept outside QSettings in an owner-only file, and the Nextcloud switch and server
-// folder of each notebook: keyed by the notebook folder's id, folders another notebook syncs
-// with, and the settings of 0.3.0 and older going to the notebook they belong to.
+// folder of each notebook: keyed by the notebook folder's id, the folder proposed for a notebook,
+// folders another notebook syncs with, and the settings of 0.3.0 and older going to the notebook
+// they belong to.
 #include "appsettings.h"
 #include "workspacesync.h"
 
@@ -252,6 +253,7 @@ private Q_SLOTS:
             // Its folder is written, also the default one: it is never offered another folder.
             QVERIFY(s.hasOwnNextcloudFolder());
             QCOMPARE(s.nextcloudFolder(), folder.isEmpty() ? u"Brulion"_s : folder);
+            QCOMPARE(s.proposedNextcloudFolder(), s.nextcloudFolder());
         }
     }
 
@@ -312,8 +314,7 @@ private Q_SLOTS:
         s.notebookOpened(n, remote);
         QVERIFY(!s.nextcloudEnabled());
         QCOMPARE(s.hasOwnNextcloudFolder(), !folder.isEmpty());
-        if (!folder.isEmpty())
-            QCOMPARE(s.nextcloudFolder(), folder);
+        QCOMPARE(s.proposedNextcloudFolder(), folder.isEmpty() ? QFileInfo(n).fileName() : folder);
         // A folder of its own is never replaced.
         s.setNextcloudFolder(u"Wybrany"_s);
         s.notebookOpened(n, remoteOf(u"Notatki"_s));
@@ -390,6 +391,63 @@ private Q_SLOTS:
         const QStringList groups = raw.childGroups();
         QCOMPARE(groups.size(), 1);
         QCOMPARE(raw.value(groups.first() + u"/path"_s).toString(), real); // the last path written
+    }
+
+    void proposedFolder_data()
+    {
+        QTest::addColumn<bool>("account");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QStringList>("others");
+        QTest::addColumn<QString>("shared");
+        QTest::addColumn<QString>("expected");
+        const QStringList none;
+        QTest::newRow("new account") << false << u"Praca"_s << none << QString() << u"Notatki"_s;
+        QTest::newRow("new account, Notatki taken")
+                << false << u"Praca"_s << QStringList{u"Notatki"_s} << QString() << u"Notatki 2"_s;
+        QTest::newRow("the notebook's name")
+                << true << u"Praca"_s << QStringList{u"Notatki"_s} << QString() << u"Praca"_s;
+        QTest::newRow("diacritics") << true << u"Zażółć gęślą jaźń"_s << none << QString() << u"Zażółć gęślą jaźń"_s;
+        QTest::newRow("characters a folder cannot have")
+                << true << u"Plan: 2026*27?"_s << none << QString() << u"Plan 2026 27"_s;
+        QTest::newRow("dots and spaces around") << true << u" .notatki. "_s << none << QString() << u"notatki"_s;
+        QTest::newRow("nothing left") << true << u"..."_s << none << QString() << u"Notatki"_s;
+        QTest::newRow("taken") << true << u"Praca"_s << QStringList{u"Praca"_s} << QString() << u"Praca 2"_s;
+        QTest::newRow("taken, other case and slashes")
+                << true << u"Praca"_s << QStringList{u"/praca/"_s} << QString() << u"Praca 2"_s;
+        QTest::newRow("taken twice") << true << u"Praca"_s << QStringList{u"Praca"_s, u"Praca 2"_s} << QString()
+                                     << u"Praca 3"_s;
+        QTest::newRow("holds another notebook's folder")
+                << true << u"Praca"_s << QStringList{u"Praca/Archiwum"_s} << QString() << u"Praca 2"_s;
+        QTest::newRow("another notebook's default folder")
+                << true << u"Brulion"_s << QStringList{QString()} << QString() << u"Brulion 2"_s;
+        QTest::newRow("the old folder waiting for its notebook")
+                << true << u"Notatki"_s << none << u"Notatki"_s << u"Notatki 2"_s;
+    }
+    void proposedFolder()
+    {
+        // A further notebook must not be offered a server folder another notebook has: the
+        // user would accept it and both notebooks would mix there.
+        QFETCH(bool, account);
+        QFETCH(QString, name);
+        QFETCH(QStringList, others);
+        QFETCH(QString, shared);
+        QFETCH(QString, expected);
+        const QString file = shared.isEmpty() ? nextFile() : oldSettings(u"/media/karta/A"_s, true, shared);
+        AppSettings s(file, m_tmp.path());
+        if (account)
+            s.setNextcloudUrl(QString::fromLatin1(kServer));
+        else
+            s.setNextcloudUrl(QString());
+        for (qsizetype i = 0; i < others.size(); ++i) {
+            s.setCurrentVault(m_tmp.filePath(u"inne-%1-%2"_s.arg(m_n).arg(i)));
+            s.setNextcloudFolder(others.at(i)); // synced or not: the folder is that notebook's
+        }
+        s.setCurrentVault(m_tmp.filePath(u"propozycja-%1/%2"_s.arg(m_n).arg(name)));
+        QVERIFY(!s.hasOwnNextcloudFolder());
+        QCOMPARE(s.proposedNextcloudFolder(), expected);
+        // Its own folder once it has one.
+        s.setNextcloudFolder(u"Mój"_s);
+        QCOMPARE(s.proposedNextcloudFolder(), u"Mój"_s);
     }
 
     void folderUsedByAnotherNotebook_data()

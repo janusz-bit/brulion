@@ -172,9 +172,10 @@ private Q_SLOTS:
         QVERIFY(QFile::exists(a + u"/Notatka z A.md"_s));
         QVERIFY(!QFile::exists(c + u"/Notatka z A.md"_s));
 
-        // C stays without sync.
+        // C stays without sync, and its form offers a folder of its own.
         QVERIFY(openAndWait(app.get(), c));
         QVERIFY(!sync->active());
+        QCOMPARE(app->settings()->proposedNextcloudFolder(), u"C-nowy"_s);
     }
 
     void startedInTheDocumentationThenANewNotebook()

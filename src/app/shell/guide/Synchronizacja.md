@@ -16,7 +16,10 @@ Opcjonalnie Brulion pokazuje stan z API Syncthinga.
 ## Nextcloud (WebDAV)
 *Ustawienia → Synchronizacja* (albo centrum synchronizacji): adres serwera, użytkownik i **hasło aplikacji** wygenerowane w Nextcloudzie. Zmiany z wielu urządzeń scalane są trójstronnie, więc zwykle nic nie ginie i nie musisz nic robić. Gdy scalenie jest niemożliwe, zostają obie wersje i dostajesz widok scalania.
 
-Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwerze należą do notatnika**: inny notatnik (także ta dokumentacja) startuje bez synchronizacji. Dzięki temu notatki z jednego notatnika nie trafią do drugiego; jeden folder na serwerze synchronizuj tylko z jednym notatnikiem.
+Serwer i konto są wspólne, ale **włączenie synchronizacji i folder na serwerze należą do notatnika**: inny notatnik (także ta dokumentacja) startuje bez synchronizacji. Dzięki temu notatki z jednego notatnika nie trafią do drugiego.
+
+- Folder na serwerze Brulion proponuje osobno dla każdego notatnika: przy pierwszym koncie `Notatki`, dla kolejnych notatników ich nazwę (np. `Praca`, a gdy jest zajęta — `Praca 2`). Na drugim urządzeniu wpisz ten sam folder co na pierwszym.
+- Jeden folder na serwerze należy do jednego notatnika: Brulion nie zapisze folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu (ani folderu w nim albo nad nim), i powie, który to notatnik.
 
 Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz — to zabezpieczenie przed pomyłką.
 

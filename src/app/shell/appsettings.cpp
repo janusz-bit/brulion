@@ -104,6 +104,23 @@ bool foldersOverlap(const QString &a, const QString &b)
     return x == y || x.startsWith(y + u'/') || y.startsWith(x + u'/');
 }
 
+/// A notebook folder's name as a server folder: characters a folder on the server cannot have
+/// become spaces, no leading or trailing dots and spaces.
+QString serverFolderFromName(const QString &name)
+{
+    static const QString forbidden = u"\\/:*?\"<>|"_s;
+    QString out;
+    out.reserve(name.size());
+    for (const QChar c : name)
+        out += forbidden.contains(c) || c.category() == QChar::Other_Control ? QChar(u' ') : c;
+    out = out.simplified();
+    while (!out.isEmpty() && (out.front() == u'.' || out.front() == u' '))
+        out.remove(0, 1);
+    while (!out.isEmpty() && (out.back() == u'.' || out.back() == u' '))
+        out.chop(1);
+    return out.normalized(QString::NormalizationForm_C);
+}
+
 QString defaultLanguage()
 {
     return QLocale().name().startsWith(u"en"_s) ? u"en"_s : u"pl"_s;
@@ -553,6 +570,34 @@ void AppSettings::setNextcloudFolder(const QString &folder)
 bool AppSettings::hasOwnNextcloudFolder() const
 {
     return hasNotebookValue(currentVault(), u"folder");
+}
+
+QString AppSettings::proposedNextcloudFolder() const
+{
+    // Syncing without a folder of its own (settings of 0.3.1–0.3.5): the folder it syncs with.
+    if (hasOwnNextcloudFolder() || nextcloudEnabled())
+        return nextcloudFolder();
+    const QString notebook = currentVault();
+    QString base;
+    if (!nextcloudUrl().isEmpty() && !cleanPath(notebook).isEmpty())
+        base = serverFolderFromName(QFileInfo(absolutePath(notebook)).fileName());
+    if (base.isEmpty())
+        base = QString::fromLatin1(NewAccountFolder);
+    // Folders given to other notebooks (synced or not) and the one of 0.3.0 waiting for its notebook.
+    const QString id = notebookId(notebook);
+    const QString legacy = legacyNotebookId(notebook);
+    QStringList taken;
+    for (const NotebookSync &n : notebookSyncs()) {
+        if (n.id != id && n.id != legacy && (n.hasFolder || n.enabled))
+            taken.append(n.folder);
+    }
+    if (hasSharedNextcloud())
+        taken.append(m_settings->value(key(kNcSharedFolder), key(kDefaultServerFolder)).toString());
+    QString candidate = base;
+    for (int i = 2;
+         std::any_of(taken.cbegin(), taken.cend(), [&](const QString &f) { return foldersOverlap(f, candidate); }); ++i)
+        candidate = u"%1 %2"_s.arg(base).arg(i);
+    return candidate;
 }
 
 QString AppSettings::nextcloudFolderUser(const QString &folder) const

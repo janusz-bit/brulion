@@ -97,6 +97,8 @@ public:
     ~AppSettings() override;
 
     static constexpr int MaxRecentVaults = 8;
+    /// The server folder proposed for the first notebook set up with an account on this device.
+    static constexpr auto NewAccountFolder = "Notatki";
 
     QString themeMode() const;
     void setThemeMode(const QString &mode);
@@ -145,6 +147,12 @@ public:
     void setNextcloudFolder(const QString &folder);
     /// The current notebook has a server folder of its own (chosen, or kept from its last sync).
     bool hasOwnNextcloudFolder() const;
+    /// The server folder the settings form shows for the current notebook: its own; for one that
+    /// has none, "Notatki" when no account is set up yet, else the notebook folder's name (without
+    /// characters a server folder cannot have) — and never a folder another notebook on this
+    /// device has, holds or is inside ("Praca 2" then), nor the one of 0.3.0 waiting for its
+    /// notebook.
+    QString proposedNextcloudFolder() const;
     /// Another notebook on this device that syncs with `folder`, a folder inside it or around it
     /// (its switch is on and its folder exists; not `except`, default: the current notebook): its
     /// path, "" when none. Their notes would mix on the server.
