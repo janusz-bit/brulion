@@ -43,6 +43,6 @@ Gdy każdy `$$` stoi w osobnej linii, wszystkie linie między nimi należą do w
 - tekst we wzorze: `\text{gdy } x > 0`;
 - macierze, układy równań i wyrównanie: `pmatrix`, `cases`, `aligned`.
 
-Nieznane polecenie nie ginie — pokazuje się tak, jak je napisałeś. Wzory są tylko do czytania: plik zawsze zachowuje LaTeX, a eksport HTML pokazuje gotowy wzór.
+Nieznane polecenie nie ginie — pokazuje się tak, jak je napisałeś. Wzory są tylko do czytania: plik zawsze zachowuje LaTeX, a eksport HTML pokazuje gotowy wzór — także blok `math` w punkcie konspektu czy dziennika.
 
 Zobacz też [[Obliczenia|Obliczenia]] — tam Brulion liczy liczby, a nie składa wzory.

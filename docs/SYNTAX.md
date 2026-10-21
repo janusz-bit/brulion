@@ -424,7 +424,9 @@ an environment's own `&` and `\\` separate its cells and rows, not those in brac
 Unknown commands stay as written; a part nested deeper than 48 levels (braces, arguments,
 environments) is shown as its source. Spaces between atoms are ignored as in LaTeX (`\ `,
 `\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. The HTML
-export shows the formula (display formulas are centred).
+export shows the formula (display formulas are centred), also a ```` ```math ```` block that is a
+list item of its own (what `/Wzór matematyczny` writes in an outline or a journal); other fenced
+list items are exported as code blocks.
 
 Where a formula is (in a block's inline text, after code spans and comments are masked):
 
