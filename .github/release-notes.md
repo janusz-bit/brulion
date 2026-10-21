@@ -5,7 +5,7 @@
 * **Godzina na zegarze:** wybór godziny w przypomnieniach, w kalendarzu i w ustawieniach działa teraz jak w Androidzie — na okrągłym zegarze. Godziny 00–23 są na dwóch pierścieniach, minuty co pięć, a dokładną wartość wybiera się dotknięciem lub przeciągnięciem; obsługiwana jest też klawiatura. Wpisywanie godziny ręcznie nadal działa.
 * **Bloki kodu:** linia z trzema backtickami wpisana w bloku kodu zostaje jego treścią — zewnętrzne ogrodzenie się poszerza, więc kolejne bloki nie są już wchłaniane przez kod. Enter otwiera też bloki o dowolnej długości ogrodzenia i z dowolnym językiem, a kod w transkluzjach pokazuje się bez linii ogrodzenia.
 
-Z wersji 0.3.4: obrazy i załączniki pokazywane jako zdjęcia oraz nowa sekcja dokumentacji o obrazach i plikach. Z wersji 0.3.3: wzory matematyczne rysowane od razu w notatkach. Z wersji 0.3.2: przełączanie notatników jednym kliknięciem i synchronizacja Nextcloud przypisana do notatnika. Z wersji 0.3.0: dokumentacja napisana w Brulionie i szybkie przełączanie notatników. Z wersji 0.2.1: rejestr zdarzeń, podgląd synchronizacji na żywo i jej historia.
+Z wersji 0.3.4: obrazy i załączniki pokazywane jako zdjęcia (opis tego widoku w sekcji „Obrazy i pliki” dokumentacji). Z wersji 0.3.3: wzory matematyczne rysowane od razu w notatkach. Z wersji 0.3.2: przełączanie notatników jednym kliknięciem. Z wersji 0.3.1: synchronizacja Nextcloud przypisana do notatnika. Z wersji 0.3.0: dokumentacja napisana w Brulionie i szybkie przełączanie notatników. Z wersji 0.2.1: rejestr zdarzeń, podgląd synchronizacji na żywo i jej historia.
 
 **Najważniejsze**
 
