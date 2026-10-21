@@ -46,14 +46,25 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 
 Releasy idą na osobnej gałęzi `release` (utworzonej z main przy v0.3.4): `main` to rozwój, a
 `release` zbiera wszystko, co release'owe — notatki wydaniowe, commit z wersją i tag. Przed
-kolejnym wydaniem brać zmiany z main na `release`:
+kolejnym wydaniem brać zmiany z main na `release`, a po wydaniu scalić `release` z powrotem
+do main:
 
 ```sh
-git switch release && git merge main     # stan main na release
+git switch main && git pull --ff-only           # aktualny main
+git switch release && git merge main            # stan main na release
 # .github/release-notes.md -> commit "Update release notes for vX.Y.Z"
-scripts/release.sh patch --push          # bump + commit "Release vX.Y.Z" + tag, push atomowo
-git switch main
+scripts/release.sh patch --push                 # bump + commit "Release vX.Y.Z" + tag, push atomowo
+git switch main && git merge --ff-only release  # wersja i notatki wracają na main
+git push origin main
 ```
+
+Powrót na main jest konieczny: z `main` budują się GitHub Pages,
+`nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI. Bez niego pokazywałyby
+w „O programie” poprzednią wersję, a APK z main miałby niższy `versionCode` niż wydany i nie
+zainstalowałby się na nim. Gdy na main coś przybyło od `git merge main`, `--ff-only` odmówi —
+wtedy `git merge --no-edit release`. Po powrocie następne `git merge main` na `release` jest
+zwykłym przewinięciem (fast-forward), a notatki wydaniowe na obu gałęziach się nie rozjeżdżają.
+`scripts/release.sh` wypisuje te polecenia na końcu.
 
 Argumenty `scripts/release.sh`:
 

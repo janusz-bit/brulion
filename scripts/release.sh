@@ -7,7 +7,8 @@
 #
 # Run it on the release branch: main holds the development, release holds the releases —
 # switch to release and merge main into it first (release.sh refuses any other branch, and a
-# release branch that lacks commits of main, origin/main or origin/release).
+# release branch that lacks commits of main, origin/main or origin/release). Afterwards merge
+# release back into main, so that main has the new version and notes too (it prints how).
 #
 # Usage: scripts/release.sh <X.Y.Z[-pre] | major | minor | patch> [--push] [--yes] [--dry-run]
 #                           [--allow-stale]
@@ -213,6 +214,10 @@ echo "Created tag $tag at $(git rev-parse --short HEAD)."
 # Always the branch with the tag: also a tag-only release has the merge and notes commits.
 if ((push)); then
   git push --atomic origin HEAD "refs/tags/$tag"
+  echo "Pushed. Now bring the version and the notes back to main:"
 else
   echo "Publish it with:  git push --atomic origin release $tag"
+  echo "Then bring the version and the notes back to main:"
 fi
+echo "  git switch main && git merge --ff-only release   # main moved on: git merge --no-edit release"
+echo "  git push origin main"

@@ -171,6 +171,30 @@ commit "$work" .github/release-notes.md '* Nowość (0.3.6)' "Update release not
 rel "$work" --dry-run patch
 expect "changed notes: no warning" test "$(grep -c 'has not changed' <<<"$out")" = 0
 
+echo "--- a normal release, then back to main as the script says"
+fixture normal
+git -C "$work" switch -q main
+commit "$work" fix.txt 'poprawka' "Fix on main"
+git -C "$work" push -q origin main
+git -C "$work" switch -q release
+git -C "$work" merge -q --no-edit main
+commit "$work" .github/release-notes.md '* Poprawka (0.3.6)' "Update release notes for v0.3.6"
+rel "$work" patch --yes --push
+expect "the release succeeds" test "$status" = 0
+expect "origin/release is the release commit" same "$origin" release "$work" HEAD
+expect "... with the tag" same "$origin" v0.3.6 "$work" HEAD
+expect "it says how to merge back into main" has "git switch main && git merge --ff-only release"
+expect "... and to push main" has "git push origin main"
+git -C "$work" switch -q main
+git -C "$work" merge -q --ff-only release
+git -C "$work" push -q origin main
+expect "main now has the release" same "$origin" main "$origin" v0.3.6
+expect "... and its version" test "$(version_on "$origin" main)" = 0.3.6
+commit "$work" fix.txt 'kolejna poprawka' "Next fix on main"
+commit "$work" .github/release-notes.md '* Kolejna (0.3.7)' "Note on main"
+git -C "$work" switch -q release
+expect "the next merge of main is a fast-forward" git -C "$work" merge -q --ff-only main
+
 echo "--- a release of the recorded version pushes the branch with the tag"
 fixture rc
 commit "$work" .github/release-notes.md '* Wydanie testowe' "Update release notes for v0.4.0-rc.1"
