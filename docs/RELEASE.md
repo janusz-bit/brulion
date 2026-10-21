@@ -62,6 +62,7 @@ scripts/release.sh minor --push        # 0.1.0 -> 0.2.0: commit "Release v0.2.0"
 scripts/release.sh 0.1.0 --push        # pierwsze wydanie: wersja już jest w plikach — sam tag
 scripts/release.sh 0.3.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.3.0
 scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił
+scripts/release.sh patch --allow-stale # mimo commitów z main, których release jeszcze nie ma
 ```
 
 `scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
@@ -70,7 +71,17 @@ minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. Wyma
 drzewa roboczego i gałęzi `release` (z innej umiera od razu). `--dry-run` niczego nie zmienia
 i działa z każdej gałęzi: poza `release` najpierw ostrzega, a potem pokazuje, co zrobiłby
 prawdziwy przebieg na `release` — wersje czyta z gałęzi `release` (lokalnej, a bez niej
-z `origin/release`), nie z bieżącej. Push taga uruchamia `release.yml`:
+z `origin/release`), nie z bieżącej.
+
+Przed wydaniem skrypt sprawdza, czy `release` zawiera wszystkie commity z `main` (lokalnej
+i `origin/main`) oraz z `origin/release`. Gdy czegoś brakuje, odmawia i pisze, co scalić
+(`git merge main`, `git fetch origin && git merge origin/main`, `… origin/release`) —
+inaczej wydanie wyszłoby bez najnowszych poprawek albo push zostałby odrzucony już po
+utworzeniu taga. `--allow-stale` wydaje mimo to (np. gdy zmiany na main celowo czekają na
+następne wydanie); `--dry-run` tylko ostrzega. Ostrzega też, gdy `.github/release-notes.md`
+nie zmienił się od ostatniego taga (wydanie powtórzyłoby poprzednie notatki).
+
+Push taga uruchamia `release.yml`:
 
 1. **draft** — tag musi się zgadzać z wersją w `CMakeLists.txt` i `nix/package.nix`; powstaje
    szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,

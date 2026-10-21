@@ -88,7 +88,13 @@ EOF
   git -C "$seed" push -q "$root/origin.git" main release --tags
   git clone -q "$root/origin.git" "$root/work"
   git -C "$root/work" switch -q release
-  work=$root/work
+  work=$root/work origin=$root/origin.git
+}
+
+# other <name>: a second clone of the fixture's origin (another machine), on main.
+other() {
+  git clone -q "$origin" "$tmp/$1"
+  other=$tmp/$1
 }
 
 echo "--- a dry run from main shows what a real run on release would do"
@@ -107,6 +113,63 @@ rel "$work" patch --yes
 expect "a real run from main fails" test "$status" != 0
 expect "... with the branch message, not a tag error" first_line_has "error: releases go on the 'release' branch, not 'main'"
 expect "... and creates no tag" test "$(git -C "$work" tag -l 'v0.3.6')" = ""
+
+echo "--- a release branch that lacks main's commits is refused"
+fixture stale
+git -C "$work" switch -q main
+commit "$work" fix.txt 'poprawka' "Fix on main"
+git -C "$work" switch -q release
+head=$(sha "$work" HEAD)
+rel "$work" patch --yes --push
+expect "a real run fails" test "$status" != 0
+expect "... names main and how to merge it" has "main: 1 commit (git merge main)"
+expect "... mentions --allow-stale" has "--allow-stale"
+expect "... creates no tag" test "$(git -C "$work" tag -l v0.3.6)" = ""
+expect "... and no commit" test "$(sha "$work" HEAD)" = "$head"
+expect "... and pushes nothing" same "$origin" release "$work" HEAD
+rel "$work" --dry-run patch
+expect "a dry run warns about it" has "A real run refuses to release without them"
+expect "... and still shows the plan" has "Brulion 0.3.5 -> 0.3.6 (tag v0.3.6, from release)"
+git -C "$work" switch -q main
+rel "$work" --dry-run patch
+expect "a dry run from main checks the release branch" has "'release' lacks commits that are on"
+
+echo "--- ... also when the commits are only on origin/main (not fetched yet)"
+git -C "$work" switch -q release
+git -C "$work" merge -q --no-edit main
+other stale-other
+commit "$other" fix2.txt 'druga poprawka' "Fix pushed from elsewhere"
+git -C "$other" push -q origin main
+rel "$work" patch --yes
+expect "a real run fails" test "$status" != 0
+expect "... naming origin/main and git fetch" has "origin/main: commits not fetched yet (git fetch origin && git merge origin/main)"
+expect "... not main, which is merged" test "$(grep -c '^  main:' <<<"$out")" = 0
+git -C "$work" fetch -q origin
+rel "$work" patch --yes
+expect "fetched but not merged: origin/main, 1 commit" has "origin/main: 1 commit (git fetch origin && git merge origin/main)"
+
+echo "--- ... and when origin/release moved on"
+git -C "$work" merge -q --no-edit origin/main
+git -C "$other" switch -q release
+commit "$other" .github/release-notes.md '* Inna notatka' "Notes from elsewhere"
+git -C "$other" push -q origin release
+rel "$work" patch --yes
+expect "a real run fails" test "$status" != 0
+expect "... naming origin/release" has "origin/release: commits not fetched yet (git fetch origin && git merge origin/release)"
+
+echo "--- --allow-stale releases anyway"
+rel "$work" patch --yes --allow-stale
+expect "the run succeeds" test "$status" = 0
+expect "... with a warning" has "Releasing without them (--allow-stale)."
+expect "... and the tag" test "$(git -C "$work" tag -l v0.3.6)" = v0.3.6
+
+echo "--- unchanged release notes are pointed out"
+fixture notes
+rel "$work" --dry-run patch
+expect "notes unchanged since v0.3.5" has ".github/release-notes.md has not changed since v0.3.5"
+commit "$work" .github/release-notes.md '* Nowość (0.3.6)' "Update release notes for v0.3.6"
+rel "$work" --dry-run patch
+expect "changed notes: no warning" test "$(grep -c 'has not changed' <<<"$out")" = 0
 
 echo
 if ((failed)); then

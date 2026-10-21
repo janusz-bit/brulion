@@ -6,9 +6,11 @@
 # AppImages, web zip, source tarball -> GitHub release).
 #
 # Run it on the release branch: main holds the development, release holds the releases —
-# switch to release and merge main into it first (release.sh refuses any other branch).
+# switch to release and merge main into it first (release.sh refuses any other branch, and a
+# release branch that lacks commits of main, origin/main or origin/release).
 #
 # Usage: scripts/release.sh <X.Y.Z[-pre] | major | minor | patch> [--push] [--yes] [--dry-run]
+#                           [--allow-stale]
 #   X.Y.Z[-pre]  the new version; a suffix (0.2.0-rc.1) only marks the tag as a pre-release
 #                (CMake and the Android versionName keep 0.2.0)
 #   major|minor|patch  bump that part of the current version
@@ -16,6 +18,8 @@
 #   --yes      do not ask for confirmation
 #   --dry-run  show what a real run would do, change nothing; from another branch it shows what a
 #              real run on the release branch would do (the versions come from that branch)
+#   --allow-stale  release even though main, origin/main or origin/release has commits that
+#              the release branch lacks
 #
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
@@ -32,12 +36,13 @@ die() {
 }
 usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "${BASH_SOURCE[0]}"; }
 
-bump='' push=0 yes=0 dry=0
+bump='' push=0 yes=0 dry=0 allow_stale=0
 for arg in "$@"; do
   case $arg in
     --push) push=1 ;;
     --yes | -y) yes=1 ;;
     --dry-run | -n) dry=1 ;;
+    --allow-stale) allow_stale=1 ;;
     -h | --help)
       usage
       exit 0
@@ -109,9 +114,60 @@ newest=$(printf '%s\n%s\n' "$current" "$release" | sort -V | tail -n 1)
 
 tag=v$new
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then die "tag $tag already exists"; fi
-if git remote get-url origin >/dev/null 2>&1 &&
-  git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
-  die "tag $tag already exists on origin"
+# One round trip to origin: the tag, and the branches whose commits the release must carry.
+remote_refs='' reached=0
+if git remote get-url origin >/dev/null 2>&1; then
+  if remote_refs=$(git ls-remote origin refs/heads/main refs/heads/release "refs/tags/$tag" 2>/dev/null); then
+    reached=1
+  else
+    echo "warning: origin is not reachable: comparing with the last fetched origin/main and origin/release" >&2
+  fi
+fi
+remote_commit() { awk -v ref="$1" '$2 == ref { print $1; exit }' <<<"$remote_refs"; }
+[[ -z $(remote_commit "refs/tags/$tag") ]] || die "tag $tag already exists on origin"
+
+# The release must carry everything on main (local and origin's) and on origin/release: after a
+# forgotten `git merge main` it would ship without the newest fixes, and an origin/release that
+# moved on would reject the push only after the tag was made.
+target=${src_ref:-HEAD}
+stale=()
+lacks() { # <name> <commit, empty when there is none> <how to merge it>
+  [[ -n $2 ]] || return 0
+  local n
+  if ! git cat-file -e "$2^{commit}" 2>/dev/null; then
+    stale+=("$1: commits not fetched yet ($3)")
+  elif ! git merge-base --is-ancestor "$2" "$target"; then
+    n=$(git rev-list --count "$target..$2")
+    if ((n == 1)); then stale+=("$1: 1 commit ($3)"); else stale+=("$1: $n commits ($3)"); fi
+  fi
+}
+known() { git rev-parse -q --verify "$1^{commit}" || true; }
+lacks main "$(known refs/heads/main)" "git merge main"
+if ((reached)); then
+  lacks origin/main "$(remote_commit refs/heads/main)" "git fetch origin && git merge origin/main"
+  lacks origin/release "$(remote_commit refs/heads/release)" "git fetch origin && git merge origin/release"
+else
+  lacks origin/main "$(known refs/remotes/origin/main)" "git merge origin/main"
+  lacks origin/release "$(known refs/remotes/origin/release)" "git merge origin/release"
+fi
+if ((${#stale[@]})); then
+  report="'$from' lacks commits that are on"$'\n'"$(printf '  %s\n' "${stale[@]}")"
+  if ((!dry && !allow_stale)); then
+    die "$report"$'\n'"Merge them first, or pass --allow-stale to release without them."
+  fi
+  echo "warning: $report" >&2
+  if ((dry)); then
+    echo "A real run refuses to release without them (unless --allow-stale)." >&2
+  else
+    echo "Releasing without them (--allow-stale)." >&2
+  fi
+fi
+
+# The notes are published as the release's description: unchanged ones repeat the last release's.
+notes=.github/release-notes.md
+if last=$(git describe --tags --abbrev=0 "$target" 2>/dev/null) &&
+  git diff --quiet "$last" ${src_ref:+"$src_ref"} -- "$notes"; then
+  echo "warning: $notes has not changed since $last (commit \"Update release notes for $tag\" first)" >&2
 fi
 
 files=()
