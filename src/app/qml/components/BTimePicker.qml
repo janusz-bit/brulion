@@ -264,14 +264,15 @@ T.Control {
         }
 
         // ---- The clock face ----------------------------------------------------------------
-        // A Control for its focusReason: the ring shows for keyboard focus only (visualFocus:
-        // Tab), or once keys were used on it — not when a dialog focuses it or a tap does.
+        // A Control for its visualFocus: the ring shows for keyboard focus only (focus that came
+        // with Tab), or once keys were used on it — not when a dialog focuses it, and not after a
+        // tap (visualFocus alone would stay: focus forced on the focused face keeps its reason).
         T.Control {
             id: faceFocus
 
-            /// Keys were used on the dial since the last press.
+            /// The keyboard has the dial: it came with Tab, or keys were used, since the last press.
             property bool keyboardActive: false
-            readonly property bool focusRingShown: activeFocus && (visualFocus || keyboardActive)
+            readonly property bool focusRingShown: activeFocus && keyboardActive
 
             Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
             Layout.fillWidth: true
@@ -283,6 +284,7 @@ T.Control {
             padding: 0
             focusPolicy: Qt.StrongFocus
             onActiveFocusChanged: if (!activeFocus) keyboardActive = false
+            onVisualFocusChanged: if (visualFocus) keyboardActive = true
 
             Accessible.role: Accessible.Grouping
             Accessible.name: qsTr("Clock face, %1").arg(control.displayTime)
@@ -347,6 +349,11 @@ T.Control {
                 property int hoverValue: -1
                 /// The press picked a value (not the hub): letting go moves on to the minutes.
                 property bool valuePicked: false
+                /// The number the press landed on (-1: none) and where: it stays that number
+                /// until the pointer moves farther than a drag — a finger that shakes a pixel or
+                /// two while tapping "45" still gives 45, not the 46 of its angle.
+                property int pressedLabel: -1
+                property point pressPoint
 
                 anchors.fill: parent
                 hoverEnabled: !Theme.touchUi
@@ -359,6 +366,8 @@ T.Control {
                     // A number under the finger is that value (a tap on "45" is 45, even a little
                     // off its centre); elsewhere the nearest hour or the minute of the angle.
                     const label = control.labelAt(mouse.x, mouse.y)
+                    faceInput.pressedLabel = label
+                    faceInput.pressPoint = Qt.point(mouse.x, mouse.y)
                     if (label >= 0) {
                         if (control.mode === "hour")
                             control.commitHour(label)
@@ -370,9 +379,19 @@ T.Control {
                     }
                 }
                 onPositionChanged: (mouse) => {
-                    if (!faceInput.pressed)
+                    if (!faceInput.pressed) {
                         faceInput.hoverValue = control.labelAt(mouse.x, mouse.y)
-                    else if (control.pickAt(mouse.x, mouse.y))
+                        return
+                    }
+                    if (faceInput.pressedLabel >= 0) {
+                        const dx = mouse.x - faceInput.pressPoint.x
+                        const dy = mouse.y - faceInput.pressPoint.y
+                        const slop = Qt.styleHints.startDragDistance
+                        if (dx * dx + dy * dy <= slop * slop)
+                            return
+                        faceInput.pressedLabel = -1 // a drag: the hand follows the pointer now
+                    }
+                    if (control.pickAt(mouse.x, mouse.y))
                         faceInput.valuePicked = true
                 }
                 onReleased: {

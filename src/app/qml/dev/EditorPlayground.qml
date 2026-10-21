@@ -989,6 +989,22 @@ ApplicationWindow {
         const p = clockPoint(c, radius, deg)
         tapAt(c.focusItem, p.x, p.y)
     }
+    /// A tap with a finger that shakes a little (two moves of a few pixels, well under a drag).
+    function clockShakyTap(c, radius, deg) {
+        const face = c.focusItem
+        const p = clockPoint(c, radius, deg)
+        if (Theme.touchUi) {
+            clockEvents.touchEvent(face).press(0, face, p.x, p.y).commit()
+            clockEvents.touchEvent(face).move(0, face, p.x + 2, p.y + 1).commit()
+            clockEvents.touchEvent(face).move(0, face, p.x + 3, p.y - 1).commit()
+            clockEvents.touchEvent(face).release(0, face, p.x + 3, p.y - 1).commit()
+        } else {
+            clockEvents.mousePress(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+            clockEvents.mouseMove(face, p.x + 2, p.y + 1, -1, Qt.LeftButton, Qt.NoModifier)
+            clockEvents.mouseMove(face, p.x + 3, p.y - 1, -1, Qt.LeftButton, Qt.NoModifier)
+            clockEvents.mouseRelease(face, p.x + 3, p.y - 1, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
     /// A drag along the circle of `radius` from `fromDeg` to `toDeg`, in twelve moves.
     function clockDrag(c, radius, fromDeg, toDeg) {
         const face = c.focusItem
@@ -1115,6 +1131,8 @@ ApplicationWindow {
             () => check(c.time === "21:37", "a tap between the minute numbers gives that minute: " + c.time),
             () => clockTap(c, c.outerRadius - 4, 45 * 6 + 3),
             () => check(c.time === "21:45", "a tap a little off the number 45 gives 45: " + c.time),
+            () => { c.time = "21:30"; clockShakyTap(c, c.outerRadius - 3, 45 * 6 + 4) },
+            () => check(c.time === "21:45", "a shaky tap a little off the number 45 (the finger moves a few pixels) gives 45: " + c.time),
             () => { c.time = "18:30"; c.mode = "hour"; clockTap(c, 4, 0) },
             () => check(c.time === "18:30" && c.mode === "hour", "a tap on the hub changes nothing: " + c.time + " " + c.mode),
             () => { c.time = "18:30"; c.mode = "minute"; window.clockPicks = []; clockDrag(c, c.outerRadius, 180, 270) },
@@ -1148,6 +1166,18 @@ ApplicationWindow {
             () => check(c.mode === "hour" && c.time === "00:59", "Left, then Home: hour 00: " + c.time + " " + c.mode),
             () => clockTap(c, c.outerRadius, 90),
             () => check(c.focusItem.activeFocus && !clockRing(c).visible && c.time === "03:59", "a tap hides the focus ring again: " + c.time),
+            () => {
+                window.clockOther = Qt.createQmlObject('import QtQuick; Item { activeFocusOnTab: true }', window.contentItem, "clockOther")
+                window.clockOther.forceActiveFocus()
+            },
+            () => c.focusItem.forceActiveFocus(Qt.TabFocusReason),
+            () => check(c.focusItem.activeFocus && clockRing(c).visible, "focus that comes with Tab shows the focus ring"),
+            () => clockTap(c, c.outerRadius, 120),
+            () => {
+                check(c.focusItem.activeFocus && !clockRing(c).visible && c.time === "03:20",
+                      "a tap after Tab hides the focus ring: " + c.time)
+                window.clockOther.destroy()
+            },
             // ---- The dialog -----------------------------------------------------------------------
             () => {
                 c.visible = false
@@ -1307,6 +1337,7 @@ ApplicationWindow {
         stepTimer.start()
     }
     property var firstClock: null
+    property var clockOther: null
 
     function runScript(name) {
         switch (name) {
