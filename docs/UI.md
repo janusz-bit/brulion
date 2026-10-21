@@ -24,7 +24,11 @@ components — no Material/Fusion look, so all targets look identical.
 
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
   right **side panel**.
-  * Sidebar (`ShellSidebar`): the notebook's name and a new-page button; navigation Dziennik,
+  * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
+    `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
+    — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
+    notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
+    new-page button; navigation Dziennik,
     Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
     folder tree, lazy, with a context menu: new page / folder here, open in side panel,
     favourite, rename, history, trash; an empty folder opens to "Pusty folder"); a sync status
@@ -50,6 +54,15 @@ components — no Material/Fusion look, so all targets look identical.
   note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
   "Importuj notatki" card that opens the chosen notebook on its import tab
   (`AppController.openVaultAt`).
+* **The documentation notebook** „Dokumentacja Brulionu” (desktop and Android; the browser has
+  one notebook, so its sample welcome page links to the guide online): Brulion notes written
+  from `src/app/shell/guide/*.md` into `<AppData>/Dokumentacja Brulionu` and brought up to date
+  on every open (pages the user changed or deleted stay so). It opens on its table of contents
+  from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
+  Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
+  user's last notebook), arms no reminders (the user's notebook keeps its armed alarms), quick
+  capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
+  is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
   new page, capture, theme, language, sync, panels, settings, about), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
@@ -64,7 +77,8 @@ components — no Material/Fusion look, so all targets look identical.
 | Ctrl+Shift+F | search |
 | Ctrl+J | today's journal |
 | Ctrl+N | new page |
-| Ctrl+Shift+N | quick capture |
+| Ctrl+Shift+N | quick capture (from the documentation notebook: back to the user's notebook first) |
+| Ctrl+Shift+B | the documentation notebook / back to the notebook used before |
 | Alt+← / Alt+→ | back / forward |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
