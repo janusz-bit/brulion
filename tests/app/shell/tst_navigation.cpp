@@ -910,6 +910,38 @@ private Q_SLOTS:
         QCOMPARE(toasts.size(), 0);
     }
 
+    void reminderTapOnAPageTheDocumentationAlsoHas()
+    {
+        // The user's own "Zadania.md" (the documentation has a page of that name too): a tap
+        // while reading the documentation opens the user's page, never the documentation's.
+        auto app = openApp(u"moje zadania"_s);
+        const QString mine = QDir(m_tmp.filePath(u"moje zadania"_s)).absolutePath();
+        const QString text = u"- [ ] Oddać książkę do biblioteki ⏰ 2026-10-15 09:00\n"_s;
+        QVERIFY(app->workspace()->write(u"Zadania.md"_s, text));
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->workspace()->exists(u"Zadania.md"_s)); // the documentation's page
+        app->openNotification(u"Zadania.md"_s, 0);
+        QTRY_COMPARE(app->workspace()->rootPath(), mine);
+        QTRY_COMPARE(app->currentRoute().value(u"path"_s).toString(), u"Zadania.md"_s);
+        QVERIFY(!app->inDocsVault());
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), text);
+
+        // No notebook of the user to go back to: the documentation's page never opens instead.
+        auto alone = makeApp();
+        alone->start();
+        alone->openDocsVault();
+        QTRY_VERIFY(alone->inDocsVault());
+        QTRY_COMPARE(alone->status(), u"ready"_s);
+        QSignalSpy toasts(alone.get(), &AppController::toastRequested);
+        const QVariantMap before = alone->currentRoute();
+        alone->openNotification(u"Zadania.md"_s, 3);
+        QCOMPARE(alone->currentRoute(), before);
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(alone->inDocsVault());
+    }
+
     void commands()
     {
         auto app = openApp(u"commands"_s);

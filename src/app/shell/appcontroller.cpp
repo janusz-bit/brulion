@@ -406,12 +406,18 @@ void AppController::applyPendingNotification()
         return;
     const QString path = m_pendingNotePath;
     const int line = m_pendingNoteLine;
-    if (!m_workspace->exists(path) && inDocsVault()) {
+    if (inDocsVault()) {
         // The documentation arms no reminders: this one belongs to the user's notebook (Android
-        // kept its alarms armed while the documentation was open). Open it there.
+        // kept its alarms armed while the documentation was open), also when the documentation
+        // has a page of the same name ("Zadania.md"). Open it there, never the documentation's.
         const QString back = lastUserVault();
         if (!back.isEmpty() && openRecentVault(back))
-            return;
+            return; // applied once that notebook is ready
+        m_pendingNotePath.clear();
+        m_pendingNoteLine = -1;
+        if (back.isEmpty()) // else openRecentVault() said that its folder is gone
+            toast(tr("The note of this reminder no longer exists."), u"warning"_s);
+        return;
     }
     m_pendingNotePath.clear();
     m_pendingNoteLine = -1;
