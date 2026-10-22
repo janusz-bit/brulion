@@ -27,8 +27,9 @@ EM_JS(void, brulion_shell_indexed, (), {
 });
 
 // The keyboard: window.visualViewport's resize and scroll events report
-// innerHeight - height - offsetTop to Module.brulionViewportEvent (below). iOS scrolls the page to
-// the input element Qt keeps for the keyboard: the page is put back at the top (best effort).
+// innerHeight - height - offsetTop to Module.brulionViewportEvent (below), 0 for a pinch-zoomed
+// page. iOS scrolls the page to the input element Qt keeps for the keyboard: the page is put back
+// at the top (best effort).
 EM_JS(int, brulion_shell_watch_viewport, (), {
     var vv = globalThis["visualViewport"];
     if (!vv || !vv.addEventListener) return 0;
@@ -36,6 +37,8 @@ EM_JS(int, brulion_shell_watch_viewport, (), {
     var send = function() {
         var overlap = Math.max(0, (globalThis["innerHeight"] || 0) - vv.height - vv.offsetTop);
         if (!isFinite(overlap)) overlap = 0;
+        // A pinch-zoomed page (a desktop touchpad) shrinks the visual viewport too: no keyboard.
+        if (vv.scale > 1.01) overlap = 0;
         if (Math.abs(overlap - last) < 0.5) return;
         last = overlap;
         try {

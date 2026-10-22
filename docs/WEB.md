@@ -365,7 +365,8 @@ zmiana rozmiaru ekranu Qt przy każdym otwarciu klawiatury przebudowywałaby ca�
 (`watchVisualViewport` w `src/platform/wasm/wasmshell.cpp`) przy każdym zdarzeniu `resize` /
 `scroll` widoku zgłasza aplikacji, ile dołu strony zakrywa klawiatura:
 `innerHeight − visualViewport.height − visualViewport.offsetTop` (piksele CSS to piksele
-logiczne Qt). `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o tyle widok, pasek
+logiczne Qt; strona powiększona gestem — `visualViewport.scale` > 1, np. touchpad na komputerze —
+to nie klawiatura: 0). `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o tyle widok, pasek
 narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
 `visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
 (`keyboardRectangle` w przeglądarce jest pusty).
