@@ -16,6 +16,7 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -975,6 +976,20 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                           && edit->property("selectedText").toString().isEmpty(),
                   touch ? "a finger scrolls the text view and selects nothing" : "the wheel scrolls the text view");
         }
+
+        // The file changes on disk while its text is shown (sync, another program): the text view
+        // shows the new text (it read the file once).
+        const QString changed = u"<!-- poprawione na laptopie: źdźbło -->\n"_s + svg;
+        {
+            QFile file(workspace->vault()->absolutePath(longSvg));
+            check(file.open(QIODevice::WriteOnly) && file.write(changed.toUtf8()) > 0, "the long SVG changes on disk");
+        }
+        workspace->vault()->rescan();
+        check(waitFor([&] {
+                  QQuickItem *e = child(pictureView(), "pictureTextEdit");
+                  return textShown() && e && e->property("text").toString().startsWith(changed.left(80));
+              }),
+              "the text view shows a change made on disk while it is open");
 
         // At most `textLimit` bytes of the file are read and shown, never half a character: a
         // limit inside "ż" (two bytes in UTF-8) stops before it. The note above says how much of

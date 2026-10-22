@@ -20,7 +20,7 @@ import Brulion
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
-// never read whole for it).
+// never read whole for it), again whenever the file changes (sync, another program).
 //
 //   ContentPictureView { path: routePath; asText: pictureAsText
 //                        rendererPalette: editor.rendererPalette
@@ -291,8 +291,13 @@ Item {
         sourceComponent: Flickable {
             id: textFlick
 
+            /// Grows when the file changes on disk: it is read again.
+            property int revision: 0
             /// The file's start: { text, truncated, bytes / bytesText (read), size / sizeText }.
-            readonly property var file: Workspace.readTextStart(root.path, root.textLimit)
+            readonly property var file: {
+                void textFlick.revision
+                return Workspace.readTextStart(root.path, root.textLimit)
+            }
             readonly property bool truncated: file.truncated === true
 
             objectName: "pictureText" // (the shell's self-test)
@@ -302,6 +307,15 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             TouchFlick.enabled: true
             T.ScrollBar.vertical: BScrollBar {}
+
+            // The file changed on disk while shown (Syncthing, Nextcloud, another program).
+            Connections {
+                target: Workspace
+                function onFileChanged(path) {
+                    if (path === root.path)
+                        textFlick.revision++
+                }
+            }
 
             Column {
                 id: textColumn
