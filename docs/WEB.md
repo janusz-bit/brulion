@@ -338,7 +338,7 @@ każdym buildzie. Pierwsze wejście pobiera więc ok. 9–13 MB (zależnie od ko
 kolejne starty idą z cache service workera (lokalnie < 1 s).
 
 Czcionki zapasowe emoji i symboli (wyżej, „Czcionki: emoji i symbole”) dokładają
-+181 339 B surowego `brulion.wasm` (+113 680 B po gzip -9, +100 336 B po brotli; pomiar z
++190 272 B surowego `brulion.wasm` (+118 111 B po gzip -9, +103 429 B po brotli; pomiar z
 22.10.2026, ten sam toolchain przed i po).
 
 Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw edytora, skryptów

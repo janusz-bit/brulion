@@ -29,7 +29,7 @@ brulion_set_warnings(brulion_ui_touch)
 
 # brulion_ui_fonts — the fallback fonts for emoji and symbols (fallbackfonts.h; assets/fonts,
 # subsets of Noto Emoji and Noto Sans Math under the SIL OFL 1.1, made by
-# scripts/fallback-fonts.py) as resources ":/fonts/Brulion*.{ttf,otf}" (~165 KB, ~106 KB
+# scripts/fallback-fonts.py) as resources ":/fonts/Brulion*.{ttf,otf}" (~170 KB, ~108 KB
 # compressed). Android leaves them out: it always has an emoji font, and the app never loads them
 # there. A static library so that tests/app/fonts checks them without the app.
 qt_add_library(brulion_ui_fonts STATIC

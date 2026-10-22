@@ -137,17 +137,30 @@ QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const 
     math.loaded = load(MathResource, MathFamily);
     // Common text (Qt files Latin under it, and gives a symbol the script of the text around it:
     // "Spotkanie ⏰ jutro" is one Latin run): [default family, Brulion Emoji, Brulion Math, the
-    // system's fallbacks…]. Each call puts its family first, hence the reverse order. The default
-    // family first: a family name Qt cannot find gets it, as before, never one of these.
-    for (FallbackFontReport *report : {&math, &emoji}) {
+    // system's fallbacks…]. The default family first: a family name Qt cannot find gets it, as
+    // before, never one of these. In the browser the same for every other script: its font
+    // database has no fallbacks beyond DejaVu Sans, so 🗓 or ⧉ in Cyrillic or Greek text
+    // ("Встреча 🗓") stayed a box; fontconfig (Linux) already tries every font for those, ours
+    // included, and keeps its own order there.
+    QStringList chain;
+    if (!defaultFamily.isEmpty() && defaultFamily != EmojiFamily && defaultFamily != MathFamily)
+        chain.append(defaultFamily);
+    for (FallbackFontReport *report : {&emoji, &math}) {
         if (report->loaded) {
-            QFontDatabase::addApplicationFallbackFontFamily(QChar::Script_Common, report->family);
+            chain.append(report->family);
             report->installed = true;
         }
     }
-    if ((emoji.installed || math.installed) && !defaultFamily.isEmpty() && defaultFamily != EmojiFamily
-        && defaultFamily != MathFamily)
-        QFontDatabase::addApplicationFallbackFontFamily(QChar::Script_Common, defaultFamily);
+    if (emoji.installed || math.installed) {
+        const int lastScript = policy == FallbackFontPolicy::Always ? QChar::ScriptCount - 1 : QChar::Script_Common;
+        for (int script = QChar::Script_Common; script <= lastScript; ++script) {
+            if (script == QChar::Script_Latin)
+                continue; // the same list as Common
+            const auto s = QChar::Script(script);
+            QFontDatabase::setApplicationFallbackFontFamilies(
+                    s, chain + QFontDatabase::applicationFallbackFontFamilies(s));
+        }
+    }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
     // Qt >= 6.9 lays out emoji sequences as runs of their own (script "emoji") whose fallbacks are
     // the emoji families, colour fonts first: a colour emoji font of the system would still win.

@@ -37,10 +37,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "assets" / "fonts"
 
-# Emoji people commonly write in notes, journals and task lists (single code points only: no
-# skin tones, flags or ZWJ sequences, which would add hundreds of glyphs). Brulion's own
-# characters (⏰ 🔔 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ …) come from src/ by themselves. About 100 KB in the
-# browser download; keep additions moderate (docs/WEB.md, "Rozmiar").
+# Emoji people commonly write in notes, journals and task lists (single code points: no flags or
+# ZWJ sequences, which would add hundreds of glyphs). Brulion's own characters (⏰ 🔔 📅 ⏳ 🛫 ✅
+# ❌ 🔁 🔺 ⏫ …) come from src/ by themselves. About 100 KB in the browser download; keep
+# additions moderate (docs/WEB.md, "Rozmiar").
 COMMON_EMOJI = {
     "faces": "😀😃😄😁😆😅😂🤣🥲😊😇🙂🙃😉😌😍🥰😘😋😛😜🤪🤓😎🤩🥳😏😒😞😔😟😕🙁😣"
              "😖😫😩🥺😢😭😤😠😡🤯😳🥵🥶😱😨😰😓🤗🤔🤭🤫😶😐😑😬🙄😮😲🥱😴🤤😵🤐"
@@ -55,6 +55,10 @@ COMMON_EMOJI = {
     "weather and nature": "☀⛅☁🌧⛈❄⛄☔🌈🌙⚡🌱🍀🌳🌸🌹🐶🐱",
     "food and drink": "☕🍵🍺🍷🍎🍓🍕🍔🍝🥗🍰🍽",
     "activities and health": "⚽🏃🚴🏊🧘🏋🎵🎶🎨🎬🎮🎓💊💉🩺🛏",
+    # The skin-tone modifiers phone keyboards add (👍🏻 🙏🏽): Noto Emoji is monochrome and
+    # ligates "hand + tone" to the plain hand, so these 5 glyphs (~1.5 KB) turn the box after
+    # every toned hand into nothing.
+    "skin tones": "🏻🏼🏽🏾🏿",
 }
 
 # Source files whose text Brulion writes into notes or shows (UI strings, the user guide).

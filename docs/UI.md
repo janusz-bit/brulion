@@ -588,11 +588,12 @@ LaTeX symbols were boxes too. The Lucide icons (`BIcon`) were never affected.
 and SHA-256 in its `README.md`), made by `scripts/fallback-fonts.py` from the fonts of the
 nixpkgs that `flake.lock` pins:
 
-* `BrulionEmoji.ttf` ("Brulion Emoji", 157 KB, ~100 KB compressed): Noto Emoji (monochrome,
+* `BrulionEmoji.ttf` ("Brulion Emoji", 162 KB, ~100 KB compressed): Noto Emoji (monochrome,
   instanced at weight 400), every emoji of `src/` plus ~300 common ones (faces, hearts, hands,
   notes and work, time and status, a few places, weather, food, activities; single code
-  points — no skin tones, flags or ZWJ sequences). Monochrome glyphs take the text colour, so
-  they look like the rest of the UI.
+  points — no flags or ZWJ sequences) and the five skin-tone modifiers, which the monochrome
+  font draws as the plain hand (👍🏻 → 👍, not 👍 and a box). Monochrome glyphs take the text
+  colour, so they look like the rest of the UI.
 * `BrulionMath.otf` ("Brulion Math", 9 KB): Noto Sans Math, the non-emoji characters of `src/`
   that DejaVu Sans lacks (⧉ ⌢ ⌣ ⎰ ⎱ ⟮ ⟯ ⨄ ⨆ ⨿ 𝒜).
 
@@ -605,7 +606,11 @@ installs them right after the application object, before any text is laid out
   their own whose fallbacks are the emoji families, colour fonts first;
 * both as application fallback families of Common text (Qt files Latin under it, and gives a
   symbol the script of the text around it: "Spotkanie ⏰ jutro" is one Latin run), **behind the
-  app's default family**: `[default family, Brulion Emoji, Brulion Math, the system's…]`;
+  app's default family**: `[default family, Brulion Emoji, Brulion Math, the system's…]`. In
+  the browser the same for every other script: its font database has no fallbacks beyond
+  DejaVu Sans, so 🗓 or ⧉ inside Cyrillic or Greek text ("Встреча 🗓") stayed boxes otherwise.
+  On Linux fontconfig already tries every font for other scripts, the application fonts
+  included, so their order stays fontconfig's;
 * first, the families Brulion asks for — the default font, the system fixed font, `serif`
   (`Theme.fontSerif`), `sans-serif` and `monospace` (formula spans) — are pinned to the fonts
   Qt resolves them to (`QFont::insertSubstitution`). Qt gives a family name that is no installed
@@ -631,7 +636,8 @@ fonts drew ⏰🔔… as boxes") and warns about boxes left. Tests (`tests/app/f
 `tst_fallback_fonts` — both fonts cover their probes and have DejaVu's metrics; every emoji in
 `src/` is in the probe and in the font, so a new emoji without a regenerated font fails; the box
 check; installing removes the boxes in the default, serif and fixed fonts while letters keep
-their font, and no requested family (nor an unknown one) gets one of these as its font;
+their font, and no requested family (nor an unknown one) gets one of these as its font; a hand
+with a skin tone is one glyph without a box; in the browser every script gets the fallbacks;
 `tst_fallback_fonts_when_missing` — the Linux policy; `tst_fallback_fonts_browser_fonts` and
 `…_browser_fonts_when_missing` — the same with a fontconfig that knows only DejaVu Sans and
 DejaVu Sans Mono, the browser's fonts (there the emoji are boxes first, and lines with emoji keep

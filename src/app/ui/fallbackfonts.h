@@ -6,13 +6,14 @@
 // without an emoji font. Android always has one and never loads them (the APK leaves them out).
 //
 // Installed once at start-up, before any text is laid out: the application emoji family (Qt >=
-// 6.9 lays out emoji runs with it) and fallback families of Latin/Common text, behind the app's
-// default family. Text keeps its own font; only the characters it lacks come from these. Qt
-// also picks the font of a family name that is no installed family ("serif" in the browser,
-// fontconfig's generic names) from those fallbacks, so the families Brulion asks for are first
-// pinned to the font Qt resolves them to (QFont::insertSubstitution), and the default family
-// heads the list: no text ever gets Brulion Emoji as its font. A colour emoji font of the
-// system stays in charge — FallbackFontPolicy::WhenMissing then installs nothing.
+// 6.9 lays out emoji runs with it) and fallback families of Latin/Common text (in the browser of
+// every script), behind the app's default family. Text keeps its own font; only the characters
+// it lacks come from these. Qt also picks the font of a family name that is no installed family
+// ("serif" in the browser, fontconfig's generic names) from those fallbacks, so the families
+// Brulion asks for are first pinned to the font Qt resolves them to (QFont::insertSubstitution),
+// and the default family heads the list: no text ever gets Brulion Emoji as its font. A colour
+// emoji font of the system stays in charge — FallbackFontPolicy::WhenMissing then installs
+// nothing.
 #pragma once
 
 #include <QFont>
@@ -23,7 +24,7 @@
 namespace brulion::ui {
 
 enum class FallbackFontPolicy {
-    Always,      ///< install both fonts (the browser, where the system has none)
+    Always,      ///< install both fonts, for every script (the browser, where the system has none)
     WhenMissing, ///< install both only when the system draws some of brulionEmoji() as boxes (Linux)
 };
 

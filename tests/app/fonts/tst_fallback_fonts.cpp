@@ -297,6 +297,8 @@ private Q_SLOTS:
             QVERIFY2(report.missingAfter.isEmpty(), qPrintable(report.missingAfter));
             QCOMPARE(QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Common).contains(report.family),
                      report.installed);
+            // Other scripts keep fontconfig's fallbacks, which try every font (ours included).
+            QVERIFY(!QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Cyrillic).contains(report.family));
         }
         const FallbackFontReport &emoji = reports.at(0);
         const FallbackFontReport &math = reports.at(1);
@@ -342,7 +344,13 @@ private Q_SLOTS:
         const QStringList common = QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Common);
         QCOMPARE(common.mid(0, 3), (QStringList{defaultFamily, u"Brulion Emoji"_s, u"Brulion Math"_s}));
         QCOMPARE(QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Latin), common);
-        QVERIFY(!QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Cyrillic).contains(u"Brulion Emoji"_s));
+        // Every other script too: the browser's font database has no fallbacks of its own, and a
+        // symbol takes the script of the text around it ("Встреча 🗓" is one Cyrillic run).
+        for (const QChar::Script script : {QChar::Script_Cyrillic, QChar::Script_Greek, QChar::Script_Hebrew,
+                                           QChar::Script_Han, QChar::Script(QChar::ScriptCount - 1)}) {
+            QCOMPARE(QFontDatabase::applicationFallbackFontFamilies(script).mid(0, 3),
+                     (QStringList{defaultFamily, u"Brulion Emoji"_s, u"Brulion Math"_s}));
+        }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
         QVERIFY(reports.at(0).emojiFamily);
         QVERIFY(!reports.at(1).emojiFamily);
@@ -366,6 +374,34 @@ private Q_SLOTS:
         QCOMPARE(again.size(), 2);
         QCOMPARE(again.at(0).installed, true);
         QCOMPARE(QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Common).count(u"Brulion Emoji"_s), 1);
+    }
+
+    void skinTones_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::newRow("thumbs up, light") << u"👍🏻"_s;
+        QTest::newRow("folded hands, medium") << u"🙏🏽"_s;
+        QTest::newRow("waving hand, dark") << u"👋🏿"_s;
+        QTest::newRow("raised hand, medium-light") << u"✋🏼"_s;
+    }
+
+    /// Phone keyboards add skin tones (👍🏻). Brulion Emoji is monochrome: it draws a toned hand
+    /// as the plain hand, a single glyph, with no box (or swatch) after it.
+    void skinTones()
+    {
+        QFETCH(QString, text);
+        if (!hasFonts())
+            QSKIP("no fonts on this system");
+        installFallbackFonts(FallbackFontPolicy::Always, QGuiApplication::font());
+        QCOMPARE(brulion::ui::missingCharacters(text, QGuiApplication::font()), QString());
+        QTextLayout layout(text, QGuiApplication::font());
+        layout.beginLayout();
+        layout.createLine();
+        layout.endLayout();
+        const QList<QGlyphRun> runs = layout.glyphRuns();
+        QCOMPARE(runs.size(), 1);
+        if (runs.constFirst().rawFont().familyName() == u"Brulion Emoji"_s)
+            QCOMPARE(runs.constFirst().glyphIndexes().size(), 1);
     }
 
     void ordinaryTextKeepsItsFont_data()
