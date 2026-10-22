@@ -352,6 +352,13 @@ expect "... naming the checkout" has "release-checkout: moving the branch would 
 expect "... changes nothing" test "$(snapshot "$work")" = "$before"
 expect "... and leaves that checkout clean" test -z "$(git -C "$tmp/checkout/release-checkout" status --porcelain)"
 git -C "$work" worktree remove "$tmp/checkout/release-checkout"
+# A dry run in a checkout of release does not count that one (git lists it with the path
+# resolved, also when it was added through a symbolic link, like --show-toplevel).
+ln -s -- "$tmp/checkout" "$tmp/checkout-link"
+git -C "$work" worktree add -q "$tmp/checkout-link/via-link" release
+rel "$tmp/checkout-link/via-link" --dry-run patch
+expect "a dry run in the release checkout itself does not count it" lacks "is checked out in"
+git -C "$work" worktree remove "$tmp/checkout-link/via-link"
 rel "$work" patch --yes
 expect "once it is gone it releases" test "$status/$(sha "$work" v0.3.6)" = "0/$(sha "$work" release)"
 
