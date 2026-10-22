@@ -1024,6 +1024,22 @@ private Q_SLOTS:
         QTest::newRow("two display formulas")
                 << u"$$\na\n$$\n\n$$\n- b\n$$"_s << u"paragraph@0-2:d0, paragraph@4-6:d0"_s;
         QTest::newRow("$$ inside a line is no fence") << u"Wzór $$a\n+ b$$"_s << u"paragraph@0-0:d0, listItem@1-1:d0"_s;
+        // A search that found no closing line before a blank one is not repeated for the next
+        // opener before that blank line; after it, a `$$` line opens a formula again.
+        QTest::newRow("display math after failed searches")
+                << u"- $$\n- $$\n\n- $$\n  a\n  - b\n  $$"_s << u"listItem@0-0:d0, listItem@1-1:d0, listItem@3-6:d0"_s;
+    }
+
+    void displayMathOpenersInLinearTime()
+    {
+        // An outline of `- $$` items with no closing line: each item's search would run to the end
+        // of the note (a hostile note of half a megabyte took seconds).
+        const QString src = u"- $$\n  - a\n"_s.repeated(50'000);
+        QElapsedTimer t;
+        t.start();
+        const ParsedNote note = parseNote(u"a.md"_s, src);
+        QVERIFY2(t.elapsed() < 3000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(note.blocks.size(), 100'000);
     }
 
     void structureNesting()

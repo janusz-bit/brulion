@@ -327,18 +327,22 @@ private:
     /// next line that is only `$$` (SYNTAX §11): the lines between are formula, not block syntax
     /// (`+ b`, `- c`, `> d`, `1. e`, `# f`). The closing line's index, or -1 when no such line comes
     /// before a blank line or the end of the container (the `$$` is then text). A search that
-    /// fails passes no other `$$` line, so the lines of a container are searched at most twice.
-    qsizetype displayMathClose(qsizetype k, QStringView opener) const
+    /// fails remembers where it stopped: an opener before that line (an outline of `- $$` items)
+    /// fails at once, so the lines of a container are searched at most twice.
+    qsizetype displayMathClose(qsizetype k, QStringView opener)
     {
-        if (opener.trimmed() != u"$$")
+        if (opener.trimmed() != u"$$" || k < m_noMathCloseBefore)
             return -1;
         for (qsizetype j = k + 1; j < m_views.size(); ++j) {
             const QStringView t = masked(j);
-            if (isBlank(t))
+            if (isBlank(t)) {
+                m_noMathCloseBefore = j;
                 return -1;
+            }
             if (t.trimmed() == u"$$")
                 return j;
         }
+        m_noMathCloseBefore = m_views.size();
         return -1;
     }
 
@@ -706,6 +710,9 @@ private:
     QList<int> m_stack; ///< open list items, outermost first
     QList<LineView> m_pendingBlanks;
     bool m_lazyOk = false; ///< the previous line was paragraph text of the innermost item
+    /// Where the last failed displayMathClose() search stopped (a blank line, or the end): no line
+    /// before it closes a display formula, so a `$$` line before it opens none.
+    qsizetype m_noMathCloseBefore = -1;
 };
 
 /// Compute ownEndLine / endLine for the forest (iterative post-order; deep outlines are safe).
