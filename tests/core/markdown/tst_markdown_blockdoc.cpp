@@ -345,6 +345,11 @@ private Q_SLOTS:
         QVERIFY(doc.setBody(0, u"Wzór:\n$$\na\n$$"_s).changed());
         QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
         QCOMPARE(doc.count(), 3);
+        // The blank line uses the note's line ends; the other blocks keep their bytes.
+        BlockDocument crlf(u"- Wzór:\r\n  $$\r\n  a\r\n  $$\r\n- [ ] b\r\n- c\r\n  $$\r\n  d\r\n  $$\r\n"_s);
+        QVERIFY(crlf.setBody(0, u"Wzór:\n$$\na"_s).changed());
+        QCOMPARE(crlf.toString(), u"- Wzór:\r\n  $$\r\n  a\r\n\r\n- [ ] b\r\n- c\r\n  $$\r\n  d\r\n  $$\r\n"_s);
+        QCOMPARE(entries(BlockDocument(crlf.toString())), entries(crlf));
         // A closing `$$` line typed in a later item, an opening one above it.
         BlockDocument later(u"- $$\n- b\n"_s);
         QCOMPARE(later.count(), 2);
