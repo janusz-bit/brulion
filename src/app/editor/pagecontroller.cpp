@@ -141,6 +141,31 @@ QString withHeading(const QString &text, int level)
     return QString(level, u'#') + u' ' + rest;
 }
 
+/// Whether `from`..`to` of a text block's body lies between the fence lines of code written in
+/// that block ("```js" typed on a new line got its closing fence at the end of the block): every
+/// fence of the body is closed, but the text before or after the range leaves one open. Enter and
+/// paste work there as in a code block. A fence that was open before (written elsewhere) does not
+/// count.
+bool insideOwnFence(QStringView body, qsizetype from, qsizetype to)
+{
+    from = std::clamp<qsizetype>(from, 0, body.size());
+    to = std::clamp<qsizetype>(to, from, body.size());
+    return missingClosingFence(body).isEmpty()
+           && (!missingClosingFence(body.first(from)).isEmpty() || !missingClosingFence(body.sliced(to)).isEmpty());
+}
+
+/// Two text blocks joined by a merge (Backspace at the start of `next`, Delete at the end of
+/// `prev`) with a line break between them when `prev` ends with the closing fence of its code:
+/// "```" + "b" would be "```b", which closes nothing, and the code would run on into the
+/// following blocks. nullopt when the plain join keeps every fence closed.
+std::optional<QString> joinedAfterFence(const QString &prev, const QString &next)
+{
+    if (next.isEmpty() || !missingClosingFence(prev).isEmpty() || !missingClosingFence(next).isEmpty()
+        || missingClosingFence(QString(prev + next)).isEmpty())
+        return std::nullopt;
+    return QString(prev + u'\n' + next);
+}
+
 } // namespace
 
 PageController::PageController(QObject *parent) : QObject(parent), m_model(new BlockListModel(this)), m_undo(new QUndoStack(this))
@@ -1033,11 +1058,17 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     m_typingUid = uid;
     m_typingCell = QPoint(-1, -2);
     markDirty();
-    // Normalisation: "[ ] " typed at the start turns into a checkbox, etc.
+    // Normalisation: "[ ] " typed at the start turns into a checkbox, a closing fence is added
+    // after a fence typed in a text block, etc. The caret keeps its place when the text before
+    // it did not change; otherwise it moves with the text after it.
     const QString now = m_model->editTextAt(row);
     if (now != edit && editingRow() == row) {
+        const int at = std::clamp(cursor >= 0 ? cursor : int(edit.size()), 0, int(edit.size()));
+        int same = 0;
+        while (same < at && same < now.size() && edit[same] == now[same])
+            ++same;
         const int delta = int(edit.size() - now.size());
-        m_cursor = std::clamp((cursor >= 0 ? cursor : int(edit.size())) - delta, 0, int(now.size()));
+        m_cursor = same == at ? at : std::clamp(at - delta, 0, int(now.size()));
         Q_EMIT editTextReset(row, now, m_cursor);
     }
 }
@@ -1055,8 +1086,9 @@ QVariantMap PageController::split(int row, int cursor)
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
 
     // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
+    // Not after a task marker: "- [ ] ```js" is a task's text, not a fence.
     const QString opening = shape.editText.trimmed();
-    if (cursor == len && !opening.contains(u'\n')) {
+    if (cursor == len && !shape.task && !opening.contains(u'\n')) {
         if (const auto fence = parseFence(opening); fence && !fence->closed) {
             const QString closing(fence->length, fence->marker);
             beginCommand();
@@ -1068,6 +1100,20 @@ QVariantMap PageController::split(int row, int cursor)
             setFocus(f, true);
             return result(f.row, f.cursor);
         }
+    }
+
+    // Enter between the fence lines of code written in this text block: a line break, as in a
+    // code block. A split would leave an unclosed fence in one of the halves, and in the saved
+    // file that code would run on into the blocks after it.
+    if (const int at = toBodyCursor(row, cursor); insideOwnFence(entry.body, at, at)) {
+        const QString updated =
+                bodyWithEditText(entry, shape.editText.left(cursor) + u'\n' + shape.editText.mid(cursor));
+        beginCommand();
+        applyOp([&](BlockDocument &d) { return d.setBody(row, updated); });
+        const Focus f{row, cursor + 1};
+        endCommand(f);
+        setFocus(f, true);
+        return result(f.row, m_cursor);
     }
 
     // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves
@@ -1119,11 +1165,16 @@ QVariantMap PageController::mergeWithPrevious(int row)
         }
         Q_EMIT foldStateChanged();
     }
+    const std::optional<QString> joined = joinedAfterFence(doc.at(row - 1).body, doc.at(row).body);
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(row); });
     Focus f;
     if (r.changed()) {
         f = focusFromResult(r, row - 1);
+        if (joined) {
+            applyOp([&](BlockDocument &d) { return d.setBody(f.row, *joined); });
+            ++f.cursor;
+        }
     } else {
         // The previous block is not a text block (code, table…): move the caret there.
         f = {r.focus >= 0 ? r.focus : row - 1, -1};
@@ -1145,9 +1196,15 @@ QVariantMap PageController::mergeNext(int row)
     if (nextView != BlockView::Text && nextView != BlockView::Heading)
         return result(-1, -1);
     const int cursor = int(m_model->editTextAt(row).size());
+    const BlockDocument &doc = m_model->document();
+    const std::optional<QString> joined = joinedAfterFence(doc.at(row).body, doc.at(next).body);
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(next); });
-    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    if (r.changed() && joined) {
+        applyOp([&](BlockDocument &d) { return d.setBody(f.row, *joined); });
+        ++f.cursor;
+    }
     endCommand(f);
     setFocus(f, true);
     return result(f.row, f.cursor);
@@ -1728,7 +1785,11 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
     const QString edit = shape.editText;
     from = snapToCharacter(edit, from);
     to = std::max(from, snapToCharacter(edit, to));
-    const bool textBlock = shape.view == BlockView::Text || shape.view == BlockView::Heading;
+    // Between the fence lines of code written in a text block the text goes in as code, as in a
+    // code block (blank lines in it would split it into blocks otherwise).
+    const bool textBlock =
+            (shape.view == BlockView::Text || shape.view == BlockView::Heading)
+            && !insideOwnFence(m_model->document().at(row).body, toBodyCursor(row, from), toBodyCursor(row, to));
     QString markdown = text;
     while (markdown.endsWith(u'\n'))
         markdown.chop(1);
@@ -1766,7 +1827,12 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
         const markdown::BlockEntry &e = pasteDoc.at(k);
         const int depth = baseDepth + std::max(0, e.depth - firstDepth);
         const bool listItem = intoList || e.kind == BlockKind::ListItem;
-        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, e.body, depth, listItem); });
+        // A pasted snippet whose fence is not closed gets its closing fence: on the page, blocks
+        // follow it that the fence would turn into code.
+        QString body = e.body;
+        if (const QString closing = missingClosingFence(body); !closing.isEmpty())
+            body += u'\n' + closing;
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, body, depth, listItem); });
         if (r.focus >= 0)
             last = r.focus;
     }

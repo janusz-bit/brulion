@@ -145,10 +145,24 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way. Code fences are
-  hidden: a ```` ``` ```` line typed inside a code block stays code, and the outer fence is
-  widened when needed (so a fenced example can be written about or pasted without breaking the
-  page).
+  and on focus loss / suspend / quit, and merges external changes three-way.
+* Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
+  exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
+  are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
+  `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a closed
+  code block stays code: the hidden fences are widened when needed (so a fenced example can be
+  written about or pasted without breaking the page). A fence that is not closed (a file written
+  elsewhere) is not widened: a closing fence typed into it closes it. A list item with more text
+  after its code block edits the closing fence and that text with the code, nothing hidden or
+  widened. A fence opened in a text block (```` ``` ```` typed on a new line of a paragraph or list
+  item, fenced text pasted without its closing line) gets its closing fence at the end of the
+  block, so the code never runs on into the following blocks in the saved file; only a lone
+  opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
+  it a code block. The two lines then act as a pair: a longer opening fence lengthens the closing
+  one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
+  deleted or changed closing fence is added again at the end of the block. Between them Enter and
+  paste work as in a code block: a line break, the pasted text as code (a split would leave half
+  a fence in each block).
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";
