@@ -1315,6 +1315,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         sibling.page.setEditText(0, u"~~~"_s, 3);
         QVERIFY(sibling.page.save());
         QCOMPARE(sibling.host.file(Page), u"- ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, sibling.host.file(Page)).reminders.size(), 1);
         sibling.page.startEditing(1, 0);
         QCOMPARE(sibling.text(), u"- ~~~\n  ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
         verifyReload(sibling);

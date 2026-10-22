@@ -51,11 +51,12 @@ QString htmlToPlainText(const QString &html);
 /// Escape plain text for Markdown: characters that would start emphasis, code, links, embeds,
 /// block references, comments, highlights or HTML are backslash-escaped, and so are the dollars
 /// that would make a formula of the text (docs/SYNTAX.md §11): the opening `$` of "Cena $10,
-/// Netflix 15$" or "$x$" — dollars that pair with nothing ("$5 i $10") stay as they are. With
-/// `lineStart` also block syntax at the start (headings, list markers, quotes, fences, rules, task
-/// checkboxes). With `linkLabel` every `[` and `]` is escaped too (text inside `[…](…)` or
-/// `![…](…)`). Dollars of several pieces put together can still pair across them: importers check
-/// the whole note (htmlToMarkdown() does so for its result).
+/// Netflix 15$" or "$x$" (the closing one when the opening one is in a bare URL) — dollars that
+/// pair with nothing ("$5 i $10") stay as they are. With `lineStart` also block syntax at the
+/// start (headings, list markers, quotes, fences, rules, task checkboxes). With `linkLabel` every
+/// `[` and `]` is escaped too (text inside `[…](…)` or `![…](…)`). Dollars of several pieces put
+/// together can still pair across them: importers check the whole note (htmlToMarkdown() does so
+/// for its result).
 QString escapeMarkdownText(QStringView text, bool lineStart = true, bool linkLabel = false);
 
 } // namespace brulion::io

@@ -764,7 +764,8 @@ private Q_SLOTS:
         QVERIFY(markdown::findMathSpans(escaped).isEmpty());
 
         // Link syntax without its end ("<a", "[[", "((") is looked for once per line, not once
-        // per opening: still linear.
+        // per opening, and a bare URL by the start of each word only: still linear (each took
+        // seconds on such a line).
         const QString open = QString(u"<a[[(("_s).repeated(30000);
         timer.restart();
         const QString links = detail::escapeTextFormulas(u"$x$ "_s + open + u" 5$\n"_s);

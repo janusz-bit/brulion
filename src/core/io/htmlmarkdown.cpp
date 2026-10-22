@@ -1445,8 +1445,12 @@ void leaveOutLines(DollarScan &s, bool callout)
 /// linear time: "<a<a<a…" or "[[[[…" without a closing one never search the rest again.
 void protectLinks(QStringView masked, QList<bool> &fixed)
 {
-    static const QRegularExpression url(u"\\G(?:(?:https?|ftp)://|www\\.)"_s,
-                                        QRegularExpression::CaseInsensitiveOption);
+    // Not a regular expression: QRegularExpression checks the whole subject on every match, which
+    // made a long line full of words quadratic.
+    const auto startsUrl = [](QStringView s) {
+        return s.startsWith(u"https://", Qt::CaseInsensitive) || s.startsWith(u"http://", Qt::CaseInsensitive)
+               || s.startsWith(u"ftp://", Qt::CaseInsensitive) || s.startsWith(u"www.", Qt::CaseInsensitive);
+    };
     /// The first `needle` at or after a position of the line (-1: none), remembered: the searches
     /// of a line go forward, so each one goes on where the last one stopped.
     struct Search {
@@ -1491,7 +1495,7 @@ void protectLinks(QStringView masked, QList<bool> &fixed)
                 const qsizetype close = find(c == u'[' ? brackets : parens, i + 2);
                 end = close < 0 ? i + 2 : close + 2;
             } else if (c.isLetter() && (i == 0 || !masked[i - 1].isLetterOrNumber())
-                       && url.matchView(masked, i).hasMatch()) {
+                       && startsUrl(masked.sliced(i, std::min<qsizetype>(8, stop - i)))) {
                 end = i;
                 while (end < stop && !masked[end].isSpace() && masked[end] != u'<' && masked[end] != u'>')
                     ++end;
