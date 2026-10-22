@@ -431,6 +431,43 @@ private Q_SLOTS:
             QCOMPARE(runs.constFirst().glyphIndexes().size(), 1);
     }
 
+    void emojiPresentation_data()
+    {
+        QTest::addColumn<QString>("font");
+        QTest::addColumn<QString>("text");
+        // U+FE0F: emoji style, U+FE0E: text style.
+        const QList<std::pair<QString, QString>> texts = {
+                {u"heart"_s, u"Dzięki ❤\uFE0F"_s},
+                {u"star"_s, u"⭐\uFE0F ważne"_s},
+                {u"check"_s, u"✔\uFE0F zrobione"_s},
+                {u"sun"_s, u"☀\uFE0F urlop"_s},
+                {u"warning"_s, u"⚠\uFE0F uwaga"_s},
+                {u"alarm"_s, u"⏰\uFE0F 7:00"_s},
+                {u"text style"_s, u"✔\uFE0E ☀\uFE0E ⏰\uFE0E"_s},
+        };
+        for (const QString &font : {u"default"_s, u"fixed"_s}) {
+            for (const auto &[name, text] : texts)
+                QTest::addRow("%s, %s", qPrintable(font), qPrintable(name)) << font << text;
+        }
+    }
+
+    /// Phone keyboards also add U+FE0F (emoji style) to symbols such as ❤ and ✔: the pair is drawn
+    /// without a box in the default and the fixed font (code), like the style U+FE0E.
+    void emojiPresentation()
+    {
+        QFETCH(QString, font);
+        QFETCH(QString, text);
+        if (!hasFonts())
+            QSKIP("no fonts on this system");
+        installFallbackFonts(FallbackFontPolicy::Always, QGuiApplication::font());
+        QFont requested;
+        for (const auto &[name, f] : requestedFonts()) {
+            if (name == font)
+                requested = f;
+        }
+        QCOMPARE(brulion::ui::missingCharacters(text, requested), QString());
+    }
+
     void ordinaryTextKeepsItsFont_data()
     {
         QTest::addColumn<QString>("font");
