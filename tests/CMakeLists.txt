@@ -17,7 +17,11 @@ function(brulion_add_test name)
                                                 BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN})
     brulion_set_warnings(${name})
     add_test(NAME ${name} COMMAND ${name})
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # QtTest stops a single test function after QTEST_FUNCTION_TIMEOUT (300 s by default) on its
+    # own, before ctest's TIMEOUT: scale it too, so only ctest's limit applies.
+    math(EXPR _function_timeout_ms "300000 * ${BRULION_TEST_SLOWDOWN}")
+    set_tests_properties(${name} PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTEST_FUNCTION_TIMEOUT=${_function_timeout_ms}")
 endfunction()
 
 add_subdirectory(core)

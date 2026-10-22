@@ -34,6 +34,7 @@ Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a t
 
 ## Pod ręką
 - [[Skróty klawiszowe|Skróty klawiszowe]]
+- [[Lista zmian|Lista zmian]] — co się zmieniło w kolejnych wersjach Brulionu.
 
 > [!tip] Paleta poleceń
 > Nie pamiętasz, gdzie coś jest? Naciśnij Ctrl+K i wpisz kilka liter — paleta znajdzie polecenie, widok albo ustawienie.

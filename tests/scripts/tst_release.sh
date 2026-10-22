@@ -531,6 +531,18 @@ news_notes "$work" '* Statusy zadań (0.3.7)' 'Z wersji 0.3.6: zegar. Z wersji 0
 rel "$work" --dry-run patch
 expect "new news: no warning" lacks "has not changed"
 
+echo "--- the documentation's list of changes needs a section for the release"
+fixture changelog
+mkdir -p "$work/src/app/shell/guide"
+commit "$work" 'src/app/shell/guide/Lista zmian.md' '## 0.3.5 — 21 października 2026' "List the changes of 0.3.5"
+rel "$work" --dry-run patch
+expect "no section for 0.3.6: pointed out" has 'Lista zmian.md has no section "## 0.3.6"'
+commit "$work" 'src/app/shell/guide/Lista zmian.md' '## 0.3.6 — 22 października 2026' "List the changes of 0.3.6"
+rel "$work" --dry-run patch
+expect "a section for 0.3.6: no warning" lacks 'has no section'
+rel "$work" --dry-run 0.4.0-rc.1
+expect "a pre-release needs no section" lacks 'has no section'
+
 echo "--- a dirty working tree, an unreachable origin"
 fixture misc
 printf '%s\n' 'niezapisane' >>"$work/fix.txt"

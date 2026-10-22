@@ -52,10 +52,18 @@ robi to `scripts/release.sh`:
 
 ```sh
 git switch main && git pull --ff-only
-# .github/release-notes.md -> commit "Update release notes for vX.Y.Z" (na main)
+# .github/release-notes.md + sekcja "## X.Y.Z — <data>" w src/app/shell/guide/Lista zmian.md
+#   -> commit "Update release notes for vX.Y.Z" (na main)
 scripts/release.sh --dry-run patch     # podgląd: wersje, commity, ostrzeżenia
 scripts/release.sh patch --push        # wersja na main, scalenie + tag na release, push
 ```
+
+Notatki wydaniowe to opis wydania na GitHubie (nowości tej wersji); strona „Lista zmian” w
+notatniku z dokumentacją (`src/app/shell/guide/Lista zmian.md`, po polsku, najnowsze na górze)
+zbiera wszystkie zmiany wszystkich wersji — każde wydanie dodaje na jej początku swoją sekcję
+(Nowe / Zmiany / Poprawki / Uwaga). Jej przykłady składni muszą być w kodzie (`⏰ …`, `#tag`,
+`- [ ]`), bo to żywa notatka. `release.sh` ostrzega, gdy notatki się nie zmieniły albo gdy na
+liście brakuje sekcji wydawanej wersji (wydanie testowe jej nie potrzebuje).
 
 Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się GitHub Pages,
 `nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI (APK z main nie ma
