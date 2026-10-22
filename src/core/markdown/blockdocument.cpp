@@ -301,6 +301,7 @@ void BlockDocument::derive(int i)
     e.lang = b ? b->lang : QString();
     e.taskStatus = b && b->task ? std::optional(b->task->status) : std::nullopt;
     e.blockId = b ? b->id : QString();
+    it.displayMathOpen = it.own.contains(u"$$") && parseStructure(it.own, options).displayMathOpenAtEnd;
 
     const QList<text::Line> lines = text::splitLines(it.own);
     const auto lm = e.kind == BlockKind::ListItem ? matchListMarker(lines.first().text) : std::nullopt;
@@ -446,9 +447,54 @@ void BlockDocument::protectLeadingRule()
         m_leading = m_eol;
 }
 
+/// A block whose `$$` line opens a display formula it does not close (a closing `$$` deleted, Enter
+/// inside the formula, a `$$` typed): read again, the formula would go on over the lines after the
+/// block up to a blank line, and a line that is only `$$` there would close it — every block in
+/// between would be formula text (list items have no blank lines between them). A blank line after
+/// the block keeps the blocks the editor shows (SYNTAX §11: a blank line ends such a formula).
+void BlockDocument::separateDisplayMath()
+{
+    // A line that may close the formula: only `$$` (a line with a `%%comment%%` may be one too).
+    const auto mayClose = [](QStringView line) {
+        return line.trimmed() == u"$$" || (line.contains(u"%%") && line.contains(u"$$"));
+    };
+    // A search that found nothing stopped at the block with a blank line: no block before it closes
+    // a formula, so a block before it needs no search (linear on an outline of `- $$` items).
+    int noCloseBefore = -1;
+    for (int i = 0; i + 1 < count(); ++i) {
+        if (!m_items[i].displayMathOpen || !m_items[i].entry.trailing.isEmpty() || i < noCloseBefore)
+            continue;
+        bool closes = false;
+        int stop = count(); // where the search ended without a closing line
+        for (int j = i + 1; j < count() && !closes; ++j) {
+            bool blank = false;
+            for (const text::Line &l : text::splitLines(m_items[j].own)) {
+                blank = isBlank(l.text);
+                closes = !blank && mayClose(l.text);
+                if (blank || closes)
+                    break;
+            }
+            if (!closes && (blank || !m_items[j].entry.trailing.isEmpty())) {
+                stop = j;
+                break;
+            }
+        }
+        if (!closes) {
+            noCloseBefore = stop;
+            continue;
+        }
+        Item &it = m_items[i];
+        if (it.eol.isEmpty())
+            it.eol = m_eol;
+        it.entry.trailing = m_eol;
+        touch(i);
+    }
+}
+
 EditResult BlockDocument::finish(const Snapshot &before, int focus, int cursor)
 {
     protectLeadingRule();
+    separateDisplayMath();
     recompute();
     EditResult r;
     r.focus = focus;

@@ -1236,6 +1236,32 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.edit(row), QString(editText).replace(u"1;"_s, u"2;"_s));
     }
 
+    void displayFormulaLeftOpenKeepsTheItemsAfterIt()
+    {
+        // Review regression: deleting the closing `$$` of a formula in an outline (or Enter inside
+        // it) saved a page whose `$$` line ran on to the `$$` line of a later item: reopened, the
+        // items between were formula text, their task and reminder gone from the index.
+        const QString content =
+                u"- Wzór:\n  $$\n  a^2\n  $$\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n- Drugi:\n  $$\n  b\n  $$\n"_s;
+        Fixture f(content);
+        QCOMPARE(f.count(), 3);
+        const QString indexed = indexedOf(content);
+        f.page.startEditing(0, 0);
+        f.page.setEditText(0, u"Wzór:\n$$\na^2"_s, 12);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        f.page.setEditText(0, u"Wzór:\n$$\na^2\n$$"_s, 15);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // Enter inside the second formula: two items, the formula's lines as text.
+        f.page.startEditing(2, 0);
+        f.page.split(2, 10);
+        QCOMPARE(f.count(), 4);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+    }
+
     void codeBlockReferenceThenTyping()
     {
         // "Copy block reference" writes the id on its own line after the closing fence; typing in

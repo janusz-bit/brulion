@@ -343,6 +343,8 @@ private:
                 return j;
         }
         m_noMathCloseBefore = m_views.size();
+        if (m_nest == 0)
+            m_st.displayMathOpenAtEnd = true; // a quote's lines end with the quote
         return -1;
     }
 

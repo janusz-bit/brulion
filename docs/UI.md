@@ -206,7 +206,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
   the LaTeX source, also as a list item of an outline or a journal; a formula between two `$$`
-  lines stays one text block whatever its lines start with), callout, embeds/transclusions
+  lines stays one text block whatever its lines start with; a block an edit leaves with a `$$`
+  line and no closing one — a deleted `$$`, Enter inside the formula — gets a blank line after
+  it when a later `$$` line would close it, so the items between never become formula text when
+  the page is read again), callout, embeds/transclusions
   (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
   ("Właściwości" panel).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,

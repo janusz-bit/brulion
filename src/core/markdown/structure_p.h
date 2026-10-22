@@ -75,6 +75,9 @@ struct Structure {
     std::optional<FrontmatterBlock> frontmatter;
     QList<Node> nodes; ///< arena
     QList<int> roots;  ///< root nodes in document order
+    /// A `$$` line of the body (not inside a quote) found no closing `$$` line before the end of
+    /// the text (SYNTAX §11): with more lines after the text its formula could go on into them.
+    bool displayMathOpenAtEnd = false;
 
     QStringView text(const LineView &v) const { return QStringView(content).sliced(v.offset, v.length); }
     QStringView maskedText(const LineView &v) const { return QStringView(masked).sliced(v.offset, v.length); }

@@ -330,6 +330,43 @@ private Q_SLOTS:
         QCOMPARE(entries(BlockDocument(u"$$\na\n- b\n"_s)), QStringList({u"p:0:|$$⏎a"_s, u"li:0:- |b"_s}));
     }
 
+    // Review regression: a `$$` line an edit leaves without its closing line reached the `$$` line
+    // of a later list item (no blank line between them), and the saved file read every block in
+    // between as part of that formula — their tasks and reminders gone from the index.
+    void displayMathNeverSwallowsLaterBlocks()
+    {
+        // The closing `$$` of the first of two formulas deleted.
+        BlockDocument doc(u"- Wzór:\n  $$\n  a\n  $$\n- [ ] Zadanie ⏰ 2026-10-20 9:00\n- Drugi:\n  $$\n  b\n  $$\n"_s);
+        QCOMPARE(doc.count(), 3);
+        QVERIFY(doc.setBody(0, u"Wzór:\n$$\na"_s).changed());
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        QCOMPARE(parseNote(u"a.md"_s, doc.toString()).tasks.size(), 1);
+        // Typed back, the formula is whole again.
+        QVERIFY(doc.setBody(0, u"Wzór:\n$$\na\n$$"_s).changed());
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        QCOMPARE(doc.count(), 3);
+        // A closing `$$` line typed in a later item, an opening one above it.
+        BlockDocument later(u"- $$\n- b\n"_s);
+        QCOMPARE(later.count(), 2);
+        QVERIFY(later.setBody(1, u"b\n$$"_s).changed());
+        QCOMPARE(entries(BlockDocument(later.toString())), entries(later));
+        // Enter inside a formula of an outline: two items, neither a formula.
+        BlockDocument split(u"- $$\n  a\n  b\n  $$\n- c\n"_s);
+        QCOMPARE(split.count(), 2);
+        QVERIFY(split.split(0, 5).changed());
+        QCOMPARE(split.count(), 3);
+        QCOMPARE(entries(BlockDocument(split.toString())), entries(split));
+        // A move that puts an item with an unclosed `$$` above one that has a `$$` line.
+        BlockDocument moved(u"- x\n  $$\n  y\n  $$\n- $$\n\n- z\n"_s);
+        QCOMPARE(moved.count(), 3);
+        QVERIFY(moved.moveUp(1).changed());
+        QCOMPARE(entries(BlockDocument(moved.toString())), entries(moved));
+        // Untouched: an unclosed `$$` that reaches no `$$` line gets no blank line.
+        BlockDocument plain(u"- $$\n- b\n"_s);
+        QVERIFY(plain.setBody(1, u"c"_s).changed());
+        QCOMPARE(plain.toString(), u"- $$\n- c\n"_s);
+    }
+
     void propertiesOnlyAtTheTop()
     {
         const BlockDocument top(u"title:: X\ntags:: a\n\n- a\n\nkey:: value\n"_s);
