@@ -645,6 +645,9 @@ private Q_SLOTS:
         QTest::newRow("prices pairing with nothing") << u"$5 i $10 za żółwia"_s << false << u"$5 i $10 za żółwia"_s;
         QTest::newRow("suffix prices pairing with nothing")
                 << u"15$, 10$/h i $PATH:$HOME"_s << false << u"15$, 10$/h i $PATH:$HOME"_s;
+        // A bare URL keeps its dollars (its link would change): the text's dollar is escaped.
+        QTest::newRow("bare URL with a dollar") << u"Zobacz https://x.org/?p=$5 – kosztuje 10$"_s << false
+                                                << u"Zobacz https://x.org/?p=$5 – kosztuje 10\\$"_s;
     }
 
     void escape()
@@ -676,6 +679,7 @@ private Q_SLOTS:
         QTest::newRow("formula look-alikes") << u"Wzór $x$, $$y$$ i $a $b$ c$"_s << false;
         QTest::newRow("prices in a link label") << u"Cena $10 – 15$"_s << true;
         QTest::newRow("dollar after a backslash") << u"C:\\$x$"_s << false;
+        QTest::newRow("bare URL with a dollar") << u"Zobacz https://x.org/?p=$5 – kosztuje 10$"_s << false;
     }
 
     // escapeTextFormulas(): Markdown an importer wrote from plain text, checked block by block as
@@ -703,12 +707,21 @@ private Q_SLOTS:
         QTest::newRow("blank quote line ends a formula")
                 << u"> Cena $10\n>\n> razem 15$\n"_s << u"> Cena $10\n>\n> razem 15$\n"_s;
         QTest::newRow("quote lines") << u"> Cena $10\n> razem 15$\n"_s << u"> Cena \\$10\n> razem 15$\n"_s;
+        // A line with only a bullet is no blank line: the editor shows the bullet.
+        QTest::newRow("bullet line in a quote")
+                << u"> Cena $10\n> -\n> razem 15$\n"_s << u"> Cena \\$10\n> -\n> razem 15$\n"_s;
         QTest::newRow("fenced and inline code")
                 << u"`$x$` i $5\n\n```\n$y$\n```\n"_s << u"`$x$` i $5\n\n```\n$y$\n```\n"_s;
         QTest::newRow("frontmatter") << u"---\ntytuł: $x$\n---\nCena $x$\n"_s
                                      << u"---\ntytuł: $x$\n---\nCena \\$x$\n"_s;
         QTest::newRow("table cells") << u"| $15 | 10$ |\n| --- | --- |\n| $x$ | =$a$ |\n"_s
                                      << u"| $15 | 10$ |\n| --- | --- |\n| \\$x$ | =$a$ |\n"_s;
+        // Rows split at every pipe, also inside code ("`a" and "b`" are two cells, neither is
+        // code); a header cell is never a table formula.
+        QTest::newRow("table code split by pipes")
+                << u"| `a | $x$ | b` |\n| --- | --- | --- |\n"_s << u"| `a | \\$x$ | b` |\n| --- | --- | --- |\n"_s;
+        QTest::newRow("table header with =")
+                << u"| =$a$ |\n| --- |\n| =$b$ |\n"_s << u"| =\\$a$ |\n| --- |\n| =$b$ |\n"_s;
         QTest::newRow("wiki link and text") << u"Kurs $1 [[Plik$a]] i 15$\n"_s << u"Kurs \\$1 [[Plik$a]] i 15$\n"_s;
         QTest::newRow("link targets stay")
                 << u"[[Plik $a|etykieta]] ((abc$)) <https://x.org/$1> https://x.org/b$ ![o](a$b.png)\n"_s
@@ -749,6 +762,14 @@ private Q_SLOTS:
         QCOMPARE(QString(out).remove(u'\\'), chain);
         const QString escaped = escapeMarkdownText(chain, false);
         QVERIFY(markdown::findMathSpans(escaped).isEmpty());
+
+        // Link syntax without its end ("<a", "[[", "((") is looked for once per line, not once
+        // per opening: still linear.
+        const QString open = QString(u"<a[[(("_s).repeated(30000);
+        timer.restart();
+        const QString links = detail::escapeTextFormulas(u"$x$ "_s + open + u" 5$\n"_s);
+        QVERIFY2(timer.elapsed() < 2000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(timer.elapsed())));
+        QCOMPARE(links, u"\\$x$ "_s + open + u" 5$\n"_s);
     }
 
     void escapedTextShowsAsWritten()

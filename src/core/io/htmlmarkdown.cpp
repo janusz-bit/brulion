@@ -1314,14 +1314,19 @@ QString withBackslashes(const QString &text, const QList<qsizetype> &at)
     return out;
 }
 
+void protectLinks(QStringView masked, QList<bool> &fixed);
+
 /// Escaped plain text (escapeMarkdownText()) without dollars that pair into a formula. All its
-/// dollars are text; it holds no code (backticks are escaped).
+/// dollars are text; it holds no code (backticks are escaped) and no link syntax but bare URLs,
+/// which keep their dollars ("https://x.org/?p=$5 … 10$": the closing one is escaped).
 QString escapeTextDollars(QString text)
 {
     for (int round = 0; round < MaxDollarRounds && text.contains(u'$'); ++round) {
+        const QString masked = markdown::maskInlineCode(text);
+        QList<bool> fixed(masked.size(), false);
+        protectLinks(masked, fixed);
         QList<qsizetype> at;
-        dollarsToEscape(
-                markdown::maskInlineCode(text), 0, [](qsizetype) { return false; }, round + 1 == MaxDollarRounds, at);
+        dollarsToEscape(masked, 0, [&fixed](qsizetype k) { return fixed[k]; }, round + 1 == MaxDollarRounds, at);
         if (at.isEmpty())
             break;
         text = withBackslashes(text, at);
@@ -1398,13 +1403,15 @@ void leaveOutLines(DollarScan &s, bool callout)
                 ++m;
             m = m > c && m < line.size() && (line[m] == u'.' || line[m] == u')') ? m + 1 : c;
         }
-        if (m > c && (m == line.size() || line[m] == u' ' || line[m] == u'\t')) {
+        const bool marker = m > c && (m == line.size() || line[m] == u' ' || line[m] == u'\t');
+        if (marker) {
             c = m;
             while (c < line.size() && (line[c] == u' ' || line[c] == u'\t'))
                 ++c;
         }
         const QStringView content = line.sliced(c);
-        bool blank = content.trimmed().isEmpty();
+        // A line with only a list marker ("> -") shows its bullet: no blank line.
+        bool blank = !marker && content.trimmed().isEmpty();
         if (fence) {
             blank = true;
             const QStringView t = content.trimmed();
@@ -1434,54 +1441,68 @@ void leaveOutLines(DollarScan &s, bool callout)
 
 /// Mark as `fixed` what the editor reads as a link target, not as text: Markdown link and image
 /// destinations, autolinks and raw tags, wiki links, block references and bare URLs (their
-/// dollars are never escaped; they still pair with others, as in the editor).
+/// dollars are never escaped; they still pair with others, as in the editor). Line by line, in
+/// linear time: "<a<a<a…" or "[[[[…" without a closing one never search the rest again.
 void protectLinks(QStringView masked, QList<bool> &fixed)
 {
-    const qsizetype n = masked.size();
-    const auto lineEnd = [&](qsizetype from) {
-        const qsizetype nl = masked.indexOf(u'\n', from);
-        return nl < 0 ? n : nl;
-    };
-    const auto protect = [&](qsizetype from, qsizetype to) {
-        for (qsizetype k = from; k < to && k < n; ++k)
-            fixed[k] = true;
-    };
     static const QRegularExpression url(u"\\G(?:(?:https?|ftp)://|www\\.)"_s,
                                         QRegularExpression::CaseInsensitiveOption);
-    for (qsizetype i = 0; i < n; ++i) {
-        const QChar c = masked[i];
-        const QChar next = i + 1 < n ? masked[i + 1] : QChar();
-        if (c == u'\\') {
-            ++i;
-            continue;
-        }
-        qsizetype end = -1;
-        if (c == u']' && next == u'(') {
-            const qsizetype stop = lineEnd(i);
-            qsizetype j = i + 2;
-            if (j < stop && masked[j] == u'<') {
-                const qsizetype gt = masked.indexOf(u'>', j);
-                j = gt < 0 || gt > stop ? stop : gt;
+    /// The first `needle` at or after a position of the line (-1: none), remembered: the searches
+    /// of a line go forward, so each one goes on where the last one stopped.
+    struct Search {
+        QStringView needle;
+        qsizetype from = -1;
+        qsizetype at = -1;
+    };
+    const qsizetype n = masked.size();
+    for (qsizetype lineFrom = 0; lineFrom < n;) {
+        qsizetype stop = masked.indexOf(u'\n', lineFrom);
+        if (stop < 0)
+            stop = n;
+        Search gt{u">"}, paren{u")"}, brackets{u"]]"}, parens{u"))"};
+        const auto find = [&](Search &s, qsizetype from) {
+            if (s.from < 0 || from < s.from || (s.at >= 0 && s.at < from)) {
+                const qsizetype k = from < stop ? masked.sliced(from, stop - from).indexOf(s.needle) : -1;
+                s.from = from;
+                s.at = k < 0 ? -1 : from + k;
             }
-            const qsizetype close = masked.indexOf(u')', j);
-            end = close < 0 || close > stop ? stop : close + 1;
-        } else if (c == u'<' && next.isLetter()) {
-            const qsizetype stop = lineEnd(i);
-            const qsizetype gt = masked.indexOf(u'>', i);
-            end = gt < 0 || gt > stop ? i + 1 : gt + 1;
-        } else if ((c == u'[' && next == u'[') || (c == u'(' && next == u'(')) {
-            const qsizetype close = masked.indexOf(c == u'[' ? u"]]"_s : u"))"_s, i + 2);
-            end = close < 0 || close > lineEnd(i) ? i + 2 : close + 2;
-        } else if (c.isLetter() && (i == 0 || !masked[i - 1].isLetterOrNumber())
-                   && url.matchView(masked, i).hasMatch()) {
-            end = i;
-            while (end < n && !masked[end].isSpace() && masked[end] != u'<' && masked[end] != u'>')
-                ++end;
+            return s.at;
+        };
+        for (qsizetype i = lineFrom; i < stop; ++i) {
+            const QChar c = masked[i];
+            const QChar next = i + 1 < stop ? masked[i + 1] : QChar();
+            if (c == u'\\') {
+                ++i;
+                continue;
+            }
+            qsizetype end = -1;
+            if (c == u']' && next == u'(') {
+                qsizetype j = i + 2;
+                if (j < stop && masked[j] == u'<') {
+                    const qsizetype close = find(gt, j);
+                    j = close < 0 ? stop : close;
+                }
+                const qsizetype close = find(paren, j);
+                end = close < 0 ? stop : close + 1;
+            } else if (c == u'<' && next.isLetter()) {
+                const qsizetype close = find(gt, i);
+                end = close < 0 ? i + 1 : close + 1;
+            } else if ((c == u'[' && next == u'[') || (c == u'(' && next == u'(')) {
+                const qsizetype close = find(c == u'[' ? brackets : parens, i + 2);
+                end = close < 0 ? i + 2 : close + 2;
+            } else if (c.isLetter() && (i == 0 || !masked[i - 1].isLetterOrNumber())
+                       && url.matchView(masked, i).hasMatch()) {
+                end = i;
+                while (end < stop && !masked[end].isSpace() && masked[end] != u'<' && masked[end] != u'>')
+                    ++end;
+            }
+            if (end > i) {
+                for (qsizetype k = i; k < end; ++k)
+                    fixed[k] = true;
+                i = end - 1;
+            }
         }
-        if (end > i) {
-            protect(i, end);
-            i = end - 1;
-        }
+        lineFrom = stop + 1;
     }
 }
 
@@ -1509,34 +1530,38 @@ QList<qsizetype> strayDollarsOf(const QString &md, bool all)
         if (!QStringView(md).sliced(from, to - from).contains(u'$'))
             continue;
         DollarScan s = dollarScan(md, from, to);
-        if (e.kind != BlockKind::Table)
-            leaveOutLines(s, e.kind == BlockKind::Callout);
-        const QString masked = markdown::maskInlineCode(s.text);
-        protectLinks(masked, s.fixed);
-        const auto fixed = [&s](qsizetype k) { return s.fixed[k]; };
         QList<qsizetype> local;
         if (e.kind == BlockKind::Table) {
-            // Each cell on its own, as the editor renders them ("| $15 | 10$ |": two prices); a
-            // formula cell (`=…`) shows its result.
-            const QStringView m = masked;
-            for (qsizetype rowFrom = 0; rowFrom <= m.size();) {
-                qsizetype rowTo = m.indexOf(u'\n', rowFrom);
+            // Each cell on its own, split as the editor splits the rows (calc::splitTableRow(): at
+            // every `|` without a backslash before it, also inside code) and with its own code
+            // masked: "| $15 | 10$ |" holds two prices. A formula cell of the body (`=…`) shows
+            // its result.
+            const QStringView t = s.text;
+            int row = 0;
+            for (qsizetype rowFrom = 0; rowFrom <= t.size(); ++row) {
+                qsizetype rowTo = t.indexOf(u'\n', rowFrom);
                 if (rowTo < 0)
-                    rowTo = m.size();
-                for (qsizetype cellFrom = rowFrom; cellFrom < rowTo;) {
+                    rowTo = t.size();
+                for (qsizetype cellFrom = rowFrom; cellFrom <= rowTo;) {
                     qsizetype cellTo = cellFrom;
-                    while (cellTo < rowTo && m[cellTo] != u'|')
-                        cellTo += m[cellTo] == u'\\' && cellTo + 1 < rowTo ? 2 : 1;
-                    cellTo = std::min(cellTo, rowTo);
-                    const QStringView cell = m.sliced(cellFrom, cellTo - cellFrom);
-                    if (!cell.trimmed().startsWith(u'='))
-                        dollarsToEscape(cell, cellFrom, [&](qsizetype k) { return fixed(cellFrom + k); }, all, local);
+                    while (cellTo < rowTo && (t[cellTo] != u'|' || (cellTo > rowFrom && t[cellTo - 1] == u'\\')))
+                        ++cellTo;
+                    const QStringView cell = t.sliced(cellFrom, cellTo - cellFrom);
+                    if (cell.contains(u'$') && !(row >= 2 && cell.trimmed().startsWith(u'='))) {
+                        const QString masked = markdown::maskInlineCode(cell);
+                        QList<bool> fixed = s.fixed.mid(cellFrom, cellTo - cellFrom);
+                        protectLinks(masked, fixed);
+                        dollarsToEscape(masked, cellFrom, [&fixed](qsizetype k) { return fixed[k]; }, all, local);
+                    }
                     cellFrom = cellTo + 1;
                 }
                 rowFrom = rowTo + 1;
             }
         } else {
-            dollarsToEscape(masked, 0, fixed, all, local);
+            leaveOutLines(s, e.kind == BlockKind::Callout);
+            const QString masked = markdown::maskInlineCode(s.text);
+            protectLinks(masked, s.fixed);
+            dollarsToEscape(masked, 0, [&s](qsizetype k) { return s.fixed[k]; }, all, local);
         }
         for (const qsizetype k : std::as_const(local))
             out.append(s.source[k]);
