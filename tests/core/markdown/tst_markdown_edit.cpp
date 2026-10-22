@@ -301,6 +301,11 @@ private Q_SLOTS:
         QTest::newRow("cancelled date") << u"- [-] Wizyta ❌ 2026-10-02 u dentysty"_s << 0 << u"- Wizyta u dentysty"_s;
         QTest::newRow("custom character") << u"- [?] pytanie"_s << 0 << u"- pytanie"_s;
         QTest::newRow("only a date") << u"- [x] ✅ 2026-10-14"_s << 0 << u"- "_s;
+        // A date right after the marker: one space stays between the list marker and the text.
+        QTest::newRow("date first") << u"- [x] ✅ 2026-10-14 Pranie"_s << 0 << u"- Pranie"_s;
+        QTest::newRow("date first, logseq") << u"- DONE ✅ 2026-10-14 Pranie"_s << 0 << u"- Pranie"_s;
+        QTest::newRow("tab after the checkbox") << u"- [ ]\tżółw"_s << 0 << u"- żółw"_s;
+        QTest::newRow("byte order mark") << u"﻿- [/] ą"_s << 0 << u"﻿- ą"_s;
         QTest::newRow("empty task") << u"- [ ] "_s << 0 << u"- "_s;
         QTest::newRow("ordered") << u"3. [ ] trzeci"_s << 0 << u"3. trzeci"_s;
         QTest::newRow("star, nested") << u"- p\n  * [/] zagnieżdżone"_s << 1 << u"- p\n  * zagnieżdżone"_s;

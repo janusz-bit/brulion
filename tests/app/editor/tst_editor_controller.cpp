@@ -1342,6 +1342,45 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(zoom.page.titleRow(), 1);
     }
 
+    void noStatusHereAndElsewhere_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("todo") << u"- [ ] Kupić mleko\n"_s << 0 << u"- Kupić mleko\n"_s;
+        QTest::newRow("done date") << u"- [x] Zapłacić czynsz 📅 2026-10-10 ✅ 2026-10-09\n"_s << 0
+                                   << u"- Zapłacić czynsz 📅 2026-10-10\n"_s;
+        QTest::newRow("cancelled date inside")
+                << u"- [-] Wizyta ❌ 2026-10-02 u dentysty\n"_s << 0 << u"- Wizyta u dentysty\n"_s;
+        QTest::newRow("date first") << u"- [x] ✅ 2026-10-14 Pranie\n"_s << 0 << u"- Pranie\n"_s;
+        QTest::newRow("logseq done") << u"- DONE Paczka ✅ 2026-10-01\n"_s << 0 << u"- Paczka\n"_s;
+        QTest::newRow("logseq planning") << u"- LATER Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s << 0
+                                         << u"- Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s;
+        QTest::newRow("block id, crlf") << u"- [/] a ^id1\r\n- b\r\n"_s << 0 << u"- a ^id1\r\n- b\r\n"_s;
+        QTest::newRow("nested") << u"- rodzic\n\t- [>] dziecko #ąę\n"_s << 1 << u"- rodzic\n\t- dziecko #ąę\n"_s;
+        QTest::newRow("numbered") << u"1. [ ] pierwszy\n2. drugi\n"_s << 0 << u"1. pierwszy\n2. drugi\n"_s;
+        QTest::newRow("date in code") << u"- [x] użyj `✅ 2026-01-01` ✅ 2026-10-01\n"_s << 0
+                                      << u"- użyj `✅ 2026-01-01`\n"_s;
+        QTest::newRow("continuation") << u"- [ ] a\n  szczegóły\n"_s << 0 << u"- a\n  szczegóły\n"_s;
+    }
+
+    void noStatusHereAndElsewhere()
+    {
+        // "No status" on this page (an editing command) and in another file (QueryHost,
+        // markdown::removeTaskMarker) writes the same text.
+        QFETCH(QString, content);
+        QFETCH(int, line);
+        QFETCH(QString, expected);
+        Fixture f(content);
+        f.host.setFile(u"Inna.md"_s, content);
+        QVERIFY(f.page.setTaskStatusAt(Page, line, QString()));
+        QVERIFY(f.page.setTaskStatusAt(u"Inna.md"_s, line, QString()));
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(f.host.file(u"Inna.md"_s), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
     void tasksElsewhere()
     {
         Fixture f(u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);

@@ -524,9 +524,14 @@ QString removeTaskMarker(const QString &content, int line)
     for (const Token &tok : findTokens(maskInline(visible))) {
         if (tok.kind != TokenKind::Done && tok.kind != TokenKind::Cancelled)
             continue;
-        // The whitespace before a date right after the marker is the marker's own.
         Edit e = removal(visible, tok.from, tok.to);
-        e.from = std::max(e.from, marker->contentStart);
+        if (e.from <= marker->contentStart) {
+            // A date right after the marker: the whitespace before it is the marker's own (it
+            // goes with the marker), so the whitespace after it goes with the date.
+            e.from = marker->contentStart;
+            while (e.to < visible.size() && isSpaceOrTab(visible[e.to]))
+                ++e.to;
+        }
         edits.append(e);
     }
     const QString out = applyEdits(visible, edits);
