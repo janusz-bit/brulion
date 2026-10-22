@@ -24,6 +24,7 @@
 #include <QKeyEvent>
 #include <QLocale>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QThread>
@@ -258,21 +259,40 @@ int openMenus(QQuickWindow *window)
     return open;
 }
 
-/// Close the tooltips open in the window: a tooltip whose button was hidden under a resting
-/// mouse stays open, and the overlay takes the next press outside it to close it.
-void closeToolTips(QQuickWindow *window)
+/// Close the tooltips waiting for deletion, and return those still alive of hidden controls. A
+/// tooltip whose Loader went inactive (BIconButton's, when its button hid: the hover ends) has
+/// its bindings cleared at once but is deleted — and only so closed — when the app's event loop
+/// runs, which this running self-test does not let it do: open, it takes the next press
+/// elsewhere just to close itself. A live tooltip of a hidden control would do that in the app
+/// too (a bug).
+QStringList closeToolTipsWaitingForDeletion(QQuickWindow *window)
 {
+    QStringList stray;
     std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
         if (!item->isVisible())
             return;
-        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickToolTip"))
-            QMetaObject::invokeMethod(item->parent(), "close");
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickToolTip")) {
+            QObject *tip = item->parent();
+            const auto *owner = tip->property("parent").value<QQuickItem *>();
+            const QQmlContext *context = qmlContext(tip);
+            const bool deleted = !owner || !owner->window() || !context || !context->isValid();
+            const QString text = tip->property("text").toString();
+            std::fprintf(stderr, "selftest: an open tooltip \"%s\" (%s)\n", qPrintable(text),
+                         deleted              ? "waiting for deletion: closed"
+                         : owner->isVisible() ? "of a control shown"
+                                              : "of a hidden control");
+            if (deleted)
+                QMetaObject::invokeMethod(tip, "close");
+            else if (!owner->isVisible())
+                stray.append(text);
+        }
         const QList<QQuickItem *> children = item->childItems();
         for (QQuickItem *child : children)
             visit(child);
     };
     visit(window->contentItem());
     settle(50);
+    return stray;
 }
 
 /// Close the menus open in the window (a failed check must not leave a modal menu behind).
@@ -880,9 +900,10 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                           && right(textButton) <= window->width() + 0.5
                           && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
                   "the picture's bar shows the file name next to the size toggle and fits the window");
-            // (A tooltip an earlier step left open — the mouse stayed on the note mode toggle,
-            // hidden since — would take the click: a press outside closes it.)
-            closeToolTips(window);
+            // (The mouse still rests where an earlier step clicked the note mode toggle, hidden
+            // since: its tooltip waits for a deletion this running test does not let happen —
+            // see closeToolTipsWaitingForDeletion — and would take the click.)
+            check(closeToolTipsWaitingForDeletion(window).isEmpty(), "no live tooltip outlives its hidden button");
             tapOrClick(window, pointIn(size), touch);
             check(waitFor([&] { return view->property("actualSize").toBool(); })
                           && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Fit to view"),
