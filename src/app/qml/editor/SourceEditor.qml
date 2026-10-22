@@ -10,6 +10,9 @@ import Brulion
 // The text is read exactly (EditorInput.plainText: no-break spaces kept); the TextEdit shows
 // every line break as "\n" and the controller puts the file's "\r\n" back, so the controller's
 // text differs from the TextEdit's in CRLF files: only changes made elsewhere are loaded back.
+// A mouse selects by dragging; a finger scrolls (on touch UIs a TextEdit that selects by dragging
+// keeps the finger and the source could not be scrolled at all) and selects with the system's
+// selection handles (a long press: the input method's, QInputMethod), a tap places the cursor.
 Flickable {
     id: root
 
@@ -47,7 +50,8 @@ Flickable {
         textFormat: TextEdit.PlainText
         wrapMode: TextEdit.Wrap
         tabStopDistance: tabMetrics.advanceWidth("    ")
-        selectByMouse: true
+        // Not on touch UIs: a finger drag scrolls (see above).
+        selectByMouse: !Theme.touchUi
         font.family: Theme.fontMono
         font.pixelSize: Theme.textSm + 1
         color: Theme.fg

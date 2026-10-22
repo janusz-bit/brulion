@@ -29,6 +29,7 @@
 #include <QWheelEvent>
 #include <qtestsupport_gui.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 
@@ -1267,6 +1268,43 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             }
             sendKey(window, Qt::Key_E, Qt::ControlModifier);
             check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
+            // Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
+            // dragging kept the finger: the source never moved) and selects nothing; a tap still
+            // puts the cursor where it lands.
+            if (QCoreApplication::arguments().contains(u"--touch"_s)) {
+                QQuickItem *sourceView = nullptr;
+                QQuickItem *sourceEdit = nullptr;
+                check(waitFor([&] {
+                          sourceView = findShown(editor, [](QQuickItem *item) { return isA(item, "SourceEditor"); });
+                          // (The whole file: its middle lies far below the screen.)
+                          const QList<QQuickItem *> edits =
+                                  sourceView ? sourceView->findChildren<QQuickItem *>() : QList<QQuickItem *>();
+                          const auto it = std::find_if(edits.cbegin(), edits.cend(), [](QQuickItem *item) {
+                              return item->inherits("QQuickTextEdit") && item->isVisible();
+                          });
+                          sourceEdit = it != edits.cend() ? *it : nullptr;
+                          return sourceEdit
+                                 && sourceView->property("contentHeight").toReal() > sourceView->height() + 400;
+                      }),
+                      "the guide's Markdown source is longer than the screen");
+                if (sourceView && sourceEdit) {
+                    const qreal before = sourceView->property("contentY").toReal();
+                    touchDrag(window, pointIn(sourceView, 0.5, 0.7), QPointF(0, -300));
+                    check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
+                    const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
+                    const QPointF at = pointIn(sourceView, 0.5, 0.5);
+                    touchTap(window, at);
+                    const QPointF local = sourceEdit->mapFromScene(at);
+                    int expected = -1;
+                    QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+                    const int cursor = sourceEdit->property("cursorPosition").toInt();
+                    check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a tap in the Markdown source puts the cursor there");
+                }
+            }
             app->requestUiAction(u"toggleSourceMode"_s);
             check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
                   "the \"Markdown source\" command switches back");
