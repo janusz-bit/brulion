@@ -523,7 +523,7 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
     QList<Atom> atoms;
     codeAndCommentAtoms(text, masked, atoms);
 
-    // Formulas: $…$, $$…$$, \(…\) and \[…\] (docs/SYNTAX.md §11). The scan runs on the masked
+    // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11). The scan runs on the masked
     // text, so a formula inside code or a comment is not one; a link label gets one through
     // renderInline() of the label.
     for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {

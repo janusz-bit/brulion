@@ -487,7 +487,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                               + u"</code>"_s});
     }
 
-    // Formulas: $…$, $$…$$, \(…\) and \[…\] (docs/SYNTAX.md §11, markdown/math.h). The scan runs
+    // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11, markdown/math.h). The scan runs
     // on the masked text, so a formula inside a code span or a comment is not one; like emphasis,
     // a formula works in a link label too.
     for (const MathSpan &span : findMathSpans(masked)) {
