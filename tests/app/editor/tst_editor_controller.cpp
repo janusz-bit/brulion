@@ -1343,6 +1343,42 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(taskText.text(), u"- [ ] ```js\n- b\n"_s);
     }
 
+    void loneFenceComparedAndMergedAsSaved()
+    {
+        // While "```js" is typed the page's text is compared with the file, merged with an
+        // external change and offered to the merge dialog as it is saved: closed. Merged open,
+        // the page would read as code running on over the task (its reminder lost everywhere).
+        const QString task = u"- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(u"Akapit\n\n"_s + task + u"- c\n"_s, 10000);
+        QString mergedLocal;
+        f.page.setMergeFunction([&mergedLocal](const QString &, const QString &local, const QString &remote) {
+            mergedLocal = local;
+            return MergeOutcome{QString(local).replace(u"- c\n"_s, u"- c zdalnie\n"_s),
+                                remote.endsWith(u"- c zdalnie\n"_s)};
+        });
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"```js"_s, 5);
+        QVERIFY(f.page.save());
+        const QString saved = u"```js\n```\n\n"_s + task + u"- c\n"_s;
+        QCOMPARE(f.host.file(Page), saved);
+        QCOMPARE(f.page.sourceText(), saved);
+        // Typed away from the saved text and back: nothing to save.
+        f.page.setEditText(0, u"```jsx"_s, 6);
+        QVERIFY(f.page.dirty());
+        f.page.setEditText(0, u"```js"_s, 5);
+        QVERIFY(!f.page.dirty());
+        // Dirty when the other device's change comes in: merged closed.
+        f.page.setEditText(0, u"```json"_s, 7);
+        QVERIFY(f.page.dirty());
+        f.host.externalWrite(Page, u"```js\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+        QVERIFY(!f.page.conflict());
+        QCOMPARE(mergedLocal, u"```json\n```\n\n"_s + task + u"- c\n"_s);
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"```json\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+    }
+
     void mergeKeepsClosingFenceOnItsLine()
     {
         // Backspace at the start of the block after code written in a text block: the text goes on

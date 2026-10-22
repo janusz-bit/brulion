@@ -607,7 +607,9 @@ void PageController::closeLoneFence(quint64 uid)
 
 void PageController::markDirty()
 {
-    const QString current = m_sourceMode ? m_sourceText : text();
+    // What save() would write: a lone fence being typed is saved closed (textToSave()), so the
+    // text compared with the file must be closed too, or every later check would call it dirty.
+    const QString current = m_sourceMode ? m_sourceText : textToSave();
     setDirty(current != m_savedText);
     if (m_dirty && !m_conflict) {
         if (m_saveTimer.interval() == 0)
@@ -695,7 +697,9 @@ void PageController::onFileChanged(const QString &path)
         m_exists = true;
         Q_EMIT existsChanged();
     }
-    const QString local = m_sourceMode ? m_sourceText : text();
+    // The local version as it would be saved: merged with an open lone fence line ("```js" being
+    // typed), the result would read as code running on over the blocks after it.
+    const QString local = m_sourceMode ? m_sourceText : textToSave();
     // While a conflict is open every later change of the file decides again (it may merge now,
     // equal ours, or go back to the base): the conflict state and the "other version" offered by
     // takeRemote() never go stale.
@@ -785,7 +789,7 @@ void PageController::resolveConflict(const QString &text)
 
 void PageController::keepLocal()
 {
-    resolveConflict(m_sourceMode ? m_sourceText : text());
+    resolveConflict(m_sourceMode ? m_sourceText : textToSave());
 }
 
 void PageController::takeRemote()
@@ -2789,7 +2793,8 @@ void PageController::redo()
 
 QString PageController::sourceText() const
 {
-    return m_sourceMode ? m_sourceText : text();
+    // Outside source mode: the text as it is saved (the merge dialog's "this device").
+    return m_sourceMode ? m_sourceText : textToSave();
 }
 
 void PageController::setSourceText(const QString &edited)
