@@ -26,7 +26,8 @@ import Brulion
 // * Time (withTime): "9", "930", "18.30" are normalised to "HH:mm" when editing finishes (Enter,
 //   Done, leaving the field, hiding the touch keyboard); a time that is not one stays in the
 //   field with a hint (timeInvalid). The clock button opens BTimePickerDialog — a round dial
-//   for tapping hours and minutes.
+//   for tapping hours and minutes —, created the first time it is asked for (`clockDialog`:
+//   most date pickers never show it).
 // * In a dialog with an OK button, call commitPending() before accepting: it applies what is
 //   still being typed (the field may keep the focus on OK: Ctrl+Enter, a touch keyboard).
 //
@@ -63,6 +64,8 @@ T.Control {
     readonly property string value: selectedDate === "" ? ""
                                   : (withTime && time !== "" ? selectedDate + " " + time : selectedDate)
     readonly property var natural: naturalField.text.trim() !== "" ? DatesHelper.parseNatural(naturalField.text) : ({ ok: false })
+    /// The round clock, null until the Clock button first opens it.
+    property BTimePickerDialog clockDialog: null
 
     signal picked(string value)
 
@@ -132,6 +135,12 @@ T.Control {
         if (natural.ok)
             applyNatural()
         return withTime ? timeField.commitTyped() : true
+    }
+    /// Open the round clock on `value` (created on first use).
+    function openClock(value) {
+        if (!clockDialog)
+            clockDialog = clockComponent.createObject(control) as BTimePickerDialog
+        clockDialog.openFor(value)
     }
     /// Forget typed text (natural-language field, an invalid time) — when a dialog opens anew.
     function clearTyped() {
@@ -522,7 +531,7 @@ T.Control {
                 onClicked: {
                     if (timeField.text.trim() !== "")
                         timeField.commitTyped()
-                    clockDialog.openFor(control.time !== "" ? control.time : control.defaultTime)
+                    control.openClock(control.time !== "" ? control.time : control.defaultTime)
                 }
             }
         }
@@ -538,8 +547,10 @@ T.Control {
         }
     }
 
-    BTimePickerDialog {
-        id: clockDialog
-        onPicked: (value) => control.applyTime(value)
+    Component {
+        id: clockComponent
+        BTimePickerDialog {
+            onPicked: (value) => control.applyTime(value)
+        }
     }
 }

@@ -3,7 +3,9 @@ import QtQuick
 import QtQuick.Templates as T
 import Brulion
 
-// BMenuItem — entry of a BMenu: icon, text, shortcut hint, check mark, submenu arrow.
+// BMenuItem — entry of a BMenu: icon, text, shortcut hint, check mark, submenu arrow. The text
+// is shown as plain text: menus list page titles and folder and notebook names, which come from
+// anywhere (sync, imports) and must never turn into markup.
 //
 //   BMenuItem { text: qsTr("Kopiuj odnośnik"); iconName: "link"; shortcut: "Ctrl+Shift+C"
 //               onTriggered: copyLink() }
@@ -60,6 +62,7 @@ T.MenuItem {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Math.min(implicitWidth, Math.max(0, parent.width - x))
                 text: control.text
+                textFormat: Text.PlainText
                 font: control.font
                 color: control.textColor
                 elide: Text.ElideRight

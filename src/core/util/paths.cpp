@@ -56,12 +56,17 @@ bool isMarkdown(const VaultPath &path)
     return ext == QLatin1String(".md") || ext == QLatin1String(".markdown");
 }
 
+const QStringList &pictureExtensions()
+{
+    using namespace Qt::StringLiterals;
+    static const QStringList ext = {u".png"_s, u".jpg"_s, u".jpeg"_s, u".gif"_s, u".webp"_s,
+                                    u".svg"_s, u".bmp"_s, u".avif"_s, u".ico"_s};
+    return ext;
+}
+
 bool isPicturePath(const VaultPath &path)
 {
-    const QString ext = extension(path);
-    return ext == QLatin1String(".png") || ext == QLatin1String(".jpg") || ext == QLatin1String(".jpeg")
-           || ext == QLatin1String(".gif") || ext == QLatin1String(".webp") || ext == QLatin1String(".svg")
-           || ext == QLatin1String(".bmp") || ext == QLatin1String(".avif");
+    return pictureExtensions().contains(extension(path));
 }
 
 QString stripMarkdownExtension(const VaultPath &path)

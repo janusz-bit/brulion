@@ -24,6 +24,8 @@ BDialog {
     readonly property string at: date + " " + time
     readonly property bool validTime: time !== ""
     readonly property var quickTimes: ["08:00", "09:00", "12:00", "15:00", "18:00", "20:00"]
+    /// The round clock, null until the clock button first opens it.
+    property BTimePickerDialog clockDialog: null
 
     signal taskAdded(string text, string date)
     signal reminderAdded(string text, string at, bool alarm)
@@ -110,7 +112,9 @@ BDialog {
                         if (typed !== "")
                             control.time = typed
                     }
-                    clockDialog.openFor(control.time)
+                    if (!control.clockDialog)
+                        control.clockDialog = clockComponent.createObject(control.contentItem) as BTimePickerDialog
+                    control.clockDialog.openFor(control.time)
                 }
             }
         }
@@ -133,6 +137,7 @@ BDialog {
             }
             BTextField {
                 id: timeField
+                objectName: "calendarAddTime" // (the editor's self-test)
                 width: Theme.touchUi ? 112 : 96
                 size: "small"
                 placeholderText: qsTr("other")
@@ -170,11 +175,13 @@ BDialog {
         wrapMode: Text.Wrap
     }
 
-    BTimePickerDialog {
-        id: clockDialog
-        onPicked: (value) => {
-            control.time = value
-            timeField.text = ""
+    Component {
+        id: clockComponent
+        BTimePickerDialog {
+            onPicked: (value) => {
+                control.time = value
+                timeField.text = ""
+            }
         }
     }
 }

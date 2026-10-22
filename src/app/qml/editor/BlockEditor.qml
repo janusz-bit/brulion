@@ -619,8 +619,8 @@ FocusScope {
         return true
     }
 
-    /// Text for a design-system component that shows it with Text.AutoText (BChip, BBreadcrumb,
-    /// BDialog subtitle, BToolTip): such text is rendered as styled text — images loaded, tags
+    /// Text for a design-system component that shows it with Text.AutoText (BChip, BDialog
+    /// subtitle, BToolTip; BBreadcrumb and BMenuItem show plain text): such text is rendered as styled text — images loaded, tags
     /// applied — when it looks like markup. Note text containing "<" is escaped, which AutoText
     /// then shows exactly as written.
     function autoTextSafe(s) {
@@ -902,7 +902,6 @@ FocusScope {
                 visible: active
                 sourceComponent: ZoomBreadcrumb {
                     controller: editor.controller
-                    editor: editor
                 }
             }
         }

@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QLoggingCategory>
 #include <QMimeDatabase>
@@ -483,6 +484,21 @@ QString Workspace::folderOf(const QString &path) const
 bool Workspace::isPicture(const QString &path) const
 {
     return paths::isPicturePath(path);
+}
+
+bool Workspace::canDecodePicture(const QString &path) const
+{
+    if (!paths::isPicturePath(path))
+        return false;
+    // The image plugins are loaded once per process: their formats never change while it runs.
+    static const QSet<QByteArray> formats = [] {
+        QSet<QByteArray> out;
+        const QList<QByteArray> supported = QImageReader::supportedImageFormats();
+        for (const QByteArray &format : supported)
+            out.insert(format.toLower());
+        return out;
+    }();
+    return formats.contains(paths::extension(path).mid(1).toLatin1());
 }
 
 QString Workspace::journalDate(const QString &path) const

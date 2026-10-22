@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QImageReader>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -326,6 +327,37 @@ private Q_SLOTS:
         // Desktop / Android: the editor reads the local file's header itself.
         ws->setDataUrlAssets(false);
         QVERIFY(!ws->assetPixelSize(u"assets/mała łąka.png"_s).isValid());
+    }
+
+    void decodablePictures_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QByteArray>("format"); // what QImageReader has to offer; "" for no picture
+        QTest::newRow("png") << u"assets/żółw.png"_s << QByteArray("png");
+        QTest::newRow("PNG, upper case") << u"assets/ŁĄKA.PNG"_s << QByteArray("png");
+        QTest::newRow("jpg") << u"assets/zdjęcie.jpg"_s << QByteArray("jpg");
+        QTest::newRow("jpeg") << u"zdjęcie.jpeg"_s << QByteArray("jpeg");
+        QTest::newRow("gif") << u"assets/animacja.gif"_s << QByteArray("gif");
+        QTest::newRow("bmp") << u"skan.bmp"_s << QByteArray("bmp");
+        QTest::newRow("svg") << u"assets/plan-mieszkania.svg"_s << QByteArray("svg");
+        QTest::newRow("ico") << u"assets/favicon.ico"_s << QByteArray("ico");
+        QTest::newRow("webp (a plugin: often missing)") << u"assets/łąka.webp"_s << QByteArray("webp");
+        QTest::newRow("avif (not in Qt itself)") << u"assets/łąka.avif"_s << QByteArray("avif");
+        QTest::newRow("a note") << u"notatka.md"_s << QByteArray();
+        QTest::newRow("xpm: Qt decodes it, but it is no attachment picture") << u"ikona.xpm"_s << QByteArray();
+        QTest::newRow("empty") << QString() << QByteArray();
+    }
+    void decodablePictures()
+    {
+        // The picture view names a format this device cannot decode instead of failing to load it.
+        QFETCH(QString, path);
+        QFETCH(QByteArray, format);
+        auto ws = open();
+        const bool expected = !format.isEmpty() && QImageReader::supportedImageFormats().contains(format);
+        QCOMPARE(ws->canDecodePicture(path), expected);
+        // Qt's own decoders (built into QtGui) are always there.
+        if (format == "png" || format == "bmp")
+            QVERIFY(ws->canDecodePicture(path));
     }
 
     void templatesAndJournals()

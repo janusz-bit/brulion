@@ -16,10 +16,10 @@ import Brulion
 //     unlinked mentions with "Połącz"), scrolling with the page;
 //   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz);
 //   * a picture attachment (assets/photo.png) as a picture (ContentPictureView: fitted into the
-//     view, a click — or the size button — its own pixels; "Pokaż jako tekst" in its bar,
-//     "Pokaż obraz" in the page menu and Ctrl+E switch to the alternative view, the file read as
-//     text — the older one, mojibake for a binary picture, kept for text-like assets and the old
-//     habit; its bytes never reach the editor until that view is asked for).
+//     view, a click — or the size button — its own pixels, the notes that embed it below; the
+//     bar's "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E switch to the file read as text and
+//     back — read-only, for text-like assets: a picture's bytes never reach the editor, where a
+//     typed character would have been saved over them; the side panel lists its references).
 // Kept from the first version (and checked by the shell's self-test, objectNames "pageController"
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
@@ -34,6 +34,7 @@ import Brulion
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
 // dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
+// A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (daily notes by their date), `sidePanel` and `editing`. `--editor-script <state>` drives the
@@ -51,17 +52,16 @@ FocusScope {
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
     /// A block (or the source) is being edited, or a picture fills the view: the shell hides
     /// its floating capture button (it would float over the photo).
-    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureShown
+    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     readonly property alias controller: page
     readonly property alias editor: editor
 
     readonly property string routePath: route && route.path ? route.path : ""
-    /// A picture attachment opens as a picture (its bytes are not a note); the file read as
-    /// text — the older view — only when asked for ("Pokaż jako tekst", "Pokaż obraz", Ctrl+E).
+    /// A picture attachment opens as a picture (its bytes are not a note, the editor never loads
+    /// them); the file read as text, read-only, when asked for ("Pokaż jako tekst", Ctrl+E).
     readonly property bool pictureRoute: Workspace.isPicture(root.routePath)
     property bool pictureAsText: false
-    readonly property bool pictureShown: root.pictureRoute && !root.pictureAsText
     property string _revealed: ""
     property string _opened: ""
     property bool _openedMissing: false
@@ -100,16 +100,22 @@ FocusScope {
     function applyRoute() {
         if (root.routePath === "")
             return
-        // A picture's bytes are not a note: the editor stays unloaded while the picture is
-        // shown (page.path "" saves the previous page without loading anything).
-        const target = root.pictureShown ? "" : root.routePath
-        if (page.path !== target) {
+        // A picture's bytes are not a note: the editor stays unloaded (page.path "" saves the
+        // previous page without loading anything); ContentPictureView shows the picture.
+        if (root.pictureRoute) {
+            if (page.path !== "") {
+                root._revealed = ""
+                root._foldsFor = ""
+                page.path = ""
+            }
+            root.openRequested()
+            return
+        }
+        if (page.path !== root.routePath) {
             root._revealed = ""
             root._opened = ""
             root._foldsFor = ""
-            page.path = target // saves the previous page, loads this one
-            if (target === "")
-                return
+            page.path = root.routePath // saves the previous page, loads this one
             root.restoreFolds()
             root.updateStartsWithTitle()
             root._openedMissing = page.loaded && !page.exists
@@ -123,18 +129,20 @@ FocusScope {
         openRequested()
     }
 
-    /// The picture's two views: the picture itself ⇄ the file read as text in the editor.
+    /// The picture's two views: the picture itself ⇄ the file read as text (read-only).
     function showPictureAsText() {
-        if (!root.pictureRoute || root.pictureAsText)
-            return
-        root.pictureAsText = true
-        root.applyRoute() // loads the file's text into the editor
+        if (root.pictureRoute)
+            root.pictureAsText = true
     }
     function showPictureView() {
-        if (!root.pictureRoute || !root.pictureAsText)
-            return
         root.pictureAsText = false
-        root.applyRoute() // page.path = "" unloads the editor
+    }
+    /// Ctrl+E, "Markdown source" and the bar's button on a picture: the other view.
+    function togglePictureText() {
+        if (root.pictureAsText)
+            root.showPictureView()
+        else
+            root.showPictureAsText()
     }
 
     function restoreFolds() {
@@ -167,13 +175,19 @@ FocusScope {
 
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
     function openRequested() {
-        if (!page.loaded || !route || !route.open)
+        if (!route || !route.open || (!root.pictureRoute && !page.loaded))
             return
-        const key = page.path + "\n" + route.open
+        const key = root.routePath + "\n" + route.open
         if (key === root._opened)
             return
         root._opened = key
+        // A picture has no title, menu or editor: its text view, or the side panel's tabs.
+        if (root.pictureRoute && ["text", "links", "outline", "calendar"].indexOf(route.open) < 0)
+            return
         switch (route.open) {
+        case "text":
+            root.showPictureAsText()
+            break
         case "rename":
             editor.later(() => { if (root.pageHeader) root.pageHeader.startTitleEdit() })
             break
@@ -313,8 +327,8 @@ FocusScope {
         id: editor
         objectName: "pageEditor"
         anchors.fill: parent
-        // A picture fills the view instead (its bytes are never loaded while it is shown).
-        visible: !root.pictureShown
+        // A picture fills the view instead (its bytes are never loaded into the editor).
+        visible: !root.pictureRoute
         controller: page
         // Problems the editor reports (a picture that could not be added) as the window's toast.
         onNotice: (text, kind) => AppController.toast(text, kind)
@@ -342,13 +356,17 @@ FocusScope {
         }
     }
 
-    // A picture attachment: the picture itself (the editor behind it holds the alternative
-    // view, the file read as text, and stays unloaded — page.path "" — while this shows).
-    ContentPictureView {
+    // A picture attachment: the picture itself or its text, read-only (the editor behind it
+    // stays unloaded — page.path "" — and hidden). Created for pictures only.
+    Loader {
         anchors.fill: parent
-        visible: root.pictureShown
-        path: root.pictureRoute ? root.routePath : ""
-        onShowTextRequested: root.showPictureAsText()
+        active: root.pictureRoute
+        sourceComponent: ContentPictureView {
+            path: root.routePath
+            asText: root.pictureAsText
+            rendererPalette: editor.rendererPalette
+            onTextToggleRequested: root.togglePictureText()
+        }
     }
 
     // The references live in the editor's scrolling content, right under the blocks (in the
@@ -389,7 +407,7 @@ FocusScope {
             onTriggered: AppController.navigate({ view: "history", path: page.path })
         }
         BMenuItem {
-            text: qsTr("Copy link %1").arg(editor.autoTextSafe(tools.wikiLink(page.path)))
+            text: qsTr("Copy link %1").arg(tools.wikiLink(page.path))
             iconName: "link"
             onTriggered: root.copyLink()
         }
@@ -418,13 +436,6 @@ FocusScope {
             iconName: page.documentMode ? "list" : "file-text"
             enabled: page.loaded
             onTriggered: root.toggleNoteMode()
-        }
-        BMenuItem {
-            visible: root.pictureRoute && root.pictureAsText
-            height: visible ? implicitHeight : 0
-            text: qsTr("Show picture")
-            iconName: "image"
-            onTriggered: root.showPictureView()
         }
         BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
@@ -469,7 +480,8 @@ FocusScope {
     Component {
         id: sidePanelComponent
         ContentSidePanel {
-            path: page.path
+            // A picture's references (the index knows the notes that embed it; nothing loads it).
+            path: root.pictureRoute ? root.routePath : page.path
             controller: page
             editor: editor
         }
@@ -490,9 +502,9 @@ FocusScope {
         target: AppController
         function onUiActionRequested(action) {
             if (action === "toggleSourceMode" && root.visible && !root.inSidePanel) {
-                // A picture shows the picture: Ctrl+E / "Markdown source" opens the file's text.
-                if (root.pictureShown)
-                    root.showPictureAsText()
+                // A picture: Ctrl+E / "Markdown source" switch between the picture and its text.
+                if (root.pictureRoute)
+                    root.togglePictureText()
                 else
                     editor.toggleSourceMode()
             } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel)
@@ -503,7 +515,7 @@ FocusScope {
     Shortcut {
         sequence: "Ctrl+E"
         enabled: root.visible && !root.inSidePanel // one per window (two would be ambiguous)
-        // A picture shows the picture: Ctrl+E opens the file's text (the alternative view).
-        onActivated: root.pictureShown ? root.showPictureAsText() : editor.toggleSourceMode()
+        // A picture: the picture ⇄ its text (read-only).
+        onActivated: root.pictureRoute ? root.togglePictureText() : editor.toggleSourceMode()
     }
 }

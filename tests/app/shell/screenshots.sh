@@ -68,6 +68,11 @@ declare -A shot_args=(
   [page-doc-outline]="--demo --editor-script doc-outline"
   [page-menu]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"menu\"}"
   [page-project]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
+  # A picture attachment: the picture with the notes that embed it, its text (read-only), and
+  # its references in the side panel (wide windows).
+  [page-picture]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\"}"
+  [page-picture-text]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\",\"open\":\"text\"}"
+  [page-picture-links]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\",\"open\":\"links\"}"
   # The document mode on a long Obsidian-like note (tests/app/shell/notemode/, added to the
   # sample notebook): reading, editing a paragraph, a nested list item, a wrapped nested task, the
   # same note switched to an outline, a heading and a numbered item being edited, a selected task, the
@@ -95,7 +100,7 @@ declare -A shot_notemode=(
 )
 all_shots=(onboarding journals page page-editing page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
-  page-menu page-project doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
+  page-menu page-project page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
@@ -129,7 +134,7 @@ for shot in "${shots[@]}"; do
     # The drawer only exists on narrow windows.
     [[ "$shot" == drawer && "$size" == desktop* ]] && continue
     # The side panel only exists on wide windows.
-    [[ "$shot" == page-sidepanel && "$size" == phone* ]] && continue
+    [[ ( "$shot" == page-sidepanel || "$shot" == page-picture-links ) && "$size" == phone* ]] && continue
     for theme in "${themes[@]}"; do
       file="$out/shell-${shot}-${size}-${theme}${suffix}.png"
       home="$(mktemp -d)"

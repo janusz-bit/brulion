@@ -155,7 +155,8 @@ ColumnLayout {
                 delegate: Rectangle {
                     id: side
                     required property var modelData
-                    readonly property bool picture: /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(modelData.path)
+                    // The pictures the app shows as pictures (one list: paths::pictureExtensions()).
+                    readonly property bool picture: Workspace.isPicture(modelData.path)
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1
                     Layout.alignment: Qt.AlignTop

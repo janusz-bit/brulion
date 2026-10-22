@@ -4,6 +4,7 @@
 #include <QTest>
 
 using namespace brulion;
+using namespace Qt::StringLiterals;
 
 class TestPaths : public QObject {
     Q_OBJECT
@@ -29,14 +30,50 @@ private Q_SLOTS:
         QCOMPARE(c->device, QStringLiteral("ABCDEFG"));
         QVERIFY(!paths::parseSyncthingConflict(QStringLiteral("a/Notatka.md")).has_value());
     }
+    void picturePaths_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("picture");
+        QTest::newRow("jpg, upper case") << QStringLiteral("assets/foto.JPG") << true;
+        QTest::newRow("jpeg") << QStringLiteral("assets/zdjęcie z wakacji.jpeg") << true;
+        QTest::newRow("png") << QStringLiteral("assets/żółw.png") << true;
+        QTest::newRow("gif") << QStringLiteral("animacja.gif") << true;
+        QTest::newRow("webp") << QStringLiteral("assets/łąka.WebP") << true;
+        QTest::newRow("svg") << QStringLiteral("assets/plan-mieszkania.svg") << true;
+        QTest::newRow("bmp") << QStringLiteral("skan.bmp") << true;
+        QTest::newRow("avif") << QStringLiteral("zdj.avif") << true;
+        // The HTML export showed .ico files as pictures while the app opened them as text.
+        QTest::newRow("ico") << QStringLiteral("assets/favicon.ico") << true;
+        QTest::newRow("markdown") << QStringLiteral("notatka.md") << false;
+        QTest::newRow("zip") << QStringLiteral("assets/archiwum.zip") << false;
+        QTest::newRow("pdf") << QStringLiteral("assets/umowa.pdf") << false;
+        QTest::newRow("compressed svg") << QStringLiteral("assets/mapa.svgz") << false;
+        QTest::newRow("heic (no decoder in Qt)") << QStringLiteral("IMG_0001.heic") << false;
+        QTest::newRow("a name, not an extension") << QStringLiteral("assets/svg") << false;
+        QTest::newRow("a hidden file") << QStringLiteral("assets/.png") << false;
+        QTest::newRow("picture extension in a folder") << QStringLiteral("zdjęcia.png/opis.md") << false;
+        QTest::newRow("empty") << QString() << false;
+    }
     void picturePaths()
     {
-        QVERIFY(paths::isPicturePath(QStringLiteral("assets/foto.JPG")));
-        QVERIFY(paths::isPicturePath(QStringLiteral("assets/plan-mieszkania.svg")));
-        QVERIFY(paths::isPicturePath(QStringLiteral("zdj.avif")));
-        QVERIFY(!paths::isPicturePath(QStringLiteral("notatka.md")));
-        QVERIFY(!paths::isPicturePath(QStringLiteral("assets/archiwum.zip")));
-        QVERIFY(!paths::isPicturePath(QStringLiteral("assets/svg"))); // a name, not an extension
+        QFETCH(QString, path);
+        QFETCH(bool, picture);
+        QCOMPARE(paths::isPicturePath(path), picture);
+    }
+    void pictureExtensions()
+    {
+        // One list: what isPicturePath accepts is exactly what the file dialogs and the export
+        // name (lower-case, with the dot, no duplicates).
+        const QStringList &ext = paths::pictureExtensions();
+        QVERIFY(ext.size() >= 9);
+        QCOMPARE(QSet<QString>(ext.cbegin(), ext.cend()).size(), ext.size());
+        for (const QString &e : ext) {
+            QVERIFY2(e.startsWith(u'.') && e == e.toLower(), qPrintable(e));
+            QVERIFY2(paths::isPicturePath(u"assets/obraz"_s + e), qPrintable(e));
+            QVERIFY2(paths::isPicturePath(u"assets/OBRAZ"_s + e.toUpper()), qPrintable(e));
+        }
+        QVERIFY(ext.contains(u".ico"_s));
+        QVERIFY(!ext.contains(u".md"_s));
     }
     void uniquePath()
     {
