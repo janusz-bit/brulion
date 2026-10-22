@@ -272,8 +272,25 @@ struct OpenFence {
     qsizetype line = -1;
 };
 
-/// Scans `lines` like the core parser: an opening fence line outside a fence, the first
-/// matching closing line inside one.
+/// The line closing the display formula that `lines[k]` opens, or -1 (the core parser's rule,
+/// SYNTAX §11): a line that is only `$$` runs to the next line that is only `$$` unless a blank
+/// line comes first; the lines between are formula, a fence-like line too.
+qsizetype displayMathEnd(const QList<text::Line> &lines, qsizetype k)
+{
+    if (QStringView(lines[k].text).trimmed() != u"$$")
+        return -1;
+    for (qsizetype j = k + 1; j < lines.size(); ++j) {
+        const QStringView t = lines[j].text;
+        if (std::all_of(t.cbegin(), t.cend(), isSpaceOrTab))
+            return -1;
+        if (t.trimmed() == u"$$")
+            return j;
+    }
+    return -1;
+}
+
+/// Scans `lines` like the core parser: an opening fence line outside a fence (and outside a
+/// display formula), the first matching closing line inside one.
 std::optional<OpenFence> openFenceAtEnd(const QList<text::Line> &lines)
 {
     std::optional<OpenFence> open;
@@ -281,6 +298,8 @@ std::optional<OpenFence> openFenceAtEnd(const QList<text::Line> &lines)
         if (open) {
             if (closingFenceRun(lines[i].text, open->marker) >= open->length)
                 open.reset();
+        } else if (const qsizetype end = displayMathEnd(lines, i); end >= 0) {
+            i = end;
         } else if (const auto o = openingFence(lines[i].text)) {
             open = OpenFence{o->first, o->second, i};
         }

@@ -1314,6 +1314,28 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         verifyReload(item);
     }
 
+    void fenceLikeLineInADisplayFormulaIsNoFence()
+    {
+        // Review regression: a ``` or ~~~ line typed inside a formula between `$$` lines got a
+        // closing fence after the formula, and that one opened a code block running over every
+        // block after it (the line inside the formula is formula, not a fence).
+        const QString content = u"$$\na\nb\n$$\n\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(content);
+        const QString indexed = indexedOf(content);
+        f.page.startEditing(0, 4);
+        f.page.setEditText(0, u"$$\na\n~~~\nb\n$$"_s, 7);
+        QCOMPARE(f.text(), u"$$\na\n~~~\nb\n$$\n\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // In a list item too: the task after it stays a task.
+        Fixture item(u"- Wzór:\n  $$\n  a\n  $$\n- [ ] Zadanie ⏰ 2026-10-22 09:00\n"_s);
+        item.page.startEditing(0, 0);
+        item.page.setEditText(0, u"Wzór:\n$$\na\n```\n$$"_s, 14);
+        QCOMPARE(item.text(), u"- Wzór:\n  $$\n  a\n  ```\n  $$\n- [ ] Zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).tasks.size(), 1);
+        verifyReload(item);
+    }
+
     void fenceTypedInTextBlockIsClosed()
     {
         // ``` typed on a new line of a paragraph (Shift+Enter) opens a fence: its closing fence

@@ -171,7 +171,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
   deleted or changed closing fence is added again at the end of the block. Between them Enter and
   paste work as in a code block: a line break, the pasted text as code (a split would leave half
-  a fence in each block).
+  a fence in each block). A fence-like line inside a display formula between `$$` lines is part
+  of the formula, as in the parser: it opens nothing and gets no closing fence.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";

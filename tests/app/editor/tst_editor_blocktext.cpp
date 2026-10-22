@@ -132,6 +132,13 @@ private Q_SLOTS:
         QTest::newRow("quoted fence") << u"> ```js\n> kod"_s << QString();
         QTest::newRow("backtick in info") << u"``` a`b\nx"_s << QString();
         QTest::newRow("task text") << u"[ ] ```js"_s << QString();
+        // Inside a display formula between `$$` lines a fence-like line is formula (SYNTAX §11).
+        QTest::newRow("in a display formula") << u"$$\na\n~~~\nb\n$$"_s << QString();
+        QTest::newRow("in an item's formula") << u"Wzór:\n$$\n```\n$$\ndalej"_s << QString();
+        QTest::newRow("after a display formula") << u"$$\na\n$$\n```js\nkod"_s << u"```"_s;
+        QTest::newRow("formula not closed") << u"$$\n```\nb"_s << u"```"_s;
+        QTest::newRow("blank line ends the formula") << u"$$\n\n```\n$$"_s << u"```"_s;
+        QTest::newRow("$$ in code") << u"```\n$$\n```\n$$\n```"_s << u"```"_s;
     }
 
     void missingClosingFences()

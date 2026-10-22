@@ -65,8 +65,9 @@ struct Fence {
 std::optional<Fence> parseFence(QStringView body);
 
 /// The closing fence line `body` lacks when it ends inside a fenced code block opened in it
-/// (```` ``` ```` for "Text\n```js\ncode"), found line by line like the core parser does; "" when
-/// every fence in it is closed.
+/// (```` ``` ```` for "Text\n```js\ncode"), found line by line like the core parser does (a
+/// fence-like line inside a display formula between `$$` lines is formula); "" when every fence
+/// in it is closed.
 QString missingClosingFence(QStringView body);
 
 /// The body block `entry` gets when the editor leaves it while it is only an opening fence line
