@@ -120,13 +120,17 @@ QList<FallbackFontReport> installFallbackFonts(FallbackFontPolicy policy, const 
     math.family = MathFamily;
     math.probe = brulionSymbols();
 
-    // The emoji decide (Linux: a system emoji font must keep drawing them). The symbols are not
-    // looked for first: that costs ~15 ms of start-up (fontconfig opens font after font), and a
-    // system with an emoji font has them too.
+    // The emoji decide (Linux: a system emoji font must keep drawing them).
     emoji.checked = true;
     emoji.missingBefore = missingCharacters(emoji.probe, font);
     emoji.missingAfter = emoji.missingBefore;
     if (policy == FallbackFontPolicy::WhenMissing && emoji.missingBefore.isEmpty()) {
+        // The system draws the emoji, but it may still lack ⧉ and the math symbols (DejaVu with
+        // a colour emoji font has none of them). Looking for them first costs ~15 ms of start-up
+        // (Qt opens fallback font after fallback font for a character no font has), so Brulion
+        // Math only becomes an application font (~1 ms): fontconfig's fallback lists include
+        // application fonts, so it draws what no system font has. No fallback families, no pins.
+        math.loaded = load(MathResource, MathFamily);
         reports = {emoji, math};
         return reports;
     }

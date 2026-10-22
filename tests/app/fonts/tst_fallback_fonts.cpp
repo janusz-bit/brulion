@@ -276,14 +276,28 @@ private Q_SLOTS:
     }
 
     /// The Linux policy: both fonts exactly when the system's fonts draw some of Brulion's emoji
-    /// as boxes (a colour emoji font keeps drawing them), and then nothing stays a box. Its own
-    /// ctest entries (…_when_missing): fonts are installed once per process.
+    /// as boxes (a colour emoji font keeps drawing them), otherwise Brulion Math only as an
+    /// application font for fontconfig's fallbacks; either way nothing stays a box, symbols
+    /// included, and every font Brulion asks for stays what it was. Its own ctest entries
+    /// (…_when_missing): fonts are installed once per process.
     void installWhenMissing()
     {
         if (!QCoreApplication::arguments().contains(u"installWhenMissing"_s))
             QSKIP("runs alone (ctest tst_fallback_fonts_when_missing): fonts are installed once per process");
         if (!hasFonts())
             QSKIP("no fonts on this system");
+        // DejaVu and an emoji font (ctest …_system_emoji_when_missing): the emoji draw, the
+        // symbols are boxes.
+        const bool systemEmoji = qEnvironmentVariableIntValue("BRULION_TEST_SYSTEM_EMOJI") == 1;
+        if (systemEmoji) {
+            QCOMPARE(brulion::ui::missingCharacters(brulionEmoji(), QGuiApplication::font()), QString());
+            QCOMPARE(brulion::ui::missingCharacters(brulionSymbols(), QGuiApplication::font()), brulionSymbols());
+        }
+        QHash<QString, QString> before;
+        for (const auto &[name, font] : requestedFonts())
+            before.insert(name, QFontInfo(font).family());
+        const QString defaultFamily = QFontInfo(QGuiApplication::font()).family();
+
         QElapsedTimer timer;
         timer.start();
         const QList<FallbackFontReport> reports =
@@ -291,9 +305,10 @@ private Q_SLOTS:
         qInfo("check and install: %lld ms", static_cast<long long>(timer.elapsed()));
         QCOMPARE(reports.size(), 2);
         for (const FallbackFontReport &report : reports) {
-            qInfo("%s: checked %d, boxes before \"%s\", installed %d, boxes after \"%s\"", qPrintable(report.family),
-                  report.checked, qPrintable(report.missingBefore), report.installed, qPrintable(report.missingAfter));
-            QCOMPARE(report.loaded, report.installed);
+            qInfo("%s: checked %d, boxes before \"%s\", loaded %d, installed %d, boxes after \"%s\"",
+                  qPrintable(report.family), report.checked, qPrintable(report.missingBefore), report.loaded,
+                  report.installed, qPrintable(report.missingAfter));
+            QVERIFY(report.loaded || !report.installed);
             QVERIFY2(report.missingAfter.isEmpty(), qPrintable(report.missingAfter));
             QCOMPARE(QFontDatabase::applicationFallbackFontFamilies(QChar::Script_Common).contains(report.family),
                      report.installed);
@@ -305,16 +320,28 @@ private Q_SLOTS:
         QCOMPARE(emoji.family, u"Brulion Emoji"_s);
         QCOMPARE(math.family, u"Brulion Math"_s);
         QVERIFY(emoji.checked);
-        QVERIFY(!math.checked); // not looked for first: a system with emoji fonts has them
+        QVERIFY(!math.checked); // not looked for first: that costs start-up time
         QCOMPARE(emoji.installed, !emoji.missingBefore.isEmpty());
+        QCOMPARE(emoji.loaded, emoji.installed);
         QCOMPARE(math.installed, emoji.installed);
+        QVERIFY(math.loaded); // a fallback family with the emoji font, else for fontconfig's fallbacks
         if (browserFonts())
             QVERIFY(emoji.installed);
+        if (systemEmoji)
+            QVERIFY(!emoji.installed);
         QCOMPARE(QFontDatabase::applicationEmojiFontFamilies().contains(emoji.family), emoji.installed);
         QCOMPARE(brulion::ui::missingCharacters(brulionEmoji(), QGuiApplication::font()), QString());
-        if (emoji.installed)
-            QCOMPARE(brulion::ui::missingCharacters(brulionSymbols(), QGuiApplication::font()), QString());
+        QCOMPARE(brulion::ui::missingCharacters(brulionSymbols(), QGuiApplication::font()), QString());
         QVERIFY(fallbackFontsJson(reports).value(u"ok"_s).toBool());
+        // No font Brulion asks for becomes one of ours (with the fallback families an unknown
+        // family gets the default one).
+        for (const auto &[name, font] : requestedFonts()) {
+            const QString family = QFontInfo(font).family();
+            const QString expected = emoji.installed && name == u"unknown"_s ? defaultFamily : before.value(name);
+            QVERIFY2(family != math.family && (systemEmoji || family != emoji.family),
+                     qPrintable(name + u" got "_s + family));
+            QCOMPARE(family, expected);
+        }
     }
 
     /// The browser's policy: both fonts, as fallbacks of Common/Latin text behind the default

@@ -182,8 +182,10 @@ int main(int argc, char *argv[])
                     << u"Fallback font %1 installed: the system fonts drew %2 as boxes"_s.arg(font.family,
                                                                                               font.missingBefore);
         else
-            qCDebug(brulion::logging::lcApp).noquote()
-                    << u"Fallback font %1 %2"_s.arg(font.family, font.installed ? u"installed"_s : u"not needed"_s);
+            qCDebug(brulion::logging::lcApp).noquote() << u"Fallback font %1 %2"_s.arg(
+                    font.family, font.installed ? u"installed"_s
+                                 : font.loaded  ? u"available to the system's fallbacks"_s
+                                                : u"not needed"_s);
     }
 #endif
 

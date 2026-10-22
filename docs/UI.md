@@ -625,10 +625,13 @@ Policies:
 * **Linux** (packages, AppImage): both only when the system's fonts draw some of
   `brulionEmoji()` as boxes (`WhenMissing`: one `QTextLayout` of the probe, ~11 ms cold on the
   reference laptop, most of it loading the system emoji font that the first emoji would load
-  anyway); otherwise nothing changes, and a colour emoji font of the system (Noto Color Emoji,
-  Twemoji…) keeps drawing the emoji. An AppImage on a system without an emoji font thus gets
-  monochrome emoji instead of boxes. The symbols are not looked for first (that costs ~15 ms of
-  fontconfig searching): a system with an emoji font has them too.
+  anyway); otherwise a colour emoji font of the system (Noto Color Emoji, Twemoji…) keeps
+  drawing the emoji, and only Brulion Math becomes an application font (~1 ms, no fallback
+  families, no pins): fontconfig's fallback lists include application fonts, so it draws ⧉ and
+  the math symbols where no system font has them (DejaVu with a colour emoji font has none). The
+  symbols are not looked for first: a character no font has costs ~15 ms of start-up (Qt opens
+  fallback font after fallback font). An AppImage on a system without an emoji font thus gets
+  monochrome emoji instead of boxes.
 * **Android**: none — it always has Noto Color Emoji; its build leaves the fonts out.
 
 The event log notes a font that fixed boxes ("Fallback font Brulion Emoji installed: the system
@@ -641,7 +644,8 @@ with a skin tone is one glyph without a box; in the browser every script gets th
 `tst_fallback_fonts_when_missing` — the Linux policy; `tst_fallback_fonts_browser_fonts` and
 `…_browser_fonts_when_missing` — the same with a fontconfig that knows only DejaVu Sans and
 DejaVu Sans Mono, the browser's fonts (there the emoji are boxes first, and lines with emoji keep
-their height). In the browser: `scripts/wasm-smoke.mjs --glyphs` (`?selftest=glyphs`,
+their height); `…_system_emoji_when_missing` — DejaVu and an emoji font: the emoji stay the
+system's, the symbols are boxes first and drawn by Brulion Math afterwards. In the browser: `scripts/wasm-smoke.mjs --glyphs` (`?selftest=glyphs`,
 docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, re-run
 `scripts/fallback-fonts.py` (it takes every emoji of `src/` by itself), commit `assets/fonts/`.
 

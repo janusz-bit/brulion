@@ -100,7 +100,8 @@ talk to the tray and the settings.
 
 `main.cpp` creates the `QApplication` (desktop: tray) / `QGuiApplication`, the translator,
 the fallback fonts for emoji and symbols (`installFallbackFonts()`: always in the browser, whose
-Qt has only DejaVu Sans/Mono; on Linux only without a system emoji font; never on Android —
+Qt has only DejaVu Sans/Mono; on Linux only without a system emoji font, else just the symbol
+font for fontconfig's fallbacks; never on Android —
 docs/UI.md "Emoji and symbol fonts"), `DevTools` and `AppController`, then loads `Main.qml` (or
 a dev tool window). Each area is a
 directory with an `area.cmake` (included by `src/app/CMakeLists.txt`) and, for its C++, a static
