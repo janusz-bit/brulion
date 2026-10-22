@@ -1259,6 +1259,90 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(open.count(), 3);
     }
 
+    void loneFenceClosedWhenLeft()
+    {
+        // "```js" typed in a block without Enter stays text while the block has the caret (the
+        // language can still be typed), but the saved file never leaves it open: on reload the
+        // code would run on over the blocks after it (the task and its reminder would be lost).
+        // Leaving the block gives it its closing fence: an empty code block.
+        const QString task = u"- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(u"Akapit\n\n"_s + task);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"```js"_s, 5);
+        QCOMPARE(f.edit(0), u"```js"_s);
+        QCOMPARE(f.role(0, "view").toString(), u"text"_s);
+        f.page.setEditText(0, u"```json"_s, 7);
+        QCOMPARE(f.edit(0), u"```json"_s);
+        QCOMPARE(f.text(), u"```json\n\n"_s + task);
+        // Saved while it is edited (save timer, the app going to the background): closed.
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"```json\n```\n\n"_s + task);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+        // The caret moves on: the block itself gets the closing fence.
+        f.page.startEditing(1, 0);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task);
+        verifyReload(f);
+        // One undo step with the typing: the text before it, with the caret there (a snapshot with
+        // the lone fence line would be read as code over the task); redo gives the closed fence.
+        f.page.undo();
+        QCOMPARE(f.text(), u"Akapit\n\n"_s + task);
+        QCOMPARE(f.page.editingRow(), 0);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+        f.page.redo();
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+
+        // A list item: its children would become code. Editing stopped (Escape, a click
+        // outside) closes it too, with the children kept.
+        Fixture item(u"- a\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.startEditing(0, 1);
+        item.page.setEditText(0, u"```py"_s, 5);
+        QVERIFY(item.page.save());
+        QCOMPARE(item.host.file(Page), u"- ```py\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.stopEditing();
+        QCOMPARE(item.text(), u"- ```py\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+
+        // Followed by a sibling only: nothing runs on, the file keeps the line while it is edited;
+        // leaving the edited block still closes it.
+        Fixture sibling(u"- a\n- b ⏰ 2026-10-22 09:00\n"_s);
+        sibling.page.startEditing(0, 1);
+        sibling.page.setEditText(0, u"~~~"_s, 3);
+        QVERIFY(sibling.page.save());
+        QCOMPARE(sibling.host.file(Page), u"- ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
+        sibling.page.startEditing(1, 0);
+        QCOMPARE(sibling.text(), u"- ~~~\n  ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
+        verifyReload(sibling);
+
+        // At the end of the page: typed and left, it is closed; a fence line that came with the
+        // file and was only looked at stays as it is.
+        Fixture last(u"Akapit\n"_s);
+        last.page.startEditing(0, 6);
+        last.page.setEditText(0, u"```"_s, 3);
+        last.page.stopEditing();
+        QCOMPARE(last.text(), u"```\n```\n"_s);
+        verifyReload(last);
+        Fixture file(u"Akapit\n\n```js\n"_s);
+        file.page.startEditing(1, 2);
+        file.page.startEditing(0, 0);
+        file.page.stopEditing();
+        QCOMPARE(file.text(), u"Akapit\n\n```js\n"_s);
+        QVERIFY(file.page.save());
+        QCOMPARE(file.host.file(Page), u"Akapit\n\n```js\n"_s);
+
+        // A task's text that starts with a fence is no fence.
+        Fixture taskText(u"- [ ] a\n- b\n"_s);
+        taskText.page.startEditing(0, 1);
+        taskText.page.setEditText(0, u"```js"_s, 5);
+        taskText.page.startEditing(1, 0);
+        QCOMPARE(taskText.text(), u"- [ ] ```js\n- b\n"_s);
+    }
+
     void mergeKeepsClosingFenceOnItsLine()
     {
         // Backspace at the start of the block after code written in a text block: the text goes on

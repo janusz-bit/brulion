@@ -296,6 +296,24 @@ QString missingClosingFence(QStringView body)
     return open ? QString(open->length, open->marker) : QString();
 }
 
+QString loneFenceClosed(const markdown::BlockEntry &e)
+{
+    if ((e.kind != BlockKind::Code && e.kind != BlockKind::ListItem) || e.body.contains(u'\n')
+        || e.body.contains(u'\r'))
+        return {};
+    const auto fence = parseFence(e.body);
+    if (!fence || fence->closed)
+        return {};
+    return e.body + u'\n' + QString(fence->length, fence->marker);
+}
+
+bool loneFenceRunsOn(const markdown::BlockDocument &doc, int row)
+{
+    if (row < 0 || row + 1 >= doc.count())
+        return false;
+    return doc.at(row).kind != BlockKind::ListItem || doc.hasChildren(row);
+}
+
 namespace {
 
 /// A fence line rewritten to `length` markers, keeping its indentation and info string.

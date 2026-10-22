@@ -69,6 +69,17 @@ std::optional<Fence> parseFence(QStringView body);
 /// every fence in it is closed.
 QString missingClosingFence(QStringView body);
 
+/// The body block `entry` gets when the editor leaves it while it is only an opening fence line
+/// ("```js" typed without Enter, shown as text while it is edited): that line and its closing
+/// fence, so the saved page never runs the code on into the blocks after it. "" for any other
+/// block (a closed or multi-line fence, a task's text "[ ] ```js", a quote).
+QString loneFenceClosed(const markdown::BlockEntry &entry);
+
+/// Whether the lone opening fence of block `row` of `doc` (loneFenceClosed()) would take the
+/// blocks after it into its code when the file is read again: everything after a top-level
+/// block, the children of a list item (a sibling or a block after the list ends its fence).
+bool loneFenceRunsOn(const markdown::BlockDocument &doc, int row);
+
 /// How a block is shown and which part of its body is edited inline.
 struct BlockShape {
     BlockView view = BlockView::Text;

@@ -159,7 +159,11 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   item, fenced text pasted without its closing line) gets its closing fence at the end of the
   block, so the code never runs on into the following blocks in the saved file; only a lone
   opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
-  it a code block. The two lines then act as a pair: a longer opening fence lengthens the closing
+  it a code block. Such a line is saved closed while it is typed when it would take the blocks
+  after it into its code (any block after a paragraph, a list item's children), and leaving the
+  block (another block gets the caret, editing stops) closes it — an empty code block, one undo
+  step; a lone fence line that came with the file and was only looked at stays as it is. The two
+  lines then act as a pair: a longer opening fence lengthens the closing
   one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
   deleted or changed closing fence is added again at the end of the block. Between them Enter and
   paste work as in a code block: a line break, the pasted text as code (a split would leave half

@@ -30,6 +30,7 @@
 #include <QImage>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QSysInfo>
 #include <QUndoCommand>
 #include <QUndoStack>
@@ -505,7 +506,7 @@ bool PageController::save()
         return false; // never overwrite the other version before the conflict is resolved
     if (!m_dirty)
         return true;
-    const QString content = m_sourceMode ? m_sourceText : text();
+    const QString content = m_sourceMode ? m_sourceText : textToSave();
     if (!m_exists) {
         // A new page: an empty page or a lone empty bullet is no reason to create a file.
         static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
@@ -552,6 +553,58 @@ void PageController::followRename(const QString &oldPath, const QString &newPath
         m_saveTimer.start();
 }
 
+QString PageController::textToSave() const
+{
+    const BlockDocument &doc = m_model->document();
+    std::optional<BlockDocument> closed;
+    for (int i = 0; i + 1 < doc.count(); ++i) {
+        const QString body = loneFenceClosed(doc.at(i));
+        if (body.isEmpty() || !loneFenceRunsOn(doc, i))
+            continue;
+        if (!closed)
+            closed = doc;
+        closed->setBody(i, body);
+    }
+    return closed ? closed->toString() : text();
+}
+
+void PageController::closeLoneFence(quint64 uid)
+{
+    if (m_undoing || m_sourceMode || !uid)
+        return;
+    const int row = m_model->rowOfUid(uid);
+    if (!validRow(row))
+        return;
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    const QString body = loneFenceClosed(entry);
+    if (body.isEmpty())
+        return;
+    // A fence line that came with the file and was only looked at stays as it is (at the end of
+    // the page it runs on over nothing).
+    const bool edited = m_focusedUid != uid || m_focusedBody != entry.body;
+    if (!edited && !loneFenceRunsOn(m_model->document(), row))
+        return;
+    if (inCommand()) { // part of the enclosing undo step
+        applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+        return;
+    }
+    // The fence was typed: one undo step with the typing. Undo restores the text as it was before
+    // (a snapshot with the lone fence line would be read again as code running on over the blocks
+    // after it), redo the closed fence.
+    const bool continueTyping =
+            m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo() && !m_undo->canRedo();
+    const QString before = text();
+    const Focus focusBefore = currentFocus();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (!r.changed())
+        return;
+    auto *cmd = new EditCommand(this, before, text(), focusBefore, Focus{-1, -1}, uid);
+    cmd->setMergeable(continueTyping);
+    m_undo->push(cmd);
+    m_typingOpen = false;
+    markDirty();
+}
+
 void PageController::markDirty()
 {
     const QString current = m_sourceMode ? m_sourceText : text();
@@ -595,7 +648,7 @@ void PageController::writeConflictCopy()
 {
     if (!m_host || m_path.isEmpty() || !m_conflict)
         return;
-    const QString local = m_sourceMode ? m_sourceText : text();
+    const QString local = m_sourceMode ? m_sourceText : textToSave();
     // One copy per conflict, rewritten when the local text changed (suspend, quit, close).
     if (!m_conflictCopyPath.isEmpty() && local == m_conflictCopyText)
         return;
@@ -781,6 +834,7 @@ EditResult PageController::applyOp(const std::function<EditResult(BlockDocument 
 
 void PageController::restore(const QString &snapshot, const Focus &focus)
 {
+    const QScopedValueRollback undoing(m_undoing, true);
     m_restoring = true;
     m_typingOpen = false;
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot);
@@ -810,16 +864,26 @@ PageController::Focus PageController::focusFromResult(const EditResult &r, int f
     return f;
 }
 
-void PageController::setFocus(const Focus &focus, bool resetText)
+void PageController::setFocus(const Focus &target, bool resetText)
 {
-    if (!validRow(focus.row)) {
+    if (!validRow(target.row)) {
         stopEditing();
         return;
     }
-    const quint64 uid = m_model->uidAt(focus.row);
+    const quint64 uid = m_model->uidAt(target.row);
     const bool rowChanged = uid != m_editingUid;
-    if (rowChanged)
+    Focus focus = target;
+    if (rowChanged && m_editingUid) {
+        closeLoneFence(m_editingUid);
+        focus.row = m_model->rowOfUid(uid); // the same row: only that block's body changed
+        if (!validRow(focus.row))
+            return;
+    }
+    if (rowChanged) {
         m_typingOpen = false;
+        m_focusedUid = uid;
+        m_focusedBody = m_model->document().at(focus.row).body;
+    }
     m_editingUid = uid;
     const int len = int(m_model->editTextAt(focus.row).size());
     m_cursor = focus.cursor < 0 ? len : snapToCharacter(m_model->editTextAt(focus.row), focus.cursor);
@@ -1022,6 +1086,9 @@ void PageController::stopEditing()
 {
     if (!m_editingUid)
         return;
+    closeLoneFence(m_editingUid);
+    if (!m_editingUid)
+        return; // closing it stopped editing already
     m_editingUid = 0;
     m_typingOpen = false;
     m_model->setEditingUid(0);
