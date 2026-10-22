@@ -7,6 +7,7 @@
 #include "index/textutil_p.h"
 #include "index/unlinked_p.h"
 #include "markdown/parse.h"
+#include "markdown/properties.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -69,6 +70,106 @@ std::optional<Excerpt> findExcerpt(const QString &content, const QStringList &te
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------------------------
+// Tags as page links (SYNTAX §3)
+// ---------------------------------------------------------------------------------------------
+
+namespace index_detail {
+
+QString tagName(const QString &tag)
+{
+    QString t = tag.trimmed();
+    if (t.startsWith(u'#'))
+        t.remove(0, 1);
+    if (t.startsWith(u"[["_s) && t.endsWith(u"]]"_s) && t.size() >= 4)
+        t = t.sliced(2, t.size() - 4);
+    t = t.trimmed();
+    while (t.endsWith(u'/'))
+        t.chop(1);
+    return nfc(t.trimmed());
+}
+
+QStringList pageLevelTags(const ParsedNote &note)
+{
+    // Frontmatter `tags`, the leading `tags::` block, and tags not found in any ordinary block.
+    QSet<QString> inBlocks;
+    QSet<QString> inFront;
+    for (const Block &b : note.blocks) {
+        for (const QString &t : b.tags)
+            (b.kind == BlockKind::Frontmatter ? inFront : inBlocks).insert(t);
+    }
+    QSet<QString> fm;
+    const QVariant fmTags = markdown::frontmatterGet(note.frontmatter, {u"tags"_s, u"tag"_s});
+    for (QString name : markdown::namesFrom(fmTags, true)) {
+        name = name.trimmed();
+        if (name.startsWith(u'#'))
+            name.remove(0, 1);
+        fm.insert(nfc(name).toLower());
+    }
+    QStringList out;
+    for (const QString &t : note.tags) {
+        if (inFront.contains(t) || fm.contains(t) || !inBlocks.contains(t))
+            out.append(t);
+    }
+    return out;
+}
+
+QStringList IndexAccess::tagKeysNaming(const VaultIndex &index, const VaultPath &path)
+{
+    return index.d->tagKeysFor(path);
+}
+
+} // namespace index_detail
+
+VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
+{
+    const QString name = tagName(tag);
+    if (name.isEmpty())
+        return {};
+    // Like [[name]] written at the vault root: one tag names one page wherever it is written.
+    const VaultPath hit = names.resolve(name, {}, TargetForm::Parsed);
+    return entry(hit) ? hit : VaultPath();
+}
+
+const TagTargets &VaultIndex::Private::tagTargets()
+{
+    if (!cache.tagTargets) {
+        TagTargets t;
+        for (auto it = tagIndex.cbegin(); it != tagIndex.cend(); ++it) {
+            const VaultPath page = resolveTagPath(it.key());
+            if (page.isEmpty())
+                continue;
+            t.byTag.insert(it.key(), page);
+            t.byPage[page].append(it.key());
+        }
+        for (QStringList &keys : t.byPage)
+            std::sort(keys.begin(), keys.end());
+        cache.tagTargets = std::move(t);
+    }
+    return *cache.tagTargets;
+}
+
+QStringList VaultIndex::Private::tagKeysFor(const VaultPath &path)
+{
+    if (path.isEmpty() || attachmentSet.contains(path))
+        return {};
+    const TagTargets &targets = tagTargets();
+    if (entry(path))
+        return targets.byPage.value(path);
+    // A page that does not exist yet: the unresolved tags that would name it once written.
+    const QString key = pathKey(paths::stripMarkdownExtension(paths::normalize(path)));
+    if (key.isEmpty())
+        return {};
+    QStringList out;
+    for (auto it = tagIndex.cbegin(); it != tagIndex.cend(); ++it) {
+        const QString &tag = it.key();
+        if (!targets.byTag.contains(tag) && (key == tag || key.endsWith(u'/' + tag)))
+            out.append(tag);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Notes
@@ -148,6 +249,29 @@ QList<Backlink> VaultIndex::backlinks(const VaultPath &path) const
         const Link *link;
     };
     QList<Found> found;
+    if (!d->entry(path) && !d->attachmentSet.contains(path) && !path.isEmpty()) {
+        // A page that does not exist yet: the links that would resolve to it.
+        const QString nameKey = noteNameKey(path);
+        const QString key = pathKey(paths::stripMarkdownExtension(paths::normalize(path)));
+        if (const auto un = d->unresolved.constFind(nameKey); un != d->unresolved.constEnd()) {
+            for (auto it = un->cbegin(); it != un->cend(); ++it) {
+                const Private::Entry *src = d->entry(it.key());
+                if (!src)
+                    continue;
+                for (const PathLink &l : src->links) {
+                    if (!l.target.isEmpty() || l.key != nameKey)
+                        continue;
+                    const QString &target = src->note.links[l.link].target;
+                    if (!isPageTarget(target, TargetForm::Parsed))
+                        continue;
+                    const QString written = pathKey(
+                            paths::stripMarkdownExtension(paths::normalize(cleanTarget(target, TargetForm::Parsed))));
+                    if (written == key || key.endsWith(u'/' + written))
+                        found.append(Found{src, &src->note.links[l.link]});
+                }
+            }
+        }
+    }
     if (const auto in = d->incoming.constFind(path); in != d->incoming.constEnd()) {
         for (auto it = in->cbegin(); it != in->cend(); ++it) {
             if (it.key() == path)
@@ -330,6 +454,73 @@ QList<TagCount> VaultIndex::tags() const
         return compareNames(a.tag, b.tag) < 0;
     });
     d->cache.tags = out;
+    return out;
+}
+
+std::optional<VaultPath> VaultIndex::resolveTag(const QString &tag) const
+{
+    const VaultPath page = d->resolveTagPath(tag);
+    if (page.isEmpty())
+        return std::nullopt;
+    return page;
+}
+
+QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
+{
+    struct Found {
+        const Private::Entry *entry;
+        int block;
+        QString tag;
+    };
+    QList<Found> found;
+    QHash<const Private::Entry *, QStringList> pageLevel;
+    for (const QString &key : d->tagKeysFor(path)) {
+        const auto notes = d->tagIndex.constFind(key);
+        if (notes == d->tagIndex.constEnd())
+            continue;
+        for (auto it = notes->cbegin(); it != notes->cend(); ++it) {
+            const Private::Entry *e = it.key() == path ? nullptr : d->entry(it.key());
+            if (!e)
+                continue;
+            auto level = pageLevel.find(e);
+            if (level == pageLevel.end())
+                level = pageLevel.insert(e, pageLevelTags(e->note));
+            if (level->contains(key))
+                found.append(Found{e, -1, key});
+            const QList<Block> &blocks = e->note.blocks;
+            for (qsizetype i = 0; i < blocks.size(); ++i) {
+                if (blocks[i].kind != BlockKind::Frontmatter && blocks[i].tags.contains(key))
+                    found.append(Found{e, int(i), key});
+            }
+        }
+    }
+    std::stable_sort(found.begin(), found.end(), [](const Found &a, const Found &b) {
+        if (a.entry != b.entry)
+            return relevanceLess(*a.entry, *b.entry);
+        return a.block < b.block;
+    });
+    QList<TagReference> out;
+    out.reserve(found.size());
+    for (const Found &f : std::as_const(found)) {
+        if (!out.isEmpty() && out.last().path == f.entry->path && out.last().blockIndex == f.block)
+            continue; // one entry per block (or page), whichever tags name the page
+        out.append(TagReference{f.entry->path, f.block, f.tag});
+    }
+    return out;
+}
+
+QList<VaultPath> VaultIndex::tagsTo(const VaultPath &path) const
+{
+    QSet<VaultPath> files;
+    for (const QString &key : d->tagKeysFor(path)) {
+        const auto notes = d->tagIndex.constFind(key);
+        if (notes == d->tagIndex.constEnd())
+            continue;
+        for (auto it = notes->cbegin(); it != notes->cend(); ++it)
+            files.insert(it.key());
+    }
+    QList<VaultPath> out(files.cbegin(), files.cend());
+    std::sort(out.begin(), out.end());
     return out;
 }
 
@@ -583,6 +774,7 @@ GraphData VaultIndex::graph(bool includeTags, bool includeMissing) const
         ++out.nodes[nodeIndex.value(target)].degree;
     };
     const QList<const Private::Entry *> &sorted = d->sortedEntries();
+    const TagTargets &tagTargets = d->tagTargets();
     for (const Private::Entry *e : sorted)
         addNode(GraphNode{e->path, e->note.title, 0, false, false});
     for (const Private::Entry *e : sorted) {
@@ -610,13 +802,18 @@ GraphData VaultIndex::graph(bool includeTags, bool includeMissing) const
             if (!owner.isEmpty())
                 addEdge(e->path, owner);
         }
-        if (includeTags) {
-            for (const QString &t : e->note.tags) {
-                const QString id = u"#"_s + t;
-                if (!nodeIndex.contains(id))
-                    addNode(GraphNode{id, id, 0, true, false});
-                addEdge(e->path, id);
+        // A tag that names a note is a link to it; the others are "#tag" nodes on request.
+        for (const QString &t : e->note.tags) {
+            if (const auto page = tagTargets.byTag.constFind(t); page != tagTargets.byTag.constEnd()) {
+                addEdge(e->path, *page);
+                continue;
             }
+            if (!includeTags)
+                continue;
+            const QString id = u"#"_s + t;
+            if (!nodeIndex.contains(id))
+                addNode(GraphNode{id, id, 0, true, false});
+            addEdge(e->path, id);
         }
     }
     return out;

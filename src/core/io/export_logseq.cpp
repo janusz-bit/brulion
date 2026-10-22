@@ -4,6 +4,7 @@
 // block ids `id::` UUIDs (deterministic) with references rewritten, embeds {{embed …}},
 // frontmatter page properties.
 #include "dates/recurrence.h"
+#include "index/vaultindex.h"
 #include "io/exporters_p.h"
 #include "io/exportutil_p.h"
 #include "io/importutil_p.h"
@@ -11,6 +12,7 @@
 #include "io/logseq_p.h"
 #include "io/messages_p.h"
 #include "markdown/inline.h"
+#include "markdown/parse.h"
 #include "markdown/tasks.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
@@ -292,7 +294,7 @@ private:
             else
                 emitLoose(b, lines, 0, out);
         }
-        return rewriteLinks(ctx, note, out.join(u'\n')) + u'\n';
+        return rewriteTags(ctx, rewriteLinks(ctx, note, out.join(u'\n'))) + u'\n';
     }
 
     static void pageProperties(const ParsedNote &parsed, const QList<text::Line> &lines, QStringList &out)
@@ -433,6 +435,40 @@ private:
             out.append(source[k].trimmed().isEmpty() ? QString() : cont + dedent(source[k], common));
         if (!id.isEmpty() && idAfter)
             out.append(cont + u"id:: "_s + logseqUuid(id));
+    }
+
+    /// A tag names a page (SYNTAX §3): when Logseq knows that page under another name (a page in a
+    /// folder is the namespace "Projekty/Dom"), the tag says it — `#[[Projekty/Dom]]`, a
+    /// `tags::` item `[[Projekty/Dom]]`. Aliases stay (Logseq resolves the exported `alias::`).
+    static QString rewriteTags(const Context &ctx, const QString &text)
+    {
+        const ExportVault &vault = ctx.vault;
+        QString out;
+        qsizetype last = 0;
+        for (const markdown::NoteTag &t : markdown::findNoteTags(text)) {
+            if (t.from < last || t.form == markdown::TagForm::Frontmatter)
+                continue;
+            const auto page = vault.index().resolveTag(t.name);
+            const ExportVault::Note *target = page ? vault.note(*page) : nullptr;
+            if (!target || !target->parsed)
+                continue;
+            const QString key = t.name.toLower();
+            const bool alias = std::any_of(target->parsed->aliases.cbegin(), target->parsed->aliases.cend(),
+                                           [&](const QString &a) {
+                                               return a.normalized(QString::NormalizationForm_C).toLower() == key;
+                                           });
+            const QString name = pageName(vault, *page);
+            if (alias || name.compare(t.name, Qt::CaseInsensitive) == 0 || markdown::tagSyntax(name).isEmpty())
+                continue;
+            const bool property = t.form == markdown::TagForm::Property;
+            out += QStringView(text).sliced(last, t.from - last);
+            out += (property ? u"[["_s : u"#[["_s) + name + u"]]"_s;
+            last = t.to;
+        }
+        if (last == 0)
+            return text;
+        out += QStringView(text).sliced(last);
+        return out;
     }
 
     static QString rewriteLinks(const Context &ctx, const ExportVault::Note &note, const QString &text)

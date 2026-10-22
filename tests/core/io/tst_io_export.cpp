@@ -237,8 +237,10 @@ private Q_SLOTS:
                               root + u"pages/Bezpieczeństwo.md"_s, root + u"pages/Projekty___Dom.md"_s,
                               root + u"pages/Zakupy.md"_s}));
         const QString dom = textOf(entries, root + u"pages/Projekty___Dom.md"_s);
+        // #dom names this page, which Logseq knows as the namespace page "Projekty/Dom"; the
+        // alias Remont stays (Logseq resolves alias:: itself).
         const QString expected = u"alias:: Remont\n"
-                                 "tags:: dom, remont\n"
+                                 "tags:: [[Projekty/Dom]], remont\n"
                                  "\n"
                                  "- # Dom\n"
                                  "- Plan remontu\n"
@@ -282,6 +284,21 @@ private Q_SLOTS:
         const QString edn = textOf(entries, root + u"logseq/config.edn"_s);
         QVERIFY(edn.contains(u":journal/page-title-format \"yyyy-MM-dd\""_s));
         QVERIFY(edn.contains(u":file/name-format :triple-lowbar"_s));
+    }
+
+    // A tag names a page (SYNTAX §3): when Logseq knows that page under another name, the tag
+    // says it.
+    void logseqTagsNamePages()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Projekty/Dom.md"_s, u"- x"_s), iotest::text(u"Zakupy.md"_s, u"- y"_s),
+                    iotest::text(u"Ludzie/Jan Kowalski.md"_s, u"---\naliases: [Janek]\n---\n- z"_s),
+                    iotest::text(u"Notatki.md"_s, u"- #dom, #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, "
+                                                   "#dom/kuchnia\n  tags:: dom, praca\n"_s)};
+        const QString page = textOf(readZip(exportWith(u"logseq-zip"_s, in).data), u"Brulion/pages/Notatki.md"_s);
+        QVERIFY2(page.contains(u"- #[[Projekty/Dom]], #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, #dom/kuchnia\n"_s),
+                 qPrintable(page));
+        QVERIFY2(page.contains(u"tags:: [[Projekty/Dom]], praca\n"_s), qPrintable(page));
     }
 
     void logseqKeepsWhatLogseqCannotSay()
@@ -380,8 +397,10 @@ private Q_SLOTS:
             QVERIFY2(paths.contains(root + p), qPrintable(p));
         const QString dom = textOf(entries, root + u"Projekty/Dom.html"_s);
         QVERIFY(dom.contains(u"<h1 class=\"title\">Dom</h1>"_s));
+        // #zakupy names the page Zakupy (SYNTAX §3): the tag leads there.
         QVERIFY(dom.contains(u"<li class=\"task todo\" id=\"block-farba\"><input type=\"checkbox\" disabled> Kup farbę "
-                             "<a class=\"tag\" href=\"../tags/zakupy.html\">#zakupy</a>"_s));
+                             "<a class=\"tag\" href=\"../Zakupy.html\">#zakupy</a>"_s));
+        QVERIFY(dom.contains(u"<p class=\"tags\"><a class=\"tag\" href=\"Dom.html\">#dom</a>"_s));
         QVERIFY(dom.contains(u"<span class=\"chip due\">📅 2026-10-20</span>"_s));
         QVERIFY(dom.contains(u"<li class=\"task done\"><input type=\"checkbox\" disabled checked> Zmierz ściany"_s));
         QVERIFY(dom.contains(u"<img src=\"../assets/salon.png\" alt=\"salon.png\" loading=\"lazy\">"_s));
@@ -399,6 +418,10 @@ private Q_SLOTS:
         QVERIFY(zakupy.contains(u"<a class=\"block-ref\" href=\"Projekty/Dom.html#block-farba\">Kup farbę"_s));
         QVERIFY(zakupy.contains(u"<div class=\"embed\""_s) || zakupy.contains(u"Plan remontu"_s));
         QVERIFY(zakupy.contains(u"href=\"journals/2026-10-14.html\""_s));
+        // Its references: the block tagged #zakupy.
+        const QString zakupyRefs = zakupy.mid(zakupy.indexOf(u"<section class=\"backlinks\">"_s));
+        QVERIFY2(zakupyRefs.contains(u"<li><a href=\"Projekty/Dom.html\">Dom</a><span class=\"excerpt\">Kup farbę"_s),
+                 qPrintable(zakupyRefs));
         const QString unsafe = textOf(entries, root + u"Bezpieczeństwo.html"_s);
         QVERIFY(!unsafe.contains(u"<script>"_s));
         QVERIFY(!unsafe.contains(u"<b>"_s));
@@ -510,6 +533,7 @@ private Q_SLOTS:
         QVERIFY(html.contains(u"href=\"#n2-block-farba\""_s));
         QVERIFY(html.contains(u"href=\"#n2\""_s));
         QVERIFY(html.contains(u"href=\"#n4\""_s));
+        QVERIFY(html.contains(u"<a class=\"tag\" href=\"#n3\">#zakupy</a>"_s)); // the page the tag names
         QVERIFY(!html.contains(u"<script>"_s));
     }
 

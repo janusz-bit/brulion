@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QSet>
+#include <QStringList>
 #include <QTimer>
 
 #include <memory>
@@ -67,10 +68,25 @@ private:
 /// Access to VaultIndex internals for the module's own free functions (runQuery).
 struct IndexAccess {
     static const Entry *entry(const VaultIndex &index, const VaultPath &path);
+    /// The tag keys that name note `path` (resolveTag()); empty for a path that is no note.
+    static QStringList tagKeysNaming(const VaultIndex &index, const VaultPath &path);
 };
 
 /// Journals first (newest first), then other notes by path.
 bool relevanceLess(const Entry &a, const Entry &b);
+
+/// The tags a note carries as a whole page: frontmatter `tags`, the leading `tags::` block, and
+/// tags found in no ordinary block (keys, lower-case NFC).
+QStringList pageLevelTags(const ParsedNote &note);
+
+/// A tag key cleaned for resolution: '#', `[[ ]]`, trailing '/' and blanks stripped (NFC).
+QString tagName(const QString &tag);
+
+/// The tags that name notes (VaultIndex::resolveTag() of every tag in use), both ways.
+struct TagTargets {
+    QHash<QString, VaultPath> byTag;      ///< tag key -> note it names (resolved tags only)
+    QHash<VaultPath, QStringList> byPage; ///< note -> tag keys naming it (sorted)
+};
 
 } // namespace index_detail
 
@@ -85,6 +101,7 @@ struct IndexCaches {
     std::optional<QList<ReminderRef>> reminders;
     std::optional<QList<JournalRef>> journals;
     std::optional<QList<MissingPage>> missing;
+    std::optional<index_detail::TagTargets> tagTargets; ///< one resolve per tag in use, lazily
 };
 
 struct VaultIndex::Private {
@@ -123,6 +140,12 @@ struct VaultIndex::Private {
     VaultPath blockOwner(const QString &id) const;
     const QList<const Entry *> &sortedEntries();
     const QList<const Entry *> &entriesByRelevance();
+    /// The note `tag` names (VaultIndex::resolveTag()); empty when none.
+    VaultPath resolveTagPath(const QString &tag) const;
+    const index_detail::TagTargets &tagTargets();
+    /// The tag keys naming `path`: resolved ones for a note, for a missing page the unresolved
+    /// ones that would name it (see VaultIndex::tagReferences()).
+    QStringList tagKeysFor(const VaultPath &path);
 
     // ---- maintenance ----------------------------------------------------------------------------
     void markChanged();

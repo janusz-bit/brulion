@@ -7,7 +7,6 @@
 #include "index/resolve_p.h"
 #include "index/textutil_p.h"
 #include "index/vaultindex_p.h"
-#include "markdown/properties.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -165,6 +164,8 @@ private:
     QStringList effectiveTags(const View &view);
     NoteMeta &meta(const Entry *entry);
     QSet<int> refLines(const VaultPath &path, const QString &value);
+    /// The tag keys that name the page `ref:value` means.
+    const QSet<QString> &refTags(const QString &value);
     std::optional<VaultPath> resolveCached(const QString &target);
     QString folded(const QString &value);
     void collapseNested(QList<Candidate> &cands) const;
@@ -184,6 +185,7 @@ private:
     QHash<QString, std::optional<dates::DateExpr>> m_exprs;
     QHash<QString, std::optional<VaultPath>> m_resolved;
     QHash<QString, QSet<int>> m_refLines;
+    QHash<QString, QSet<QString>> m_refTags;
     QHash<QString, QString> m_folded;
 };
 
@@ -302,19 +304,53 @@ bool Runner::pathMatches(const QString &value, const View &view)
 
 bool Runner::refMatches(const QString &value, const View &view)
 {
-    const QSet<int> lines = refLines(view.path(), value);
-    if (lines.isEmpty())
-        return false;
-    if (view.block < 0)
-        return true;
     const QList<Block> &blocks = view.note().blocks;
-    for (int b = view.block; b >= 0; b = blocks[b].parent) {
-        for (const int l : lines) {
-            if (l >= blocks[b].line && l <= blocks[b].ownEndLine)
-                return true;
+    const QSet<int> lines = refLines(view.path(), value);
+    if (!lines.isEmpty()) {
+        if (view.block < 0)
+            return true;
+        for (int b = view.block; b >= 0; b = blocks[b].parent) {
+            for (const int l : lines) {
+                if (l >= blocks[b].line && l <= blocks[b].ownEndLine)
+                    return true;
+            }
         }
     }
+    // A tag names a page too (SYNTAX §3): the block's, an ancestor's or — for pages — any tag.
+    const QSet<QString> &keys = refTags(value);
+    if (keys.isEmpty())
+        return false;
+    const auto named = [&keys](const QStringList &tags) {
+        return std::any_of(tags.cbegin(), tags.cend(), [&keys](const QString &t) { return keys.contains(t); });
+    };
+    if (view.block < 0)
+        return named(view.note().tags);
+    for (int b = view.block; b >= 0; b = blocks[b].parent) {
+        if (named(blocks[b].tags))
+            return true;
+    }
     return false;
+}
+
+const QSet<QString> &Runner::refTags(const QString &value)
+{
+    auto it = m_refTags.find(value);
+    if (it != m_refTags.end())
+        return *it;
+    QSet<QString> keys;
+    const auto add = [&keys](const QStringList &list) {
+        for (const QString &k : list)
+            keys.insert(k);
+    };
+    if (isThisPage(folded(value.trimmed()))) {
+        if (!m_options.currentPath.isEmpty())
+            add(IndexAccess::tagKeysNaming(m_index, m_options.currentPath));
+    } else if (const std::optional<VaultPath> target = resolveCached(value)) {
+        add(IndexAccess::tagKeysNaming(m_index, *target));
+    } else if (const QString name = tagName(cleanTarget(value)); !name.isEmpty()) {
+        keys.insert(name.toLower()); // no page (yet): the tag of that name
+    }
+    return *m_refTags.insert(value, keys);
 }
 
 bool Runner::textMatches(const QString &value, const View &view)
@@ -432,27 +468,8 @@ NoteMeta &Runner::meta(const Entry *entry)
     if (it != m_meta.end())
         return *it;
     const ParsedNote &note = entry->note;
-    // Page-level tags: frontmatter `tags`, the leading `tags::` block, and tags not found in any
-    // ordinary block.
-    QSet<QString> inBlocks;
-    QSet<QString> inFront;
-    for (const Block &b : note.blocks) {
-        for (const QString &t : b.tags)
-            (b.kind == BlockKind::Frontmatter ? inFront : inBlocks).insert(t);
-    }
-    QSet<QString> fm;
-    const QVariant fmTags = markdown::frontmatterGet(note.frontmatter, {u"tags"_s, u"tag"_s});
-    for (QString name : markdown::namesFrom(fmTags, true)) {
-        name = name.trimmed();
-        if (name.startsWith(u'#'))
-            name.remove(0, 1);
-        fm.insert(nfc(name).toLower());
-    }
     NoteMeta m;
-    for (const QString &t : note.tags) {
-        if (inFront.contains(t) || fm.contains(t) || !inBlocks.contains(t))
-            m.pageTags.append(t);
-    }
+    m.pageTags = pageLevelTags(note);
     m.effective.resize(note.blocks.size());
     return *m_meta.insert(entry, std::move(m));
 }

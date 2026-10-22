@@ -18,9 +18,15 @@
 //                           base name — shortest path, then alphabetical —, aliases; attachments
 //                           for ![[img.png]]), outgoingLinks(path) -> ResolvedLink{link, target},
 //                           backlinks(path) -> Backlink{path, link, blockIndex} (incl. ((id)) refs
-//                           to blocks of the page; self excluded), linksTo(path) (files to rewrite
-//                           on rename), unlinkedReferences(path) -> UnlinkedRef{path, line,
+//                           to blocks of the page; self excluded; for a page not written yet the
+//                           links that will resolve to it), linksTo(path) (files to rewrite on
+//                           rename), unlinkedReferences(path) -> UnlinkedRef{path, line,
 //                           excerpt} (title/aliases as whole words, ≤ 200), missingPages()
+//                  tags as page links (SYNTAX §3): resolveTag(tag) -> optional<VaultPath> (like
+//                           [[tag]] at the vault root, notes only), tagReferences(path) ->
+//                           TagReference{path, blockIndex (-1 = whole page), tag} (blocks and
+//                           pages tagged with a tag naming `path`; self excluded; a missing page
+//                           by its name), tagsTo(path) (files to rewrite on rename)
 //                  blocks:  blockById(id) -> optional<BlockRef{path, blockIndex}>
 //                  lists:   tags() -> TagCount{tag, count, paths, display}, tasks() -> TaskRef{path,
 //                           blockIndex, task}, reminders() -> ReminderRef{path, blockIndex,
@@ -29,7 +35,8 @@
 //                           suggestPages(prefix, limit = 20) -> PageSuggestion{path, title, alias}
 //                           suggestBlocks(text, limit = 20) -> BlockRef
 //                  graph:   graph(includeTags, includeMissing) -> GraphData{nodes{id, title, degree,
-//                           isTag, isMissing}, edges{source, target}}
+//                           isTag, isMissing}, edges{source, target}} (a tag naming a note is an
+//                           edge to it; "#tag" nodes only for the others)
 //
 //   searchindex.h  class SearchIndex — the inverted index behind VaultIndex::search(): fields
 //                  title (x3) / aliases (x2) / content, tokens folded with text::foldKey ("zolw"
