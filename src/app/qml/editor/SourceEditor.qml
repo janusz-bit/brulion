@@ -11,8 +11,10 @@ import Brulion
 // every line break as "\n" and the controller puts the file's "\r\n" back, so the controller's
 // text differs from the TextEdit's in CRLF files: only changes made elsewhere are loaded back.
 // A mouse selects by dragging; a finger scrolls (on touch UIs a TextEdit that selects by dragging
-// keeps the finger and the source could not be scrolled at all) and selects with the system's
-// selection handles (a long press: the input method's, QInputMethod), a tap places the cursor.
+// keeps the finger and the source could not be scrolled at all). Such a TextEdit leaves taps of a
+// finger alone too, so on touch UIs a TapHandler above it places the cursor where a tap lands
+// and selects the word under a long press (the system's selection handles, QInputMethod, take it
+// on from there where the platform has them).
 Flickable {
     id: root
 
@@ -125,6 +127,32 @@ Flickable {
             if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_E) {
                 root.editor.toggleSourceMode()
                 event.accepted = true
+            }
+        }
+    }
+
+    // Touch UIs (see above): taps and long presses on the source, on an item of its own above
+    // the TextEdit (BlockText's way): its TapHandler takes the press first, and a drag past the
+    // threshold goes to the Flickable.
+    Item {
+        x: source.x
+        y: source.y
+        width: source.width
+        height: source.height
+        visible: Theme.touchUi
+
+        TapHandler {
+            id: touchTap
+            gesturePolicy: TapHandler.ReleaseWithinBounds
+            onTapped: (eventPoint) => {
+                source.forceActiveFocus()
+                source.cursorPosition = source.positionAt(eventPoint.position.x, eventPoint.position.y)
+                Qt.inputMethod.show()
+            }
+            onLongPressed: {
+                source.forceActiveFocus()
+                source.cursorPosition = source.positionAt(touchTap.point.position.x, touchTap.point.position.y)
+                source.selectWord()
             }
         }
     }

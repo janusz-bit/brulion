@@ -1453,6 +1453,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
                                   && sourceEdit->property("selectedText").toString().isEmpty(),
                           "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
+                    // (A tap on a moving list only stops it.)
+                    waitFor([&] { return !sourceView->property("moving").toBool(); });
                     const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
                     const QPointF at = pointIn(sourceView, 0.5, 0.5);
                     touchTap(window, at);
@@ -1460,9 +1462,39 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     int expected = -1;
                     QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
                     const int cursor = sourceEdit->property("cursorPosition").toInt();
+                    std::fprintf(stderr,
+                                 "selftest: the tap in the source: cursor %d (before %d, under the finger %d)\n",
+                                 cursor, cursorBefore, expected);
                     check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
                                   && sourceEdit->property("selectedText").toString().isEmpty(),
                           "a tap in the Markdown source puts the cursor there");
+                    // A long press selects the word under the finger (where the platform has
+                    // selection handles, they take it on from there).
+                    const qreal scrolled = sourceView->property("contentY").toReal();
+                    const auto textAt = [&](int from, int to) {
+                        QString text;
+                        QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
+                        return text;
+                    };
+                    QPointF onWord = pointIn(sourceView, 0.5, 0.4);
+                    for (qreal fy = 0.3; fy < 0.7; fy += 0.05) {
+                        const QPointF p = pointIn(sourceView, 0.35, fy);
+                        const QPointF l = sourceEdit->mapFromScene(p);
+                        int pos = -1;
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
+                        const QString around = textAt(pos - 1, pos + 1);
+                        if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
+                            onWord = p;
+                            break;
+                        }
+                    }
+                    touchTap(window, onWord, 1000);
+                    const QString word = sourceEdit->property("selectedText").toString();
+                    std::fprintf(stderr, "selftest: a long press in the source selected \"%s\"\n", qPrintable(word));
+                    check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
+                                  && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
+                          "a long press in the Markdown source selects the word under the finger");
+                    QMetaObject::invokeMethod(sourceEdit, "deselect");
                 }
             }
             app->requestUiAction(u"toggleSourceMode"_s);

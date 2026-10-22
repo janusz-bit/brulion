@@ -53,7 +53,7 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 ==Zakreślenie== piszesz między podwójnymi znakami równości, ~~przekreślenie~~ w `~~tyldach~~`, a komentarz widoczny tylko w edycji w `%%procentach%%`.
 
 ## Tryb źródła
-**Ctrl+E** pokazuje cały plik jako surowy Markdown z podświetleniem składni. Przydaje się do hurtowych zmian; kolejne naciśnięcie wraca do bloków. Na telefonie tekst przesuwasz palcem, dotknięcie stawia kursor, a przytrzymanie zaznacza słowo (dalej zaznaczenie poszerzasz uchwytami).
+**Ctrl+E** pokazuje cały plik jako surowy Markdown z podświetleniem składni. Przydaje się do hurtowych zmian; kolejne naciśnięcie wraca do bloków. Na telefonie tekst przesuwasz palcem, dotknięcie stawia kursor, a przytrzymanie zaznacza słowo.
 
 ## Obrazy i pliki
 Wklej obraz (Ctrl+V), upuść pliki na stronę albo użyj `/Obraz…`. Pliki trafiają do folderu załączników (`assets/`) i są osadzane jako `![[plik.png]]`.
