@@ -838,6 +838,41 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     check(refs && waitFor([&] { return refs->isVisible() && refs->property("linkedCount").toInt() >= 2; }),
           "the notes that embed the picture are listed under it");
 
+    // The top bar's More menu on a picture: no "Toggle note mode" (a picture is no note), and its
+    // "Markdown source" item says what it does there, like the picture's bar — and does it.
+    {
+        const auto moreMenuItem = [&](const QString &text) {
+            return findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BMenuItem") && item->property("text").toString() == text;
+            });
+        };
+        const auto openMoreMenu = [&] {
+            const QString more = QCoreApplication::translate("ShellTopBar", "More");
+            QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BIconButton") && item->property("label").toString() == more;
+            });
+            if (button)
+                tapOrClick(window, pointIn(button), touch);
+            return button && waitFor([&] { return openMenus(window) == 1; });
+        };
+        const QString noteMode = QCoreApplication::translate("ShellTopBar", "Toggle note mode");
+        const QString source = QCoreApplication::translate("ShellTopBar", "Markdown source");
+        for (const bool asText : {false, true}) {
+            const QString wanted = QCoreApplication::translate("ShellTopBar", asText ? "Show picture" : "Show as text");
+            QQuickItem *item = nullptr;
+            check(openMoreMenu() && waitFor([&] { return (item = moreMenuItem(wanted)) != nullptr; })
+                          && !moreMenuItem(noteMode) && !moreMenuItem(source),
+                  asText ? "with a picture's text shown the More menu offers “Show picture”, not the note mode"
+                         : "on a picture the More menu offers “Show as text”, not the note mode");
+            if (item)
+                tapOrClick(window, pointIn(item), touch);
+            check(waitFor([&] { return openMenus(window) == 0 && (asText ? pictureShown() : textShown()); }),
+                  asText ? "the More menu's “Show picture” shows the picture again"
+                         : "the More menu's “Show as text” shows the picture's text");
+            closeMenus(window);
+        }
+    }
+
     // "Pokaż jako tekst" in the picture's bar: the file's text, read-only; the editor stays
     // unloaded.
     if (QQuickItem *button = child(view, "pictureTextButton")) {

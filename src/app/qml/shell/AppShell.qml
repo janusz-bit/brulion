@@ -161,6 +161,8 @@ FocusScope {
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
+                picture: routeView.viewPicture
+                pictureAsText: routeView.viewPictureAsText
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette()
