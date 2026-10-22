@@ -40,7 +40,9 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE
-            FAIL_REGULAR_EXPRESSION "Binding loop detected")
+            # QML that ran on something already gone fails too, as in tst_editor_qml (a side
+            # panel created from the context of the view the shell had just left did).
+            FAIL_REGULAR_EXPRESSION "Binding loop detected;TypeError;ReferenceError;Cannot create a component in an invalid context")
     endforeach()
 
     # A first-time user's journey through the real app with real clicks, taps and keys

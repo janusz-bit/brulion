@@ -203,11 +203,18 @@ FocusScope {
             break
         case "links":
         case "outline":
-        case "calendar":
-            // The side panel's context on this tab (wide windows).
-            AppSettings.setValue("ui/sidePanel/tab", route.open)
-            AppController.sidePanelVisible = true
+        case "calendar": {
+            // The side panel's context on this tab (wide windows), one turn later: from this
+            // view's Component.onCompleted (a picture opens at once) the shell still offers the
+            // previous view's side panel, whose context went with that view ("Cannot create a
+            // component in an invalid context").
+            const tab = route.open
+            editor.later(() => {
+                AppSettings.setValue("ui/sidePanel/tab", tab)
+                AppController.sidePanelVisible = true
+            })
             break
+        }
         }
     }
 
