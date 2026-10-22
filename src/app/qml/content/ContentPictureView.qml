@@ -295,8 +295,10 @@ Item {
             property int revision: 0
             /// The file's start: { text, truncated, bytes / bytesText (read), size / sizeText }.
             readonly property var file: {
-                void textFlick.revision
-                return Workspace.readTextStart(root.path, root.textLimit)
+                // `revision` used for real: qmlcachegen compiles a bare `void revision` away, and
+                // the binding's dependency on it with it.
+                const revision = textFlick.revision
+                return revision >= 0 ? Workspace.readTextStart(root.path, root.textLimit) : ({})
             }
             readonly property bool truncated: file.truncated === true
 
