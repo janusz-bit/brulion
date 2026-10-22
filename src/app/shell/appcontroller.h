@@ -7,7 +7,8 @@
 //   navigate(route, newPane)   main view (pushes history) or, with newPane on a wide window
 //                              (sidePanelAllowed), the side panel
 //   back(), forward(), goHome(), replaceRoute(route), handleBackKey() (Android back)
-//   openPage(path, line), openJournal(date), openToday(), openTag(tag), search(query)
+//   openPage(path, line), openJournal(date), openToday(), openTag(tag) (the tag's page),
+//   search(query)
 // Renamed pages are followed in the history; deleted pages drop out of it.
 //
 // Vault lifecycle: start() opens the last vault (or shows onboarding); openVault(path)
@@ -184,7 +185,9 @@ public:
     Q_INVOKABLE void openToday();
     /// "YYYY-MM-DD" of today (+ `offsetDays`) by the app clock.
     Q_INVOKABLE QString today(int offsetDays = 0) const;
-    Q_INVOKABLE void openTag(const QString &tag);
+    /// The page the tag names (docs/SYNTAX.md §3; created by its first content when it does not
+    /// exist yet) — through Workspace::navigate(). The tag overview is the route {view: "tag"}.
+    Q_INVOKABLE void openTag(const QString &tag, bool newPane = false);
     Q_INVOKABLE void search(const QString &query);
     /// Open a reminder's note (notification tap); waits for the vault when it is not ready. In
     /// the documentation (which arms no reminders) it opens the user's notebook first.

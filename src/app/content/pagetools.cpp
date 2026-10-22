@@ -3,6 +3,8 @@
 #include "contentutil.h"
 #include "index/vaultindex.h"
 #include "io/exporter.h"
+#include "markdown/inline.h"
+#include "markdown/rename.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
@@ -25,6 +27,37 @@ namespace {
 QString withoutMd(const QString &title)
 {
     return title.endsWith(u".md"_s, Qt::CaseInsensitive) ? title.left(title.size() - 3) : title;
+}
+
+/// The tag that names the page at `path` (docs/SYNTAX.md §3): its key and how it is shown —
+/// the title, or the path when the title names another page (a duplicate base name); when that
+/// tag is not in use but another one naming the page is (an alias: #Janek), the most used of those.
+struct PageTag {
+    QString key;
+    QString display;
+};
+
+PageTag pageTag(const VaultIndex *idx, const QString &path)
+{
+    const QString title = paths::pageTitle(path);
+    PageTag tag{title.normalized(QString::NormalizationForm_C).toLower(), title};
+    if (!idx)
+        return tag;
+    if (const auto named = idx->resolveTag(tag.key); named && *named != path) {
+        tag.display = paths::stripMarkdownExtension(path);
+        tag.key = tag.display.normalized(QString::NormalizationForm_C).toLower();
+    }
+    PageTag other;
+    for (const TagCount &t : idx->tags()) { // most used first
+        if (t.tag == tag.key) {
+            if (!t.display.isEmpty())
+                tag.display = t.display;
+            return tag;
+        }
+        if (other.key.isEmpty() && idx->resolveTag(t.tag) == path)
+            other = {t.tag, t.display.isEmpty() ? t.tag : t.display};
+    }
+    return other.key.isEmpty() ? tag : other;
 }
 
 QString propertyText(const QVariant &value)
@@ -64,8 +97,9 @@ void PageTools::setWorkspace(shell::Workspace *workspace)
 
 QVariantMap PageTools::renameImpact(const QString &rawPath) const
 {
-    int notes = 0;
     int links = 0;
+    int tags = 0;
+    QSet<QString> notes;
     const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
     const QString path = paths::normalize(rawPath);
     if (idx) {
@@ -79,12 +113,32 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
                     ++here;
             }
             if (here > 0) {
-                ++notes;
+                notes.insert(source);
                 links += here;
             }
         }
+        // The tags that name the page (docs/SYNTAX.md §3) are renamed with it, as
+        // Workspace::renamePage() does: by name only when they name this page.
+        const QString title = paths::pageTitle(path);
+        const QString byName = idx->resolveTag(title) == path ? title : QString();
+        const QString placeholder = title + u" (2)"_s; // any other name: what changes is the same
+        for (const VaultPath &source : idx->tagsTo(path)) {
+            if (source == path)
+                continue;
+            const qsizetype here = markdown::tagsToRename(idx->content(source), byName, placeholder, path).size();
+            if (here > 0) {
+                notes.insert(source);
+                tags += int(here);
+            }
+        }
     }
-    return { { u"notes"_s, notes }, { u"links"_s, links } };
+    return {{u"notes"_s, int(notes.size())}, {u"links"_s, links}, {u"tags"_s, tags}};
+}
+
+QString PageTools::tagFor(const QString &rawPath) const
+{
+    const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
+    return markdown::tagSyntax(pageTag(idx, paths::normalize(rawPath)).display);
 }
 
 QString PageTools::validateTitle(const QString &rawPath, const QString &rawTitle) const
@@ -139,8 +193,20 @@ QVariantMap PageTools::summary(const QString &rawPath) const
     out.insert(u"exists"_s, m_workspace->exists(path));
     const VaultIndex *idx = m_workspace->index();
     const ParsedNote *note = idx ? idx->note(path) : nullptr;
-    if (!note)
+    if (!note) {
+        // A page not written yet (a link's or a tag's): what already names it.
+        if (idx && !path.isEmpty()) {
+            const QList<TagReference> tagged = idx->tagReferences(path);
+            QSet<QString> linking;
+            for (const Backlink &b : idx->backlinks(path))
+                linking.insert(b.path);
+            for (const TagReference &r : tagged)
+                linking.insert(r.path);
+            out.insert(u"backlinks"_s, int(linking.size()));
+            out.insert(u"tag"_s, tagInfo(idx, path, int(tagged.size())));
+        }
         return out;
+    }
     if (note->journalDate)
         out.insert(u"journalDate"_s, isoDate(*note->journalDate));
     out.insert(u"aliases"_s, note->aliases);
@@ -182,11 +248,36 @@ QVariantMap PageTools::summary(const QString &rawPath) const
         }
     }
     out.insert(u"words"_s, words);
+    // Pages linking here or carrying a tag that names this page.
     QSet<QString> linking;
     for (const Backlink &b : idx->backlinks(path))
         linking.insert(b.path);
+    const QList<TagReference> tagged = idx->tagReferences(path);
+    for (const TagReference &r : tagged)
+        linking.insert(r.path);
     out.insert(u"backlinks"_s, int(linking.size()));
+    out.insert(u"tag"_s, tagInfo(idx, path, int(tagged.size())));
     return out;
+}
+
+QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int references)
+{
+    const PageTag tag = pageTag(idx, path);
+    QVariantList subTags;
+    const QString prefix = tag.key + u'/';
+    if (idx) {
+        for (const TagCount &t : idx->tags()) {
+            if (t.tag.startsWith(prefix))
+                subTags.append(QVariantMap{{u"tag"_s, t.tag},
+                                           {u"display"_s, t.display.isEmpty() ? t.tag : t.display},
+                                           {u"count"_s, t.count}});
+        }
+    }
+    return {{u"key"_s, tag.key},
+            {u"display"_s, tag.display},
+            {u"text"_s, markdown::tagSyntax(tag.display)},
+            {u"references"_s, references},
+            {u"subTags"_s, subTags}};
 }
 
 QString PageTools::wikiLink(const QString &path) const

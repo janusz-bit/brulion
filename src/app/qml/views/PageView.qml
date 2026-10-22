@@ -6,14 +6,16 @@ import Brulion
 // PageView — route "page" ({path, line?, blockId?, heading?, source?, open?}): one note in the
 // block editor (docs/UI.md "The block editor"), with
 //   * the page header (qml/content/ContentPageHeader.qml): folder breadcrumb, the title edited in
-//     place (renaming rewrites links everywhere — a confirmation says how many when other notes
-//     link here), favourite star, page menu (Historia wersji, Kopiuj odnośnik, Eksportuj stronę,
+//     place (renaming rewrites links and the tags that name the page everywhere — a confirmation
+//     says how many when other notes link here or carry such a tag), a strip for the tag that
+//     names the page (tag overview, its tasks, sub-tags), favourite star, page menu (Historia wersji, Kopiuj odnośnik, Eksportuj stronę,
 //     panel boczny, tekst źródłowy, Przenieś do kosza), previous / next day for daily notes and the
 //     page's properties (aliases, tags, frontmatter values) as chips;
 //   * the blocks (route line / blockId / heading scroll there and select the block; the zoom
 //     breadcrumb is the editor's), fold state kept per device (Workspace.foldState);
-//   * the references below the blocks (ContentBacklinks: linked references grouped by page,
-//     unlinked mentions with "Połącz"), scrolling with the page;
+//   * the references below the blocks (ContentBacklinks: linked references — links and tags
+//     naming the page — grouped by page, unlinked mentions with "Połącz"), scrolling with the
+//     page; a page opened from a #tag or a [[link]] before it exists lists them too;
 //   * the side panel's context (ContentSidePanel: Odnośniki / Konspekt / Kalendarz);
 //   * a picture attachment (assets/photo.png) as a picture (ContentPictureView: fitted into the
 //     view, a click — or the size button — its own pixels, the notes that embed it below; the
@@ -229,17 +231,19 @@ FocusScope {
         return -1
     }
 
-    /// The title was edited: rename, confirming first when other notes link here.
+    /// The title was edited: rename, confirming first when other notes link here or carry a tag
+    /// that names the page (both follow the new name).
     function rename(newTitle) {
         page.save()
         const impact = tools.renameImpact(page.path)
-        if (impact.links > 0) {
+        if (impact.links + impact.tags > 0) {
             renameDialog.openFor(page.path, newTitle, impact)
         } else {
             renameDialog.path = page.path
             renameDialog.newTitle = newTitle
             renameDialog.notes = 0
             renameDialog.links = 0
+            renameDialog.tags = 0
             renameDialog.rename()
         }
     }
@@ -380,6 +384,7 @@ FocusScope {
     // space the editor's footer keeps free: bottomSpace).
     ContentBacklinks {
         id: refsSection
+        objectName: "pageReferences" // the shell's self-test reads linkedCount
         parent: editor.listView.contentItem
         visible: page.loaded && !page.sourceMode && page.zoomBlock < 0 && page.path !== ""
         x: editor.contentX + (root.inSidePanel || Theme.compact || editor.documentMode ? 0 : editor.arrowColumn)

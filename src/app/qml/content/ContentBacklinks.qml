@@ -3,8 +3,10 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ContentBacklinks — "Odnośniki" of a page: the blocks of other notes that link to it, grouped
-// by page (journals newest first), each rendered like in the editor and opening at its line;
+// ContentBacklinks — "Odnośniki" of a page: the blocks of other notes that link to it or carry a
+// tag naming it (docs/SYNTAX.md §3), grouped by page (journals newest first; a page tagged as a
+// whole is marked "cała strona"), each rendered like in the editor and opening at its line; a
+// page not written yet (a link's or a tag's) lists what already names it;
 // below, collapsed, "Niepowiązane wzmianki": plain-text mentions of the page's title or aliases,
 // each with "Połącz" turning the mention into a [[link]] in that note (BacklinksModel.linkMention
 // through the Workspace, so open editors reload), plus "Połącz wszystkie".
@@ -28,7 +30,7 @@ FocusScope {
     property bool unlinkedOpen: false
 
     readonly property int linkedCount: linked.refCount
-    readonly property bool empty: linked.refCount === 0
+    readonly property bool empty: linked.refCount === 0 && linked.pageCount === 0
 
     implicitHeight: column.implicitHeight
 
@@ -72,6 +74,7 @@ FocusScope {
             required property string journalDate
             required property int count
             required property bool collapsed
+            required property bool pageLevel
             required property int line
             required property string html
             required property string text
@@ -95,6 +98,7 @@ FocusScope {
                 journalDate: entry.journalDate
                 count: entry.count
                 collapsed: entry.collapsed
+                pageLevel: entry.pageLevel
                 compact: list.compact
             }
             ContentRefRow {
@@ -152,11 +156,18 @@ FocusScope {
             }
         }
         BText {
-            visible: linked.refCount === 0
+            visible: root.empty
             Layout.fillWidth: true
             Layout.leftMargin: Theme.space6
             Layout.bottomMargin: Theme.space2
-            text: qsTr("No other note links here yet. Write [[%1]] in any note to link it.").arg(Workspace.pageTitle(root.path))
+            text: {
+                // A tag names a page too (docs/SYNTAX.md §3): #name, or #[[two words]].
+                const tag = root.path !== "" ? tools.tagFor(root.path) : ""
+                return tag !== "" ? qsTr("No other note links here yet. Write [[%1]] or %2 in any note to link it.")
+                                    .arg(Workspace.pageTitle(root.path)).arg(tag)
+                                  : qsTr("No other note links here yet. Write [[%1]] in any note to link it.")
+                                    .arg(Workspace.pageTitle(root.path))
+            }
             variant: "muted"
             wrapMode: Text.Wrap
         }

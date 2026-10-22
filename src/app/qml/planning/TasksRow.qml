@@ -9,11 +9,13 @@ import Brulion
 // where it is written (page, or the day of a daily note).
 //
 //   TasksRow { task: model; onTaskToggled: …; onOpened: …; onLinkActivated: (url) => …
-//              onStatusRequested: (status) => … }
+//              onTagPageRequested: (tag) => …; onStatusRequested: (status) => … }
 //
 // Click / Enter opens the note at the task's line; Space toggles; the context menu — "Otwórz" and
 // the statuses (TaskStatusMenu; "Bez statusu" makes it a plain list item) — opens with a right
-// click or long press on the row or its checkbox, or the Menu key.
+// click or long press on the row or its checkbox, or the Menu key. A click on a #tag is a link
+// (TasksView filters by it); Ctrl+click (mouse) or a long press (touch) on it asks for the tag's
+// page instead (tagPageRequested, docs/SYNTAX.md §3).
 T.ItemDelegate {
     id: control
 
@@ -23,7 +25,21 @@ T.ItemDelegate {
     signal taskToggled()
     signal opened()
     signal linkActivated(string url)
+    /// Ctrl+click or a long press on the #tag `tag`: open the page it names.
+    signal tagPageRequested(string tag)
     signal statusRequested(string status)
+
+    /// A long press opened a tag's page: the release that follows is no click on the link.
+    property bool _tagOpened: false
+    /// The tag of the link at (x, y) of the task text, "" when it is no #tag.
+    function tagAt(x, y) {
+        const link = label.linkAt(x, y)
+        return link.startsWith("tag:") ? decodeURIComponent(link.slice(4)) : ""
+    }
+    function openTagPage(tag) {
+        control._tagOpened = true
+        control.tagPageRequested(tag)
+    }
 
     readonly property bool closed: task.status === "done" || task.status === "cancelled"
     readonly property string journalDay: task.isJournal ? Workspace.journalDate(task.path || "") : ""
@@ -63,7 +79,14 @@ T.ItemDelegate {
                       task.overdue ? qsTr("overdue") : "", priorityLabel, where].filter(s => !!s).join(", ")
 
     onClicked: control.opened()
-    onPressAndHold: control.openMenu()
+    onPressAndHold: {
+        const p = label.mapFromItem(control, control.pressX, control.pressY)
+        const tag = control.tagAt(p.x, p.y)
+        if (tag === "")
+            control.openMenu()
+        else if (!control._tagOpened) // the text's own long press may have opened it already
+            control.openTagPage(tag)
+    }
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: control.taskToggled()
@@ -125,9 +148,38 @@ T.ItemDelegate {
                 elide: Text.ElideRight
                 lineHeightMode: Text.FixedHeight
                 lineHeight: Theme.lineHeightPx(font.pixelSize, 1.4)
-                onLinkActivated: (link) => control.linkActivated(link)
+                onLinkActivated: (link) => {
+                    if (control._tagOpened)
+                        control._tagOpened = false // the gesture that opened the tag's page
+                    else
+                        control.linkActivated(link)
+                }
                 HoverHandler {
                     cursorShape: label.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
+                TapHandler {
+                    // Ctrl+click on a #tag: its page (a plain click is the text's link: it filters
+                    // the list). Passive: the text keeps its clicks; the link of this one is ignored.
+                    id: mouseTap
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                    onPressedChanged: if (pressed) control._tagOpened = false
+                    onTapped: (eventPoint) => {
+                        if (!(mouseTap.point.modifiers & Qt.ControlModifier))
+                            return
+                        const tag = control.tagAt(eventPoint.position.x, eventPoint.position.y)
+                        if (tag !== "")
+                            control.openTagPage(tag)
+                    }
+                }
+                TapHandler {
+                    // A long press on a #tag (touch): its page. The text keeps the press (a link).
+                    acceptedDevices: PointerDevice.TouchScreen
+                    onPressedChanged: if (pressed) control._tagOpened = false
+                    onLongPressed: {
+                        const tag = control.tagAt(point.position.x, point.position.y)
+                        if (tag !== "" && !control._tagOpened)
+                            control.openTagPage(tag)
+                    }
                 }
             }
 

@@ -65,7 +65,8 @@ FocusScope {
             toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => planningActions.undo() })
     }
     function activateLink(link, task) {
-        // A tag filters this list; everything else navigates.
+        // A tag filters this list (Ctrl+click or a long press opens its page: TasksRow); everything
+        // else navigates.
         if (link.startsWith("tag:")) {
             taskModel.tagFilter = decodeURIComponent(link.slice(4))
             return
@@ -226,6 +227,7 @@ FocusScope {
                     onTaskToggled: root.toggle(row.model)
                     onOpened: AppController.openPage(row.model.path, row.model.line)
                     onLinkActivated: (url) => root.activateLink(url, row.model)
+                    onTagPageRequested: (tag) => AppController.openTag(tag)
                     onStatusRequested: (status) => root.setStatus(row.model, status)
                 }
             }

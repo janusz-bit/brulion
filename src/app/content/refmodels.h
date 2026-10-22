@@ -1,5 +1,6 @@
 // Block references grouped by page — the backlinks of a page (PageView's "Odnośniki", the side
-// panel) and the blocks carrying a tag (TagsView's tag detail).
+// panel: links, block references and tags naming the page) and the blocks carrying a tag
+// (TagsView's tag detail).
 //
 //   BacklinksModel { workspace: Workspace; path: page.path; palette: rendererPalette }
 //   BacklinksModel { workspace: Workspace; path: page.path; mode: "unlinked" }
@@ -8,7 +9,8 @@
 // Rows are page headers and the blocks under them (rowType "page" | "ref"), journals first
 // (newest first), then other pages:
 //   page rows  path, title, folder, journalDate ("" for pages), count (refs in the group),
-//              collapsed, pageLevel (TagBlocksModel: the page itself carries the tag)
+//              collapsed, pageLevel (the page itself carries the tag: TagBlocksModel, and a
+//              BacklinksModel page tagged as a whole with a tag naming the page)
 //   ref rows   path, line (first line of the block, for opening it there), html (the block's own
 //              text rendered by the core InlineRenderer — escaped, links page:/tag:/block:/ext:,
 //              the task checkbox as task:toggle), text (plain, one line), blockId, breadcrumb
@@ -186,8 +188,12 @@ class BacklinksModel : public GroupedRefsModel {
     Q_OBJECT
     /// The page whose references are listed.
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged FINAL)
-    /// "linked" (default: links, embeds, block references) | "unlinked" (plain-text mentions).
+    /// "linked" (default: links, embeds, block references and the blocks and pages tagged with a
+    /// tag naming the page — docs/SYNTAX.md §3; a page tagged as a whole has `pageLevel`) |
+    /// "unlinked" (plain-text mentions).
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
+    /// Linked mode: blocks and pages tagged with a tag naming the page (VaultIndex::tagReferences()).
+    Q_PROPERTY(int taggedCount READ taggedCount NOTIFY taggedCountChanged FINAL)
 
 public:
     explicit BacklinksModel(QObject *parent = nullptr);
@@ -196,6 +202,7 @@ public:
     void setPath(const QString &path);
     QString mode() const { return m_mode; }
     void setMode(const QString &mode);
+    int taggedCount() const { return m_taggedCount; }
 
     /// Unlinked mode: turn the mention of ref row `row` into a [[link]] to `path` in its file.
     /// False when the mention is no longer there (the file changed) or the write failed.
@@ -208,6 +215,7 @@ public:
 Q_SIGNALS:
     void pathChanged();
     void modeChanged();
+    void taggedCountChanged();
 
 protected:
     QList<Group> collect() override;
@@ -221,6 +229,7 @@ private:
 
     QString m_path;
     QString m_mode = QStringLiteral("linked");
+    int m_taggedCount = 0;
 };
 
 class TagBlocksModel : public GroupedRefsModel {

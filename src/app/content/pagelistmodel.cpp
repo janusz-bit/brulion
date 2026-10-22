@@ -115,13 +115,24 @@ void PageListModel::refresh()
             tagDisplay.insert(t.tag, t.display.isEmpty() ? t.tag : t.display);
         const QList<VaultPath> all = idx->paths();
 
-        // Backlinks: distinct other pages linking to each page, one walk over all links.
+        // Backlinks: distinct other pages linking to each page or carrying a tag that names it
+        // (docs/SYNTAX.md §3), one walk over all links and tags.
         QHash<QString, int> backlinks;
+        QHash<QString, QString> tagTargets; // tag -> page it names ("" when none)
         for (const VaultPath &source : all) {
             QSet<QString> targets;
             for (const ResolvedLink &l : idx->outgoingLinks(source)) {
                 if (!l.target.isEmpty() && l.target != source)
                     targets.insert(l.target);
+            }
+            if (const ParsedNote *note = idx->note(source)) {
+                for (const QString &tag : note->tags) {
+                    auto it = tagTargets.find(tag);
+                    if (it == tagTargets.end())
+                        it = tagTargets.insert(tag, idx->resolveTag(tag).value_or(QString()));
+                    if (!it->isEmpty() && *it != source)
+                        targets.insert(*it);
+                }
             }
             for (const QString &t : std::as_const(targets))
                 backlinks[t] += 1;

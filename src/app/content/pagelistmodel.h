@@ -10,7 +10,8 @@
 // folder and below. includeJournals: daily notes too (default false).
 //
 // Roles: path, title, folder, aliases (list), modified (ms since epoch), modifiedLabel ("dziś
-// 09:12"), size, backlinks (pages linking here), tags (display spellings), tagCount,
+// 09:12"), size, backlinks (pages linking here or carrying a tag that names the page), tags
+// (display spellings), tagCount,
 // journalDate ("" for pages), titleMatches (positions of the filter words in the title).
 #pragma once
 

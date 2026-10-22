@@ -1,7 +1,7 @@
 // SuggestionModel — items of the editor's autocomplete popup (docs/UI.md "Autocomplete popup"):
 //   pages  `[[` — EditorHost::suggestPages, plus "create page" when nothing matches exactly
 //   blocks `((` — EditorHost::suggestBlocks (ids are created when one is accepted)
-//   tags   `#`  — EditorHost::suggestTags
+//   tags   `#`  — EditorHost::suggestTags: tags in use, then pages (a tag names a page)
 //   slash  `/`  — the slash commands (Polish + English names, diacritic-insensitive filter)
 //   date   after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` — natural-language dates (dates::parseNaturalDate,
 //          Polish + English) offered as canonical "YYYY-MM-DD[ HH:mm]" values; `@` also offers

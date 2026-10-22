@@ -382,12 +382,13 @@ QString AppController::today(int offsetDays) const
     return now().date().addDays(offsetDays).toString(Qt::ISODate);
 }
 
-void AppController::openTag(const QString &tag)
+void AppController::openTag(const QString &tag, bool newPane)
 {
     QString t = tag.trimmed();
     if (t.startsWith(u'#'))
         t.remove(0, 1);
-    navigate({ { u"view"_s, u"tag"_s }, { u"tag"_s, t } });
+    // The page the tag names (Workspace::resolveRoute()); the tag overview is {view: "tag"}.
+    m_workspace->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, t}}, newPane);
 }
 
 void AppController::search(const QString &query)

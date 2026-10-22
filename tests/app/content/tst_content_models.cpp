@@ -351,6 +351,87 @@ private Q_SLOTS:
         QCOMPARE(outline(other), (QStringList{ u"Budżet (1)"_s, u"  2: osobny blok z blok"_s }));
     }
 
+    // A tag names a page (docs/SYNTAX.md §3): its references list the tagged blocks with the
+    // linking ones (one row per block), pages tagged as a whole, and for a page not written yet
+    // what already names it. Exactly the tag: sub-tags and other spellings are other pages.
+    void referencesIncludeTags()
+    {
+        auto ws = open({
+                {u"Projekty/Dom.md"_s, u"# Dom\n- plan\n"_s},
+                {u"journals/2026-10-13.md"_s,
+                 u"- [[Dom]] i #dom w jednym bloku\n- tylko #Dom\n- #dom/kuchnia podtag\n"_s},
+                {u"journals/2026-10-12.md"_s, u"- stare #dom\n"_s},
+                {u"Lista.md"_s, u"---\ntags: [dom]\n---\n- treść bez tagu\n"_s},
+                {u"Logseq.md"_s, u"tags:: dom\n\n- x #dom\n"_s},
+                {u"Żółw.md"_s, u"- zwierzę\n"_s},
+                {u"Zoo.md"_s, u"- #żółw\n- #zolw\n"_s},
+                {u"Notatki.md"_s, u"- #praca dziś\n- [[Praca]] jutro\n- #praca/raporty\n"_s},
+        });
+        BacklinksModel model;
+        QSignalSpy tagged(&model, &BacklinksModel::taggedCountChanged);
+        model.setWorkspace(ws.get());
+        model.setPath(u"Projekty/Dom.md"_s);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{
+                                         u"2026-10-13 (2)"_s,
+                                         u"  0: Dom i #dom w jednym bloku"_s,
+                                         u"  1: tylko #Dom"_s,
+                                         u"2026-10-12 (1)"_s,
+                                         u"  0: stare #dom"_s,
+                                         u"Lista (0)"_s,
+                                         u"Logseq (1)"_s,
+                                         u"  2: x #dom"_s,
+                                 }));
+        QCOMPARE(column(model, "pageLevel"), (QStringList{u"false"_s, u"false"_s, u"false"_s, u"false"_s, u"false"_s,
+                                                          u"true"_s, u"true"_s, u"false"_s}));
+        QCOMPARE(model.refCount(), 4);
+        QCOMPARE(model.pageCount(), 4);
+        QCOMPARE(model.taggedCount(), 6);
+        QCOMPARE(tagged.size(), 1);
+
+        // Polish letters count, diacritics are not folded: #zolw is another page.
+        model.setPath(u"Żółw.md"_s);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"Zoo (1)"_s, u"  0: #żółw"_s}));
+        model.setPath(u"zolw.md"_s);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"Zoo (1)"_s, u"  1: #zolw"_s}));
+        // A page that exists only as a tag and a link: both, in one group; not the sub-tag.
+        model.setPath(u"Praca.md"_s);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"Notatki (2)"_s, u"  0: #praca dziś"_s, u"  1: Praca jutro"_s}));
+
+        // The page tools: what a rename touches, the tag that names the page.
+        PageTools tools;
+        tools.setWorkspace(ws.get());
+        const QVariantMap impact = tools.renameImpact(u"Projekty/Dom.md"_s);
+        QCOMPARE(impact.value(u"links"_s).toInt(), 1);
+        QCOMPARE(impact.value(u"tags"_s).toInt(), 6); // #dom ×4, `tags:: dom`, frontmatter `dom`
+        QCOMPARE(impact.value(u"notes"_s).toInt(), 4);
+        const QVariantMap s = tools.summary(u"Projekty/Dom.md"_s);
+        QCOMPARE(s.value(u"backlinks"_s).toInt(), 4);
+        const QVariantMap tag = s.value(u"tag"_s).toMap();
+        QCOMPARE(tag.value(u"key"_s).toString(), u"dom"_s);
+        QCOMPARE(tag.value(u"text"_s).toString(), u"#dom"_s);
+        QCOMPARE(tag.value(u"references"_s).toInt(), 6);
+        const QVariantList subTags = tag.value(u"subTags"_s).toList();
+        QCOMPARE(subTags.size(), 1);
+        QCOMPARE(subTags.first().toMap().value(u"tag"_s).toString(), u"dom/kuchnia"_s);
+        // A page not written yet: what names it already.
+        const QVariantMap praca = tools.summary(u"Praca.md"_s);
+        QCOMPARE(praca.value(u"backlinks"_s).toInt(), 1);
+        QCOMPARE(praca.value(u"tag"_s).toMap().value(u"references"_s).toInt(), 1);
+        QCOMPARE(praca.value(u"tag"_s).toMap().value(u"subTags"_s).toList().size(), 1);
+        QCOMPARE(tools.tagFor(u"Ludzie/Jan Kowalski.md"_s), u"#[[Jan Kowalski]]"_s);
+        QCOMPARE(tools.tagFor(u"Żółw.md"_s), u"#żółw"_s);
+        // The All pages column counts the pages that tag a page.
+        PageListModel pages;
+        pages.setWorkspace(ws.get());
+        pages.refreshNow();
+        const QStringList paths = column(pages, "path");
+        QCOMPARE(value(pages, int(paths.indexOf(u"Projekty/Dom.md"_s)), "backlinks").toInt(), 4);
+    }
+
     void unlinkedMentionsBecomeLinks()
     {
         auto ws = open({

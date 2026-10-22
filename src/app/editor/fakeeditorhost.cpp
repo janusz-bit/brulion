@@ -7,19 +7,21 @@
 #include "index/vaultindex.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"
+#include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "text/text.h"
 #include "util/paths.h"
 
 #include <QBuffer>
+#include <QDateTime>
 #include <QFile>
 #include <QImage>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
-#include <QDateTime>
 #include <QRadialGradient>
+#include <QSet>
 #include <QTimer>
 
 #include <algorithm>
@@ -386,11 +388,37 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
             return a.second > b.second;
         return a.first < b.first;
     });
+    // Tags (with the page they name), then pages no tag names yet (docs/SYNTAX.md §3).
     QVariantList out;
+    QSet<QString> seen;
     for (const auto &[tag, count] : std::as_const(tags)) {
         if (out.size() >= limit)
             break;
-        out.append(QVariantMap{{u"tag"_s, tag}, {u"count"_s, count}});
+        QVariantMap m{{u"tag"_s, tag}, {u"count"_s, count}, {u"kind"_s, u"tag"_s}};
+        const QString page = resolveLink(tag, QString());
+        if (paths::isMarkdown(page)) {
+            m.insert(u"path"_s, page);
+            m.insert(u"title"_s, paths::pageTitle(page));
+            m.insert(u"folder"_s, paths::dirname(page));
+        }
+        seen.insert(text::foldKey(tag));
+        out.append(m);
+    }
+    for (const QVariant &v : suggestPages(prefix, limit)) {
+        if (out.size() >= limit)
+            break;
+        const QVariantMap p = v.toMap();
+        const QString name = p.value(u"alias"_s).toString().isEmpty() ? p.value(u"title"_s).toString()
+                                                                      : p.value(u"alias"_s).toString();
+        if (seen.contains(text::foldKey(name)) || markdown::tagSyntax(name).isEmpty())
+            continue;
+        seen.insert(text::foldKey(name));
+        out.append(QVariantMap{{u"tag"_s, name},
+                               {u"count"_s, 0},
+                               {u"kind"_s, u"page"_s},
+                               {u"path"_s, p.value(u"path"_s)},
+                               {u"title"_s, p.value(u"title"_s)},
+                               {u"folder"_s, p.value(u"folder"_s)}});
     }
     return out;
 }

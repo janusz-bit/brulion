@@ -5,10 +5,11 @@ import Brulion
 
 // ContentRefGroupHeader — the page heading of a group of references (ContentBacklinks, TagsView):
 // a fold arrow (GroupedRefsModel.toggleCollapsed), the page's title — journals by their date —
-// that opens the page, its folder and the number of references.
+// that opens the page, its folder, "cała strona" when the page itself carries the tag
+// (`pageLevel`) and the number of references.
 //
 //   ContentRefGroupHeader { refs: backlinks; path: …; title: …; folder: …; journalDate: …;
-//                           count: …; collapsed: … }
+//                           count: …; collapsed: …; pageLevel: … }
 Item {
     id: header
     required property var refs
@@ -19,6 +20,8 @@ Item {
     required property int count
     required property bool collapsed
     property bool compact: false
+    /// The page is tagged as a whole (its properties), not only in blocks.
+    property bool pageLevel: false
 
     implicitHeight: Math.max(Theme.touchUi ? Theme.touchTarget : 30, headerRow.implicitHeight)
 
@@ -61,6 +64,12 @@ Item {
             variant: "caption"
             color: Theme.fgFaint
             elide: Text.ElideMiddle
+        }
+        BText {
+            visible: header.pageLevel
+            text: qsTr("whole page")
+            variant: "caption"
+            color: Theme.fgFaint
         }
         BBadge {
             count: header.count

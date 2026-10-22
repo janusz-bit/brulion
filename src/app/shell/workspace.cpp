@@ -593,23 +593,61 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
     QVariantList out;
     if (!m_index || limit <= 0)
         return out;
-    const QString key = text::foldKey(prefix.startsWith(u'#') ? QStringView(prefix).mid(1) : QStringView(prefix));
-    const QList<TagCount> tags = m_index->tags(); // most used first
-    QVariantList contains;
+    const QStringView typed = prefix.startsWith(u'#') ? QStringView(prefix).mid(1) : QStringView(prefix);
+    const QString key = text::foldKey(typed);
+    QSet<QString> seen; // folded names offered so far
+    const auto tagItem = [&](const TagCount &t) {
+        const QString name = t.display.isEmpty() ? t.tag : t.display;
+        QVariantMap m{{u"tag"_s, name}, {u"count"_s, t.count}, {u"kind"_s, u"tag"_s}};
+        if (const auto page = m_index->resolveTag(t.tag)) {
+            m.insert(u"path"_s, *page);
+            m.insert(u"title"_s, paths::pageTitle(*page));
+            m.insert(u"folder"_s, paths::dirname(*page));
+        }
+        seen.insert(text::foldKey(name));
+        return m;
+    };
+    // Tags in use (most used first) that start with the text, then pages no tag names yet (a tag
+    // names a page, docs/SYNTAX.md §3), then tags that contain the text.
+    QList<const TagCount *> contains;
+    const QList<TagCount> tags = m_index->tags();
     for (const TagCount &t : tags) {
         const QString folded = text::foldKey(t.tag);
-        const QVariantMap m{ { u"tag"_s, t.display.isEmpty() ? t.tag : t.display }, { u"count"_s, t.count } };
         if (key.isEmpty() || folded.startsWith(key))
-            out.append(m);
+            out.append(tagItem(t));
         else if (folded.contains(key))
-            contains.append(m);
+            contains.append(&t);
         if (out.size() >= limit)
             return out;
     }
-    for (const QVariant &m : std::as_const(contains)) {
+    for (const PageSuggestion &s : m_index->suggestPages(typed.toString(), limit)) {
+        // What was typed is in the name (no fuzzy matches among the tags).
+        if (!key.isEmpty() && !text::foldKey(s.alias.isEmpty() ? s.title : s.alias).contains(key)
+            && !text::foldKey(s.path).contains(key))
+            continue;
+        // The name of the tag: the alias that matched or the title — or the path, when that name
+        // is another page's (a duplicate base name).
+        QString name = s.alias.isEmpty() ? s.title : s.alias;
+        if (m_index->resolveTag(name) != s.path)
+            name = paths::stripMarkdownExtension(s.path);
+        const QString folded = text::foldKey(name);
+        if (seen.contains(folded) || markdown::tagSyntax(name).isEmpty())
+            continue;
+        seen.insert(folded);
+        out.append(QVariantMap{{u"tag"_s, name},
+                               {u"count"_s, 0},
+                               {u"kind"_s, u"page"_s},
+                               {u"path"_s, s.path},
+                               {u"title"_s, s.title},
+                               {u"folder"_s, paths::dirname(s.path)}});
+        if (out.size() >= limit)
+            return out;
+    }
+    for (const TagCount *t : std::as_const(contains)) {
         if (out.size() >= limit)
             break;
-        out.append(m);
+        if (!seen.contains(text::foldKey(t->display.isEmpty() ? t->tag : t->display)))
+            out.append(tagItem(*t));
     }
     return out;
 }
@@ -832,6 +870,15 @@ void Workspace::navigate(const QVariantMap &route, bool newPane)
 
 QVariantMap Workspace::resolveRoute(const QVariantMap &route)
 {
+    // A tag names a page (docs/SYNTAX.md §3): a click on #tag opens that page, created by its
+    // first content when it does not exist yet. {view: "tag", overview: true} (and routes the
+    // shell navigates to itself) keep the tag overview.
+    if (route.value(u"view"_s).toString() == u"tag" && !route.value(u"overview"_s).toBool() && m_vault) {
+        const QString path = tagPage(route.value(u"tag"_s).toString());
+        if (!path.isEmpty())
+            return {{u"view"_s, u"page"_s}, {u"path"_s, path}};
+        return route;
+    }
     // Only page routes the editor could not resolve itself: {view: "page", blockId} for a
     // ((block)) of another page, {view: "page", target} for a link to a page that does not exist.
     if (route.value(u"view"_s).toString() != u"page" || !route.value(u"path"_s).toString().isEmpty() || !m_vault)
@@ -856,6 +903,39 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
     if (!path.isEmpty())
         out.insert(u"path"_s, path);
     return out;
+}
+
+QString Workspace::tagPage(const QString &rawTag)
+{
+    if (!m_vault)
+        return {};
+    QString tag = rawTag.trimmed();
+    if (tag.startsWith(u'#'))
+        tag.remove(0, 1);
+    if (tag.startsWith(u"[["_s) && tag.endsWith(u"]]"_s) && tag.size() >= 4)
+        tag = tag.mid(2, tag.size() - 4).trimmed();
+    while (tag.endsWith(u'/'))
+        tag.chop(1);
+    if (tag.trimmed().isEmpty())
+        return {};
+    // Right after opening the index is still being built: what looks unresolved may exist.
+    if (indexing())
+        finishIndexing();
+    if (m_index) {
+        if (const auto page = m_index->resolveTag(tag))
+            return *page;
+        // A new page is named as the tag was first written (#Praca and #praca: "Praca.md"),
+        // whichever spelling was clicked.
+        const QString key = tag.normalized(QString::NormalizationForm_C).toLower();
+        for (const TagCount &t : m_index->tags()) {
+            if (t.tag == key) {
+                if (!t.display.isEmpty())
+                    tag = t.display;
+                break;
+            }
+        }
+    }
+    return newPagePath(tag);
 }
 
 QString Workspace::newPagePath(const QString &target) const
@@ -984,25 +1064,45 @@ QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
             }
         }
     }
-    // Files to rewrite, asked before the index learns about the rename.
+    // Files to rewrite, asked before the index learns about the rename: the links to the page and
+    // the tags that name it (docs/SYNTAX.md §3). Tags of the old name are renamed only when they
+    // name this page (with a duplicate base name they may name the other one).
     const QList<VaultPath> linking = m_index ? m_index->linksTo(path) : QList<VaultPath>();
+    const QList<VaultPath> tagging = m_index ? m_index->tagsTo(path) : QList<VaultPath>();
+    const bool namedByTitle = m_index && m_index->resolveTag(oldTitle) == path;
     if (!m_vault->rename(path, newPath, ChangeSource::User)) {
         Q_EMIT errorOccurred(tr("Could not rename the page: %1").arg(m_vault->errorString()));
         return {};
     }
     if (paths::isMarkdown(newPath)) {
-        for (const VaultPath &file : linking) {
-            const VaultPath target = file == path ? newPath : file;
-            bool ok = false;
-            const QString content = m_vault->readText(target, &ok);
-            if (!ok)
-                continue;
-            const QString rewritten = markdown::renameLinks(content, oldTitle, newName, path, newPath);
-            if (rewritten != content)
-                m_vault->writeText(target, rewritten, ChangeSource::User);
-        }
+        const auto moved = [&](const VaultPath &file) { return file == path ? newPath : file; };
+        rewriteReferences(linking, tagging, moved, {oldTitle, newName, path, newPath, namedByTitle});
     }
     return newPath;
+}
+
+void Workspace::rewriteReferences(const QList<VaultPath> &linking, const QList<VaultPath> &tagging,
+                                  const std::function<VaultPath(const VaultPath &)> &moved, const PageRename &rename)
+{
+    QList<VaultPath> files = linking + tagging;
+    std::sort(files.begin(), files.end());
+    files.erase(std::unique(files.begin(), files.end()), files.end());
+    for (const VaultPath &file : std::as_const(files)) {
+        const VaultPath target = moved(file);
+        bool ok = false;
+        const QString content = m_vault->readText(target, &ok);
+        if (!ok)
+            continue;
+        QString rewritten = content;
+        if (linking.contains(file))
+            rewritten =
+                    markdown::renameLinks(rewritten, rename.oldName, rename.newName, rename.oldPath, rename.newPath);
+        if (tagging.contains(file))
+            rewritten = markdown::renameTags(rewritten, rename.tagsByName ? rename.oldName : QString(), rename.newName,
+                                             rename.oldPath, rename.newPath);
+        if (rewritten != content)
+            m_vault->writeText(target, rewritten, ChangeSource::User); // one write, one history step
+    }
 }
 
 QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
@@ -1018,17 +1118,19 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
     if (newPath == path)
         return path;
     finishIndexing(); // every linking file must be known (see renamePage)
-    // Path-qualified links ([[Projekty/Dom]]) to pages inside the folder must follow the move.
+    // Path-qualified links ([[Projekty/Dom]]) and tags (#Projekty/Dom) to pages inside the
+    // folder must follow the move.
     struct Rewrite {
         VaultPath oldPath;
         QList<VaultPath> linking;
+        QList<VaultPath> tagging;
     };
     QList<Rewrite> rewrites;
     const QString prefix = path + u'/';
     if (m_index) {
         for (const FileStat &f : m_vault->markdownFiles()) {
             if (f.path.startsWith(prefix))
-                rewrites.append({ f.path, m_index->linksTo(f.path) });
+                rewrites.append({f.path, m_index->linksTo(f.path), m_index->tagsTo(f.path)});
         }
     }
     if (!m_vault->rename(path, newPath, ChangeSource::User)) {
@@ -1037,17 +1139,9 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
     }
     const auto moved = [&](const VaultPath &p) { return p.startsWith(prefix) ? newPath + u'/' + p.mid(prefix.size()) : p; };
     for (const Rewrite &r : std::as_const(rewrites)) {
+        // The pages keep their names: only what names them with their folder changes.
         const QString title = paths::pageTitle(r.oldPath);
-        for (const VaultPath &file : r.linking) {
-            const VaultPath target = moved(file);
-            bool ok = false;
-            const QString content = m_vault->readText(target, &ok);
-            if (!ok)
-                continue;
-            const QString rewritten = markdown::renameLinks(content, title, title, r.oldPath, moved(r.oldPath));
-            if (rewritten != content)
-                m_vault->writeText(target, rewritten, ChangeSource::User);
-        }
+        rewriteReferences(r.linking, r.tagging, moved, {title, title, r.oldPath, moved(r.oldPath), false});
     }
     return newPath;
 }

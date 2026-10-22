@@ -11,6 +11,9 @@ import Brulion
 // "Właściwości" block). Next to the star: the note mode toggle (document / outline; its icon
 // shows the current mode, a click asks for the other one: modeToggleRequested). An empty page
 // gets a "Start writing" button; a page that does not exist yet says that typing creates it.
+// A page named by a tag that is in use (docs/SYNTAX.md §3: #tag is a link to this page) gets a
+// strip with "Widok tagu" (the tag overview), "Zadania z tym tagiem" and its sub-tags as chips
+// (#praca/raporty under Praca), each opening its own page.
 //
 //   ContentPageHeader {
 //       controller: page; editor: editor; tools: tools
@@ -89,6 +92,10 @@ Item {
         titleError = ""
         if (editor)
             editor.forceActiveFocus()
+    }
+    /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
+    function tagQuery(key) {
+        return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
     }
     function openDay(offset) {
         AppController.navigate({ view: "journal", date: DatesHelper.addDays(header.journalDate, offset) })
@@ -303,6 +310,48 @@ Item {
                     variant: "tag"
                     text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.display) : modelData.display)
                     interactive: true
+                    Accessible.name: qsTr("Tag %1").arg(modelData.display)
+                    onClicked: AppController.openTag(modelData.tag)
+                }
+            }
+        }
+
+        // ---- The tag that names this page -----------------------------------------------------------
+        Flow {
+            id: tagStrip
+            readonly property var tag: header.summary.tag || ({})
+            readonly property var subTags: tagStrip.tag.subTags || []
+            objectName: "pageTagStrip"
+            visible: (tagStrip.tag.key || "") !== "" && ((tagStrip.tag.references || 0) > 0 || tagStrip.subTags.length > 0)
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.space1
+            Layout.leftMargin: -Theme.space2
+            spacing: Theme.space1
+
+            BButton {
+                objectName: "pageTagOverview"
+                size: "small"
+                variant: "ghost"
+                iconName: "hash"
+                text: qsTr("Tag overview")
+                Accessible.description: qsTr("Everything tagged %1").arg(tagStrip.tag.text || "")
+                onClicked: AppController.navigate({ view: "tag", tag: tagStrip.tag.key, overview: true })
+            }
+            BButton {
+                size: "small"
+                variant: "ghost"
+                iconName: "list-todo"
+                text: qsTr("Tasks with this tag")
+                onClicked: AppController.navigate({ view: "tasks", query: header.tagQuery(tagStrip.tag.key) })
+            }
+            Repeater {
+                model: tagStrip.subTags
+                delegate: BChip {
+                    required property var modelData
+                    variant: "tag"
+                    interactive: true
+                    text: "#" + (header.editor ? header.editor.autoTextSafe(modelData.display) : modelData.display)
+                          + " · " + modelData.count
                     Accessible.name: qsTr("Tag %1").arg(modelData.display)
                     onClicked: AppController.openTag(modelData.tag)
                 }

@@ -1929,6 +1929,12 @@ ApplicationWindow {
             typeInto(row, "Zamówić kontener #za")
             break
         }
+        case "tag-pages": {
+            // `#` offers pages too (a tag names a page): pages no tag names yet, with their folder.
+            const row = page.insertBlockAfter(rowOf("Wywieźć gruz"), "")
+            typeInto(row, "Porównać z #rem")
+            break
+        }
         case "slash": {
             const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
             typeInto(row, "Zapytać o termin /")

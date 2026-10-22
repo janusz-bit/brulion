@@ -2195,9 +2195,10 @@ QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerM
             cursorAfter = from + int(replacement.size());
         }
     } else if (t.mode == u"tags") {
-        replacement = insert;
-        if (replacement.contains(u' ') && !replacement.startsWith(u"[["_s))
-            replacement = u"[["_s + replacement + u"]]"_s;
+        // After the typed '#': the name, in brackets when it is no simple tag (#[[Jan Kowalski]],
+        // #[[C++]]: markdown::tagSyntax).
+        const QString tag = markdown::tagSyntax(insert);
+        replacement = tag.isEmpty() ? insert : tag.mid(1);
         if (to >= edit.size() || !edit[to].isSpace())
             replacement += u' ';
         cursorAfter = from + int(replacement.size());
