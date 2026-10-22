@@ -384,7 +384,7 @@ private Q_SLOTS:
                                  }));
         QCOMPARE(column(model, "pageLevel"), (QStringList{u"false"_s, u"false"_s, u"false"_s, u"false"_s, u"false"_s,
                                                           u"true"_s, u"true"_s, u"false"_s}));
-        QCOMPARE(model.refCount(), 4);
+        QCOMPARE(model.refCount(), 6); // a page tagged as a whole is one reference
         QCOMPARE(model.pageCount(), 4);
         QCOMPARE(model.taggedCount(), 6);
         QCOMPARE(tagged.size(), 1);

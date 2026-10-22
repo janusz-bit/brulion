@@ -266,7 +266,7 @@ void GroupedRefsModel::refresh()
             continue;
         keys.insert(h.key);
         next.append(h);
-        refs += h.count;
+        refs += h.count + (m_pageLevelCounts && h.pageLevel ? 1 : 0);
         if (h.collapsed)
             continue;
         for (const Ref &r : g.refs) {
@@ -367,7 +367,10 @@ bool GroupedRefsModel::setTaskStatus(int row, const QString &status)
 
 // ---- BacklinksModel ---------------------------------------------------------------------------------
 
-BacklinksModel::BacklinksModel(QObject *parent) : GroupedRefsModel(parent) { }
+BacklinksModel::BacklinksModel(QObject *parent) : GroupedRefsModel(parent)
+{
+    setPageLevelCounts(true); // a page tagged as a whole is one reference
+}
 
 void BacklinksModel::setPath(const QString &path)
 {

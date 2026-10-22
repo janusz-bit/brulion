@@ -729,6 +729,13 @@ private Q_SLOTS:
         QTest::newRow("date due empty") << u"x 📅 "_s << 5 << u"date"_s << QString() << 5 << 5 << u"📅"_s << QString();
         QTest::newRow("date canonical") << u"x 📅 2026-10-15"_s << 15 << QString() << QString() << -1 << -1 << QString()
                                         << QString();
+        // After a written date the rest of the line completes as anywhere else.
+        QTest::newRow("tag after a date")
+                << u"x 📅 2026-10-15 #zak"_s << 20 << u"tags"_s << u"zak"_s << 17 << 20 << u"#"_s << QString();
+        QTest::newRow("slash after a date")
+                << u"x ⏳ 2026-10-15 /prz"_s << 19 << u"slash"_s << u"prz"_s << 15 << 19 << u"/"_s << QString();
+        QTest::newRow("date after a date")
+                << u"x 📅 2026-10-15 text"_s << 20 << QString() << QString() << -1 << -1 << QString() << QString();
         QTest::newRow("at date") << u"spotkanie @jutro"_s << 16 << u"date"_s << u"jutro"_s << 10 << 16 << u"@"_s << QString();
         QTest::newRow("email") << u"jan@example.com"_s << 15 << QString() << QString() << -1 << -1 << QString() << QString();
         QTest::newRow("inside code") << u"`[[x`"_s << 4 << QString() << QString() << -1 << -1 << QString() << QString();

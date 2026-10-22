@@ -58,6 +58,7 @@ Item {
             TapHandler { onTapped: AppController.openPage(header.path, -1, false) }
         }
         BText {
+            id: folderText
             visible: header.folder !== "" && header.journalDate === "" && !header.compact
             Layout.maximumWidth: headerRow.width * 0.35
             text: header.folder
@@ -67,7 +68,7 @@ Item {
         }
         BText {
             visible: header.pageLevel
-            text: qsTr("whole page")
+            text: (folderText.visible ? "· " : "") + qsTr("whole page")
             variant: "caption"
             color: Theme.fgFaint
         }

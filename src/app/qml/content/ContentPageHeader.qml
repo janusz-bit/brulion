@@ -344,6 +344,12 @@ Item {
                 text: qsTr("Tasks with this tag")
                 onClicked: AppController.navigate({ view: "tasks", query: header.tagQuery(tagStrip.tag.key) })
             }
+        }
+        Flow {
+            // The sub-tags (#praca/raporty under Praca), each a page of its own.
+            visible: tagStrip.visible && tagStrip.subTags.length > 0
+            Layout.fillWidth: true
+            spacing: Theme.space1
             Repeater {
                 model: tagStrip.subTags
                 delegate: BChip {

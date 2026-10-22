@@ -52,7 +52,8 @@ class GroupedRefsModel : public WorkspaceListModel {
     Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged FINAL)
     /// References left out by `limit` (not counting collapsed groups).
     Q_PROPERTY(int hiddenCount READ hiddenCount NOTIFY totalsChanged FINAL)
-    /// References (ref rows, also of collapsed groups) and pages (groups).
+    /// References (ref rows, also of collapsed groups; BacklinksModel: a page tagged as a whole
+    /// counts as one) and pages (groups).
     Q_PROPERTY(int refCount READ refCount NOTIFY totalsChanged FINAL)
     Q_PROPERTY(int pageCount READ pageCount NOTIFY totalsChanged FINAL)
 
@@ -150,6 +151,8 @@ protected:
     /// (rendered the way the editor shows it) when the row is listed (fillRef()) — a busy page
     /// has thousands of references, of which `limit` are shown.
     Ref refForBlock(const QString &path, int blockIndex) const;
+    /// refCount counts a page-level group as one reference more.
+    void setPageLevelCounts(bool on) { m_pageLevelCounts = on; }
     /// Render a ref of refForBlock() (no-op for filled ones).
     void fillRef(Ref &ref, const QString &path) const;
     /// A ref row for line `line` of `path` that is not inside a block (e.g. frontmatter).
@@ -182,6 +185,7 @@ private:
     int m_pageCount = 0;
     int m_limit = 0;
     int m_hidden = 0;
+    bool m_pageLevelCounts = false;
 };
 
 class BacklinksModel : public GroupedRefsModel {
