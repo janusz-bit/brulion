@@ -258,6 +258,23 @@ int openMenus(QQuickWindow *window)
     return open;
 }
 
+/// Close the tooltips open in the window: a tooltip whose button was hidden under a resting
+/// mouse stays open, and the overlay takes the next press outside it to close it.
+void closeToolTips(QQuickWindow *window)
+{
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickToolTip"))
+            QMetaObject::invokeMethod(item->parent(), "close");
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children)
+            visit(child);
+    };
+    visit(window->contentItem());
+    settle(50);
+}
+
 /// Close the menus open in the window (a failed check must not leave a modal menu behind).
 void closeMenus(QQuickWindow *window)
 {
@@ -863,6 +880,9 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                           && right(textButton) <= window->width() + 0.5
                           && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
                   "the picture's bar shows the file name next to the size toggle and fits the window");
+            // (A tooltip an earlier step left open — the mouse stayed on the note mode toggle,
+            // hidden since — would take the click: a press outside closes it.)
+            closeToolTips(window);
             tapOrClick(window, pointIn(size), touch);
             check(waitFor([&] { return view->property("actualSize").toBool(); })
                           && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Fit to view"),
