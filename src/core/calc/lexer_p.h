@@ -7,6 +7,9 @@
 #include <QString>
 #include <QStringView>
 
+#include <optional>
+#include <utility>
+
 namespace brulion::calc {
 
 enum class TokenKind {
@@ -32,6 +35,9 @@ struct Token {
     qsizetype length = 0; ///< length in the lexed string
     double number = 0;
     bool unterminated = false; ///< String without closing quote
+    /// LParen of a call like `round(2,5)`, where a ',' between digits could be a decimal comma as
+    /// well as an argument separator, and the function takes both counts (normalizeNumbers()).
+    bool ambiguousComma = false;
 
     bool is(TokenKind k) const { return kind == k; }
     bool isOperator(QStringView op) const { return kind == TokenKind::Operator && text == op; }
@@ -48,7 +54,16 @@ QList<Token> lex(QStringView input);
 /// "12,5" (decimal comma — outside function arguments and lists, or inside calls that use ';'
 /// as argument separator), English "1,000,000.5", and "1 000 000" / "12 345,5" (groups of three
 /// digits separated by one space, no-break space or thin space).
+/// In a call without ';' a ',' between digits ("2,5", no spaces) separates arguments, unless only
+/// the decimal reading gives the builtin function a valid number of arguments (`sqrt(2,25)`).
+/// When both readings fit (`round(2,5)`, `max(1,5)`), the separators stay and the call's LParen
+/// is marked `ambiguousComma`: evaluating it is an error, never a guess. Runs of such commas
+/// (`sum(1,2,3)`) always separate.
 void normalizeNumbers(QList<Token> &tokens, QStringView source, CalcLocale locale);
+
+/// Numbers of arguments {min, max (-1 = any)} of the builtin function `name` (case-insensitive);
+/// nullopt for other names. Implemented by the evaluator (its table of builtins).
+std::optional<std::pair<int, int>> builtinArity(const QString &name);
 
 /// Words that are always operators: to, mod, and, or, xor, not (case-insensitive).
 bool isOperatorWord(QStringView word);

@@ -74,13 +74,16 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool notifyMissed READ notifyMissed WRITE setNotifyMissed NOTIFY notifyMissedChanged FINAL)
 
     // ---- Nextcloud (WebDAV) sync --------------------------------------------------------
-    // Whether it syncs and the server folder are per notebook (the current one); the server,
-    // the user and the password are shared.
+    // Whether it syncs and the server folder are per notebook (the current one; with no notebook
+    // open nothing syncs); the server, the user and the password are shared. A notebook's are
+    // stored under the id of its folder ("sync/nextcloud/notebooks/<Vault::idForPath>/…", the id
+    // its device state and sync bookkeeping have: a symlink or a relative path is the same
+    // notebook), with the notebook's path.
     Q_PROPERTY(bool nextcloudEnabled READ nextcloudEnabled WRITE setNextcloudEnabled NOTIFY nextcloudChanged FINAL)
     /// Server address, e.g. "https://cloud.example.com".
     Q_PROPERTY(QString nextcloudUrl READ nextcloudUrl WRITE setNextcloudUrl NOTIFY nextcloudChanged FINAL)
     Q_PROPERTY(QString nextcloudUser READ nextcloudUser WRITE setNextcloudUser NOTIFY nextcloudChanged FINAL)
-    /// Folder on the server, relative to the user's files (default "Brulion").
+    /// Folder on the server, relative to the user's files ("Brulion" when the notebook has none).
     Q_PROPERTY(QString nextcloudFolder READ nextcloudFolder WRITE setNextcloudFolder NOTIFY nextcloudChanged FINAL)
     /// Automatic sync interval in minutes (0 = only manually / after edits; default 15).
     Q_PROPERTY(int syncIntervalMinutes READ syncIntervalMinutes WRITE setSyncIntervalMinutes NOTIFY nextcloudChanged FINAL)
@@ -94,6 +97,8 @@ public:
     ~AppSettings() override;
 
     static constexpr int MaxRecentVaults = 8;
+    /// The server folder proposed for the first notebook set up with an account on this device.
+    static constexpr auto NewAccountFolder = "Notatki";
 
     QString themeMode() const;
     void setThemeMode(const QString &mode);
@@ -140,8 +145,41 @@ public:
     void setNextcloudUser(const QString &user);
     QString nextcloudFolder() const;
     void setNextcloudFolder(const QString &folder);
-    /// Move the pre-0.3.1 shared switch and folder (one for all notebooks) to `notebook`, once.
-    void claimSharedNextcloud(const QString &notebook);
+    /// The current notebook has a server folder of its own (chosen, or kept from its last sync).
+    bool hasOwnNextcloudFolder() const;
+    /// The server folder the settings form shows for the current notebook: its own; for one that
+    /// has none, "Notatki" when no account is set up yet, else the notebook folder's name (without
+    /// characters a server folder cannot have) — and never a folder another notebook on this
+    /// device has, holds or is inside ("Praca 2" then), nor the one of 0.3.0 waiting for its
+    /// notebook.
+    QString proposedNextcloudFolder() const;
+    /// Another notebook on this device that syncs with `folder`, a folder inside it or around it
+    /// (its switch is on and its folder exists; not `except`, default: the current notebook): its
+    /// path, "" when none. Their notes would mix on the server.
+    QString nextcloudFolderUser(const QString &folder) const;
+    QString nextcloudFolderUser(const QString &folder, const QString &except) const;
+    /// Switch Nextcloud sync off in every notebook (`exceptCurrent`: but the current one), also
+    /// the 0.3.0 switch still waiting for its notebook. The account is shared: without it (signed
+    /// out) or with another one, the others must not sync by themselves.
+    void disableNextcloudEverywhere(bool exceptCurrent = false);
+
+    // Up to 0.3.0 one switch and one server folder applied to every notebook ("sync/nextcloud/
+    // enabled", "…/folder"). They wait, read by nothing but notebookOpened(), for the notebook
+    // they belong to.
+    /// The settings of 0.3.0 or older wait for their notebook.
+    bool hasSharedNextcloud() const;
+    /// Remember `notebook` as theirs: the notebook that was current when they were first seen
+    /// (AppController: not the documentation, then the last other notebook). Once; "" records
+    /// that none is.
+    void recordSharedNextcloudOwner(const QString &notebook);
+    /// `notebook` was opened (never called for the documentation). `syncedRemote`: what its sync
+    /// bookkeeping names ("remote" of "sync/meta" in its LocalStore, nextcloudRemote()). It takes
+    /// over the settings of 0.3.0 when they are its own: its bookkeeping names exactly that
+    /// account and folder, or it is the recorded notebook — any other notebook never does (its
+    /// notes would flow into that folder). The switch stays off when another notebook syncs with
+    /// that folder meanwhile. A notebook with sync off and no server folder of its own keeps the
+    /// folder its bookkeeping names on this account, so turning sync on continues there.
+    void notebookOpened(const QString &notebook, const QString &syncedRemote);
     int syncIntervalMinutes() const;
     void setSyncIntervalMinutes(int minutes);
 
@@ -187,6 +225,27 @@ Q_SIGNALS:
 private:
     template<typename T>
     bool store(const QString &key, const T &value, const T &current);
+
+    /// The sync settings of one notebook's group in "sync/nextcloud/notebooks".
+    struct NotebookSync {
+        QString id;
+        QString path; ///< "" when unknown (written by 0.3.1–0.3.5 for a notebook no longer recent)
+        bool enabled = false;
+        bool hasFolder = false;
+        QString folder;
+    };
+    QList<NotebookSync> notebookSyncs() const;
+    /// The key of setting `name` of `notebook` ("" without a notebook): in its group, or where
+    /// 0.3.1–0.3.5 wrote it (the hash of the path as written) until it is moved.
+    QString notebookKey(const QString &notebook, QStringView name) const;
+    bool hasNotebookValue(const QString &notebook, QStringView name) const;
+    void setNotebookValue(const QString &notebook, QStringView name, const QVariant &value);
+    template<typename T>
+    bool storeNotebookValue(const QString &notebook, QStringView name, const T &value, const T &current);
+    /// Move the settings 0.3.1–0.3.5 wrote for `notebook` under the hash of its path as written
+    /// into its group (when its folder exists: the id is the canonical path), and record its path.
+    void adoptNotebookKeys(const QString &notebook);
+    bool claimSharedNextcloud(const QString &notebook, const QString &syncedRemote);
 
     std::unique_ptr<QSettings> m_settings;
     QString m_dataDir;

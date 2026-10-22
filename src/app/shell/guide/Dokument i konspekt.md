@@ -40,7 +40,7 @@ Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnien
 
 ## Podpowiedzi podczas pisania
 - `[[` — strony (z możliwością utworzenia nowej),
-- `((` — bloki z całego brulionu,
+- `((` — bloki z całego notatnika,
 - `#` — tagi,
 - po `📅`, `⏳`, `⏰` albo `@` — daty słowami: „jutro o 9”, „w piątek 18:00”.
 

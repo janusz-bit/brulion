@@ -9,8 +9,9 @@
 #   io_history_base <home> <vault>   this device's version history of "Zakupy.md" holds the common
 #                               ancestor of both versions (written in History's on-disk format)
 #   io_logseq_graph <dir>       a small Logseq graph to import (journal, pages, a picture)
-#   io_nextcloud_home <home>    settings of an XDG home with a Nextcloud account whose server
-#                               does not exist (chmura.invalid: fails at once, offline-safe)
+#   io_nextcloud_home <home> <vault>  settings of an XDG home with a Nextcloud account whose
+#                               server does not exist (chmura.invalid: fails at once, offline-safe),
+#                               written as 0.3.0 did with <vault> open: it takes them over
 #   io_sync_history <home> <vault>  the sync history of this device (sync-history.json in the
 #                               vault's device state): runs #37–#43 of 2026-10-14 — ok, quiet ones
 #                               folded, per-file errors, a timeout, a stalled run
@@ -57,7 +58,7 @@ io_logseq_graph() {
 }
 
 io_nextcloud_home() {
-  local home="$1"
+  local home="$1" vault="$2"
   mkdir -p "$home/config/Brulion" "$home/data/Brulion/Brulion/secrets"
   cat > "$home/config/Brulion/Brulion.ini" <<'EOF'
 [sync]
@@ -67,6 +68,7 @@ nextcloud\user=jan
 nextcloud\folder=Notatki
 intervalMinutes=15
 EOF
+  printf '\n[vaults]\ncurrent="%s"\n' "$vault" >> "$home/config/Brulion/Brulion.ini"
   printf 'abcde-fghij-klmno-pqrst-uvwxy' > "$home/data/Brulion/Brulion/secrets/nextcloud-password"
   chmod 600 "$home/data/Brulion/Brulion/secrets/nextcloud-password"
 }

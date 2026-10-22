@@ -12,7 +12,11 @@
 //
 // Vault lifecycle: start() opens the last vault (or shows onboarding); openVault(path)
 // (created when missing), openDemoVault() ("Przykładowy brulion", seeded with the sample notes),
-// closeVault(). Android: a vault on shared storage first needs "All files access" —
+// closeVault(); openRecentVault(path) for a known notebook (never recreates a missing folder).
+// The documentation notebook (openDocsVault(), toggleDocsVault()) is for reading:
+// it never becomes the start notebook or a recent one, arms no reminders (the user's notebook
+// keeps its armed set), and quick capture and reminder taps go back to the user's notebook.
+// Android: a vault on shared storage first needs "All files access" —
 // openVault() then asks for it (pendingVaultPath) and continues when it is granted.
 // WebAssembly: one fixed vault folder in IndexedDB (defaultVaultPath); construct the controller
 // only after WasmStorage::ready().
@@ -106,6 +110,8 @@ class AppController : public QObject {
     Q_PROPERTY(QString pendingVaultPath READ pendingVaultPath NOTIFY pendingVaultPathChanged FINAL)
     /// The vault that could not be opened (status "error"; retryOpenVault()), "" otherwise.
     Q_PROPERTY(QString failedVaultPath READ failedVaultPath NOTIFY statusChanged FINAL)
+    /// The documentation notebook is the open one.
+    Q_PROPERTY(bool inDocsVault READ inDocsVault NOTIFY inDocsVaultChanged FINAL)
 
     // ---- Permissions --------------------------------------------------------------------
     /// { allFilesAccess, notifications, exactAlarms, fullScreenAlarms } (true when granted or
@@ -180,7 +186,8 @@ public:
     Q_INVOKABLE QString today(int offsetDays = 0) const;
     Q_INVOKABLE void openTag(const QString &tag);
     Q_INVOKABLE void search(const QString &query);
-    /// Open a reminder's note (notification tap); waits for the vault when it is not ready.
+    /// Open a reminder's note (notification tap); waits for the vault when it is not ready. In
+    /// the documentation (which arms no reminders) it opens the user's notebook first.
     Q_INVOKABLE void openNotification(const QString &path, int line);
 
     // ---- Platform -----------------------------------------------------------------------
@@ -211,17 +218,25 @@ public:
     /// Open (or create) the vault folder `path` (a local path or a file:// URL). Asynchronous:
     /// status becomes "loading", then "ready" or "error".
     Q_INVOKABLE void openVault(const QString &path);
+    /// Open a notebook known from before (the recent list, "back" from the documentation). Like
+    /// start(), never creates its folder when it is gone (deleted, moved, an unmounted card):
+    /// says so, drops it from the recent list and returns false.
+    Q_INVOKABLE bool openRecentVault(const QString &path);
     /// openVault(), then show `route` instead of the home view (onboarding's "Import notes":
     /// the import screen of the new notebook). Kept while Android asks for "All files access".
     Q_INVOKABLE void openVaultAt(const QString &path, const QVariantMap &route);
     /// Create (first time) and open "Przykładowy brulion" with the sample notes.
     Q_INVOKABLE void openDemoVault();
-    /// Opens the documentation notebook, seeding it on first use (no-op in the browser).
+    /// Opens the documentation notebook, writing it on first use and updating the pages nobody
+    /// changed to this version (updateDocsVault(); no-op in the browser).
     Q_INVOKABLE void openDocsVault();
     /// True while the documentation notebook is the open one.
     bool inDocsVault() const;
     /// The documentation notebook, or back to the notebook used before it (Ctrl+Shift+B).
     Q_INVOKABLE void toggleDocsVault();
+    /// The user's notebook used last: the first recent one that is not the documentation ("" when
+    /// there is none). start() opens it when the app was left in the documentation.
+    QString lastUserVault() const;
     /// Show onboarding and close the vault (a moment later: the shell's editors save first).
     Q_INVOKABLE void closeVault();
     /// "Try again" after an error: open failedVaultPath() again (else the current vault).
@@ -248,10 +263,11 @@ public:
 
     // ---- Quick capture, window, app ---------------------------------------------------------
     /// Open the quick capture dialog (also from the tray / a launcher shortcut); while the
-    /// notebook is still opening, once it is ready.
+    /// notebook is still opening, once it is ready. In the documentation it goes back to the
+    /// user's notebook first: captured notes never land in the documentation.
     Q_INVOKABLE void quickCapture();
     /// Append `text` to today's journal (Workspace::quickCapture: a date in it makes a task with
-    /// a ⏰ reminder or 📅 due date); false when nothing was saved.
+    /// a ⏰ reminder or 📅 due date); false when nothing was saved (also in the documentation).
     Q_INVOKABLE bool capture(const QString &text);
     /// Bring the main window to the front (tray, second launch, notification tap).
     Q_INVOKABLE void showWindow();
@@ -292,6 +308,7 @@ Q_SIGNALS:
     void trayAvailableChanged();
     void quittingChanged();
     void pendingVaultPathChanged();
+    void inDocsVaultChanged();
     void permissionsChanged();
     void syncStatusChanged();
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
@@ -319,6 +336,8 @@ private:
     void onPathRemoved(const QString &path);
     void applyPendingNotification();
     QVariantMap initialRoute() const;
+    /// `path` is the documentation notebook's folder.
+    bool isDocsPath(const QString &path) const;
 
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;

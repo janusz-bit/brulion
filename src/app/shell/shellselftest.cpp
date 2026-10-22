@@ -2,6 +2,7 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "demovault.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -15,6 +16,7 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QInputDevice>
@@ -452,6 +454,69 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
 ///     the rows' right-click TapHandlers took every finger tap too (touch points carry no
 ///     buttons, so Qt ignores a TapHandler's acceptedButtons for them): each tap opened the modal
 ///     context menu, which then swallowed the release — no folder expanded, no page opened.
+/// 5d. The notebook switcher next to the notebook's name (in the drawer on phones): one tap / click
+/// on another notebook switches to it — a checkable menu item has toggled `checked` before
+/// `triggered` runs, which once made the first click do nothing — here to the documentation (on
+/// its table of contents) and back to the sample notebook.
+void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const QString sample = app->workspace()->rootPath();
+    const auto activate = [&](QQuickItem *item) {
+        if (touch)
+            touchTap(window, pointIn(item));
+        else
+            mouseClick(window, pointIn(item));
+    };
+    const auto shownItem = [window](const std::function<bool(QQuickItem *)> &pred) {
+        QQuickItem *found = nullptr;
+        waitFor([&] { return (found = findShown(window->contentItem(), pred)) != nullptr; });
+        return found;
+    };
+    const auto named = [](const QString &name) {
+        return [name](QQuickItem *item) { return item->objectName() == name; };
+    };
+    // Opens the switcher's menu and taps / clicks the entry `pred` picks, once.
+    const auto pick = [&](const std::function<bool(QQuickItem *)> &pred) {
+        closeMenus(window);
+        if (window->width() < 900) {
+            // A fresh shell after each switch: its drawer, found through its bottom bar.
+            QQuickItem *menuTab = shownItem(named(u"bottomNav_menu"_s));
+            if (!menuTab)
+                return false;
+            activate(menuTab);
+        }
+        QQuickItem *button = shownItem(named(u"notebookSwitch"_s));
+        if (!button)
+            return false;
+        activate(button);
+        QQuickItem *entry = shownItem(pred);
+        if (!entry)
+            return false;
+        settle(150); // the menu's opening transition
+        activate(entry);
+        return true;
+    };
+    const auto ready = [app] { return app->status() == u"ready" && app->workspace()->ready(); };
+
+    check(pick(named(u"notebookMenuDocs"_s)), "the notebook switcher lists the documentation");
+    check(waitFor(
+                  [&] {
+                      return app->inDocsVault() && ready()
+                             && app->currentRoute().value(u"path"_s).toString() == docsWelcomePage();
+                  },
+                  10000),
+          "one tap on the documentation opens it on its table of contents");
+    const QString name = QFileInfo(sample).fileName();
+    check(pick([&](QQuickItem *item) {
+              return item->objectName() == u"notebookMenuRecent" && item->property("text").toString() == name;
+          }),
+          "the notebook switcher lists the sample notebook");
+    check(waitFor([&] { return !app->inDocsVault() && ready() && app->workspace()->rootPath() == sample; }, 10000),
+          "one tap on a recent notebook switches back to it");
+    closeMenus(window);
+}
+
 void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -1317,6 +1382,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkLogsAndSyncDetails(window, app, check);
     closeMenus(window);
     app->goHome();
+
+    // 5d. The notebook switcher: to the documentation and back with one tap / click each.
+    checkNotebookSwitcher(window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

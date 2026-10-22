@@ -109,6 +109,11 @@
   odzyskać z kosza.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
   żywych przykładach — do klikania, edytowania i psucia.
+* **Dokumentacja w środku.** Pełny poradnik po polsku to osobny notatnik „Dokumentacja
+  Brulionu” (na komputerze i Androidzie): przycisk „Przełącz notatnik” obok nazwy notatnika
+  albo `Ctrl+Shift+B` i z powrotem. Aktualizuje się razem z aplikacją, a Twoje zmiany w nim
+  zostają; w przeglądarce te same strony są w repozytorium
+  ([src/app/shell/guide](src/app/shell/guide)).
 
 ## Instalacja
 
@@ -142,8 +147,13 @@ synchronizacji z API Syncthinga.
 
 **Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →
 Synchronizacja*) podaj adres serwera, użytkownika i **hasło aplikacji** (Nextcloud →
-Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (domyślnie
-`Notatki`); „Testuj połączenie” wyjaśnia ewentualne błędy. Brulion synchronizuje w tle
+Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (przy
+pierwszym koncie proponowany `Notatki`, dla kolejnych notatników ich nazwa); „Testuj
+połączenie” wyjaśnia ewentualne błędy. Serwer i konto są wspólne, ale włączenie synchronizacji
+i folder na serwerze należą do notatnika: inny notatnik (także dokumentacja) startuje bez
+synchronizacji, a folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu,
+Brulion nie zapisze. „Wyloguj” wyłącza synchronizację we wszystkich notatnikach, a zapisanie
+innego serwera lub użytkownika — w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
@@ -189,6 +199,7 @@ usuwa go w całości.
 | `Ctrl+O` | szybkie przejście do strony |
 | `Ctrl+J` | dzisiejszy dziennik |
 | `Ctrl+N` / `Ctrl+Shift+N` | nowa strona / szybka notatka do dziennika |
+| `Ctrl+Shift+B` | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | `Ctrl+Shift+F` | wyszukiwanie |
 | `Alt+←` / `Alt+→` | wstecz / dalej |
 | `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |

@@ -5,9 +5,10 @@ import Brulion
 
 // NextcloudForm — the Nextcloud account (NextcloudSetup over AppSettings): on/off, server address,
 // user, app password (how to create one, a button to Nextcloud's security page), server folder
-// (default "Notatki"), how often to sync, this device's name; "Testuj połączenie" explains what
-// went wrong (and offers to create a missing folder), "Zapisz" applies everything at once. Used by
-// SyncView and the settings' sync section.
+// (the notebook's own; proposed: "Notatki" for a new account, else the notebook's name; one that
+// another notebook syncs with is refused), how often to sync, this device's name; "Testuj
+// połączenie" explains what went wrong (and offers to create a missing folder), "Zapisz" applies
+// everything at once. Used by SyncView and the settings' sync section.
 //
 //   NextcloudForm { Layout.fillWidth: true }
 IoCard {
@@ -387,7 +388,7 @@ IoCard {
     BConfirmDialog {
         id: signOut
         title: qsTr("Sign out of Nextcloud?")
-        message: qsTr("Syncing stops and this device forgets the app password. The notes stay here and on the server.")
+        message: qsTr("Syncing stops in every notebook and this device forgets the app password. The notes stay here and on the server.")
         confirmText: qsTr("Sign out")
         destructive: true
         onAccepted: form.setup.disconnectAccount()

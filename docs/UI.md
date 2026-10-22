@@ -24,7 +24,11 @@ components — no Material/Fusion look, so all targets look identical.
 
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
   right **side panel**.
-  * Sidebar (`ShellSidebar`): the notebook's name and a new-page button; navigation Dziennik,
+  * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
+    `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
+    — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
+    notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
+    new-page button; navigation Dziennik,
     Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
     folder tree, lazy, with a context menu: new page / folder here, open in side panel,
     favourite, rename, history, trash; an empty folder opens to "Pusty folder"); a sync status
@@ -50,6 +54,15 @@ components — no Material/Fusion look, so all targets look identical.
   note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
   "Importuj notatki" card that opens the chosen notebook on its import tab
   (`AppController.openVaultAt`).
+* **The documentation notebook** „Dokumentacja Brulionu” (desktop and Android; the browser has
+  one notebook, so its sample welcome page links to the guide online): Brulion notes written
+  from `src/app/shell/guide/*.md` into `<AppData>/Dokumentacja Brulionu` and brought up to date
+  on every open (pages the user changed or deleted stay so). It opens on its table of contents
+  from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
+  Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
+  user's last notebook), arms no reminders (the user's notebook keeps its armed alarms), quick
+  capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
+  is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
   new page, capture, theme, language, sync, panels, settings, about), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
@@ -64,7 +77,8 @@ components — no Material/Fusion look, so all targets look identical.
 | Ctrl+Shift+F | search |
 | Ctrl+J | today's journal |
 | Ctrl+N | new page |
-| Ctrl+Shift+N | quick capture |
+| Ctrl+Shift+N | quick capture (from the documentation notebook: back to the user's notebook first) |
+| Ctrl+Shift+B | the documentation notebook / back to the notebook used before |
 | Alt+← / Alt+→ | back / forward |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
@@ -465,6 +479,17 @@ Choosing and switching the mode:
 The user must always be able to tell what the sync is doing, whether something failed and
 why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 
+* **The Nextcloud account and the notebooks** (`qml/io/NextcloudForm.qml` over
+  `NextcloudSetup`, in the sync center and Settings → Synchronizacja): the server, the user and
+  the app password are shared, the switch and the server folder belong to the open notebook (no
+  notebook open: nothing syncs). A notebook without a folder of its own is offered "Notatki"
+  for the first account on the device, else its own name ("Praca", "Praca 2" when taken —
+  never a folder another notebook has, holds or is inside); one synced before keeps the folder
+  its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
+  exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
+  się już z tym folderem…") and is not saved while sync is on. "Wyloguj" switches sync off in
+  every notebook (the dialog says so), saving another server or user in all the others. The
+  switch and folder of 0.3.0 and older go to the notebook they belong to (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i

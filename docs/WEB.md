@@ -11,7 +11,9 @@ przeglądarki.
   brak dostępu do folderów na dysku (import/eksport plików zamiast tego), synchronizacja z
   Nextcloud wymaga CORS (niżej), Syncthing niedostępny. Qt for WebAssembly nie ma bazy stref
   czasowych: przy imporcie kalendarza (`.ics`) godziny ze strefą (`TZID`) są brane jako czas
-  lokalny (godziny w UTC przelicza się normalnie).
+  lokalny (godziny w UTC przelicza się normalnie). Przeglądarka ma jeden notatnik, więc nie ma
+  w niej notatnika „Dokumentacja Brulionu”: strona powitalna przykładowego brulionu odsyła do
+  dokumentacji w repozytorium (`src/app/shell/guide/`).
 
 ## Wersje narzędzi
 

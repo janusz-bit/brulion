@@ -5,7 +5,9 @@ brulion: document
 ---
 # Dokumentacja Brulionu
 
-Ta dokumentacja jest zwykłymi notatkami Brulionu — osobnym brulionem „Dokumentacja Brulionu”. Możesz ją czytać, klikać linki, a nawet edytować: to Twoja kopia. Przykłady w niej są żywe, więc najlepiej uczyć się, zmieniając je na próbę. Do własnych notatek wrócisz przyciskiem przełączania brulionów obok nazwy brulionu w pasku bocznym.
+Ta dokumentacja jest zwykłymi notatkami Brulionu — osobnym notatnikiem „Dokumentacja Brulionu”. Możesz ją czytać, klikać linki, a nawet edytować: to Twoja kopia. Przykłady w niej są żywe, więc najlepiej uczyć się, zmieniając je na próbę. Do własnych notatek wrócisz przyciskiem „Przełącz notatnik” obok nazwy notatnika w pasku bocznym albo skrótem Ctrl+Shift+B.
+
+Brulion aktualizuje dokumentację razem z aplikacją: dochodzą nowe strony, a te, których nie zmieniałeś, dostają nową wersję. Strony, które zmieniłeś albo usunąłeś, zostają takie, jak je zostawiłeś. Ten notatnik nie uruchamia przypomnień (alarmy Twojego notatnika działają dalej), nie trafiają do niego szybkie notatki i aplikacja nie otwiera go sama po ponownym uruchomieniu.
 
 ## Od czego zacząć
 - [[Pierwsze kroki|Pierwsze kroki]] — pierwszy wpis, nowa strona, wyszukiwanie.
@@ -20,7 +22,7 @@ Ta dokumentacja jest zwykłymi notatkami Brulionu — osobnym brulionem „Dokum
 ## Planowanie
 - [[Zadania|Zadania]] — terminy, priorytety, powtarzanie.
 - [[Przypomnienia i alarmy|Przypomnienia i alarmy]] — powiadomienia i budziki.
-- [[Zapytania|Zapytania]] — listy zadań i bloków zbierane z całego brulionu.
+- [[Zapytania|Zapytania]] — listy zadań i bloków zbierane z całego notatnika.
 
 ## Liczenie
 - [[Obliczenia|Obliczenia]] — bloki `calc`, tabele z formułami, rachunki w tekście.

@@ -4,15 +4,20 @@
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "commandmodel.h"
+#include "demovault.h"
 #include "navigation.h"
+#include "olddocs.h"
 #include "workspace.h"
+
+#include "reminders/notifications.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <QTest>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 using namespace brulion::shell;
@@ -28,6 +33,32 @@ QVariantMap view(const QString &name)
 {
     return { { u"view"_s, name } };
 }
+
+bool writeFile(const QString &file, const QByteArray &bytes)
+{
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    QFile f(file);
+    return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+}
+
+/// The platform's notifier as Android has it: the armed set rings while the app is closed.
+class FakeSink : public brulion::NotificationSink {
+public:
+    QList<QList<brulion::ScheduledNotification>> scheduled;
+    bool firesWhenClosed() const override { return true; }
+    void schedule(const QList<brulion::ScheduledNotification> &list) override { scheduled.append(list); }
+    void showNow(const brulion::ScheduledNotification &) override { }
+    /// Titles of what is armed now.
+    QStringList armed() const
+    {
+        QStringList out;
+        if (!scheduled.isEmpty()) {
+            for (const brulion::ScheduledNotification &n : scheduled.last())
+                out.append(n.title);
+        }
+        return out;
+    }
+};
 
 } // namespace
 
@@ -614,7 +645,10 @@ private Q_SLOTS:
         QVERIFY(app->workspace()->exists(u"Zadania.md"_s));
         QVERIFY(app->workspace()->exists(u"Format plików.md"_s));
         QVERIFY(title() != toDocs); // "Back to my notebook"
-        QCOMPARE(app->settings()->recentVaults().size(), 2);
+        QCOMPARE(app->settings()->recentVaults().size(), 1); // the documentation is not a recent notebook
+        // It is the user's copy: edits and deletions are theirs.
+        QVERIFY(app->workspace()->write(u"Zadania.md"_s, u"- [ ] moja wersja zadań\n"_s));
+        QVERIFY(!app->workspace()->deletePage(u"Obliczenia.md"_s).isEmpty());
 
         // Back: the notebook used before, on its usual home route.
         app->toggleDocsVault();
@@ -624,11 +658,36 @@ private Q_SLOTS:
         QVERIFY(!app->workspace()->exists(u"Spis treści.md"_s));
         QCOMPARE(title(), toDocs);
 
-        // The second visit does not seed again over the user's edits.
+        // The second visit brings the documentation up to date, but never over the user's edits
+        // and without bringing back what the user deleted.
         app->toggleDocsVault();
         QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
         QTRY_COMPARE(app->status(), u"ready"_s);
         QVERIFY(app->workspace()->exists(u"Spis treści.md"_s));
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moja wersja zadań\n"_s);
+        QVERIFY(!app->workspace()->exists(u"Obliczenia.md"_s));
+    }
+
+    void documentationNotebookFromAnOlderVersion()
+    {
+        // Opened in 0.3.0–0.3.2, before "Wzory matematyczne" existed (the user has kept only the
+        // table of contents and changed "Zadania"): the new page arrives, the unchanged table of
+        // contents is replaced by this version's, the changed page stays.
+        auto app = openApp(u"aktualizacja"_s);
+        const QString docs = app->docsVaultPath();
+        QVERIFY(writeFile(QDir(docs).filePath(docsWelcomePage()), olddocs::kTableOfContents030.toUtf8()));
+        QVERIFY(writeFile(QDir(docs).filePath(u"Zadania.md"_s), "- [ ] moje zadania\n"));
+        app->openDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), QDir(docs).absolutePath());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->workspace()->exists(u"Wzory matematyczne.md"_s));
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), docsWelcomePage());
+        for (const DemoFile &f : docsVaultFiles()) {
+            if (f.path == docsWelcomePage())
+                QCOMPARE(app->workspace()->readFile(f.path), f.content);
+        }
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), u"- [ ] moje zadania\n"_s);
+        QVERIFY(!app->workspace()->exists(u"Obliczenia.md"_s)); // deleted back then: stays deleted
     }
 
     void switchingNotebooksDoesNotCarrySyncOver()
@@ -674,9 +733,213 @@ private Q_SLOTS:
         app->openDocsVault();
         QTRY_COMPARE(app->status(), u"ready"_s);
         QVERIFY(app->inDocsVault());
+        // Quick capture has nowhere to go but the documentation: it says so and writes nothing.
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        app->quickCapture();
+        QCOMPARE(toasts.size(), 1);
+        QCOMPARE(ui.size(), 0);
+        QVERIFY(app->inDocsVault());
+        QCOMPARE(app->status(), u"ready"_s);
         app->toggleDocsVault();
         QCOMPARE(app->status(), u"onboarding"_s);
         QVERIFY(!app->inDocsVault());
+    }
+
+    void documentationKeepsTheArmedReminders()
+    {
+        // Reading the documentation must not disarm the user's alarms: it has no reminders of its
+        // own, and its empty set would replace the armed one (on Android every alarm is cancelled).
+        FakeSink sink;
+        auto app = makeApp();
+        Workspace *ws = app->workspace();
+        ws->sync()->setSyncthingDiscovery(false);
+        ws->reminders()->setSink(&sink);
+        const QString mine = QDir(m_tmp.filePath(u"budzik"_s)).absolutePath();
+        QVERIFY(writeFile(mine + u"/Plan.md"_s, "- Pobudka na pociąg ⏰! 2026-10-15 05:45\n"));
+        app->start();
+        app->openVault(mine);
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QTRY_VERIFY(ws->reminders()->isRunning());
+        QCOMPARE(sink.armed(), QStringList{u"Pobudka na pociąg"_s});
+
+        const qsizetype calls = sink.scheduled.size();
+        app->toggleDocsVault(); // Ctrl+Shift+B
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QTRY_VERIFY(ws->ready());
+        QVERIFY(!ws->reminders()->isRunning());
+        QCOMPARE(sink.scheduled.size(), calls); // the armed set stays as it was
+
+        app->toggleDocsVault();
+        QTRY_COMPARE(ws->rootPath(), mine);
+        QTRY_VERIFY(ws->reminders()->isRunning());
+        QCOMPARE(sink.armed(), QStringList{u"Pobudka na pociąg"_s});
+
+        // Another notebook of the user arms its own reminders instead (the guide says so).
+        const QString other = QDir(m_tmp.filePath(u"budzik-inny"_s)).absolutePath();
+        app->openVault(other);
+        QTRY_COMPARE(ws->rootPath(), other);
+        QTRY_VERIFY(ws->reminders()->isRunning());
+        QVERIFY(sink.armed().isEmpty());
+    }
+
+    void restartLeavesTheDocumentation()
+    {
+        // Quit while reading the documentation: the next start opens the user's notebook, so quick
+        // capture (the launcher, Ctrl+Shift+N) and the journal write there.
+        auto app = openApp(u"po restarcie"_s);
+        const QString mine = QDir(m_tmp.filePath(u"po restarcie"_s)).absolutePath();
+        const QString docs = app->docsVaultPath();
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        for (const QVariant &v : app->settings()->recentVaults())
+            QVERIFY(v.toMap().value(u"path"_s).toString() != docs);
+        AppController::Options o;
+        o.settingsFile = app->settings()->fileName();
+        o.dataDir = app->dataDir();
+        app.reset();
+
+        AppController again(o);
+        again.setClock([] { return QDateTime(QDate(2026, 10, 14), QTime(10, 0)); });
+        again.start();
+        QTRY_COMPARE(again.status(), u"ready"_s);
+        QVERIFY(!again.inDocsVault());
+        QCOMPARE(again.workspace()->rootPath(), mine);
+        QVERIFY(again.capture(u"Zadzwonić do mamy jutro o 18"_s));
+        QVERIFY(QFile::exists(mine + u"/journals/2026-10-14.md"_s));
+        QVERIFY(!QFile::exists(docs + u"/journals/2026-10-14.md"_s));
+    }
+
+    void startAfterOlderVersionLeftInTheDocumentation()
+    {
+        // 0.3.0–0.3.5 stored the documentation as the current and most recent notebook.
+        auto app = makeApp();
+        const QString mine = QDir(m_tmp.filePath(u"żółw"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(mine));
+        app->settings()->addRecentVault(mine);
+        app->settings()->addRecentVault(app->docsVaultPath());
+        app->start();
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QCOMPARE(app->workspace()->rootPath(), mine);
+        QVERIFY(!app->inDocsVault());
+
+        // Only the documentation known: the start screen, with nothing set to reopen it.
+        auto alone = makeApp();
+        alone->settings()->addRecentVault(alone->docsVaultPath());
+        alone->start();
+        QCOMPARE(alone->status(), u"onboarding"_s);
+        QVERIFY(alone->settings()->currentVault().isEmpty());
+    }
+
+    void quickCaptureLeavesTheDocumentation()
+    {
+        // Ctrl+Shift+N, the "+" button or the launcher while reading the documentation: back to
+        // the user's notebook, and the dialog opens there. Nothing is written into the docs.
+        auto app = openApp(u"szybka notatka"_s);
+        const QString mine = QDir(m_tmp.filePath(u"szybka notatka"_s)).absolutePath();
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!app->capture(u"Kupić mleko"_s));
+        QVERIFY(!QFile::exists(app->docsVaultPath() + u"/journals/2026-10-14.md"_s));
+
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        app->quickCapture();
+        QTRY_COMPARE(app->workspace()->rootPath(), mine);
+        QTRY_COMPARE(ui.size(), 1);
+        QCOMPARE(ui.first().first().toString(), u"capture"_s);
+        QVERIFY(!app->inDocsVault());
+        QVERIFY(app->capture(u"Kupić mleko"_s));
+        QVERIFY(QFile::exists(mine + u"/journals/2026-10-14.md"_s));
+    }
+
+    void backToAMissingNotebookCreatesNothing()
+    {
+        // The user's folder is deleted (moved, on an unplugged card) while the documentation is
+        // open: "back" must not create an empty notebook there, as start() never does.
+        auto app = openApp(u"USB/Notatki"_s);
+        const QString mine = QDir(m_tmp.filePath(u"USB/Notatki"_s)).absolutePath();
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(QDir(m_tmp.filePath(u"USB"_s)).removeRecursively());
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        app->toggleDocsVault(); // Ctrl+Shift+B
+        QCOMPARE(app->status(), u"ready"_s);
+        QTest::qWait(50);
+        QCOMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->inDocsVault());
+        QVERIFY(!QDir(mine).exists());
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(toasts.first().first().toString().contains(QDir::toNativeSeparators(mine)));
+        QVERIFY(app->lastUserVault().isEmpty()); // dropped from the list
+
+        // The same for the switcher in the sidebar and the start screen's list.
+        auto other = makeApp();
+        const QString gone = QDir(m_tmp.filePath(u"usunięty notatnik"_s)).absolutePath();
+        const QString kept = QDir(m_tmp.filePath(u"istniejący notatnik"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(kept));
+        other->settings()->addRecentVault(kept);
+        other->settings()->addRecentVault(gone);
+        QVERIFY(!other->openRecentVault(gone));
+        QVERIFY(!QFileInfo::exists(gone));
+        QCOMPARE(other->settings()->recentVaults().size(), 1);
+        QCOMPARE(other->status(), u"boot"_s);
+        QVERIFY(other->openRecentVault(kept));
+        QTRY_COMPARE(other->status(), u"ready"_s);
+        QCOMPARE(other->workspace()->rootPath(), kept);
+    }
+
+    void reminderTapLeavesTheDocumentation()
+    {
+        // Android rings the user's alarms while the documentation is open: tapping one opens its
+        // note in the user's notebook instead of "the note no longer exists".
+        auto app = openApp(u"dotknięcie"_s);
+        const QString mine = QDir(m_tmp.filePath(u"dotknięcie"_s)).absolutePath();
+        QVERIFY(app->workspace()->write(u"Plan.md"_s, u"- Pobudka ⏰! 2026-10-15 05:45\n"_s));
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        app->openNotification(u"Plan.md"_s, 0);
+        QTRY_COMPARE(app->workspace()->rootPath(), mine);
+        QTRY_COMPARE(app->currentRoute().value(u"path"_s).toString(), u"Plan.md"_s);
+        QCOMPARE(app->currentView(), u"page"_s);
+        QCOMPARE(toasts.size(), 0);
+    }
+
+    void reminderTapOnAPageTheDocumentationAlsoHas()
+    {
+        // The user's own "Zadania.md" (the documentation has a page of that name too): a tap
+        // while reading the documentation opens the user's page, never the documentation's.
+        auto app = openApp(u"moje zadania"_s);
+        const QString mine = QDir(m_tmp.filePath(u"moje zadania"_s)).absolutePath();
+        const QString text = u"- [ ] Oddać książkę do biblioteki ⏰ 2026-10-15 09:00\n"_s;
+        QVERIFY(app->workspace()->write(u"Zadania.md"_s, text));
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(app->workspace()->exists(u"Zadania.md"_s)); // the documentation's page
+        app->openNotification(u"Zadania.md"_s, 0);
+        QTRY_COMPARE(app->workspace()->rootPath(), mine);
+        QTRY_COMPARE(app->currentRoute().value(u"path"_s).toString(), u"Zadania.md"_s);
+        QVERIFY(!app->inDocsVault());
+        QCOMPARE(app->workspace()->readFile(u"Zadania.md"_s), text);
+
+        // No notebook of the user to go back to: the documentation's page never opens instead.
+        auto alone = makeApp();
+        alone->start();
+        alone->openDocsVault();
+        QTRY_VERIFY(alone->inDocsVault());
+        QTRY_COMPARE(alone->status(), u"ready"_s);
+        QSignalSpy toasts(alone.get(), &AppController::toastRequested);
+        const QVariantMap before = alone->currentRoute();
+        alone->openNotification(u"Zadania.md"_s, 3);
+        QCOMPARE(alone->currentRoute(), before);
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(alone->inDocsVault());
     }
 
     void commands()

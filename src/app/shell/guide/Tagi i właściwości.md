@@ -35,7 +35,7 @@ W stylu Logseq/Dataview: linia `klucz:: wartość` bezpośrednio w bloku.
 
 Szacowany koszt:: 1200 zł
 
-Listę wartości w postaci linków lub tagów (`autor:: [[Jan]], [[Anna]]`) Brulion rozumie jako listę. Liczbowe właściwości strony można też użyć w [[Obliczenia|obliczeniach]] jako zmienne.
+Listę wartości w postaci linków lub tagów (`autor:: [[Jan]], [[Anna]]`) Brulion rozumie jako listę. Liczbowych właściwości strony można też użyć w [[Obliczenia|obliczeniach]] jako zmiennych.
 
 ## Wyszukiwanie po właściwościach
 Wartości właściwości są częścią tekstu bloku, więc znajdziesz je zwykłym wyszukiwaniem, a w zapytaniach filtrem tekstowym.

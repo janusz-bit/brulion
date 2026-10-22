@@ -3,6 +3,7 @@
 // references), dates are relative to "now", links resolve (except the one meant to be created
 // by a click), and seeding writes into a real vault without overwriting anything.
 #include "demovault.h"
+#include "olddocs.h"
 
 #include "calc/calc.h"
 #include "dates/recurrence.h"
@@ -10,8 +11,12 @@
 #include "index/vaultindex.h"
 #include "markdown/markdown.h"
 #include "util/paths.h"
+#include "vault/localstore.h"
 #include "vault/vault.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
@@ -23,6 +28,13 @@ using brulion::shell::DemoFile;
 namespace {
 
 const QDateTime kNow(QDate(2026, 10, 14), QTime(10, 0)); // a Wednesday
+
+bool writeRaw(const QString &file, const QByteArray &bytes)
+{
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    QFile f(file);
+    return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+}
 
 QHash<QString, QString> filesByPath(const QDateTime &now)
 {
@@ -164,6 +176,33 @@ private Q_SLOTS:
         for (const Heading &h : recipes.headings)
             recipeHeadings.append(h.text);
         QVERIFY(recipeHeadings.contains(u"Szarlotka babci"_s));
+    }
+
+    void welcomePageFindsTheDocumentation()
+    {
+        // Desktop and Android: the documentation notebook, through the switcher or Ctrl+Shift+B.
+        // The browser has none: the documentation online. The rest of the sample is the same.
+        const auto withNotebook = shell::demoVaultFiles(kNow, true);
+        const auto browser = shell::demoVaultFiles(kNow, false);
+        QCOMPARE(withNotebook.size(), browser.size());
+        for (qsizetype i = 0; i < browser.size(); ++i) {
+            QCOMPARE(browser.at(i).path, withNotebook.at(i).path);
+            if (browser.at(i).path != shell::demoWelcomePage())
+                QCOMPARE(browser.at(i).content, withNotebook.at(i).content);
+        }
+        const QString local = filesByPath(kNow).value(shell::demoWelcomePage());
+        QCOMPARE(local, withNotebook.first().content);
+        QVERIFY(local.contains(u"„Dokumentacja Brulionu”"_s));
+        QVERIFY(local.contains(u"„Przełącz notatnik”"_s) && local.contains(u"Ctrl+Shift+B"_s));
+        const QString web = browser.first().content;
+        QCOMPARE(browser.first().path, shell::demoWelcomePage());
+        QVERIFY(!web.contains(u"Przełącz notatnik"_s) && !web.contains(u"Ctrl+Shift+B"_s));
+        QVERIFY(!web.contains(u"{docs}"_s) && !local.contains(u"{docs}"_s));
+        const ParsedNote note = markdown::parseNote(shell::demoWelcomePage(), web);
+        bool online = false;
+        for (const Link &l : note.links)
+            online |= l.target.startsWith(u"https://github.com/janusz-bit/brulion/"_s);
+        QVERIFY(online);
     }
 
     void showsBothNoteModes()
@@ -321,8 +360,12 @@ private Q_SLOTS:
         QVERIFY(vault.open());
         const auto docs = shell::docsVaultFiles();
         QVERIFY(docs.size() >= 14);
-        QCOMPARE(shell::seedDocsVault(vault), int(docs.size()));
-        QCOMPARE(shell::seedDocsVault(vault), 0);
+        const shell::DocsUpdate first = shell::updateDocsVault(vault);
+        QVERIFY(first.ok);
+        QCOMPARE(first.added, int(docs.size()));
+        const shell::DocsUpdate second = shell::updateDocsVault(vault);
+        QVERIFY(second.ok);
+        QCOMPARE(second.added + second.updated + second.removed + second.kept, 0);
         QVERIFY(vault.exists(shell::docsWelcomePage()));
 
         VaultIndex index(vault.config());
@@ -368,6 +411,125 @@ private Q_SLOTS:
             }
         }
         QVERIFY(queries >= 1);
+    }
+
+    void documentationUpdates()
+    {
+        // The documentation follows the app: the next version's pages replace those nobody
+        // changed, new pages arrive, dropped ones go; what the user changed or deleted stays so.
+        // The record of what was written survives reopening the notebook (its LocalStore).
+        QTemporaryDir dir;
+        const QString root = dir.filePath(u"Dokumentacja Brulionu"_s);
+        const QString state = dir.filePath(u"stan"_s);
+        const QList<DemoFile> v1 = {
+                {u"Spis treści.md"_s, u"# Spis treści\n- [[Zadania]]\n"_s},
+                {u"Zadania.md"_s, u"- [ ] zadanie\n"_s},
+                {u"Obliczenia.md"_s, u"```calc\n2 + 2\n```\n"_s},
+                {u"Stara strona.md"_s, u"stara\n"_s},
+                {u"Żółw.md"_s, u"żółw\n"_s},
+        };
+        const QList<DemoFile> v2 = {
+                {u"Spis treści.md"_s, u"# Spis treści\n- [[Zadania]]\n- [[Wzory]]\n"_s},
+                {u"Zadania.md"_s, u"- [ ] zadanie ⏫\n"_s},
+                {u"Obliczenia.md"_s, u"```calc\n2 + 3\n```\n"_s},
+                {u"Wzory.md"_s, u"$x^2$\n"_s},
+        };
+        {
+            Vault vault(root, state);
+            QVERIFY(vault.open());
+            QCOMPARE(shell::updateDocsVault(vault, v1).added, 5);
+            // On disk at once, not only after the store's delay: the app may be killed meanwhile.
+            QVERIFY(LocalStore(vault.store()->filePath()).contains(u"docs/written"_s));
+            QVERIFY(vault.writeText(u"Zadania.md"_s, u"- [ ] moje zadanie\n"_s)); // the user's version
+            QVERIFY(vault.writeText(u"Żółw.md"_s, u"mój żółw\n"_s));
+            QVERIFY(vault.removePermanently(u"Obliczenia.md"_s)); // deleted on purpose
+        }
+        {
+            Vault vault(root, state);
+            QVERIFY(vault.open());
+            const shell::DocsUpdate update = shell::updateDocsVault(vault, v2);
+            QVERIFY(update.ok);
+            QCOMPARE(update.updated, 1); // Spis treści
+            QCOMPARE(update.added, 1);   // Wzory
+            QCOMPARE(update.removed, 1); // Stara strona
+            QCOMPARE(update.kept, 1);    // Zadania
+            QCOMPARE(vault.readText(u"Spis treści.md"_s), v2.at(0).content);
+            QCOMPARE(vault.readText(u"Zadania.md"_s), u"- [ ] moje zadanie\n"_s);
+            QVERIFY(!vault.exists(u"Obliczenia.md"_s));
+            QCOMPARE(vault.readText(u"Wzory.md"_s), v2.at(3).content);
+            QVERIFY(!vault.exists(u"Stara strona.md"_s));
+            QCOMPARE(vault.trash().size(), 1);                       // not lost for good
+            QCOMPARE(vault.readText(u"Żółw.md"_s), u"mój żółw\n"_s); // dropped, but the user's now
+            // The previous version of an updated page is in its history.
+            QVERIFY(!vault.history()->list(u"Spis treści.md"_s).isEmpty());
+        }
+        {
+            Vault vault(root, state);
+            QVERIFY(vault.open());
+            QVERIFY(vault.removePermanently(u"Wzory.md"_s));
+            const shell::DocsUpdate again = shell::updateDocsVault(vault, v2);
+            QCOMPARE(again.added + again.updated + again.removed, 0);
+            QVERIFY(!vault.exists(u"Wzory.md"_s));
+            QVERIFY(vault.exists(u"Żółw.md"_s));
+        }
+        {
+            // Emptied to start over (every page deleted): written anew.
+            Vault vault(root, state);
+            QVERIFY(vault.open());
+            for (const FileStat &f : vault.markdownFiles())
+                QVERIFY(vault.removePermanently(f.path));
+            QCOMPARE(shell::updateDocsVault(vault, v2).added, v2.size());
+        }
+    }
+
+    void documentationFromOlderVersions_data()
+    {
+        QTest::addColumn<QString>("tableOfContents");
+        QTest::addColumn<bool>("formulasAdded");
+        // 0.3.0–0.3.2 had no page about formulas: it arrives. In a notebook written by 0.3.3+
+        // it was there, so its absence means the user deleted it.
+        QTest::newRow("0.3.0") << olddocs::kTableOfContents030 << true;
+        QTest::newRow("0.3.3") << olddocs::tableOfContents033() << false;
+    }
+
+    void documentationFromOlderVersions()
+    {
+        // Notebooks written by 0.3.0–0.3.5 have no record of what was written: their pages are
+        // recognised by the hashes of those versions.
+        QFETCH(QString, tableOfContents);
+        QFETCH(bool, formulasAdded);
+        QTemporaryDir dir;
+        Vault vault(dir.filePath(u"Dokumentacja Brulionu"_s), dir.filePath(u"stan"_s));
+        QVERIFY(vault.open());
+        const auto docs = shell::docsVaultFiles();
+        for (const DemoFile &f : docs) {
+            if (f.path == u"Wzory matematyczne.md" || f.path == u"Obliczenia.md")
+                continue; // not written / deleted by the user
+            QString content = f.content;
+            if (f.path == u"Spis treści.md")
+                content = tableOfContents;
+            else if (f.path == u"Zadania.md")
+                content = u"- [ ] moje notatki o zadaniach\n"_s;
+            QVERIFY(writeRaw(vault.absolutePath(f.path), content.toUtf8()));
+        }
+        QVERIFY(vault.open()); // rescan
+
+        const shell::DocsUpdate update = shell::updateDocsVault(vault);
+        QVERIFY(update.ok);
+        const auto current = [&](const QString &path) {
+            for (const DemoFile &f : docs) {
+                if (f.path == path)
+                    return f.content;
+            }
+            return QString();
+        };
+        QCOMPARE(vault.readText(u"Spis treści.md"_s), current(u"Spis treści.md"_s)); // updated
+        QCOMPARE(vault.exists(u"Wzory matematyczne.md"_s), formulasAdded);
+        QVERIFY(!vault.exists(u"Obliczenia.md"_s));                                       // stays deleted
+        QCOMPARE(vault.readText(u"Zadania.md"_s), u"- [ ] moje notatki o zadaniach\n"_s); // kept
+        QCOMPARE(update.updated, tableOfContents == current(u"Spis treści.md"_s) ? 0 : 1);
+        QCOMPARE(update.added, formulasAdded ? 1 : 0);
+        QCOMPARE(update.kept, 1);
     }
 
     void journalTemplate()

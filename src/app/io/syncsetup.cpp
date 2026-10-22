@@ -301,8 +301,8 @@ void NextcloudSetup::reload()
         m_enabled = m_settings->nextcloudEnabled();
         m_url = m_settings->nextcloudUrl();
         m_user = m_settings->nextcloudUser();
-        // A new account suggests "Notatki"; a configured one shows its folder.
-        m_folder = m_url.isEmpty() ? QString::fromLatin1(DefaultFolder) : m_settings->nextcloudFolder();
+        // The notebook's folder; for one without, a folder no other notebook here has.
+        m_folder = m_settings->proposedNextcloudFolder();
         m_interval = m_settings->syncIntervalMinutes();
         m_deviceName = m_settings->value(u"sync/deviceName"_s, QString()).toString();
     }
@@ -406,8 +406,7 @@ bool NextcloudSetup::dirty() const
 {
     if (!m_settings)
         return false;
-    const QString savedFolder = m_settings->nextcloudUrl().isEmpty() ? QString::fromLatin1(DefaultFolder)
-                                                                     : m_settings->nextcloudFolder();
+    const QString savedFolder = m_settings->proposedNextcloudFolder();
     return m_enabled != m_settings->nextcloudEnabled() || m_url.trimmed() != m_settings->nextcloudUrl()
         || m_user.trimmed() != m_settings->nextcloudUser() || !m_password.isEmpty()
         || m_folder.trimmed() != savedFolder || m_interval != m_settings->syncIntervalMinutes()
@@ -443,13 +442,37 @@ QString NextcloudSetup::passwordError() const
 
 QString NextcloudSetup::folderError() const
 {
-    return m_showErrors ? validateServerFolder(m_folder) : QString();
+    const QString invalid = validateServerFolder(m_folder);
+    if (!invalid.isEmpty())
+        return m_showErrors ? invalid : QString();
+    return folderConflict();
+}
+
+bool NextcloudSetup::sameAccount() const
+{
+    return m_settings
+           && shell::sameNextcloudAccount(m_url, m_user, m_settings->nextcloudUrl(), m_settings->nextcloudUser());
+}
+
+QString NextcloudSetup::folderConflict() const
+{
+    // Shown at once, not only after a save attempt: the user should not find out from mixed notes.
+    // Another account switches the other notebooks off when saved (save()).
+    if (!m_settings || !m_enabled || !sameAccount())
+        return {};
+    const QString other = m_settings->nextcloudFolderUser(m_folder);
+    if (other.isEmpty())
+        return {};
+    return tr("The notebook “%1” already syncs with this folder. Choose another folder, or turn sync off in that "
+              "notebook first.")
+            .arg(QFileInfo(other).fileName());
 }
 
 bool NextcloudSetup::valid() const
 {
     return validateServerUrl(m_url).isEmpty() && validateUserName(m_user).isEmpty()
-        && validateServerFolder(m_folder).isEmpty() && (!m_password.isEmpty() || storedPasswordApplies());
+           && validateServerFolder(m_folder).isEmpty() && (!m_password.isEmpty() || storedPasswordApplies())
+           && folderConflict().isEmpty();
 }
 
 QString NextcloudSetup::davUrl() const
@@ -483,6 +506,8 @@ bool NextcloudSetup::save()
     // Switching off never needs a complete form.
     if (m_enabled && !valid())
         return false;
+    // The other notebooks synced with the saved account: never with another one by themselves.
+    const bool otherAccount = !sameAccount() && !(m_url.trimmed().isEmpty() && m_settings->nextcloudUrl().isEmpty());
     if (!m_password.isEmpty() && !m_settings->setNextcloudPassword(m_password))
         return false;
     // Another server or user without a new password (only possible while switched off): the
@@ -491,6 +516,8 @@ bool NextcloudSetup::save()
         && !m_settings->setNextcloudPassword(QString()))
         return false;
     m_password.clear();
+    if (otherAccount)
+        m_settings->disableNextcloudEverywhere(true);
     m_settings->setNextcloudUrl(m_url.trimmed());
     m_settings->setNextcloudUser(m_user.trimmed());
     m_settings->setNextcloudFolder(m_folder.trimmed());
@@ -507,7 +534,9 @@ void NextcloudSetup::disconnectAccount()
 {
     if (!m_settings)
         return;
-    m_settings->setNextcloudEnabled(false);
+    // The password is the account's, shared by the notebooks: every one of them stops (they
+    // would start again with whatever account is signed in next).
+    m_settings->disableNextcloudEverywhere();
     m_settings->setNextcloudPassword(QString());
     reload();
 }
