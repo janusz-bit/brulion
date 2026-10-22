@@ -15,8 +15,13 @@ import Brulion
 // and "Pokaż jako tekst" ⇄ "Pokaż obraz": the file read as text, read-only — a binary picture's
 // bytes are mojibake there, and a typed character would have been saved over the picture; the
 // view is for text-like assets such as SVG (`asText`, PageView switches it, Ctrl+E too).
+// In a narrow view (a phone; on the desktop between the sidebar and the side panel) the size
+// toggle is an icon, its text in the tooltip and for screen readers (as text it left the file's
+// name no room).
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
+// The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
+// never read whole for it), again whenever the file changes (sync, another program).
 //
 //   ContentPictureView { path: routePath; asText: pictureAsText
 //                        rendererPalette: editor.rendererPalette
@@ -46,9 +51,9 @@ Item {
 
     /// Fitted into the view ↔ the picture's own pixels (the flickable then).
     property bool actualSize: false
-    /// At most this many characters of the file are shown as text (a photo's bytes would take
-    /// seconds to lay out, for nothing anyone can read).
-    property int textLimit: 200000
+    /// At most this many bytes of the file are read and shown as text (a photo's bytes would
+    /// take seconds to lay out, for nothing anyone can read).
+    property int textLimit: 200 * 1024
 
     readonly property string fileName: {
         const i = root.path.lastIndexOf("/")
@@ -89,6 +94,12 @@ Item {
     readonly property bool pictureLoaded: picture.status === Image.Ready && picture.paintedWidth > 0
     /// The fitted picture is not its own pixels: the size toggle is offered.
     readonly property bool canZoom: root.pictureLoaded && Math.abs(root.fitScale - 1) > 0.01
+    readonly property string sizeToggleText: root.actualSize ? qsTr("Fit to view") : qsTr("Zoom to actual size")
+    /// The size toggle is an icon (see above): the view is narrow — its own width, not the
+    /// window's.
+    readonly property bool iconSizeToggle: root.width < Theme.compactBreakpoint
+    /// The toggle's icon: which way the picture's size changes.
+    readonly property string sizeToggleIcon: (root.fitScale < 1) !== root.actualSize ? "zoom-in" : "zoom-out"
 
     // Another picture: start fitted from the top left (the flickable clamps itself to the
     // smaller content, but contentX/Y are plain state without a binding to reset them).
@@ -154,12 +165,22 @@ Item {
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted
             }
+            // The size toggle: with its text where there is room, an icon in a narrow view.
             BButton {
                 objectName: "pictureSizeButton"
-                visible: !root.asText && (root.canZoom || root.actualSize)
+                visible: !root.iconSizeToggle && !root.asText && (root.canZoom || root.actualSize)
                 size: "small"
                 variant: "ghost"
-                text: root.actualSize ? qsTr("Fit to view") : qsTr("Zoom to actual size")
+                text: root.sizeToggleText
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.toggleSize()
+            }
+            BIconButton {
+                objectName: "pictureSizeButton"
+                visible: root.iconSizeToggle && !root.asText && (root.canZoom || root.actualSize)
+                size: "small"
+                iconName: root.sizeToggleIcon
+                label: root.sizeToggleText
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.toggleSize()
             }
@@ -274,8 +295,16 @@ Item {
         sourceComponent: Flickable {
             id: textFlick
 
-            readonly property string fileText: Workspace.readFile(root.path)
-            readonly property bool truncated: fileText.length > root.textLimit
+            /// Grows when the file changes on disk: it is read again.
+            property int revision: 0
+            /// The file's start: { text, truncated, bytes / bytesText (read), size / sizeText }.
+            readonly property var file: {
+                // `revision` used for real: qmlcachegen compiles a bare `void revision` away, and
+                // the binding's dependency on it with it.
+                const revision = textFlick.revision
+                return revision >= 0 ? Workspace.readTextStart(root.path, root.textLimit) : ({})
+            }
+            readonly property bool truncated: file.truncated === true
 
             objectName: "pictureText" // (the shell's self-test)
             clip: true
@@ -285,6 +314,15 @@ Item {
             TouchFlick.enabled: true
             T.ScrollBar.vertical: BScrollBar {}
 
+            // The file changed on disk while shown (Syncthing, Nextcloud, another program).
+            Connections {
+                target: Workspace
+                function onFileChanged(path) {
+                    if (path === root.path)
+                        textFlick.revision++
+                }
+            }
+
             Column {
                 id: textColumn
                 x: Theme.compact ? Theme.space4 : Theme.space8
@@ -293,9 +331,10 @@ Item {
                 spacing: Theme.space3
 
                 BText {
+                    objectName: "pictureTextNote" // (the shell's self-test)
                     visible: textFlick.truncated
                     width: parent.width
-                    text: qsTr("The first %L1 of %L2 characters.").arg(root.textLimit).arg(textFlick.fileText.length)
+                    text: qsTr("The start of the file: %1 of %2.").arg(textFlick.file.bytesText).arg(textFlick.file.sizeText)
                     variant: "muted"
                     wrapMode: Text.Wrap
                 }
@@ -308,7 +347,7 @@ Item {
                     selectByMouse: !Theme.touchUi
                     textFormat: TextEdit.PlainText
                     wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                    text: textFlick.truncated ? textFlick.fileText.slice(0, root.textLimit) : textFlick.fileText
+                    text: textFlick.file.text || ""
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.textSm + 1
                     color: Theme.fg

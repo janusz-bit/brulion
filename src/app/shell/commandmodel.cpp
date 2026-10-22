@@ -117,13 +117,17 @@ static QList<Command> buildCommands(const AppController *app)
 }
 
 /// buildCommands() with the note mode command right after "Markdown source", available where that
-/// is (an editor shows a page or a day): document (Obsidian-like) / outline (Logseq-like), written
-/// into the note (docs/UI.md "Note modes"); and the event log after the sync center.
+/// is (an editor shows a page or a day) except on a picture attachment, which is no note: document
+/// (Obsidian-like) / outline (Logseq-like), written into the note (docs/UI.md "Note modes"); and
+/// the event log after the sync center.
 static QList<Command> allCommands(const AppController *app)
 {
     QList<Command> out = buildCommands(app);
     const auto source = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.source"; });
-    const bool inEditor = source != out.cend() && source->enabled;
+    const QVariantMap route = app->currentRoute();
+    const bool picture = route.value(u"view"_s).toString() == u"page"
+                         && app->workspace()->isPicture(route.value(u"path"_s).toString());
+    const bool inEditor = source != out.cend() && source->enabled && !picture;
     out.insert(source == out.cend() ? out.size() : std::distance(out.cbegin(), source) + 1,
                {u"page.mode"_s,
                 CommandModel::tr("Toggle note mode"),

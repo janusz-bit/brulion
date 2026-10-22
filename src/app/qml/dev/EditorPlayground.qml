@@ -1029,6 +1029,87 @@ ApplicationWindow {
     function clockRing(c) {
         return findItem(c, "clockFocusRing")
     }
+    /// The number circles the face shows (hours or minutes) and the chosen value's bubble, as
+    /// { label, bubble, outer (on the outer ring), x, y, r, textWidth, font } in the face's
+    /// coordinates.
+    function clockCircles(c) {
+        const out = []
+        const face = c.focusItem
+        for (let i = 0; i < face.children.length; ++i) {
+            const item = face.children[i]
+            if (!item.visible || item.width <= 0)
+                continue
+            const hour = item.selected !== undefined && item.angle !== undefined
+            const minute = !hour && item.value !== undefined && item.angle !== undefined
+            // The bubble: a round Rectangle holding only its text (the face's disc holds nothing).
+            const bubble = !hour && !minute && item.children.length === 1 && item.children[0].text !== undefined
+                           && Math.abs(item.radius - item.width / 2) < 0.01
+            if (!hour && !minute && !bubble)
+                continue
+            let text = null
+            for (let j = 0; j < item.children.length; ++j) {
+                if (item.children[j].text !== undefined)
+                    text = item.children[j]
+            }
+            const x = item.x + item.width / 2
+            const y = item.y + item.height / 2
+            out.push({ label: bubble ? "bubble " + text.text : text ? text.text : "?", bubble: bubble,
+                       outer: Math.abs(Math.hypot(x - c.center, y - c.center) - c.outerRadius) < 0.5,
+                       x: x, y: y, r: item.width / 2,
+                       textWidth: text ? text.contentWidth : 0, font: text ? text.font.pixelSize : 0 })
+        }
+        return out
+    }
+    /// The numbers on the face never overlap (nor does the chosen value's bubble reach over a
+    /// neighbour of its number), each holds its text in a legible font — the outer ring's in the
+    /// text size itself, the inner one's at least 12 px —, and a press near a number's edge,
+    /// towards its neighbour, still gives that number.
+    function checkClockNumbers(c, what) {
+        const circles = clockCircles(c)
+        const numbers = circles.filter(n => !n.bubble)
+        const bubble = circles.filter(n => n.bubble)[0]
+        const overlaps = []
+        const cramped = []
+        const fits = (n, minFont) => n.textWidth <= 2 * n.r - 2 && n.font >= minFont
+        for (let i = 0; i < numbers.length; ++i) {
+            const a = numbers[i]
+            if (!fits(a, a.outer ? Theme.textSm : Math.min(Theme.textSm, 12)))
+                cramped.push(a.label + " (" + a.textWidth.toFixed(1) + " px text in " + 2 * a.r + ", font " + a.font + ")")
+            for (let j = i + 1; j < numbers.length; ++j) {
+                const b = numbers[j]
+                const d = Math.hypot(a.x - b.x, a.y - b.y)
+                if (d < a.r + b.r - 0.01)
+                    overlaps.push(a.label + "/" + b.label + " " + d.toFixed(1) + " < " + (a.r + b.r))
+            }
+            const toBubble = bubble ? Math.hypot(a.x - bubble.x, a.y - bubble.y) : 0
+            if (bubble && toBubble > 0.5 && toBubble < a.r + bubble.r - 0.01)
+                overlaps.push(bubble.label + "/" + a.label + " " + toBubble.toFixed(1) + " < " + (a.r + bubble.r))
+        }
+        if (bubble && !fits(bubble, 10))
+            cramped.push(bubble.label + " (" + bubble.textWidth.toFixed(1) + " px text in " + 2 * bubble.r + ")")
+        const wrong = []
+        if (c.mode === "hour") {
+            for (let h = 0; h < 24; ++h) {
+                const n = numbers.filter(m => m.label === c.pad(h))[0]
+                for (const side of [-1, 1]) {
+                    const other = (h % 12 + 12 + side) % 12 + (h >= 12 ? 12 : 0)
+                    const next = numbers.filter(m => m.label === c.pad(other))[0]
+                    if (!n || !next)
+                        continue
+                    const d = Math.hypot(next.x - n.x, next.y - n.y)
+                    const x = n.x + (next.x - n.x) / d * (n.r - 1)
+                    const y = n.y + (next.y - n.y) / d * (n.r - 1)
+                    if (c.labelAt(x, y) !== h)
+                        wrong.push(n.label + "→" + c.labelAt(x, y))
+                }
+            }
+        }
+        const expected = c.mode === "hour" ? 24 : 12
+        check(numbers.length === expected && overlaps.length === 0 && cramped.length === 0 && wrong.length === 0,
+              "the clock's numbers do not overlap and hold their text, " + what + ": " + numbers.length + " numbers"
+              + (overlaps.length ? ", overlapping " + overlaps : "") + (cramped.length ? ", cramped " + cramped : "")
+              + (wrong.length ? ", a press near a number's edge gives another one " + wrong : ""))
+    }
     /// Scroll a dialog's body so that `item` shows, then tap it.
     function tapInDialog(dialog, item) {
         const body = dialog.contentItem
@@ -1067,6 +1148,29 @@ ApplicationWindow {
         steps = [
             () => check(c.focusItem.width === c.dialSize && c.focusItem.height === c.dialSize,
                         "the face is the dial's size: " + c.focusItem.width + "×" + c.focusItem.height + ", dial " + c.dialSize),
+            // ---- The numbers never overlap, down to the smallest dial (the dialog's 180 px floor;
+            //      196 px: a phone held sideways), with an inner hour or a minute chosen ----------
+            () => checkClockNumbers(c, c.dialSize + " px, hours"),
+            () => { window.clockSizeBefore = c.dialSize; c.dialSize = 196; c.time = "13:25" },
+            () => checkClockNumbers(c, "196 px, hours, 13 chosen"),
+            () => { c.dialSize = 180 },
+            () => checkClockNumbers(c, "180 px, hours, 13 chosen"),
+            () => { c.mode = "minute" },
+            () => checkClockNumbers(c, "180 px, minutes"),
+            // Larger text (Ustawienia → Rozmiar tekstu → Większy) on the smallest dials: the
+            // outer numbers keep the text size, the inner hours stay legible.
+            () => { window.clockFontScaleBefore = Theme.fontScale; Theme.fontScale = 1.3; c.mode = "hour" },
+            () => checkClockNumbers(c, "180 px, larger text, hours, 13 chosen"),
+            () => { c.mode = "minute" },
+            () => checkClockNumbers(c, "180 px, larger text, minutes"),
+            () => { c.dialSize = 196; c.mode = "hour" },
+            () => checkClockNumbers(c, "196 px, larger text, hours, 13 chosen"),
+            () => {
+                Theme.fontScale = window.clockFontScaleBefore
+                c.dialSize = window.clockSizeBefore
+                c.mode = "hour"
+                c.time = "18:30"
+            },
             // ---- The value of every position --------------------------------------------------
             () => {
                 c.mode = "hour"
@@ -1199,6 +1303,7 @@ ApplicationWindow {
                 check(p.dialSize >= 180 && 2 * Math.PI * p.innerRadius / 12 >= Theme.textSm * 1.6,
                       "the inner ring's numbers have room: dial " + p.dialSize + ", " + (2 * Math.PI * p.innerRadius / 12).toFixed(1)
                       + " px apart")
+                checkClockNumbers(p, "in the dialog (dial " + p.dialSize + " px)")
             },
             () => clockTap(clockDialog.picker, clockDialog.picker.innerRadius, 90),
             () => clockTap(clockDialog.picker, clockDialog.picker.outerRadius, 45 * 6),
@@ -1338,6 +1443,8 @@ ApplicationWindow {
     }
     property var firstClock: null
     property var clockOther: null
+    property int clockSizeBefore: 0
+    property real clockFontScaleBefore: 1
 
     function runScript(name) {
         switch (name) {

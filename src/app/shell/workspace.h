@@ -188,6 +188,12 @@ public:
     // ---- Files for QML views ----------------------------------------------------------------
     /// Content of a file ("" when missing).
     Q_INVOKABLE QString readFile(const QString &path);
+    /// The start of a file as text, reading at most `maxBytes` of it (a picture's text view: a
+    /// photo is never read whole for what it shows): { text, truncated, bytes (read and shown),
+    /// size (the file's), bytesText, sizeText ("1,5 MB" in the UI language) }. UTF-8 with a
+    /// leading BOM dropped, like readFile(); a character cut by the limit is left out whole (never
+    /// half of it as "�"). An empty text (ok false) for a missing or unreadable file.
+    Q_INVOKABLE QVariantMap readTextStart(const QString &path, int maxBytes) const;
     /// Save a file from a view other than the editor (emits fileChanged so editors reload).
     Q_INVOKABLE bool writeFile(const QString &path, const QString &content);
     Q_INVOKABLE bool exists(const QString &path) const;
@@ -199,8 +205,8 @@ public:
     Q_INVOKABLE bool isPicture(const QString &path) const;
     /// A picture whose format this device can decode (QImageReader's formats: WebP and AVIF need
     /// Qt's image plugins, which Android, the browser and some desktops lack); false for files
-    /// that are no picture. The picture view names a format it cannot show.
-    Q_INVOKABLE bool canDecodePicture(const QString &path) const;
+    /// that are no picture. The picture view and the editor's embeds name a format it cannot show.
+    Q_INVOKABLE bool canDecodePicture(const QString &path) const override;
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
     /// header has none): the picture view's own-pixels size, without decoding the picture.
     Q_INVOKABLE QSize pictureSize(const QString &path) const;

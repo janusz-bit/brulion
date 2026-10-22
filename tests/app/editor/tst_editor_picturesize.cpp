@@ -12,8 +12,10 @@
 #include <QTest>
 
 using namespace Qt::StringLiterals;
+using brulion::editor::canDecodePictureFormat;
 using brulion::editor::localPictureSize;
 using brulion::editor::MaxFullSvgBytes;
+using brulion::editor::pictureFormatName;
 using brulion::editor::pictureSize;
 
 namespace {
@@ -264,6 +266,35 @@ private Q_SLOTS:
         QCOMPARE(localPictureSize(file), QSize(100, 400));
         QVERIFY(!localPictureSize(dir.filePath(u"brak.png"_s)).isValid());
         QVERIFY(!localPictureSize(dir.path()).isValid());
+    }
+
+    void pictureFormatNames_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("format");
+        QTest::addColumn<bool>("qtDecodes"); // QtGui's own decoders, always there
+        QTest::newRow("png") << u"assets/żółw.png"_s << u"PNG"_s << true;
+        QTest::newRow("upper case") << u"ŁĄKA.JPG"_s << u"JPG"_s << true;
+        QTest::newRow("jpeg") << u"zdjęcia/łąka.jpeg"_s << u"JPEG"_s << true;
+        QTest::newRow("webp") << u"assets/łąka.webp"_s << u"WEBP"_s << false;
+        QTest::newRow("a dot in a folder only") << u"v1.2/plik"_s << QString() << false;
+        QTest::newRow("a hidden file") << u"assets/.webp"_s << QString() << false;
+        QTest::newRow("a dot at the end") << u"assets/plik."_s << QString() << false;
+        QTest::newRow("no extension") << u"assets/plik"_s << QString() << false;
+        QTest::newRow("empty") << QString() << QString() << false;
+    }
+    void pictureFormatNames()
+    {
+        // The picture views name a format this device cannot decode (Workspace::canDecodePicture,
+        // EditorHost::canDecodePicture: the same helpers).
+        QFETCH(QString, path);
+        QFETCH(QString, format);
+        QFETCH(bool, qtDecodes);
+        QCOMPARE(pictureFormatName(path), format);
+        QCOMPARE(canDecodePictureFormat(path),
+                 !format.isEmpty() && QImageReader::supportedImageFormats().contains(format.toLower().toLatin1()));
+        if (qtDecodes)
+            QVERIFY(canDecodePictureFormat(path));
     }
 };
 

@@ -54,8 +54,27 @@ T.Control {
     readonly property real center: dialSize / 2
     readonly property real outerRadius: center - Math.round(dialSize * 0.115)
     readonly property real innerRadius: outerRadius * 0.62
-    /// A number's circle (and the chosen value's bubble): two digits with room around them.
-    readonly property int labelSize: Math.max(Theme.textSm * 2, Math.round(dialSize * 0.12))
+    /// A number's circle where the dial has room for it: two digits with room around them.
+    readonly property int labelRoom: Math.max(Theme.textSm * 2, Math.round(dialSize * 0.12))
+    /// The inner ring's circles: the twelve hours sit closer together there (24 px apart on a
+    /// 196 px dial, 22 on the 180 px the dialog shrinks to), so they are as large as the outer
+    /// ones only where they do not reach the next hour (1 px between them), and take at most
+    /// half the room between the rings.
+    readonly property int innerLabelSize: Math.min(labelRoom,
+                                                   Math.floor(2 * innerRadius * Math.sin(Math.PI / 12)) - 1,
+                                                   Math.floor(outerRadius - innerRadius - 0.5))
+    /// A number's circle on the outer ring (and the chosen value's bubble there): never reaching
+    /// the next number nor the inner ring's (1 px between them). Sized after the inner ones, so
+    /// larger text (Theme.fontScale) on a small dial does not squeeze the inner hours.
+    readonly property int labelSize: Math.min(labelRoom,
+                                              Math.floor(2 * outerRadius * Math.sin(Math.PI / 12)) - 1,
+                                              Math.floor(2 * (outerRadius - innerRadius) - innerLabelSize) - 1)
+    /// The numbers' font: the small one, smaller only where two digits would not fit their
+    /// circle (the inner ring's on the smallest dials, like Android's clock).
+    readonly property int labelFontSize: Math.min(Theme.textSm, Math.floor(labelSize * 0.62))
+    readonly property int innerLabelFontSize: Math.min(Theme.textSm, Math.floor(innerLabelSize * 0.62))
+    /// The chosen value's bubble: the size of the number it sits on.
+    readonly property int selectionSize: mode === "hour" && selectedHour >= 12 ? innerLabelSize : labelSize
     // The hand points at the chosen value: 0° is up, 90° right (QML rotation of a vertical bar).
     readonly property real selectionRotation: mode === "minute" ? selectedMinute * 6
                                                                  : (selectedHour % 12) * 30
@@ -92,10 +111,11 @@ T.Control {
     /// The value of the number drawn at (x, y) of the face — an hour (0–23) or a minute label (a
     /// multiple of five) — or -1 when no number is there.
     function labelAt(x, y) {
-        const r = labelSize / 2
         const count = mode === "hour" ? 24 : 12
         for (let i = 0; i < count; ++i) {
-            const radius = mode === "hour" && i >= 12 ? innerRadius : outerRadius
+            const inner = mode === "hour" && i >= 12
+            const radius = inner ? innerRadius : outerRadius
+            const r = (inner ? innerLabelSize : labelSize) / 2
             const angle = (i % 12) * Math.PI / 6 - Math.PI / 2
             const dx = x - center - Math.cos(angle) * radius
             const dy = y - center - Math.sin(angle) * radius
@@ -449,8 +469,8 @@ T.Control {
                     readonly property real angle: (index % 12) * Math.PI / 6 - Math.PI / 2
                     readonly property real radius: index < 12 ? control.outerRadius : control.innerRadius
                     readonly property bool selected: control.mode === "hour" && control.selectedHour === index
-                    width: control.labelSize
-                    height: control.labelSize
+                    width: index < 12 ? control.labelSize : control.innerLabelSize
+                    height: width
                     x: control.center + Math.cos(angle) * radius - width / 2
                     y: control.center + Math.sin(angle) * radius - height / 2
                     visible: control.mode === "hour"
@@ -470,7 +490,7 @@ T.Control {
                         anchors.centerIn: parent
                         text: control.pad(hourNumber.index)
                         font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
+                        font.pixelSize: hourNumber.index < 12 ? control.labelFontSize : control.innerLabelFontSize
                         font.weight: hourNumber.selected ? Theme.weightSemiBold : Theme.weightNormal
                         font.features: { "tnum": 1 }
                         color: Theme.fg
@@ -505,7 +525,7 @@ T.Control {
                         anchors.centerIn: parent
                         text: control.pad(minuteNumber.value)
                         font.family: Theme.fontUi
-                        font.pixelSize: Theme.textSm
+                        font.pixelSize: control.labelFontSize
                         font.weight: Theme.weightNormal
                         font.features: { "tnum": 1 }
                         color: Theme.fg
@@ -515,8 +535,8 @@ T.Control {
 
             // The chosen value sits on top of its number (the exact minute may lie between labels).
             Rectangle {
-                width: control.labelSize
-                height: control.labelSize
+                width: control.selectionSize
+                height: control.selectionSize
                 radius: width / 2
                 color: Theme.primary
                 x: control.selectionX - width / 2
@@ -525,7 +545,7 @@ T.Control {
                     anchors.centerIn: parent
                     text: control.mode === "hour" ? control.displayHour : control.displayMinute
                     font.family: Theme.fontUi
-                    font.pixelSize: Math.round(control.labelSize * 0.45)
+                    font.pixelSize: Math.min(Math.round(control.labelSize * 0.45), Math.floor(control.selectionSize * 0.6))
                     font.weight: Theme.weightSemiBold
                     font.features: { "tnum": 1 }
                     color: Theme.primaryFg

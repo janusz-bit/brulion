@@ -47,7 +47,9 @@ components — no Material/Fusion look, so all targets look identical.
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2, pages only), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
-  tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza; always — Nowa strona (Ctrl+N), Paleta
+  tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
+  Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
+  offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
   poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
   Kosz (n), Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
@@ -193,7 +195,11 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (edit / snooze / delete). "dziś"/"jutro" and overdue colours of open pages move on at
   midnight (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "wt 13 paź").
 * Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
-  highlighting.
+  highlighting. A mouse selects by dragging; on touch UIs a finger scrolls it (a TextEdit that
+  selects by dragging keeps the finger: the source could not be scrolled at all), a tap places
+  the cursor and a long press selects the word under the finger (a TapHandler on an item above
+  the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
+  system's selection handles take a selection on where the platform has them).
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
@@ -201,18 +207,28 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
   raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
   view —; when the fitted picture differs from its own pixels, a click on it or the "Pokaż
-  naturalny rozmiar" button shows those pixels (then draggable), the button goes back. Under the
+  naturalny rozmiar" button (in a view narrower than 600 px — a phone, or on the desktop between
+  the sidebar and the side panel — a magnifier icon, its name in the tooltip, on touch that of a
+  long press, and for screen readers: as text it left the file name no room) shows those pixels (then
+  draggable), the button goes back. Under the
   fitted picture (it moves to the top then) the notes that embed or link it (`ContentBacklinks`);
   the side panel's Odnośniki list them too. The bar shows the file name as plain text. Its
-  "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (and the palette's "Markdown source") switch
-  between the picture and the file read as text — read-only and at most 200 000 characters, for
-  text-like assets such as SVG (a binary picture is mojibake); a mouse selects in it, a finger
+  "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (the palette's "Markdown source", the top bar's
+  Więcej → Pokaż jako tekst / Pokaż obraz) switch between the picture and the file read as text —
+  read-only, for text-like assets such as SVG (a binary picture is mojibake), at most its first
+  200 KB (`Workspace.readTextStart` reads no more of the file — a photo is not read whole for
+  it — and leaves out whole a character the limit would cut; a note above the text says how much
+  of how much), read again when the file changes on disk while it is shown (sync, another
+  program: `Workspace.fileChanged`); a mouse selects in it, a finger
   scrolls it (no selection by dragging on touch UIs: such a TextEdit keeps the finger). The editor never loads a picture
   (`page.path` stays ""): its bytes are not a note, and a character typed into them used to be
   saved over the picture. A format the device has no decoder for (`Workspace.canDecodePicture`,
   QImageReader's formats: WebP and AVIF need Qt's image plugins, missing on Android, in the
   browser and in the Nix package) says so ("Obrazów w formacie WEBP nie można wyświetlić na tym
-  urządzeniu") instead of a load error. `route.open` on a picture: `text`, `links` | `outline` |
+  urządzeniu") instead of a load error — in its view and embedded in a note (`EmbedView`: the
+  file's name and the same sentence in the picture's frame, nothing loaded; the embeds'
+  `decodable` and `format` from `EditorHost::canDecodePicture`, one helper with the picture
+  view: `canDecodePictureFormat`, picturesize.h). `route.open` on a picture: `text`, `links` | `outline` |
   `calendar`.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
   Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie, Link do strony (`[[`), Tag
@@ -281,7 +297,8 @@ content jump now and then, not every time. Hence:
   the bindings do not rely on that.)
 * a query block runs its first query when its `QueryResultModel` is completed: on the guide page
   its results (773 px) used to arrive after the editor had placed the block;
-* pictures: the `embeds` role has each picture's `width` × `height` — a raster picture's header
+* pictures: the `embeds` role has each picture's `width` × `height` (0 × 0 for a format the device
+  cannot decode: not read) — a raster picture's header
   (`QImageReader::size()`), an SVG's root `width` / `height` / `viewBox` given to Qt's own SVG
   reader as a document of their own (so units, percentages and the viewBox follow Qt's rules
   exactly), the whole SVG only when the root leaves the size to the drawing and the file is at most
@@ -570,7 +587,11 @@ live preview; its clock dialog is created on first use), `BTimePicker`/`BTimePic
 round 24-hour clock: tap or drag hours and minutes — the face takes every press, so a drag may
 start on a number or the chosen value's bubble —, keyboard arrows; the focus ring shows for the
 keyboard only; in a window too short for it, a phone held sideways, the dial shrinks and the
-hours / minutes fields go beside it), `BReminderDialog` (date/time, alarm switch, recurrence picker,
+hours / minutes fields go beside it; the number circles are sized from the rings' geometry — the
+inner ring's twelve hours sit closer together, so they are sized first and the outer ones fit the
+room left between the rings — so none overlap, down to the dialog's 180 px dial and with larger
+text; the outer numbers keep the small text size, the inner ones get a smaller font only where two
+digits would not fit), `BReminderDialog` (date/time, alarm switch, recurrence picker,
 quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher`. Icons: SVGs in `assets/icons/` (Lucide, ISC licence) via `BIcon`.
@@ -650,7 +671,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input, its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
@@ -658,7 +679,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; a picture attachment (its view, the text view read-only and scrolled by a finger or the wheel, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |

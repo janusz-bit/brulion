@@ -1095,6 +1095,9 @@ void BlockListModel::ensureEmbeds(int row) const
         // its size only when it had loaded made its block, and every block below it, move while
         // the page scrolled.
         QSize size;
+        // A picture whose format this device has no decoder for (WebP, AVIF without Qt's image
+        // plugins) is named as such instead of failing to load (EmbedView).
+        bool decodable = em.image;
         if (m_host) {
             QString path = m_host->resolveLink(em.target, m_path);
             if (path.isEmpty()) {
@@ -1102,16 +1105,21 @@ void BlockListModel::ensureEmbeds(int row) const
                 path = decoded.contains(u'/') ? paths::normalize(decoded) : paths::join(attachments, decoded);
             }
             url = m_host->assetUrl(path);
-            if (em.image)
-                size = m_host->assetPixelSize(path);
+            if (em.image) {
+                decodable = m_host->canDecodePicture(path);
+                if (decodable)
+                    size = m_host->assetPixelSize(path);
+            }
         }
-        if (em.image && !size.isValid() && url.isLocalFile())
+        if (decodable && !size.isValid() && url.isLocalFile())
             size = localPictureSize(url.toLocalFile());
         if (!size.isValid())
             size = QSize(0, 0);
         st.embeds.append(QVariantMap{{u"target"_s, em.target},
                                      {u"alt"_s, em.alt},
                                      {u"image"_s, em.image},
+                                     {u"decodable"_s, decodable},
+                                     {u"format"_s, em.image ? pictureFormatName(em.target) : QString()},
                                      {u"url"_s, url},
                                      {u"name"_s, paths::basename(em.target)},
                                      {u"width"_s, size.width()},

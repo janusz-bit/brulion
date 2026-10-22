@@ -1031,6 +1031,29 @@ private Q_SLOTS:
         QVERIFY(model->run(u"page.history"_s));
         QCOMPARE(app->currentRoute(), (QVariantMap{ { u"view"_s, u"history"_s }, { u"path"_s, p } }));
 
+        // A picture attachment is no note: "Markdown source" switches its views (the picture ⇄
+        // its text), the note mode is not offered.
+        const QString picture = u"assets/łąka.svg"_s;
+        QVERIFY(app->workspace()->writeFile(picture,
+                                            u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"3\"/>"_s));
+        app->openPage(picture);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), picture);
+        sourceUi.clear();
+        QVERIFY(!model->run(u"page.mode"_s));
+        QVERIFY(model->run(u"page.source"_s));
+        QCOMPARE(sourceUi.size(), 1);
+        QCOMPARE(sourceUi.first().first().toString(), u"toggleSourceMode"_s);
+        const auto modeEnabled = [model] {
+            for (const QVariant &v : model->commands()) {
+                if (v.toMap().value(u"id"_s).toString() == u"page.mode")
+                    return v.toMap().value(u"enabled"_s).toBool();
+            }
+            return true;
+        };
+        QVERIFY(!modeEnabled());
+        app->openPage(p);
+        QVERIFY(modeEnabled());
+
         QSignalSpy ui(app.get(), &AppController::uiActionRequested);
         QVERIFY(model->run(u"page.new"_s));
         QVERIFY(model->run(u"theme.toggle"_s));

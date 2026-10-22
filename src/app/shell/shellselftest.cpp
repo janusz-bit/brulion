@@ -16,12 +16,15 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QInputDevice>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QThread>
@@ -29,6 +32,7 @@
 #include <QWheelEvent>
 #include <qtestsupport_gui.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 
@@ -253,6 +257,42 @@ int openMenus(QQuickWindow *window)
     };
     visit(window->contentItem());
     return open;
+}
+
+/// Close the tooltips waiting for deletion, and return those still alive of hidden controls. A
+/// tooltip whose Loader went inactive (BIconButton's, when its button hid: the hover ends) has
+/// its bindings cleared at once but is deleted — and only so closed — when the app's event loop
+/// runs, which this running self-test does not let it do: open, it takes the next press
+/// elsewhere just to close itself. A live tooltip of a hidden control would do that in the app
+/// too (a bug).
+QStringList closeToolTipsWaitingForDeletion(QQuickWindow *window)
+{
+    QStringList stray;
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickToolTip")) {
+            QObject *tip = item->parent();
+            const auto *owner = tip->property("parent").value<QQuickItem *>();
+            const QQmlContext *context = qmlContext(tip);
+            const bool deleted = !owner || !owner->window() || !context || !context->isValid();
+            const QString text = tip->property("text").toString();
+            std::fprintf(stderr, "selftest: an open tooltip \"%s\" (%s)\n", qPrintable(text),
+                         deleted              ? "waiting for deletion: closed"
+                         : owner->isVisible() ? "of a control shown"
+                                              : "of a hidden control");
+            if (deleted)
+                QMetaObject::invokeMethod(tip, "close");
+            else if (!owner->isVisible())
+                stray.append(text);
+        }
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children)
+            visit(child);
+    };
+    visit(window->contentItem());
+    settle(50);
+    return stray;
 }
 
 /// Close the menus open in the window (a failed check must not leave a modal menu behind).
@@ -837,6 +877,79 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     check(refs && waitFor([&] { return refs->isVisible() && refs->property("linkedCount").toInt() >= 2; }),
           "the notes that embed the picture are listed under it");
 
+    // The bar fits the window: next to the size toggle (an icon on phones, named for screen
+    // readers and in its tooltip) the file name keeps its room — the toggle's "Pokaż naturalny
+    // rozmiar" left it none on a phone — and nothing runs off the window's edge. The toggle works.
+    {
+        QQuickItem *name = child(view, "pictureName");
+        QQuickItem *size = child(view, "pictureSizeButton");
+        QQuickItem *textButton = child(view, "pictureTextButton");
+        const auto left = [](QQuickItem *item) { return item->mapToScene(QPointF(0, 0)).x(); };
+        const auto right = [](QQuickItem *item) { return item->mapToScene(QPointF(item->width(), 0)).x(); };
+        const auto nameOf = [](QQuickItem *button) {
+            const QVariant label = button->property("label");
+            return label.isValid() ? label.toString() : button->property("text").toString();
+        };
+        if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
+            std::fprintf(stderr,
+                         "selftest: picture bar: name %.0f of %.0f px, size toggle %.0f–%.0f, text button %.0f–%.0f\n",
+                         name->width(), name->property("implicitWidth").toReal(), left(size), right(size),
+                         left(textButton), right(textButton));
+            check(name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                          && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
+                          && right(textButton) <= window->width() + 0.5
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
+                  "the picture's bar shows the file name next to the size toggle and fits the window");
+            // (The mouse still rests where an earlier step clicked the note mode toggle, hidden
+            // since: its tooltip waits for a deletion this running test does not let happen —
+            // see closeToolTipsWaitingForDeletion — and would take the click.)
+            check(closeToolTipsWaitingForDeletion(window).isEmpty(), "no live tooltip outlives its hidden button");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return view->property("actualSize").toBool(); })
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Fit to view"),
+                  "the size toggle shows the picture's own pixels");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return !view->property("actualSize").toBool(); }), "and fits it into the view again");
+        } else {
+            check(false, "the picture's bar has its name, its size toggle and its text button");
+        }
+    }
+
+    // The top bar's More menu on a picture: no "Toggle note mode" (a picture is no note), and its
+    // "Markdown source" item says what it does there, like the picture's bar — and does it.
+    {
+        const auto moreMenuItem = [&](const QString &text) {
+            return findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BMenuItem") && item->property("text").toString() == text;
+            });
+        };
+        const auto openMoreMenu = [&] {
+            const QString more = QCoreApplication::translate("ShellTopBar", "More");
+            QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BIconButton") && item->property("label").toString() == more;
+            });
+            if (button)
+                tapOrClick(window, pointIn(button), touch);
+            return button && waitFor([&] { return openMenus(window) == 1; });
+        };
+        const QString noteMode = QCoreApplication::translate("ShellTopBar", "Toggle note mode");
+        const QString source = QCoreApplication::translate("ShellTopBar", "Markdown source");
+        for (const bool asText : {false, true}) {
+            const QString wanted = QCoreApplication::translate("ShellTopBar", asText ? "Show picture" : "Show as text");
+            QQuickItem *item = nullptr;
+            check(openMoreMenu() && waitFor([&] { return (item = moreMenuItem(wanted)) != nullptr; })
+                          && !moreMenuItem(noteMode) && !moreMenuItem(source),
+                  asText ? "with a picture's text shown the More menu offers “Show picture”, not the note mode"
+                         : "on a picture the More menu offers “Show as text”, not the note mode");
+            if (item)
+                tapOrClick(window, pointIn(item), touch);
+            check(waitFor([&] { return openMenus(window) == 0 && (asText ? pictureShown() : textShown()); }),
+                  asText ? "the More menu's “Show picture” shows the picture again"
+                         : "the More menu's “Show as text” shows the picture's text");
+            closeMenus(window);
+        }
+    }
+
     // "Pokaż jako tekst" in the picture's bar: the file's text, read-only; the editor stays
     // unloaded.
     if (QQuickItem *button = child(view, "pictureTextButton")) {
@@ -904,6 +1017,53 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                           && edit->property("selectedText").toString().isEmpty(),
                   touch ? "a finger scrolls the text view and selects nothing" : "the wheel scrolls the text view");
         }
+
+        // The file changes on disk while its text is shown (sync, another program): the text view
+        // shows the new text (it read the file once).
+        const QString changed = u"<!-- poprawione na laptopie: źdźbło -->\n"_s + svg;
+        {
+            QFile file(workspace->vault()->absolutePath(longSvg));
+            check(file.open(QIODevice::WriteOnly) && file.write(changed.toUtf8()) > 0, "the long SVG changes on disk");
+        }
+        workspace->vault()->rescan();
+        check(waitFor([&] {
+                  QQuickItem *e = child(pictureView(), "pictureTextEdit");
+                  return textShown() && e && e->property("text").toString().startsWith(changed.left(80));
+              }),
+              "the text view shows a change made on disk while it is open");
+
+        // At most `textLimit` bytes of the file are read and shown, never half a character: a
+        // limit inside "ż" (two bytes in UTF-8) stops before it. The note above says how much of
+        // how much.
+        const QByteArray utf8 = workspace->vault()->readBinary(longSvg);
+        const qsizetype zz = utf8.indexOf(QStringView(u"żółw 5 ").toUtf8());
+        app->requestUiAction(u"toggleSourceMode"_s);
+        waitFor(pictureShown);
+        if (QQuickItem *v = pictureView()) {
+            const QVariant limitBefore = v->property("textLimit");
+            v->setProperty("textLimit", int(zz + 1));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            QQuickItem *note = nullptr;
+            QQuickItem *e = nullptr;
+            const QString expected = QString::fromUtf8(utf8.left(zz));
+            const QLocale locale;
+            const QString noteText =
+                    QCoreApplication::translate("ContentPictureView", "The start of the file: %1 of %2.")
+                            .arg(locale.formattedDataSize(zz, 1, QLocale::DataSizeTraditionalFormat),
+                                 locale.formattedDataSize(utf8.size(), 1, QLocale::DataSizeTraditionalFormat));
+            check(waitFor([&] {
+                      note = textShown() ? child(pictureView(), "pictureTextNote") : nullptr;
+                      e = child(pictureView(), "pictureTextEdit");
+                      return note && note->isVisible() && e && e->property("text").toString() == expected;
+                  }) && note->property("text").toString() == noteText,
+                  "a long file's text view shows its start, cut before a character that does not fit whole");
+            if (note)
+                std::fprintf(stderr, "selftest: the text view's note: %s\n",
+                             qPrintable(note->property("text").toString()));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            waitFor(pictureShown);
+            v->setProperty("textLimit", limitBefore);
+        }
     }
 
     // route.open on a picture: "text" opens its text view, "links" (wide windows) the side panel
@@ -929,6 +1089,28 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                   return panelRefs && panelRefs->property("linkedCount").toInt() >= 2;
               }),
               "the side panel lists the notes that embed the picture");
+        // A narrower window with the side panel open leaves the picture a narrow view: its size
+        // toggle is an icon there too (the view's width counts, not the window's), and the file
+        // name keeps room next to it.
+        const QSize windowSize = window->size();
+        window->resize(900, windowSize.height());
+        QQuickItem *name = nullptr;
+        QQuickItem *size = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *v = pictureView();
+                  name = child(v, "pictureName");
+                  size = child(v, "pictureSizeButton");
+                  return v && v->width() < 600 && pictureShown() && name && size && size->isVisible()
+                         && isA(size, "BIconButton");
+              }) && name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 40)
+                      && name->mapToScene(QPointF(name->width(), 0)).x() <= size->mapToScene(QPointF(0, 0)).x() + 0.5,
+              "in a narrow view on the desktop the picture's size toggle is an icon, next to the file name");
+        if (name && size)
+            std::fprintf(stderr, "selftest: a narrow picture view: %.0f px, name %.0f of %.0f px\n",
+                         pictureView() ? pictureView()->width() : 0., name->width(),
+                         name->property("implicitWidth").toReal());
+        window->resize(windowSize);
+        waitFor([&] { return pictureView() && pictureView()->width() >= 600; });
         app->setSidePanelVisible(false);
     }
 
@@ -978,6 +1160,28 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                   return message && message->isVisible();
               }) && message->property("text").toString().contains(decodable ? u"łąka.webp"_s : u"WEBP"_s),
               "a picture that cannot be shown says why");
+
+        // Embedded in a note it says so too, with its name (the embed only said "Nie można
+        // wczytać łąka.webp").
+        const QString note = u"Łąka wiosną.md"_s;
+        check(workspace->writeFile(note, u"Zdjęcie z łąki:\n\n![[łąka.webp]]\n"_s), "a note embeds the WebP picture");
+        app->openPage(note);
+        QQuickItem *embedText = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *embed =
+                          findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "EmbedView"); });
+                  embedText =
+                          embed ? findShown(embed,
+                                            [](QQuickItem *item) {
+                                                return item->inherits("QQuickText")
+                                                       && item->property("text").toString().contains(u"łąka.webp"_s);
+                                            })
+                                : nullptr;
+                  return embedText != nullptr;
+              }) && (decodable || embedText->property("text").toString().contains(u"WEBP"_s)),
+              "an embedded picture that cannot be shown says why");
+        if (embedText)
+            std::fprintf(stderr, "selftest: the embed says: %s\n", qPrintable(embedText->property("text").toString()));
     }
 
     // Back to the sample picture: the picture, the editor still unloaded.
@@ -1267,6 +1471,75 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             }
             sendKey(window, Qt::Key_E, Qt::ControlModifier);
             check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
+            // Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
+            // dragging kept the finger: the source never moved) and selects nothing; a tap still
+            // puts the cursor where it lands.
+            if (QCoreApplication::arguments().contains(u"--touch"_s)) {
+                QQuickItem *sourceView = nullptr;
+                QQuickItem *sourceEdit = nullptr;
+                check(waitFor([&] {
+                          sourceView = findShown(editor, [](QQuickItem *item) { return isA(item, "SourceEditor"); });
+                          // (The whole file: its middle lies far below the screen.)
+                          const QList<QQuickItem *> edits =
+                                  sourceView ? sourceView->findChildren<QQuickItem *>() : QList<QQuickItem *>();
+                          const auto it = std::find_if(edits.cbegin(), edits.cend(), [](QQuickItem *item) {
+                              return item->inherits("QQuickTextEdit") && item->isVisible();
+                          });
+                          sourceEdit = it != edits.cend() ? *it : nullptr;
+                          return sourceEdit
+                                 && sourceView->property("contentHeight").toReal() > sourceView->height() + 400;
+                      }),
+                      "the guide's Markdown source is longer than the screen");
+                if (sourceView && sourceEdit) {
+                    const qreal before = sourceView->property("contentY").toReal();
+                    touchDrag(window, pointIn(sourceView, 0.5, 0.7), QPointF(0, -300));
+                    check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
+                    // (A tap on a moving list only stops it.)
+                    waitFor([&] { return !sourceView->property("moving").toBool(); });
+                    const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
+                    const QPointF at = pointIn(sourceView, 0.5, 0.5);
+                    touchTap(window, at);
+                    const QPointF local = sourceEdit->mapFromScene(at);
+                    int expected = -1;
+                    QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+                    const int cursor = sourceEdit->property("cursorPosition").toInt();
+                    std::fprintf(stderr,
+                                 "selftest: the tap in the source: cursor %d (before %d, under the finger %d)\n",
+                                 cursor, cursorBefore, expected);
+                    check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a tap in the Markdown source puts the cursor there");
+                    // A long press selects the word under the finger (where the platform has
+                    // selection handles, they take it on from there).
+                    const qreal scrolled = sourceView->property("contentY").toReal();
+                    const auto textAt = [&](int from, int to) {
+                        QString text;
+                        QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
+                        return text;
+                    };
+                    QPointF onWord = pointIn(sourceView, 0.5, 0.4);
+                    for (qreal fy = 0.3; fy < 0.7; fy += 0.05) {
+                        const QPointF p = pointIn(sourceView, 0.35, fy);
+                        const QPointF l = sourceEdit->mapFromScene(p);
+                        int pos = -1;
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
+                        const QString around = textAt(pos - 1, pos + 1);
+                        if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
+                            onWord = p;
+                            break;
+                        }
+                    }
+                    touchTap(window, onWord, 1000);
+                    const QString word = sourceEdit->property("selectedText").toString();
+                    std::fprintf(stderr, "selftest: a long press in the source selected \"%s\"\n", qPrintable(word));
+                    check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
+                                  && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
+                          "a long press in the Markdown source selects the word under the finger");
+                    QMetaObject::invokeMethod(sourceEdit, "deselect");
+                }
+            }
             app->requestUiAction(u"toggleSourceMode"_s);
             check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
                   "the \"Markdown source\" command switches back");
