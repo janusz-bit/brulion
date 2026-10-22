@@ -105,7 +105,8 @@ Service worker (offline) działa tylko na `https://` oraz na `localhost`/`127.0.
 Parametry adresu (do debugowania):
 
 * `?nosw` — nie rejestruj service workera.
-* `?selftest=storage`, `?selftest=notify`, `?selftest=storage,notify` — testy (niżej).
+* `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=storage,notify` —
+  testy (niżej).
 
 Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
 serwując `site/` (`http://127.0.0.1:8000/brulion/`).
@@ -138,6 +139,10 @@ Pozostałe opcje:
 * `--notify` — nadaje stronie zgodę na powiadomienia, aplikacja (`?selftest=notify`) pokazuje
   powiadomienie testowe, skrypt je „klika” i sprawdza, że kliknięcie (id, ścieżka, linia)
   dotarło do C++ (`WasmNotifier::activated`).
+* `--glyphs` — `?selftest=glyphs`: aplikacja sprawdza, czy zapasowe czcionki (niżej,
+  „Czcionki: emoji i symbole”) są zainstalowane i rysują wszystkie emoji i symbole Brulionu
+  bez pustych kwadratów (`window.brulionGlyphSelfTest`: dla każdej czcionki znaki rysowane jako
+  kwadraty przed i po instalacji). CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
@@ -303,6 +308,23 @@ WebDAV, więc synchronizacja z wersji przeglądarkowej „po prostu” nie zadzi
 
 Używaj hasła aplikacji Nextcloud (Ustawienia → Bezpieczeństwo), nie głównego hasła.
 
+## Czcionki: emoji i symbole
+
+Qt for WebAssembly nie widzi czcionek systemu. Ma tylko dwie własne, DejaVu Sans i DejaVu
+Sans Mono (wkompilowane w `brulion.wasm`; czcionki komputera dałoby się wczytać jedynie przez
+Local Font Access API, tylko w Chromium i po zgodzie użytkownika, o którą Qt domyślnie nie
+prosi). DejaVu nie ma żadnego emoji, którego używa Brulion: przypomnienia ⏰, alarmy 🔔,
+znaczniki zadań 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕, a także ⧉ osadzonych bloków — wszystkie były
+**pustymi kwadratami** (białymi w ciemnym motywie), w notatkach, edytorze, ustawieniach i
+podpowiedziach. Ikony Lucide (`BIcon`, SVG) działały poprawnie.
+
+Dlatego aplikacja zawiera dwie małe czcionki zapasowe z `assets/fonts/` (fragmenty Noto Emoji
+i Noto Sans Math, licencja SIL OFL 1.1, robione przez `scripts/fallback-fonts.py`) i w
+przeglądarce zawsze instaluje je przy starcie jako czcionki zapasowe: tekst zostaje w DejaVu, a
+tylko brakujące znaki biorą się z nich. Emoji są jednokolorowe, w kolorze tekstu. Szczegóły,
+zasady na innych platformach i lista znaków: docs/UI.md, „Emoji and symbol fonts”. Test:
+`scripts/wasm-smoke.mjs --glyphs`.
+
 ## Rozmiar
 
 Build `MinSizeRel` (Qt 6.11.2, emsdk 4.0.7), pełna aplikacja:
@@ -316,6 +338,10 @@ Z tego ok. 26,2 MB to kod, 13,8 MB dane (skompilowany QML, zasoby Qt: czcionki, 
 Unicode). Wynik pomiaru z 18.10.2026; `scripts/wasm-build.sh` wypisuje aktualne wartości po
 każdym buildzie. Pierwsze wejście pobiera więc ok. 9–13 MB (zależnie od kompresji serwera),
 kolejne starty idą z cache service workera (lokalnie < 1 s).
+
+Czcionki zapasowe emoji i symboli (wyżej, „Czcionki: emoji i symbole”) dokładają
++190 272 B surowego `brulion.wasm` (+118 111 B po gzip -9, +103 429 B po brotli; pomiar z
+22.10.2026, ten sam toolchain przed i po).
 
 Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw edytora, skryptów
 i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
@@ -362,6 +388,7 @@ i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 01
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
 | `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania (`wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
 
 Ikony po zmianie logo:

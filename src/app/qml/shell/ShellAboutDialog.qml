@@ -44,7 +44,7 @@ BDialog {
         }
         BText {
             Layout.fillWidth: true
-            text: qsTr("Free software under the GNU Affero General Public License, version 3 or later. Icons: Lucide (ISC licence).")
+            text: qsTr("Free software under the GNU Affero General Public License, version 3 or later. Icons: Lucide (ISC licence). Emoji and symbols: Noto Emoji and Noto Sans Math (SIL Open Font License).")
             variant: "muted"
             font.pixelSize: Theme.textSm
             wrapMode: Text.Wrap

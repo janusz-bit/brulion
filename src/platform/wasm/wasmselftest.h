@@ -3,13 +3,21 @@
 // WebAssembly only (compiled when EMSCRIPTEN is set, see src/platform/CMakeLists.txt).
 //
 // Debug flows for the browser build, driven by scripts/wasm-smoke.mjs. The HTML shell turns
-// `?selftest=storage,notify` into the app arguments `--selftest-storage --selftest-notify`.
+// `?selftest=storage,notify,glyphs` into the app arguments `--selftest-storage --selftest-notify
+// --selftest-glyphs`.
 // Results are published as JavaScript globals (and console lines `BRULION_SELFTEST …`).
-// Neither flow touches notes.
+// No flow touches notes.
+
+#include <QJsonObject>
 
 namespace brulion::platform {
 
 class WasmStorage;
+
+/// Publishes `result` as the JavaScript global `name` (and the console line
+/// `BRULION_SELFTEST <name> <json>`), for checks that live in the app: `brulionGlyphSelfTest`
+/// (`?selftest=glyphs`, the fallback fonts of src/app/ui/fallbackfonts.h).
+void publishSelfTestResult(const char *name, const QJsonObject &result);
 
 /// Proves that browser storage survives a page reload. Call after `WasmStorage::ready()`.
 ///

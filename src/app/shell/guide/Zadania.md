@@ -42,6 +42,8 @@ Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
 
 Po terminie, zaplanowaniu i początku możesz dopisać godzinę: `📅 2026-10-20 15:00`.
 
+Znaczniki to zwykłe emoji. Gdy system nie ma czcionki z emoji (Brulion w przeglądarce, niektóre Linuksy), Brulion rysuje je własną czcionką — jednokolorowe, w kolorze tekstu.
+
 Nie musisz znać tych znaczników na pamięć. Po wpisaniu `📅` (albo wybraniu „Termin…” z menu `/`) wystarczy napisać po polsku lub angielsku: „jutro”, „w piątek”, „za 3 dni”, „15 października”, „15.10 18:30”. Brulion wstawi datę w postaci `RRRR-MM-DD` — w pliku zawsze zostaje data, nigdy słowa.
 
 ## Priorytety
