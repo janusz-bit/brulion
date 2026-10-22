@@ -1,6 +1,7 @@
-# Release: push a tag v<version> (scripts/release.sh bumps the version and creates the tag), or
-# run this workflow by hand. It checks the tag against the version in CMakeLists.txt and
-# nix/package.nix, creates a draft GitHub release (notes: .github/release-notes.md), builds
+# Release: push a tag v<version> (scripts/release.sh commits the version on main, merges main into
+# the release branch and tags that merge), or run this workflow by hand. It checks the tag
+# against the version in CMakeLists.txt and nix/package.nix, creates a draft GitHub release
+# (notes: .github/release-notes.md), builds
 #   brulion-<version>-arm64-v8a.apk          Android (android.yml, signed with the release key)
 #   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)

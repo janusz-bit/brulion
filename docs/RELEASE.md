@@ -44,58 +44,71 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 
 ## Wydanie
 
-Releasy idą na osobnej gałęzi `release` (utworzonej z main przy v0.3.4): `main` to rozwój, a
-`release` zbiera wszystko, co release'owe — notatki wydaniowe, commit z wersją i tag. Przed
-kolejnym wydaniem brać zmiany z main na `release`, a po wydaniu scalić `release` z powrotem
-do main:
+Wszystkie commity idą na `main`: rozwój, notatki wydaniowe (`.github/release-notes.md`)
+i commit z wersją „Release vX.Y.Z”. Gałąź `release` ma **wyłącznie commity scalające z main**
+— jedno scalenie „Merge main into release for vX.Y.Z” na wydanie, z tagiem `vX.Y.Z` — więc
+`git log --first-parent release` to lista wydań. Wydać znaczy scalić main do `release`;
+robi to `scripts/release.sh`:
 
 ```sh
-git switch main && git pull --ff-only           # aktualny main
-git switch release && git merge main            # stan main na release
-# .github/release-notes.md -> commit "Update release notes for vX.Y.Z"
-scripts/release.sh patch --push                 # bump + commit "Release vX.Y.Z" + tag, push atomowo
-git switch main && git merge --ff-only release  # wersja i notatki wracają na main
-git push origin main
+git switch main && git pull --ff-only
+# .github/release-notes.md -> commit "Update release notes for vX.Y.Z" (na main)
+scripts/release.sh --dry-run patch     # podgląd: wersje, commity, ostrzeżenia
+scripts/release.sh patch --push        # wersja na main, scalenie + tag na release, push
 ```
 
-Powrót na main jest konieczny: z `main` budują się GitHub Pages,
-`nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI. Bez niego pokazywałyby
-w „O programie” poprzednią wersję, a APK z main miałby niższy `versionCode` niż wydany i nie
-zainstalowałby się na nim. Gdy na main coś przybyło od `git merge main`, `--ff-only` odmówi —
-wtedy `git merge --no-edit release`. Po powrocie następne `git merge main` na `release` jest
-zwykłym przewinięciem (fast-forward), a notatki wydaniowe na obu gałęziach się nie rozjeżdżają.
-`scripts/release.sh` wypisuje te polecenia na końcu.
+Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się GitHub Pages,
+`nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI (APK z main nie ma
+niższego `versionCode` niż wydany). Na `release` nie commitować niczego innego: poprawka do
+wydania to commit na main i kolejne wydanie. Do v0.3.4 wydania powstawały na main, a v0.3.5
+na `release` (jej notatki i commit z wersją trafiły na main przed v0.3.6); od v0.3.6
+`release` dostaje już tylko scalenia.
 
 Argumenty `scripts/release.sh`:
 
 ```sh
-scripts/release.sh minor --push        # 0.1.0 -> 0.2.0: commit "Release v0.2.0" + tag v0.2.0, push
-scripts/release.sh 0.1.0 --push        # pierwsze wydanie: wersja już jest w plikach — sam tag
-scripts/release.sh 0.3.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.3.0
-scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił
-scripts/release.sh patch --allow-stale # mimo commitów z main, których release jeszcze nie ma
+scripts/release.sh minor --push        # 0.3.6 -> 0.4.0: "Release v0.4.0" na main, scalenie z tagiem v0.4.0, push
+scripts/release.sh 0.4.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.4.0
+scripts/release.sh 0.4.0-rc.2          # wersja już jest w plikach: bez commita z wersją, scalenie + tag
+scripts/release.sh 0.4.0               # main bez zmian od -rc.2: tag v0.4.0 na tym samym scaleniu
+scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił (z każdej gałęzi)
 ```
 
-`scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
-biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
-minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. `--push` wysyła
-atomowo gałąź `release` razem z tagiem — także wtedy, gdy wersja już jest w plikach i powstaje
-sam tag (np. kolejne `-rc.N`), więc tag nigdy nie wskazuje commitów, których nie ma na żadnej
-gałęzi w origin (bez `--push` skrypt wypisuje to samo polecenie). Wymaga czystego
-drzewa roboczego i gałęzi `release` (z innej umiera od razu). `--dry-run` niczego nie zmienia
-i działa z każdej gałęzi: poza `release` najpierw ostrzega, a potem pokazuje, co zrobiłby
-prawdziwy przebieg na `release` — wersje czyta z gałęzi `release` (lokalnej, a bez niej
-z `origin/release`), nie z bieżącej.
+Prawdziwy przebieg działa tylko na `main` (z innej gałęzi umiera od razu) i z czystym drzewem
+roboczym:
 
-Przed wydaniem skrypt sprawdza, czy `release` zawiera wszystkie commity z `main` (lokalnej
-i `origin/main`) oraz z `origin/release`. Gdy czegoś brakuje, odmawia i pisze, co scalić
-(`git merge main`, `git fetch origin && git merge origin/main`, `… origin/release`) —
-inaczej wydanie wyszłoby bez najnowszych poprawek albo push zostałby odrzucony już po
-utworzeniu taga. `--allow-stale` wydaje mimo brakujących commitów z main (np. gdy zmiany na
-main celowo czekają na następne wydanie), ale nie z `origin/release` — tamte trzeba scalić,
-bo origin odrzuciłby push. `--dry-run` tylko ostrzega. Ostrzega też, gdy
-`.github/release-notes.md` nie zmienił się od ostatniego taga (wydanie powtórzyłoby poprzednie
-notatki).
+1. **Sprawdza.** Pobiera z origin `main` i `release` (`git fetch`, bez tagów) i odmawia, gdy
+   main nie ma commitów z `origin/main` (`git pull --ff-only`); gdy lokalna `release`
+   i `origin/release` się rozeszły; gdy na `release` (lokalnej albo w origin) jest commit,
+   którego main nie ma, a który nie jest scaleniem (`git rev-list --no-merges main..release`
+   musi być puste), albo scalenie z własnymi zmianami (treść `release` różni się od ostatnio
+   scalonego commita z main) — takie commity trzeba najpierw przenieść na main
+   (`git merge release` na main); gdy tag już jest (lokalnie albo w origin). Ostrzega, gdy
+   `.github/release-notes.md` nie zmienił się od ostatniego taga (wydanie powtórzyłoby
+   poprzednie notatki).
+2. **Wersja na main.** Ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
+   biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
+   minor·1000 + patch) i w `nix/package.nix` i robi na main commit „Release vX.Y.Z”. Gdy
+   wersja już jest w plikach (kolejne `-rc.N`, wydanie końcowe po `-rc`), tego commita nie ma.
+3. **Scalenie na `release`.** Robi na `release` commit scalający main „Merge main into release
+   for vX.Y.Z” — zawsze scalenie (jak `git merge --no-ff main`), także gdy wystarczyłoby
+   przewinięcie — i daje mu tag z adnotacją `vX.Y.Z`. Gałęzi nie przełącza: `release` nie ma
+   nic poza main, więc drzewo scalenia to drzewo main i powstaje ono bez checkoutu — pliki
+   w drzewie roboczym nie zmieniają dat, a build się nie przebudowuje. Brakującą lokalną
+   `release` tworzy z `origin/release`, nieaktualną przewija do `origin/release`. Gdy main nie
+   wnosi nic nowego (wersja już zapisana i scalona, np. `0.4.0` po `0.4.0-rc.2` bez zmian na
+   main), mówi to i tylko taguje ostatnie scalenie.
+4. **Push.** Z `--push` wysyła atomowo (wszystko albo nic)
+   `git push --atomic origin main release refs/tags/vX.Y.Z`. Bez `--push` wypisuje to
+   polecenie i to, jak cofnąć wydanie przed wysłaniem.
+
+Gdy któryś krok się nie uda (np. hook albo odrzucony push), skrypt cofa wszystko, co zrobił —
+tag, scalenie na `release`, commit z wersją na main — pisze, co cofnął, i zostawia czysty main;
+wystarczy usunąć przyczynę i uruchomić go ponownie. `--dry-run` niczego nie zmienia (nawet nie
+pobiera z origin, tylko pyta o jego refy) i działa z każdej gałęzi: poza `main` najpierw
+ostrzega, a potem pokazuje, co zrobiłby prawdziwy przebieg na `main` (wersje czyta z lokalnej
+`main`, a bez niej z `origin/main`); to, czego prawdziwy przebieg by odmówił, wypisuje jako
+ostrzeżenia. `--yes` pomija pytanie o potwierdzenie.
 
 Push taga uruchamia `release.yml`:
 
