@@ -458,11 +458,19 @@ std::optional<QStringList> nextInstance(const Target &t, const QString &text, co
     return out;
 }
 
+/// A line that is only `$$` (after its list marker): it opens a display formula (SYNTAX §11) and
+/// never becomes a task — "- [ ] $$" opens none, and the formula's lines would become blocks.
+bool isDisplayMathLine(const Target &t)
+{
+    const auto lm = matchListMarker(t.masked);
+    return QStringView(t.masked).sliced(lm ? lm->contentStart : t.insertAt).trimmed() == u"$$";
+}
+
 /// Rewrite the target's line for `status` (plus the next occurrence of a recurring task).
 QString applyStatus(const QString &content, const Target &t, const std::optional<TaskMarker> &marker, TaskStatus status,
                     QDate today)
 {
-    if (marker && marker->status == status)
+    if ((marker && marker->status == status) || (!marker && isDisplayMathLine(t)))
         return content;
     // Edit only the visible part of the line; a comment running past its end is kept as is.
     const qsizetype tailAt = hiddenTailStart(t);

@@ -23,7 +23,8 @@ namespace brulion::markdown {
 /// reminder) date or from `today` for "when done" rules, ➕ set to today, no ✅/❌/block id — like
 /// Obsidian Tasks. A non-task line becomes a task (`[ ] ` after its list marker, or a `- [ ] `
 /// prefix). Lines in code, frontmatter, tables, headings, rules, callout headers, hidden
-/// comments and out-of-range lines leave the content unchanged.
+/// comments, a line that is only `$$` (it opens a display formula, SYNTAX §11; "- [ ] $$" would
+/// open none) and out-of-range lines leave the content unchanged.
 QString setTaskStatus(const QString &content, int line, TaskStatus status, QDate today);
 
 /// Toggle the task at `line`: todo / doing / deferred → done; done / cancelled → todo. A line

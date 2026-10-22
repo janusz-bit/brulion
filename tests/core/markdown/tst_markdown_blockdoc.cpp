@@ -367,6 +367,30 @@ private Q_SLOTS:
         QCOMPARE(plain.toString(), u"- $$\n- c\n"_s);
     }
 
+    // Review regression: a task status for a block that is a display formula (the status menu,
+    // Ctrl+Enter, "/zadanie") wrote "- [ ] $$", which opens no formula: its lines that look like
+    // list items became blocks of their own when the page was read again.
+    void displayMathGetsNoTaskStatus()
+    {
+        const QString src = u"- Zadanie\n- $$\n  a\n  + b\n  $$\n\n$$\nf(x)\n- c\n$$\n"_s;
+        BlockDocument doc(src);
+        QCOMPARE(doc.count(), 3);
+        for (const TaskStatus status : {TaskStatus::Todo, TaskStatus::Done, TaskStatus::Cancelled}) {
+            QVERIFY(!doc.setTaskStatus(1, status, Today).changed());
+            QVERIFY(!doc.setTaskStatus(2, status, Today).changed());
+        }
+        QVERIFY(!doc.toggleTask(1, Today).changed());
+        QVERIFY(!doc.toggleTask(2, Today).changed());
+        QCOMPARE(doc.toString(), src);
+        QVERIFY(doc.setTaskStatus(0, TaskStatus::Todo, Today).changed());
+        QCOMPARE(doc.toString(), u"- [ ] Zadanie\n"_s + src.sliced(10));
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        // A "- [ ] $$" written elsewhere is a task: it opens no formula, its status changes.
+        BlockDocument task(u"- [ ] $$\n- b\n"_s);
+        QVERIFY(task.setTaskStatus(0, TaskStatus::Done, Today).changed());
+        QCOMPARE(task.toString(), u"- [x] $$ ✅ 2026-10-14\n- b\n"_s);
+    }
+
     void propertiesOnlyAtTheTop()
     {
         const BlockDocument top(u"title:: X\ntags:: a\n\n- a\n\nkey:: value\n"_s);

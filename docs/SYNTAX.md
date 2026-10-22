@@ -459,7 +459,8 @@ Where a formula is (in a block's inline text, after code spans and comments are 
   are blocks as usual. A `$$` that shares its line with the formula does not hold the lines
   together (`$$a` / `+ b$$` breaks at `+ b`) — write such formulas between `$$` lines or in a
   ```` ```math ```` block. The editor writes a blank line after a block whose `$$` line it leaves
-  unclosed when a later `$$` line would close it (the blocks between stay blocks).
+  unclosed when a later `$$` line would close it (the blocks between stay blocks), and never
+  makes a line that is only `$$` a task (`- [ ] $$` opens no formula).
 * Inline `$…$` follows pandoc's `tex_math_dollars`, tightened for prices and variables: the
   opening `$` has a non-space character right after it and does not directly follow a letter
   or digit; the closing `$` has a non-space character right before it and is not followed by

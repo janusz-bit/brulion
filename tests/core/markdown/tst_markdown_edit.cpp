@@ -158,6 +158,17 @@ private Q_SLOTS:
         QCOMPARE(status(fm, 1, TaskStatus::Done), fm);
         QCOMPARE(status(u"- [ ] a"_s, 5, TaskStatus::Done), u"- [ ] a"_s);
         QCOMPARE(status(u"- [ ] a"_s, -1, TaskStatus::Done), u"- [ ] a"_s);
+        // A line that is only `$$` opens a display formula: "- [ ] $$" would open none and the
+        // formula's lines ("+ b", "- c") would become blocks (review regression).
+        for (const QString &math :
+             {u"$$\nf(x)\n+ b\n$$"_s, u"- $$\n  a\n  - c\n  $$"_s, u"> $$\n> a\n> $$"_s, u"  *   $$  "_s}) {
+            QCOMPARE(status(math, 0, TaskStatus::Todo), math);
+            QCOMPARE(toggleTask(math, 0, Today), math);
+        }
+        QCOMPARE(status(u"- $$\n  a\n  $$"_s, 1, TaskStatus::Done), u"- $$\n  a\n  $$"_s); // the item's line
+        // Its task marker still changes (written elsewhere, it opens no formula).
+        QCOMPARE(status(u"- [ ] $$"_s, 0, TaskStatus::Done), u"- [x] $$ ✅ 2026-10-14"_s);
+        QCOMPARE(status(u"Wzór $$x$$"_s, 0, TaskStatus::Todo), u"- [ ] Wzór $$x$$"_s);
     }
 
     void crlfPreserved()
