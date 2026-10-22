@@ -3,6 +3,7 @@
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
+#include "localnetwork.h" // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h" // the event log page's controller (src/app/diag)
 #include "workspace.h"
 #include "workspacesync.h"
@@ -169,7 +170,15 @@ int main(int argc, char *argv[])
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
 #endif
+#if QT_CONFIG(qml_network)
+    // Pictures come from the vault and icons from the resources: the engine refuses remote URLs,
+    // so no rich text (a note's rendered Markdown) can make it fetch one (localnetwork.h).
+    brulion::ui::LocalOnlyNetworkFactory networkFactory;
+#endif
     QQmlApplicationEngine engine;
+#if QT_CONFIG(qml_network)
+    engine.setNetworkAccessManagerFactory(&networkFactory);
+#endif
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     devTools.attach(&engine); // --size, --screenshot

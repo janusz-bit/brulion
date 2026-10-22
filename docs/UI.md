@@ -150,8 +150,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Special block delegates: code (monospace), `calc` (input lines with right-aligned results),
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
-  the LaTeX source), callout, embeds/transclusions (`![[…]]`, `!((…))`), images, headings,
-  horizontal rule, properties / frontmatter ("Właściwości" panel).
+  the LaTeX source, also as a list item of an outline or a journal; a formula between two `$$`
+  lines stays one text block whatever its lines start with), callout, embeds/transclusions
+  (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
+  ("Właściwości" panel).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in Polish words. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete). "dziś"/"jutro" and overdue colours of open pages move on at

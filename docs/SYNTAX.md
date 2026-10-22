@@ -91,16 +91,17 @@ with the year when it is not the current one). The file keeps `[[2026-10-13]]`.
 `#tag`, `#nested/tag`, `#[[tag with spaces]]`. Tag body: Unicode letters/digits, `_`,
 `-`, `/`; must contain at least one non-digit (`#1` is not a tag); must be preceded by
 start of line, whitespace or `(`. Never recognised inside code spans, fenced code,
-URLs or link targets. A heading `# Title` is not a tag. Frontmatter `tags: [a, b]` or
-`tags: a, b` also tags the page. Tags compare case-insensitively; display keeps the
-first-seen casing.
+formulas (§11), URLs or link targets. A heading `# Title` is not a tag. Frontmatter
+`tags: [a, b]` or `tags: a, b` also tags the page. Tags compare case-insensitively; display
+keeps the first-seen casing.
 
 ## 4. Blocks and outline
 
 * Every **list item** is a block. Nesting by indentation (tab = one level; for spaces the
   child must be indented past the parent's marker). Markers: `-`, `*`, `+`, `1.`, `1)`.
 * Outside lists, each paragraph, heading, fenced code, table, blockquote/callout, `---`
-  rule is a top-level block (depth 0).
+  rule is a top-level block (depth 0). A display formula between two lines that are only `$$`
+  stays in one block whatever its lines start with (§11).
 * **Block id**: ` ^abc-123` (caret + `[A-Za-z0-9-]+`) at the end of a block's first or last
   line (Obsidian style; Brulion writes it at the end of the first line for list items and
   at the end of the last line for paragraphs). Generated ids are 6 chars `[a-z0-9]`.
@@ -175,8 +176,9 @@ Logseq markers are also tasks: `- TODO`/`- LATER` → todo, `- DOING`/`- NOW` �
 `- DONE` → done, `- CANCELED`/`- CANCELLED` → cancelled, `- WAITING` → deferred.
 Logseq priorities `[#A]`/`[#B]`/`[#C]` map to high/medium/low.
 
-Metadata tokens anywhere on the task's first line (Obsidian Tasks signifiers); dates are
-`YYYY-MM-DD`, Brulion additionally allows an optional ` HH:mm` after due/scheduled/start:
+Metadata tokens anywhere on the task's first line, outside code spans and formulas (Obsidian
+Tasks signifiers); dates are `YYYY-MM-DD`, Brulion additionally allows an optional ` HH:mm`
+after due/scheduled/start:
 
 | Token | Field |
 |---|---|
@@ -206,11 +208,11 @@ completed line gets `✅ <today>`.
 | `⏰! 2026-10-15 06:30` | **alarm**: loud, high-priority, stays until dismissed |
 | `(@2026-10-15 09:00)` | obsidian-reminder plugin syntax, read-only compatibility |
 
-Reminders may appear in any block (not only tasks). A block may carry several. A `🔁` rule
-in the same block makes the reminder recur. A reminder on a task whose status is `done`
-or `cancelled` never fires. Times are **local wall-clock time** (no time zone stored).
-The notification title is the block text with all tokens stripped; tapping it opens the
-note at that block.
+Reminders may appear in any block (not only tasks), outside code spans and formulas. A block
+may carry several. A `🔁` rule in the same block makes the reminder recur. A reminder on a
+task whose status is `done` or `cancelled` never fires. Times are **local wall-clock time**
+(no time zone stored). The notification title is the block text with all tokens stripped;
+tapping it opens the note at that block.
 
 ## 7. Recurrence rules
 
@@ -398,9 +400,8 @@ executed).
 ### Math formulas
 
 Formulas are written as LaTeX and drawn by Brulion as Unicode rich text (no KaTeX, no web
-view, nothing is executed); the note keeps the LaTeX source. Inline: `$E = mc^2$` or
-`\(\pi r^2\)`. Display, also over several lines: `$$\frac{a}{b}$$` or `\[ … \]`. A fenced
-block:
+view, nothing is executed); the note keeps the LaTeX source. Inline: `$E = mc^2$`. Display,
+also over several lines: `$$\frac{a}{b}$$`. A fenced block:
 
 ````
 ```math
@@ -410,15 +411,54 @@ block:
 
 The fence languages are `math`, `latex` and `tex`; such a block is edited in place (the
 LaTeX source while editing, the formula otherwise), and Enter starts a new formula line.
-Supported: Greek letters, common operators, arrows and set symbols; `^` and `_` (also
-`^{…}`, `_{…}`); `\frac`/`\dfrac`/`\tfrac` (vulgar fractions where one exists),
-`\sqrt[n]{…}`; `\text`, `\operatorname`, `\mathbf`, `\mathbb`, `\boldsymbol`/`\bm`,
-`\vec`, `\hat`, `\bar`, accents; `\left…\right`; matrices (`pmatrix`, `bmatrix`,
-`Bmatrix`, `vmatrix`, `Vmatrix`), `cases`, `aligned` and `array`. Unknown commands stay as
-written. Spaces between atoms are ignored as in LaTeX (`\ `, `\,`, `\quad` are explicit
-spaces); lowercase Greek is italic, uppercase upright. A formula is not recognised when the
-opening `$` is followed by a space or the closing `$` is followed by a digit (`$5 i $10`);
-`\$` is a literal dollar. The HTML export shows the formula (display formulas are centred).
+Supported: Greek letters, common operators, arrows and set symbols; big operators (`\sum`,
+`\int`, `\bigcup`, `\bigoplus`…; `\limits`, `\nolimits` and the styles `\displaystyle`…
+are accepted and show nothing); `^` and `_` (also `^{…}`, `_{…}`); `\frac`/`\dfrac`/`\tfrac`
+(vulgar fractions where one exists), `\sqrt[n]{…}`; `\text` (with `\&`, `\%`, `\$`, `\#`,
+`\_`, `\{`, `\}`), `\operatorname`, `\mathbf`, `\mathbb`, `\boldsymbol`/`\bm`, `\vec`,
+`\hat`, `\bar`, accents; `\left…\right`, `\middle` and the sizes `\big`, `\Big`, `\bigg`,
+`\Bigg` (also with `l`, `r`, `m`) before a delimiter: a character (`<` and `>` are ⟨ ⟩, `.` is
+none), an escaped one (`\{`, `\}`, `\|` is ‖) or a command (`\langle`); matrices (`pmatrix`,
+`bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`), `cases`, `aligned` and `array`, also nested (only
+an environment's own `&` and `\\` separate its cells and rows, not those in braces or escaped).
+Unknown commands stay as written; a part nested deeper than 48 levels (braces, arguments,
+environments) is shown as its source. Spaces between atoms are ignored as in LaTeX (`\ `,
+`\,`, `\quad` are explicit spaces); lowercase Greek is italic, uppercase upright. The HTML
+export shows the formula (display formulas are centred), also a ```` ```math ```` block that is a
+list item of its own (what `/Wzór matematyczny` writes in an outline or a journal); other fenced
+list items are exported as code blocks.
+
+Where a formula is (in a block's inline text, after code spans and comments are masked):
+
+* `$$…$$` runs to the next `$$`, also over several lines; content of spaces only is no formula.
+* For the block structure (§4), a line that is only `$$` (any indentation, also inside a list
+  item or a quote) opens a display formula that runs to the next line that is only `$$`, like a
+  fence: the lines between belong to the formula and its block even when they look like block
+  syntax (`+ b`, `- c`, `> d`, `1. e`, `# f`, `---`). A blank line before that closing line ends
+  it (TeX allows none in a formula): the `$$` line is then ordinary text and the following lines
+  are blocks as usual. A `$$` that shares its line with the formula does not hold the lines
+  together (`$$a` / `+ b$$` breaks at `+ b`) — write such formulas between `$$` lines or in a
+  ```` ```math ```` block.
+* Inline `$…$` follows pandoc's `tex_math_dollars`, tightened for prices and variables: the
+  opening `$` has a non-space character right after it and does not directly follow a letter
+  or digit; the closing `$` has a non-space character right before it and is not followed by
+  a letter or digit. A `$` with a space before it never closes a formula: the attempt ends
+  there, and that `$` may open a formula itself (`$5 a wzór $x$`: only `$x$`). An inline
+  formula may go on to the next line of the same block but never crosses a blank line. Text,
+  not formulas: `$5 i $10`, `15$, 10$`, `10$/h … 15$/h`, `$PATH:$HOME`, `Niech$x$`.
+* A `$` or `$$` without a partner is text and hides no later formula.
+* What starts inside a formula belongs to it — in the editor, the HTML export and the index
+  (tags, backlinks, tasks, reminders) alike, as with a code span: a `#tag`, `[[link]]`, URL,
+  task date (`📅 …`), reminder (`⏰ …`) or `key:: value` there is part of the formula. A
+  block's id (`^id`, `id::`) and `collapsed::` stay the block's even there, so references to it
+  keep working. Whatever starts first wins: a formula in a link label (`[$x^2$](Wykres.md)`)
+  leaves the link a link.
+  The formula is found in the block's text as the editor shows it: a list item's blank lines
+  and code lines end an inline formula like a blank line.
+* `\$` is a literal dollar. `\(`, `\)`, `\[` and `\]` are ordinary escapes (literal brackets,
+  as the importers write them), not math delimiters — as in Obsidian. (Brulion 0.3.3–0.3.5
+  read `\(…\)` and `\[…\]` as formulas; such notes now show the brackets and should use
+  `$…$` / `$$…$$`.)
 
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.

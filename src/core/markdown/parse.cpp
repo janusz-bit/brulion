@@ -122,7 +122,15 @@ struct ScannedText {
     QString orig;
     QString masked;
     Segments seg;
+    QList<LineInfo *> lines; ///< the scanned lines, in the order of `seg`
 };
+
+/// Store each scanned line's part of `masked` (the joined text, masked) as its masked text.
+void setLineMasks(const ScannedText &scan, const QString &masked)
+{
+    for (qsizetype k = 0; k < scan.lines.size(); ++k)
+        scan.lines[k]->masked = masked.sliced(scan.seg.pos[k], scan.lines[k]->own->view.length);
+}
 
 /// Join the scanned lines, mask inline code across them and store each line's masked text.
 ScannedText maskScannedLines(const Structure &st, QList<LineInfo> &infos)
@@ -130,7 +138,7 @@ ScannedText maskScannedLines(const Structure &st, QList<LineInfo> &infos)
     ScannedText out;
     qsizetype pos = 0;
     QString maskedJoined;
-    QList<LineInfo *> scanned;
+    QList<LineInfo *> &scanned = out.lines;
     for (LineInfo &info : infos) {
         if (info.cls != LineClass::Text)
             continue;
@@ -148,9 +156,109 @@ ScannedText maskScannedLines(const Structure &st, QList<LineInfo> &infos)
         pos += v.length + 1;
     }
     out.masked = maskInline(maskedJoined);
-    for (qsizetype k = 0; k < scanned.size(); ++k)
-        scanned[k]->masked = out.masked.sliced(out.seg.pos[k], scanned[k]->own->view.length);
+    setLineMasks(out, out.masked);
     return out;
+}
+
+/// The formulas of a block's scanned text (findMathSpans(), SYNTAX §11) as the editor finds them
+/// in the block's body: where the scan leaves lines out (blank lines, code, drawers), the body has
+/// lines that end an inline formula like a blank line, so a blank line stands in for them.
+QList<MathSpan> blockFormulas(const ScannedText &scan)
+{
+    if (!scan.masked.contains(u'$'))
+        return {};
+    QString text;
+    QList<qsizetype> added; // positions in `text` of the line breaks added for left-out lines
+    for (qsizetype k = 0; k < scan.seg.pos.size(); ++k) {
+        if (k > 0 && scan.seg.line[k] != scan.seg.line[k - 1] + 1) {
+            added.append(text.size());
+            text += u'\n';
+        }
+        const qsizetype from = scan.seg.pos[k];
+        const qsizetype to = k + 1 < scan.seg.pos.size() ? scan.seg.pos[k + 1] : scan.masked.size();
+        text += QStringView(scan.masked).sliced(from, to - from);
+    }
+    QList<MathSpan> spans = findMathSpans(added.isEmpty() ? QStringView(scan.masked) : QStringView(text));
+    if (added.isEmpty())
+        return spans;
+    const auto back = [&added](qsizetype p) {
+        return p - (std::lower_bound(added.cbegin(), added.cend(), p) - added.cbegin());
+    };
+    for (MathSpan &s : spans) {
+        s.from = back(s.from);
+        s.to = back(s.to);
+        s.contentFrom = back(s.contentFrom);
+        s.contentTo = back(s.contentTo);
+    }
+    return spans;
+}
+
+/// The formulas of a table's rows: each cell is rendered on its own (a formula never spans cells
+/// or rows: "| $15 |" and "| 10$ |" are prices), a formula cell (`=…`) shows its result.
+QList<MathSpan> cellFormulas(const ScannedText &scan)
+{
+    QList<MathSpan> out;
+    if (!scan.masked.contains(u'$'))
+        return out;
+    const QStringView masked = scan.masked;
+    for (qsizetype k = 0; k < scan.seg.pos.size(); ++k) {
+        const qsizetype rowFrom = scan.seg.pos[k];
+        const qsizetype rowTo = k + 1 < scan.seg.pos.size() ? scan.seg.pos[k + 1] - 1 : masked.size();
+        for (qsizetype from = rowFrom; from < rowTo;) {
+            qsizetype to = from;
+            while (to < rowTo && masked[to] != u'|') {
+                to += masked[to] == u'\\' && to + 1 < rowTo ? 2 : 1;
+            }
+            const QStringView cell = masked.sliced(from, std::min(to, rowTo) - from);
+            if (!cell.trimmed().startsWith(u'=')) {
+                for (MathSpan s : findMathSpans(cell)) {
+                    s.from += from;
+                    s.to += from;
+                    s.contentFrom += from;
+                    s.contentTo += from;
+                    out.append(s);
+                }
+            }
+            from = to + 1;
+        }
+    }
+    return out;
+}
+
+/// Blank the formulas `formulas` (positions in the scanned text) in each scanned line's masked
+/// text: metadata tokens and properties are not read inside formulas (SYNTAX §11). A block's
+/// identity and folding are: an `id::` or `collapsed::` line and a block id `^id` at the end of a
+/// line stay readable, so a formula that a price on one line makes with a `$` on a later one
+/// ("Cena $5 ^abc123" / "razem 15$") never costs the block its id and the references to it.
+void maskFormulas(const ScannedText &scan, const QList<MathSpan> &formulas)
+{
+    if (formulas.isEmpty())
+        return;
+    QString masked = scan.masked;
+    for (const MathSpan &f : formulas) {
+        for (qsizetype i = f.from; i < f.to; ++i) {
+            if (!isLineBreak(masked[i]))
+                masked[i] = u' ';
+        }
+    }
+    const auto restore = [&](qsizetype from, qsizetype to) {
+        for (qsizetype i = from; i < to; ++i)
+            masked[i] = scan.masked[i];
+    };
+    for (qsizetype k = 0; k < scan.lines.size(); ++k) {
+        const qsizetype from = scan.seg.pos[k];
+        const QStringView line = QStringView(scan.masked).sliced(from, scan.lines[k]->own->view.length);
+        if (const auto pm = matchPropertyLine(line.sliced(indentOf(line).chars))) {
+            const QString key = pm->key.toLower();
+            if (key == u"id" || key == u"collapsed") {
+                restore(from, from + line.size());
+                continue;
+            }
+        }
+        if (const auto id = blockIdAtEnd(line))
+            restore(from + id->from, from + id->to);
+    }
+    setLineMasks(scan, masked);
 }
 
 /// Block id at the end of the first or last text line (Obsidian `^id`); records its removal.
@@ -560,6 +668,11 @@ Block buildBlock(const Node &node, Ctx &ctx)
 
     QList<LineInfo> infos = classifyLines(st, node);
     const ScannedText scan = maskScannedLines(st, infos);
+    // Links and tags; what starts inside a formula is part of the formula (SYNTAX §11), for the
+    // tokens, properties and block ids of the lines too.
+    const ScanResult inl = scanInline(scan.orig, scan.masked, scan.seg,
+                                      node.kind == BlockKind::Table ? cellFormulas(scan) : blockFormulas(scan));
+    maskFormulas(scan, inl.formulas);
     std::optional<TaskMarker> marker;
     if (node.kind == BlockKind::ListItem && !infos.isEmpty() && infos.first().cls == LineClass::Text) {
         LineInfo &first = infos.first();
@@ -575,7 +688,6 @@ Block buildBlock(const Node &node, Ctx &ctx)
     const LineScan lines = readLines(st, node, infos, marker, block.properties, caretId);
     block.id = lines.id;
 
-    const ScanResult inl = scanInline(scan.orig, scan.masked, scan.seg);
     ctx.links.append(inl.links);
     if (!inl.tags.isEmpty() || !lines.extraTags.isEmpty()) {
         QStringList names;

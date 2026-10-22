@@ -9,6 +9,7 @@
 #include "io/ical.h"
 #include "io/importer.h"
 #include "io/zip.h"
+#include "markdown/math.h"
 #include "markdown/parse.h"
 
 #include <QJsonArray>
@@ -453,6 +454,43 @@ private Q_SLOTS:
         QVERIFY(page.contains(u"<span class=\"math display\"><sup><i>a</i></sup>&#8260;<sub><i>b</i></sub></span>"_s));
         QVERIFY(page.contains(u"<div class=\"math\">∑<sub><i>i</i> = 1</sub><sup><i>n</i></sup> <i>i</i></div>"_s));
         QVERIFY(!page.contains(u"language-math"_s));
+    }
+
+    // `/Wzór matematyczny` in an outline or a journal writes a ```math block inside a list item:
+    // the export shows the formula there too, and other fenced items as code blocks.
+    void htmlFencesInListItems()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Konspekt.md"_s, u"- Wzór w konspekcie:\n"
+                                                   "- ```math\n"
+                                                   "  a^2 + b^2 = c^2\n"
+                                                   "  ```\n"
+                                                   "  - ```calc\n"
+                                                   "    2 + 2\n"
+                                                   "    ```\n"
+                                                   "- ~~~LaTeX\n"
+                                                   "  \\frac{1}{2}\n"
+                                                   "  ~~~\n"
+                                                   "- Tekst i `kod`\n"
+                                                   "  ```js\n"
+                                                   "  x\n"
+                                                   "  ```\n"
+                                                   "- [ ] ```math\n"
+                                                   "- ```\n"
+                                                   "- koniec\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString page = textOf(entries, u"Brulion/Konspekt.html"_s);
+        const QString formula = markdown::renderMath(u"a^2 + b^2 = c^2"_s, true);
+        QVERIFY2(page.contains(
+                         u"<li><div class=\"math\">"_s + formula
+                         + u"</div><ul><li><pre><code class=\"language-calc\">2 + 2</code></pre></li></ul></li>"_s),
+                 qPrintable(page));
+        QVERIFY(page.contains(u"<li><div class=\"math\">"_s + markdown::renderMath(u"\\frac{1}{2}"_s, true)
+                              + u"</div></li>"_s));
+        // Only an item that is nothing but the fence is a block; a lone opening fence is text.
+        QVERIFY(page.contains(u"<li>Tekst i <code>kod</code>"_s));
+        QVERIFY(page.contains(u"<li>```</li>"_s));
+        QVERIFY(!page.contains(u"<code>math"_s));
     }
 
     void htmlSingle()

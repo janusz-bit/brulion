@@ -33,13 +33,15 @@ QString noteBody(const QString &page);
 /// HTML of a text note (noteBody()) in the dialect: to-do items `- [ ]` / `- [x]` / `- [/]`
 /// (doing) / `- [-]` (cancelled), empty ones left out, admonitions `> [!tip]`, collapsible
 /// blocks `> [!note]- Summary`, every quote a block of its own, footnotes `[^1]` (also those of
-/// notes Trilium imported from Markdown) with their definitions at the end, inline math as code
-/// `` `$E=mc^2$` `` and display math as a ```` ```math ```` block (the dialect has no math),
+/// notes Trilium imported from Markdown) with their definitions at the end, inline math as a
+/// formula `$E=mc^2$` (docs/SYNTAX.md §11) — as code `` `$E=mc^2$` `` when the editor would not read
+/// exactly that formula in its paragraph (a `$` of the text around it, a digit right after it, TeX
+/// with a backtick) — and display math as a ```` ```math ```` block,
 /// include-note boxes and links through `resolver`, link previews as links, code blocks with the
 /// language of their MIME class, icons dropped. List items holding several blocks (code, images,
 /// quotes, paragraphs) keep them, indented below the marker; lists next to each other stay
-/// apart (`-` / `*`, `1.` / `1)`). `#` before tag-like words is escaped (Trilium has no inline
-/// tags). Everything else as htmlToMarkdown() writes it (sanitised, escaped).
+/// apart (`-` / `*`, `1.` / `1)`). `#` before tag-like words outside code and formulas is escaped
+/// (Trilium has no inline tags). Everything else as htmlToMarkdown() writes it (sanitised, escaped).
 QString htmlNoteToMarkdown(const QString &html, const Resolver &resolver);
 
 /// A note of the Markdown export (or a Markdown code note) in the dialect: the title line Trilium

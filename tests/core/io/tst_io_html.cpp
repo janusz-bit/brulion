@@ -2,12 +2,15 @@
 #include "iotest.h"
 
 #include "io/htmlmarkdown.h"
+#include "io/htmlrender_p.h"
 #include "io/htmlutil_p.h"
+#include "markdown/inlinerenderer.h"
 
 #include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTest>
+#include <QTextDocument>
 
 #include <limits>
 
@@ -620,6 +623,40 @@ private Q_SLOTS:
         QFETCH(bool, lineStart);
         QFETCH(QString, expected);
         QCOMPARE(escapeMarkdownText(text, lineStart), expected);
+    }
+
+    // What the importers write with escapeMarkdownText() reads back as the original text, in the
+    // editor (InlineRenderer) and in the HTML export (HtmlRenderer): `\[`, `\(` are escapes, no
+    // formulas (SYNTAX §11), and dollars of plain text stay text.
+    void escapedTextShowsAsWritten_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<bool>("linkLabel");
+        QTest::newRow("link label") << u"[1] Źródło"_s << true;
+        QTest::newRow("brackets in a link label") << u"Rozdział [a] i [[b]]"_s << true;
+        QTest::newRow("double brackets") << u"[[Nie link]] w tekście"_s << false;
+        QTest::newRow("footnote, block ref, image") << u"Zobacz [^1] i ((x)) oraz ![obraz]"_s << false;
+        QTest::newRow("citations") << u"Indeks[2] i Historia [edytuj], Geografia [edytuj]"_s << false;
+        QTest::newRow("emphasis and comments")
+                << u"a\\b, *gwiazdki*, _podkreślniki_, `kod`, ~~skreślenie~~, ==zaznaczenie==, %%uwaga%%"_s << false;
+        QTest::newRow("markup") << u"<b>znacznik</b> i a < b"_s << false;
+        QTest::newRow("prefix prices and variables") << u"Cena $5 i $10, $PATH:$HOME/bin"_s << false;
+        QTest::newRow("suffix prices") << u"Netflix 15$, Spotify 10$, stawka 10$/h"_s << false;
+    }
+
+    void escapedTextShowsAsWritten()
+    {
+        QFETCH(QString, text);
+        QFETCH(bool, linkLabel);
+        const QString escaped = escapeMarkdownText(text, false, linkLabel);
+        const QString md = linkLabel ? u"["_s + escaped + u"](https://example.org)"_s : escaped;
+        const auto shown = [](const QString &html) {
+            QTextDocument doc;
+            doc.setHtml(html);
+            return doc.toPlainText().replace(QChar::Nbsp, u' ');
+        };
+        QCOMPARE(shown(markdown::InlineRenderer().render(md)), text);
+        QCOMPARE(shown(detail::HtmlRenderer().renderInline(md)), text);
     }
 };
 

@@ -92,12 +92,12 @@ Treść notatek:
 | uwaga (*admonition*: notatka, wskazówka, ważne, ostrożnie, ostrzeżenie) | callout `> [!tip]`, `> [!warning]` … |
 | blok zwijany | zwinięty callout `> [!note]- Tytuł` (rozwinięty: `+`) |
 | przypisy (także w notatkach zaimportowanych do Trilium z Markdowna) | `[^1]` w tekście, treść przypisów na końcu strony |
-| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku |
+| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku; gdy `$` z tekstu wokół (np. cena w tym samym akapicie) albo litera czy cyfra tuż za wzorem zmieniłyby, co Brulion uzna za wzór, wzory tej linii zostają kodem `` `$E=mc^2$` `` |
 | link referencyjny do notatki | `[[Import/Trilium/Projekty/Strona\|Strona]]` (pokazuje tytuł z Trilium) |
 | link z własnym tekstem | `[[Import/Trilium/Projekty/Strona\|tekst]]`; link do notatki dnia — `[[2026-10-16]]` |
 | link do notatki spoza eksportu, wykluczonej albo chronionej | sam tekst linku (ostrzeżenie) |
 | osadzona notatka (*include note*) | `![[Import/Trilium/Projekty/Strona]]` |
-| `#słowo` w tekście (w Trilium to zwykły tekst, nie etykieta) | `\#słowo` — nie staje się tagiem |
+| `#słowo` w tekście (w Trilium to zwykły tekst, nie etykieta) | `\#słowo` — nie staje się tagiem (we wzorze `#` zostaje bez zmian: należy do wzoru) |
 | podgląd linku (*link preview*) | zwykły link `[tytuł](adres)` |
 | obraz w treści | `![[assets/…/obraz.png]]`; obrazy w `data:` — zapisane jako załączniki |
 | nagłówki, pogrubienie, kursywa, przekreślenie, zaznaczenie, kod, cytaty, tabele, linie | Markdown Brulionu (`==zaznaczenie==`, tabele GFM, ```` ```język ````) |

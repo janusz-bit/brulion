@@ -434,16 +434,21 @@ std::pair<QString, bool> mathSource(const QString &text)
     return {t, false};
 }
 
-/// `source` when the editor sees it as one formula covering the whole string, otherwise a code
-/// span. TeX that Markdown would break (a backtick, a `$`, a trailing backslash) keeps the old
-/// behaviour: a code span with the LaTeX source as written.
+/// A formula the importer writes travels between these private-use characters (removed from the
+/// input first) until finishFormulas() has checked it in its paragraph.
+constexpr char16_t FormulaOpen = 0xE0F2;
+constexpr char16_t FormulaClose = 0xE0F3;
+
+/// `source` (`$…$`, `$$…$$`) between the formula marks when the editor sees it as one formula
+/// covering the whole string, otherwise a code span. TeX that Markdown would break (a backtick, a
+/// `$`, a trailing backslash) keeps the old behaviour: a code span with the LaTeX source as written.
 QString formulaOrCode(const QString &source)
 {
     const QString masked = markdown::maskInlineCode(source);
     if (masked == source && !source.contains(u'`')) {
         const QList<markdown::MathSpan> spans = markdown::findMathSpans(masked);
         if (spans.size() == 1 && spans.first().from == 0 && spans.first().to == source.size())
-            return source;
+            return QChar(FormulaOpen) + source + QChar(FormulaClose);
     }
     return codeSpan(source);
 }
@@ -466,14 +471,19 @@ QString displayMath(const QString &tex)
     return f + u"math\n"_s + tex + u'\n' + f;
 }
 
-/// Code spans and formulas blanked: their text is neither Markdown nor HTML to convert (a `<b>`
-/// or `#tag` inside a formula is part of the formula).
+/// Code spans and the importer's formulas (between the formula marks) blanked: their text is
+/// neither Markdown nor HTML to convert (a `<b>` or `#tag` inside a formula is part of the
+/// formula). Text that only looks like a formula to the editor ("10$/h #pilne … 15$/h") is text.
 QString maskCodeAndMath(const QString &line)
 {
     QString masked = markdown::maskInlineCode(line);
-    for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
-        for (qsizetype i = span.from; i < span.to; ++i)
-            masked[i] = u' ';
+    for (qsizetype i = masked.indexOf(QChar(FormulaOpen)); i >= 0; i = masked.indexOf(QChar(FormulaOpen), i)) {
+        const qsizetype close = masked.indexOf(QChar(FormulaClose), i);
+        if (close < 0)
+            break;
+        for (qsizetype k = i; k <= close; ++k)
+            masked[k] = u' ';
+        i = close + 1;
     }
     return masked;
 }
@@ -701,7 +711,7 @@ private:
             // Only our own markers may use the schemes and the block characters.
             s.replace(RawScheme, u"trilium-raw-:"_s, Qt::CaseInsensitive);
             s.replace(RefScheme, u"trilium-ref-:"_s, Qt::CaseInsensitive);
-            s.remove(QChar(BlockOpen)).remove(QChar(BlockClose));
+            s.remove(QChar(BlockOpen)).remove(QChar(BlockClose)).remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
             s = limitListItems(limitNesting(s, MaxHtmlDepth));
         }
         s = footnoteLinks(s);
@@ -1877,6 +1887,106 @@ QString escapeHashtags(const QString &markdown)
     });
 }
 
+/// `line` with each of the importer's formulas as a code span with its LaTeX source (the output
+/// before Brulion had formulas), the formula marks removed.
+QString formulasAsCode(const QString &line)
+{
+    QString out;
+    qsizetype last = 0;
+    for (qsizetype i = line.indexOf(QChar(FormulaOpen)); i >= 0; i = line.indexOf(QChar(FormulaOpen), last)) {
+        const qsizetype close = line.indexOf(QChar(FormulaClose), i);
+        if (close < 0)
+            break;
+        out += QStringView(line).sliced(last, i - last);
+        out += codeSpan(line.sliced(i + 1, close - i - 1));
+        last = close + 1;
+    }
+    return out + QStringView(line).sliced(last);
+}
+
+/// The importer's formulas in lines [from, to) of a paragraph (lines without a blank one between
+/// them) checked as the editor reads them: each must be exactly one formula of the paragraph's
+/// text (findMathSpans() with code masked, SYNTAX §11). A `$` of the text around it ("Cena $5,$x$")
+/// or a letter or digit right after it ("$x$2") pairs the delimiters differently; then the
+/// formulas of that line become code spans. Bounded: after two such rounds all of them do.
+void checkFormulas(QStringList &lines, qsizetype from, qsizetype to)
+{
+    struct Formula {
+        qsizetype from = 0;
+        qsizetype to = 0;
+        qsizetype line = 0;
+    };
+    for (int round = 0;; ++round) {
+        QString text;
+        QList<Formula> formulas;
+        for (qsizetype k = from; k < to; ++k) {
+            if (k > from)
+                text += u'\n';
+            qsizetype open = -1;
+            for (const QChar c : std::as_const(lines[k])) {
+                if (c == QChar(FormulaOpen)) {
+                    open = text.size();
+                } else if (c == QChar(FormulaClose)) {
+                    if (open >= 0)
+                        formulas.append({open, text.size(), k});
+                    open = -1;
+                } else {
+                    text += c;
+                }
+            }
+        }
+        if (formulas.isEmpty())
+            return;
+        QSet<std::pair<qsizetype, qsizetype>> spans;
+        for (const markdown::MathSpan &span : markdown::findMathSpans(markdown::maskInlineCode(text)))
+            spans.insert({span.from, span.to});
+        QSet<qsizetype> wrong;
+        for (const Formula &f : std::as_const(formulas)) {
+            if (round >= 2 || !spans.contains({f.from, f.to}))
+                wrong.insert(f.line);
+        }
+        if (wrong.isEmpty())
+            return;
+        for (const qsizetype k : std::as_const(wrong))
+            lines[k] = formulasAsCode(lines[k]);
+    }
+}
+
+/// The importer's formulas checked in their paragraphs (checkFormulas()), the formula marks
+/// removed. Fenced code is left alone.
+QString finishFormulas(const QString &markdown)
+{
+    if (!markdown.contains(QChar(FormulaOpen)))
+        return QString(markdown).remove(QChar(FormulaClose));
+    QStringList lines = markdown.split(u'\n');
+    std::optional<Fence> fence;
+    qsizetype paragraph = -1; // first line of the current paragraph
+    for (qsizetype k = 0; k <= lines.size(); ++k) {
+        bool text = false;
+        if (k < lines.size()) {
+            const QString &line = lines[k];
+            if (fence) {
+                if (const auto f = fenceLine(line); f && f->fence.ch == fence->ch && f->fence.length >= fence->length
+                                                    && f->info.isEmpty() && f->rest.trimmed().isEmpty())
+                    fence.reset();
+            } else if (const auto f = fenceLine(line)) {
+                fence = f->fence;
+            } else {
+                text = !line.trimmed().isEmpty();
+            }
+        }
+        if (text) {
+            if (paragraph < 0)
+                paragraph = k;
+            continue;
+        }
+        if (paragraph >= 0)
+            checkFormulas(lines, paragraph, k);
+        paragraph = -1;
+    }
+    return lines.join(u'\n').remove(QChar(FormulaOpen)).remove(QChar(FormulaClose));
+}
+
 } // namespace
 
 QString languageForMime(const QString &mime)
@@ -1931,7 +2041,7 @@ QString noteBody(const QString &page)
 QString htmlNoteToMarkdown(const QString &html, const Resolver &resolver)
 {
     Prepass prepass(resolver);
-    return escapeHashtags(prepass.convert(html));
+    return finishFormulas(escapeHashtags(prepass.convert(html)));
 }
 
 QString markdownNoteToMarkdown(const QString &markdown, const QString &title, const Resolver &resolver)
@@ -1946,6 +2056,7 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
 
     QString text = markdown;
     text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    text.remove(QChar(FormulaOpen)).remove(QChar(FormulaClose)); // only the importer's own marks
     QStringList lines = text.split(u'\n');
     if (!title.isEmpty() && !lines.isEmpty() && lines.first().trimmed() == u"# "_s + title.trimmed())
         lines.removeFirst();
@@ -2095,7 +2206,7 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
             return line;
         return result + QStringView(line).sliced(last);
     });
-    return escapeHashtags(tidy(text));
+    return finishFormulas(escapeHashtags(tidy(text)));
 }
 
 } // namespace brulion::io::detail::trilium

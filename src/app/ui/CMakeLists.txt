@@ -27,6 +27,16 @@ target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 qt_extract_metatypes(brulion_ui_touch)
 brulion_set_warnings(brulion_ui_touch)
 
+# brulion_ui_network — the QML engine's network access manager (localnetwork.h): local URLs only,
+# so rich text never fetches a remote picture. A static library so that tests/app/network checks
+# it without the app.
+qt_add_library(brulion_ui_network STATIC
+    localnetwork.h localnetwork.cpp
+)
+target_include_directories(brulion_ui_network PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_network PUBLIC Qt6::Core Qt6::Network Qt6::Qml)
+brulion_set_warnings(brulion_ui_network)
+
 # Qt's own Polish texts (standard dialog buttons, QtQuick.Dialogs, QFileDialog — QtTranslations):
 # qtbase_pl.qm and qtdeclarative_pl.qm from Qt's translations folder, bundled as resources
 # ":/i18n/qt/…" so Android and the browser have them too. The folder: BRULION_QT_TRANSLATIONS_DIR

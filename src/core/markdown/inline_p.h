@@ -8,6 +8,7 @@
 #pragma once
 
 #include "markdown/lines_p.h"
+#include "markdown/math.h"
 #include "types.h"
 
 #include <QList>
@@ -79,6 +80,14 @@ struct InlineItem {
 /// construct in order. Markdown links with an empty destination are skipped (not reported).
 void lexInline(QStringView orig, QStringView masked, const std::function<void(const InlineItem &)> &visit);
 
+/// lexInline() with the formulas `formulas` of `masked` (findMathSpans(), SYNTAX §11) taken into
+/// account as the InlineRenderer does: the construct that starts first wins, so a link, tag or
+/// URL starting inside a formula is part of the formula and not reported, and a formula starting
+/// inside a link (its label) leaves the link alone. The formulas that won are appended to `kept`
+/// (when given).
+void lexInlineOutsideMath(QStringView orig, QStringView masked, const QList<MathSpan> &formulas,
+                          const std::function<void(const InlineItem &)> &visit, QList<MathSpan> *kept = nullptr);
+
 /// Maps positions of a scanned string back to the document: segment k starts at pos[k] in the
 /// scanned string, at document offset offset[k] and on document line line[k].
 struct Segments {
@@ -99,10 +108,12 @@ struct TagHit {
 struct ScanResult {
     QList<Link> links;
     QList<TagHit> tags;
+    QList<MathSpan> formulas; ///< the formulas that hide what starts inside them (scanned string)
 };
 
-/// Links and tags of `masked` mapped to document positions through `seg`.
-ScanResult scanInline(QStringView orig, QStringView masked, const Segments &seg);
+/// Links and tags of `masked` mapped to document positions through `seg`; none that starts inside
+/// one of the formulas `formulas` of `masked` (lexInlineOutsideMath()).
+ScanResult scanInline(QStringView orig, QStringView masked, const Segments &seg, const QList<MathSpan> &formulas = {});
 
 /// Lower-cased NFC tag key.
 QString tagKey(QStringView tag);
