@@ -31,7 +31,7 @@ Blokiem jest każdy punkt listy, a poza listami — każdy akapit, nagłówek, t
 | Alt+↑ / Alt+↓ | przeniesienie bloku z dziećmi |
 | Ctrl+. | zwinięcie / rozwinięcie dzieci (konspekt) |
 | Esc | koniec edycji i zaznaczenie bloku |
-| Ctrl+Enter | zmiana stanu zadania |
+| Ctrl+Enter | zmiana statusu zadania |
 
 W konspekcie kliknij kropkę bloku, żeby się do niego **przybliżyć** — widzisz tylko ten blok i jego dzieci. W dokumencie Enter na pustym punkcie listy kończy listę, a Tab działa tylko na punktach listy.
 

@@ -83,7 +83,7 @@
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
   powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
-  widok kalendarza i listy zadań. Stan zadania (do zrobienia, w toku, zrobione, oczekujące,
+  widok kalendarza i listy zadań. Status zadania (do zrobienia, w toku, zrobione, oczekujące,
   anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
   przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku.
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
@@ -211,13 +211,13 @@ usuwa go w całości.
 | `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
-| `Ctrl+Enter` | zmiana stanu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
-| `Ctrl+Shift+Enter` | menu stanu zadania (dowolny stan albo bez statusu) |
+| `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
+| `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
 | `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
-| `/` | menu poleceń (stan zadania, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
+| `/` | menu poleceń (status zadania, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
 
 W trybie dokumentu `Tab` / `Shift+Tab` działa tylko na punktach listy, `Enter` na pustym
 punkcie kończy listę (w liście zagnieżdżonej: wysuwa punkt o poziom), a `Backspace` na początku

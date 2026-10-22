@@ -7567,7 +7567,7 @@
     <message>
         <location filename="../src/app/qml/editor/TaskBox.qml" line="36"/>
         <source>Right-click or press and hold to choose the status</source>
-        <translation>Kliknij prawym przyciskiem myszy albo przytrzymaj, aby wybrać stan</translation>
+        <translation>Kliknij prawym przyciskiem myszy albo przytrzymaj, aby wybrać status</translation>
     </message>
 </context>
 <context>
@@ -7575,7 +7575,7 @@
     <message>
         <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="31"/>
         <source>Task status</source>
-        <translation>Stan zadania</translation>
+        <translation>Status zadania</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/TaskStatusMenu.qml" line="84"/>

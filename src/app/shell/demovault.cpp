@@ -210,8 +210,8 @@ type:tasks status:open due:<=+7d sort:due
 | Ctrl+Shift+F | szukaj |
 | Alt+← / Alt+→ | wstecz / dalej |
 | Ctrl+E | tryb źródła Markdown |
-| Ctrl+Enter | zmień stan zadania |
-| Ctrl+Shift+Enter | menu stanu zadania |
+| Ctrl+Enter | zmień status zadania |
+| Ctrl+Shift+Enter | menu statusu zadania |
 | Tab / Shift+Tab | wcięcie / wysunięcie bloku |
 
 %%Ten komentarz widać tylko podczas edycji.%%
