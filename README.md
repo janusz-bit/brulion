@@ -241,7 +241,9 @@ Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, stra
 ## Licencja
 
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
-[miniz](https://github.com/richgel999/miniz) (MIT).
+[miniz](https://github.com/richgel999/miniz) (MIT). Emoji i symbole tam, gdzie system nie ma
+czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
+i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)).
 
 ---
 
@@ -278,6 +280,7 @@ Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK
 `scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
-[UI](docs/UI.md). License: AGPL-3.0-or-later.
+[UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), emoji and
+symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

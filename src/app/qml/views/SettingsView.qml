@@ -652,7 +652,7 @@ Item {
             }
             ShellSettingRow {
                 title: qsTr("Licence")
-                description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC).")
+                description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).")
                 BButton {
                     text: qsTr("Read")
                     iconName: "external-link"
