@@ -87,7 +87,7 @@ void push(QList<Node> &nodes, const QString &html, Kind kind)
     nodes.append(Node{html, kind, {}, {}});
 }
 
-/// UTF-16 units of the character at `i`: 2 for a surrogate pair (😀, 𝔸), which is never split.
+/// UTF-16 units of the character at `i`: 2 for a surrogate pair (an emoji, 𝔸), which is never split.
 qsizetype charLength(QStringView s, qsizetype i)
 {
     return s[i].isHighSurrogate() && i + 1 < s.size() && s[i + 1].isLowSurrogate() ? 2 : 1;
