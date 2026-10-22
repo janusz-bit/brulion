@@ -19,6 +19,8 @@ import Brulion
 // it left the file's name no room).
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
+// The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
+// never read whole for it).
 //
 //   ContentPictureView { path: routePath; asText: pictureAsText
 //                        rendererPalette: editor.rendererPalette
@@ -48,9 +50,9 @@ Item {
 
     /// Fitted into the view ↔ the picture's own pixels (the flickable then).
     property bool actualSize: false
-    /// At most this many characters of the file are shown as text (a photo's bytes would take
-    /// seconds to lay out, for nothing anyone can read).
-    property int textLimit: 200000
+    /// At most this many bytes of the file are read and shown as text (a photo's bytes would
+    /// take seconds to lay out, for nothing anyone can read).
+    property int textLimit: 200 * 1024
 
     readonly property string fileName: {
         const i = root.path.lastIndexOf("/")
@@ -289,8 +291,9 @@ Item {
         sourceComponent: Flickable {
             id: textFlick
 
-            readonly property string fileText: Workspace.readFile(root.path)
-            readonly property bool truncated: fileText.length > root.textLimit
+            /// The file's start: { text, truncated, bytes / bytesText (read), size / sizeText }.
+            readonly property var file: Workspace.readTextStart(root.path, root.textLimit)
+            readonly property bool truncated: file.truncated === true
 
             objectName: "pictureText" // (the shell's self-test)
             clip: true
@@ -308,9 +311,10 @@ Item {
                 spacing: Theme.space3
 
                 BText {
+                    objectName: "pictureTextNote" // (the shell's self-test)
                     visible: textFlick.truncated
                     width: parent.width
-                    text: qsTr("The first %L1 of %L2 characters.").arg(root.textLimit).arg(textFlick.fileText.length)
+                    text: qsTr("The start of the file: %1 of %2.").arg(textFlick.file.bytesText).arg(textFlick.file.sizeText)
                     variant: "muted"
                     wrapMode: Text.Wrap
                 }
@@ -323,7 +327,7 @@ Item {
                     selectByMouse: !Theme.touchUi
                     textFormat: TextEdit.PlainText
                     wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                    text: textFlick.truncated ? textFlick.fileText.slice(0, root.textLimit) : textFlick.fileText
+                    text: textFlick.file.text || ""
                     font.family: Theme.fontMono
                     font.pixelSize: Theme.textSm + 1
                     color: Theme.fg

@@ -21,6 +21,7 @@
 #include <QImage>
 #include <QInputDevice>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -973,6 +974,39 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
             check(waitFor([&] { return flick->property("contentY").toReal() > 100; })
                           && edit->property("selectedText").toString().isEmpty(),
                   touch ? "a finger scrolls the text view and selects nothing" : "the wheel scrolls the text view");
+        }
+
+        // At most `textLimit` bytes of the file are read and shown, never half a character: a
+        // limit inside "ż" (two bytes in UTF-8) stops before it. The note above says how much of
+        // how much.
+        const QByteArray utf8 = workspace->vault()->readBinary(longSvg);
+        const qsizetype zz = utf8.indexOf(QStringView(u"żółw 5 ").toUtf8());
+        app->requestUiAction(u"toggleSourceMode"_s);
+        waitFor(pictureShown);
+        if (QQuickItem *v = pictureView()) {
+            const QVariant limitBefore = v->property("textLimit");
+            v->setProperty("textLimit", int(zz + 1));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            QQuickItem *note = nullptr;
+            QQuickItem *e = nullptr;
+            const QString expected = QString::fromUtf8(utf8.left(zz));
+            const QLocale locale;
+            const QString noteText =
+                    QCoreApplication::translate("ContentPictureView", "The start of the file: %1 of %2.")
+                            .arg(locale.formattedDataSize(zz, 1, QLocale::DataSizeTraditionalFormat),
+                                 locale.formattedDataSize(utf8.size(), 1, QLocale::DataSizeTraditionalFormat));
+            check(waitFor([&] {
+                      note = textShown() ? child(pictureView(), "pictureTextNote") : nullptr;
+                      e = child(pictureView(), "pictureTextEdit");
+                      return note && note->isVisible() && e && e->property("text").toString() == expected;
+                  }) && note->property("text").toString() == noteText,
+                  "a long file's text view shows its start, cut before a character that does not fit whole");
+            if (note)
+                std::fprintf(stderr, "selftest: the text view's note: %s\n",
+                             qPrintable(note->property("text").toString()));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            waitFor(pictureShown);
+            v->setProperty("textLimit", limitBefore);
         }
     }
 
