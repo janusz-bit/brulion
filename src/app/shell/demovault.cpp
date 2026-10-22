@@ -104,7 +104,7 @@ Tryb jest zapisany w samej notatce (właściwość `brulion: document` albo `bru
 - Kliknij tag, żeby zobaczyć wszystko, co nim oznaczono.
 
 ## Zadania
-- [ ] Zwykłe zadanie — kliknij pole wyboru albo naciśnij Ctrl+Enter
+- [ ] Zwykłe zadanie — kliknij pole wyboru albo naciśnij Ctrl+Enter; prawy przycisk myszy (na telefonie przytrzymanie) pokaże wszystkie stany
 - [ ] Zadanie z terminem 📅 {in2}
 - [ ] Zadanie zaplanowane na jutro ⏳ {tomorrow}
 - [/] Zadanie w toku
@@ -208,6 +208,7 @@ Pełna dokumentacja jest w osobnym brulionie „Dokumentacja Brulionu” (tryby,
 | Alt+← / Alt+→ | wstecz / dalej |
 | Ctrl+E | tryb źródła Markdown |
 | Ctrl+Enter | zmień stan zadania |
+| Ctrl+Shift+Enter | menu stanu zadania |
 | Tab / Shift+Tab | wcięcie / wysunięcie bloku |
 
 %%Ten komentarz widać tylko podczas edycji.%%

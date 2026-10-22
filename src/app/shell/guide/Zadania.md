@@ -26,7 +26,7 @@ Każdy stan możesz wybrać od razu, na trzy sposoby:
 
 Na telefonie przytrzymaj przycisk **Zadanie** na pasku nad klawiaturą — otworzy się menu stanu (krótkie dotknięcie przełącza stan po kolei).
 
-Blok, który nie był zadaniem, staje się zadaniem. **Bez statusu** usuwa pole wyboru (i datę ✅ lub ❌), tekst zostaje zwykłym punktem listy. Zadania zapisane znacznikami Logseq zachowują swój styl: `TODO` staje się `DOING`, `LATER` — `NOW`, oczekujące to `WAITING`. Zmianę stanu cofniesz przez Ctrl+Z (w widoku Zadania i w kalendarzu — przyciskiem „Cofnij” w powiadomieniu).
+Blok, który nie był zadaniem, staje się zadaniem. **Bez statusu** usuwa pole wyboru (i datę ✅ lub ❌), tekst zostaje zwykłym punktem listy. Zadania zapisane znacznikami Logseq zachowują swój styl: `TODO` staje się `DOING`, `LATER` — `NOW`, oczekujące to `WAITING`. Zmianę stanu w otwartej notatce cofniesz przez Ctrl+Z, a w widoku Zadania i w kalendarzu — przyciskiem „Cofnij” w powiadomieniu.
 
 ## Terminy i daty
 Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
