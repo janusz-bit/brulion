@@ -357,7 +357,8 @@ using Check = std::function<void(bool, const char *)>;
 /// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
 ///     long press (--touch) on the checkbox opens the status menu with the task's status checked
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
-///     page, the calendar's agenda and a journal day's editor; "No status" removes the checkbox;
+///     page, the calendar's agenda, its day panel (on phones a bottom sheet, which stays open) and
+///     a journal day's editor; "No status" removes the checkbox;
 ///     "/zrobione" typed into a journal day completes its block. The notes are put back afterwards.
 void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check &check)
 {
@@ -551,6 +552,43 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
               "choosing another status in the agenda writes it");
     }
+    restore();
+
+    // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
+    //      sheet (a modal dialog) on phones, where the menu opens over the sheet and the sheet
+    //      stays open after the choice. The day in two days has dated tasks.
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"week"_s}});
+    settle(600);
+    QQuickItem *calendarView =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
+    QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
+    if (calendarView)
+        QMetaObject::invokeMethod(calendarView, "showDay", Q_ARG(QVariant, QVariant(app->today(2))));
+    const bool inSheet = daySheet && waitFor([&] { return daySheet->property("opened").toBool(); }, 1000);
+    std::fprintf(stderr, "selftest: the calendar's day panel %s\n", inSheet ? "in a bottom sheet" : "beside the week");
+    box = shownWhere(window->contentItem(), [](QQuickItem *item) {
+        if (item->objectName() != u"planningTaskBox" || item->property("status").toString() != u"todo")
+            return false;
+        for (const QQuickItem *p = item->parentItem(); p; p = p->parentItem()) {
+            if (isA(p, "CalendarDayPanel"))
+                return true;
+        }
+        return false;
+    });
+    check(box != nullptr, "the calendar's day panel shows an open task's checkbox");
+    if (box) {
+        const int doingBefore = total(u"doing"_s);
+        const int closedBefore = total(u"closed"_s);
+        check(openStatusMenu(box) && total(u"closed"_s) == closedBefore && checked("todo")
+                      && (!inSheet || daySheet->property("opened").toBool()),
+              "a long press or right-click on a checkbox in the day panel opens the status menu (and does not "
+              "toggle)");
+        check(choose("doing") && waitFor([&] { return total(u"doing"_s) == doingBefore + 1; })
+                      && (!inSheet || daySheet->property("opened").toBool()),
+              "choosing “W toku” in the day panel writes it, and its sheet stays open");
+    }
+    if (inSheet)
+        QMetaObject::invokeMethod(daySheet, "close");
     restore();
 
     // ---- A day of the journal stream: its checkbox's menu, and a "/" command typed into a block.
