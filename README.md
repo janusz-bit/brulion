@@ -154,8 +154,9 @@ i folder na serwerze należą do notatnika: inny notatnik (także dokumentacja) 
 synchronizacji, a folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu,
 Brulion nie zapisze. Dwa notatniki, które wersje 0.3.1–0.3.5 połączyły z jednym folderem,
 nie synchronizują się wcale (także „Synchronizuj teraz”), dopóki jednemu z nich nie wybierzesz
-innego folderu — status synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj” wyłącza synchronizację we wszystkich notatnikach, a zapisanie
-innego serwera lub użytkownika — w pozostałych. Brulion synchronizuje w tle
+innego folderu — status synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj”
+wyłącza synchronizację we wszystkich notatnikach, a zapisanie innego serwera lub użytkownika —
+w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
