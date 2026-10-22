@@ -10,6 +10,7 @@
 #include "index/query.h"
 #include "index/vaultindex.h"
 #include "markdown/markdown.h"
+#include "markdown/math.h"
 #include "util/paths.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -411,6 +412,33 @@ private Q_SLOTS:
             }
         }
         QVERIFY(queries >= 1);
+    }
+
+    void listOfChangesHasNoLiveSyntax()
+    {
+        // "Lista zmian" only describes syntax, in code: an example written as text would act in
+        // the documentation notebook — a task, a reminder, a tag, a property or a formula.
+        QString content;
+        for (const DemoFile &f : shell::docsVaultFiles()) {
+            if (f.path == u"Lista zmian.md")
+                content = f.content;
+        }
+        QVERIFY(!content.isEmpty());
+        const ParsedNote note = markdown::parseNote(u"Lista zmian.md"_s, content);
+        QVERIFY(note.tasks.isEmpty());
+        QVERIFY(note.reminders.isEmpty());
+        QCOMPARE(note.tags, QStringList{u"dokumentacja"_s});
+        QVERIFY(note.blockIds.isEmpty());
+        static const QRegularExpression codeSpan(u"(`+)(?!`)(.+?)(?<!`)\\1(?!`)"_s);
+        for (const Block &b : note.blocks) {
+            if (b.kind == BlockKind::Frontmatter)
+                continue; // the guide's own tags, aliases and note mode
+            QVERIFY2(b.properties.isEmpty(), qPrintable(b.raw));
+            QString text = b.raw; // code spans masked, as the renderer does before formulas
+            for (const auto &m : codeSpan.globalMatch(b.raw))
+                text.replace(m.capturedStart(), m.capturedLength(), QString(m.capturedLength(), u' '));
+            QVERIFY2(markdown::findMathSpans(text).isEmpty(), qPrintable(b.raw));
+        }
     }
 
     void documentationUpdates()
