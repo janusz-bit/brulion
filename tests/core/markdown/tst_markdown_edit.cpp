@@ -331,6 +331,17 @@ private Q_SLOTS:
         QTest::newRow("heading") << u"# [ ] Nagłówek"_s << 0 << u"# [ ] Nagłówek"_s;
         QTest::newRow("out of range") << u"- [ ] a"_s << 3 << u"- [ ] a"_s;
         QTest::newRow("negative line") << u"- [ ] a"_s << -1 << u"- [ ] a"_s;
+        // Text that would open a block over the lines after it (the children's tasks would be gone
+        // into code or a formula) keeps being text: its first character is escaped.
+        QTest::newRow("fence text, child task")
+                << u"- [ ] ```js\n  - [ ] dziecko ⏰ 2026-10-15 09:00\n- [ ] dalej"_s << 0
+                << u"- \\```js\n  - [ ] dziecko ⏰ 2026-10-15 09:00\n- [ ] dalej"_s;
+        QTest::newRow("fence text, last item") << u"- [ ] ```"_s << 0 << u"- \\```"_s;
+        QTest::newRow("tilde fence, done date")
+                << u"- [x] ~~~ ✅ 2026-10-01\n  - [/] żółw"_s << 0 << u"- \\~~~\n  - [/] żółw"_s;
+        QTest::newRow("fence text, logseq")
+                << u"- TODO ```py\n  - TODO dziecko"_s << 0 << u"- \\```py\n  - TODO dziecko"_s;
+        QTest::newRow("lone $$, child task") << u"- [ ] $$\n  - [ ] x\n  $$"_s << 0 << u"- \\$$\n  - [ ] x\n  $$"_s;
         // What starts the text right after the marker stays, also when the parser masks it.
         QTest::newRow("code span first") << u"- [ ] `npm i` w katalogu"_s << 0 << u"- `npm i` w katalogu"_s;
         QTest::newRow("code span first, logseq") << u"- TODO `a` b"_s << 0 << u"- `a` b"_s;
@@ -338,6 +349,9 @@ private Q_SLOTS:
         QTest::newRow("formula first, done date")
                 << u"- [x] $x^2$ policzyć ✅ 2026-10-14"_s << 0 << u"- $x^2$ policzyć"_s;
         QTest::newRow("date, then a code span") << u"- [x] ✅ 2026-10-14 `kod` ż"_s << 0 << u"- `kod` ż"_s;
+        QTest::newRow("code span is no fence")
+                << u"- [ ] ```npm i``` w katalogu"_s << 0 << u"- ```npm i``` w katalogu"_s;
+        QTest::newRow("formula is no lone $$") << u"- [ ] $$x$$\n  - [ ] y"_s << 0 << u"- $$x$$\n  - [ ] y"_s;
     }
 
     void removeMarker()

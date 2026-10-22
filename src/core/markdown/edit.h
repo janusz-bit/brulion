@@ -33,8 +33,9 @@ QString toggleTask(const QString &content, int line, QDate today);
 /// Remove the task marker of the task at `line` ("no status"; any line of a list item targets the
 /// item's first line): the checkbox or Logseq keyword and the space after it go, so do the ✅ / ❌
 /// dates; the list item and the rest of its text stay ("- [x] a ✅ 2026-10-14" → "- a",
-/// "- TODO a" → "- a"). Lines that are not tasks (and every line setTaskStatus leaves alone) give
-/// the content unchanged.
+/// "- TODO a" → "- a"); text that would then open a code fence or a lone `$$` formula over the
+/// lines after it gets its first character escaped ("- [ ] ```js" → "- \```js"). Lines that are
+/// not tasks (and every line setTaskStatus leaves alone) give the content unchanged.
 QString removeTaskMarker(const QString &content, int line);
 
 /// Random 6-character block id `[a-z0-9]` (QRandomGenerator::global(), unbiased).
