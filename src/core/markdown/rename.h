@@ -44,7 +44,8 @@ QString renameTags(const QString &content, const QString &oldName, const QString
                    const VaultPath &oldPath = {}, const VaultPath &newPath = {});
 
 /// The occurrences renameTags() would rewrite with the same arguments, in document order (e.g.
-/// to count them before asking).
+/// to count them before asking). Frontmatter names in a YAML form findNoteTags() cannot place
+/// come last, without a range (from = to = -1).
 QList<NoteTag> tagsToRename(const QString &content, const QString &oldName, const QString &newName,
                             const VaultPath &oldPath = {}, const VaultPath &newPath = {});
 

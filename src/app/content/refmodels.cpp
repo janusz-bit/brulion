@@ -247,7 +247,7 @@ void GroupedRefsModel::refresh()
         const bool collapsed = m_collapsed.contains(g.path);
         // Past the limit: count what is left out, list no more groups.
         if (m_limit > 0 && shown >= m_limit) {
-            refs += int(g.refs.size());
+            refs += int(g.refs.size()) + (m_pageLevelCounts && g.pageLevel ? 1 : 0);
             if (!collapsed)
                 hidden += int(g.refs.size());
             continue;
