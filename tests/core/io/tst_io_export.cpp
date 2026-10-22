@@ -294,9 +294,10 @@ private Q_SLOTS:
         in.files = {iotest::text(u"Projekty/Dom.md"_s, u"- x"_s), iotest::text(u"Zakupy.md"_s, u"- y"_s),
                     iotest::text(u"Ludzie/Jan Kowalski.md"_s, u"---\naliases: [Janek]\n---\n- z"_s),
                     iotest::text(u"Notatki.md"_s, u"- #dom, #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, "
-                                                   "#dom/kuchnia\n  tags:: dom, praca\n"_s)};
+                                                  "#dom/kuchnia\n  tags:: dom, praca\n"_s)};
         const QString page = textOf(readZip(exportWith(u"logseq-zip"_s, in).data), u"Brulion/pages/Notatki.md"_s);
-        QVERIFY2(page.contains(u"- #[[Projekty/Dom]], #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, #dom/kuchnia\n"_s),
+        QVERIFY2(page.contains(
+                         u"- #[[Projekty/Dom]], #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, #dom/kuchnia\n"_s),
                  qPrintable(page));
         QVERIFY2(page.contains(u"tags:: [[Projekty/Dom]], praca\n"_s), qPrintable(page));
     }

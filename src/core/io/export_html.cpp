@@ -284,10 +284,11 @@ public:
                 continue;
             seen.insert(key);
             const HtmlRenderer renderer(links(r.path, n.path, false));
-            const QString excerpt = r.blockIndex >= 0 ? u"<span class=\"excerpt\">"_s
-                                                                + renderer.renderInline(blockText(*source->parsed, r.blockIndex))
-                                                                + u"</span>"_s
-                                                      : QString();
+            const QString excerpt = r.blockIndex >= 0
+                                            ? u"<span class=\"excerpt\">"_s
+                                                      + renderer.renderInline(blockText(*source->parsed, r.blockIndex))
+                                                      + u"</span>"_s
+                                            : QString();
             items.append(u"<li><a href=\""_s + esc(m_noteHref(r.path, {})) + u"\">"_s + esc(source->parsed->title)
                          + u"</a>"_s + excerpt + u"</li>"_s);
         }

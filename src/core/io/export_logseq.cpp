@@ -453,10 +453,9 @@ private:
             if (!target || !target->parsed)
                 continue;
             const QString key = t.name.toLower();
-            const bool alias = std::any_of(target->parsed->aliases.cbegin(), target->parsed->aliases.cend(),
-                                           [&](const QString &a) {
-                                               return a.normalized(QString::NormalizationForm_C).toLower() == key;
-                                           });
+            const bool alias = std::any_of(
+                    target->parsed->aliases.cbegin(), target->parsed->aliases.cend(),
+                    [&](const QString &a) { return a.normalized(QString::NormalizationForm_C).toLower() == key; });
             const QString name = pageName(vault, *page);
             if (alias || name.compare(t.name, Qt::CaseInsensitive) == 0 || markdown::tagSyntax(name).isEmpty())
                 continue;
