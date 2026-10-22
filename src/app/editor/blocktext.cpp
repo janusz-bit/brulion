@@ -845,18 +845,19 @@ const QList<SlashCommand> &slashCommands()
     // clang-format off
     static const QList<SlashCommand> commands{
             // The task statuses (docs/SYNTAX.md §5; "task" is the plain "make it a task" of old).
+            // No "teraz" / "now" (the current time's) and no "later" (Logseq's LATER is to do).
             {u"task"_s, u"Zadanie: do zrobienia"_s, u"Task: to do"_s, u"square-check-big"_s, u"[ ]"_s,
              u"- [ ] zadanie"_s, u"- [ ] task"_s,
              {u"zadanie"_s, u"todo"_s, u"do zrobienia"_s, u"checkbox"_s, u"zrobić"_s, u"status"_s}},
             {u"taskDoing"_s, u"Zadanie: w toku"_s, u"Task: in progress"_s, u"clock"_s, u"[/]"_s,
              u"- [/] zadanie"_s, u"- [/] task"_s,
-             {u"zadanie"_s, u"w toku"_s, u"doing"_s, u"teraz"_s, u"now"_s, u"status"_s}},
+             {u"zadanie"_s, u"w toku"_s, u"doing"_s, u"status"_s}},
             {u"taskDone"_s, u"Zadanie: zrobione"_s, u"Task: done"_s, u"circle-check"_s, u"[x]"_s,
              u"- [x] zadanie ✅ data"_s, u"- [x] task ✅ date"_s,
              {u"zadanie"_s, u"zrobione"_s, u"gotowe"_s, u"ukończone"_s, u"done"_s, u"finished"_s, u"status"_s}},
             {u"taskWaiting"_s, u"Zadanie: oczekujące"_s, u"Task: waiting"_s, u"hourglass"_s, u"[>]"_s,
              u"- [>] zadanie"_s, u"- [>] task"_s,
-             {u"zadanie"_s, u"czeka"_s, u"odłożone"_s, u"waiting"_s, u"deferred"_s, u"later"_s, u"status"_s}},
+             {u"zadanie"_s, u"czeka"_s, u"odłożone"_s, u"waiting"_s, u"deferred"_s, u"status"_s}},
             {u"taskCancelled"_s, u"Zadanie: anulowane"_s, u"Task: cancelled"_s, u"circle-x"_s, u"[-]"_s,
              u"- [-] zadanie ❌ data"_s, u"- [-] task ❌ date"_s,
              {u"zadanie"_s, u"anulowane"_s, u"porzucone"_s, u"cancel"_s, u"canceled"_s, u"status"_s}},

@@ -525,6 +525,9 @@ private Q_SLOTS:
         QTest::newRow("cancel") << u"cancel"_s << u"taskCancelled"_s;
         QTest::newRow("bez statusu") << u"bez"_s << u"taskNone"_s;
         QTest::newRow("no status") << u"none"_s << u"taskNone"_s;
+        // The current time keeps its words (no task status takes them).
+        QTest::newRow("teraz") << u"teraz"_s << u"time"_s;
+        QTest::newRow("now") << u"now"_s << u"time"_s;
     }
 
     void slashTaskStatuses()
