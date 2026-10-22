@@ -392,6 +392,11 @@ struct Frame {
     TokenKind kind = TokenKind::LParen;
     bool call = false;
     bool semicolon = false;
+    qsizetype open = -1;  ///< index of the opening bracket
+    int commas = 0;       ///< ',' directly inside
+    int glued = 0;        ///< of them: between digits without spaces ("2,5")
+    bool chained = false; ///< two of those in a row ("1,2,3"): a list of numbers, not decimals
+    bool decimal = false; ///< a call whose glued commas are decimal commas (decided by arity)
 };
 
 /// An identifier directly before '(' that names a function (`max(`, `mod(`), not an operator
@@ -408,7 +413,20 @@ bool adjacent(const Token &a, const Token &b)
     return a.pos + a.length == b.pos;
 }
 
-/// Innermost bracket frame of each token (-1 = top level); frames record ';' inside them.
+/// A ',' at `i` written between digits without spaces ("2,5"): a decimal comma or a separator.
+bool gluedComma(const QList<Token> &tokens, qsizetype i)
+{
+    if (i < 1 || i + 1 >= tokens.size() || tokens.at(i).kind != TokenKind::Comma)
+        return false;
+    const Token &before = tokens.at(i - 1);
+    const Token &after = tokens.at(i + 1);
+    return before.kind == TokenKind::Number && allDigits(before.text) && after.kind == TokenKind::Number
+           && isAsciiDigit(after.text.front()) && !after.text.contains(u'.') && adjacent(before, tokens.at(i))
+           && adjacent(tokens.at(i), after);
+}
+
+/// Innermost bracket frame of each token (-1 = top level); frames record ';' and ',' inside them,
+/// and calls without ';' with commas between digits learn which reading their function takes.
 QList<int> computeFrames(const QList<Token> &tokens, QList<Frame> &frames)
 {
     QList<int> frameOf(tokens.size(), -1);
@@ -421,6 +439,7 @@ QList<int> computeFrames(const QList<Token> &tokens, QList<Frame> &frames)
             Frame f;
             f.kind = t.kind;
             f.call = t.kind == TokenKind::LParen && i > 0 && isCallTarget(tokens.at(i - 1));
+            f.open = i;
             frames.append(f);
             stack.append(int(frames.size() - 1));
         } else if (t.kind == TokenKind::RParen || t.kind == TokenKind::RBracket) {
@@ -429,9 +448,42 @@ QList<int> computeFrames(const QList<Token> &tokens, QList<Frame> &frames)
             frameOf[i] = stack.isEmpty() ? -1 : stack.last();
         } else if (t.kind == TokenKind::Semicolon && top >= 0) {
             frames[top].semicolon = true;
+        } else if (t.kind == TokenKind::Comma && top >= 0) {
+            Frame &f = frames[top];
+            ++f.commas;
+            if (gluedComma(tokens, i)) {
+                ++f.glued;
+                f.chained = f.chained || gluedComma(tokens, i - 2);
+            }
         }
     }
+    // `sqrt(2,25)` is sqrt(2.25): two arguments would be too many. `pow(2,5)` keeps two.
+    for (Frame &f : frames) {
+        if (!f.call || f.semicolon || f.glued == 0 || f.chained)
+            continue;
+        const std::optional<std::pair<int, int>> arity = builtinArity(tokens.at(f.open - 1).text);
+        if (!arity) // a function of the notebook (or an unknown one): the arguments as written
+            continue;
+        const auto fits = [&](int count) {
+            return count >= arity->first && (arity->second < 0 || count <= arity->second);
+        };
+        const int separated = f.commas + 1;
+        const int decimal = separated - f.glued;
+        f.decimal = fits(decimal) && !fits(separated);
+    }
     return frameOf;
+}
+
+/// A call whose commas between digits fit its function both as decimal commas and as separators.
+bool ambiguousCall(const Frame &f, const QList<Token> &tokens)
+{
+    if (!f.call || f.semicolon || f.glued == 0 || f.chained || f.decimal)
+        return false;
+    const std::optional<std::pair<int, int>> arity = builtinArity(tokens.at(f.open - 1).text);
+    if (!arity)
+        return false;
+    const auto fits = [&](int count) { return count >= arity->first && (arity->second < 0 || count <= arity->second); };
+    return fits(f.commas + 1 - f.glued) && fits(f.commas + 1);
 }
 
 Token mergedNumber(const Token &first, const Token &last, QString code)
@@ -454,12 +506,22 @@ QList<Token> mergeDecimalCommas(const QList<Token> &tokens, CalcLocale locale)
         if (f < 0)
             return true;
         const Frame &frame = frames.at(f);
-        return frame.kind == TokenKind::LParen && (!frame.call || frame.semicolon);
+        return frame.kind == TokenKind::LParen && (!frame.call || frame.semicolon || frame.decimal);
     };
+    QList<qsizetype> ambiguousOpen;
+    for (const Frame &f : frames) {
+        if (ambiguousCall(f, tokens))
+            ambiguousOpen.append(f.open);
+    }
     QList<Token> out;
     out.reserve(tokens.size());
     for (qsizetype i = 0; i < tokens.size(); ++i) {
         const Token &t = tokens.at(i);
+        if (t.kind == TokenKind::LParen && ambiguousOpen.contains(i)) {
+            out.append(t);
+            out.last().ambiguousComma = true;
+            continue;
+        }
         const bool candidate = t.kind == TokenKind::Number && allDigits(t.text) && i + 2 < tokens.size()
                                && tokens.at(i + 1).kind == TokenKind::Comma
                                && tokens.at(i + 2).kind == TokenKind::Number

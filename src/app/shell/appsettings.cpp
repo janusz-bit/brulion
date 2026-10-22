@@ -1,12 +1,16 @@
 #include "appsettings.h"
 
+#include "workspacesync.h"
+
 #include "text/text.h"
+#include "vault/vault.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QLocale>
 #include <QSaveFile>
 #include <QSettings>
@@ -35,11 +39,17 @@ constexpr auto kRemindersEnabled = "reminders/enabled";
 constexpr auto kSnooze = "reminders/snoozeMinutes";
 constexpr auto kAlarmRing = "reminders/alarmRingMinutes";
 constexpr auto kNotifyMissed = "reminders/notifyMissed";
-constexpr auto kNcEnabled = "sync/nextcloud/enabled";
 constexpr auto kNcUrl = "sync/nextcloud/url";
 constexpr auto kNcUser = "sync/nextcloud/user";
-constexpr auto kNcFolder = "sync/nextcloud/folder";
+// Up to 0.3.0 one switch and one folder for every notebook; read only to hand them over.
+constexpr auto kNcSharedEnabled = "sync/nextcloud/enabled";
+constexpr auto kNcSharedFolder = "sync/nextcloud/folder";
+/// The notebook that was current when this version first saw them.
+constexpr auto kNcSharedOwner = "sync/nextcloud/sharedOwner";
+constexpr auto kNcNotebooks = "sync/nextcloud/notebooks";
 constexpr auto kSyncInterval = "sync/intervalMinutes";
+/// The server folder of a notebook without one (WorkspaceSync syncs with it then).
+constexpr auto kDefaultServerFolder = "Brulion";
 
 QString key(const char *k)
 {
@@ -48,14 +58,67 @@ QString key(const char *k)
 
 QString cleanPath(const QString &path);
 
-/// Where a setting of one notebook lives: "sync/nextcloud/notebooks/<hash of the folder>/<name>".
-/// Without a notebook (the start screen) the old shared key.
-QString notebookKey(const QString &notebook, const char *shared, const char *name)
+/// The id of a notebook's folder, as its device state is named (Vault::idForPath: the
+/// canonical path); "" without a notebook.
+QString notebookId(const QString &notebook)
 {
     const QString clean = cleanPath(notebook);
-    if (clean.isEmpty())
-        return key(shared);
-    return u"sync/nextcloud/notebooks/%1/%2"_s.arg(text::fnv1a64Hex(clean.toUtf8()), QString::fromLatin1(name));
+    return clean.isEmpty() ? QString() : Vault::idForPath(clean);
+}
+
+/// The id 0.3.1–0.3.5 gave a notebook's settings: the hash of its path as written.
+QString legacyNotebookId(const QString &notebook)
+{
+    const QString clean = cleanPath(notebook);
+    return clean.isEmpty() ? QString() : text::fnv1a64Hex(clean.toUtf8());
+}
+
+QString groupKey(const QString &id, QStringView name)
+{
+    return key(kNcNotebooks) + u'/' + id + u'/' + name;
+}
+
+QString absolutePath(const QString &path)
+{
+    return QDir::cleanPath(QFileInfo(cleanPath(path)).absoluteFilePath());
+}
+
+/// A server folder as compared: no outer slashes, the default for none, NFC, case folded.
+QString folderIdentity(const QString &folder)
+{
+    QString v = QDir::cleanPath(QDir::fromNativeSeparators(folder.trimmed()));
+    while (v.startsWith(u'/'))
+        v.remove(0, 1);
+    while (v.endsWith(u'/'))
+        v.chop(1);
+    if (v.isEmpty() || v == u".")
+        v = key(kDefaultServerFolder);
+    return v.normalized(QString::NormalizationForm_C).toCaseFolded();
+}
+
+/// One folder is the other or holds it: notebooks syncing with them would mix their notes.
+bool foldersOverlap(const QString &a, const QString &b)
+{
+    const QString x = folderIdentity(a);
+    const QString y = folderIdentity(b);
+    return x == y || x.startsWith(y + u'/') || y.startsWith(x + u'/');
+}
+
+/// A notebook folder's name as a server folder: characters a folder on the server cannot have
+/// become spaces, no leading or trailing dots and spaces.
+QString serverFolderFromName(const QString &name)
+{
+    static const QString forbidden = u"\\/:*?\"<>|"_s;
+    QString out;
+    out.reserve(name.size());
+    for (const QChar c : name)
+        out += forbidden.contains(c) || c.category() == QChar::Other_Control ? QChar(u' ') : c;
+    out = out.simplified();
+    while (!out.isEmpty() && (out.front() == u'.' || out.front() == u' '))
+        out.remove(0, 1);
+    while (!out.isEmpty() && (out.back() == u'.' || out.back() == u' '))
+        out.chop(1);
+    return out.normalized(QString::NormalizationForm_C);
 }
 
 QString defaultLanguage()
@@ -82,6 +145,7 @@ AppSettings::AppSettings(const QString &settingsFile, const QString &dataDir, QO
                                                  QCoreApplication::applicationName());
     else
         m_settings = std::make_unique<QSettings>(settingsFile, QSettings::IniFormat);
+    adoptNotebookKeys(currentVault());
 }
 
 AppSettings::~AppSettings()
@@ -214,6 +278,7 @@ QString AppSettings::currentVault() const
 
 void AppSettings::setCurrentVault(const QString &path)
 {
+    adoptNotebookKeys(path);
     if (store(key(kCurrentVault), cleanPath(path), currentVault())) {
         Q_EMIT currentVaultChanged();
         Q_EMIT nextcloudChanged(); // the sync switch and folder belong to the notebook
@@ -343,14 +408,120 @@ void AppSettings::setNotifyMissed(bool on)
 // the server holds one notebook, so a second notebook must never inherit it (its notes would
 // flow into the first one). The server and the account are shared.
 
+template<typename T>
+bool AppSettings::storeNotebookValue(const QString &notebook, QStringView name, const T &value, const T &current)
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty())
+        return false; // no notebook open: nothing to set
+    adoptNotebookKeys(notebook);
+    const QString pathKey = groupKey(id, u"path");
+    const QString path = absolutePath(notebook);
+    if (m_settings->value(pathKey).toString() != path)
+        m_settings->setValue(pathKey, path);
+    return store(groupKey(id, name), value, current);
+}
+
+QString AppSettings::notebookKey(const QString &notebook, QStringView name) const
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty())
+        return {};
+    const QString own = groupKey(id, name);
+    if (!m_settings->contains(own)) {
+        const QString legacy = groupKey(legacyNotebookId(notebook), name);
+        if (m_settings->contains(legacy))
+            return legacy;
+    }
+    return own;
+}
+
+bool AppSettings::hasNotebookValue(const QString &notebook, QStringView name) const
+{
+    const QString k = notebookKey(notebook, name);
+    return !k.isEmpty() && m_settings->contains(k);
+}
+
+void AppSettings::setNotebookValue(const QString &notebook, QStringView name, const QVariant &value)
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty())
+        return;
+    adoptNotebookKeys(notebook);
+    m_settings->setValue(groupKey(id, u"path"), absolutePath(notebook));
+    m_settings->setValue(groupKey(id, name), value);
+}
+
+void AppSettings::adoptNotebookKeys(const QString &notebook)
+{
+    // Only for a folder that exists: the canonical path of one that does not (an unmounted card)
+    // may not be the one it will have.
+    const QString clean = cleanPath(notebook);
+    if (clean.isEmpty() || !QFileInfo(clean).isDir())
+        return;
+    const QString id = notebookId(clean);
+    const QString legacy = legacyNotebookId(clean);
+    bool has = false;
+    if (legacy != id) {
+        const QString from = key(kNcNotebooks) + u'/' + legacy;
+        m_settings->beginGroup(from);
+        const QStringList keys = m_settings->childKeys();
+        m_settings->endGroup();
+        for (const QString &k : keys) {
+            const QString to = groupKey(id, k);
+            if (!m_settings->contains(to))
+                m_settings->setValue(to, m_settings->value(from + u'/' + k));
+            has = true;
+        }
+        if (has)
+            m_settings->remove(from);
+    }
+    const QString pathKey = groupKey(id, u"path");
+    if (!has) {
+        m_settings->beginGroup(key(kNcNotebooks) + u'/' + id);
+        has = !m_settings->childKeys().isEmpty();
+        m_settings->endGroup();
+    }
+    if (has && m_settings->value(pathKey).toString() != absolutePath(clean))
+        m_settings->setValue(pathKey, absolutePath(clean));
+}
+
+QList<AppSettings::NotebookSync> AppSettings::notebookSyncs() const
+{
+    // A group without its path (0.3.1–0.3.5 wrote none) is found among the recent notebooks.
+    QHash<QString, QString> recent;
+    for (const QVariant &v : recentVaults()) {
+        const QString path = v.toMap().value(u"path"_s).toString();
+        recent.insert(legacyNotebookId(path), path);
+        recent.insert(notebookId(path), path);
+    }
+    m_settings->beginGroup(key(kNcNotebooks));
+    const QStringList ids = m_settings->childGroups();
+    m_settings->endGroup();
+    QList<NotebookSync> out;
+    for (const QString &id : ids) {
+        NotebookSync n;
+        n.id = id;
+        n.path = m_settings->value(groupKey(id, u"path")).toString();
+        if (n.path.isEmpty())
+            n.path = recent.value(id);
+        n.enabled = m_settings->value(groupKey(id, u"enabled"), false).toBool();
+        n.hasFolder = m_settings->contains(groupKey(id, u"folder"));
+        n.folder = m_settings->value(groupKey(id, u"folder"), key(kDefaultServerFolder)).toString();
+        out.append(n);
+    }
+    return out;
+}
+
 bool AppSettings::nextcloudEnabled() const
 {
-    return m_settings->value(notebookKey(currentVault(), kNcEnabled, "enabled"), false).toBool();
+    const QString k = notebookKey(currentVault(), u"enabled");
+    return !k.isEmpty() && m_settings->value(k, false).toBool();
 }
 
 void AppSettings::setNextcloudEnabled(bool on)
 {
-    if (store(notebookKey(currentVault(), kNcEnabled, "enabled"), on, nextcloudEnabled()))
+    if (storeNotebookValue(currentVault(), u"enabled", on, nextcloudEnabled()))
         Q_EMIT nextcloudChanged();
 }
 
@@ -381,7 +552,8 @@ void AppSettings::setNextcloudUser(const QString &user)
 
 QString AppSettings::nextcloudFolder() const
 {
-    return m_settings->value(notebookKey(currentVault(), kNcFolder, "folder"), u"Brulion"_s).toString();
+    const QString k = notebookKey(currentVault(), u"folder");
+    return k.isEmpty() ? key(kDefaultServerFolder) : m_settings->value(k, key(kDefaultServerFolder)).toString();
 }
 
 void AppSettings::setNextcloudFolder(const QString &folder)
@@ -391,29 +563,139 @@ void AppSettings::setNextcloudFolder(const QString &folder)
         v.remove(0, 1);
     if (v == u".")
         v.clear();
-    if (store(notebookKey(currentVault(), kNcFolder, "folder"), v, nextcloudFolder()))
+    if (storeNotebookValue(currentVault(), u"folder", v, nextcloudFolder()))
         Q_EMIT nextcloudChanged();
 }
 
-void AppSettings::claimSharedNextcloud(const QString &notebook)
+bool AppSettings::hasOwnNextcloudFolder() const
 {
-    // Up to 0.3.0 the switch and the folder were shared by all notebooks. The first notebook
-    // opened afterwards takes them over (it is the one that was being synced) and the shared
-    // keys go away, so no other notebook picks them up.
-    const bool hasEnabled = m_settings->contains(key(kNcEnabled));
-    const bool hasFolder = m_settings->contains(key(kNcFolder));
-    const QString clean = cleanPath(notebook);
-    if (clean.isEmpty() || (!hasEnabled && !hasFolder))
+    return hasNotebookValue(currentVault(), u"folder");
+}
+
+QString AppSettings::proposedNextcloudFolder() const
+{
+    // Syncing without a folder of its own (settings of 0.3.1–0.3.5): the folder it syncs with.
+    if (hasOwnNextcloudFolder() || nextcloudEnabled())
+        return nextcloudFolder();
+    const QString notebook = currentVault();
+    QString base;
+    if (!nextcloudUrl().isEmpty() && !cleanPath(notebook).isEmpty())
+        base = serverFolderFromName(QFileInfo(absolutePath(notebook)).fileName());
+    if (base.isEmpty())
+        base = QString::fromLatin1(NewAccountFolder);
+    // Folders given to other notebooks (synced or not) and the one of 0.3.0 waiting for its notebook.
+    const QString id = notebookId(notebook);
+    const QString legacy = legacyNotebookId(notebook);
+    QStringList taken;
+    for (const NotebookSync &n : notebookSyncs()) {
+        if (n.id != id && n.id != legacy && (n.hasFolder || n.enabled))
+            taken.append(n.folder);
+    }
+    if (hasSharedNextcloud())
+        taken.append(m_settings->value(key(kNcSharedFolder), key(kDefaultServerFolder)).toString());
+    QString candidate = base;
+    for (int i = 2;
+         std::any_of(taken.cbegin(), taken.cend(), [&](const QString &f) { return foldersOverlap(f, candidate); }); ++i)
+        candidate = u"%1 %2"_s.arg(base).arg(i);
+    return candidate;
+}
+
+QString AppSettings::nextcloudFolderUser(const QString &folder) const
+{
+    return nextcloudFolderUser(folder, currentVault());
+}
+
+QString AppSettings::nextcloudFolderUser(const QString &folder, const QString &except) const
+{
+    const QString exceptId = notebookId(except);
+    const QString exceptLegacy = legacyNotebookId(except);
+    for (const NotebookSync &n : notebookSyncs()) {
+        if (!n.enabled || n.path.isEmpty() || n.id == exceptId || n.id == exceptLegacy)
+            continue;
+        // A notebook whose folder is gone (moved, deleted) syncs nothing any more; the same folder
+        // reached through another path is the notebook itself.
+        if (!QFileInfo(n.path).isDir() || notebookId(n.path) == exceptId)
+            continue;
+        if (foldersOverlap(n.folder, folder))
+            return n.path;
+    }
+    return {};
+}
+
+void AppSettings::disableNextcloudEverywhere(bool exceptCurrent)
+{
+    const bool wasOn = nextcloudEnabled();
+    const QString current = currentVault();
+    const QString currentId = notebookId(current);
+    const QString currentLegacy = legacyNotebookId(current);
+    for (const NotebookSync &n : notebookSyncs()) {
+        const bool isCurrent = !currentId.isEmpty() && (n.id == currentId || n.id == currentLegacy);
+        if (n.enabled && !(exceptCurrent && isCurrent))
+            m_settings->setValue(groupKey(n.id, u"enabled"), false);
+    }
+    if (m_settings->value(key(kNcSharedEnabled), false).toBool())
+        m_settings->setValue(key(kNcSharedEnabled), false); // its folder still goes to its notebook
+    if (wasOn != nextcloudEnabled())
+        Q_EMIT nextcloudChanged();
+}
+
+bool AppSettings::hasSharedNextcloud() const
+{
+    return m_settings->contains(key(kNcSharedEnabled)) || m_settings->contains(key(kNcSharedFolder));
+}
+
+void AppSettings::recordSharedNextcloudOwner(const QString &notebook)
+{
+    if (!hasSharedNextcloud() || m_settings->contains(key(kNcSharedOwner)))
         return;
-    const QString enabledKey = notebookKey(clean, kNcEnabled, "enabled");
-    const QString folderKey = notebookKey(clean, kNcFolder, "folder");
-    if (hasEnabled && !m_settings->contains(enabledKey))
-        m_settings->setValue(enabledKey, m_settings->value(key(kNcEnabled)));
-    if (hasFolder && !m_settings->contains(folderKey))
-        m_settings->setValue(folderKey, m_settings->value(key(kNcFolder)));
-    m_settings->remove(key(kNcEnabled));
-    m_settings->remove(key(kNcFolder));
-    if (cleanPath(currentVault()) == clean)
+    m_settings->setValue(key(kNcSharedOwner), cleanPath(notebook));
+}
+
+bool AppSettings::claimSharedNextcloud(const QString &notebook, const QString &syncedRemote)
+{
+    // Not "the first notebook opened": that may be another one (the synced one is on an
+    // unmounted card, the user opened the documentation and then created a notebook), which
+    // would then sync with the old folder and mix both notebooks there.
+    if (!hasSharedNextcloud())
+        return false;
+    const QString folder = m_settings->value(key(kNcSharedFolder), key(kDefaultServerFolder)).toString();
+    const bool synced =
+            !syncedRemote.isEmpty() && syncedRemote == nextcloudRemote(nextcloudUrl(), nextcloudUser(), folder);
+    const QString owner = m_settings->value(key(kNcSharedOwner)).toString();
+    if (!synced && (owner.isEmpty() || notebookId(owner) != notebookId(notebook)))
+        return false;
+    if (!hasNotebookValue(notebook, u"enabled")) {
+        const bool on = m_settings->value(key(kNcSharedEnabled), false).toBool()
+                        && nextcloudFolderUser(folder, notebook).isEmpty();
+        setNotebookValue(notebook, u"enabled", on);
+    }
+    // Always written: a notebook without a folder of its own would be offered another one.
+    if (!hasNotebookValue(notebook, u"folder"))
+        setNotebookValue(notebook, u"folder", folder);
+    m_settings->remove(key(kNcSharedEnabled));
+    m_settings->remove(key(kNcSharedFolder));
+    m_settings->remove(key(kNcSharedOwner));
+    return true;
+}
+
+void AppSettings::notebookOpened(const QString &notebook, const QString &syncedRemote)
+{
+    const QString id = notebookId(notebook);
+    if (id.isEmpty())
+        return;
+    adoptNotebookKeys(notebook);
+    bool changed = claimSharedNextcloud(notebook, syncedRemote);
+    // Off and without a folder of its own, yet synced with a folder of this account before (up
+    // to 0.3.0, or its settings went to another notebook in 0.3.1–0.3.5): that folder stays its
+    // folder, so turning sync on again continues there instead of starting over elsewhere.
+    if (!hasNotebookValue(notebook, u"folder") && !hasNotebookValue(notebook, u"enabled")) {
+        const QString folder = nextcloudRemoteFolder(nextcloudUrl(), nextcloudUser(), syncedRemote);
+        if (!folder.isEmpty()) {
+            setNotebookValue(notebook, u"folder", folder);
+            changed = true;
+        }
+    }
+    if (changed && notebookId(currentVault()) == id)
         Q_EMIT nextcloudChanged();
 }
 

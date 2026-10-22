@@ -11,11 +11,15 @@ import Brulion
 //
 // `--editor-script <name>` puts the editor into a state for screenshots (see runScript()):
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
-// table, calc, query, embeds, title, empty, conflict, markup; the document mode on the sample
-// trip plan (FakeEditorHost.documentPath): document (reading), document-paragraph,
-// document-list, document-heading, document-task (editing one), document-outline (the same page
-// switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
-// mode) and exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
+// table, calc, query, embeds, title, empty, conflict, markup, task-menu (a checkbox's status
+// menu), task-menu-query (a query result's), task-slash (the status commands); the document
+// mode on the sample trip plan (FakeEditorHost.documentPath): document (reading),
+// document-paragraph, document-list, document-heading, document-task (editing one),
+// document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
+// checks (outline and document mode) and exits; `clock` checks the round clock and its buttons
+// (clockTest()) and exits; `taskstatus` checks the task status menu and commands
+// (taskStatusTest()) and exits. The in-memory vault runs ```query blocks on the real index
+// (FakeEditorHost).
 ApplicationWindow {
     id: window
 
@@ -284,6 +288,18 @@ ApplicationWindow {
         }
     }
 
+    /// Runs `fn` once, 400 ms later (a scripted state that waits for the list's layout).
+    Timer {
+        id: scriptLater
+        property var fn: null
+        interval: 400
+        function run(f) {
+            fn = f
+            start()
+        }
+        onTriggered: if (fn) fn()
+    }
+
     Timer {
         id: scriptTimer
         interval: 250
@@ -307,6 +323,7 @@ ApplicationWindow {
     property BTextField timeField: null
     /// Repeats of a step waiting for something asynchronous (a picture loading).
     property int waits: 0
+    property var crumbsProbe: null
     function check(ok, what) {
         if (!ok)
             failures += 1
@@ -331,6 +348,43 @@ ApplicationWindow {
                 return found
         }
         return null
+    }
+    /// The Text under `item` that shows `text`, or null.
+    function textShowing(item, text) {
+        if (!item)
+            return null
+        if (item.text === text && item.textFormat !== undefined)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = textShowing(item.children[i], text)
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// The Text under `item` whose text contains `needle`, or null.
+    function textContaining(item, needle) {
+        if (!item || !item.visible)
+            return null
+        if (item.textFormat !== undefined && String(item.text).indexOf(needle) >= 0)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = textContaining(item.children[i], needle)
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// `label` is as wide as `text` written out in plain text (markup not interpreted).
+    function showsAsWritten(label, text) {
+        if (!label)
+            return false
+        const plain = Qt.createQmlObject('import QtQuick; Text { textFormat: Text.PlainText }', window.contentItem, "plainText")
+        plain.font = label.font
+        plain.text = text
+        const same = Math.abs(plain.implicitWidth - label.implicitWidth) < 1
+        plain.destroy()
+        return same
     }
     /// A real key press (through the window, Keys handlers and TextEdit) to the focused item.
     function realKey(k, modifiers, text) {
@@ -879,10 +933,949 @@ ApplicationWindow {
                 ed.controller.load()
             },
             () => check(window.probe === null, "the probe editor is gone"),
-            () => check(page.loaded && editor.alive, "the page's own editor still works")
+            () => check(page.loaded && editor.alive, "the page's own editor still works"),
+            // ---- Names in menus and breadcrumbs are shown as written -------------------------------
+            () => {
+                const markup = "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"
+                const item = Qt.createQmlObject('import QtQuick; import Brulion; BMenuItem {}', window.contentItem, "menuItemProbe")
+                item.text = markup
+                check(showsAsWritten(textShowing(item, markup), markup), "a menu item shows a name with markup as written")
+                item.destroy()
+                const crumbs = Qt.createQmlObject('import QtQuick; import Brulion; BBreadcrumb { width: 900 }', window.contentItem, "crumbsProbe")
+                crumbs.model = [{ title: "Projekty" }, { title: markup }]
+                window.crumbsProbe = crumbs
+            },
+            () => {
+                check(showsAsWritten(textShowing(window.crumbsProbe, "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"),
+                                     "<font size=1>Żółw " + "ż".repeat(24) + "</font>.png"),
+                      "a breadcrumb shows a name with markup as written")
+                window.crumbsProbe.destroy()
+                page.save()
+                page.path = host.samplePath
+            },
+            () => {
+                // A block zoomed into: its text in the breadcrumb above the blocks, as written.
+                window.realRow = page.insertBlockAfter(rowOf("Ekipa może"), "Tekst z <b>HTML</b> & <i>kursywą</i>")
+                page.stopEditing()
+                page.zoomInto(window.realRow)
+            },
+            () => {
+                const label = textContaining(editor, "<b>HTML</b>")
+                check(label !== null && showsAsWritten(label, label.text), "the zoom breadcrumb shows a block's markup as written: "
+                      + (label ? label.text : "none"))
+                page.zoomOut()
+                page.undo()
+            }
         ]
         stepIndex = 0
         stepTimer.start()
+    }
+
+    // ---- Self test of the round clock (`--editor-script clock`, tst_editor_qml_clock*) -------
+    // BTimePicker on its own: the value of every position, taps and drags with a finger (touch
+    // UI) or the mouse — also drags that start on a number or the chosen value's bubble —, keys
+    // and the focus ring; BTimePickerDialog: open, set, cancel, the whole dial in a short window;
+    // the clock buttons of the reminder's date picker and of the calendar's add dialog (a typed
+    // time first; the clock created only when asked for). Real input through QtTest's TestEvent.
+    property var clockEvents: null
+    property BTimePicker clock: null
+    property BTimePickerDialog clockDialog: null
+    property var clockPicks: []
+    property var dialogPicks: []
+    property var datePicker: null
+    property var addDialog: null
+    property var reminderDialog: null
+
+    /// A point of the face (its coordinates) at `radius` from the centre, `deg` from 12 o'clock.
+    function clockPoint(c, radius, deg) {
+        const a = (deg - 90) * Math.PI / 180
+        return { x: c.center + Math.cos(a) * radius, y: c.center + Math.sin(a) * radius }
+    }
+    /// A tap (a finger on touch UIs, else a click) at (x, y) of `item`.
+    function tapAt(item, x, y) {
+        if (Theme.touchUi) {
+            clockEvents.touchEvent(item).press(0, item, x, y).commit()
+            clockEvents.touchEvent(item).release(0, item, x, y).commit()
+        } else {
+            clockEvents.mouseClick(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    function clockTap(c, radius, deg) {
+        const p = clockPoint(c, radius, deg)
+        tapAt(c.focusItem, p.x, p.y)
+    }
+    /// A tap with a finger that shakes a little (two moves of a few pixels, well under a drag).
+    function clockShakyTap(c, radius, deg) {
+        const face = c.focusItem
+        const p = clockPoint(c, radius, deg)
+        if (Theme.touchUi) {
+            clockEvents.touchEvent(face).press(0, face, p.x, p.y).commit()
+            clockEvents.touchEvent(face).move(0, face, p.x + 2, p.y + 1).commit()
+            clockEvents.touchEvent(face).move(0, face, p.x + 3, p.y - 1).commit()
+            clockEvents.touchEvent(face).release(0, face, p.x + 3, p.y - 1).commit()
+        } else {
+            clockEvents.mousePress(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+            clockEvents.mouseMove(face, p.x + 2, p.y + 1, -1, Qt.LeftButton, Qt.NoModifier)
+            clockEvents.mouseMove(face, p.x + 3, p.y - 1, -1, Qt.LeftButton, Qt.NoModifier)
+            clockEvents.mouseRelease(face, p.x + 3, p.y - 1, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    /// A drag along the circle of `radius` from `fromDeg` to `toDeg`, in twelve moves.
+    function clockDrag(c, radius, fromDeg, toDeg) {
+        const face = c.focusItem
+        const touch = Theme.touchUi
+        let p = clockPoint(c, radius, fromDeg)
+        if (touch)
+            clockEvents.touchEvent(face).press(0, face, p.x, p.y).commit()
+        else
+            clockEvents.mousePress(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+        for (let i = 1; i <= 12; ++i) {
+            p = clockPoint(c, radius, fromDeg + (toDeg - fromDeg) * i / 12)
+            if (touch)
+                clockEvents.touchEvent(face).move(0, face, p.x, p.y).commit()
+            else
+                clockEvents.mouseMove(face, p.x, p.y, -1, Qt.LeftButton, Qt.NoModifier)
+        }
+        if (touch)
+            clockEvents.touchEvent(face).release(0, face, p.x, p.y).commit()
+        else
+            clockEvents.mouseRelease(face, p.x, p.y, Qt.LeftButton, Qt.NoModifier, -1)
+    }
+    function clockRing(c) {
+        return findItem(c, "clockFocusRing")
+    }
+    /// The number circles the face shows (hours or minutes) and the chosen value's bubble, as
+    /// { label, bubble, outer (on the outer ring), x, y, r, textWidth, font } in the face's
+    /// coordinates.
+    function clockCircles(c) {
+        const out = []
+        const face = c.focusItem
+        for (let i = 0; i < face.children.length; ++i) {
+            const item = face.children[i]
+            if (!item.visible || item.width <= 0)
+                continue
+            const hour = item.selected !== undefined && item.angle !== undefined
+            const minute = !hour && item.value !== undefined && item.angle !== undefined
+            // The bubble: a round Rectangle holding only its text (the face's disc holds nothing).
+            const bubble = !hour && !minute && item.children.length === 1 && item.children[0].text !== undefined
+                           && Math.abs(item.radius - item.width / 2) < 0.01
+            if (!hour && !minute && !bubble)
+                continue
+            let text = null
+            for (let j = 0; j < item.children.length; ++j) {
+                if (item.children[j].text !== undefined)
+                    text = item.children[j]
+            }
+            const x = item.x + item.width / 2
+            const y = item.y + item.height / 2
+            out.push({ label: bubble ? "bubble " + text.text : text ? text.text : "?", bubble: bubble,
+                       outer: Math.abs(Math.hypot(x - c.center, y - c.center) - c.outerRadius) < 0.5,
+                       x: x, y: y, r: item.width / 2,
+                       textWidth: text ? text.contentWidth : 0, font: text ? text.font.pixelSize : 0 })
+        }
+        return out
+    }
+    /// The numbers on the face never overlap (nor does the chosen value's bubble reach over a
+    /// neighbour of its number), each holds its text in a legible font — the outer ring's in the
+    /// text size itself, the inner one's at least 12 px —, and a press near a number's edge,
+    /// towards its neighbour, still gives that number.
+    function checkClockNumbers(c, what) {
+        const circles = clockCircles(c)
+        const numbers = circles.filter(n => !n.bubble)
+        const bubble = circles.filter(n => n.bubble)[0]
+        const overlaps = []
+        const cramped = []
+        const fits = (n, minFont) => n.textWidth <= 2 * n.r - 2 && n.font >= minFont
+        for (let i = 0; i < numbers.length; ++i) {
+            const a = numbers[i]
+            if (!fits(a, a.outer ? Theme.textSm : Math.min(Theme.textSm, 12)))
+                cramped.push(a.label + " (" + a.textWidth.toFixed(1) + " px text in " + 2 * a.r + ", font " + a.font + ")")
+            for (let j = i + 1; j < numbers.length; ++j) {
+                const b = numbers[j]
+                const d = Math.hypot(a.x - b.x, a.y - b.y)
+                if (d < a.r + b.r - 0.01)
+                    overlaps.push(a.label + "/" + b.label + " " + d.toFixed(1) + " < " + (a.r + b.r))
+            }
+            const toBubble = bubble ? Math.hypot(a.x - bubble.x, a.y - bubble.y) : 0
+            if (bubble && toBubble > 0.5 && toBubble < a.r + bubble.r - 0.01)
+                overlaps.push(bubble.label + "/" + a.label + " " + toBubble.toFixed(1) + " < " + (a.r + bubble.r))
+        }
+        if (bubble && !fits(bubble, 10))
+            cramped.push(bubble.label + " (" + bubble.textWidth.toFixed(1) + " px text in " + 2 * bubble.r + ")")
+        const wrong = []
+        if (c.mode === "hour") {
+            for (let h = 0; h < 24; ++h) {
+                const n = numbers.filter(m => m.label === c.pad(h))[0]
+                for (const side of [-1, 1]) {
+                    const other = (h % 12 + 12 + side) % 12 + (h >= 12 ? 12 : 0)
+                    const next = numbers.filter(m => m.label === c.pad(other))[0]
+                    if (!n || !next)
+                        continue
+                    const d = Math.hypot(next.x - n.x, next.y - n.y)
+                    const x = n.x + (next.x - n.x) / d * (n.r - 1)
+                    const y = n.y + (next.y - n.y) / d * (n.r - 1)
+                    if (c.labelAt(x, y) !== h)
+                        wrong.push(n.label + "→" + c.labelAt(x, y))
+                }
+            }
+        }
+        const expected = c.mode === "hour" ? 24 : 12
+        check(numbers.length === expected && overlaps.length === 0 && cramped.length === 0 && wrong.length === 0,
+              "the clock's numbers do not overlap and hold their text, " + what + ": " + numbers.length + " numbers"
+              + (overlaps.length ? ", overlapping " + overlaps : "") + (cramped.length ? ", cramped " + cramped : "")
+              + (wrong.length ? ", a press near a number's edge gives another one " + wrong : ""))
+    }
+    /// Scroll a dialog's body so that `item` shows, then tap it.
+    function tapInDialog(dialog, item) {
+        const body = dialog.contentItem
+        const at = item.mapToItem(body.contentItem, 0, 0)
+        body.contentY = Math.max(0, Math.min(at.y - (body.height - item.height) / 2, body.contentHeight - body.height))
+        tapAt(item, item.width / 2, item.height / 2)
+    }
+    /// The clock dialogs `object` holds (created ones: BDatePicker creates its clock on demand).
+    function clockDialogsIn(object) {
+        const found = []
+        for (const list of [object.resources, object.data]) {
+            for (let i = 0; list && i < list.length; ++i) {
+                const o = list[i]
+                if (o && o.openFor !== undefined && o.picked !== undefined && found.indexOf(o) < 0)
+                    found.push(o)
+            }
+        }
+        return found.length
+    }
+    /// Repeat the current step until `ready` (an asynchronous popup), at most 6 s.
+    function waitUntil(ready) {
+        if (ready || window.waits++ >= 50) {
+            window.waits = 0
+            return true
+        }
+        window.stepIndex -= 1
+        return false
+    }
+
+    function clockTest() {
+        clockEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "clockEvents")
+        clock = Qt.createQmlObject('import QtQuick; import Brulion; BTimePicker { x: 40; y: 40; z: 100000; time: "18:30" }',
+                                   window.contentItem, "clock") as BTimePicker
+        clock.picked.connect((v) => window.clockPicks.push(v))
+        const c = clock
+        steps = [
+            () => check(c.focusItem.width === c.dialSize && c.focusItem.height === c.dialSize,
+                        "the face is the dial's size: " + c.focusItem.width + "×" + c.focusItem.height + ", dial " + c.dialSize),
+            // ---- The numbers never overlap, down to the smallest dial (the dialog's 180 px floor;
+            //      196 px: a phone held sideways), with an inner hour or a minute chosen ----------
+            () => checkClockNumbers(c, c.dialSize + " px, hours"),
+            () => { window.clockSizeBefore = c.dialSize; c.dialSize = 196; c.time = "13:25" },
+            () => checkClockNumbers(c, "196 px, hours, 13 chosen"),
+            () => { c.dialSize = 180 },
+            () => checkClockNumbers(c, "180 px, hours, 13 chosen"),
+            () => { c.mode = "minute" },
+            () => checkClockNumbers(c, "180 px, minutes"),
+            // Larger text (Ustawienia → Rozmiar tekstu → Większy) on the smallest dials: the
+            // outer numbers keep the text size, the inner hours stay legible.
+            () => { window.clockFontScaleBefore = Theme.fontScale; Theme.fontScale = 1.3; c.mode = "hour" },
+            () => checkClockNumbers(c, "180 px, larger text, hours, 13 chosen"),
+            () => { c.mode = "minute" },
+            () => checkClockNumbers(c, "180 px, larger text, minutes"),
+            () => { c.dialSize = 196; c.mode = "hour" },
+            () => checkClockNumbers(c, "196 px, larger text, hours, 13 chosen"),
+            () => {
+                Theme.fontScale = window.clockFontScaleBefore
+                c.dialSize = window.clockSizeBefore
+                c.mode = "hour"
+                c.time = "18:30"
+            },
+            // ---- The value of every position --------------------------------------------------
+            () => {
+                c.mode = "hour"
+                const bad = []
+                for (let h = 0; h < 24; ++h) {
+                    c.time = "12:34"
+                    const p = clockPoint(c, h < 12 ? c.outerRadius : c.innerRadius, (h % 12) * 30)
+                    c.pickAt(p.x, p.y)
+                    if (c.time !== c.pad(h) + ":34")
+                        bad.push(h + "→" + c.time)
+                }
+                check(bad.length === 0, "every hour's number gives that hour (00–11 outside, 12–23 inside) " + bad)
+            },
+            () => {
+                c.mode = "hour"
+                let outerFrom = -1
+                for (let r = 13; r < c.center && outerFrom < 0; ++r) {
+                    c.time = "06:00"
+                    const p = clockPoint(c, r, 90)
+                    c.pickAt(p.x, p.y)
+                    if (c.selectedHour === 3)
+                        outerFrom = r
+                }
+                check(outerFrom > c.innerRadius && outerFrom < c.outerRadius,
+                      "the outer ring starts between the rings: r " + outerFrom + " (inner " + c.innerRadius + ", outer " + c.outerRadius + ")")
+            },
+            () => {
+                c.mode = "minute"
+                const bad = []
+                for (let m = 0; m < 60; ++m) {
+                    for (const r of [20, c.innerRadius, c.outerRadius, c.center - 2]) {
+                        c.time = "10:" + (m === 7 ? "08" : "07")
+                        const p = clockPoint(c, r, m * 6)
+                        c.pickAt(p.x, p.y)
+                        if (c.selectedMinute !== m || c.selectedHour !== 10)
+                            bad.push(m + "@" + Math.round(r) + "→" + c.time)
+                    }
+                }
+                const at = (deg) => {
+                    c.time = "10:30"
+                    const p = clockPoint(c, c.outerRadius, deg)
+                    c.pickAt(p.x, p.y)
+                    return c.time
+                }
+                check(bad.length === 0 && at(359.9) === "10:00" && at(2.9) === "10:00" && at(3.1) === "10:01",
+                      "every minute comes from its angle, at any distance from the centre " + bad)
+            },
+            () => {
+                c.mode = "hour"
+                c.time = "18:30"
+                window.clockPicks = []
+                const p = clockPoint(c, 5, 0)
+                c.pickAt(p.x, p.y)
+                check(c.time === "18:30" && window.clockPicks.length === 0, "the hub is no value")
+            },
+            // ---- Taps and drags (a finger on touch UIs, the mouse elsewhere) ------------------
+            () => { c.time = "18:30"; c.mode = "hour"; clockTap(c, c.outerRadius, 7 * 30) },
+            () => check(c.time === "07:30" && c.mode === "minute", "a tap on 07 (outer ring) picks it and moves on to the minutes: " + c.time + " " + c.mode),
+            () => { c.mode = "hour"; clockTap(c, c.innerRadius, 9 * 30) },
+            () => check(c.time === "21:30" && c.mode === "minute", "a tap on 21 (inner ring): " + c.time + " " + c.mode),
+            () => clockTap(c, c.outerRadius, 37 * 6),
+            () => check(c.time === "21:37", "a tap between the minute numbers gives that minute: " + c.time),
+            () => clockTap(c, c.outerRadius - 4, 45 * 6 + 3),
+            () => check(c.time === "21:45", "a tap a little off the number 45 gives 45: " + c.time),
+            () => { c.time = "21:30"; clockShakyTap(c, c.outerRadius - 3, 45 * 6 + 4) },
+            () => check(c.time === "21:45", "a shaky tap a little off the number 45 (the finger moves a few pixels) gives 45: " + c.time),
+            () => { c.time = "18:30"; c.mode = "hour"; clockTap(c, 4, 0) },
+            () => check(c.time === "18:30" && c.mode === "hour", "a tap on the hub changes nothing: " + c.time + " " + c.mode),
+            () => { c.time = "18:30"; c.mode = "minute"; window.clockPicks = []; clockDrag(c, c.outerRadius, 180, 270) },
+            () => check(c.time === "18:45" && window.clockPicks.length > 1,
+                        "dragging the minute hand by its bubble (on the number 30) to 45: " + c.time + " via " + window.clockPicks),
+            () => { c.time = "18:30"; c.mode = "hour"; clockDrag(c, c.innerRadius, 180, 270) },
+            () => check(c.time === "21:30" && c.mode === "minute",
+                        "dragging the hour bubble (on 18) to 21, then on to the minutes: " + c.time + " " + c.mode),
+            () => { c.time = "11:30"; c.mode = "hour"; clockDrag(c, c.outerRadius, 330, 390) },
+            () => check(c.time === "01:30", "a drag from the number 11 across 12 o'clock to 01: " + c.time),
+            () => { c.time = "18:30"; c.mode = "minute"; clockDrag(c, 60, 180, 270) },
+            () => check(c.time === "18:45", "a drag inside the ring, off the numbers: " + c.time),
+            () => { c.time = "18:32"; c.mode = "minute"; clockDrag(c, c.outerRadius, 32 * 6, 44 * 6) },
+            () => check(c.time === "18:44", "a drag from between the numbers (32) to 44: " + c.time),
+            // ---- Keys, and the focus ring for the keyboard only --------------------------------
+            () => { c.mode = "hour"; c.time = "23:59"; c.focusItem.forceActiveFocus(Qt.MouseFocusReason) },
+            () => check(c.focusItem.activeFocus && !clockRing(c).visible, "the face has the keyboard, without a focus ring after a tap"),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_Up),
+            () => check(c.time === "00:59" && clockRing(c).visible, "Up from 23 wraps to 00, and keys show the focus ring: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_Down),
+            () => check(c.time === "23:59", "Down from 00 wraps to 23: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_PageUp),
+            () => check(c.time === "04:59", "PageUp: five hours on: " + c.time),
+            () => { EditorInput.sendKey(c.focusItem, Qt.Key_Right); EditorInput.sendKey(c.focusItem, Qt.Key_Up) },
+            () => check(c.mode === "minute" && c.time === "04:00", "Right, then Up: minute 59 wraps to 00: " + c.time + " " + c.mode),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_PageDown),
+            () => check(c.time === "04:55", "PageDown: five minutes back: " + c.time),
+            () => EditorInput.sendKey(c.focusItem, Qt.Key_End),
+            () => check(c.time === "04:59", "End: the last minute: " + c.time),
+            () => { EditorInput.sendKey(c.focusItem, Qt.Key_Left); EditorInput.sendKey(c.focusItem, Qt.Key_Home) },
+            () => check(c.mode === "hour" && c.time === "00:59", "Left, then Home: hour 00: " + c.time + " " + c.mode),
+            () => clockTap(c, c.outerRadius, 90),
+            () => check(c.focusItem.activeFocus && !clockRing(c).visible && c.time === "03:59", "a tap hides the focus ring again: " + c.time),
+            () => {
+                window.clockOther = Qt.createQmlObject('import QtQuick; Item { activeFocusOnTab: true }', window.contentItem, "clockOther")
+                window.clockOther.forceActiveFocus()
+            },
+            () => c.focusItem.forceActiveFocus(Qt.TabFocusReason),
+            () => check(c.focusItem.activeFocus && clockRing(c).visible, "focus that comes with Tab shows the focus ring"),
+            () => clockTap(c, c.outerRadius, 120),
+            () => {
+                check(c.focusItem.activeFocus && !clockRing(c).visible && c.time === "03:20",
+                      "a tap after Tab hides the focus ring: " + c.time)
+                window.clockOther.destroy()
+            },
+            // ---- The dialog -----------------------------------------------------------------------
+            () => {
+                c.visible = false
+                clockDialog = Qt.createQmlObject('import QtQuick; import Brulion; BTimePickerDialog {}', window.contentItem,
+                                                 "clockDialog") as BTimePickerDialog
+                clockDialog.picked.connect((v) => window.dialogPicks.push(v))
+                clockDialog.openFor("7")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                const p = clockDialog.picker
+                check(p.time === "07:00" && p.mode === "hour", "the dialog opens on 07:00 for \"7\", on the hours: " + p.time)
+                check(p.focusItem.activeFocus && !clockRing(p).visible, "the dial has the keyboard when the dialog opens, without a focus ring")
+                const body = clockDialog.contentItem
+                check(body.contentHeight <= body.height + 1,
+                      "the whole dial shows in the dialog in a " + window.width + "×" + window.height + " window: body " + body.height
+                      + ", clock " + body.contentHeight + ", dial " + p.dialSize + (p.horizontal ? ", the fields beside it" : ""))
+                check(p.dialSize >= 180 && 2 * Math.PI * p.innerRadius / 12 >= Theme.textSm * 1.6,
+                      "the inner ring's numbers have room: dial " + p.dialSize + ", " + (2 * Math.PI * p.innerRadius / 12).toFixed(1)
+                      + " px apart")
+                checkClockNumbers(p, "in the dialog (dial " + p.dialSize + " px)")
+            },
+            () => clockTap(clockDialog.picker, clockDialog.picker.innerRadius, 90),
+            () => clockTap(clockDialog.picker, clockDialog.picker.outerRadius, 45 * 6),
+            () => check(clockDialog.picker.time === "15:45" && window.dialogPicks.length === 0, "picked on the dial, not set yet: " + clockDialog.picker.time),
+            () => {
+                // A drag on the dial moves the hand and never scrolls the dialog.
+                const body = clockDialog.contentItem
+                const before = body.contentY
+                clockDrag(clockDialog.picker, 60, 0, 170)
+                check(clockDialog.picker.time === "15:28" && body.contentY === before,
+                      "a drag down the dial in the dialog moves the hand, not the dialog: " + clockDialog.picker.time + ", scrolled " + (body.contentY - before))
+                clockDialog.picker.time = "15:45"
+            },
+            () => clockDialog.tryAccept(),
+            () => check(window.dialogPicks.join() === "15:45", "Set gives the time: " + window.dialogPicks),
+            () => {
+                if (waitUntil(!clockDialog.visible))
+                    clockDialog.openFor("")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                check(clockDialog.picker.time === "10:00", "nothing given: the dialog opens on the current time: " + clockDialog.picker.time)
+                clockTap(clockDialog.picker, clockDialog.picker.outerRadius, 30)
+            },
+            () => clockDialog.reject(),
+            () => check(window.dialogPicks.join() === "15:45", "Cancel gives nothing: " + window.dialogPicks),
+            () => {
+                if (waitUntil(!clockDialog.visible))
+                    clockDialog.openFor("25:00")
+            },
+            () => {
+                if (!waitUntil(clockDialog.opened))
+                    return
+                check(clockDialog.picker.time === "10:00", "no time: the dialog opens on the current time: " + clockDialog.picker.time)
+                clockDialog.reject()
+            },
+            // ---- The date picker's clock: created when asked for, after the typed time ---------
+            () => {
+                if (!waitUntil(!clockDialog.visible))
+                    return
+                const plain = Qt.createQmlObject('import QtQuick; import Brulion; BDatePicker { withTime: false }', window.contentItem, "plainDatePicker")
+                check(clockDialogsIn(plain) === 0, "a date picker without a time creates no clock")
+                plain.destroy()
+                page.stopEditing()
+                editor.dialogs.createReminder(rowOf("Zadzwonić do hydraulika"), false)
+            },
+            () => {
+                reminderDialog = editor.dialogs.reminderDialog
+                if (!waitUntil(reminderDialog && reminderDialog.opened))
+                    return
+                window.timeField = findItem(reminderDialog.contentItem, "datePickerTime") as BTextField
+                window.dateField = findItem(reminderDialog.contentItem, "datePickerNatural") as BTextField
+                datePicker = window.timeField
+                while (datePicker && datePicker.applyTime === undefined)
+                    datePicker = datePicker.parent
+                check(datePicker !== null && clockDialogsIn(datePicker) === 0, "the reminder's date picker has no clock until it is asked for")
+                window.timeField.forceActiveFocus()
+                window.timeField.selectAll()
+            },
+            () => typeKeys("2346"),
+            () => tapInDialog(reminderDialog, findItem(reminderDialog.contentItem, "datePickerClock")),
+            () => {
+                const clk = datePicker.clockDialog
+                if (!waitUntil(clk && clk.opened))
+                    return
+                check(reminderDialog.at === "2026-10-16 23:46" && clk.picker.time === "23:46",
+                      "the Clock button applies the typed time first and opens the clock on it: " + reminderDialog.at)
+                window.firstClock = clk
+            },
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 5 * 30),
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 15 * 6),
+            () => datePicker.clockDialog.tryAccept(),
+            () => check(reminderDialog.at === "2026-10-16 05:15", "Set on the clock changes the reminder's time: " + reminderDialog.at),
+            () => {
+                if (!waitUntil(!datePicker.clockDialog.visible))
+                    return
+                check(window.timeField.text === "05:15", "the time field shows the clock's time: " + window.timeField.text)
+                window.dateField.forceActiveFocus()
+            },
+            () => check(reminderDialog.at === "2026-10-16 05:15", "leaving the time field keeps it: " + reminderDialog.at),
+            () => { window.timeField.forceActiveFocus(); window.timeField.selectAll() },
+            () => typeKeys("25:99"),
+            () => tapInDialog(reminderDialog, findItem(reminderDialog.contentItem, "datePickerClock")),
+            () => {
+                const clk = datePicker.clockDialog
+                if (!waitUntil(clk.opened))
+                    return
+                check(datePicker.timeInvalid && clk.picker.time === "05:15",
+                      "after an invalid typed time the clock opens on the last good one: " + clk.picker.time)
+                check(datePicker.clockDialog === window.firstClock, "the date picker keeps its one clock")
+                clockTap(clk.picker, clk.picker.innerRadius, 7 * 30)
+            },
+            () => clockTap(datePicker.clockDialog.picker, datePicker.clockDialog.picker.outerRadius, 0),
+            () => datePicker.clockDialog.tryAccept(),
+            () => {
+                if (!waitUntil(!datePicker.clockDialog.visible))
+                    return
+                check(reminderDialog.at === "2026-10-16 19:00" && !datePicker.timeInvalid && window.timeField.text === "19:00"
+                      && reminderDialog.acceptEnabled, "a time from the clock replaces an invalid typed one: " + reminderDialog.at)
+                reminderDialog.reject()
+            },
+            // ---- The calendar's add dialog ------------------------------------------------------
+            () => {
+                if (!waitUntil(!reminderDialog.visible))
+                    return
+                addDialog = Qt.createQmlObject('import QtQuick; import Brulion; CalendarAddDialog {}', window.contentItem, "addDialog")
+                check(addDialog.clockDialog === null, "the calendar's add dialog creates no clock until it is asked for")
+                addDialog.openFor("reminder", "2026-10-16")
+            },
+            () => {
+                if (!waitUntil(addDialog.opened))
+                    return
+                findItem(addDialog.contentItem, "calendarAddTime").forceActiveFocus()
+            },
+            () => typeKeys("2346"),
+            () => tapInDialog(addDialog, findItem(addDialog.contentItem, "calendarAddClock")),
+            () => {
+                const clk = addDialog.clockDialog
+                if (!waitUntil(clk && clk.opened))
+                    return
+                check(addDialog.time === "23:46" && clk.picker.time === "23:46", "the add dialog's clock opens on the typed time: " + clk.picker.time)
+                clockTap(clk.picker, clk.picker.outerRadius, 30)
+            },
+            () => clockTap(addDialog.clockDialog.picker, addDialog.clockDialog.picker.outerRadius, 10 * 6),
+            () => addDialog.clockDialog.tryAccept(),
+            () => {
+                if (!waitUntil(!addDialog.clockDialog.visible))
+                    return
+                check(addDialog.time === "01:10" && findItem(addDialog.contentItem, "calendarAddTime").text === "",
+                      "a time picked on the clock replaces the typed one: " + addDialog.time)
+                addDialog.reject()
+            }
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
+    property var firstClock: null
+    property var clockOther: null
+    property int clockSizeBefore: 0
+    property real clockFontScaleBefore: 1
+
+    // ---- Self test of task statuses (`--editor-script taskstatus`, tst_editor_qml_taskstatus*) ---
+    // The status menu with real input — a right-click (mouse) or a long press (finger, --touch) —
+    // on the checkboxes of the editor, a query result and an embedded section, a menu item clicked
+    // or tapped; a plain click / tap still toggles; Ctrl+Shift+Enter while editing and on a
+    // selected block (menu keys, Escape, the caret kept); the "/" commands typed with real keys
+    // (list item, paragraph, Logseq keyword, undo); the touch toolbar's task button held down.
+    // QtTest's TestEvent sends the pointer events through the window like a real device.
+    property var taskEvents: null
+    property int taskRow: -1
+    property string taskText: ""
+    property TaskStatusMenu ownMenu: null
+    /// A row's TaskBox (the editor's, objectName "taskBox"), or null.
+    function blockTaskBox(row) {
+        const item = editor.listView.itemAtIndex(row)
+        return item ? findItem(item, "taskBox") : null
+    }
+    /// Every item named `name` under `item`.
+    function findAll(item, name, out) {
+        out = out || []
+        if (!item)
+            return out
+        if (item.objectName === name)
+            out.push(item)
+        for (let i = 0; i < item.children.length; ++i)
+            findAll(item.children[i], name, out)
+        return out
+    }
+    /// A query result's TaskBox for the task whose text starts with `prefix`.
+    function resultTaskBox(prefix) {
+        const item = editor.listView.itemAtIndex(viewRow("query"))
+        const boxes = findAll(item, "queryTaskBox")
+        for (const box of boxes) {
+            const resultRow = box.parent ? box.parent.parent : null
+            if (resultRow && String(resultRow.text).indexOf(prefix) === 0)
+                return box
+        }
+        return null
+    }
+    function menuIndexOf(menu, name) {
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.objectName === name)
+                return i
+        }
+        return -1
+    }
+    function menuItemNamed(menu, name) {
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.objectName === name)
+                return item
+        }
+        return null
+    }
+    /// A tap with a finger on touch UIs, else a left click, in the middle of `item`.
+    function tapItem(item) {
+        if (!item)
+            return
+        const x = item.width / 2
+        const y = item.height / 2
+        if (Theme.touchUi) {
+            taskEvents.touchEvent(item).press(0, item, x, y).commit()
+            taskEvents.touchEvent(item).release(0, item, x, y).commit()
+        } else {
+            taskEvents.mouseClick(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    /// The steps of the context-menu gesture on `target()`: a right-click, or on touch UIs a finger
+    /// held down for a second (TaskBox's press-and-hold) and lifted.
+    function menuGesture(target) {
+        if (!Theme.touchUi) {
+            return [() => {
+                const item = target()
+                check(item !== null, "the checkbox is there for the right-click")
+                if (item)
+                    taskEvents.mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+            }]
+        }
+        const steps = [() => {
+            const item = target()
+            check(item !== null, "the checkbox is there for the long press")
+            if (item)
+                taskEvents.touchEvent(item).press(0, item, item.width / 2, item.height / 2).commit()
+        }]
+        for (let i = 0; i < 9; ++i)
+            steps.push(() => {})
+        steps.push(() => {
+            const item = target()
+            if (item)
+                taskEvents.touchEvent(item).release(0, item, item.width / 2, item.height / 2).commit()
+        })
+        return steps
+    }
+    /// Steps that wait until `ready()` (at most ~3 s), then go on. `what`: the check's text, or a
+    /// function giving it (read when the step runs).
+    function waitStep(ready, what) {
+        return () => {
+            if (!ready() && window.waits++ < 25) {
+                window.stepIndex -= 1
+                return
+            }
+            window.waits = 0
+            check(ready(), typeof what === "function" ? what() : what)
+        }
+    }
+    /// The page's text as saved.
+    function pageText() {
+        page.save()
+        return host.file(page.path)
+    }
+    /// The shown TaskBox of the embedded section under the block "Budżet na październik".
+    function embedTaskBox() {
+        const boxes = findAll(editor.listView.itemAtIndex(rowOf("Budżet na październik") + 1), "embedTaskBox")
+        for (const box of boxes) {
+            if (box.visible)
+                return box
+        }
+        return null
+    }
+    function fileLine(path, prefix) {
+        const lines = host.file(path).split("\n")
+        for (const line of lines) {
+            if (line.indexOf(prefix) >= 0)
+                return line
+        }
+        return ""
+    }
+
+    function taskStatusTest() {
+        taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "taskEvents")
+        const gesture = Theme.touchUi ? "a long press" : "a right-click"
+        const tap = Theme.touchUi ? "a tap" : "a click"
+        steps = [
+            () => {
+                window.taskRow = rowOf("Kupić płytki")
+                editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
+            },
+            () => check(info(window.taskRow).taskStatus === "todo" && blockTaskBox(window.taskRow) !== null,
+                        "the block shows its checkbox"),
+            // ---- The editor's checkbox: the menu, a status, undo, a plain click, no status ---------
+            ...menuGesture(() => blockTaskBox(window.taskRow)),
+            waitStep(() => editor.taskMenu !== null && editor.taskMenu.opened, gesture + " on a checkbox opens the status menu"),
+            () => {
+                const menu = editor.taskMenu
+                check(info(window.taskRow).taskStatus === "todo", gesture + " does not toggle the task")
+                const todo = menuItemNamed(menu, "taskStatus_todo")
+                const doing = menuItemNamed(menu, "taskStatus_doing")
+                check(todo !== null && todo.checked && doing !== null && !doing.checked
+                      && menuItemNamed(menu, "taskStatus_none") !== null, "the current status is checked")
+                tapItem(doing)
+            },
+            waitStep(() => !editor.taskMenu.visible, "choosing a status closes the menu"),
+            () => {
+                check(info(window.taskRow).taskStatus === "doing" && pageText().indexOf("\t- [/] Kupić płytki 📅 2026-10-16") > 0,
+                      "the chosen status is written: " + fileLineOf(pageText(), "Kupić płytki"))
+                page.undo()
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "one undo step puts the status back"),
+            () => tapItem(blockTaskBox(window.taskRow)),
+            () => {
+                check(info(window.taskRow).taskStatus === "done" && !editor.taskMenu.visible,
+                      tap + " on the checkbox still toggles, without a menu")
+                page.undo()
+            },
+            ...menuGesture(() => blockTaskBox(window.taskRow)),
+            waitStep(() => editor.taskMenu.opened, "the menu opens again"),
+            () => {
+                const doing = menuItemNamed(editor.taskMenu, "taskStatus_doing")
+                check(!doing.checked && menuItemNamed(editor.taskMenu, "taskStatus_todo").checked,
+                      "the check marks follow the status (not the last click)")
+                tapItem(menuItemNamed(editor.taskMenu, "taskStatus_none"))
+            },
+            waitStep(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "",
+                      "“No status” removes the checkbox"),
+            () => {
+                check(info(window.taskRow).kind === "listItem" && info(window.taskRow).plainText.indexOf("Kupić płytki") === 0
+                      && pageText().indexOf("\t- Kupić płytki 📅 2026-10-16") > 0, "the text stays a list item: "
+                      + fileLineOf(pageText(), "Kupić płytki"))
+                check(blockTaskBox(window.taskRow) === null, "the checkbox is gone")
+                page.undo()
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "undo brings the checkbox back"),
+            // ---- Ctrl+Shift+Enter while editing: the menu at the caret, keys, the caret kept -------
+            () => {
+                window.taskRow = rowOf("Wywieźć gruz")
+                editor.startEditing(window.taskRow, 3)
+            },
+            () => {
+                window.taskText = editor.activeEditor.plain()
+                realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+            },
+            waitStep(() => editor.taskMenu.opened, "Ctrl+Shift+Enter opens the status menu of the edited block"),
+            () => {
+                check(info(window.taskRow).taskStatus === "todo", "Ctrl+Shift+Enter does not cycle the status")
+                taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1)
+            },
+            waitStep(() => !editor.taskMenu.visible && editor.activeEditor !== null && editor.activeEditor.activeFocus,
+                      "Escape closes the menu and the block has the keyboard again"),
+            () => {
+                check(editor.activeEditor.row === window.taskRow && editor.activeEditor.cursorPosition === 3
+                      && info(window.taskRow).taskStatus === "todo", "nothing changed, the caret is where it was")
+                realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+                window.waits = 0
+            },
+            waitStep(() => editor.taskMenu.opened, "the menu opens again"),
+            () => {
+                // Down until "Oczekujące" is highlighted, then Enter.
+                const target = menuIndexOf(editor.taskMenu, "taskStatus_deferred")
+                if (editor.taskMenu.currentIndex !== target && window.waits++ < 12) {
+                    taskEvents.keyClick(Qt.Key_Down, Qt.NoModifier, -1)
+                    window.stepIndex -= 1
+                    return
+                }
+                window.waits = 0
+                check(editor.taskMenu.currentIndex === target, "Down moves through the statuses: "
+                      + editor.taskMenu.currentIndex + " (" + target + ")")
+                taskEvents.keyClick(Qt.Key_Return, Qt.NoModifier, -1)
+            },
+            waitStep(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "deferred",
+                      "Enter on “Oczekujące” sets the status"),
+            waitStep(() => editor.activeEditor !== null && editor.activeEditor.activeFocus
+                      && editor.activeEditor.row === window.taskRow, "the edited block gets the keyboard back"),
+            () => {
+                check(editor.activeEditor.cursorPosition === 3 && editor.activeEditor.plain() === window.taskText,
+                      "the text and the caret are kept: " + editor.activeEditor.cursorPosition)
+                check(pageText().indexOf("\t- [>] Wywieźć gruz ⏳ 2026-10-18") > 0, "written as [>]")
+                realKey(Qt.Key_Return, Qt.ControlModifier)
+            },
+            () => check(info(window.taskRow).taskStatus !== "deferred" && !editor.taskMenu.visible,
+                        "Ctrl+Enter still cycles, without the menu: " + info(window.taskRow).taskStatus),
+            // A selected block (Esc): Ctrl+Shift+Enter opens its menu too, the selection keeps the keys.
+            () => { realKey(Qt.Key_Escape) },
+            () => {
+                check(page.selectedRow === window.taskRow, "Esc selects the block")
+                EditorInput.sendKey(editor.listView, Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitStep(() => editor.taskMenu.opened, "Ctrl+Shift+Enter on a selected block opens its menu"),
+            () => tapItem(menuItemNamed(editor.taskMenu, "taskStatus_cancelled")),
+            waitStep(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "cancelled",
+                      "a status for the selected block"),
+            waitStep(() => editor.listView.activeFocus && page.selectedRow === window.taskRow,
+                      "the selected block keeps the keyboard"),
+            // A heading gets no status: Ctrl+Shift+Enter opens no menu there (selected or edited).
+            () => {
+                window.taskRow = rowOf("Koszty")
+                check(window.taskRow >= 0 && info(window.taskRow).kind === "heading", "the page has the heading “Koszty”")
+                window.taskText = pageText()
+                page.selectedRow = window.taskRow
+                EditorInput.sendKey(editor.listView, Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            () => {
+                check(!editor.taskMenu.visible && pageText() === window.taskText,
+                      "Ctrl+Shift+Enter on a selected heading opens no status menu")
+                editor.startEditing(window.taskRow, -1)
+            },
+            () => realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier),
+            () => {},
+            () => {
+                check(!editor.taskMenu.visible && pageText() === window.taskText && editor.activeEditor !== null
+                      && editor.activeEditor.activeFocus, "Ctrl+Shift+Enter in a heading opens no status menu")
+                page.stopEditing()
+            },
+            () => { page.selectedRow = -1 },
+            // ---- "/" commands typed with real keys -----------------------------------------------
+            () => { window.taskRow = page.insertBlockAfter(rowOf("Ekipa może"), "") },
+            () => typeKeys("Zadzwonić do Żanety /czeka"),
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.model.count > 0
+                      && editor.suggestions.model.get(0).command === "taskWaiting",
+                      "“/czeka” offers “Zadanie: oczekujące” first"),
+            () => realKey(Qt.Key_Return),
+            () => {
+                check(info(window.taskRow).taskStatus === "deferred" && editor.activeEditor.plain() === "Zadzwonić do Żanety "
+                      && editor.activeEditor.cursorPosition === 20 && !editor.suggestionsOpen,
+                      "the command sets the status, its text goes, the caret stays: " + editor.activeEditor.plain())
+                page.undo()
+            },
+            () => check(editor.activeEditor.plain() === "Zadzwonić do Żanety /czeka" && info(window.taskRow).taskStatus === "",
+                        "one undo step brings the command text back: " + editor.activeEditor.plain()),
+            () => {
+                const e = editor.activeEditor
+                e.cursorPosition = e.length
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                realKey(Qt.Key_Backspace)
+                typeKeys("zrob")
+            },
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "task",
+                      "“/zrob” offers the statuses (to do first)"),
+            () => {
+                // Down to "Zadanie: zrobione", Enter.
+                let done = -1
+                for (let i = 0; i < editor.suggestions.model.count; ++i) {
+                    if (editor.suggestions.model.get(i).command === "taskDone")
+                        done = i
+                }
+                check(done > 0, "“Zadanie: zrobione” is listed")
+                for (let i = 0; i < done; ++i)
+                    realKey(Qt.Key_Down)
+                realKey(Qt.Key_Return)
+            },
+            () => check(info(window.taskRow).taskStatus === "done" && pageText().indexOf("- [x] Zadzwonić do Żanety ✅ 2026-10-15") > 0,
+                        "“Zadanie: zrobione” completes the task: " + fileLineOf(pageText(), "Żanety")),
+            () => typeKeys(" /bez"),
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "taskNone",
+                      "“/bez” offers “Zadanie: bez statusu”"),
+            () => realKey(Qt.Key_Return),
+            () => check(info(window.taskRow).taskStatus === "" && fileLineOf(pageText(), "Żanety").indexOf("\t- Zadzwonić do Żanety") === 0,
+                        "“Zadanie: bez statusu” removes the checkbox and its date: " + fileLineOf(pageText(), "Żanety")),
+            // A paragraph becomes a task; a Logseq keyword keeps its workflow.
+            () => {
+                page.stopEditing()
+                window.taskRow = page.insertMarkdown(page.lastVisibleRow(), "Akapit o płytkach")
+            },
+            () => editor.startEditing(rowOf("Akapit o płytkach"), -1),
+            () => typeKeys(" /zadanie"),
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "task",
+                      "“/zadanie” offers “Zadanie: do zrobienia”"),
+            () => realKey(Qt.Key_Return),
+            () => {
+                const r = rowOf("Akapit o płytkach")
+                check(r >= 0 && info(r).taskStatus === "todo" && info(r).kind === "listItem"
+                      && pageText().indexOf("- [ ] Akapit o płytkach") >= 0, "a paragraph becomes a task")
+                page.stopEditing()
+                window.taskRow = page.insertBlockAfter(rowOf("Ekipa może"), "TODO Odebrać kafelki")
+            },
+            () => check(info(window.taskRow).taskStatus === "todo", "a Logseq TODO is a task"),
+            () => typeKeys(" /toku"),
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.model.get(0).command === "taskDoing",
+                      "“/toku” offers “Zadanie: w toku”"),
+            () => realKey(Qt.Key_Return),
+            () => check(info(window.taskRow).taskStatus === "doing" && pageText().indexOf("- DOING Odebrać kafelki") > 0,
+                        "the Logseq keyword follows: " + fileLineOf(pageText(), "kafelki")),
+            () => page.stopEditing(),
+            // ---- A query result's checkbox: its own menu, the task in its own file ----------------
+            () => editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning),
+            waitStep(() => resultTaskBox("Mleko") !== null && resultTaskBox("Śrubki") !== null,
+                      "the query block lists the shopping tasks"),
+            ...menuGesture(() => resultTaskBox("Mleko")),
+            waitStep(() => resultTaskBox("Mleko") !== null && resultTaskBox("Mleko").statusMenu !== null
+                      && resultTaskBox("Mleko").statusMenu.opened, gesture + " on a query result's checkbox opens its menu"),
+            () => {
+                window.ownMenu = resultTaskBox("Mleko").statusMenu
+                check(host.file("Zakupy.md").indexOf("- [ ] Mleko") === 0, gesture + " does not toggle the result")
+                check(menuItemNamed(window.ownMenu, "taskStatus_todo").checked, "its status is checked")
+                tapItem(menuItemNamed(window.ownMenu, "taskStatus_deferred"))
+            },
+            waitStep(() => host.file("Zakupy.md").indexOf("- [>] Mleko #zakupy") === 0,
+                      () => "a result's status is written in its own file: " + host.file("Zakupy.md").split("\n")[0]),
+            ...menuGesture(() => resultTaskBox("Śrubki")),
+            waitStep(() => resultTaskBox("Śrubki") !== null && resultTaskBox("Śrubki").statusMenu !== null
+                      && resultTaskBox("Śrubki").statusMenu.opened, "the next result's menu opens"),
+            () => tapItem(menuItemNamed(resultTaskBox("Śrubki").statusMenu, "taskStatus_none")),
+            waitStep(() => fileLine("Zakupy.md", "Śrubki") === "- Śrubki do półki #zakupy",
+                      () => "“No status” on a result removes the task's checkbox in its file: " + fileLine("Zakupy.md", "Śrubki")),
+            waitStep(() => resultTaskBox("Śrubki") === null, "the result is no task any more"),
+            // ---- An embedded section's task (Budżet domowy#Październik) --------------------------
+            () => editor.listView.positionViewAtIndex(rowOf("Budżet na październik") + 1, ListView.Center),
+            waitStep(() => embedTaskBox() !== null, "the embedded section shows its task's checkbox"),
+            ...menuGesture(() => embedTaskBox()),
+            waitStep(() => embedTaskBox() !== null && embedTaskBox().statusMenu !== null && embedTaskBox().statusMenu.opened,
+                      gesture + " on an embedded task opens its menu"),
+            () => tapItem(menuItemNamed(embedTaskBox().statusMenu, "taskStatus_done")),
+            waitStep(() => fileLine("Budżet domowy.md", "czynsz") === "- [x] Opłacić czynsz 📅 2026-10-20 #finanse ✅ 2026-10-15",
+                      () => "an embedded task's status is written in its own file: " + fileLine("Budżet domowy.md", "czynsz")),
+            // ---- The touch toolbar: the task button held down opens the menu above it --------------
+            () => {
+                Theme.forceTouch = true
+                window.taskRow = rowOf("Położyć hydroizolację")
+                editor.listView.positionViewAtIndex(window.taskRow, ListView.Center)
+                editor.startEditing(window.taskRow, -1)
+            },
+            waitStep(() => {
+                const writing = findItem(editor, "toolbarWriting")
+                const button = writing ? findItem(writing, "toolbarTask") : null
+                return editor.toolbarVisible && button !== null && button.width > 0
+            }, "the touch toolbar shows its task button"),
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                taskEvents.touchEvent(button).press(0, button, button.width / 2, button.height / 2).commit()
+            },
+            () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                taskEvents.touchEvent(button).release(0, button, button.width / 2, button.height / 2).commit()
+            },
+            waitStep(() => editor.taskMenu.opened, "holding the toolbar's task button opens the status menu"),
+            () => {
+                const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
+                const menuBottom = editor.taskMenu.contentItem.mapToItem(null, 0, editor.taskMenu.contentItem.height).y
+                const buttonTop = button.mapToItem(null, 0, 0).y
+                check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
+                check(info(window.taskRow).taskStatus === "todo", "holding the button does not cycle the status")
+                tapItem(menuItemNamed(editor.taskMenu, "taskStatus_done"))
+            },
+            waitStep(() => !editor.taskMenu.visible && info(window.taskRow).taskStatus === "done",
+                      "a status from the toolbar's menu"),
+            () => tapItem(findItem(findItem(editor, "toolbarWriting"), "toolbarTask")),
+            () => check(info(window.taskRow).taskStatus === "", "a tap on the task button cycles (done → none)"),
+            () => {
+                page.stopEditing()
+                Theme.forceTouch = DevTools.touch
+            }
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
+    function fileLineOf(text, needle) {
+        const lines = text.split("\n")
+        for (const line of lines) {
+            if (line.indexOf(needle) >= 0)
+                return line
+        }
+        return ""
     }
 
     function runScript(name) {
@@ -890,6 +1883,37 @@ ApplicationWindow {
         case "selftest":
             selfTest()
             break
+        case "clock":
+            clockTest()
+            break
+        case "taskstatus":
+            taskStatusTest()
+            break
+        case "task-menu": {
+            // The status menu of a block's checkbox (screenshots).
+            const row = rowOf("Kupić płytki")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            scriptLater.run(() => {
+                const box = blockTaskBox(row)
+                if (box)
+                    editor.openTaskStatusMenu(row, box, 0, box.height)
+            })
+            break
+        }
+        case "task-menu-query":
+            // The status menu of a query result's checkbox (screenshots).
+            editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
+            scriptLater.run(() => {
+                const box = resultTaskBox("Mleko")
+                if (box)
+                    box.openMenu()
+            })
+            break
+        case "task-slash": {
+            const row = page.insertBlockAfter(rowOf("Zadzwonić do hydraulika"), "")
+            typeInto(row, "Odebrać płytki /zad")
+            break
+        }
         case "editing": {
             const row = rowOf("Kupić płytki")
             editor.startEditing(row, -1)

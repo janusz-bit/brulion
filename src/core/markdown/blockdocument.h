@@ -13,8 +13,10 @@
 // neighbours are the ones Markdown needs to keep the structure: a blank line between blocks
 // that would otherwise merge (e.g. a paragraph inserted after a list item), renumbering of an
 // affected ordered list, the final line break when the last block changes, removing the
-// indentation of a non-list block that follows a list item (it would continue the item), and a
-// blank line before a `---` rule that becomes the first line (it would open YAML frontmatter).
+// indentation of a non-list block that follows a list item (it would continue the item), a blank
+// line before a `---` rule that becomes the first line (it would open YAML frontmatter), and a
+// blank line after a block with a `$$` line that opens a display formula it does not close, when a
+// later line that is only `$$` would close it (the formula would take the blocks in between).
 //
 // Every operation returns an EditResult: ordered row changes (for QAbstractItemModel
 // begin/end calls) plus a suggested focus block and caret position. Folding is device-local and
@@ -204,6 +206,9 @@ private:
         // recognised at the top of the document); recompute() re-derives when they change.
         bool frontmatterAllowed = false;
         bool propertiesAllowed = false;
+        /// A `$$` line of the block's text opens a display formula its text does not close
+        /// (Structure::displayMathOpenAtEnd): separateDisplayMath() keeps it from later blocks.
+        bool displayMathOpen = false;
     };
     struct Snapshot {
         QList<quint64> uids;
@@ -235,6 +240,7 @@ private:
     void renumberChildren(int parent, quint64 restartUid = 0);
     void renumberAround(quint64 uid);
     void ensureSeparated(int i);
+    void separateDisplayMath();
     void protectLeadingRule();
     void fixEnds();
     void insertItem(int pos, Item item, bool takeTrailingFromPrevious);

@@ -8,6 +8,7 @@
 #   SIZES=phone THEMES=dark scripts/screenshots.sh reminder
 #   LOCALE=en SCALE=2 scripts/screenshots.sh chips  # English UI, 2× device pixel ratio
 #   SIZES="desktop-tall phone-tall" scripts/screenshots.sh lists  # whole long sections
+#   SIZES=phone-landscape scripts/screenshots.sh timepicker   # a phone held sideways
 #   BRULION_BIN=build-ui/src/app/brulion scripts/screenshots.sh
 #
 # Files: tests/screenshots/<section>-<size>-<theme>[-<locale>][@<scale>x].png
@@ -29,7 +30,7 @@ delay="${DELAY:-900}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_sections=(foundations icons buttons inputs selection chips lists feedback menus dialog confirm
+all_sections=(foundations icons buttons inputs selection chips lists feedback menus taskstatus dialog confirm
   datepicker timepicker reminder diff merge palette switcher split)
 if [[ $# -gt 0 ]]; then sections=("$@"); else sections=("${all_sections[@]}"); fi
 
@@ -50,6 +51,7 @@ for section in "${sections[@]}"; do
       desktop) geometry=1280x800; extra=() ;;
       phone) geometry=412x915; extra=(--touch) ;;
       tablet) geometry=800x1180; extra=(--touch) ;;
+      phone-landscape) geometry=915x412; extra=(--touch) ;;
       # Whole sections (content below the fold of the standard sizes); not for popups.
       desktop-tall) geometry=1280x2000; extra=() ;;
       phone-tall) geometry=412x2600; extra=(--touch) ;;

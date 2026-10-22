@@ -32,10 +32,12 @@
 #   BRULION_APPIMAGE_TESTS  1 (default) = run the unit tests (ctest) before packaging
 #   LINUXDEPLOY_DIR         where linuxdeploy is downloaded (default ~/.cache/brulion-linuxdeploy)
 #   LDAI_UPDATE_INFORMATION AppImage update information (e.g. gh-releases-zsync|owner|repo|latest|
-#                           Brulion-*-x86_64.AppImage.zsync); also writes the .zsync file
+#                           Brulion-*-x86_64.AppImage.zsync); also writes the .zsync file (needs
+#                           zsyncmake, from the zsync package)
 #
-# Output: dist-appimage/Brulion-<version>-<arch>.AppImage. On GitHub Actions also written to
-# $GITHUB_OUTPUT as `appimage` and `version`.
+# Output: dist-appimage/Brulion-<version>-<arch>.AppImage, with update information also
+# dist-appimage/Brulion-<version>-<arch>.AppImage.zsync (publish both in the same release).
+# On GitHub Actions also written to $GITHUB_OUTPUT as `appimage` and `version`.
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -295,7 +297,9 @@ fi
 
 mkdir -p "$DIST_DIR"
 appimage=$DIST_DIR/Brulion-$VERSION-$ARCH.AppImage
-rm -f -- "$appimage" "$appimage.zsync"
+# appimagetool runs zsyncmake in the current directory ($ROOT): it writes <name>.zsync here.
+zsync=$(basename -- "$appimage").zsync
+rm -f -- "$appimage" "$appimage.zsync" "$zsync"
 
 info "Bundling Qt and packing $appimage"
 (
@@ -316,6 +320,12 @@ info "Bundling Qt and packing $appimage"
 )
 [[ -f $appimage ]] || die "linuxdeploy produced no $appimage"
 chmod +x "$appimage"
+# The update file belongs next to the AppImage: the release publishes the two together, and the
+# .zsync refers to the AppImage by its file name.
+if [[ -n ${LDAI_UPDATE_INFORMATION:-} ]]; then
+  [[ -f $zsync ]] || die "no $zsync although LDAI_UPDATE_INFORMATION is set (is zsyncmake installed? --install-deps)"
+  [[ $zsync -ef $appimage.zsync ]] || mv -f -- "$zsync" "$appimage.zsync"
+fi
 
 # --- check ---------------------------------------------------------------------------------------
 
@@ -352,5 +362,9 @@ if [[ -n ${GITHUB_OUTPUT:-} ]]; then
 fi
 
 info "Done"
-(cd "$DIST_DIR" && sha256sum -- "$(basename -- "$appimage")")
+(
+  cd "$DIST_DIR"
+  sha256sum -- "$(basename -- "$appimage")"
+  if [[ -f $zsync ]]; then sha256sum -- "$zsync"; fi
+)
 echo "AppImage: $(cd -- "$(dirname -- "$appimage")" && pwd)/$(basename -- "$appimage") ($(du -h "$appimage" | cut -f1))"

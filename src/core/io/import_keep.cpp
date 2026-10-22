@@ -1,6 +1,7 @@
 // Google Keep importer: Google Takeout's Keep folder (one JSON file per note, attachments next
 // to them).
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 #include "io/importers_p.h"
 #include "io/importutil_p.h"
 #include "io/messages_p.h"
@@ -202,10 +203,12 @@ private:
         if (!color.isEmpty() && color != u"default")
             fm.insert(u"color"_s, color);
         addTitleAlias(fm, o.value(u"title"_s).toString().simplified());
+        // Keep's text is written as it is, but its dollars never make formulas ("Cena $10,
+        // Netflix 15$"): Keep has none.
         ctx.addPage(path, noteWithFrontmatter(fm,
                                               {u"aliases"_s, u"created"_s, u"updated"_s, u"tags"_s, u"pinned"_s,
                                                u"archived"_s, u"color"_s},
-                                              parts.join(u"\n\n"_s)));
+                                              escapeTextFormulas(parts.join(u"\n\n"_s))));
     }
 };
 

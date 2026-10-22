@@ -36,6 +36,7 @@ brulion/
 | `> [!tip] Tytuł` | ramka |
 | podwójne `=` wokół tekstu, `%%komentarz%%` | zakreślenie, ukryty komentarz |
 | blok z językiem `calc` lub `query` | obliczenia, zapytanie |
+| `$…$`, `$$…$$`, blok z językiem `math` | wzór matematyczny (LaTeX) |
 | komórka zaczynająca się od `=` | formuła w tabeli |
 
 Pliki nigdy nie zawierają dat słowami („jutro”) — tylko `RRRR-MM-DD` i `GG:MM`. HTML w notatce jest pokazywany jako tekst i nigdy nie jest wykonywany.

@@ -46,8 +46,8 @@ for size in desktop phone; do
   for route in "${routes[@]}"; do
     home="$work/home"
     rm -rf "$home"
-    io_nextcloud_home "$home"
     vault="$home/Przykładowy brulion"
+    io_nextcloud_home "$home" "$vault"
     cp -a "$work/template" "$vault"
     io_history_base "$home" "$vault"
     io_sync_history "$home" "$vault"

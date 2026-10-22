@@ -83,8 +83,11 @@
 * **Zadania, kalendarz, przypomnienia.** `- [ ] Zadanie 📅 2026-10-20 ⏰ 2026-10-19 18:00`,
   powtarzanie `🔁 co tydzień`, alarmy `⏰!` (dzwonią jak budzik, aż je wyłączysz albo minie
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
-  widok kalendarza i listy zadań. Przypomnienia, które minęły przy wyłączonym urządzeniu,
-  czekają w dzienniku. Daty wpisujesz po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
+  widok kalendarza i listy zadań. Status zadania (do zrobienia, w toku, zrobione, oczekujące,
+  anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
+  przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku.
+  Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
+  po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
   jednostki `5 km to mi`, waluty `12 zł + 5 zł`, `suma`), tabele z formułami jak w arkuszu
   (`=sum(above)`, `=[Cena]*[Ilość]`), obliczenia w tekście `` `= 2*21` ``.
@@ -109,13 +112,18 @@
   odzyskać z kosza.
 * **Na start: przykładowy brulion.** Strona „Witaj w Brulionie” pokazuje wszystkie funkcje na
   żywych przykładach — do klikania, edytowania i psucia.
+* **Dokumentacja w środku.** Pełny poradnik po polsku to osobny notatnik „Dokumentacja
+  Brulionu” (na komputerze i Androidzie): przycisk „Przełącz notatnik” obok nazwy notatnika
+  albo `Ctrl+Shift+B` i z powrotem. Aktualizuje się razem z aplikacją, a Twoje zmiany w nim
+  zostają; w przeglądarce te same strony są w repozytorium
+  ([src/app/shell/guide](src/app/shell/guide)).
 
 ## Instalacja
 
 | Platforma | Jak |
 |---|---|
 | **NixOS** | flake + moduł `programs.brulion` (z autostartem w zasobniku) — [docs/NIXOS.md](docs/NIXOS.md) |
-| **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases) |
+| **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases); aktualizuje się przez AppImageUpdate, Gear Lever albo AppImageLauncher |
 | **Android** (9+) | plik APK (arm64) z [Wydań](https://github.com/janusz-bit/brulion/releases) — [docs/ANDROID.md](docs/ANDROID.md) |
 | **Przeglądarka** | <https://janusz-bit.github.io/brulion/> (działa offline po pierwszym otwarciu) — [docs/WEB.md](docs/WEB.md); na własnym serwerze: `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
 
@@ -142,8 +150,16 @@ synchronizacji z API Syncthinga.
 
 **Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →
 Synchronizacja*) podaj adres serwera, użytkownika i **hasło aplikacji** (Nextcloud →
-Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (domyślnie
-`Notatki`); „Testuj połączenie” wyjaśnia ewentualne błędy. Brulion synchronizuje w tle
+Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (przy
+pierwszym koncie proponowany `Notatki`, dla kolejnych notatników ich nazwa); „Testuj
+połączenie” wyjaśnia ewentualne błędy. Serwer i konto są wspólne, ale włączenie synchronizacji
+i folder na serwerze należą do notatnika: inny notatnik (także dokumentacja) startuje bez
+synchronizacji, a folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu,
+Brulion nie zapisze. Dwa notatniki, które wersje 0.3.1–0.3.5 połączyły z jednym folderem,
+nie synchronizują się wcale (także „Synchronizuj teraz”), dopóki jednemu z nich nie wybierzesz
+innego folderu — stan synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj”
+wyłącza synchronizację we wszystkich notatnikach, a zapisanie innego serwera lub użytkownika —
+w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
@@ -189,17 +205,19 @@ usuwa go w całości.
 | `Ctrl+O` | szybkie przejście do strony |
 | `Ctrl+J` | dzisiejszy dziennik |
 | `Ctrl+N` / `Ctrl+Shift+N` | nowa strona / szybka notatka do dziennika |
+| `Ctrl+Shift+B` | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | `Ctrl+Shift+F` | wyszukiwanie |
 | `Alt+←` / `Alt+→` | wstecz / dalej |
 | `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
-| `Ctrl+Enter` | zmiana stanu zadania (do zrobienia → w toku → zrobione) |
+| `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
+| `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
 | `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
-| `/` | menu poleceń (zadanie, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
+| `/` | menu poleceń (status zadania, przypomnienie, alarm, tabela, obliczenia, zapytanie, obraz…) |
 
 W trybie dokumentu `Tab` / `Shift+Tab` działa tylko na punktach listy, `Enter` na pustym
 punkcie kończy listę (w liście zagnieżdżonej: wysuwa punkt o poziom), a `Backspace` na początku
@@ -241,7 +259,9 @@ Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, stra
 ## Licencja
 
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
-[miniz](https://github.com/richgel999/miniz) (MIT).
+[miniz](https://github.com/richgel999/miniz) (MIT). Emoji i symbole tam, gdzie system nie ma
+czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
+i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)).
 
 ---
 
@@ -265,6 +285,9 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   a page is created and switchable at any time; stored in the note as `brulion: document` /
   `brulion: outline` frontmatter, and notes from Obsidian or Logseq open in the right mode
   without it.
+* Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
+  waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
+  wherever a task is shown — or a `/` command.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
@@ -278,6 +301,7 @@ Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK
 `scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
-[UI](docs/UI.md). License: AGPL-3.0-or-later.
+[UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), emoji and
+symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).

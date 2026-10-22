@@ -9,6 +9,7 @@
 #include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QSet>
 #include <QXmlStreamReader>
 
 #include <optional>
@@ -121,6 +122,31 @@ QSize localPictureSize(const QString &file)
         cache.clear();
     cache.insert(file, Entry{modified, info.size(), size});
     return size;
+}
+
+bool canDecodePictureFormat(const QString &fileName)
+{
+    const QString format = pictureFormatName(fileName).toLower();
+    if (format.isEmpty())
+        return false;
+    // The image plugins are loaded once per process: their formats never change while it runs.
+    static const QSet<QString> formats = [] {
+        QSet<QString> out;
+        const QList<QByteArray> supported = QImageReader::supportedImageFormats();
+        for (const QByteArray &f : supported)
+            out.insert(QString::fromLatin1(f).toLower());
+        return out;
+    }();
+    return formats.contains(format);
+}
+
+QString pictureFormatName(const QString &fileName)
+{
+    const qsizetype slash = fileName.lastIndexOf(u'/');
+    const qsizetype dot = fileName.lastIndexOf(u'.');
+    if (dot <= slash + 1 || dot == fileName.size() - 1)
+        return {};
+    return fileName.mid(dot + 1).toUpper();
 }
 
 } // namespace brulion::editor

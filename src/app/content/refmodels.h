@@ -99,6 +99,9 @@ public:
     Q_INVOKABLE QVariantMap get(int row) const;
     /// Check / uncheck the task of a ref row (task:toggle in its text): done <-> todo.
     Q_INVOKABLE bool toggleTask(int row);
+    /// The status menu of a ref row's task: "todo", "doing", "done", "deferred", "cancelled", or
+    /// "" (no status: the marker goes). False when it is no task or nothing changed.
+    Q_INVOKABLE bool setTaskStatus(int row, const QString &status);
 
 Q_SIGNALS:
     void paletteChanged();

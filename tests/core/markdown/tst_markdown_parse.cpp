@@ -510,6 +510,94 @@ private Q_SLOTS:
                               u"2026-10-16 06:30|alarm|Akapit\ndruga linia|3|every day"_s}));
     }
 
+    // What starts inside a formula is part of the formula for the index as in the editor
+    // (SYNTAX §11): tags, links, task dates and reminders there do not count; outside they do.
+    void formulasHideIndexedSyntax_data()
+    {
+        QTest::addColumn<QString>("src");
+        QTest::addColumn<QStringList>("tags");
+        QTest::addColumn<QStringList>("links");
+        QTest::addColumn<QString>("taskText");
+        QTest::addColumn<QString>("due");
+        QTest::addColumn<QStringList>("reminders");
+        QTest::newRow("tags and links") << u"Wzór $x \\in A #B$ i $[[Strona]]$, poza nim #pilne i [[Budżet]]"_s
+                                        << QStringList({u"pilne"_s}) << QStringList({u"Budżet"_s}) << QString()
+                                        << QString() << QStringList();
+        QTest::newRow("task date inside")
+                << u"- [ ] Zapłacić $📅 2026-10-30$ do końca"_s << QStringList() << QStringList()
+                << u"Zapłacić $📅 2026-10-30$ do końca"_s << QString() << QStringList();
+        QTest::newRow("task date and reminder outside")
+                << u"- [ ] Zapłacić $x$ 📅 2026-10-30 ⏰ 2026-10-22 09:00"_s << QStringList() << QStringList()
+                << u"Zapłacić $x$"_s << u"2026-10-30"_s << QStringList({u"2026-10-22 09:00"_s});
+        QTest::newRow("reminder inside") << u"Spotkanie $⏰ 2026-10-22 09:00$ #ważne"_s << QStringList({u"ważne"_s})
+                                         << QStringList() << QString() << QString() << QStringList();
+        // The editor shows a list item with its blank lines and code: they end an inline formula.
+        QTest::newRow("blank line in an item") << u"- a $x\n\n  #tag$"_s << QStringList({u"tag"_s}) << QStringList()
+                                               << QString() << QString() << QStringList();
+        QTest::newRow("code in an item") << u"- a $x\n  ```\n  kod\n  ```\n  #tag$"_s << QStringList({u"tag"_s})
+                                         << QStringList() << QString() << QString() << QStringList();
+        // Table cells are shown one by one: no formula spans cells or rows.
+        QTest::newRow("table cells")
+                << u"| Usługa | Cena |\n|---|---|\n| [[Netflix]] | $15 |\n| [[Spotify]] #muzyka | 10$ |\n| $x #y$ | =A1 |"_s
+                << QStringList({u"muzyka"_s}) << QStringList({u"Netflix"_s, u"Spotify"_s}) << QString() << QString()
+                << QStringList();
+        // A formula right after the checkbox is the task's text (Tasks showed only "policzyć").
+        QTest::newRow("formula first in a task")
+                << u"- [ ] $x^2$ policzyć 📅 2026-10-30"_s << QStringList() << QStringList() << u"$x^2$ policzyć"_s
+                << u"2026-10-30"_s << QStringList();
+        QTest::newRow("display formula over a blank line")
+                << u"- $$a\n\n  #b [[Ukryta]]$$ #c"_s << QStringList({u"c"_s}) << QStringList() << QString()
+                << QString() << QStringList();
+    }
+
+    void formulasHideIndexedSyntax()
+    {
+        QFETCH(QString, src);
+        QFETCH(QStringList, tags);
+        QFETCH(QStringList, links);
+        QFETCH(QString, taskText);
+        QFETCH(QString, due);
+        QFETCH(QStringList, reminders);
+        const ParsedNote n = parseNote(u"a.md"_s, src);
+        QCOMPARE(n.tags, tags);
+        QStringList targets;
+        for (const Link &l : n.links)
+            targets.append(l.target);
+        QCOMPARE(targets, links);
+        QCOMPARE(n.tasks.isEmpty() ? QString() : n.tasks.first().text, taskText);
+        QCOMPARE(n.tasks.isEmpty() ? QString() : spec(n.tasks.first().due), due);
+        QStringList at;
+        for (const Reminder &r : n.reminders)
+            at.append(r.at.toString());
+        QCOMPARE(at, reminders);
+    }
+
+    void formulaLinesAreNoProperties()
+    {
+        const ParsedNote n = parseNote(u"a.md"_s, u"$$\nf:: x \\cdot y\n$$\n\nklucz:: wartość"_s);
+        QCOMPARE(n.blocks.size(), 2);
+        QVERIFY(n.blocks[0].properties.isEmpty());
+        QCOMPARE(n.blocks[0].text, u"$$\nf:: x \\cdot y\n$$"_s);
+        QCOMPARE(n.blocks[1].properties.value(u"klucz"_s).toString(), u"wartość"_s);
+    }
+
+    void blockIdsSurviveFalseFormulas()
+    {
+        // A price on one line and a `$` on a later one make a formula (SYNTAX §11) that hides the
+        // tags inside it, but never the block's id, which references point to, or its folding.
+        const ParsedNote a = parseNote(u"a.md"_s, u"- Cena $5 #a ^abc123\n  razem 15$"_s);
+        QCOMPARE(a.blocks.size(), 1);
+        QCOMPARE(a.blocks[0].id, u"abc123"_s);
+        QVERIFY(a.tags.isEmpty());
+        QCOMPARE(a.blocks[0].text, u"Cena $5 #a\nrazem 15$"_s);
+        const ParsedNote b =
+                parseNote(u"a.md"_s, u"- Cena $5\n  id:: 6512-abcd\n  collapsed:: true\n  razem 15$\n  - dziecko"_s);
+        QCOMPARE(b.blocks.size(), 2);
+        QCOMPARE(b.blocks[0].id, u"6512-abcd"_s);
+        QCOMPARE(b.blocks[0].properties.value(u"collapsed"_s).toString(), u"true"_s);
+        QCOMPARE(b.blocks[0].text, u"Cena $5\nrazem 15$"_s);
+    }
+
     void polishAndNestedTags()
     {
         const ParsedNote n = parseNote(u"a.md"_s, u"Lista #zakupy/spożywcze i #Żółw oraz #[[Lista życzeń]]");
@@ -631,6 +719,15 @@ private Q_SLOTS:
         QCOMPARE(n.tasks.first().text, u"widoczne"_s);
         QVERIFY(n.reminders.isEmpty());
         QVERIFY(n.links.isEmpty());
+    }
+
+    void textRightAfterTheMarkerKept()
+    {
+        // A code span right after the marker is the text's start, not whitespace; a comment there
+        // is left out like any comment.
+        QCOMPARE(parseNote(u"a.md"_s, u"- [ ] `npm i` w katalogu"_s).tasks.first().text, u"`npm i` w katalogu"_s);
+        QCOMPARE(parseNote(u"a.md"_s, u"- TODO `ą` b"_s).tasks.first().text, u"`ą` b"_s);
+        QCOMPARE(parseNote(u"a.md"_s, u"- [ ] %%ważne%% zadzwonić"_s).tasks.first().text, u"zadzwonić"_s);
     }
 
     void inlineMarkdownKeptAndCodeSpansRespected()
@@ -937,6 +1034,42 @@ private Q_SLOTS:
         QTest::newRow("frontmatter") << u"---\na: 1\n---\n\ntitle:: X\ntags:: a\n\n- first"_s
                                      << u"frontmatter@0-2:d0, frontmatter@4-5:d0, listItem@7-7:d0"_s;
         QTest::newRow("properties only at top") << u"- a\nkey:: v"_s << u"listItem@0-1:d0"_s;
+        // A line that is only `$$` opens a display formula up to the next such line (SYNTAX §11).
+        QTest::newRow("display math") << u"$$\nf(x) = a\n + b\n - c\n$$\n"_s << u"paragraph@0-4:d0"_s;
+        QTest::newRow("display math with block syntax")
+                << u"$$\nf(x) = a\n+ b\n> c\n1. d\n# e\n---\n```\n$$\npo\n\n- x"_s
+                << u"paragraph@0-9:d0, listItem@11-11:d0"_s;
+        QTest::newRow("display math after text")
+                << u"Tekst:\n$$\na\n- b\n$$\n- c"_s << u"paragraph@0-4:d0, listItem@5-5:d0"_s;
+        QTest::newRow("display math unclosed") << u"$$\na\n- b"_s << u"paragraph@0-1:d0, listItem@2-2:d0"_s;
+        QTest::newRow("display math ends at a blank line")
+                << u"$$\na\n\n- b\n$$"_s << u"paragraph@0-1:d0, listItem@3-4:d0"_s;
+        QTest::newRow("display math in an item")
+                << u"- Wzór:\n  $$\n  f(x) = a\n  + b\n  - c\n  $$\n- dalej"_s << u"listItem@0-5:d0, listItem@6-6:d0"_s;
+        QTest::newRow("item opening display math")
+                << u"- $$\n  a\n  - b\n  $$\n- c"_s << u"listItem@0-3:d0, listItem@4-4:d0"_s;
+        QTest::newRow("lazy display math in an item")
+                << u"- Wzór:\n$$\na\n+ b\n$$\n- c"_s << u"listItem@0-4:d0, listItem@5-5:d0"_s;
+        QTest::newRow("display math in a quote") << u"> $$\n> a\n> - b\n> $$"_s << u"quote@0-3:d0"_s;
+        QTest::newRow("two display formulas")
+                << u"$$\na\n$$\n\n$$\n- b\n$$"_s << u"paragraph@0-2:d0, paragraph@4-6:d0"_s;
+        QTest::newRow("$$ inside a line is no fence") << u"Wzór $$a\n+ b$$"_s << u"paragraph@0-0:d0, listItem@1-1:d0"_s;
+        // A search that found no closing line before a blank one is not repeated for the next
+        // opener before that blank line; after it, a `$$` line opens a formula again.
+        QTest::newRow("display math after failed searches")
+                << u"- $$\n- $$\n\n- $$\n  a\n  - b\n  $$"_s << u"listItem@0-0:d0, listItem@1-1:d0, listItem@3-6:d0"_s;
+    }
+
+    void displayMathOpenersInLinearTime()
+    {
+        // An outline of `- $$` items with no closing line: each item's search would run to the end
+        // of the note (a hostile note of half a megabyte took seconds).
+        const QString src = u"- $$\n  - a\n"_s.repeated(50'000);
+        QElapsedTimer t;
+        t.start();
+        const ParsedNote note = parseNote(u"a.md"_s, src);
+        QVERIFY2(t.elapsed() < 3000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(t.elapsed())));
+        QCOMPARE(note.blocks.size(), 100'000);
     }
 
     void structureNesting()
@@ -944,6 +1077,19 @@ private Q_SLOTS:
         QFETCH(QString, src);
         QFETCH(QString, expected);
         QCOMPARE(outline(src), expected);
+    }
+
+    void displayMathKeepsItsLines()
+    {
+        const ParsedNote n = parseNote(u"a.md"_s, u"- Wzór #wzory:\n  $$\n  f(x) = a\n  + b\n  - c\n  $$\n- dalej"_s);
+        QCOMPARE(n.blocks.size(), 2);
+        QCOMPARE(n.blocks[0].text, u"Wzór #wzory:\n$$\nf(x) = a\n+ b\n- c\n$$"_s);
+        QCOMPARE(n.blocks[0].tags, QStringList({u"wzory"_s}));
+        QCOMPARE(n.blocks[1].text, u"dalej"_s);
+        const ParsedNote top = parseNote(u"a.md"_s, u"$$\nf(x) = a\n + b\n - c\n$$\n"_s);
+        QCOMPARE(top.blocks.size(), 1);
+        QCOMPARE(top.blocks[0].kind, BlockKind::Paragraph);
+        QCOMPARE(top.blocks[0].text, u"$$\nf(x) = a\n+ b\n- c\n$$"_s);
     }
 
     void continuationAndLazyLines()

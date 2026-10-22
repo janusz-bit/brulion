@@ -24,7 +24,11 @@ components — no Material/Fusion look, so all targets look identical.
 
 * **Wide (≥ 900 px):** `SplitView` — left **sidebar** | **top bar** + current view | optional
   right **side panel**.
-  * Sidebar (`ShellSidebar`): the notebook's name and a new-page button; navigation Dziennik,
+  * Sidebar (`ShellSidebar`): the notebook's name, the **Przełącz notatnik** button (the
+    `repeat` icon; a menu of the recent notebooks — the current one checked, one click switches
+    — then „Dokumentacja Brulionu” and „Otwórz inny notatnik…” (the start screen); a recent
+    notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
+    new-page button; navigation Dziennik,
     Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
     folder tree, lazy, with a context menu: new page / folder here, open in side panel,
     favourite, rename, history, trash; an empty folder opens to "Pusty folder"); a sync status
@@ -43,13 +47,25 @@ components — no Material/Fusion look, so all targets look identical.
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2, pages only), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
-  tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza; always — Nowa strona (Ctrl+N), Paleta
+  tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
+  Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
+  offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
   poleceń (Ctrl+K), **Centrum synchronizacji, Importuj notatki (the import tab), Import i eksport,
   Kosz (n), Ustawienia (Ctrl+,), O Brulionie**. These destinations have no button of their own: on
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
   note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
   "Importuj notatki" card that opens the chosen notebook on its import tab
   (`AppController.openVaultAt`).
+* **The documentation notebook** „Dokumentacja Brulionu” (desktop and Android; the browser has
+  one notebook, so its sample welcome page links to the guide online): Brulion notes written
+  from `src/app/shell/guide/*.md` into `<AppData>/Dokumentacja Brulionu` and brought up to date
+  on every open (pages the user changed or deleted stay so). It opens on its table of contents
+  from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
+  Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
+  user's last notebook; the start drops it from the recent notebooks where 0.3.0–0.3.5 listed
+  it), arms no reminders (the user's notebook keeps its armed alarms), quick
+  capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
+  is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
   new page, capture, theme, language, sync, panels, settings, about), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
@@ -64,7 +80,8 @@ components — no Material/Fusion look, so all targets look identical.
 | Ctrl+Shift+F | search |
 | Ctrl+J | today's journal |
 | Ctrl+N | new page |
-| Ctrl+Shift+N | quick capture |
+| Ctrl+Shift+N | quick capture (from the documentation notebook: back to the user's notebook first) |
+| Ctrl+Shift+B | the documentation notebook / back to the notebook used before |
 | Alt+← / Alt+→ | back / forward |
 | Ctrl+\\ | side panel on/off (wide windows) |
 | F2 | rename the current page |
@@ -84,6 +101,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | Alt+↑ / Alt+↓ | move the block with its children | move |
 | ↑ / ↓ | on the first / last line: to the previous / next block | select previous / next |
 | Ctrl+Enter | cycle the task status (none → todo → doing → done → none) | same |
+| Ctrl+Shift+Enter | the task status menu at the caret (any status, or none; list items and paragraphs only) | the same menu under the block |
 | Ctrl+. | fold / unfold | same |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same |
 | Ctrl+V | a copied picture or files become attachments `![[…]]` | — |
@@ -131,45 +149,113 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   Clicking or tapping it edits it inline (`InlineEditor`: a `TextEdit` with the raw Markdown,
   minus the task marker / fences the delegate draws, and `MarkdownHighlighter`).
 * `PageController` executes commands (one undo step each, typing coalesced), saves debounced
-  and on focus loss / suspend / quit, and merges external changes three-way. Code fences are
-  hidden: a ```` ``` ```` line typed inside a code block stays code, and the outer fence is
-  widened when needed (so a fenced example can be written about or pasted without breaking the
-  page).
+  and on focus loss / suspend / quit, and merges external changes three-way.
+* Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
+  exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
+  are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
+  `key:: value` properties after the closing fence. A ```` ``` ```` line typed inside a closed
+  code block stays code: the hidden fences are widened when needed (so a fenced example can be
+  written about or pasted without breaking the page). A fence that is not closed (a file written
+  elsewhere) is not widened: a closing fence typed into it closes it. A list item with more text
+  after its code block edits the closing fence and that text with the code, nothing hidden or
+  widened. A fence opened in a text block (```` ``` ```` typed on a new line of a paragraph or list
+  item, fenced text pasted without its closing line) gets its closing fence at the end of the
+  block, so the code never runs on into the following blocks in the saved file; only a lone
+  opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
+  it a code block. Such a line is saved closed while it is typed when it would take the blocks
+  after it into its code (any block after a paragraph, a list item's children) — and so it is
+  compared with the file, merged with another device's change and shown in the merge dialog —,
+  and leaving the block (another block gets the caret, editing stops) closes it — an empty code
+  block, one undo step; a lone fence line that came with the file and was only looked at stays
+  as it is. The two lines then act as a pair: a longer opening fence lengthens the closing
+  one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
+  deleted or changed closing fence is added again at the end of the block. Between them Enter and
+  paste work as in a code block: a line break, the pasted text as code (a split would leave half
+  a fence in each block). A fence-like line inside a display formula between `$$` lines is part
+  of the formula, as in the parser: it opens nothing and gets no closing fence.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags, `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";
   `@` also offers the journal link and a reminder).
-* Slash commands (`/`, Polish and English names, diacritic-insensitive filter): Zadanie,
-  Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś, Jutro, Data…, Tabela,
-  Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór matematyczny, Szablon…,
-  Obraz…, Osadź, Odwołanie do bloku, Priorytet wysoki / niski, Linia pozioma, Aktualna
-  godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ] zadanie", "blok
-  ```calc").
+* Slash commands (`/`, Polish and English names, diacritic-insensitive filter): the task
+  statuses Zadanie: do zrobienia / w toku / zrobione / oczekujące / anulowane / bez statusu
+  ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
+  anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
+  Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
+  matematyczny, Szablon…, Obraz…, Osadź, Odwołanie do bloku, Priorytet wysoki / niski, Linia
+  pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
+  zadanie", "blok ```calc"). A status command sets the status of the block being edited
+  (`PageController.applySlashCommand` → `setTaskStatus`) in the same undo step that removes the
+  "/command": a block that is no task becomes one (a paragraph a list item), Logseq keywords keep
+  their workflow (TODO → DOING, LATER → NOW), "bez statusu" removes the checkbox and its ✅ / ❌
+  date, and the caret stays in the words around the command.
+* **Task status menu** (`TaskStatusMenu`, `qml/editor`): Do zrobienia, W toku, Zrobione,
+  Oczekujące, Anulowane, Bez statusu, the current one checked. It opens with a right-click (mouse,
+  touchpad, stylus) or a long press on any task checkbox (`TaskBox`) — in the editor, query
+  results, embedded pages and blocks, linked references and tag pages, the calendar's day panel
+  and agenda, Tasks (whose row menu adds "Otwórz") —, with Ctrl+Shift+Enter in the editor and by
+  holding the touch toolbar's Zadanie button. A click or tap on the checkbox still toggles (a long
+  press never does). The editor's menu (`BlockEditor.openTaskStatusMenu`) follows its block while
+  open and gives the keyboard back to the edited block; elsewhere the choice goes through the
+  view's model to the task's own file (`QueryResultModel.setTaskStatus`,
+  `PageController.setTaskStatusAt`, `GroupedRefsModel.setTaskStatus`,
+  `PlanningActions.setTaskStatus`; "" = no status, `markdown::removeTaskMarker`); Tasks and the
+  calendar show "Zmieniono status" with Undo.
 * A day without a note (journal stream or a single day) starts from the journal template; the
   note is created by the first change (`PageController.startNewPage`), never by looking at it.
 * Special block delegates: code (monospace), `calc` (input lines with right-aligned results),
   table (grid editor with formula results; edits rewrite the Markdown table), `query` (live
   results with checkable tasks), math (`math`/`latex`/`tex` fences, the formula rendered from
-  the LaTeX source), callout, embeds/transclusions (`![[…]]`, `!((…))`), images, headings,
-  horizontal rule, properties / frontmatter ("Właściwości" panel).
+  the LaTeX source, also as a list item of an outline or a journal; a formula between two `$$`
+  lines stays one text block whatever its lines start with; a block an edit leaves with a `$$`
+  line and no closing one — a deleted `$$`, Enter inside the formula — gets a blank line after
+  it when a later `$$` line would close it, so the items between never become formula text when
+  the page is read again), callout, embeds/transclusions
+  (`![[…]]`, `!((…))`), images, headings, horizontal rule, properties / frontmatter
+  ("Właściwości" panel).
 * Chips inside rendered text: 📅 due (red when overdue), ⏳ scheduled, ⏰ reminders (amber,
   bell for alarms), 🔁 recurrence in Polish words. Clicking a ⏰ chip opens the reminder dialog
   (edit / snooze / delete). "dziś"/"jutro" and overdue colours of open pages move on at
   midnight (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "wt 13 paź").
 * Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
-  highlighting.
+  highlighting. A mouse selects by dragging; on touch UIs a finger scrolls it (a TextEdit that
+  selects by dragging keeps the finger: the source could not be scrolled at all), a tap places
+  the cursor and a long press selects the word under the finger (a TapHandler on an item above
+  the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
+  system's selection handles take a selection on where the platform has them).
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
-  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files. Opening
-  one (a click on the embed, a link to the file) shows the picture itself
-  (`ContentPictureView`, `PageView.pictureRoute`): fitted into the view with its aspect ratio
-  kept, a click on it or the "Pokaż naturalny rozmiar" button its own pixels (then draggable), the
-  button back to the fitted view. The bar's "Pokaż jako tekst", the page menu's "Pokaż obraz"
-  and Ctrl+E switch to the alternative view — the file read as text in the block editor (the
-  older behaviour, mojibake for a binary picture, kept for text-like assets). While the picture
-  shows, the editor stays unloaded (`page.path` ""): a picture's bytes are not a note
-  (`paths::isPicturePath`, `Workspace.isPicture`).
+  stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
+  pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
+  a link to the file) shows the picture itself (`ContentPictureView`, loaded by `PageView` for a
+  `pictureRoute` only): fitted into the view with its aspect ratio kept — fitting only shrinks a
+  raster picture (a smaller one keeps its own pixels and gets no size toggle), an SVG fills the
+  view —; when the fitted picture differs from its own pixels, a click on it or the "Pokaż
+  naturalny rozmiar" button (in a view narrower than 600 px — a phone, or on the desktop between
+  the sidebar and the side panel — a magnifier icon, its name in the tooltip, on touch that of a
+  long press, and for screen readers: as text it left the file name no room) shows those pixels (then
+  draggable), the button goes back. Under the
+  fitted picture (it moves to the top then) the notes that embed or link it (`ContentBacklinks`);
+  the side panel's Linki tab lists them too. The bar shows the file name as plain text. Its
+  "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (the palette's "Markdown source", the top bar's
+  Więcej → Pokaż jako tekst / Pokaż obraz) switch between the picture and the file read as text —
+  read-only, for text-like assets such as SVG (a binary picture is mojibake), at most its first
+  200 KB (`Workspace.readTextStart` reads no more of the file — a photo is not read whole for
+  it — and leaves out whole a character the limit would cut; a note above the text says how much
+  of how much), read again when the file changes on disk while it is shown (sync, another
+  program: `Workspace.fileChanged`); a mouse selects in it, a finger
+  scrolls it (no selection by dragging on touch UIs: such a TextEdit keeps the finger). The editor never loads a picture
+  (`page.path` stays ""): its bytes are not a note, and a character typed into them used to be
+  saved over the picture. A format the device has no decoder for (`Workspace.canDecodePicture`,
+  QImageReader's formats: WebP and AVIF need Qt's image plugins, missing on Android, in the
+  browser and in the Nix package) says so ("Obrazów w formacie WEBP nie można wyświetlić na tym
+  urządzeniu") instead of a load error — in its view and embedded in a note (`EmbedView`: the
+  file's name and the same sentence in the picture's frame, nothing loaded; the embeds'
+  `decodable` and `format` from `EditorHost::canDecodePicture`, one helper with the picture
+  view: `canDecodePictureFormat`, picturesize.h). `route.open` on a picture: `text`, `links` | `outline` |
+  `calendar`.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
-  Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie, Link do strony (`[[`), Tag
+  Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a tap: the next status like
+  Ctrl+Enter; held down: the task status menu, above the toolbar), Link do strony (`[[`), Tag
   (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów, Ukryj klawiaturę.
 
 ## Scrolling performance
@@ -235,7 +321,8 @@ content jump now and then, not every time. Hence:
   the bindings do not rely on that.)
 * a query block runs its first query when its `QueryResultModel` is completed: on the guide page
   its results (773 px) used to arrive after the editor had placed the block;
-* pictures: the `embeds` role has each picture's `width` × `height` — a raster picture's header
+* pictures: the `embeds` role has each picture's `width` × `height` (0 × 0 for a format the device
+  cannot decode: not read) — a raster picture's header
   (`QImageReader::size()`), an SVG's root `width` / `height` / `viewBox` given to Qt's own SVG
   reader as a document of their own (so units, percentages and the viewBox follow Qt's rules
   exactly), the whole SVG only when the root leaves the size to the drawing and the file is at most
@@ -453,6 +540,25 @@ Choosing and switching the mode:
 The user must always be able to tell what the sync is doing, whether something failed and
 why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 
+* **The Nextcloud account and the notebooks** (`qml/io/NextcloudForm.qml` over
+  `NextcloudSetup`, in the sync center and Settings → Synchronizacja): the server, the user and
+  the app password are shared, the switch and the server folder belong to the open notebook (no
+  notebook open: nothing syncs). A notebook without a folder of its own is offered "Notatki"
+  for the first account on the device, else its own name ("Praca", "Praca 2" when taken —
+  never a folder another notebook has, holds or is inside); one synced before keeps the folder
+  its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
+  exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
+  się już z tym folderem…") and is not saved while sync is on. Two notebooks that 0.3.1–0.3.5
+  left on one folder (or one inside the other) sync nothing while that lasts — no automatic
+  sync and no "Synchronizuj teraz" (it only says why: one click would mix the two notebooks for
+  good, and choosing another folder is one step away): the status ("Synchronizacja wstrzymana:
+  notatnik „Dom” na tym urządzeniu synchronizuje się z tym samym folderem…") stays in the sync
+  footer and the sync center (red, error code `folder-shared`), the event log says it once per
+  notebook opened and folder, a toast too, and the overview's Nextcloud card offers „Wybierz
+  inny folder” (the Nextcloud tab, whose form shows the error under the folder). "Wyloguj"
+  switches sync off in every notebook (the dialog says so), saving another server or user in all
+  the others. The switch and folder of 0.3.0 and older go to the notebook they belong to
+  (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i
@@ -501,8 +607,15 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`),
 `BToolTip`, `BEmptyState`, `BProgressBar`, `BSpinner`, `BScrollBar`, `BSplitHandle`,
 `BShadow`, `BFocusRing`, `BDatePicker` (month grid, Polish names, natural-language input with
-live preview), `BTimePicker`/`BTimePickerDialog` (a round 24-hour clock: tap or drag hours
-and minutes, keyboard arrows), `BReminderDialog` (date/time, alarm switch, recurrence picker,
+live preview; its clock dialog is created on first use), `BTimePicker`/`BTimePickerDialog` (a
+round 24-hour clock: tap or drag hours and minutes — the face takes every press, so a drag may
+start on a number or the chosen value's bubble —, keyboard arrows; the focus ring shows for the
+keyboard only; in a window too short for it, a phone held sideways, the dial shrinks and the
+hours / minutes fields go beside it; the number circles are sized from the rings' geometry — the
+inner ring's twelve hours sit closer together, so they are sized first and the outer ones fit the
+room left between the rings — so none overlap, down to the dialog's 180 px dial and with larger
+text; the outer numbers keep the small text size, the inner ones get a smaller font only where two
+digits would not fit), `BReminderDialog` (date/time, alarm switch, recurrence picker,
 quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
 `BQuickSwitcher`. Icons: SVGs in `assets/icons/` (Lucide, ISC licence) via `BIcon`.
@@ -564,7 +677,92 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   `QML_ATTACHED` itself (Qt resolves `qmlAttachedProperties` on the registered class), the app's
   wrapper in `qmlforeign.h` gives it its QML name.
 * **Icons**: Lucide SVGs in `assets/icons/` (see its LICENSE), `BIcon { name: "bell" }`.
-  New icons: copy from `lucide-static`, normalise like the others, re-run CMake.
+  New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
+  everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
+  on the CPU, no shader effect).
+* **Emoji and symbol fonts** (`src/app/ui/fallbackfonts.h`, see below).
+
+### Emoji and symbol fonts
+
+Brulion writes emoji into notes and shows them in the UI: ⏰ reminders, 🔔 alarms in rendered
+blocks, the task fields 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕ 🆔 ⛔ 🏁, ⧉ before block embeds,
+setting descriptions and hints ("⏰ jutro 9:00"). Text never draws them itself: Qt takes each
+character the text's font lacks from a fallback font, and where no font has it, it draws the
+font's missing-glyph box.
+
+**The browser bug** ("white empty squares instead of the bells"): Qt for WebAssembly has no
+system fonts. It brings exactly two, DejaVu Sans and DejaVu Sans Mono
+(`qwasmfontdatabase.cpp`; fonts of the computer only with the Local Font Access API, which Qt
+asks for only on request and which only Chromium has), and DejaVu has none of Brulion's emoji
+— every one of them came out as DejaVu's hollow box, white in the dark theme. ⧉ and some rare
+LaTeX symbols were boxes too. The Lucide icons (`BIcon`) were never affected.
+
+**The fix**: two small fonts in `assets/fonts/` (SIL Open Font License 1.1, `OFL.txt`; sources
+and SHA-256 in its `README.md`), made by `scripts/fallback-fonts.py` from the fonts of the
+nixpkgs that `flake.lock` pins:
+
+* `BrulionEmoji.ttf` ("Brulion Emoji", 162 KB, ~100 KB compressed): Noto Emoji (monochrome,
+  instanced at weight 400), every emoji of `src/` plus ~300 common ones (faces, hearts, hands,
+  notes and work, time and status, a few places, weather, food, activities; single code
+  points — no flags or ZWJ sequences) and the five skin-tone modifiers, which the monochrome
+  font draws as the plain hand (👍🏻 → 👍, not 👍 and a box). Monochrome glyphs take the text
+  colour, so they look like the rest of the UI.
+* `BrulionMath.otf` ("Brulion Math", 9 KB): Noto Sans Math, the non-emoji characters of `src/`
+  that DejaVu Sans lacks (⧉ ⌢ ⌣ ⎰ ⎱ ⟮ ⟯ ⨄ ⨆ ⨿ 𝒜).
+
+Both carry their own family names and DejaVu Sans's vertical metrics (Noto Sans Math's are half
+as tall again), so a line with a fallback glyph is no taller than one without. `main.cpp`
+installs them right after the application object, before any text is laid out
+(`installFallbackFonts()`):
+
+* the emoji font as the application emoji family: Qt ≥ 6.9 lays out emoji sequences as runs of
+  their own whose fallbacks are the emoji families, colour fonts first;
+* both as application fallback families of Common text (Qt files Latin under it, and gives a
+  symbol the script of the text around it: "Spotkanie ⏰ jutro" is one Latin run), **behind the
+  app's default family**: `[default family, Brulion Emoji, Brulion Math, the system's…]`. In
+  the browser the same for every other script: its font database has no fallbacks beyond
+  DejaVu Sans, so 🗓 or ⧉ inside Cyrillic or Greek text ("Встреча 🗓") stayed boxes otherwise.
+  On Linux fontconfig already tries every font for other scripts, the application fonts
+  included, so their order stays fontconfig's;
+* first, the families Brulion asks for — the default font, the system fixed font, `serif`
+  (`Theme.fontSerif`), `sans-serif` and `monospace` (formula spans) — are pinned to the fonts
+  Qt resolves them to (`QFont::insertSubstitution`). Qt gives a family name that is no installed
+  family ("serif" in the browser, fontconfig's generic names) the first font of its fallback
+  list; without the pin and the default family at its head, the browser's editor text got Brulion
+  Math as its font (its line metrics moved every block down a few pixels).
+
+Text keeps its own font; only the characters it lacks come from these (tested per character).
+Policies:
+
+* **Browser**: both, always (`FallbackFontPolicy::Always`).
+* **Linux** (packages, AppImage): both only when the system's fonts draw some of
+  `brulionEmoji()` as boxes (`WhenMissing`: one `QTextLayout` of the probe, ~11 ms cold on the
+  reference laptop, most of it loading the system emoji font that the first emoji would load
+  anyway); otherwise a colour emoji font of the system (Noto Color Emoji, Twemoji…) keeps
+  drawing the emoji, and only Brulion Math becomes an application font (~1 ms, no fallback
+  families, no pins): fontconfig's fallback lists include application fonts, so it draws ⧉ and
+  the math symbols where no system font has them (DejaVu with a colour emoji font has none). The
+  symbols are not looked for first: a character no font has costs ~15 ms of start-up (Qt opens
+  fallback font after fallback font). An AppImage on a system without an emoji font thus gets
+  monochrome emoji instead of boxes.
+* **Android**: none — it always has Noto Color Emoji; its build leaves the fonts out.
+
+The event log notes a font that fixed boxes ("Fallback font Brulion Emoji installed: the system
+fonts drew ⏰🔔… as boxes") and warns about boxes left. Tests (`tests/app/fonts`):
+`tst_fallback_fonts` — both fonts cover their probes and have DejaVu's metrics; every emoji in
+`src/` is in the probe and in the font, so a new emoji without a regenerated font fails; the box
+check; installing removes the boxes in the default, serif and fixed fonts while letters keep
+their font, and no requested family (nor an unknown one) gets one of these as its font; a hand
+with a skin tone is one glyph without a box, and a symbol with U+FE0F or U+FE0E (❤️ ✔️ from
+phone keyboards) has none in the default and the fixed font; in the browser every script gets
+the fallbacks; `tst_fallback_fonts_when_missing` — the Linux policy;
+`tst_fallback_fonts_browser_fonts` and `…_browser_fonts_when_missing` — the same with a
+fontconfig that knows only DejaVu Sans and DejaVu Sans Mono, the browser's fonts (there the emoji
+are boxes first, and lines with emoji keep their height); `…_system_emoji_when_missing` — DejaVu
+and an emoji font: the emoji stay the system's, the symbols are boxes first and drawn by Brulion
+Math afterwards. In the browser: `scripts/wasm-smoke.mjs --glyphs` (`?selftest=glyphs`,
+docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, re-run
+`scripts/fallback-fonts.py` (it takes every emoji of `src/` by itself), commit `assets/fonts/`.
 
 ## Dev tools, screenshots and UI tests
 
@@ -582,7 +780,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline` |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
@@ -590,7 +788,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -601,13 +799,17 @@ the app scripts give every run a fresh temporary XDG home, so the user's own Bru
 touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
 `tests/screenshots/`, git-ignored):
 
-* `scripts/screenshots.sh [sections…]` — gallery sections × {desktop 1280×800, phone 412×915
-  `--touch`} × {light, dark}; `SIZES="desktop-tall phone-tall"` captures long sections whole.
+* `scripts/screenshots.sh [sections…]` — gallery sections (`taskstatus`: the task checkboxes and
+  their status menu) × {desktop 1280×800, phone 412×915 `--touch`} × {light, dark};
+  `SIZES="desktop-tall phone-tall"` captures long sections whole, `SIZES=phone-landscape`
+  (915×412 `--touch`) a phone held sideways.
 * `tests/app/editor/editor-screenshots.sh` — the editor playground states.
 * `tests/app/shell/screenshots.sh` — the real app: onboarding, journals, the guide page and
   its editor states (`page-editing`, `page-slash`, `page-reminder`, `page-doc-paragraph`,
   `page-doc-list`, `page-doc-heading`, `page-doc-outline`, …), the page menu (`page-menu`), the
-  renovation project as an outline (`page-project`), the document mode on a long Obsidian-like
+  renovation project as an outline (`page-project`), a picture attachment (`page-picture`, its
+  text view `page-picture-text`, its references in the side panel `page-picture-links`), the
+  document mode on a long Obsidian-like
   note (`tests/app/shell/notemode/`: `doc-long`, editing a paragraph / list item / task / heading
   / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
   outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,

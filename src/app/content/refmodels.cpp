@@ -355,6 +355,16 @@ bool GroupedRefsModel::toggleTask(int row)
     return workspace()->setTaskStatus(r.path, r.ref.line, closed ? u"todo"_s : u"done"_s);
 }
 
+bool GroupedRefsModel::setTaskStatus(int row, const QString &status)
+{
+    if (row < 0 || row >= m_rows.size() || m_rows.at(row).header || !workspace())
+        return false;
+    const Row &r = m_rows.at(row);
+    if (r.ref.taskStatus.isEmpty() || r.ref.taskStatus == status)
+        return false;
+    return workspace()->setTaskStatus(r.path, r.ref.line, status);
+}
+
 // ---- BacklinksModel ---------------------------------------------------------------------------------
 
 BacklinksModel::BacklinksModel(QObject *parent) : GroupedRefsModel(parent) { }

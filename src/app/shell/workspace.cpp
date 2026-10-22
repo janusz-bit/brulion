@@ -21,9 +21,11 @@
 #include <QBuffer>
 #include <QDesktopServices>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QJsonArray>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QMimeDatabase>
 #include <QMimeType>
@@ -323,8 +325,10 @@ void Workspace::indexingFinished()
         m_indexClock.invalidate();
     }
     // Every note is known now: reminders may fire and missed ones be recorded (a half-built
-    // index would make reminders look deleted).
-    m_reminders->start();
+    // index would make reminders look deleted). A vault with paused reminders never starts its
+    // scheduler: an empty schedule() would cancel what the previous notebook armed.
+    if (!m_remindersPaused)
+        m_reminders->start();
     setReady(false);
 #ifdef Q_OS_WASM
     platform::reportIndexReady(); // for scripts/wasm-smoke.mjs and the browser benchmarks
@@ -460,6 +464,55 @@ QString Workspace::readFile(const QString &path)
     return read(path);
 }
 
+namespace {
+
+/// The length of `bytes` without a UTF-8 sequence its end cuts short (a lead byte with fewer
+/// continuation bytes after it than it announces); the whole length otherwise.
+qsizetype utf8CompletePrefix(QByteArrayView bytes)
+{
+    const qsizetype n = bytes.size();
+    // The last sequence starts at most 3 bytes before the end (4-byte sequences are the longest).
+    for (qsizetype i = n - 1; i >= 0 && i >= n - 4; --i) {
+        const auto b = static_cast<unsigned char>(bytes.at(i));
+        if ((b & 0xC0) == 0x80)
+            continue; // a continuation byte: its lead comes before it
+        const qsizetype length = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 1;
+        return i + length > n && b >= 0xC0 && b < 0xF8 ? i : n;
+    }
+    return n; // continuation bytes only: no character to complete
+}
+
+} // namespace
+
+QVariantMap Workspace::readTextStart(const QString &path, int maxBytes) const
+{
+    QVariantMap out{{u"text"_s, QString()}, {u"truncated"_s, false}, {u"bytes"_s, 0}, {u"size"_s, 0}, {u"ok"_s, false}};
+    if (!m_vault || path.isEmpty())
+        return out;
+    // Straight from the file: Vault::readText() reads it whole (a 20 MB photo: 20 MB of bytes and
+    // 40 MB of text) for the 200 KB shown.
+    QFile file(m_vault->absolutePath(path));
+    if (!file.open(QIODevice::ReadOnly))
+        return out;
+    const qint64 size = file.size();
+    QByteArray bytes = file.read(qMax(0, maxBytes));
+    const bool truncated = bytes.size() < size;
+    if (truncated)
+        bytes.truncate(utf8CompletePrefix(bytes));
+    QByteArrayView text(bytes);
+    if (text.startsWith("\xEF\xBB\xBF"))
+        text = text.sliced(3);
+    const QLocale locale;
+    out.insert(u"text"_s, QString::fromUtf8(text));
+    out.insert(u"truncated"_s, truncated);
+    out.insert(u"bytes"_s, double(bytes.size()));
+    out.insert(u"size"_s, double(size));
+    out.insert(u"bytesText"_s, locale.formattedDataSize(bytes.size(), 1, QLocale::DataSizeTraditionalFormat));
+    out.insert(u"sizeText"_s, locale.formattedDataSize(size, 1, QLocale::DataSizeTraditionalFormat));
+    out.insert(u"ok"_s, true);
+    return out;
+}
+
 bool Workspace::writeFile(const QString &path, const QString &content)
 {
     return write(path, content);
@@ -483,6 +536,11 @@ QString Workspace::folderOf(const QString &path) const
 bool Workspace::isPicture(const QString &path) const
 {
     return paths::isPicturePath(path);
+}
+
+bool Workspace::canDecodePicture(const QString &path) const
+{
+    return paths::isPicturePath(path) && editor::canDecodePictureFormat(path);
 }
 
 QString Workspace::journalDate(const QString &path) const

@@ -14,7 +14,10 @@ T.ItemDelegate {
     property real safeBottom: 0
 
     readonly property var status: AppController.syncStatus
-    readonly property string syncState: AppController.syncAvailable ? (status.state || "idle") : "none"
+    // Without a sync engine an error can still stop the sync (another notebook syncs with the
+    // same server folder): shown as one.
+    readonly property string syncState: AppController.syncAvailable ? (status.state || "idle")
+                                      : status.state === "error" ? "error" : "none"
     readonly property string statusText: {
         if (status.text)
             return status.text

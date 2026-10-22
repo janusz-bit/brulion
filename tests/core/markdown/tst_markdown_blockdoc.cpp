@@ -165,6 +165,7 @@ QStringList fixtures()
             u"\n\n\n- zaczyna się od pustych linii\n"_s,
             u"10. dziesięć\n11. jedenaście\n"_s,
             u"- \n-\n- [ ] \n"_s,
+            u"$$\nf(x) = a\n + b\n - c\n$$\n\n- Wzór:\n  $$\n  a\n  + b\n  $$\n- dalej\n"_s,
     };
 }
 
@@ -313,6 +314,98 @@ private Q_SLOTS:
         const BlockDocument doc(u"> [!todo] Lista\n> - [ ] a\n>   - [ ] b\n\n> cytat\n> - x\n"_s);
         QCOMPARE(entries(doc),
                  QStringList({u"callout:0:|> [!todo] Lista⏎> - [ ] a⏎>   - [ ] b"_s, u"quote:0:|> cytat⏎> - x"_s}));
+    }
+
+    // A display formula between `$$` lines is one block, also when its lines look like list items
+    // or quotes (SYNTAX §11): the editor's blocks and the parser's agree, also after an edit.
+    void displayMathIsOneBlock()
+    {
+        BlockDocument doc(u"$$\nf(x) = a\n+ b\n- c\n$$\n\n- Wzór:\n  $$\n  a\n  > b\n  1. c\n  $$\n- dalej\n"_s);
+        QCOMPARE(entries(doc), QStringList({u"p:0:|$$⏎f(x) = a⏎+ b⏎- c⏎$$"_s, u"li:0:- |Wzór:⏎$$⏎a⏎> b⏎1. c⏎$$"_s,
+                                            u"li:0:- |dalej"_s}));
+        QVERIFY(doc.setBody(1, u"Wzór:\n$$\nx\n+ y\n- z\n$$"_s).changed());
+        QCOMPARE(doc.toString(), u"$$\nf(x) = a\n+ b\n- c\n$$\n\n- Wzór:\n  $$\n  x\n  + y\n  - z\n  $$\n- dalej\n"_s);
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        // Without a closing `$$` line the lines are blocks of their own.
+        QCOMPARE(entries(BlockDocument(u"$$\na\n- b\n"_s)), QStringList({u"p:0:|$$⏎a"_s, u"li:0:- |b"_s}));
+    }
+
+    // Review regression: a `$$` line an edit leaves without its closing line reached the `$$` line
+    // of a later list item (no blank line between them), and the saved file read every block in
+    // between as part of that formula — their tasks and reminders gone from the index.
+    void displayMathNeverSwallowsLaterBlocks()
+    {
+        // The closing `$$` of the first of two formulas deleted.
+        BlockDocument doc(u"- Wzór:\n  $$\n  a\n  $$\n- [ ] Zadanie ⏰ 2026-10-20 9:00\n- Drugi:\n  $$\n  b\n  $$\n"_s);
+        QCOMPARE(doc.count(), 3);
+        QVERIFY(doc.setBody(0, u"Wzór:\n$$\na"_s).changed());
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        QCOMPARE(parseNote(u"a.md"_s, doc.toString()).tasks.size(), 1);
+        // Typed back, the formula is whole again.
+        QVERIFY(doc.setBody(0, u"Wzór:\n$$\na\n$$"_s).changed());
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        QCOMPARE(doc.count(), 3);
+        // The blank line uses the note's line ends; the other blocks keep their bytes.
+        BlockDocument crlf(u"- Wzór:\r\n  $$\r\n  a\r\n  $$\r\n- [ ] b\r\n- c\r\n  $$\r\n  d\r\n  $$\r\n"_s);
+        QVERIFY(crlf.setBody(0, u"Wzór:\n$$\na"_s).changed());
+        QCOMPARE(crlf.toString(), u"- Wzór:\r\n  $$\r\n  a\r\n\r\n- [ ] b\r\n- c\r\n  $$\r\n  d\r\n  $$\r\n"_s);
+        QCOMPARE(entries(BlockDocument(crlf.toString())), entries(crlf));
+        // A closing `$$` line typed in a later item, an opening one above it.
+        BlockDocument later(u"- $$\n- b\n"_s);
+        QCOMPARE(later.count(), 2);
+        QVERIFY(later.setBody(1, u"b\n$$"_s).changed());
+        QCOMPARE(entries(BlockDocument(later.toString())), entries(later));
+        // Enter inside a formula of an outline: two items, neither a formula.
+        BlockDocument split(u"- $$\n  a\n  b\n  $$\n- c\n"_s);
+        QCOMPARE(split.count(), 2);
+        QVERIFY(split.split(0, 5).changed());
+        QCOMPARE(split.count(), 3);
+        QCOMPARE(entries(BlockDocument(split.toString())), entries(split));
+        // A move that puts an item with an unclosed `$$` above one that has a `$$` line.
+        BlockDocument moved(u"- x\n  $$\n  y\n  $$\n- $$\n\n- z\n"_s);
+        QCOMPARE(moved.count(), 3);
+        QVERIFY(moved.moveUp(1).changed());
+        QCOMPARE(entries(BlockDocument(moved.toString())), entries(moved));
+        // Untouched: an unclosed `$$` that reaches no `$$` line gets no blank line.
+        BlockDocument plain(u"- $$\n- b\n"_s);
+        QVERIFY(plain.setBody(1, u"c"_s).changed());
+        QCOMPARE(plain.toString(), u"- $$\n- c\n"_s);
+        // Nor when the later `$$` is no line of its own (a formula in the text, a comment beside it).
+        BlockDocument inText(u"- $$\n- b\n- wzór $$x$$ %%uwaga%%\n  $$ %%a%%x\n"_s);
+        QCOMPARE(inText.count(), 3);
+        QVERIFY(inText.setBody(1, u"c"_s).changed());
+        QCOMPARE(inText.toString(), u"- $$\n- c\n- wzór $$x$$ %%uwaga%%\n  $$ %%a%%x\n"_s);
+        QCOMPARE(entries(BlockDocument(inText.toString())), entries(inText));
+        // A comment beside the closing `$$` line: it closes the formula.
+        BlockDocument comment(u"- $$\n- b\n- c\n  $$ %%koniec%%\n"_s);
+        QCOMPARE(comment.count(), 1);
+        BlockDocument split2(u"- $$\n  a\n  b\n  $$ %%koniec%%\n"_s);
+        QVERIFY(split2.split(0, 5).changed());
+        QCOMPARE(entries(BlockDocument(split2.toString())), entries(split2));
+    }
+
+    // Review regression: a task status for a block that is a display formula (the status menu,
+    // Ctrl+Enter, "/zadanie") wrote "- [ ] $$", which opens no formula: its lines that look like
+    // list items became blocks of their own when the page was read again.
+    void displayMathGetsNoTaskStatus()
+    {
+        const QString src = u"- Zadanie\n- $$\n  a\n  + b\n  $$\n\n$$\nf(x)\n- c\n$$\n"_s;
+        BlockDocument doc(src);
+        QCOMPARE(doc.count(), 3);
+        for (const TaskStatus status : {TaskStatus::Todo, TaskStatus::Done, TaskStatus::Cancelled}) {
+            QVERIFY(!doc.setTaskStatus(1, status, Today).changed());
+            QVERIFY(!doc.setTaskStatus(2, status, Today).changed());
+        }
+        QVERIFY(!doc.toggleTask(1, Today).changed());
+        QVERIFY(!doc.toggleTask(2, Today).changed());
+        QCOMPARE(doc.toString(), src);
+        QVERIFY(doc.setTaskStatus(0, TaskStatus::Todo, Today).changed());
+        QCOMPARE(doc.toString(), u"- [ ] Zadanie\n"_s + src.sliced(10));
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
+        // A "- [ ] $$" written elsewhere is a task: it opens no formula, its status changes.
+        BlockDocument task(u"- [ ] $$\n- b\n"_s);
+        QVERIFY(task.setTaskStatus(0, TaskStatus::Done, Today).changed());
+        QCOMPARE(task.toString(), u"- [x] $$ ✅ 2026-10-14\n- b\n"_s);
     }
 
     void propertiesOnlyAtTheTop()

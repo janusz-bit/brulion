@@ -25,7 +25,7 @@ ans - rabat
 - Jednostki: `5 km`, `3 h + 20 min`, `100 km / 2 h`, `20°C to °F`; konwersja słowem `to`, `in`, `na` albo `w`.
 - Waluty to etykiety, które przechodzą przez rachunki: `12 zł + 5 zł`, `€10`, `$5`. Różnych walut Brulion nigdy nie przelicza.
 - `#` i `//` zaczynają komentarz. Tekst przed dwukropkiem to etykieta: `Czynsz: 2400 zł`.
-- Przecinek dziesiętny działa tak samo jak kropka; w wywołaniach funkcji oddzielaj argumenty średnikiem: `round(2,345; 2)`.
+- Przecinek dziesiętny działa jak kropka. W wywołaniu funkcji oddzielaj argumenty średnikiem — wtedy przecinek w liczbie jest zawsze dziesiętny: `round(2,345; 2)`, `max(1,5; 2)`. Bez średnika przecinek między cyframi rozdziela argumenty (`pow(2,5)` to 2⁵), chyba że wbudowana funkcja dostałaby wtedy za dużo argumentów — wtedy jest dziesiętny (`sqrt(2,25)` to 1,5). Gdy pasują oba odczytania, jak w `round(2,5)` czy `zaokr(netto * 1,23)`, Brulion pokazuje błąd zamiast zgadywać: dopisz średnik albo użyj kropki.
 - Funkcje: `sum`/`suma`, `avg`/`średnia`, `min`, `max`, `count`, `median`, `round`/`zaokr`, `floor`, `ceil`, `abs`, `sqrt`, `pow`, `exp`, `ln`, `log`, trygonometria, `if`/`jeśli`.
 
 ### Sumy

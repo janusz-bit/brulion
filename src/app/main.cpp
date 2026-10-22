@@ -1,8 +1,10 @@
 #include "platform.h"
-#include "ui/devtools.h" // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
+#include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
+#include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
+#include "localnetwork.h" // QML loads nothing from the network (src/app/ui)
 #include "logcontroller.h" // the event log page's controller (src/app/diag)
 #include "workspace.h"
 #include "workspacesync.h"
@@ -161,6 +163,33 @@ int main(int argc, char *argv[])
         QCoreApplication::installTranslator(&translator);
     devTools.setTranslator(&translator);
 
+    // Emoji and symbols where the system has no font for them (ui/fallbackfonts.h), before any
+    // text is laid out: Qt for WebAssembly only has DejaVu Sans and DejaVu Sans Mono (every ⏰ 🔔
+    // 📅 was an empty box), some Linux systems have no emoji font, Android always has one.
+#ifndef Q_OS_ANDROID
+#ifdef Q_OS_WASM
+    const auto fallbackPolicy = brulion::ui::FallbackFontPolicy::Always;
+#else
+    const auto fallbackPolicy = brulion::ui::FallbackFontPolicy::WhenMissing;
+#endif
+    const QList<brulion::ui::FallbackFontReport> fallbackFonts =
+            brulion::ui::installFallbackFonts(fallbackPolicy, QGuiApplication::font());
+    for (const brulion::ui::FallbackFontReport &font : fallbackFonts) {
+        if (!font.missingAfter.isEmpty())
+            qCWarning(brulion::logging::lcApp).noquote() << u"Fallback font %1 %2: %3 still drawn as boxes"_s.arg(
+                    font.family, font.loaded ? u"installed"_s : u"not available"_s, font.missingAfter);
+        else if (font.installed && !font.missingBefore.isEmpty())
+            qCInfo(brulion::logging::lcApp).noquote()
+                    << u"Fallback font %1 installed: the system fonts drew %2 as boxes"_s.arg(font.family,
+                                                                                              font.missingBefore);
+        else
+            qCDebug(brulion::logging::lcApp).noquote() << u"Fallback font %1 %2"_s.arg(
+                    font.family, font.installed ? u"installed"_s
+                                 : font.loaded  ? u"available to the system's fallbacks"_s
+                                                : u"not needed"_s);
+    }
+#endif
+
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     // Declared before the engine: QML singletons point into them, so they must outlive the engine.
@@ -169,7 +198,15 @@ int main(int argc, char *argv[])
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
 #endif
+#if QT_CONFIG(qml_network)
+    // Pictures come from the vault and icons from the resources: the engine refuses remote URLs,
+    // so no rich text (a note's rendered Markdown) can make it fetch one (localnetwork.h).
+    brulion::ui::LocalOnlyNetworkFactory networkFactory;
+#endif
     QQmlApplicationEngine engine;
+#if QT_CONFIG(qml_network)
+    engine.setNetworkAccessManagerFactory(&networkFactory);
+#endif
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     devTools.attach(&engine); // --size, --screenshot
@@ -287,6 +324,10 @@ int main(int argc, char *argv[])
                                   u"error"_s);
         },
         Qt::SingleShotConnection);
+    // ?selftest=glyphs (scripts/wasm-smoke.mjs --glyphs): did the fallback fonts load and draw
+    // Brulion's emoji and symbols?
+    if (args.contains(u"--selftest-glyphs"_s))
+        wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
     wasm::setShellStage(wasm::ShellStage::LoadingNotes);
     storage.start();
 #else

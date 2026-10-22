@@ -328,6 +328,7 @@ FocusScope {
                         line: entry.model.line
                         onOpened: (newPane) => AppController.openPage(entry.model.path, entry.model.line, newPane)
                         onTaskToggled: tagged.toggleTask(entry.index)
+                        onTaskStatusRequested: (status) => tagged.setTaskStatus(entry.index, status)
                     }
                 }
 

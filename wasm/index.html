@@ -315,10 +315,10 @@
         function start() {
           setStatus(T.download);
           var params = new URLSearchParams(location.search);
-          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify
+          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs
           var args = [];
           (params.get('selftest') || '').split(',').forEach(function (name) {
-            if (name === 'storage' || name === 'notify') args.push('--selftest-' + name);
+            if (name === 'storage' || name === 'notify' || name === 'glyphs') args.push('--selftest-' + name);
           });
 
           // Start the big download first; the small scripts load in parallel.

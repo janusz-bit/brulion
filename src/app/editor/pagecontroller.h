@@ -182,6 +182,10 @@ public:
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
     /// The status a checkbox click gives: todo/doing/deferred -> "done", done/cancelled -> "todo".
     static QString toggledStatus(const QString &status);
+    /// The status a task slash command sets ("task" -> "todo", "taskDoing" -> "doing", "taskDone",
+    /// "taskWaiting" -> "deferred", "taskCancelled", "taskNone" -> "" = no status); nullopt for
+    /// other commands.
+    static std::optional<QString> slashTaskStatus(const QString &command);
 
     /// Three-way merge used for external changes while dirty (base, local, remote). Defaults to
     /// sync::merge3 when the sync module is available; without one, conflicts keep local.
@@ -255,7 +259,9 @@ public:
     Q_INVOKABLE void toggleTask(int row);
     /// Ctrl+Enter: none -> todo -> doing -> done -> none.
     Q_INVOKABLE void cycleTask(int row);
-    /// Set a task status ("todo", "doing", "done", "cancelled", "deferred"; "" removes the marker).
+    /// Set a task status ("todo", "doing", "done", "cancelled", "deferred"; "" removes the marker)
+    /// as one undo step: the status menu, Ctrl+Enter. A block that is no task becomes one. The
+    /// caret of the block being edited stays in its words.
     Q_INVOKABLE void setTaskStatus(int row, const QString &status);
     /// Remove the task marker (the block stays a plain bullet).
     Q_INVOKABLE void removeTaskMarker(int row);
@@ -377,9 +383,9 @@ public:
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
     // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------
-    /// Set the status of the task on `line` (0-based) of `path`: on this page as an editing
-    /// command (undo), in other files through the host's QueryHost. False when nothing changed or
-    /// the host cannot edit other files.
+    /// Set the status of the task on `line` (0-based) of `path` ("" = no status: the marker goes):
+    /// on this page as an editing command (undo), in other files through the host's QueryHost.
+    /// False when nothing changed or the host cannot edit other files.
     Q_INVOKABLE bool setTaskStatusAt(const QString &path, int line, const QString &status);
     /// A checkbox click on a task shown elsewhere: toggledStatus(currentStatus) at path:line.
     Q_INVOKABLE bool toggleTaskAt(const QString &path, int line, const QString &currentStatus);
@@ -476,6 +482,8 @@ private:
     void beginCommand();
     void endCommand(const Focus &after);
     bool inCommand() const { return m_commandDepth > 0; }
+    /// setTaskStatus() inside the current command (also the task slash commands).
+    void applyTaskStatus(int row, const QString &status);
     /// Restore a text snapshot (undo/redo) and focus.
     void restore(const QString &text, const Focus &focus);
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
@@ -498,6 +506,15 @@ private:
     /// Save now, or write the conflict copy while a conflict is unresolved.
     void flush();
     void updateTitleRow();
+    /// The text written to the file: text() with the lone opening fences of text blocks that
+    /// would run on over the blocks after them closed (loneFenceClosed(), loneFenceRunsOn()) —
+    /// "```js" being typed is saved as a closed, empty code block.
+    QString textToSave() const;
+    /// Leaving block `uid` (the caret moves to another block, editing stops): a body that is only
+    /// an opening fence line gets its closing fence (in the undo step of the typing that wrote
+    /// it, else in one of its own) when it was edited since the block got the caret or would run
+    /// on over the blocks after it.
+    void closeLoneFence(quint64 uid);
     /// Insert embeds of stored attachments (see insertAttachment()).
     QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
     /// Read and store files as attachments (attachmentFailed() for each one that fails).
@@ -555,6 +572,10 @@ private:
     quint64 m_typingUid = 0;
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
     bool m_restoring = false;
+    bool m_undoing = false; ///< restore() runs (undo/redo): moving the caret changes no text
+    /// The block that got the caret last and its body then (closeLoneFence()).
+    quint64 m_focusedUid = 0;
+    QString m_focusedBody;
 };
 
 } // namespace brulion::editor

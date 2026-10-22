@@ -365,7 +365,7 @@ Rectangle {
                         text: modelData.name
                         subtitle: modelData.path
                         iconName: "folder"
-                        onClicked: AppController.openVault(modelData.path)
+                        onClicked: AppController.openRecentVault(modelData.path)
                         trailing: BIconButton {
                             iconName: "x"
                             label: qsTr("Remove from the list")

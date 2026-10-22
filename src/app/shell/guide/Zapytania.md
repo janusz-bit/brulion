@@ -4,7 +4,7 @@ brulion: document
 ---
 # Zapytania
 
-Blok z językiem `query` zbiera zadania, bloki, strony albo przypomnienia z całego brulionu i pokazuje je na bieżąco. Zadania można odhaczać prosto w wynikach. Oto strony z tagiem #dokumentacja, czyli wszystkie strony tego brulionu:
+Blok z językiem `query` zbiera zadania, bloki, strony albo przypomnienia z całego notatnika i pokazuje je na bieżąco. Zadania można odhaczać prosto w wynikach. Oto strony z tagiem #dokumentacja, czyli wszystkie strony tego notatnika:
 
 ```query
 type:pages tag:dokumentacja sort:page
@@ -15,7 +15,7 @@ Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytani
 ## Składnia
 - Warunki rozdzielasz spacjami lub nowymi liniami. **Wszystkie** warunki muszą być spełnione; wartości rozdzielone przecinkiem to „lub” (`status:todo,doing`).
 - Minus przed warunkiem go odwraca: `-tag:prywatne`, `-kupić`.
-- `//` zaczyna komentarz do końca linii, a linia zaczynająca się od `# ` jest tytułem komentarza.
+- `//` zaczyna komentarz do końca linii, a linia zaczynająca się od `# ` jest komentarzem (na przykład tytułem zapytania).
 - Skróty: samo słowo szuka tekstu, `#praca` to `tag:praca`, `[[Strona]]` to `ref:Strona`.
 - Klucze i wartości mają polskie odpowiedniki i nie zależą od wielkości liter ani polskich znaków: `stan:otwarte termin:jutro`.
 

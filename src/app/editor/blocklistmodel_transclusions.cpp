@@ -343,8 +343,8 @@ private:
                 html.clear();
             } else {
                 // Code, calculations, queries and tables: their source as preformatted text.
-                // Code-like blocks hide their fence lines in the delegate; an embed shows the
-                // same text (`editText`), never the fences.
+                // Code-like blocks show the text their delegate shows (`editText`): the code
+                // without its fence lines and without a block id or properties after them.
                 html = u"<pre>"_s + s.editText.toHtmlEscaped() + u"</pre>"_s;
                 view = u"code"_s;
             }

@@ -111,7 +111,7 @@ set(BRULION_UI_SOURCES
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch)
+target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_network brulion_ui_fonts)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon; the logo as
 # :/images/logo.svg.
 file(GLOB _brulion_icons CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)
@@ -275,10 +275,12 @@ target_compile_definitions(brulion PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 target_link_libraries(brulion PRIVATE brulion_core brulion_platform Qt6::Quick Qt6::QuickControls2 Qt6::Svg)
 brulion_set_warnings(brulion)
 
+# -no-obsolete: strings that left the sources are dropped, not kept as vanished entries.
 qt_add_translations(brulion
     TS_FILE_DIR ${PROJECT_SOURCE_DIR}/i18n
     TS_FILE_BASE brulion
-    RESOURCE_PREFIX /i18n)
+    RESOURCE_PREFIX /i18n
+    LUPDATE_OPTIONS -no-obsolete)
 
 include(GNUInstallDirs)
 install(TARGETS brulion

@@ -2,6 +2,7 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "demovault.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -9,20 +10,29 @@
 #include "log/logger.h"
 #include "log/redact.h"
 #include "sync/synchistory.h"
+#include "vault/vault.h"
 
+#include <QBuffer>
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QImage>
 #include <QInputDevice>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
+#include <QWheelEvent>
 #include <qtestsupport_gui.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <functional>
 
@@ -127,10 +137,21 @@ void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
 /// A tap on touch UIs (the phone run), a left click otherwise.
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch);
 
+/// Timestamps of synthetic mouse events (increasing).
+int mouseTimestamp = 0;
+
+/// The mouse pointer moved to `scenePos`, no button pressed (hover).
+void mouseMove(QQuickWindow *window, QPointF scenePos)
+{
+    qt_handleMouseEvent(window, scenePos, window->mapToGlobal(scenePos), Qt::NoButton, Qt::NoButton, QEvent::MouseMove,
+                        Qt::NoModifier, mouseTimestamp += 1000);
+    settle(50);
+}
+
 /// A click (left by default) at `scenePos` of the window, as a real mouse sends it.
 void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton)
 {
-    static int timestamp = 0;
+    int &timestamp = mouseTimestamp;
     timestamp += 1000; // never a double click
     const QPointF global = window->mapToGlobal(scenePos);
     qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
@@ -249,6 +270,42 @@ int openMenus(QQuickWindow *window)
     return open;
 }
 
+/// Close the tooltips waiting for deletion, and return those still alive of hidden controls. A
+/// tooltip whose Loader went inactive (BIconButton's, when its button hid: the hover ends) has
+/// its bindings cleared at once but is deleted — and only so closed — when the app's event loop
+/// runs, which this running self-test does not let it do: open, it takes the next press
+/// elsewhere just to close itself. A live tooltip of a hidden control would do that in the app
+/// too (a bug).
+QStringList closeToolTipsWaitingForDeletion(QQuickWindow *window)
+{
+    QStringList stray;
+    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
+        if (!item->isVisible())
+            return;
+        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickToolTip")) {
+            QObject *tip = item->parent();
+            const auto *owner = tip->property("parent").value<QQuickItem *>();
+            const QQmlContext *context = qmlContext(tip);
+            const bool deleted = !owner || !owner->window() || !context || !context->isValid();
+            const QString text = tip->property("text").toString();
+            std::fprintf(stderr, "selftest: an open tooltip \"%s\" (%s)\n", qPrintable(text),
+                         deleted              ? "waiting for deletion: closed"
+                         : owner->isVisible() ? "of a control shown"
+                                              : "of a hidden control");
+            if (deleted)
+                QMetaObject::invokeMethod(tip, "close");
+            else if (!owner->isVisible())
+                stray.append(text);
+        }
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children)
+            visit(child);
+    };
+    visit(window->contentItem());
+    settle(50);
+    return stray;
+}
+
 /// Close the menus open in the window (a failed check must not leave a modal menu behind).
 void closeMenus(QQuickWindow *window)
 {
@@ -296,6 +353,322 @@ QStringList fingerRightClickHandlers(QQuickWindow *window)
 }
 
 using Check = std::function<void(bool, const char *)>;
+
+/// 3c. Task statuses wherever a checkbox is shown, with real input: a right-click (desktop) or a
+///     long press (--touch) on the checkbox opens the status menu with the task's status checked
+///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
+///     page, the calendar's agenda, its day panel (on phones a bottom sheet, which stays open) and
+///     a journal day's editor; "No status" removes the checkbox;
+///     "/zrobione" typed into a journal day completes its block. The notes are put back afterwards.
+void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const auto total = [ws](const QString &status) {
+        return ws->runQuery(u"type:tasks status:"_s + status).value(u"total"_s).toInt();
+    };
+    // Every note with a task, as it was (restored at the end).
+    QHash<QString, QString> notes;
+    for (const QVariant &v : ws->runQuery(u"type:tasks status:all"_s).value(u"items"_s).toList()) {
+        const QString path = v.toMap().value(u"path"_s).toString();
+        if (!notes.contains(path))
+            notes.insert(path, ws->readFile(path));
+    }
+    const QString today = ws->journalPath(app->today(0));
+    notes.insert(today, ws->readFile(today));
+    const auto restore = [&] {
+        closeMenus(window);
+        for (auto it = notes.cbegin(); it != notes.cend(); ++it) {
+            if (ws->readFile(it.key()) != it.value())
+                ws->writeFile(it.key(), it.value());
+        }
+        settle(200);
+    };
+    const auto shownWhere = [](QQuickItem *root, const std::function<bool(QQuickItem *)> &pred) {
+        QQuickItem *found = nullptr;
+        waitFor([&] { return (found = findShown(root, pred)) != nullptr; });
+        return found;
+    };
+    const auto named = [&](QQuickItem *root, const QString &name) {
+        return shownWhere(root, [&name](QQuickItem *item) { return item->objectName() == name; });
+    };
+    // A visible item of the visual tree (list delegates are not in the QObject tree), on screen or
+    // not (a day of the journal is taller than a phone's screen).
+    std::function<QQuickItem *(QQuickItem *, const std::function<bool(QQuickItem *)> &)> visual =
+            [&visual](QQuickItem *item, const std::function<bool(QQuickItem *)> &pred) -> QQuickItem * {
+        if (!item->isVisible())
+            return nullptr;
+        if (pred(item))
+            return item;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children) {
+            if (QQuickItem *found = visual(child, pred))
+                return found;
+        }
+        return nullptr;
+    };
+    // The context gesture on a checkbox, and a status of the menu it opened.
+    const auto openStatusMenu = [&](QQuickItem *box) {
+        if (!box)
+            return false;
+        if (qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG")) {
+            QString chain;
+            for (const QQuickItem *p = box; p; p = p->parentItem())
+                chain += QString::fromLatin1(p->metaObject()->className()).section(u'_', 0, 0) + u' ';
+            const QPointF at = pointIn(box);
+            std::fprintf(stderr, "selftest: status menu gesture at %.0f,%.0f on %s\n", at.x(), at.y(),
+                         qPrintable(chain));
+        }
+        if (touch)
+            touchTap(window, pointIn(box), 1000);
+        else
+            mouseClick(window, pointIn(box), Qt::RightButton);
+        return waitFor([&] { return openMenus(window) == 1; });
+    };
+    const auto statusItem = [&](const char *status) {
+        return named(window->contentItem(), u"taskStatus_"_s + QLatin1String(status));
+    };
+    const auto choose = [&](const char *status) {
+        QQuickItem *item = statusItem(status);
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+        return item != nullptr && waitFor([&] { return openMenus(window) == 0; });
+    };
+    const auto checked = [&](const char *status) {
+        QQuickItem *item = statusItem(status);
+        return item && item->property("checked").toBool();
+    };
+
+    // ---- Tasks: the row's checkbox opens the row's menu; a status, then "No status".
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    const int allBefore = total(u"all"_s);
+    QQuickItem *box = named(window->contentItem(), u"tasksRowTaskBox"_s);
+    check(box != nullptr, "the tasks view shows task checkboxes");
+    if (box) {
+        const QString status = box->property("status").toString();
+        // A status the task does not have yet.
+        const char *target = status == u"doing" ? "deferred" : "doing";
+        const int targetBefore = total(QLatin1String(target));
+        const int openBefore = total(u"open"_s);
+        check(openStatusMenu(box) && total(u"open"_s) == openBefore && total(QLatin1String(target)) == targetBefore,
+              "a long press or right-click on a task's checkbox in Tasks opens the status menu (and does not toggle)");
+        check(statusItem("todo") != nullptr && checked(status.toLatin1().constData()) && !checked(target),
+              "the task's status is checked in the menu");
+        check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
+              "choosing another status in Tasks writes it");
+        // The same row may now sit elsewhere (sections); any task's checkbox will do.
+        box = named(window->contentItem(), u"tasksRowTaskBox"_s);
+        check(openStatusMenu(box) && choose("none") && waitFor([&] { return total(u"all"_s) == allBefore - 1; }),
+              "“Bez statusu” in Tasks removes a task's checkbox");
+    }
+    // The keyboard: the Menu key opens a row's menu, the arrows reach "Otwórz" (above the
+    // statuses), Enter opens the task's note. First the list catches up with the last change (a
+    // row it rebuilds takes its menu along), and the mouse pointer leaves the place where the
+    // menu opens (the item under it would take the highlight).
+    settle(1500);
+    if (!touch)
+        mouseMove(window, QPointF(1, 1));
+    if (QQuickItem *row = shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "TasksRow"); })) {
+        row->forceActiveFocus(Qt::TabFocusReason);
+        sendKey(window, Qt::Key_Menu);
+        const bool opened = waitFor([&] { return openMenus(window) == 1; });
+        const auto focusName = [window] {
+            const QQuickItem *focus = window->activeFocusItem();
+            return focus ? focus->objectName() : QString();
+        };
+        const QQuickItem *rowBox = named(row, u"tasksRowTaskBox"_s);
+        const QString status = rowBox ? rowBox->property("status").toString() : QString();
+        check(opened && focusName() == u"taskStatus_"_s + status,
+              "the Menu key opens a task's menu in Tasks with its status highlighted");
+        for (int i = 0; i < 8 && opened && focusName() != u"taskStatusOpen"; ++i)
+            sendKey(window, Qt::Key_Up);
+        const bool reached = focusName() == u"taskStatusOpen";
+        sendKey(window, Qt::Key_Return);
+        check(opened && reached && waitFor([&] { return app->currentView() != u"tasks" && openMenus(window) == 0; }),
+              "in a task's menu in Tasks Up reaches “Otwórz” and Enter opens the note");
+        closeMenus(window);
+    } else {
+        check(false, "the tasks view lists tasks for the keyboard");
+    }
+    restore();
+
+    // ---- The backlinks under a page: today's "Przejrzeć [[Remont mieszkania]]…" task.
+    const QString remont = u"Projekty/Remont mieszkania.md"_s;
+    app->openPage(remont);
+    QQuickItem *editor = nullptr;
+    waitFor([&] {
+        editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c =
+                    item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
+            return c && c->property("path").toString() == remont && c->property("loaded").toBool();
+        });
+        return editor != nullptr;
+    });
+    if (auto *list = editor ? editor->property("listView").value<QQuickItem *>() : nullptr) {
+        QMetaObject::invokeMethod(list, "positionViewAtEnd");
+        settle(300);
+        // Below the blocks: scroll until the reference's checkbox is on screen.
+        for (int i = 0; i < 20
+                        && !findShown(
+                                window->contentItem(),
+                                [](QQuickItem *item) {
+                                    return item->objectName() == u"refTaskBox"
+                                           && item->property("status").toString() == u"todo";
+                                });
+             ++i) {
+            list->setProperty("contentY", list->property("contentY").toReal() + 200);
+            settle(60);
+        }
+    }
+    box = shownWhere(window->contentItem(), [](QQuickItem *item) {
+        return item->objectName() == u"refTaskBox" && item->property("status").toString() == u"todo";
+    });
+    check(box != nullptr, "the page's linked references show a task's checkbox");
+    if (box) {
+        const QString before = ws->readFile(today);
+        check(openStatusMenu(box) && ws->readFile(today) == before && checked("todo"),
+              "a long press or right-click on a backlink's checkbox opens the status menu (and does not toggle)");
+        check(choose("deferred") && waitFor([&] {
+                  return ws->readFile(today).contains(u"- [>] Przejrzeć [[Remont mieszkania]]"_s);
+              }),
+              "choosing “Oczekujące” on a backlink writes the status in its note");
+    }
+    restore();
+
+    // ---- The calendar's agenda: a task with a date (the agenda scrolls to today first).
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"agenda"_s}});
+    settle(600);
+    // Inside the list's own area (a row half under the top bar is still "in the window").
+    QQuickItem *agenda =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarAgendaList"); });
+    box = agenda ? named(agenda, u"planningTaskBox"_s) : nullptr;
+    check(box != nullptr, "the agenda shows task checkboxes");
+    if (box) {
+        const char *target = box->property("status").toString() == u"cancelled" ? "deferred" : "cancelled";
+        const int targetBefore = total(QLatin1String(target));
+        const int closedBefore = total(u"closed"_s);
+        check(openStatusMenu(box) && total(u"closed"_s) == closedBefore,
+              "a long press or right-click on a checkbox in the agenda opens the status menu (and does not toggle)");
+        check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
+              "choosing another status in the agenda writes it");
+    }
+    restore();
+
+    // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
+    //      sheet (a modal dialog) on phones, where the menu opens over the sheet and the sheet
+    //      stays open after the choice. The day in two days has dated tasks.
+    app->navigate({{u"view"_s, u"calendar"_s}, {u"mode"_s, u"week"_s}});
+    settle(600);
+    QQuickItem *calendarView =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "CalendarView"); });
+    QObject *daySheet = calendarView ? calendarView->findChild<QObject *>(u"calendarDaySheet"_s) : nullptr;
+    if (calendarView)
+        QMetaObject::invokeMethod(calendarView, "showDay", Q_ARG(QVariant, QVariant(app->today(2))));
+    const bool inSheet = daySheet && waitFor([&] { return daySheet->property("opened").toBool(); }, 1000);
+    std::fprintf(stderr, "selftest: the calendar's day panel %s\n", inSheet ? "in a bottom sheet" : "beside the week");
+    box = shownWhere(window->contentItem(), [](QQuickItem *item) {
+        if (item->objectName() != u"planningTaskBox" || item->property("status").toString() != u"todo")
+            return false;
+        for (const QQuickItem *p = item->parentItem(); p; p = p->parentItem()) {
+            if (isA(p, "CalendarDayPanel"))
+                return true;
+        }
+        return false;
+    });
+    check(box != nullptr, "the calendar's day panel shows an open task's checkbox");
+    if (box) {
+        const int doingBefore = total(u"doing"_s);
+        const int closedBefore = total(u"closed"_s);
+        check(openStatusMenu(box) && total(u"closed"_s) == closedBefore && checked("todo")
+                      && (!inSheet || daySheet->property("opened").toBool()),
+              "a long press or right-click on a checkbox in the day panel opens the status menu (and does not "
+              "toggle)");
+        check(choose("doing") && waitFor([&] { return total(u"doing"_s) == doingBefore + 1; })
+                      && (!inSheet || daySheet->property("opened").toBool()),
+              "choosing “W toku” in the day panel writes it, and its sheet stays open");
+    }
+    if (inSheet)
+        QMetaObject::invokeMethod(daySheet, "close");
+    restore();
+
+    // ---- A day of the journal stream: its checkbox's menu, and a "/" command typed into a block.
+    app->goHome();
+    QObject *day = nullptr;
+    QQuickItem *dayEditor = nullptr;
+    waitFor([&] {
+        dayEditor = visual(window->contentItem(), [&](QQuickItem *item) {
+            const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>()
+                                                                      : nullptr;
+            return c && c->property("path").toString() == today && c->property("loaded").toBool();
+        });
+        day = dayEditor ? dayEditor->property("controller").value<QObject *>() : nullptr;
+        return day != nullptr;
+    });
+    if (!day && qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG")) {
+        std::fprintf(stderr, "selftest: no day editor for %s, view %s\n", qPrintable(today),
+                     qPrintable(app->currentView()));
+        std::function<void(QQuickItem *, int)> dump = [&](QQuickItem *item, int depth) {
+            if (item->objectName() == u"journalDayEditor") {
+                const auto *c = item->property("controller").value<QObject *>();
+                std::fprintf(stderr, "selftest: day editor %s loaded %d visible %d depth %d\n",
+                             qPrintable(c ? c->property("path").toString() : u"-"_s),
+                             c && c->property("loaded").toBool(), item->isVisible(), depth);
+            }
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children)
+                dump(child, depth + 1);
+        };
+        dump(window->contentItem(), 0);
+    }
+    check(day != nullptr, "today's journal day is shown with its editor");
+    if (!day) {
+        restore();
+        app->goHome();
+        return;
+    }
+    const auto saved = [&] {
+        bool ok = false;
+        QMetaObject::invokeMethod(day, "save", qReturnArg(ok));
+        return ws->readFile(today);
+    };
+    box = named(dayEditor, u"taskBox"_s);
+    check(box != nullptr, "today's task has its checkbox");
+    if (box) {
+        const QString before = saved();
+        check(openStatusMenu(box) && saved() == before && checked("todo"),
+              "a long press or right-click on a journal task's checkbox opens the status menu (and does not toggle)");
+        check(choose("doing") && waitFor([&] { return saved().contains(u"- [/] Przejrzeć [[Remont mieszkania]]"_s); }),
+              "choosing “W toku” in a journal day writes the status");
+    }
+    const QStringList lines = ws->readFile(today).split(u'\n');
+    qsizetype ideaLine = -1;
+    for (qsizetype i = 0; i < lines.size() && ideaLine < 0; ++i) {
+        if (lines.at(i).startsWith(u"- Pomysł na obiad"_s))
+            ideaLine = i;
+    }
+    int row = -1;
+    QMetaObject::invokeMethod(day, "rowOfLine", qReturnArg(row), int(ideaLine));
+    check(row >= 0, "today's journal has its dinner idea");
+    if (row >= 0) {
+        QMetaObject::invokeMethod(dayEditor, "startEditing", QVariant(row), QVariant(-1));
+        const bool editing = waitFor([&] {
+            const QQuickItem *f = window->activeFocusItem();
+            return day->property("editingRow").toInt() == row && f
+                   && QByteArray(f->metaObject()->className()).contains("InlineEditor");
+        });
+        for (const QChar ch : u" /zrobione"_s)
+            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        check(editing && waitFor([&] { return dayEditor->property("suggestionsOpen").toBool(); }),
+              "“/zrobione” typed into a journal day opens the commands");
+        sendKey(window, Qt::Key_Return);
+        check(waitFor([&] { return saved().contains(u"\n- [x] Pomysł na obiad"_s) && saved().contains(u"✅"_s); })
+                      && !saved().contains(u"/zrobione"_s),
+              "the command completes the journal's block, its text gone");
+        QMetaObject::invokeMethod(day, "stopEditing");
+    }
+    restore();
+    app->goHome();
+}
 
 /// 5c. The event log ("Rejestr zdarzeń") and the details of a sync run, with real taps / clicks:
 ///     lines logged anywhere reach the page (a secret never does), the search ignores diacritics,
@@ -448,6 +821,69 @@ void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Che
 ///     the rows' right-click TapHandlers took every finger tap too (touch points carry no
 ///     buttons, so Qt ignores a TapHandler's acceptedButtons for them): each tap opened the modal
 ///     context menu, which then swallowed the release — no folder expanded, no page opened.
+/// 5d. The notebook switcher next to the notebook's name (in the drawer on phones): one tap / click
+/// on another notebook switches to it — a checkable menu item has toggled `checked` before
+/// `triggered` runs, which once made the first click do nothing — here to the documentation (on
+/// its table of contents) and back to the sample notebook.
+void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const QString sample = app->workspace()->rootPath();
+    const auto activate = [&](QQuickItem *item) {
+        if (touch)
+            touchTap(window, pointIn(item));
+        else
+            mouseClick(window, pointIn(item));
+    };
+    const auto shownItem = [window](const std::function<bool(QQuickItem *)> &pred) {
+        QQuickItem *found = nullptr;
+        waitFor([&] { return (found = findShown(window->contentItem(), pred)) != nullptr; });
+        return found;
+    };
+    const auto named = [](const QString &name) {
+        return [name](QQuickItem *item) { return item->objectName() == name; };
+    };
+    // Opens the switcher's menu and taps / clicks the entry `pred` picks, once.
+    const auto pick = [&](const std::function<bool(QQuickItem *)> &pred) {
+        closeMenus(window);
+        if (window->width() < 900) {
+            // A fresh shell after each switch: its drawer, found through its bottom bar.
+            QQuickItem *menuTab = shownItem(named(u"bottomNav_menu"_s));
+            if (!menuTab)
+                return false;
+            activate(menuTab);
+        }
+        QQuickItem *button = shownItem(named(u"notebookSwitch"_s));
+        if (!button)
+            return false;
+        activate(button);
+        QQuickItem *entry = shownItem(pred);
+        if (!entry)
+            return false;
+        settle(150); // the menu's opening transition
+        activate(entry);
+        return true;
+    };
+    const auto ready = [app] { return app->status() == u"ready" && app->workspace()->ready(); };
+
+    check(pick(named(u"notebookMenuDocs"_s)), "the notebook switcher lists the documentation");
+    check(waitFor(
+                  [&] {
+                      return app->inDocsVault() && ready()
+                             && app->currentRoute().value(u"path"_s).toString() == docsWelcomePage();
+                  },
+                  10000),
+          "one tap on the documentation opens it on its table of contents");
+    const QString name = QFileInfo(sample).fileName();
+    check(pick([&](QQuickItem *item) {
+              return item->objectName() == u"notebookMenuRecent" && item->property("text").toString() == name;
+          }),
+          "the notebook switcher lists the sample notebook");
+    check(waitFor([&] { return !app->inDocsVault() && ready() && app->workspace()->rootPath() == sample; }, 10000),
+          "one tap on a recent notebook switches back to it");
+    closeMenus(window);
+}
+
 void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -709,6 +1145,436 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
     }
 }
 
+/// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
+/// never reach the editor — the older view read them as text there, mojibake for a binary picture,
+/// and a typed character was saved over it. "Pokaż jako tekst" (a real tap / click) and Ctrl+E
+/// show the file's text, read-only, and back; the notes that embed the picture are listed under it
+/// and in the side panel; fitting never enlarges a small picture; a file name is never markup; a
+/// format the device cannot decode is named.
+void checkPictureView(QQuickWindow *window, AppController *app, const Check &check,
+                      const std::function<QObject *(const QString &)> &controllerFor)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    const auto pictureView = [window]() -> QQuickItem * {
+        for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
+            if (v->isVisible())
+                return v;
+        }
+        return nullptr;
+    };
+    // The shown one: a Loader's earlier items are only deleted once this test returns to the
+    // event loop (they stay, hidden, among the view's children until then).
+    const auto child = [](QQuickItem *view, const char *name) -> QQuickItem * {
+        if (!view)
+            return nullptr;
+        const QList<QQuickItem *> found = view->findChildren<QQuickItem *>(QString::fromLatin1(name));
+        for (QQuickItem *item : found) {
+            if (item->isVisible())
+                return item;
+        }
+        return found.value(0);
+    };
+    const auto opened = [&](const QString &path) {
+        return app->currentRoute().value(u"path"_s).toString() == path && pictureView()
+               && pictureView()->property("path").toString() == path;
+    };
+    const auto textShown = [&] {
+        QQuickItem *text = child(pictureView(), "pictureText");
+        return text && text->isVisible();
+    };
+    const auto pictureShown = [&] {
+        QQuickItem *view = pictureView();
+        return view && !textShown() && view->property("pictureLoaded").toBool();
+    };
+
+    const QString picture = u"assets/plan-mieszkania.svg"_s;
+    const QString bytes = workspace->readFile(picture);
+    app->openPage(picture);
+    check(waitFor([&] { return opened(picture) && pictureShown(); }), "a picture opens as a picture, loaded and shown");
+    check(controllerFor(picture) == nullptr, "the picture's bytes are not loaded into the block editor");
+    QQuickItem *view = pictureView();
+    if (!view) {
+        check(false, "the page view has a picture view");
+        return;
+    }
+
+    // The two notes of the sample notebook that embed it, under the picture (scrolled to).
+    QQuickItem *refs = child(view, "pictureReferences");
+    check(refs && waitFor([&] { return refs->isVisible() && refs->property("linkedCount").toInt() >= 2; }),
+          "the notes that embed the picture are listed under it");
+
+    // The bar fits the window: next to the size toggle (an icon on phones, named for screen
+    // readers and in its tooltip) the file name keeps its room — the toggle's "Pokaż naturalny
+    // rozmiar" left it none on a phone — and nothing runs off the window's edge. The toggle works.
+    {
+        QQuickItem *name = child(view, "pictureName");
+        QQuickItem *size = child(view, "pictureSizeButton");
+        QQuickItem *textButton = child(view, "pictureTextButton");
+        const auto left = [](QQuickItem *item) { return item->mapToScene(QPointF(0, 0)).x(); };
+        const auto right = [](QQuickItem *item) { return item->mapToScene(QPointF(item->width(), 0)).x(); };
+        const auto nameOf = [](QQuickItem *button) {
+            const QVariant label = button->property("label");
+            return label.isValid() ? label.toString() : button->property("text").toString();
+        };
+        if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
+            std::fprintf(stderr,
+                         "selftest: picture bar: name %.0f of %.0f px, size toggle %.0f–%.0f, text button %.0f–%.0f\n",
+                         name->width(), name->property("implicitWidth").toReal(), left(size), right(size),
+                         left(textButton), right(textButton));
+            check(name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                          && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
+                          && right(textButton) <= window->width() + 0.5
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
+                  "the picture's bar shows the file name next to the size toggle and fits the window");
+            // (The mouse still rests where an earlier step clicked the note mode toggle, hidden
+            // since: its tooltip waits for a deletion this running test does not let happen —
+            // see closeToolTipsWaitingForDeletion — and would take the click.)
+            check(closeToolTipsWaitingForDeletion(window).isEmpty(), "no live tooltip outlives its hidden button");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return view->property("actualSize").toBool(); })
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Fit to view"),
+                  "the size toggle shows the picture's own pixels");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return !view->property("actualSize").toBool(); }), "and fits it into the view again");
+        } else {
+            check(false, "the picture's bar has its name, its size toggle and its text button");
+        }
+    }
+
+    // The top bar's More menu on a picture: no "Toggle note mode" (a picture is no note), and its
+    // "Markdown source" item says what it does there, like the picture's bar — and does it.
+    {
+        const auto moreMenuItem = [&](const QString &text) {
+            return findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BMenuItem") && item->property("text").toString() == text;
+            });
+        };
+        const auto openMoreMenu = [&] {
+            const QString more = QCoreApplication::translate("ShellTopBar", "More");
+            QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BIconButton") && item->property("label").toString() == more;
+            });
+            if (button)
+                tapOrClick(window, pointIn(button), touch);
+            return button && waitFor([&] { return openMenus(window) == 1; });
+        };
+        const QString noteMode = QCoreApplication::translate("ShellTopBar", "Toggle note mode");
+        const QString source = QCoreApplication::translate("ShellTopBar", "Markdown source");
+        for (const bool asText : {false, true}) {
+            const QString wanted = QCoreApplication::translate("ShellTopBar", asText ? "Show picture" : "Show as text");
+            QQuickItem *item = nullptr;
+            check(openMoreMenu() && waitFor([&] { return (item = moreMenuItem(wanted)) != nullptr; })
+                          && !moreMenuItem(noteMode) && !moreMenuItem(source),
+                  asText ? "with a picture's text shown the More menu offers “Show picture”, not the note mode"
+                         : "on a picture the More menu offers “Show as text”, not the note mode");
+            if (item)
+                tapOrClick(window, pointIn(item), touch);
+            check(waitFor([&] { return openMenus(window) == 0 && (asText ? pictureShown() : textShown()); }),
+                  asText ? "the More menu's “Show picture” shows the picture again"
+                         : "the More menu's “Show as text” shows the picture's text");
+            closeMenus(window);
+        }
+    }
+
+    // "Pokaż jako tekst" in the picture's bar: the file's text, read-only; the editor stays
+    // unloaded.
+    if (QQuickItem *button = child(view, "pictureTextButton")) {
+        tapOrClick(window, pointIn(button), touch);
+        check(waitFor(textShown) && controllerFor(picture) == nullptr,
+              "“Pokaż jako tekst” shows the file's text without loading it into the editor");
+    } else {
+        check(false, "the picture view has its text button");
+    }
+    QQuickItem *textEdit = child(view, "pictureTextEdit");
+    check(textEdit && textEdit->property("readOnly").toBool()
+                  && textEdit->property("text").toString().contains(u"<svg"_s),
+          "the text view shows the file's text, read-only");
+    if (textEdit) {
+        // Keys typed there change nothing: a picture's bytes are never rewritten as text.
+        tapOrClick(window, pointIn(textEdit, 0.2, 0.1), touch);
+        textEdit->forceActiveFocus();
+        sendKey(window, 0, Qt::NoModifier, u"Ż"_s);
+        sendKey(window, Qt::Key_Backspace);
+        settle(300);
+        check(textEdit->property("text").toString().startsWith(bytes.left(200)) && workspace->readFile(picture) == bytes
+                      && controllerFor(picture) == nullptr,
+              "typing in the text view changes neither the view nor the file");
+    }
+
+    // Ctrl+E (the same branch as the "Markdown source" command) switches back and forth.
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(pictureShown) && controllerFor(picture) == nullptr,
+          "Ctrl+E in the text view shows the picture again");
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(textShown) && controllerFor(picture) == nullptr, "Ctrl+E on the picture shows its text");
+    app->requestUiAction(u"toggleSourceMode"_s);
+    check(waitFor(pictureShown), "and Ctrl+E once more the picture");
+
+    // A long text view scrolls: with a finger on phones (a TextEdit that selects by dragging
+    // kept the finger, the text never moved), with the wheel on desktops; nothing gets selected.
+    {
+        QString svg = u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\">\n"_s;
+        for (int i = 0; i < 300; ++i)
+            svg += u"  <rect x=\"%1\" y=\"1\" width=\"1\" height=\"1\"/> <!-- żółw %1 -->\n"_s.arg(i);
+        svg += u"</svg>\n"_s;
+        const QString longSvg = u"assets/długi szkic.svg"_s;
+        check(workspace->writeFile(longSvg, svg), "a long SVG is added to the notebook");
+        app->openPage(longSvg);
+        check(waitFor([&] { return opened(longSvg) && pictureShown(); }), "the long SVG opens");
+        app->requestUiAction(u"toggleSourceMode"_s);
+        QQuickItem *flick = nullptr;
+        QQuickItem *edit = nullptr;
+        check(waitFor([&] {
+                  flick = textShown() ? child(pictureView(), "pictureText") : nullptr;
+                  edit = flick ? child(pictureView(), "pictureTextEdit") : nullptr;
+                  return edit && flick->property("contentHeight").toReal() > 2 * flick->height();
+              }),
+              "the long SVG's text view is longer than the window");
+        if (flick && edit) {
+            const QPointF at = flick->mapToScene(QPointF(flick->width() / 2, flick->height() * 0.7));
+            if (touch) {
+                touchDrag(window, at, QPointF(0, -300));
+            } else {
+                QWheelEvent wheel(at, window->mapToGlobal(at), QPoint(), QPoint(0, -360), Qt::NoButton, Qt::NoModifier,
+                                  Qt::NoScrollPhase, false);
+                QCoreApplication::sendEvent(window, &wheel);
+            }
+            check(waitFor([&] { return flick->property("contentY").toReal() > 100; })
+                          && edit->property("selectedText").toString().isEmpty(),
+                  touch ? "a finger scrolls the text view and selects nothing" : "the wheel scrolls the text view");
+        }
+
+        // The file changes on disk while its text is shown (sync, another program): the text view
+        // shows the new text (it read the file once).
+        const QString changed = u"<!-- poprawione na laptopie: źdźbło -->\n"_s + svg;
+        {
+            QFile file(workspace->vault()->absolutePath(longSvg));
+            check(file.open(QIODevice::WriteOnly) && file.write(changed.toUtf8()) > 0, "the long SVG changes on disk");
+        }
+        workspace->vault()->rescan();
+        check(waitFor([&] {
+                  QQuickItem *e = child(pictureView(), "pictureTextEdit");
+                  return textShown() && e && e->property("text").toString().startsWith(changed.left(80));
+              }),
+              "the text view shows a change made on disk while it is open");
+
+        // At most `textLimit` bytes of the file are read and shown, never half a character: a
+        // limit inside "ż" (two bytes in UTF-8) stops before it. The note above says how much of
+        // how much.
+        const QByteArray utf8 = workspace->vault()->readBinary(longSvg);
+        const qsizetype zz = utf8.indexOf(QStringView(u"żółw 5 ").toUtf8());
+        app->requestUiAction(u"toggleSourceMode"_s);
+        waitFor(pictureShown);
+        if (QQuickItem *v = pictureView()) {
+            const QVariant limitBefore = v->property("textLimit");
+            v->setProperty("textLimit", int(zz + 1));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            QQuickItem *note = nullptr;
+            QQuickItem *e = nullptr;
+            const QString expected = QString::fromUtf8(utf8.left(zz));
+            const QLocale locale;
+            const QString noteText =
+                    QCoreApplication::translate("ContentPictureView", "The start of the file: %1 of %2.")
+                            .arg(locale.formattedDataSize(zz, 1, QLocale::DataSizeTraditionalFormat),
+                                 locale.formattedDataSize(utf8.size(), 1, QLocale::DataSizeTraditionalFormat));
+            check(waitFor([&] {
+                      note = textShown() ? child(pictureView(), "pictureTextNote") : nullptr;
+                      e = child(pictureView(), "pictureTextEdit");
+                      return note && note->isVisible() && e && e->property("text").toString() == expected;
+                  }) && note->property("text").toString() == noteText,
+                  "a long file's text view shows its start, cut before a character that does not fit whole");
+            if (note)
+                std::fprintf(stderr, "selftest: the text view's note: %s\n",
+                             qPrintable(note->property("text").toString()));
+            app->requestUiAction(u"toggleSourceMode"_s);
+            waitFor(pictureShown);
+            v->setProperty("textLimit", limitBefore);
+        }
+    }
+
+    // route.open on a picture: "text" opens its text view, "links" (wide windows) the side panel
+    // with the picture's references.
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, picture}, {u"open"_s, u"text"_s}});
+    check(waitFor([&] { return opened(picture) && textShown(); }), "route.open \"text\" opens a picture's text view");
+    if (window->width() >= 900) {
+        app->setSidePanelVisible(false);
+        app->goHome();
+        waitFor([&] { return !pictureView(); });
+        app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, picture}, {u"open"_s, u"links"_s}});
+        QQuickItem *panel = nullptr;
+        check(waitFor([&] {
+                  panel = findShown(window->contentItem(),
+                                    [](QQuickItem *item) { return isA(item, "ContentSidePanel"); });
+                  return app->sidePanelVisible() && panel && panel->property("path").toString() == picture
+                         && pictureShown();
+              }),
+              "route.open \"links\" opens the side panel with the references of the picture shown");
+        const auto isRefs = [](QQuickItem *item) { return isA(item, "ContentBacklinks"); };
+        check(waitFor([&] {
+                  QQuickItem *panelRefs = panel ? findShown(panel, isRefs) : nullptr;
+                  return panelRefs && panelRefs->property("linkedCount").toInt() >= 2;
+              }),
+              "the side panel lists the notes that embed the picture");
+        // A narrower window with the side panel open leaves the picture a narrow view: its size
+        // toggle is an icon there too (the view's width counts, not the window's), and the file
+        // name keeps room next to it.
+        const QSize windowSize = window->size();
+        window->resize(900, windowSize.height());
+        QQuickItem *name = nullptr;
+        QQuickItem *size = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *v = pictureView();
+                  name = child(v, "pictureName");
+                  size = child(v, "pictureSizeButton");
+                  return v && v->width() < 600 && pictureShown() && name && size && size->isVisible()
+                         && isA(size, "BIconButton");
+              }) && name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 40)
+                      && name->mapToScene(QPointF(name->width(), 0)).x() <= size->mapToScene(QPointF(0, 0)).x() + 0.5,
+              "in a narrow view on the desktop the picture's size toggle is an icon, next to the file name");
+        if (name && size)
+            std::fprintf(stderr, "selftest: a narrow picture view: %.0f px, name %.0f of %.0f px\n",
+                         pictureView() ? pictureView()->width() : 0., name->width(),
+                         name->property("implicitWidth").toReal());
+        window->resize(windowSize);
+        waitFor([&] { return pictureView() && pictureView()->width() >= 600; });
+        app->setSidePanelVisible(false);
+    }
+
+    // A small picture keeps its own pixels: fitting only shrinks (no blurry enlargement, no
+    // pointless "actual size" that would make it smaller).
+    {
+        QImage small(40, 30, QImage::Format_RGB32);
+        small.fill(Qt::darkGreen);
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly);
+        small.save(&buffer, "PNG");
+        const QString icon = u"assets/mała ikona.png"_s;
+        check(workspace->vault()->writeBinary(icon, buffer.data()), "a small picture is added to the notebook");
+        app->openPage(icon);
+        check(waitFor([&] { return opened(icon) && pictureShown(); }), "the small picture opens");
+        QQuickItem *image = child(pictureView(), "pictureImage");
+        QQuickItem *size = child(pictureView(), "pictureSizeButton");
+        check(image && qRound(image->width()) == 40 && qRound(image->height()) == 30 && size && !size->isVisible(),
+              "a picture smaller than the view is shown at its own size, without a size toggle");
+    }
+
+    // A file name that looks like markup is shown as written (one line, not a line break).
+    {
+        const QString odd = u"assets/a<br>b <i>szkic.svg"_s;
+        check(workspace->writeFile(odd, bytes), "a picture with markup in its name is added to the notebook");
+        app->openPage(odd);
+        check(waitFor([&] { return opened(odd) && pictureShown(); }), "the picture with markup in its name opens");
+        QQuickItem *name = child(pictureView(), "pictureName");
+        check(name && name->property("lineCount").toInt() == 1
+                      && name->property("text").toString() == u"a<br>b <i>szkic.svg"_s
+                      && name->property("textFormat").toInt() == 0 /* Text.PlainText */,
+              "a picture's file name is shown as plain text");
+    }
+
+    // A format this device cannot decode is named (WebP and AVIF need Qt's image plugins); one
+    // it can is loaded (these bytes are no picture: "Nie można wczytać").
+    {
+        const QString webp = u"assets/łąka.webp"_s;
+        check(workspace->vault()->writeBinary(webp, QByteArray("RIFF\x00\x00\x00\x00WEBPVP8 ", 16)),
+              "a WebP picture is added to the notebook");
+        app->openPage(webp);
+        const bool decodable = workspace->canDecodePicture(webp);
+        std::fprintf(stderr, "selftest: this build %s decode WebP\n", decodable ? "can" : "cannot");
+        QQuickItem *message = nullptr;
+        check(waitFor([&] {
+                  message = opened(webp) ? child(pictureView(), "pictureMessage") : nullptr;
+                  return message && message->isVisible();
+              }) && message->property("text").toString().contains(decodable ? u"łąka.webp"_s : u"WEBP"_s),
+              "a picture that cannot be shown says why");
+
+        // Embedded in a note it says so too, with its name (the embed only said "Nie można
+        // wczytać łąka.webp").
+        const QString note = u"Łąka wiosną.md"_s;
+        check(workspace->writeFile(note, u"Zdjęcie z łąki:\n\n![[łąka.webp]]\n"_s), "a note embeds the WebP picture");
+        app->openPage(note);
+        QQuickItem *embedText = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *embed =
+                          findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "EmbedView"); });
+                  embedText =
+                          embed ? findShown(embed,
+                                            [](QQuickItem *item) {
+                                                return item->inherits("QQuickText")
+                                                       && item->property("text").toString().contains(u"łąka.webp"_s);
+                                            })
+                                : nullptr;
+                  return embedText != nullptr;
+              }) && (decodable || embedText->property("text").toString().contains(u"WEBP"_s)),
+              "an embedded picture that cannot be shown says why");
+        if (embedText)
+            std::fprintf(stderr, "selftest: the embed says: %s\n", qPrintable(embedText->property("text").toString()));
+    }
+
+    // Back to the sample picture: the picture, the editor still unloaded.
+    app->openPage(picture);
+    check(waitFor([&] { return opened(picture) && pictureShown(); }) && controllerFor(picture) == nullptr,
+          "the picture comes back and the editor stays unloaded");
+}
+
+/// 5e. The default reminder time in the notebook's settings, set on the clock: saved at once, and
+/// the field keeps following the notebook's config afterwards — a value synced from another
+/// device shows (assigning the picked text once ended that binding: the field kept the old value
+/// and wrote it back with the next edit).
+void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &check)
+{
+    Workspace *workspace = app->workspace();
+    const QString key = u"defaultReminderTime"_s;
+    const QString original = workspace->vaultConfig().value(key).toString();
+    const auto configValue = [&] { return workspace->vaultConfig().value(key).toString(); };
+    // Through the visual tree: phones list every section from a Repeater, whose items are not
+    // QObject children of the window. Shown, but maybe scrolled out of the view.
+    const auto shownNamed = [window](const QString &name) -> QQuickItem * {
+        std::function<QQuickItem *(QQuickItem *)> visit = [&](QQuickItem *item) -> QQuickItem * {
+            if (!item->isVisible())
+                return nullptr;
+            if (item->objectName() == name)
+                return item;
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children) {
+                if (QQuickItem *found = visit(child))
+                    return found;
+            }
+            return nullptr;
+        };
+        return visit(window->contentItem());
+    };
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"vault"_s}});
+    QQuickItem *field = nullptr;
+    QQuickItem *button = nullptr;
+    check(waitFor([&] {
+              field = shownNamed(u"defaultReminderTimeField"_s);
+              button = shownNamed(u"defaultReminderTimeClock"_s);
+              return field && button && field->property("text").toString() == original;
+          }),
+          "the notebook settings show the default reminder time and its clock button");
+    QObject *dialog = button ? button->findChild<QObject *>(u"defaultReminderTimeDialog"_s) : nullptr;
+    if (!field || !button || !dialog) {
+        check(false, "the default reminder time has its clock");
+        return;
+    }
+    QMetaObject::invokeMethod(button, "clicked");
+    check(waitFor([&] { return dialog->property("opened").toBool(); }), "the clock button opens the clock");
+    auto *picker = dialog->property("picker").value<QQuickItem *>();
+    QMetaObject::invokeMethod(picker, "commitTime", Q_ARG(QVariant, 7), Q_ARG(QVariant, 35));
+    QMetaObject::invokeMethod(dialog, "tryAccept");
+    check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
+          "a time picked on the clock is saved as the default reminder time");
+    waitFor([&] { return !dialog->property("visible").toBool(); });
+    workspace->setConfig({{key, u"10:05"_s}});
+    check(waitFor([&] { return field->property("text").toString() == u"10:05"; }),
+          "after a clock pick the field still follows the notebook's config (a synced change shows)");
+    workspace->setConfig({{key, original}});
+    check(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original,
+          "the default reminder time is back");
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -778,6 +1644,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 
     // 3b. Rows with context menus: taps / clicks act, long presses / right-clicks open the menu.
     checkRowsAndMenus(window, app, check);
+    // 3c. The task status menus (Tasks, backlinks, the agenda, a journal day) and "/" commands.
+    checkTaskStatusMenus(window, app, check);
     closeMenus(window); // whatever a failed check left open
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");
@@ -932,6 +1800,75 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             }
             sendKey(window, Qt::Key_E, Qt::ControlModifier);
             check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
+            // Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
+            // dragging kept the finger: the source never moved) and selects nothing; a tap still
+            // puts the cursor where it lands.
+            if (QCoreApplication::arguments().contains(u"--touch"_s)) {
+                QQuickItem *sourceView = nullptr;
+                QQuickItem *sourceEdit = nullptr;
+                check(waitFor([&] {
+                          sourceView = findShown(editor, [](QQuickItem *item) { return isA(item, "SourceEditor"); });
+                          // (The whole file: its middle lies far below the screen.)
+                          const QList<QQuickItem *> edits =
+                                  sourceView ? sourceView->findChildren<QQuickItem *>() : QList<QQuickItem *>();
+                          const auto it = std::find_if(edits.cbegin(), edits.cend(), [](QQuickItem *item) {
+                              return item->inherits("QQuickTextEdit") && item->isVisible();
+                          });
+                          sourceEdit = it != edits.cend() ? *it : nullptr;
+                          return sourceEdit
+                                 && sourceView->property("contentHeight").toReal() > sourceView->height() + 400;
+                      }),
+                      "the guide's Markdown source is longer than the screen");
+                if (sourceView && sourceEdit) {
+                    const qreal before = sourceView->property("contentY").toReal();
+                    touchDrag(window, pointIn(sourceView, 0.5, 0.7), QPointF(0, -300));
+                    check(waitFor([&] { return sourceView->property("contentY").toReal() > before + 100; })
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a finger dragged 300 px over the Markdown source scrolls it and selects nothing");
+                    // (A tap on a moving list only stops it.)
+                    waitFor([&] { return !sourceView->property("moving").toBool(); });
+                    const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
+                    const QPointF at = pointIn(sourceView, 0.5, 0.5);
+                    touchTap(window, at);
+                    const QPointF local = sourceEdit->mapFromScene(at);
+                    int expected = -1;
+                    QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+                    const int cursor = sourceEdit->property("cursorPosition").toInt();
+                    std::fprintf(stderr,
+                                 "selftest: the tap in the source: cursor %d (before %d, under the finger %d)\n",
+                                 cursor, cursorBefore, expected);
+                    check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
+                                  && sourceEdit->property("selectedText").toString().isEmpty(),
+                          "a tap in the Markdown source puts the cursor there");
+                    // A long press selects the word under the finger (where the platform has
+                    // selection handles, they take it on from there).
+                    const qreal scrolled = sourceView->property("contentY").toReal();
+                    const auto textAt = [&](int from, int to) {
+                        QString text;
+                        QMetaObject::invokeMethod(sourceEdit, "getText", qReturnArg(text), from, to);
+                        return text;
+                    };
+                    QPointF onWord = pointIn(sourceView, 0.5, 0.4);
+                    for (qreal fy = 0.3; fy < 0.7; fy += 0.05) {
+                        const QPointF p = pointIn(sourceView, 0.35, fy);
+                        const QPointF l = sourceEdit->mapFromScene(p);
+                        int pos = -1;
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), l.x(), l.y());
+                        const QString around = textAt(pos - 1, pos + 1);
+                        if (around.size() == 2 && around.at(0).isLetter() && around.at(1).isLetter()) {
+                            onWord = p;
+                            break;
+                        }
+                    }
+                    touchTap(window, onWord, 1000);
+                    const QString word = sourceEdit->property("selectedText").toString();
+                    std::fprintf(stderr, "selftest: a long press in the source selected \"%s\"\n", qPrintable(word));
+                    check(!word.isEmpty() && !word.contains(u' ') && !word.contains(u'\n')
+                                  && qAbs(sourceView->property("contentY").toReal() - scrolled) < 1,
+                          "a long press in the Markdown source selects the word under the finger");
+                    QMetaObject::invokeMethod(sourceEdit, "deselect");
+                }
+            }
             app->requestUiAction(u"toggleSourceMode"_s);
             check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
                   "the \"Markdown source\" command switches back");
@@ -1033,58 +1970,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the text typed before the rename is saved under the new name");
             }
 
-            // A picture opens as a picture: its bytes are not a note (the older view read them
-            // as text — mojibake for a binary picture). "Pokaż jako tekst" brings that view
-            // back, the view's own switch (the page menu's "Pokaż obraz") the picture.
-            const QString picture = u"assets/plan-mieszkania.svg"_s;
-            app->openPage(picture);
-            QQuickItem *pictureView = nullptr;
-            check(waitFor([&] {
-                      pictureView = nullptr;
-                      for (QQuickItem *v : window->findChildren<QQuickItem *>(u"pictureView"_s)) {
-                          if (v->property("visible").toBool()) {
-                              pictureView = v;
-                              break;
-                          }
-                      }
-                      return app->currentRoute().value(u"path"_s).toString() == picture && pictureView
-                             && pictureView->property("pictureLoaded").toBool();
-                  }),
-                  "a picture opens as a picture, loaded and shown");
-            check(controllerFor(picture) == nullptr, "the picture's bytes are not loaded into the block editor");
-            if (pictureView) {
-                // "Pokaż jako tekst" in the picture's bar: the file read as text in the editor.
-                if (QQuickItem *button = pictureView->findChild<QQuickItem *>(u"pictureTextButton"_s)) {
-                    const QPointF at = button->mapToScene(QPointF(button->width() / 2, button->height() / 2));
-                    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
-                    if (touch)
-                        touchTap(window, at, 30);
-                    else
-                        mouseClick(window, at);
-                    check(waitFor([&] {
-                              QObject *textPage = controllerFor(picture);
-                              return textPage && textPage->property("loaded").toBool()
-                                     && !pictureView->property("visible").toBool();
-                          }),
-                          "“Pokaż jako tekst” shows the file's text in the editor, the alternative view");
-                } else {
-                    check(false, "the picture view has its text button");
-                }
-                // Back to the picture (the page menu's "Pokaż obraz" calls the same switch).
-                if (QQuickItem *pageView = pictureView->parentItem()) {
-                    QMetaObject::invokeMethod(pageView, "showPictureView");
-                    check(waitFor([&] {
-                              return pictureView->property("visible").toBool()
-                                     && pictureView->property("pictureLoaded").toBool()
-                                     && controllerFor(picture) == nullptr;
-                          }),
-                          "the picture comes back and the editor is unloaded again");
-                } else {
-                    check(false, "the picture view lives in the page view");
-                }
-            } else {
-                check(false, "the page view has a picture view");
-            }
+            // 5b. A picture opens as a picture (checkPictureView).
+            checkPictureView(window, app, check, controllerFor);
+            // 5e. The default reminder time set on a clock in the settings.
+            checkSettingsClock(window, app, check);
         } else {
             check(false, "the page view has an editor");
         }
@@ -1095,6 +1984,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     checkLogsAndSyncDetails(window, app, check);
     closeMenus(window);
     app->goHome();
+
+    // 5d. The notebook switcher: to the documentation and back with one tap / click each.
+    checkNotebookSwitcher(window, app, check);
 
     // 6. Closing the notebook from the UI (as a click would: from inside an event).
     QTimer::singleShot(0, app, [app] { app->closeVault(); });

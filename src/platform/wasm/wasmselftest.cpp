@@ -32,6 +32,11 @@ EM_JS(void, brulion_selftest_publish, (const char *name, const char *json), {
 
 namespace brulion::platform {
 
+void publishSelfTestResult(const char *name, const QJsonObject &result)
+{
+    brulion_selftest_publish(name, QJsonDocument(result).toJson(QJsonDocument::Compact).constData());
+}
+
 void runStorageSelfTest(WasmStorage *storage)
 {
     QJsonObject result{

@@ -114,6 +114,7 @@ FocusScope {
                 actionIcon: list.linkable ? "link" : ""
                 onOpened: (newPane) => AppController.openPage(entry.path, entry.line, newPane)
                 onTaskToggled: list.refs.toggleTask(entry.index)
+                onTaskStatusRequested: (status) => list.refs.setTaskStatus(entry.index, status)
                 onActionTriggered: {
                     const where = entry.journalDate !== "" ? DatesHelper.formatLong(entry.journalDate) : entry.title
                     if (list.refs.linkMention(entry.index))

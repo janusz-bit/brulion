@@ -382,6 +382,58 @@ private Q_SLOTS:
         QVERIFY(findTags(QString()).isEmpty());
     }
 
+    // What starts inside a formula is part of the formula (SYNTAX §11), as the editor shows it:
+    // no tag, link or URL for the index; whatever starts first wins, as in the InlineRenderer.
+    void formulasHideWhatStartsInside_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QStringList>("tags");
+        QTest::addColumn<QStringList>("links");
+        QTest::newRow("tag and wiki link in formulas")
+                << u"$x \\in A #B$ oraz $[[Strona]]$"_s << QStringList() << QStringList();
+        // The Trilium importer writes 0.6x macros like this one as a formula.
+        QTest::newRow("trilium macro")
+                << u"Makro $% \\f is #1f(#2) \\int_{-\\infty}^\\infty \\hat\\xi\\,e^{2 \\pi i}$ koniec"_s
+                << QStringList() << QStringList();
+        QTest::newRow("tags around a formula")
+                << u"#przed $x^2$ #po i [[Łąka]]"_s << QStringList({u"przed"_s, u"po"_s}) << QStringList({u"Łąka"_s});
+        QTest::newRow("formula in a wiki alias")
+                << u"[[Wzory|$x^2$ #wzór]] #tag"_s << QStringList({u"tag"_s}) << QStringList({u"Wzory"_s});
+        QTest::newRow("formula in a link label") << u"[$\\alpha$ i #tag](Wzory.md) #źródło"_s
+                                                 << QStringList({u"źródło"_s}) << QStringList({u"Wzory.md"_s});
+        QTest::newRow("link starts before the formula")
+                << u"[[a $b]] c$ #d"_s << QStringList({u"d"_s}) << QStringList({u"a $b"_s});
+        QTest::newRow("url in a formula") << u"$f(https://example.org)$ i https://brulion.pl"_s << QStringList()
+                                          << QStringList({u"https://brulion.pl"_s});
+        QTest::newRow("embed and block ref in formulas")
+                << u"$![[obraz.png]]$ $((abc123))$ ((def456))"_s << QStringList() << QStringList({u"def456"_s});
+        QTest::newRow("prices are no formula")
+                << u"Stawka 10$/h #pilne, w weekend 15$/h."_s << QStringList({u"pilne"_s}) << QStringList();
+        QTest::newRow("escaped dollars") << u"\\$5 #tag \\$"_s << QStringList({u"tag"_s}) << QStringList();
+        QTest::newRow("dollars in code") << u"`$x` #tag [[Ś]] `$`"_s << QStringList({u"tag"_s})
+                                         << QStringList({u"Ś"_s});
+        QTest::newRow("over a line break") << u"$a\n#b$ #c"_s << QStringList({u"c"_s}) << QStringList();
+        QTest::newRow("not over a blank line") << u"$a\n\n#b$"_s << QStringList({u"b"_s}) << QStringList();
+        QTest::newRow("display over lines") << u"$$\n#b [[S]]\n\n#c\n$$ #d"_s << QStringList({u"d"_s}) << QStringList();
+    }
+
+    void formulasHideWhatStartsInside()
+    {
+        QFETCH(QString, text);
+        QFETCH(QStringList, tags);
+        QFETCH(QStringList, links);
+        const InlineScan scan = extractInline(text);
+        QStringList targets;
+        for (const Link &l : scan.links)
+            targets.append(l.target);
+        QCOMPARE(scan.tags, tags);
+        QCOMPARE(targets, links);
+        QStringList names;
+        for (const TagSpan &t : findTags(text))
+            names.append(t.name);
+        QCOMPARE(names, tags);
+    }
+
     void offsetsAndLines()
     {
         auto r = extractInline(u"first\nsecond [[P]]"_s, 100, 7);

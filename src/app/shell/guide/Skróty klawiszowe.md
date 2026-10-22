@@ -4,7 +4,7 @@ brulion: document
 ---
 # Skróty klawiszowe
 
-Skróty komputerowe. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi nad klawiaturą.
+Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, polecenia, terminy i cofanie są w pasku narzędzi nad klawiaturą (przytrzymaj przycisk Zadanie, aby wybrać status zadania).
 
 ## Ogólne
 | Skrót | Działanie |
@@ -30,13 +30,16 @@ Skróty komputerowe. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi, 
 | Shift+Enter | nowa linia w bloku |
 | Tab / Shift+Tab | wcięcie / wysunięcie z dziećmi |
 | Alt+↑ / Alt+↓ | przeniesienie bloku z dziećmi |
-| Ctrl+Enter | zmiana stanu zadania |
+| Ctrl+Enter | zmiana statusu zadania (po kolei) |
+| Ctrl+Shift+Enter | menu statusu zadania (dowolny status albo bez statusu) |
 | Ctrl+. | zwiń / rozwiń |
 | Ctrl+Z, Ctrl+Y | cofnij / ponów |
 | Ctrl+V | wklejenie obrazu lub plików jako załączników |
 | Esc | zamknij podpowiedzi, potem zakończ edycję i zaznacz blok |
 | / | menu poleceń |
 
-Zaznaczony blok (po Esc): Enter edytuje, Backspace lub Delete usuwa, strzałki przechodzą dalej, Tab i Alt+strzałki działają jak podczas edycji.
+Zaznaczony blok (po Esc): Enter edytuje, Backspace lub Delete usuwa, strzałki przechodzą dalej, Tab, Alt+strzałki, Ctrl+Enter i Ctrl+Shift+Enter działają jak podczas edycji.
+
+Menu statusu zadania otwiera też prawy przycisk myszy na polu wyboru (na telefonie: przytrzymanie). Więcej: [[Zadania|Zadania]].
 
 W dokumencie Backspace na początku punktu listy najpierw zdejmuje pole zadania, potem znacznik listy. Opis działania trybów: [[Dokument i konspekt|Dokument i konspekt]].

@@ -30,6 +30,8 @@ FocusScope {
 
     signal itemOpened(var entry)
     signal itemToggled(var entry)
+    /// A task's status menu: `status` "todo" … "cancelled", "" = none.
+    signal itemStatusRequested(var entry, string status)
     signal journalOpened(string date)
     signal addTaskRequested(string date)
     signal addReminderRequested(string date)
@@ -143,6 +145,7 @@ FocusScope {
                     showDate: true
                     onOpened: root.itemOpened(modelData)
                     onTaskToggled: root.itemToggled(modelData)
+                    onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
                 }
             }
 
@@ -171,6 +174,7 @@ FocusScope {
                     entry: modelData
                     onOpened: root.itemOpened(modelData)
                     onTaskToggled: root.itemToggled(modelData)
+                    onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
                 }
             }
             BEmptyState {

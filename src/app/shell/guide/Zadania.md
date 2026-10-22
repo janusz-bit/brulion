@@ -6,16 +6,27 @@ brulion: document
 
 Zadanie to punkt listy z polem wyboru. Zapis jest zgodny z wtyczką Obsidian Tasks, więc zadania zostają czytelne w innych programach.
 
-## Stany
-| Zapis | Stan |
+## Statusy
+| Zapis | Status |
 |---|---|
 | `- [ ]` | do zrobienia |
 | `- [/]` | w toku |
 | `- [x]` | zrobione |
 | `- [-]` | anulowane |
-| `- [>]` | odłożone |
+| `- [>]` | oczekujące (odłożone) |
 
-**Ctrl+Enter** w bloku przełącza stan po kolei (brak → do zrobienia → w toku → zrobione). Możesz też kliknąć pole wyboru. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
+**Ctrl+Enter** w bloku przełącza status po kolei (brak → do zrobienia → w toku → zrobione → brak). Kliknięcie pola wyboru odhacza zadanie albo przywraca je do zrobienia. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
+
+## Wybór statusu
+Każdy status możesz wybrać od razu, na trzy sposoby:
+
+- **Menu statusu** — kliknij pole wyboru prawym przyciskiem myszy albo przytrzymaj je palcem. Menu ma pozycje Do zrobienia, W toku, Zrobione, Oczekujące, Anulowane i Bez statusu; bieżący status jest zaznaczony. Działa wszędzie, gdzie widać pole zadania: w notatce i dzienniku, w wynikach [[Zapytania|zapytań]], we wstawionych blokach, w odnośnikach zwrotnych, na stronach tagów, w kalendarzu i w widoku Zadania.
+- **Klawiatura** — **Ctrl+Shift+Enter** w edytowanym (albo zaznaczonym) bloku otwiera to samo menu; strzałki wybierają status, Enter zatwierdza, Escape zamyka.
+- **Polecenie `/`** — wpisz w bloku `/` i początek nazwy: „Zadanie: do zrobienia”, „Zadanie: w toku”, „Zadanie: zrobione”, „Zadanie: oczekujące”, „Zadanie: anulowane”, „Zadanie: bez statusu”. Wystarczą też słowa takie jak `/czeka`, `/odłożone`, `/anul`, `/bez`, `/todo`, `/doing`, `/done`. Tekst polecenia znika, reszta bloku i kursor zostają.
+
+Na telefonie przytrzymaj przycisk **Zadanie** na pasku nad klawiaturą — otworzy się menu statusu (krótkie dotknięcie przełącza status po kolei).
+
+Blok, który nie był zadaniem, staje się zadaniem. **Bez statusu** usuwa pole wyboru (i datę ✅ lub ❌), tekst zostaje zwykłym punktem listy. Zadania zapisane znacznikami Logseq zachowują swój styl: `TODO` staje się `DOING`, `LATER` — `NOW`, oczekujące to `WAITING`. Zmianę statusu w otwartej notatce cofniesz przez Ctrl+Z, a w widoku Zadania i w kalendarzu — przyciskiem „Cofnij” w powiadomieniu.
 
 ## Terminy i daty
 Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
@@ -31,6 +42,8 @@ Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
 
 Po terminie, zaplanowaniu i początku możesz dopisać godzinę: `📅 2026-10-20 15:00`.
 
+Znaczniki to zwykłe emoji. Gdy system nie ma czcionki z emoji (Brulion w przeglądarce, niektóre Linuksy), Brulion rysuje je własną czcionką — jednokolorowe, w kolorze tekstu.
+
 Nie musisz znać tych znaczników na pamięć. Po wpisaniu `📅` (albo wybraniu „Termin…” z menu `/`) wystarczy napisać po polsku lub angielsku: „jutro”, „w piątek”, „za 3 dni”, „15 października”, „15.10 18:30”. Brulion wstawi datę w postaci `RRRR-MM-DD` — w pliku zawsze zostaje data, nigdy słowa.
 
 ## Priorytety
@@ -44,6 +57,6 @@ Po polsku reguły można wpisać tak: „codziennie”, „co 3 dni”, „w dni
 Po odhaczeniu zadania cyklicznego Brulion dopisuje jego następne wystąpienie nad ukończonym.
 
 ## Widok Zadania
-Widok **Zadania** zbiera zadania z całego brulionu: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki.
+Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki.
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).

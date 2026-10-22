@@ -6,7 +6,8 @@
 // Inline editing never shows the parts of a block's body that the delegate draws itself:
 //   * the task marker of a list item ("[ ] ", "TODO ") — the delegate draws a checkbox;
 //   * the opening and closing fence lines of code/calc/query/math blocks and the `---` lines of
-//     YAML frontmatter — the delegate draws a frame with the language label.
+//     YAML frontmatter — the delegate draws a frame with the language label; a block id line
+//     (`^id`) and `key:: value` properties after a closing fence stay hidden with it.
 // EditMapping describes that split: body = body.left(offset) + editText + body.right(suffix).
 #pragma once
 
@@ -41,20 +42,44 @@ std::optional<TaskStatus> taskStatusFromName(QStringView name);
 /// A fenced code block body (```` ```lang ```` … ```` ``` ````, also `~~~`).
 struct Fence {
     QString openLine;     ///< "```calc"
-    QString closeLine;    ///< "```"; empty when the fence is not closed
+    QString closeLine;    ///< the line closing the fence ("```"); empty when the fence is not closed
     QString lang;         ///< first word of the info string, lower-case ("calc", "query", "js")
-    QString inner;        ///< content lines joined by '\n'
+    QString inner;        ///< lines between the fence lines joined by '\n' (when the fence is not
+                          ///< closed: every line after the opening one)
+    QString after;        ///< lines after the closing fence joined by '\n' (a block's `^id` line,
+                          ///< `key:: value` properties, more text of a list item); "" when none
     int innerOffset = 0;  ///< index of `inner` in the body
     QChar marker;         ///< '`' or '~'
     int length = 3;       ///< number of markers in the opening fence
     bool closed = false;
+    bool onlyMetadataAfter = true; ///< `after` holds nothing but blank lines, standalone `^id`
+                                   ///< lines and `key:: value` properties
 
     friend bool operator==(const Fence &, const Fence &) = default;
 };
 
-/// The fence when the body's first line opens a fenced code block (up to 3 spaces, 3+ backticks
-/// or tildes); the last line closes it when it is a matching closing fence.
+/// The fence when the body's first line opens a fenced code block (3+ backticks or tildes at any
+/// indentation; a backtick fence's info string has no backtick). It is closed by the first later
+/// line that is a closing fence — the same character, at least as many, nothing else but spaces
+/// and tabs around it — exactly where the core parser (markdown::parseNote) ends the block.
 std::optional<Fence> parseFence(QStringView body);
+
+/// The closing fence line `body` lacks when it ends inside a fenced code block opened in it
+/// (```` ``` ```` for "Text\n```js\ncode"), found line by line like the core parser does (a
+/// fence-like line inside a display formula between `$$` lines is formula); "" when every fence
+/// in it is closed.
+QString missingClosingFence(QStringView body);
+
+/// The body block `entry` gets when the editor leaves it while it is only an opening fence line
+/// ("```js" typed without Enter, shown as text while it is edited): that line and its closing
+/// fence, so the saved page never runs the code on into the blocks after it. "" for any other
+/// block (a closed or multi-line fence, a task's text "[ ] ```js", a quote).
+QString loneFenceClosed(const markdown::BlockEntry &entry);
+
+/// Whether the lone opening fence of block `row` of `doc` (loneFenceClosed()) would take the
+/// blocks after it into its code when the file is read again: everything after a top-level
+/// block, the children of a list item (a sibling or a block after the list ends its fence).
+bool loneFenceRunsOn(const markdown::BlockDocument &doc, int row);
 
 /// How a block is shown and which part of its body is edited inline.
 struct BlockShape {
@@ -75,8 +100,17 @@ struct BlockShape {
 BlockShape shapeOf(const markdown::BlockEntry &entry);
 
 /// The new body for `editText` (the inverse of shapeOf().editText): the hidden prefix and
-/// suffix of the current body are kept. A task marker without a trailing space gets one when
-/// text follows it.
+/// suffix of the current body are kept; the unchanged edit text gives the body itself. A task
+/// marker without a trailing space gets one when text follows it. The result stays one block
+/// in the saved file:
+///   * in a closed code block a line that would close it is code — the hidden opening and
+///     closing fences are widened past it;
+///   * a fence the edit leaves open at the end of the block (```` ``` ```` typed on a new line of
+///     a paragraph, a closing fence deleted) is closed, so the code never runs on into the blocks
+///     after it: a closing fence is appended, or the one on the last line follows its opening
+///     fence (lengthened with it, removed with it). Not for a body that is just an opening fence
+///     line (a code block being typed, made by Enter) or that ended inside an open fence already
+///     (a file written elsewhere: a typed closing fence closes it).
 QString bodyWithEditText(const markdown::BlockEntry &entry, const QString &editText);
 
 /// Body without the leading task marker (and its spacing); unchanged when there is none.

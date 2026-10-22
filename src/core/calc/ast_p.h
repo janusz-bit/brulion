@@ -72,6 +72,9 @@ struct Node {
     std::vector<NodePtr> children;
     QList<CompareOp> ops;
     int ref = -1;
+    /// A Call written like `round(2,5)`: a ',' between digits that its function would take as a
+    /// decimal comma as well as a separator (lexer_p.h, normalizeNumbers()).
+    bool ambiguousComma = false;
     /// Evaluation recursion depth of the subtree (bounded by the parser): like its height, but
     /// the left operand of a left-associative chain does not count (see isLeftChain()).
     int depth = 1;

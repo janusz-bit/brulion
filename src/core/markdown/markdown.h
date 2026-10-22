@@ -30,7 +30,8 @@
 //   edit.h         pure edits (content in -> content out, EOLs and other bytes preserved):
 //                  setTaskStatus(content, line, status, today) (✅/❌ dates, recurring tasks get
 //                  their next occurrence inserted above, like Obsidian Tasks),
-//                  toggleTask(content, line, today), ensureBlockId(content, line) -> {content, id},
+//                  toggleTask(content, line, today), removeTaskMarker(content, line) (no status),
+//                  ensureBlockId(content, line) -> {content, id},
 //                  generateBlockId(), listItemRange(content, line) -> {from, to}
 //   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath])
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)

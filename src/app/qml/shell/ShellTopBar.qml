@@ -6,6 +6,8 @@ import Brulion
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
 // (a breadcrumb for pages in folders), search, command palette, quick capture, side panel toggle
 // and the "more" menu with page actions. On narrow windows it keeps only what fits a phone.
+// On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
+// text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
 Rectangle {
     id: bar
@@ -15,6 +17,9 @@ Rectangle {
     property var crumbs: []
     property real topInset: 0
     property bool sidebarVisible: true
+    /// The view shows a picture attachment, as text (`pictureAsText`) or as the picture.
+    property bool picture: false
+    property bool pictureAsText: false
 
     signal menuClicked()
     signal sidebarToggled()
@@ -183,15 +188,17 @@ Rectangle {
         BMenuItem {
             visible: bar.inEditor
             height: visible ? implicitHeight : 0
-            text: qsTr("Markdown source")
-            iconName: "code"
+            // A picture: its two views (PageView switches them for this action too).
+            text: !bar.picture ? qsTr("Markdown source")
+                : bar.pictureAsText ? qsTr("Show picture") : qsTr("Show as text")
+            iconName: bar.picture && bar.pictureAsText ? "image" : "code"
             shortcut: "Ctrl+E"
             onTriggered: AppController.requestUiAction("toggleSourceMode")
         }
         BMenuItem {
             // Document (like Obsidian) / outline (like Logseq): the page shown, in the journal
-            // stream the day being written in (docs/UI.md "Note modes").
-            visible: bar.inEditor
+            // stream the day being written in (docs/UI.md "Note modes"). A picture is no note.
+            visible: bar.inEditor && !bar.picture
             height: visible ? implicitHeight : 0
             text: qsTr("Toggle note mode")
             iconName: "file-text"

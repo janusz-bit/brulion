@@ -74,13 +74,12 @@ enum class MediaKind { Image, Audio, Video, Other };
 
 MediaKind mediaKind(const QString &path)
 {
-    static const QStringList images = {u".png"_s, u".jpg"_s, u".jpeg"_s, u".gif"_s, u".webp"_s,
-                                       u".svg"_s, u".bmp"_s, u".avif"_s, u".ico"_s};
     static const QStringList audio = {u".mp3"_s, u".m4a"_s, u".wav"_s, u".ogg"_s, u".opus"_s, u".flac"_s, u".aac"_s};
     static const QStringList video = {u".mp4"_s, u".webm"_s, u".mov"_s, u".m4v"_s};
-    const QString ext = paths::extension(path);
-    if (images.contains(ext))
+    // The pictures the app shows as pictures (one list: paths::pictureExtensions()).
+    if (paths::isPicturePath(path))
         return MediaKind::Image;
+    const QString ext = paths::extension(path);
     if (audio.contains(ext))
         return MediaKind::Audio;
     if (video.contains(ext))
@@ -425,6 +424,47 @@ QString calloutTitle(const Block &b)
     return first.trimmed();
 }
 
+/// A fenced code block as HTML: fenced math (```math, latex, tex) is display-only, so the export
+/// shows the formula, not its LaTeX source (docs/SYNTAX.md §11). `id`: attribute text or empty.
+QString codeBlockHtml(const QString &lang, const QString &code, const QString &id)
+{
+    if (lang == u"math" || lang == u"latex" || lang == u"tex")
+        return u"<div class=\"math\""_s + id + u'>' + markdown::renderMath(code, true) + u"</div>"_s;
+    const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
+    return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(code) + u"</code></pre>"_s;
+}
+
+/// A list item's text that is one fenced block, as the editor shows it (a code, calc, query or
+/// math block; editor/blocktext.h parseFence): the opening fence (``` or ~~~, 3 or more, any
+/// indentation, no backtick in a backtick fence's info), and the last line a closing fence of the
+/// same character at least as long — or more lines after an unclosed one. The language (the
+/// info string's first word, lower case) and the lines between.
+std::optional<std::pair<QString, QString>> itemFence(const QString &text)
+{
+    const QStringList lines = text.split(u'\n');
+    const QString first = lines.first().trimmed();
+    const QChar marker = first.isEmpty() ? QChar() : first.front();
+    if (marker != u'`' && marker != u'~')
+        return std::nullopt;
+    qsizetype length = 0;
+    while (length < first.size() && first[length] == marker)
+        ++length;
+    const QString info = first.sliced(length).trimmed();
+    if (length < 3 || (marker == u'`' && info.contains(u'`')))
+        return std::nullopt;
+    const QString last = lines.last().trimmed();
+    qsizetype closing = 0;
+    while (closing < last.size() && last[closing] == marker)
+        ++closing;
+    const bool closed = lines.size() >= 2 && closing >= length && closing == last.size();
+    if (!closed && lines.size() < 2)
+        return std::nullopt; // a lone opening fence is text
+    QString lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
+    if (lang.startsWith(u'{'))
+        lang.clear();
+    return std::pair{lang, lines.mid(1, lines.size() - (closed ? 2 : 1)).join(u'\n')};
+}
+
 } // namespace
 
 HtmlRenderer::HtmlRenderer(HtmlLinks links) : m_links(std::move(links)) { }
@@ -482,7 +522,7 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
     QList<Atom> atoms;
     codeAndCommentAtoms(text, masked, atoms);
 
-    // Formulas: $…$, $$…$$, \(…\) and \[…\] (docs/SYNTAX.md §11). The scan runs on the masked
+    // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11). The scan runs on the masked
     // text, so a formula inside code or a comment is not one; a link label gets one through
     // renderInline() of the label.
     for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
@@ -746,10 +786,17 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index) const
         out += u" class=\""_s + cls + u'"';
     if (!b.id.isEmpty())
         out += u" id="_s + attr(m_links.idPrefix + blockAnchor(b.id));
-    const QString embedded = b.task ? QString() : embeddedContent(b.text);
-    out += u'>' + box
-           + (embedded.isEmpty() ? QString(renderInline(b.text) + metaChips(b))
-                                 : QString(u"<div class=\"embed\">"_s + embedded + u"</div>"_s));
+    // A list item that is one fenced block (`/Wzór matematyczny` in an outline or a journal writes
+    // "- ```math") is shown as that block, like the editor does.
+    const auto fence = b.task ? std::nullopt : itemFence(b.text);
+    const QString embedded = b.task || fence ? QString() : embeddedContent(b.text);
+    out += u'>' + box;
+    if (fence)
+        out += codeBlockHtml(fence->first, fence->second, QString());
+    else if (!embedded.isEmpty())
+        out += u"<div class=\"embed\">"_s + embedded + u"</div>"_s;
+    else
+        out += renderInline(b.text) + metaChips(b);
     if (!b.children.isEmpty())
         out += renderBlocks(note, b.children);
     return out + u"</li>"_s;
@@ -822,15 +869,7 @@ QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
             return u"<div class=\"embed\""_s + id + u'>' + embedded + u"</div>"_s;
         return u"<p"_s + id + u'>' + renderInline(b.text) + metaChips(b) + u"</p>"_s;
     }
-    case BlockKind::Code: {
-        const QString lang = b.lang.section(u' ', 0, 0);
-        // Fenced math is display-only: the export shows the formula, not its LaTeX source.
-        if (lang == u"math" || lang == u"latex" || lang == u"tex") {
-            return u"<div class=\"math\""_s + id + u'>' + markdown::renderMath(b.text, true) + u"</div>"_s;
-        }
-        const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
-        return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(b.text) + u"</code></pre>"_s;
-    }
+    case BlockKind::Code: return codeBlockHtml(b.lang.section(u' ', 0, 0), b.text, id);
     case BlockKind::Table: return u"<div class=\"table\""_s + id + u'>' + renderTable(b.text) + u"</div>"_s;
     case BlockKind::Quote: {
         if (!b.children.isEmpty())

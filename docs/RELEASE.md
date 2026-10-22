@@ -7,7 +7,7 @@ Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryp
 
 | Plik | Kiedy | Co robi |
 |---|---|---|
-| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
+| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
 | `.github/workflows/android.yml` | push na `main` (zmiany w `src/`, `android/`…), ręcznie, z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
 | `.github/workflows/wasm.yml` | push na `main` (zmiany w `src/`, `wasm/`…), ręcznie, z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** |
 | `.github/workflows/appimage.yml` | push na `main` (zmiany w `src/`, `tests/`…), ręcznie, z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
@@ -44,31 +44,82 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 
 ## Wydanie
 
-Releasy idą na osobnej gałęzi `release` (utworzonej z main przy v0.3.4): `main` to rozwój, a
-`release` zbiera wszystko, co release'owe — notatki wydaniowe, commit z wersją i tag. Przed
-kolejnym wydaniem brać zmiany z main na `release`:
+Wszystkie commity idą na `main`: rozwój, notatki wydaniowe (`.github/release-notes.md`)
+i commit z wersją „Release vX.Y.Z”. Gałąź `release` ma **wyłącznie commity scalające z main**
+— jedno scalenie „Merge main into release for vX.Y.Z” na wydanie, z tagiem `vX.Y.Z` — więc
+`git log --first-parent release` to lista wydań. Wydać znaczy scalić main do `release`;
+robi to `scripts/release.sh`:
 
 ```sh
-git switch release && git merge main     # stan main na release
-# .github/release-notes.md -> commit "Update release notes for vX.Y.Z"
-scripts/release.sh patch --push          # bump + commit "Release vX.Y.Z" + tag, push atomowo
-git switch main
+git switch main && git pull --ff-only
+# .github/release-notes.md -> commit "Update release notes for vX.Y.Z" (na main)
+scripts/release.sh --dry-run patch     # podgląd: wersje, commity, ostrzeżenia
+scripts/release.sh patch --push        # wersja na main, scalenie + tag na release, push
 ```
+
+Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się GitHub Pages,
+`nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI (APK z main nie ma
+niższego `versionCode` niż wydany). Na `release` nie commitować niczego innego: poprawka do
+wydania to commit na main i kolejne wydanie. Do v0.3.4 wydania powstawały na main, a v0.3.5
+na `release` (jej notatki i commit z wersją trafiły na main przed v0.3.6); od v0.3.6
+`release` dostaje już tylko scalenia.
 
 Argumenty `scripts/release.sh`:
 
 ```sh
-scripts/release.sh minor --push        # 0.1.0 -> 0.2.0: commit "Release v0.2.0" + tag v0.2.0, push
-scripts/release.sh 0.1.0 --push        # pierwsze wydanie: wersja już jest w plikach — sam tag
-scripts/release.sh 0.3.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.3.0
-scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił
+scripts/release.sh minor --push        # 0.3.6 -> 0.4.0: "Release v0.4.0" na main, scalenie z tagiem v0.4.0, push
+scripts/release.sh 0.4.0-rc.1          # wydanie testowe (pre-release); pliki mają wersję 0.4.0
+scripts/release.sh 0.4.0-rc.2          # wersja już jest w plikach: bez commita z wersją, scalenie + tag
+scripts/release.sh 0.4.0               # main bez zmian od -rc.2: tag v0.4.0 na tym samym scaleniu
+scripts/release.sh --dry-run patch     # tylko pokazuje, co by zrobił (z każdej gałęzi)
 ```
 
-`scripts/release.sh` ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
-biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
-minor·1000 + patch) i w `nix/package.nix`, robi commit i tag z adnotacją. Wymaga czystego
-drzewa roboczego i gałęzi `release` (z innej umiera; `--dry-run` pokazuje, co by zrobił, z
-każdej). Push taga uruchamia `release.yml`:
+Prawdziwy przebieg działa tylko na `main` (z innej gałęzi umiera od razu) i z czystym drzewem
+roboczym:
+
+1. **Sprawdza.** Pobiera z origin `main` i `release` (`git fetch`, bez tagów) i odmawia, gdy
+   main nie ma commitów z `origin/main` (`git pull --ff-only`); gdy lokalna `release`
+   i `origin/release` się rozeszły; gdy na `release` (lokalnej albo w origin) jest commit,
+   którego main nie ma, a który nie jest scaleniem (`git rev-list --no-merges main..release`
+   musi być puste), albo scalenie z własnymi zmianami (treść `release` różni się od ostatnio
+   scalonego commita z main) — takie commity trzeba najpierw przenieść na main
+   (`git merge release` na main); gdy `release` przewinięto do main (fast-forward — np. stary
+   nawyk `git merge main` na `release`, póki `release` nie ma nic poza main, albo push main do
+   `release`): od ostatniego taga na jej linii pierwszych rodziców są wtedy commity main
+   zamiast scaleń — trzeba ją cofnąć do tego taga (skrypt podaje `git branch -f` i push
+   z `--force-with-lease`); gdy `release` jest wybrana w innym worktree (przesunięcie gałęzi
+   rozjechałoby tamten checkout); gdy tag już jest (lokalnie albo w origin); przy
+   `patch`/`minor`/`major`, gdy bieżąca wersja ma tylko wydania testowe (np. po `0.4.0-rc.2`
+   `patch` pominąłby 0.4.0 — trzeba podać wersję wprost). Ostrzega, gdy
+   `.github/release-notes.md` nie zmienił się od ostatniego taga (wydanie powtórzyłoby
+   poprzednie notatki), i gdy lokalna `release` wyprzedza `origin/release` z tagiem
+   wcześniejszego wydania bez `--push` — push wyśle jego scalenie, ale nie jego tag (skrypt
+   podaje `git push origin <tag>`).
+2. **Wersja na main.** Ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
+   biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
+   minor·1000 + patch) i w `nix/package.nix` i robi na main commit „Release vX.Y.Z”. Gdy
+   wersja już jest w plikach (kolejne `-rc.N`, wydanie końcowe po `-rc`), tego commita nie ma.
+3. **Scalenie na `release`.** Robi na `release` commit scalający main „Merge main into release
+   for vX.Y.Z” — zawsze scalenie (jak `git merge --no-ff main`), także gdy wystarczyłoby
+   przewinięcie — i daje mu tag z adnotacją `vX.Y.Z`. Gałęzi nie przełącza: `release` nie ma
+   nic poza main, więc drzewo scalenia to drzewo main i powstaje ono bez checkoutu — pliki
+   w drzewie roboczym nie zmieniają dat, a build się nie przebudowuje. Brakującą lokalną
+   `release` tworzy z `origin/release`, nieaktualną przewija do `origin/release`. Gdy main nie
+   wnosi nic nowego (wersja już zapisana i scalona, np. `0.4.0` po `0.4.0-rc.2` bez zmian na
+   main), mówi to i tylko taguje ostatnie scalenie.
+4. **Push.** Z `--push` wysyła atomowo (wszystko albo nic)
+   `git push --atomic origin main release refs/tags/vX.Y.Z`. Bez `--push` wypisuje to
+   polecenie i to, jak cofnąć wydanie przed wysłaniem.
+
+Gdy któryś krok się nie uda (np. hook albo odrzucony push), skrypt cofa wszystko, co zrobił —
+tag, scalenie na `release`, commit z wersją na main — pisze, co cofnął, i zostawia czysty main;
+wystarczy usunąć przyczynę i uruchomić go ponownie. `--dry-run` niczego nie zmienia (nawet nie
+pobiera z origin, tylko pyta o jego refy) i działa z każdej gałęzi: poza `main` najpierw
+ostrzega, a potem pokazuje, co zrobiłby prawdziwy przebieg na `main` (wersje czyta z lokalnej
+`main`, a bez niej z `origin/main`); to, czego prawdziwy przebieg by odmówił, wypisuje jako
+ostrzeżenia. `--yes` pomija pytanie o potwierdzenie.
+
+Push taga uruchamia `release.yml`:
 
 1. **draft** — tag musi się zgadzać z wersją w `CMakeLists.txt` i `nix/package.nix`; powstaje
    szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,
@@ -80,7 +131,12 @@ każdej). Push taga uruchamia `release.yml`:
    `brulion-<wersja>-arm64-v8a.apk`, `Brulion-<wersja>-x86_64.AppImage`,
    `Brulion-<wersja>-aarch64.AppImage` (+ `.zsync` do aktualizacji przez AppImageUpdate),
    `brulion-web-<wersja>.zip`, `brulion-<wersja>-source.tar.gz`, `SHA256SUMS.txt`; potem
-   szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release).
+   szkic staje się wydaniem (tag z sufiksem, np. `-rc.1`, → pre-release). Wcześniej
+   `scripts/appimage-update-check.sh` sprawdza, że każdy AppImage ma swój `.zsync`, który go
+   wskazuje, i że informacja o aktualizacji wbudowana w AppImage
+   (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) pasuje
+   dokładnie do tego pliku — AppImageUpdate, Gear Lever i AppImageLauncher pobierają go
+   z najnowszego wydania.
 
 Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
 ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba
@@ -96,6 +152,7 @@ przy publikacji.
 podman run --rm -v "$PWD:/src:Z" -w /src docker.io/library/ubuntu:22.04 \
   bash -c 'scripts/appimage-build.sh --install-deps && scripts/appimage-build.sh'
 # wynik: dist-appimage/Brulion-<wersja>-x86_64.AppImage
+# (z LDAI_UPDATE_INFORMATION, jak w CI, także Brulion-<wersja>-x86_64.AppImage.zsync obok)
 ```
 
 Na hoście NixOS z `programs.appimage.binfmt` jądro przekazuje każdy AppImage do interpretera,
@@ -113,7 +170,9 @@ na Ubuntu 24.04).
 
 ```sh
 nix shell nixpkgs#actionlint nixpkgs#shellcheck -c actionlint
-nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh
+nix shell nixpkgs#shellcheck -c shellcheck scripts/*.sh tests/scripts/*.sh
+tests/scripts/tst_release.sh                  # release.sh w jednorazowych repozytoriach
+tests/scripts/tst_appimage_update_check.sh    # (oba też w ctest: tst_scripts_*)
 ```
 
 Na Raspberry Pi shellcheck 0.11 potrafi się zawiesić (losowo, 100% CPU) — pomaga przypięcie do

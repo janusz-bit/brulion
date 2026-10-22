@@ -61,6 +61,30 @@ bool sameNextcloudAccount(const QString &url, const QString &user, const QString
     return !url.trimmed().isEmpty() && server(url) == server(otherUrl);
 }
 
+QString nextcloudRemote(const QString &url, const QString &user, const QString &folder)
+{
+    // As WorkspaceSync::rebuild() builds the client (davUrlFor()) and WebDavClient::identity().
+    if (url.trimmed().isEmpty() || user.trimmed().isEmpty())
+        return {};
+    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), defaultFolder(folder));
+    while (base.endsWith(u'/'))
+        base.chop(1);
+    return user.trimmed() + u'@' + base;
+}
+
+QString nextcloudRemoteFolder(const QString &url, const QString &user, const QString &remote)
+{
+    if (url.trimmed().isEmpty() || user.trimmed().isEmpty() || remote.isEmpty())
+        return {};
+    QString base = sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), QString());
+    while (base.endsWith(u'/'))
+        base.chop(1);
+    const QString prefix = user.trimmed() + u'@' + base + u'/';
+    if (!remote.startsWith(prefix) || remote.size() == prefix.size())
+        return {};
+    return QUrl::fromPercentEncoding(remote.mid(prefix.size()).toUtf8());
+}
+
 bool NextcloudSettings::isComplete() const
 {
     return enabled && !url.trimmed().isEmpty() && !user.trimmed().isEmpty() && !password.isEmpty();
@@ -271,6 +295,7 @@ void WorkspaceSync::attach(Vault *vault)
 void WorkspaceSync::detach()
 {
     teardown();
+    m_sharedNotice.clear(); // the next notebook opened warns again
     m_syncthing.reset();
     m_syncthingTimer.stop();
     m_syncthingFolderId.clear();
@@ -311,7 +336,21 @@ void WorkspaceSync::teardown()
 void WorkspaceSync::rebuild()
 {
     teardown();
-    if (!m_vault || !m_nextcloud.isComplete()) {
+    if (m_vault && folderShared()) {
+        // Two notebooks of this device in one server folder (0.3.1–0.3.5 could do that): every
+        // sync would mix their notes, so none runs until one of them gets a folder of its own.
+        const QString notice = m_nextcloud.sharedWith + u'\n' + defaultFolder(m_nextcloud.folder);
+        if (notice != m_sharedNotice) {
+            m_sharedNotice = notice;
+            qCWarning(logging::lcSync).noquote()
+                    << u"Nextcloud sync stopped: the notebook \"%1\" on this device also syncs with the server folder %2"_s
+                               .arg(QFileInfo(m_nextcloud.sharedWith).fileName(), defaultFolder(m_nextcloud.folder));
+            Q_EMIT folderSharingFound(sharedFolderText());
+        }
+    } else {
+        m_sharedNotice.clear();
+    }
+    if (!m_vault || !m_nextcloud.isComplete() || folderShared()) {
         Q_EMIT configurationChanged();
         Q_EMIT statusChanged();
         return;
@@ -401,7 +440,7 @@ QString WorkspaceSync::davUrlFor(const QString &url, const QString &user, const 
 QString WorkspaceSync::state() const
 {
     if (!m_scheduler)
-        return u"disabled"_s;
+        return m_vault && folderShared() ? u"error"_s : u"disabled"_s;
     const sync::SyncStatus s = m_scheduler->status();
     // Started by hand only (not automatic): between runs it is idle, not "disabled".
     if (s.state == sync::SyncState::Disabled)
@@ -457,12 +496,24 @@ QString WorkspaceSync::errorText(const QString &code, const QString &fallback) c
     return fallback.isEmpty() ? tr("Sync failed.") : logging::redact(fallback);
 }
 
+QString WorkspaceSync::sharedFolderText() const
+{
+    return tr("Not syncing: the notebook “%1” on this device syncs with the same server folder “%2”. Choose "
+              "another folder for one of them in the Nextcloud settings.")
+            .arg(QFileInfo(m_nextcloud.sharedWith).fileName(), defaultFolder(m_nextcloud.folder));
+}
+
+QString WorkspaceSync::folderSharedWith() const
+{
+    return folderShared() ? QFileInfo(m_nextcloud.sharedWith).fileName() : QString();
+}
+
 QString WorkspaceSync::statusText() const
 {
     if (!m_nextcloud.isComplete())
         return m_nextcloud.enabled ? tr("Nextcloud is not set up completely") : QString();
     if (!m_scheduler)
-        return tr("No notebook open");
+        return m_vault && folderShared() ? sharedFolderText() : tr("No notebook open");
     const sync::SyncStatus s = m_scheduler->status();
     switch (s.state) {
     case sync::SyncState::Syncing:
@@ -511,14 +562,16 @@ QString WorkspaceSync::lastSyncText() const
 QString WorkspaceSync::lastError() const
 {
     if (!m_scheduler)
-        return {};
+        return m_vault && folderShared() ? sharedFolderText() : QString();
     const sync::SyncStatus s = m_scheduler->status();
     return s.lastErrorCode.isEmpty() && s.lastError.isEmpty() ? QString() : errorText(s.lastErrorCode, s.lastError);
 }
 
 QString WorkspaceSync::lastErrorCode() const
 {
-    return m_scheduler ? m_scheduler->status().lastErrorCode : QString();
+    if (!m_scheduler)
+        return m_vault && folderShared() ? u"folder-shared"_s : QString();
+    return m_scheduler->status().lastErrorCode;
 }
 
 qreal WorkspaceSync::progress() const
@@ -599,7 +652,11 @@ QVariantMap WorkspaceSync::appStatus() const
 void WorkspaceSync::syncNow()
 {
     if (!m_scheduler) {
-        if (m_nextcloud.enabled && !m_nextcloud.isComplete())
+        // Not even by hand while another notebook syncs with the folder: a confirmation would be
+        // one click from mixing two notebooks for good; another folder is one step away.
+        if (m_vault && folderShared())
+            Q_EMIT errorOccurred(sharedFolderText());
+        else if (m_nextcloud.enabled && !m_nextcloud.isComplete())
             Q_EMIT errorOccurred(tr("Nextcloud is not set up completely: server, user and app password are needed."));
         return;
     }

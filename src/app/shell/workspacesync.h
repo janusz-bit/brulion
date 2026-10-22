@@ -85,6 +85,11 @@ struct NextcloudSettings {
     QString password;
     QString folder;          ///< relative to the user's files; empty = "Brulion"
     int intervalMinutes = 15; ///< 0 = after edits and about once a day only
+    /// Another notebook on this device whose sync is on with this server folder, one inside it or
+    /// around it (AppSettings::nextcloudFolderUser(); 0.3.1–0.3.5 could set that up): its path.
+    /// Nothing syncs then, neither by itself nor by "Sync now" — the two notebooks' notes would
+    /// mix in the folder — until one of them gets another folder or its sync is turned off.
+    QString sharedWith;
 
     /// Enabled, with a server, a user and a password.
     bool isComplete() const;
@@ -102,6 +107,13 @@ struct SyncthingSettings {
 /// port and path compared; "https://" is assumed without a scheme). A stored app password is only
 /// ever sent to the account it was saved for.
 bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser);
+
+/// What the sync bookkeeping of a notebook (its LocalStore's "sync/meta" "remote", the
+/// WebDavClient's identity) records after syncing with this account and server folder:
+/// "<user>@<WebDAV address of the folder>"; "" without a server or user.
+QString nextcloudRemote(const QString &url, const QString &user, const QString &folder);
+/// The server folder such a record names on this account ("" when it names another account).
+QString nextcloudRemoteFolder(const QString &url, const QString &user, const QString &remote);
 
 /// The GUI address and API key of a Syncthing config.xml; std::nullopt without an API key.
 /// "0.0.0.0:8384" / "[::]:8384" mean this machine; tls="true" gives https.
@@ -142,6 +154,9 @@ class WorkspaceSync : public QObject {
     Q_PROPERTY(bool testing READ testing NOTIFY testingChanged FINAL)
     /// Name of this device in conflict copies.
     Q_PROPERTY(QString deviceName READ deviceName NOTIFY configurationChanged FINAL)
+    /// The notebook (its folder's name) that syncs with this notebook's server folder too, while
+    /// that stops the sync (NextcloudSettings::sharedWith); "" otherwise.
+    Q_PROPERTY(QString folderSharedWith READ folderSharedWith NOTIFY configurationChanged FINAL)
 
     /// The running sync, throttled (see the top of this file); {} when idle.
     Q_PROPERTY(QVariantMap live READ live NOTIFY liveChanged FINAL)
@@ -203,6 +218,9 @@ public:
     // ---- state --------------------------------------------------------------------------
     bool configured() const { return m_nextcloud.isComplete(); }
     bool active() const { return m_scheduler != nullptr; }
+    /// Complete settings whose server folder another notebook syncs with: nothing syncs.
+    bool folderShared() const { return m_nextcloud.isComplete() && !m_nextcloud.sharedWith.isEmpty(); }
+    QString folderSharedWith() const;
     QString currentDavUrl() const;
     QString state() const;
     QString statusText() const;
@@ -284,6 +302,9 @@ Q_SIGNALS:
     void conflictsFound(int count);
     /// Something failed that the user should know about (translated).
     void errorOccurred(const QString &message);
+    /// The open notebook's server folder is another notebook's too, so it does not sync (a
+    /// warning, translated): once per notebook opened and folder.
+    void folderSharingFound(const QString &message);
     void liveChanged();
     void historyChanged();
 
@@ -310,6 +331,8 @@ private:
     QString bytesText(qint64 bytes) const;
     QDateTime now() const;
     QString effectiveDeviceName() const;
+    /// Why nothing syncs while the folder is shared (translated, names the other notebook).
+    QString sharedFolderText() const;
     std::optional<QVariantMap> conflictFor(const QString &copy) const;
 
     QPointer<Vault> m_vault;
@@ -340,6 +363,7 @@ private:
     std::unique_ptr<sync::SyncHistory> m_history;
     QVariantMap m_live;
     QString m_lastStatusText;
+    QString m_sharedNotice; ///< the shared folder last warned about (folderSharingFound())
     QTimer m_liveTimer; ///< coalesces progress into ≤ 4 updates per second
     QTimer m_liveTick;  ///< once a second while syncing (elapsed time, stall countdown)
 };

@@ -80,7 +80,14 @@ FocusScope {
         if (query)
             switcher.query = query
     }
-    function openCapture() { capture.open() }
+    function openCapture() {
+        // Captured notes belong in the user's journal: from the documentation, AppController
+        // goes back to the user's notebook and opens the dialog there.
+        if (AppController.inDocsVault)
+            AppController.quickCapture()
+        else
+            capture.open()
+    }
     function openNewPage(folder) { newPage.openFor(folder, false) }
     function openNewFolder(parentFolder) { newPage.openFor(parentFolder, true) }
     function openRename(path, isDir) { rename.openFor(path, isDir) }
@@ -154,6 +161,8 @@ FocusScope {
                 crumbs: shell.crumbs
                 topInset: shell.safe.top
                 sidebarVisible: shell.sidebarVisible
+                picture: routeView.viewPicture
+                pictureAsText: routeView.viewPictureAsText
                 onMenuClicked: drawer.open()
                 onSidebarToggled: shell.toggleSidebar()
                 onPaletteRequested: shell.openPalette()

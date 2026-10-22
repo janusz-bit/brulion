@@ -2,14 +2,20 @@
 // import results and fixed options (time zone Europe/Warsaw, never the system clock).
 #pragma once
 
+#include "io/htmlrender_p.h"
 #include "io/importer.h"
 #include "io/zip.h"
+#include "markdown/blockdocument.h"
+#include "markdown/inlinerenderer.h"
 
 #include <QByteArray>
 #include <QString>
 #include <QStringList>
 #include <QTest>
+#include <QTextDocument>
 #include <QTimeZone>
+
+#include <algorithm>
 
 namespace iotest {
 
@@ -78,6 +84,47 @@ inline QByteArray entryData(const QList<brulion::io::FileEntry> &entries, const 
             return e.data;
     }
     return QByteArray("<missing>");
+}
+
+/// What a note shows, block by block (frontmatter left out): each block's text rendered by the
+/// editor's InlineRenderer (renderBlock(), as the block editor does) or, with `exported`, by the
+/// HTML export's renderer, as plain text (table cells one by one, joined by " | "). A formula
+/// shows as rich text without its dollars ("$x$" -> "x").
+inline QString shownText(const QString &note, bool exported = false)
+{
+    const auto shown = [exported](QStringView markdown, brulion::BlockKind kind) {
+        QTextDocument rich;
+        rich.setHtml(exported ? brulion::io::detail::HtmlRenderer().renderInline(markdown)
+                              : brulion::markdown::InlineRenderer().renderBlock(markdown, kind));
+        return rich.toPlainText().replace(QChar::Nbsp, u' ');
+    };
+    const brulion::markdown::BlockDocument doc(note);
+    QStringList out;
+    for (int i = 0; i < doc.count(); ++i) {
+        const brulion::markdown::BlockEntry &e = doc.at(i);
+        if (e.kind == brulion::BlockKind::Frontmatter)
+            continue;
+        if (e.kind != brulion::BlockKind::Table) {
+            out.append(shown(e.body, e.kind));
+            continue;
+        }
+        for (const QString &row : e.body.split(u'\n')) {
+            if (std::all_of(row.cbegin(), row.cend(), [](QChar c) { return QStringView(u"|-: \t").contains(c); }))
+                continue; // the delimiter row
+            QStringList cells;
+            qsizetype from = row.startsWith(u'|') ? 1 : 0;
+            for (qsizetype k = from; k <= row.size(); ++k) {
+                if (k == row.size() || (row[k] == u'|' && (k == 0 || row[k - 1] != u'\\'))) {
+                    if (k > from || k < row.size())
+                        cells.append(shown(QStringView(row).sliced(from, k - from).trimmed(),
+                                           brulion::BlockKind::Paragraph));
+                    from = k + 1;
+                }
+            }
+            out.append(cells.join(u" | "_s));
+        }
+    }
+    return out.join(u'\n');
 }
 
 inline QStringList entryPaths(const QList<brulion::io::FileEntry> &entries)

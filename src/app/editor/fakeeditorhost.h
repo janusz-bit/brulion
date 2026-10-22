@@ -66,6 +66,7 @@ public:
     QString ensureBlockId(const QString &path, int line) override;
     QVariantList templates() const override;
     QUrl assetUrl(const QString &path) const override;
+    bool canDecodePicture(const QString &path) const override;
     QString saveAttachment(const QString &fileName, const QByteArray &data) override;
     QVariantMap vaultConfig() const override;
     void navigate(const QVariantMap &route, bool newPane = false) override;
@@ -76,6 +77,9 @@ public:
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status) override;
     /// Make runQuery() fail like a host without an index (tests).
     Q_INVOKABLE void setQueriesFail(bool fail) { m_queriesFail = fail; }
+    /// Picture formats ("WEBP") canDecodePicture() says no to whatever Qt can decode, like a
+    /// device without Qt's image plugins (tests).
+    Q_INVOKABLE void setUndecodablePictureFormats(const QStringList &formats) { m_undecodable = formats; }
 
     QString now() const { return m_now; }
     void setNow(const QString &now);
@@ -139,6 +143,7 @@ private:
     int m_taskEdits = 0;
     int m_queryRuns = 0;
     bool m_queriesFail = false;
+    QStringList m_undecodable;
     /// The index for queries, rebuilt from the files after a change.
     std::unique_ptr<VaultIndex> m_index;
     bool m_indexDirty = true;

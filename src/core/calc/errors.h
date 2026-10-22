@@ -12,11 +12,11 @@ namespace brulion::calc {
 enum class CalcErrorCode {
     None,
     Generic,
-    UndefinedSymbol,    ///< arg: variable name
-    UndefinedFunction,  ///< arg: function name
+    UndefinedSymbol,   ///< arg: variable name
+    UndefinedFunction, ///< arg: function name
     UnitsMismatch,
     UnexpectedEnd,
-    ParenExpected,      ///< arg: the missing bracket
+    ParenExpected, ///< arg: the missing bracket
     ValueExpected,
     UnexpectedOperator, ///< arg: operator
     UnexpectedPart,     ///< arg: fragment
@@ -27,19 +27,21 @@ enum class CalcErrorCode {
     TooFewArgs,         ///< arg: function name
     Recursion,
     TooLong,
-    TooLarge,           ///< arg: limit
+    TooLarge, ///< arg: limit
     TooComplex,
     TooBig,
-    NotAFunction,       ///< arg: name
+    NotAFunction, ///< arg: name
     CurrencyConversion,
     NoValues,
     Cycle,
-    RefError,           ///< arg: cell name ("B1")
-    RefOutside,         ///< arg: reference as written ("A99")
-    Domain,             ///< arg: function name
+    RefError,   ///< arg: cell name ("B1")
+    RefOutside, ///< arg: reference as written ("A99")
+    Domain,     ///< arg: function name
     UnterminatedString,
-    NotAUnit,           ///< arg: name
+    NotAUnit, ///< arg: name
     ListNotAllowed,
+    /// arg: function name (`round(2,5)`: a decimal comma as well as an argument separator)
+    AmbiguousComma,
 };
 
 /// An evaluation error: a code plus an optional argument, translated on demand.

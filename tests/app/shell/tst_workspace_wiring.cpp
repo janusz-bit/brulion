@@ -300,6 +300,13 @@ private Q_SLOTS:
         QVERIFY(!ws->setTaskStatus(u"Praca.md"_s, 0, u"done"_s)); // nothing to change
         QVERIFY(!ws->setTaskStatus(u"Praca.md"_s, 0, u"zrobione"_s));
         QVERIFY(!ws->setTaskStatus(u"brak.md"_s, 0, u"todo"_s));
+        // The status menu's "No status": the checkbox and its date go, the text stays.
+        QVERIFY(queries->setTaskStatus(u"Praca.md"_s, 0, QString()));
+        QVERIFY(ws->readFile(u"Praca.md"_s).startsWith(u"- Raport kwartalny #praca 📅 2026-10-15\n"_s));
+        QCOMPARE(ws->runQuery(u"type:tasks tag:praca status:all"_s).value(u"total"_s).toInt(), 1); // the offer
+        QVERIFY(!ws->setTaskStatus(u"Praca.md"_s, 0, QString()));                                  // no task left
+        QVERIFY(ws->setTaskStatus(u"Praca.md"_s, 0, u"deferred"_s));                               // a task again
+        QVERIFY(ws->readFile(u"Praca.md"_s).startsWith(u"- [>] Raport kwartalny"_s));
     }
 
     // ---- Pages, trash, history, device-local state ---------------------------------------------------

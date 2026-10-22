@@ -8,8 +8,9 @@ import Brulion
 // `transclusions`): a quiet frame with the source as a header link ("Budżet domowy ›
 // Październik") and the embedded blocks rendered read-only like the editor renders them —
 // headings, links, tags, chips, nested embeds (depth-limited, a cycle is named instead of
-// repeated). Tasks inside keep a working checkbox (it changes the task in its own file). A click
-// on the header opens the source; a click on the content edits the block with the embed.
+// repeated). Tasks inside keep a working checkbox (it changes the task in its own file; a
+// right-click or long press: the status menu). A click on the header opens the source; a click
+// on the content edits the block with the embed.
 Column {
     id: root
 
@@ -241,6 +242,7 @@ Column {
 
                         TaskBox {
                             id: taskBox
+                            objectName: "embedTaskBox"
                             visible: entry.isTask
                             status: entry.task
                             enabled: root.controller !== null
@@ -249,6 +251,10 @@ Column {
                             x: entry.indent - Math.round((width - boxSize) / 2) + 2
                             y: Math.round(entry.lineHeightPx / 2 - height / 2) + 1
                             onToggled: root.controller.toggleTaskAt(entry.modelData.path, entry.modelData.line, entry.task)
+                            onStatusChosen: (status) => {
+                                if (status !== entry.task)
+                                    root.controller.setTaskStatusAt(entry.modelData.path, entry.modelData.line, status)
+                            }
                         }
 
                         Text {

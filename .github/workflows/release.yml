@@ -1,6 +1,7 @@
-# Release: push a tag v<version> (scripts/release.sh bumps the version and creates the tag), or
-# run this workflow by hand. It checks the tag against the version in CMakeLists.txt and
-# nix/package.nix, creates a draft GitHub release (notes: .github/release-notes.md), builds
+# Release: push a tag v<version> (scripts/release.sh commits the version on main, merges main into
+# the release branch and tags that merge), or run this workflow by hand. It checks the tag
+# against the version in CMakeLists.txt and nix/package.nix, creates a draft GitHub release
+# (notes: .github/release-notes.md), builds
 #   brulion-<version>-arm64-v8a.apk          Android (android.yml, signed with the release key)
 #   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
@@ -178,6 +179,10 @@ jobs:
       RELEASE_ID: ${{ needs.draft.outputs.release-id }}
       FILE_VERSION: ${{ needs.draft.outputs.file-version }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -187,6 +192,8 @@ jobs:
           mkdir assets
           cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-source/* assets/
           (cd artifacts/brulion-web && zip -q -r -X "$GITHUB_WORKSPACE/assets/brulion-web-$FILE_VERSION.zip" .)
+          # The AppImages update themselves from their .zsync files in the latest release.
+          scripts/appimage-update-check.sh assets "$GH_REPO"
           (cd assets && sha256sum -- * > SHA256SUMS.txt)
           cat assets/SHA256SUMS.txt
           {

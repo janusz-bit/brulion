@@ -158,6 +158,17 @@ private Q_SLOTS:
         QCOMPARE(status(fm, 1, TaskStatus::Done), fm);
         QCOMPARE(status(u"- [ ] a"_s, 5, TaskStatus::Done), u"- [ ] a"_s);
         QCOMPARE(status(u"- [ ] a"_s, -1, TaskStatus::Done), u"- [ ] a"_s);
+        // A line that is only `$$` opens a display formula: "- [ ] $$" would open none and the
+        // formula's lines ("+ b", "- c") would become blocks (review regression).
+        for (const QString &math :
+             {u"$$\nf(x)\n+ b\n$$"_s, u"- $$\n  a\n  - c\n  $$"_s, u"> $$\n> a\n> $$"_s, u"  *   $$  "_s}) {
+            QCOMPARE(status(math, 0, TaskStatus::Todo), math);
+            QCOMPARE(toggleTask(math, 0, Today), math);
+        }
+        QCOMPARE(status(u"- $$\n  a\n  $$"_s, 1, TaskStatus::Done), u"- $$\n  a\n  $$"_s); // the item's line
+        // Its task marker still changes (written elsewhere, it opens no formula).
+        QCOMPARE(status(u"- [ ] $$"_s, 0, TaskStatus::Done), u"- [x] $$ ✅ 2026-10-14"_s);
+        QCOMPARE(status(u"Wzór $$x$$"_s, 0, TaskStatus::Todo), u"- [ ] Wzór $$x$$"_s);
     }
 
     void crlfPreserved()
@@ -283,6 +294,96 @@ private Q_SLOTS:
         QCOMPARE(toggleTask(u"- WAITING a"_s, 0, Today), u"- DONE a ✅ 2026-10-14"_s);
         QCOMPARE(toggleTask(u"- a"_s, 0, Today), u"- [ ] a"_s);
         QCOMPARE(toggleTask(u"```\nx\n```"_s, 1, Today), u"```\nx\n```"_s);
+    }
+
+    // --- removeTaskMarker ("no status") ------------------------------------------------------------
+
+    void removeMarker_data()
+    {
+        QTest::addColumn<QString>("src");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("todo") << u"- [ ] Kupić mleko"_s << 0 << u"- Kupić mleko"_s;
+        QTest::newRow("doing") << u"- [/] Pisać raport"_s << 0 << u"- Pisać raport"_s;
+        QTest::newRow("deferred") << u"- [>] Odpisać Żanecie"_s << 0 << u"- Odpisać Żanecie"_s;
+        QTest::newRow("done date") << u"- [x] Zapłacić czynsz 📅 2026-10-10 ✅ 2026-10-09"_s << 0
+                                   << u"- Zapłacić czynsz 📅 2026-10-10"_s;
+        QTest::newRow("capital X, block id") << u"- [X] a ✅ 2026-10-01 ^id1"_s << 0 << u"- a ^id1"_s;
+        QTest::newRow("cancelled date") << u"- [-] Wizyta ❌ 2026-10-02 u dentysty"_s << 0 << u"- Wizyta u dentysty"_s;
+        QTest::newRow("custom character") << u"- [?] pytanie"_s << 0 << u"- pytanie"_s;
+        QTest::newRow("only a date") << u"- [x] ✅ 2026-10-14"_s << 0 << u"- "_s;
+        // A date right after the marker: one space stays between the list marker and the text.
+        QTest::newRow("date first") << u"- [x] ✅ 2026-10-14 Pranie"_s << 0 << u"- Pranie"_s;
+        QTest::newRow("date first, logseq") << u"- DONE ✅ 2026-10-14 Pranie"_s << 0 << u"- Pranie"_s;
+        QTest::newRow("tab after the checkbox") << u"- [ ]\tżółw"_s << 0 << u"- żółw"_s;
+        QTest::newRow("byte order mark") << u"﻿- [/] ą"_s << 0 << u"﻿- ą"_s;
+        QTest::newRow("empty task") << u"- [ ] "_s << 0 << u"- "_s;
+        QTest::newRow("ordered") << u"3. [ ] trzeci"_s << 0 << u"3. trzeci"_s;
+        QTest::newRow("star, nested") << u"- p\n  * [/] zagnieżdżone"_s << 1 << u"- p\n  * zagnieżdżone"_s;
+        QTest::newRow("continuation line targets the item") << u"- [ ] a\n  szczegóły"_s << 1 << u"- a\n  szczegóły"_s;
+        QTest::newRow("quote") << u"> - [ ] w cytacie"_s << 0 << u"> - w cytacie"_s;
+        QTest::newRow("callout") << u"> [!todo] Lista\n> - [x] ząb ✅ 2026-10-01"_s << 1
+                                 << u"> [!todo] Lista\n> - ząb"_s;
+        QTest::newRow("logseq todo") << u"- TODO zadzwonić"_s << 0 << u"- zadzwonić"_s;
+        QTest::newRow("logseq done") << u"- DONE zadzwonić ✅ 2026-10-01"_s << 0 << u"- zadzwonić"_s;
+        QTest::newRow("logseq waiting, priority") << u"- WAITING [#A] paczka"_s << 0 << u"- [#A] paczka"_s;
+        QTest::newRow("logseq planning kept")
+                << u"- LATER a\n  SCHEDULED: <2026-10-15 Thu>"_s << 0 << u"- a\n  SCHEDULED: <2026-10-15 Thu>"_s;
+        QTest::newRow("dates in code kept")
+                << u"- [x] użyj `✅ 2026-01-01` ✅ 2026-10-01"_s << 0 << u"- użyj `✅ 2026-01-01`"_s;
+        QTest::newRow("recurrence kept as written")
+                << u"- [ ] podlać 🔁 co tydzień"_s << 0 << u"- podlać 🔁 co tydzień"_s;
+        QTest::newRow("comment tail kept")
+                << u"- [x] zadanie ✅ 2026-10-14 %%notatka\nciąg%%"_s << 0 << u"- zadanie %%notatka\nciąg%%"_s;
+        QTest::newRow("crlf") << u"- [ ] a\r\n- [x] b ✅ 2026-10-01\r\nc"_s << 1 << u"- [ ] a\r\n- b\r\nc"_s;
+        QTest::newRow("not a task") << u"- zwykły punkt"_s << 0 << u"- zwykły punkt"_s;
+        QTest::newRow("paragraph") << u"Akapit"_s << 0 << u"Akapit"_s;
+        QTest::newRow("in code") << u"```\n- [ ] kod\n```"_s << 1 << u"```\n- [ ] kod\n```"_s;
+        QTest::newRow("heading") << u"# [ ] Nagłówek"_s << 0 << u"# [ ] Nagłówek"_s;
+        QTest::newRow("out of range") << u"- [ ] a"_s << 3 << u"- [ ] a"_s;
+        QTest::newRow("negative line") << u"- [ ] a"_s << -1 << u"- [ ] a"_s;
+        // Text that would open a block over the lines after it (the children's tasks would be gone
+        // into code or a formula) keeps being text: its first character is escaped.
+        QTest::newRow("fence text, child task")
+                << u"- [ ] ```js\n  - [ ] dziecko ⏰ 2026-10-15 09:00\n- [ ] dalej"_s << 0
+                << u"- \\```js\n  - [ ] dziecko ⏰ 2026-10-15 09:00\n- [ ] dalej"_s;
+        QTest::newRow("fence text, last item") << u"- [ ] ```"_s << 0 << u"- \\```"_s;
+        QTest::newRow("tilde fence, done date")
+                << u"- [x] ~~~ ✅ 2026-10-01\n  - [/] żółw"_s << 0 << u"- \\~~~\n  - [/] żółw"_s;
+        QTest::newRow("fence text, logseq")
+                << u"- TODO ```py\n  - TODO dziecko"_s << 0 << u"- \\```py\n  - TODO dziecko"_s;
+        QTest::newRow("lone $$, child task") << u"- [ ] $$\n  - [ ] x\n  $$"_s << 0 << u"- \\$$\n  - [ ] x\n  $$"_s;
+        // What starts the text right after the marker stays, also when the parser masks it.
+        QTest::newRow("code span first") << u"- [ ] `npm i` w katalogu"_s << 0 << u"- `npm i` w katalogu"_s;
+        QTest::newRow("code span first, logseq") << u"- TODO `a` b"_s << 0 << u"- `a` b"_s;
+        QTest::newRow("comment first") << u"- [ ] %%ważne%% zadzwonić"_s << 0 << u"- %%ważne%% zadzwonić"_s;
+        QTest::newRow("formula first, done date")
+                << u"- [x] $x^2$ policzyć ✅ 2026-10-14"_s << 0 << u"- $x^2$ policzyć"_s;
+        QTest::newRow("date, then a code span") << u"- [x] ✅ 2026-10-14 `kod` ż"_s << 0 << u"- `kod` ż"_s;
+        QTest::newRow("code span is no fence")
+                << u"- [ ] ```npm i``` w katalogu"_s << 0 << u"- ```npm i``` w katalogu"_s;
+        QTest::newRow("formula is no lone $$") << u"- [ ] $$x$$\n  - [ ] y"_s << 0 << u"- $$x$$\n  - [ ] y"_s;
+    }
+
+    void removeMarker()
+    {
+        QFETCH(QString, src);
+        QFETCH(int, line);
+        QFETCH(QString, expected);
+        const QString out = removeTaskMarker(src, line);
+        QCOMPARE(out, expected);
+        // The task is gone (the others stay); an unchanged text had none there.
+        const qsizetype before = parseNote(u"a.md"_s, src).tasks.size();
+        QCOMPARE(parseNote(u"a.md"_s, out).tasks.size(), out == src ? before : before - 1);
+    }
+
+    void removeMarkerThenStatus()
+    {
+        // Back from "no status": setTaskStatus makes the plain item a task again.
+        const QString plain = removeTaskMarker(u"- [x] Pranie ✅ 2026-10-01"_s, 0);
+        QCOMPARE(plain, u"- Pranie"_s);
+        QCOMPARE(status(plain, 0, TaskStatus::Deferred), u"- [>] Pranie"_s);
+        QCOMPARE(removeTaskMarker(plain, 0), plain);
     }
 
     void linesThatCannotBecomeTasks_data()

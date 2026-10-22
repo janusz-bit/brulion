@@ -44,7 +44,7 @@ struct TaskMarker {
     QString marker;             ///< the checkbox character or the keyword
     qsizetype from = 0;         ///< index of '[' or of the keyword
     qsizetype to = 0;           ///< index after the marker
-    qsizetype contentStart = 0; ///< index after the marker and the whitespace following it
+    qsizetype contentStart = 0; ///< index after the marker and the whitespace following it (in `text`)
 };
 
 /// Detect a checkbox (`[ ]`, `[x]`, `[?]` …) or a Logseq keyword at `start` of a list item

@@ -3,6 +3,7 @@
 // rewritten to wiki links, and CSV databases become pages with a GFM table.
 #include "io/csv.h"
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 #include "io/importers_p.h"
 #include "io/importutil_p.h"
 #include "util/paths.h"
@@ -291,7 +292,8 @@ private:
             if (r == 0)
                 lines.append(u'|' + QStringList(columns, u" --- "_s).join(u'|') + u'|');
         }
-        return lines.join(u'\n') + u'\n';
+        // CSV cells are plain text: their dollars never make formulas ("$x$", "Cena $10, 15$").
+        return escapeTextFormulas(lines.join(u'\n') + u'\n');
     }
 };
 

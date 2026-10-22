@@ -13,6 +13,8 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QImageReader>
+#include <QLocale>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -140,6 +142,71 @@ private Q_SLOTS:
         QVERIFY(ws->exists(u"Notatka.md"_s));
         QCOMPARE(ws->pageTitle(u"Projekty/Dom.md"_s), u"Dom"_s);
         QCOMPARE(ws->folderOf(u"Projekty/Dom.md"_s), u"Projekty"_s);
+    }
+
+    void readTextStart_data()
+    {
+        QTest::addColumn<QByteArray>("content");
+        QTest::addColumn<int>("limit");
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<bool>("truncated");
+        const QByteArray svg = "<svg>\xC5\xBC\xC3\xB3\xC5\x82w</svg>"; // <svg>żółw</svg>
+        QTest::newRow("shorter than the limit") << svg << 1000 << u"<svg>żółw</svg>"_s << false;
+        QTest::newRow("exactly the limit") << svg << int(svg.size()) << u"<svg>żółw</svg>"_s << false;
+        QTest::newRow("cut after a whole character") << svg << 7 << u"<svg>ż"_s << true;
+        QTest::newRow("cut inside ż (2 bytes): left out") << svg << 6 << u"<svg>"_s << true;
+        const QByteArray euro = "x\xE2\x82\xACy"; // x€y
+        QTest::newRow("cut after the first byte of €") << euro << 2 << u"x"_s << true;
+        QTest::newRow("cut after the second byte of €") << euro << 3 << u"x"_s << true;
+        QTest::newRow("cut after €") << euro << 4 << u"x€"_s << true;
+        const QByteArray emoji = "a\xF0\x9F\x8C\xB3\x62"; // a🌳b
+        for (const int limit : {2, 3, 4})
+            QTest::addRow("cut inside 🌳 (4 bytes) after %d", limit) << emoji << limit << u"a"_s << true;
+        QTest::newRow("cut after 🌳") << emoji << 5 << u"a🌳"_s << true;
+        QTest::newRow("a BOM is dropped") << QByteArray("\xEF\xBB\xBF\xC5\x82\xC4\x85ka") << 100 << u"łąka"_s << false;
+        // The file's own broken end is shown as it is (a replacement character), like readFile().
+        QTest::newRow("a file that ends in half a character")
+                << QByteArray("ab\xC5") << 100 << QString::fromUtf8("ab\xC5") << false;
+        const QByteArray png("\x89PNG\r\n\x1A\n\x00\x00\x00\x0DIHDR", 16);
+        QTest::newRow("a binary picture") << png << 6 << QString::fromUtf8(png.left(6)) << true;
+        QTest::newRow("nothing at all") << svg << 0 << QString() << true;
+        QTest::newRow("an empty file") << QByteArray() << 100 << QString() << false;
+    }
+    void readTextStart()
+    {
+        // The picture's text view reads at most what it shows (a photo is never read whole for
+        // it) and never shows half a character where the limit cuts one.
+        QFETCH(QByteArray, content);
+        QFETCH(int, limit);
+        QFETCH(QString, text);
+        QFETCH(bool, truncated);
+        QString root;
+        auto ws = open({}, &root);
+        const QString path = u"assets/szkic żółwia.svg"_s;
+        QVERIFY(writeRaw(root + u'/' + path, content));
+        const QVariantMap start = ws->readTextStart(path, limit);
+        QVERIFY(start.value(u"ok"_s).toBool());
+        QCOMPARE(start.value(u"text"_s).toString(), text);
+        QCOMPARE(start.value(u"truncated"_s).toBool(), truncated);
+        QCOMPARE(start.value(u"size"_s).toLongLong(), qint64(content.size()));
+        QVERIFY(start.value(u"bytes"_s).toLongLong() <= limit);
+        QCOMPARE(start.value(u"bytesText"_s).toString(),
+                 QLocale().formattedDataSize(start.value(u"bytes"_s).toLongLong(), 1,
+                                             QLocale::DataSizeTraditionalFormat));
+        QCOMPARE(start.value(u"sizeText"_s).toString(),
+                 QLocale().formattedDataSize(content.size(), 1, QLocale::DataSizeTraditionalFormat));
+        if (!truncated)
+            QCOMPARE(start.value(u"text"_s).toString(), ws->readFile(path)); // the same as the whole file
+    }
+    void readTextStartOfAMissingFile()
+    {
+        auto ws = open();
+        const QVariantMap start = ws->readTextStart(u"assets/nie ma.svg"_s, 100);
+        QVERIFY(!start.value(u"ok"_s).toBool());
+        QCOMPARE(start.value(u"text"_s).toString(), QString());
+        QVERIFY(!start.value(u"truncated"_s).toBool());
+        Workspace closed;
+        QVERIFY(!closed.readTextStart(u"a.svg"_s, 100).value(u"ok"_s).toBool());
     }
 
     void changeSignals()
@@ -326,6 +393,37 @@ private Q_SLOTS:
         // Desktop / Android: the editor reads the local file's header itself.
         ws->setDataUrlAssets(false);
         QVERIFY(!ws->assetPixelSize(u"assets/mała łąka.png"_s).isValid());
+    }
+
+    void decodablePictures_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QByteArray>("format"); // what QImageReader has to offer; "" for no picture
+        QTest::newRow("png") << u"assets/żółw.png"_s << QByteArray("png");
+        QTest::newRow("PNG, upper case") << u"assets/ŁĄKA.PNG"_s << QByteArray("png");
+        QTest::newRow("jpg") << u"assets/zdjęcie.jpg"_s << QByteArray("jpg");
+        QTest::newRow("jpeg") << u"zdjęcie.jpeg"_s << QByteArray("jpeg");
+        QTest::newRow("gif") << u"assets/animacja.gif"_s << QByteArray("gif");
+        QTest::newRow("bmp") << u"skan.bmp"_s << QByteArray("bmp");
+        QTest::newRow("svg") << u"assets/plan-mieszkania.svg"_s << QByteArray("svg");
+        QTest::newRow("ico") << u"assets/favicon.ico"_s << QByteArray("ico");
+        QTest::newRow("webp (a plugin: often missing)") << u"assets/łąka.webp"_s << QByteArray("webp");
+        QTest::newRow("avif (not in Qt itself)") << u"assets/łąka.avif"_s << QByteArray("avif");
+        QTest::newRow("a note") << u"notatka.md"_s << QByteArray();
+        QTest::newRow("xpm: Qt decodes it, but it is no attachment picture") << u"ikona.xpm"_s << QByteArray();
+        QTest::newRow("empty") << QString() << QByteArray();
+    }
+    void decodablePictures()
+    {
+        // The picture view names a format this device cannot decode instead of failing to load it.
+        QFETCH(QString, path);
+        QFETCH(QByteArray, format);
+        auto ws = open();
+        const bool expected = !format.isEmpty() && QImageReader::supportedImageFormats().contains(format);
+        QCOMPARE(ws->canDecodePicture(path), expected);
+        // Qt's own decoders (built into QtGui) are always there.
+        if (format == "png" || format == "bmp")
+            QVERIFY(ws->canDecodePicture(path));
     }
 
     void templatesAndJournals()

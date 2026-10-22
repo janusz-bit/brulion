@@ -400,6 +400,86 @@ private Q_SLOTS:
         QCOMPARE(inl(source), expected);
     }
 
+    void decimalCommaInCalls_data()
+    {
+        // A ',' between digits in a call without ';' is never silently read the wrong way: it is a
+        // decimal comma when only that gives the function a valid number of arguments, a
+        // separator when only that does, and an error when both would.
+        const auto ambiguous = [](const QString &name) {
+            return u"!Niejednoznaczny przecinek w "_s + name
+                   + u"(…): ułamek zapisz z kropką, a argumenty rozdziel średnikiem"_s;
+        };
+        addCases({
+                {u"sqrt(2,25)"_s, u"1,5"_s},
+                {u"pierwiastek(2,25)"_s, u"1,5"_s},
+                {u"floor(1,5)"_s, u"1"_s},
+                {u"ceil(1,5)"_s, u"2"_s},
+                {u"abs(-1,5)"_s, u"1,5"_s},
+                {u"ln(1,0)"_s, u"0"_s},
+                {u"sqrt(2,25) + 1,5"_s, u"3"_s},
+                {u"sqrt(sqrt(5,0625))"_s, u"1,5"_s},
+                {u"pow(2,5)"_s, u"32"_s},
+                {u"potęga(2,5)"_s, u"32"_s},
+                {u"mod(7,5)"_s, u"2"_s},
+                {u"atan2(0,5)"_s, u"0"_s},
+                {u"round(2,5)"_s, ambiguous(u"round"_s)},
+                {u"zaokr(12,75)"_s, ambiguous(u"zaokr"_s)},
+                {u"zaokrąglij(12,75)"_s, ambiguous(u"zaokrąglij"_s)},
+                {u"max(1,5)"_s, ambiguous(u"max"_s)},
+                {u"średnia(2,5)"_s, ambiguous(u"średnia"_s)},
+                {u"log(8,2)"_s, ambiguous(u"log"_s)},
+                {u"max(sqrt(2,25), round(2,5))"_s, ambiguous(u"round"_s)},
+                {u"concat(\"a\", 1,5)"_s, ambiguous(u"concat"_s)},
+                {u"round(2,5; 0)"_s, u"3"_s},
+                {u"max(1,5; 2)"_s, u"2"_s},
+                {u"round(2.5)"_s, u"3"_s},
+                {u"round(2, 5)"_s, u"2"_s},
+                {u"max(1, 5)"_s, u"5"_s},
+                {u"round(2.345,2)"_s, u"2,35"_s},
+                {u"sum(1,2,3)"_s, u"6"_s},
+                {u"max(1,5, 2)"_s, ambiguous(u"max"_s)},
+                {u"sqrt(2,25, 4)"_s, u"!Za dużo argumentów funkcji sqrt"_s},
+        });
+    }
+    void decimalCommaInCalls()
+    {
+        QFETCH(QString, source);
+        QFETCH(QString, expected);
+        QCOMPARE(inl(source), expected);
+    }
+
+    void decimalCommaInCallsElsewhere()
+    {
+        // Variables, block lines, user functions (their arguments as written: a wrong count is an
+        // error), table formulas and English.
+        QCOMPARE(calctest::results(u"netto = 100\nzaokr(netto * 1,23)\nzaokr(netto * 1,23; 2)\nnetto * 1,23"_s),
+                 (QStringList{u"100"_s,
+                              u"!Niejednoznaczny przecinek w zaokr(…): ułamek zapisz z kropką, a argumenty rozdziel "
+                              u"średnikiem"_s,
+                              u"123"_s, u"123"_s}));
+        QCOMPARE(last(u"f(x) = x^2\nf(2,5)"_s), u"!Za dużo argumentów funkcji f"_s);
+        QCOMPARE(inl(u"sqrt(2,25)"_s, En), u"1.5"_s);
+        QCOMPARE(inl(u"sqrt(1,000)"_s, En), u"31.6227766"_s); // English thousands
+        QCOMPARE(inl(u"max(1,000)"_s, En),
+                 u"!Ambiguous comma in max(…): write decimals with a dot or separate arguments with “;”"_s);
+    }
+
+    void decimalCommaTokens_data()
+    {
+        addCases({
+                {u"sqrt(2,25)"_s, u"id:sqrt br:( num:2.25 br:)"_s},
+                {u"round(2,5)"_s, u"id:round br:( num:2 comma:, num:5 br:)"_s},
+                {u"pow(2,5)"_s, u"id:pow br:( num:2 comma:, num:5 br:)"_s},
+                {u"sum(1,2,3)"_s, u"id:sum br:( num:1 comma:, num:2 comma:, num:3 br:)"_s},
+        });
+    }
+    void decimalCommaTokens()
+    {
+        QFETCH(QString, source);
+        QFETCH(QString, expected);
+        QCOMPARE(tokens(source).join(u' '), expected);
+    }
+
     void englishErrors()
     {
         QCOMPARE(inl(u"ln(0)"_s, En), u"!Argument out of range for ln"_s);

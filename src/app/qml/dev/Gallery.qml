@@ -33,6 +33,7 @@ ApplicationWindow {
         { id: "lists", title: "Listy i karty", icon: "list", popup: false },
         { id: "feedback", title: "Postęp i powiadomienia", icon: "bell", popup: true },
         { id: "menus", title: "Menu", icon: "ellipsis", popup: true },
+        { id: "taskstatus", title: "Status zadania", icon: "list-todo", popup: true },
         { id: "dialog", title: "Okno dialogowe", icon: "panel-right", popup: true },
         { id: "confirm", title: "Potwierdzenie", icon: "triangle-alert", popup: true },
         { id: "datepicker", title: "Wybór daty", icon: "calendar", popup: false },
@@ -211,6 +212,7 @@ ApplicationWindow {
                     case "lists": return listsSection
                     case "feedback": return feedbackSection
                     case "menus": return menusSection
+                    case "taskstatus": return taskStatusSection
                     case "dialog": return dialogSection
                     case "confirm": return confirmSection
                     case "datepicker": return datePickerSection
@@ -1075,6 +1077,68 @@ ApplicationWindow {
                         BMenuItem { text: "Tryb źródła"; checkable: true; shortcut: "Ctrl+E" }
                         BMenuSeparator {}
                         BMenuItem { text: "Przenieś do kosza"; iconName: "trash-2"; danger: true; shortcut: "Del" }
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: taskStatusSection
+        GallerySection {
+            title: "Status zadania"
+            description: "Pole zadania: kliknięcie odhacza, prawy przycisk myszy albo przytrzymanie palcem otwiera menu statusów (w edytorze także Ctrl+Shift+Enter i „/” z poleceniem). „Bez statusu” usuwa pole wyboru, tekst zostaje."
+            Component.onCompleted: if (window.autoOpen) Qt.callLater(() => doingBox.openMenu())
+
+            Specimen {
+                label: "POLA ZADAŃ"
+                note: "TaskBox"
+                Repeater {
+                    model: [{ status: "todo", text: "Do zrobienia" }, { status: "doing", text: "W toku" },
+                            { status: "done", text: "Zrobione" }, { status: "deferred", text: "Oczekujące" },
+                            { status: "cancelled", text: "Anulowane" }]
+                    delegate: Row {
+                        id: specimenRow
+                        required property var modelData
+                        spacing: Theme.space1
+                        TaskBox {
+                            id: specimenBox
+                            anchors.verticalCenter: parent.verticalCenter
+                            status: specimenRow.modelData.status
+                            onToggled: toasts.show("Kliknięcie: " + specimenRow.modelData.text, { kind: "info" })
+                            onStatusChosen: (status) => specimenBox.status = status === "" ? "todo" : status
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: specimenRow.modelData.text
+                            font.family: Theme.fontUi
+                            font.pixelSize: Theme.textBase
+                            color: Theme.fg
+                        }
+                    }
+                }
+            }
+            Specimen {
+                label: "MENU STATUSU"
+                note: "TaskStatusMenu"
+                Item {
+                    width: 320
+                    height: 360
+                    Row {
+                        spacing: Theme.space1
+                        TaskBox {
+                            id: doingBox
+                            anchors.verticalCenter: parent.verticalCenter
+                            status: "doing"
+                            onStatusChosen: (status) => doingBox.status = status === "" ? "todo" : status
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Pomalować ścianę w łazience"
+                            font.family: Theme.fontEditor
+                            font.pixelSize: Theme.textEditor
+                            color: Theme.fg
+                        }
                     }
                 }
             }

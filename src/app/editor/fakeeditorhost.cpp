@@ -255,12 +255,13 @@ bool FakeEditorHost::setTaskStatus(const QString &path, int line, const QString 
 {
     const std::optional<TaskStatus> wanted = taskStatusFromName(status);
     const auto it = m_files.find(path);
-    if (!wanted || line < 0 || it == m_files.end())
+    if ((!wanted && !status.isEmpty()) || line < 0 || it == m_files.end())
         return false;
     QDate today = QDate::currentDate();
     if (const auto spec = dates::parseDateSpec(m_now))
         today = spec->date;
-    const QString edited = markdown::setTaskStatus(*it, line, *wanted, today);
+    const QString edited =
+            wanted ? markdown::setTaskStatus(*it, line, *wanted, today) : markdown::removeTaskMarker(*it, line);
     if (edited == *it)
         return false;
     *it = edited;
@@ -492,6 +493,11 @@ QUrl FakeEditorHost::assetUrl(const QString &path) const
     const QUrl url = QUrl::fromLocalFile(file);
     m_assetUrls.insert(path, url);
     return url;
+}
+
+bool FakeEditorHost::canDecodePicture(const QString &path) const
+{
+    return !m_undecodable.contains(pictureFormatName(path), Qt::CaseInsensitive) && EditorHost::canDecodePicture(path);
 }
 
 QString FakeEditorHost::saveAttachment(const QString &fileName, const QByteArray &data)

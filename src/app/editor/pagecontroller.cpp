@@ -30,6 +30,7 @@
 #include <QImage>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QSysInfo>
 #include <QUndoCommand>
 #include <QUndoStack>
@@ -139,6 +140,31 @@ QString withHeading(const QString &text, int level)
     QString rest = text;
     rest.remove(re);
     return QString(level, u'#') + u' ' + rest;
+}
+
+/// Whether `from`..`to` of a text block's body lies between the fence lines of code written in
+/// that block ("```js" typed on a new line got its closing fence at the end of the block): every
+/// fence of the body is closed, but the text before or after the range leaves one open. Enter and
+/// paste work there as in a code block. A fence that was open before (written elsewhere) does not
+/// count.
+bool insideOwnFence(QStringView body, qsizetype from, qsizetype to)
+{
+    from = std::clamp<qsizetype>(from, 0, body.size());
+    to = std::clamp<qsizetype>(to, from, body.size());
+    return missingClosingFence(body).isEmpty()
+           && (!missingClosingFence(body.first(from)).isEmpty() || !missingClosingFence(body.sliced(to)).isEmpty());
+}
+
+/// Two text blocks joined by a merge (Backspace at the start of `next`, Delete at the end of
+/// `prev`) with a line break between them when `prev` ends with the closing fence of its code:
+/// "```" + "b" would be "```b", which closes nothing, and the code would run on into the
+/// following blocks. nullopt when the plain join keeps every fence closed.
+std::optional<QString> joinedAfterFence(const QString &prev, const QString &next)
+{
+    if (next.isEmpty() || !missingClosingFence(prev).isEmpty() || !missingClosingFence(next).isEmpty()
+        || missingClosingFence(QString(prev + next)).isEmpty())
+        return std::nullopt;
+    return QString(prev + u'\n' + next);
 }
 
 } // namespace
@@ -480,7 +506,7 @@ bool PageController::save()
         return false; // never overwrite the other version before the conflict is resolved
     if (!m_dirty)
         return true;
-    const QString content = m_sourceMode ? m_sourceText : text();
+    const QString content = m_sourceMode ? m_sourceText : textToSave();
     if (!m_exists) {
         // A new page: an empty page or a lone empty bullet is no reason to create a file.
         static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
@@ -527,9 +553,63 @@ void PageController::followRename(const QString &oldPath, const QString &newPath
         m_saveTimer.start();
 }
 
+QString PageController::textToSave() const
+{
+    const BlockDocument &doc = m_model->document();
+    std::optional<BlockDocument> closed;
+    for (int i = 0; i + 1 < doc.count(); ++i) {
+        const QString body = loneFenceClosed(doc.at(i));
+        if (body.isEmpty() || !loneFenceRunsOn(doc, i))
+            continue;
+        if (!closed)
+            closed = doc;
+        closed->setBody(i, body);
+    }
+    return closed ? closed->toString() : text();
+}
+
+void PageController::closeLoneFence(quint64 uid)
+{
+    if (m_undoing || m_sourceMode || !uid)
+        return;
+    const int row = m_model->rowOfUid(uid);
+    if (!validRow(row))
+        return;
+    const markdown::BlockEntry &entry = m_model->document().at(row);
+    const QString body = loneFenceClosed(entry);
+    if (body.isEmpty())
+        return;
+    // A fence line that came with the file and was only looked at stays as it is (at the end of
+    // the page it runs on over nothing).
+    const bool edited = m_focusedUid != uid || m_focusedBody != entry.body;
+    if (!edited && !loneFenceRunsOn(m_model->document(), row))
+        return;
+    if (inCommand()) { // part of the enclosing undo step
+        applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+        return;
+    }
+    // The fence was typed: one undo step with the typing. Undo restores the text as it was before
+    // (a snapshot with the lone fence line would be read again as code running on over the blocks
+    // after it), redo the closed fence.
+    const bool continueTyping =
+            m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo() && !m_undo->canRedo();
+    const QString before = text();
+    const Focus focusBefore = currentFocus();
+    const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+    if (!r.changed())
+        return;
+    auto *cmd = new EditCommand(this, before, text(), focusBefore, Focus{-1, -1}, uid);
+    cmd->setMergeable(continueTyping);
+    m_undo->push(cmd);
+    m_typingOpen = false;
+    markDirty();
+}
+
 void PageController::markDirty()
 {
-    const QString current = m_sourceMode ? m_sourceText : text();
+    // What save() would write: a lone fence being typed is saved closed (textToSave()), so the
+    // text compared with the file must be closed too, or every later check would call it dirty.
+    const QString current = m_sourceMode ? m_sourceText : textToSave();
     setDirty(current != m_savedText);
     if (m_dirty && !m_conflict) {
         if (m_saveTimer.interval() == 0)
@@ -570,7 +650,7 @@ void PageController::writeConflictCopy()
 {
     if (!m_host || m_path.isEmpty() || !m_conflict)
         return;
-    const QString local = m_sourceMode ? m_sourceText : text();
+    const QString local = m_sourceMode ? m_sourceText : textToSave();
     // One copy per conflict, rewritten when the local text changed (suspend, quit, close).
     if (!m_conflictCopyPath.isEmpty() && local == m_conflictCopyText)
         return;
@@ -617,7 +697,9 @@ void PageController::onFileChanged(const QString &path)
         m_exists = true;
         Q_EMIT existsChanged();
     }
-    const QString local = m_sourceMode ? m_sourceText : text();
+    // The local version as it would be saved: merged with an open lone fence line ("```js" being
+    // typed), the result would read as code running on over the blocks after it.
+    const QString local = m_sourceMode ? m_sourceText : textToSave();
     // While a conflict is open every later change of the file decides again (it may merge now,
     // equal ours, or go back to the base): the conflict state and the "other version" offered by
     // takeRemote() never go stale.
@@ -707,7 +789,7 @@ void PageController::resolveConflict(const QString &text)
 
 void PageController::keepLocal()
 {
-    resolveConflict(m_sourceMode ? m_sourceText : text());
+    resolveConflict(m_sourceMode ? m_sourceText : textToSave());
 }
 
 void PageController::takeRemote()
@@ -756,6 +838,7 @@ EditResult PageController::applyOp(const std::function<EditResult(BlockDocument 
 
 void PageController::restore(const QString &snapshot, const Focus &focus)
 {
+    const QScopedValueRollback undoing(m_undoing, true);
     m_restoring = true;
     m_typingOpen = false;
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot);
@@ -785,16 +868,26 @@ PageController::Focus PageController::focusFromResult(const EditResult &r, int f
     return f;
 }
 
-void PageController::setFocus(const Focus &focus, bool resetText)
+void PageController::setFocus(const Focus &target, bool resetText)
 {
-    if (!validRow(focus.row)) {
+    if (!validRow(target.row)) {
         stopEditing();
         return;
     }
-    const quint64 uid = m_model->uidAt(focus.row);
+    const quint64 uid = m_model->uidAt(target.row);
     const bool rowChanged = uid != m_editingUid;
-    if (rowChanged)
+    Focus focus = target;
+    if (rowChanged && m_editingUid) {
+        closeLoneFence(m_editingUid);
+        focus.row = m_model->rowOfUid(uid); // the same row: only that block's body changed
+        if (!validRow(focus.row))
+            return;
+    }
+    if (rowChanged) {
         m_typingOpen = false;
+        m_focusedUid = uid;
+        m_focusedBody = m_model->document().at(focus.row).body;
+    }
     m_editingUid = uid;
     const int len = int(m_model->editTextAt(focus.row).size());
     m_cursor = focus.cursor < 0 ? len : snapToCharacter(m_model->editTextAt(focus.row), focus.cursor);
@@ -997,6 +1090,9 @@ void PageController::stopEditing()
 {
     if (!m_editingUid)
         return;
+    closeLoneFence(m_editingUid);
+    if (!m_editingUid)
+        return; // closing it stopped editing already
     m_editingUid = 0;
     m_typingOpen = false;
     m_model->setEditingUid(0);
@@ -1033,11 +1129,17 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     m_typingUid = uid;
     m_typingCell = QPoint(-1, -2);
     markDirty();
-    // Normalisation: "[ ] " typed at the start turns into a checkbox, etc.
+    // Normalisation: "[ ] " typed at the start turns into a checkbox, a closing fence is added
+    // after a fence typed in a text block, etc. The caret keeps its place when the text before
+    // it did not change; otherwise it moves with the text after it.
     const QString now = m_model->editTextAt(row);
     if (now != edit && editingRow() == row) {
+        const int at = std::clamp(cursor >= 0 ? cursor : int(edit.size()), 0, int(edit.size()));
+        int same = 0;
+        while (same < at && same < now.size() && edit[same] == now[same])
+            ++same;
         const int delta = int(edit.size() - now.size());
-        m_cursor = std::clamp((cursor >= 0 ? cursor : int(edit.size())) - delta, 0, int(now.size()));
+        m_cursor = same == at ? at : std::clamp(at - delta, 0, int(now.size()));
         Q_EMIT editTextReset(row, now, m_cursor);
     }
 }
@@ -1055,8 +1157,9 @@ QVariantMap PageController::split(int row, int cursor)
     cursor = cursor < 0 ? len : snapToCharacter(shape.editText, cursor);
 
     // "```calc" + Enter opens a code block (any fence length and info string Markdown accepts).
+    // Not after a task marker: "- [ ] ```js" is a task's text, not a fence.
     const QString opening = shape.editText.trimmed();
-    if (cursor == len && !opening.contains(u'\n')) {
+    if (cursor == len && !shape.task && !opening.contains(u'\n')) {
         if (const auto fence = parseFence(opening); fence && !fence->closed) {
             const QString closing(fence->length, fence->marker);
             beginCommand();
@@ -1068,6 +1171,20 @@ QVariantMap PageController::split(int row, int cursor)
             setFocus(f, true);
             return result(f.row, f.cursor);
         }
+    }
+
+    // Enter between the fence lines of code written in this text block: a line break, as in a
+    // code block. A split would leave an unclosed fence in one of the halves, and in the saved
+    // file that code would run on into the blocks after it.
+    if (const int at = toBodyCursor(row, cursor); insideOwnFence(entry.body, at, at)) {
+        const QString updated =
+                bodyWithEditText(entry, shape.editText.left(cursor) + u'\n' + shape.editText.mid(cursor));
+        beginCommand();
+        applyOp([&](BlockDocument &d) { return d.setBody(row, updated); });
+        const Focus f{row, cursor + 1};
+        endCommand(f);
+        setFocus(f, true);
+        return result(f.row, m_cursor);
     }
 
     // Document mode: Enter on an empty list item leaves the list (Obsidian) — a nested item moves
@@ -1119,11 +1236,16 @@ QVariantMap PageController::mergeWithPrevious(int row)
         }
         Q_EMIT foldStateChanged();
     }
+    const std::optional<QString> joined = joinedAfterFence(doc.at(row - 1).body, doc.at(row).body);
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(row); });
     Focus f;
     if (r.changed()) {
         f = focusFromResult(r, row - 1);
+        if (joined) {
+            applyOp([&](BlockDocument &d) { return d.setBody(f.row, *joined); });
+            ++f.cursor;
+        }
     } else {
         // The previous block is not a text block (code, table…): move the caret there.
         f = {r.focus >= 0 ? r.focus : row - 1, -1};
@@ -1145,9 +1267,15 @@ QVariantMap PageController::mergeNext(int row)
     if (nextView != BlockView::Text && nextView != BlockView::Heading)
         return result(-1, -1);
     const int cursor = int(m_model->editTextAt(row).size());
+    const BlockDocument &doc = m_model->document();
+    const std::optional<QString> joined = joinedAfterFence(doc.at(row).body, doc.at(next).body);
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.mergeWithPrevious(next); });
-    const Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    Focus f = r.changed() ? focusFromResult(r, row) : Focus{row, cursor};
+    if (r.changed() && joined) {
+        applyOp([&](BlockDocument &d) { return d.setBody(f.row, *joined); });
+        ++f.cursor;
+    }
     endCommand(f);
     setFocus(f, true);
     return result(f.row, f.cursor);
@@ -1288,26 +1416,72 @@ void PageController::cycleTask(int row)
         setTaskStatus(row, QString());
 }
 
-void PageController::setTaskStatus(int row, const QString &status)
+namespace {
+
+/// Where a caret at `cursor` of `before` is in `after`, the same text edited in one place (a
+/// task's ✅ date added or removed, its marker gone): before the edit it stays, after it it moves
+/// with the text, inside it it goes to the end of the new text there.
+int caretThroughEdit(const QString &before, const QString &after, int cursor)
 {
-    if (!validRow(row))
-        return;
+    const TextDelta d = TextDelta::between(before, after);
+    if (cursor <= d.from)
+        return cursor;
+    if (cursor >= d.from + d.removed.size())
+        return cursor + int(d.inserted.size() - d.removed.size());
+    return int(d.from + d.inserted.size());
+}
+
+} // namespace
+
+std::optional<QString> PageController::slashTaskStatus(const QString &command)
+{
+    if (command == u"task")
+        return u"todo"_s;
+    if (command == u"taskDoing")
+        return u"doing"_s;
+    if (command == u"taskDone")
+        return u"done"_s;
+    if (command == u"taskWaiting")
+        return u"deferred"_s;
+    if (command == u"taskCancelled")
+        return u"cancelled"_s;
+    if (command == u"taskNone")
+        return QString();
+    return std::nullopt;
+}
+
+void PageController::applyTaskStatus(int row, const QString &status)
+{
     const QDate day = today();
-    const quint64 uid = m_model->uidAt(row);
-    beginCommand();
     if (status.isEmpty()) {
         // Back to a plain block: reopen first (removes ✅/❌ dates), then drop the marker.
-        if (m_model->shapeAt(row).task) {
-            applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, TaskStatus::Todo, day); });
-            const int r = m_model->rowOfUid(uid);
-            if (r >= 0) {
-                const QString body = withoutTaskMarker(m_model->document().at(r));
-                applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
-            }
+        if (!m_model->shapeAt(row).task)
+            return;
+        const quint64 uid = m_model->uidAt(row);
+        applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, TaskStatus::Todo, day); });
+        const int r = m_model->rowOfUid(uid);
+        if (r >= 0) {
+            const QString body = withoutTaskMarker(m_model->document().at(r));
+            applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
         }
     } else if (const auto s = taskStatusFromName(status)) {
         applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, *s, day); });
     }
+}
+
+void PageController::setTaskStatus(int row, const QString &status)
+{
+    if (!validRow(row))
+        return;
+    // The caret of the block being edited stays in its words when the text before it changes.
+    const quint64 uid = m_model->uidAt(row);
+    const bool editingThis = m_editingUid == uid;
+    const QString editBefore = editingThis ? m_model->editTextAt(row) : QString();
+    beginCommand();
+    applyTaskStatus(row, status);
+    const int r = m_model->rowOfUid(uid);
+    if (editingThis && r >= 0 && m_cursor >= 0)
+        m_cursor = caretThroughEdit(editBefore, m_model->editTextAt(r), m_cursor);
     endCommand(currentFocus());
     Q_EMIT editingRowChanged();
     emitEditTextReset();
@@ -1728,7 +1902,11 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
     const QString edit = shape.editText;
     from = snapToCharacter(edit, from);
     to = std::max(from, snapToCharacter(edit, to));
-    const bool textBlock = shape.view == BlockView::Text || shape.view == BlockView::Heading;
+    // Between the fence lines of code written in a text block the text goes in as code, as in a
+    // code block (blank lines in it would split it into blocks otherwise).
+    const bool textBlock =
+            (shape.view == BlockView::Text || shape.view == BlockView::Heading)
+            && !insideOwnFence(m_model->document().at(row).body, toBodyCursor(row, from), toBodyCursor(row, to));
     QString markdown = text;
     while (markdown.endsWith(u'\n'))
         markdown.chop(1);
@@ -1766,7 +1944,12 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
         const markdown::BlockEntry &e = pasteDoc.at(k);
         const int depth = baseDepth + std::max(0, e.depth - firstDepth);
         const bool listItem = intoList || e.kind == BlockKind::ListItem;
-        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, e.body, depth, listItem); });
+        // A pasted snippet whose fence is not closed gets its closing fence: on the page, blocks
+        // follow it that the fence would turn into code.
+        QString body = e.body;
+        if (const QString closing = missingClosingFence(body); !closing.isEmpty())
+            body += u'\n' + closing;
+        const EditResult r = applyOp([&](BlockDocument &d) { return d.insertAfter(last, body, depth, listItem); });
         if (r.focus >= 0)
             last = r.focus;
     }
@@ -2066,16 +2249,15 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
     const markdown::BlockEntry &entry = m_model->document().at(currentRow());
     const bool listItem = entry.kind == BlockKind::ListItem;
     const QString cmd = command;
-    if (cmd == u"task") {
-        if (!m_model->shapeAt(currentRow()).task) {
-            const int r = currentRow();
-            const int before = int(m_model->editTextAt(r).size());
-            applyOp([&](BlockDocument &d) { return d.setTaskStatus(r, TaskStatus::Todo, today()); });
-            const int r2 = currentRow();
-            focus = {r2, std::max(0, cursor + int(m_model->editTextAt(r2).size()) - before)};
-        }
-    } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled"
-               || cmd == u"recurrence" || cmd == u"date" || cmd == u"template" || cmd == u"image") {
+    if (const auto status = slashTaskStatus(cmd)) {
+        // A task's status (a block that is no task becomes one; "" removes the marker), in the
+        // same undo step as removing the "/command"; the caret stays in the words around it.
+        const QString before = m_model->editTextAt(currentRow());
+        applyTaskStatus(currentRow(), *status);
+        const int r = currentRow();
+        focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
+    } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
+               || cmd == u"date" || cmd == u"template" || cmd == u"image") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -2394,7 +2576,7 @@ QString PageController::toggledStatus(const QString &status)
 
 bool PageController::setTaskStatusAt(const QString &path, int line, const QString &status)
 {
-    if (path.isEmpty() || line < 0 || !taskStatusFromName(status))
+    if (path.isEmpty() || line < 0 || (!status.isEmpty() && !taskStatusFromName(status)))
         return false;
     if (path == m_path) {
         const int row = rowOfLine(line);
@@ -2483,7 +2665,12 @@ QList<QUrl> copiedFiles(const QMimeData *data)
 
 QStringList PageController::imageNameFilters() const
 {
-    return {tr("Pictures (*.png *.jpg *.jpeg *.gif *.webp *.svg *.bmp *.avif)"), tr("All files (*)")};
+    // The pictures the editor embeds as pictures (one list: paths::pictureExtensions()).
+    QStringList patterns;
+    for (const QString &ext : paths::pictureExtensions())
+        patterns.append(u'*' + ext);
+    //: %1: the file name patterns of pictures, e.g. "*.png *.jpg *.jpeg"
+    return {tr("Pictures (%1)").arg(patterns.join(u' ')), tr("All files (*)")};
 }
 
 bool PageController::clipboardHasImage() const
@@ -2651,7 +2838,8 @@ void PageController::redo()
 
 QString PageController::sourceText() const
 {
-    return m_sourceMode ? m_sourceText : text();
+    // Outside source mode: the text as it is saved (the merge dialog's "this device").
+    return m_sourceMode ? m_sourceText : textToSave();
 }
 
 void PageController::setSourceText(const QString &edited)

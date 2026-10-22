@@ -23,12 +23,21 @@ namespace brulion::markdown {
 /// reminder) date or from `today` for "when done" rules, ➕ set to today, no ✅/❌/block id — like
 /// Obsidian Tasks. A non-task line becomes a task (`[ ] ` after its list marker, or a `- [ ] `
 /// prefix). Lines in code, frontmatter, tables, headings, rules, callout headers, hidden
-/// comments and out-of-range lines leave the content unchanged.
+/// comments, a line that is only `$$` (it opens a display formula, SYNTAX §11; "- [ ] $$" would
+/// open none) and out-of-range lines leave the content unchanged.
 QString setTaskStatus(const QString &content, int line, TaskStatus status, QDate today);
 
 /// Toggle the task at `line`: todo / doing / deferred → done; done / cancelled → todo. A line
 /// that is not a task becomes a todo task.
 QString toggleTask(const QString &content, int line, QDate today);
+
+/// Remove the task marker of the task at `line` ("no status"; any line of a list item targets the
+/// item's first line): the checkbox or Logseq keyword and the space after it go, so do the ✅ / ❌
+/// dates; the list item and the rest of its text stay ("- [x] a ✅ 2026-10-14" → "- a",
+/// "- TODO a" → "- a"); text that would then open a code fence or a lone `$$` formula over the
+/// lines after it gets its first character escaped ("- [ ] ```js" → "- \```js"). Lines that are
+/// not tasks (and every line setTaskStatus leaves alone) give the content unchanged.
+QString removeTaskMarker(const QString &content, int line);
 
 /// Random 6-character block id `[a-z0-9]` (QRandomGenerator::global(), unbiased).
 QString generateBlockId();

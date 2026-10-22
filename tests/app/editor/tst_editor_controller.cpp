@@ -6,17 +6,20 @@
 #include "blocktext.h"
 #include "dayclock.h"
 #include "fakeeditorhost.h"
+#include "markdown/parse.h"
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
+#include <QBuffer>
 #include <QClipboard>
-#include <QFile>
-#include <QImage>
-#include <QMimeData>
-#include <QTemporaryDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QGuiApplication>
+#include <QImage>
+#include <QImageReader>
+#include <QMimeData>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
@@ -63,6 +66,52 @@ struct Fixture {
         return out;
     }
 };
+
+/// The blocks of a document: kind, depth, block id and body of each.
+QStringList blocksOf(const markdown::BlockDocument &doc)
+{
+    QStringList out;
+    for (int i = 0; i < doc.count(); ++i) {
+        const markdown::BlockEntry &e = doc.at(i);
+        out.append(kindName(e.kind) + u'/' + QString::number(e.depth) + u'/' + e.blockId + u'/' + e.body);
+    }
+    return out;
+}
+
+/// What the index takes from a note: tasks, block ids, links, tags and reminders.
+QString indexedOf(const QString &content)
+{
+    const ParsedNote n = markdown::parseNote(Page, content);
+    QStringList tasks;
+    for (const Task &t : n.tasks)
+        tasks.append(t.text);
+    QStringList ids = n.blockIds.keys();
+    ids.sort();
+    QStringList links;
+    for (const Link &l : n.links)
+        links.append(l.target);
+    QStringList reminders;
+    for (const Reminder &r : n.reminders)
+        reminders.append(r.text);
+    return u"tasks="_s + tasks.join(u'|') + u" ids="_s + ids.join(u',') + u" links="_s + links.join(u',') + u" tags="_s
+           + n.tags.join(u',') + u" reminders="_s + reminders.join(u'|');
+}
+
+/// The page saved and opened again in a new controller: its blocks are the ones the editor had.
+void verifyReload(Fixture &f)
+{
+    QVERIFY(f.page.save());
+    const QString saved = f.host.file(Page);
+    QCOMPARE(saved, f.text());
+    QCOMPARE(blocksOf(markdown::BlockDocument(saved)), blocksOf(f.model()->document()));
+    PageController reopened;
+    reopened.setNow(Now);
+    reopened.setHost(&f.host);
+    reopened.setPath(Page);
+    QCOMPARE(reopened.blocks()->rowCount(), f.count());
+    for (int r = 0; r < f.count(); ++r)
+        QCOMPARE(reopened.blocks()->editTextAt(r), f.edit(r));
+}
 
 } // namespace
 
@@ -441,6 +490,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         nested.page.startEditing(1, 0);
         nested.page.split(1, 0);
         QCOMPARE(nested.text(), u"- a\n- \n"_s);
+        // A task's text is not a fence: Enter starts the next task.
+        Fixture task(u"- [ ] ```js\n"_s);
+        task.page.split(0, 5);
+        QCOMPARE(task.text(), u"- [ ] ```js\n- [ ] \n"_s);
         // Code blocks do not split.
         Fixture code(u"```\nx\n```\n"_s);
         QCOMPARE(code.page.split(0, 1).value(u"row"_s).toInt(), 0);
@@ -853,6 +906,165 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(rule.text(), u"- a\n- /lin\n"_s);
     }
 
+    void taskStatusSlashCommands_data()
+    {
+        // The block, the row being edited, the typed "/command" (it is found in the row's edit
+        // text), the command; the page and the caret (edit text position) after it.
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("command");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("cursor");
+        QTest::newRow("list item becomes a task")
+                << u"- Kupić mleko /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] Kupić mleko \n"_s << 12;
+        QTest::newRow("paragraph becomes a done task") << u"Kupić mleko /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                                       << u"- [x] Kupić mleko ✅ 2026-10-15\n"_s << 12;
+        QTest::newRow("command between words")
+                << u"- Kupić /toku mleko\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- [/] Kupić  mleko\n"_s << 6;
+        QTest::newRow("done task back to do")
+                << u"- [x] Zapłacić ✅ 2026-10-14 /do\n"_s << 0 << u"/do"_s << u"task"_s << u"- [ ] Zapłacić \n"_s << 9;
+        QTest::newRow("waiting") << u"- [ ] Odpisać Żanecie /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                 << u"- [>] Odpisać Żanecie \n"_s << 16;
+        QTest::newRow("cancelled") << u"- [/] Wizyta /anul u dentysty\n"_s << 0 << u"/anul"_s << u"taskCancelled"_s
+                                   << u"- [-] Wizyta  u dentysty ❌ 2026-10-15\n"_s << 7;
+        QTest::newRow("no status on a task")
+                << u"- [/] Pisać raport /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać raport \n"_s << 13;
+        QTest::newRow("no status on a done task")
+                << u"- [x] Pranie ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pranie \n"_s << 7;
+        QTest::newRow("no status on a plain item")
+                << u"- Pisać /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać \n"_s << 6;
+        QTest::newRow("no status on a paragraph")
+                << u"Akapit /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"Akapit \n"_s << 7;
+        QTest::newRow("same status") << u"- [/] W toku /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                     << u"- [/] W toku \n"_s << 7;
+        QTest::newRow("nested item") << u"- rodzic\n\t- dziecko /zad\n"_s << 1 << u"/zad"_s << u"task"_s
+                                     << u"- rodzic\n\t- [ ] dziecko \n"_s << 8;
+        QTest::newRow("numbered item") << u"1. pierwszy /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                       << u"1. [x] pierwszy ✅ 2026-10-15\n"_s << 9;
+        QTest::newRow("first line of a multi-line item")
+                << u"- pierwsza /zrob\n  druga\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                << u"- [x] pierwsza ✅ 2026-10-15\n  druga\n"_s << 9;
+        QTest::newRow("second line of a multi-line item") << u"- pierwsza\n  druga /zad\n"_s << 0 << u"/zad"_s
+                                                          << u"task"_s << u"- [ ] pierwsza\n  druga \n"_s << 15;
+        QTest::newRow("Logseq todo to doing") << u"- TODO Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                              << u"- DOING Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq later to now")
+                << u"- LATER Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- NOW Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq waiting") << u"- TODO Paczka /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                        << u"- WAITING Paczka \n"_s << 7;
+        QTest::newRow("Logseq no status")
+                << u"- DONE Paczka ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Paczka \n"_s << 7;
+        QTest::newRow("crlf kept") << u"- a\r\n- b /zad\r\n- c\r\n"_s << 1 << u"/zad"_s << u"task"_s
+                                   << u"- a\r\n- [ ] b \r\n- c\r\n"_s << 2;
+        QTest::newRow("empty block") << u"- /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] \n"_s << 0;
+    }
+
+    void taskStatusSlashCommands()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(QString, typed);
+        QFETCH(QString, command);
+        QFETCH(QString, expected);
+        QFETCH(int, cursor);
+        Fixture f(content);
+        const int from = int(f.edit(row).indexOf(typed));
+        QVERIFY(from >= 0);
+        const int to = from + int(typed.size());
+        f.page.startEditing(row, to);
+        const QVariantMap r = f.page.applySlashCommand(row, from, to, command);
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(r.value(u"action"_s).toString(), QString());
+        // Still editing that block, the caret where the command was (in edit text coordinates).
+        QCOMPARE(r.value(u"row"_s).toInt(), row);
+        QCOMPARE(f.page.editingRow(), row);
+        QCOMPARE(f.page.cursorPosition(), cursor);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), cursor);
+        // One undo step, the command's text back.
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        f.page.redo();
+        QCOMPARE(f.text(), expected);
+    }
+
+    void taskStatusSlashCommandNames()
+    {
+        QCOMPARE(PageController::slashTaskStatus(u"task"_s), std::optional<QString>(u"todo"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDoing"_s), std::optional<QString>(u"doing"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDone"_s), std::optional<QString>(u"done"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskWaiting"_s), std::optional<QString>(u"deferred"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskCancelled"_s), std::optional<QString>(u"cancelled"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskNone"_s), std::optional<QString>(QString()));
+        QVERIFY(!PageController::slashTaskStatus(u"reminder"_s));
+        QVERIFY(!PageController::slashTaskStatus(QString()));
+        // Each of them is a command of the "/" menu.
+        for (const QString &id :
+             {u"task"_s, u"taskDoing"_s, u"taskDone"_s, u"taskWaiting"_s, u"taskCancelled"_s, u"taskNone"_s})
+            QVERIFY2(slashCommand(id), qPrintable(id));
+    }
+
+    void taskStatusKeepsTheCaret()
+    {
+        // The status menu / Ctrl+Enter while editing: the caret stays in its words when a date
+        // before it goes or one after it comes.
+        Fixture f(u"- [x] Kupić ✅ 2026-10-01 mleko\n"_s);
+        f.page.startEditing(0, 20); // after "mleko"'s "m"
+        QCOMPARE(f.edit(0).mid(20), u"leko"_s);
+        f.page.setTaskStatus(0, u"doing"_s);
+        QCOMPARE(f.text(), u"- [/] Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        f.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(f.text(), u"- [x] Kupić mleko ✅ 2026-10-15\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko ✅ 2026-10-15"_s);
+        f.page.setTaskStatus(0, QString());
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        QCOMPARE(f.page.editingRow(), 0);
+        f.page.setTaskStatus(0, u"bogus"_s); // nothing happens
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+    }
+
+    void taskStatusOnRecurringTask()
+    {
+        // Done from a "/" command: the next occurrence goes above, in the same undo step as the
+        // status and the command's removal; editing stays on the completed task.
+        const QString recurring = u"- [ ] Podlać kwiaty 📅 2026-10-15 🔁 every week /zrob\n"_s;
+        const QString completed = u"- [ ] Podlać kwiaty 📅 2026-10-22 🔁 every week\n"
+                                  u"- [x] Podlać kwiaty 📅 2026-10-15 🔁 every week ✅ 2026-10-15\n"_s;
+        Fixture f(recurring);
+        const int from = int(f.edit(0).indexOf(u"/zrob"_s));
+        f.page.startEditing(0, from + 5);
+        const QVariantMap r = f.page.applySlashCommand(0, from, from + 5, u"taskDone"_s);
+        QCOMPARE(f.text(), completed);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.edit(1).mid(f.page.cursorPosition()), u"✅ 2026-10-15"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), recurring);
+        f.page.redo();
+        QCOMPARE(f.text(), completed);
+
+        // The status menu: the same, one undo step; cancelled and no status make no new occurrence.
+        const QString open = u"- [/] Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s;
+        Fixture m(open);
+        m.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(m.text(), completed);
+        m.page.undo();
+        QCOMPARE(m.text(), open);
+        m.page.setTaskStatus(0, u"cancelled"_s);
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        m.page.setTaskStatus(0, QString());
+        QCOMPARE(m.text(), u"- Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s);
+        m.page.undo();
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        // In another file (Tasks, the calendar, query results): the same text.
+        m.host.setNow(Now);
+        m.host.setFile(u"Inna.md"_s, open);
+        QVERIFY(m.page.setTaskStatusAt(u"Inna.md"_s, 0, u"done"_s));
+        QCOMPARE(m.host.file(u"Inna.md"_s), completed);
+    }
+
     void pasting()
     {
         // A list pasted into an empty block becomes blocks, nesting kept.
@@ -968,6 +1180,442 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         adjacent.page.setEditText(0, u"first\n```\nstill code"_s);
         QCOMPARE(adjacent.text(), u"````\nfirst\n```\nstill code\n````\n```\nsecond\n```\n\nPo\n"_s);
         QCOMPARE(adjacent.count(), 3);
+    }
+
+    // One keystroke in the code of a code block followed by its block id, properties or more
+    // text of its list item changes that character in the file and nothing else: the tasks,
+    // ids, links and reminders after the code stay in the index, and a reload sees the blocks
+    // the editor has.
+    void typingInCodeKeepsWhatFollowsIt_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("editText");
+        QTest::newRow("code with id, task after")
+                << u"```js\nlet a = 1;\n```\n^kod123\n\n- [ ] Zadzwonić do mamy #praca ⏰ 2026-10-22 09:00\n- Spotkanie [[Inna]]\n"_s
+                << 0 << u"let a = 1;"_s;
+        QTest::newRow("id after a blank line")
+                << u"```js\nlet a = 1;\n```\n\n^kod123\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("logseq id:: and a child task")
+                << u"- ```js\n  let a = 1;\n  ```\n  id:: 650f1c2a-0000-4000-8000-000000000001\n  - [ ] dziecko #ważne ⏰ 2026-10-22 09:00\n- dalej [[Inna]]\n"_s
+                << 0 << u"let a = 1;"_s;
+        QTest::newRow("item with id and a child")
+                << u"- ```js\n  let a = 1;\n  ```\n  ^kod123\n  - [ ] dziecko #ważne\n- dalej\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("item text after code")
+                << u"- ```js\n  let a = 1;\n  ```\n  opis [[Inna]] #tag\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej\n"_s
+                << 0 << u"let a = 1;\n```\nopis [[Inna]] #tag"_s;
+        QTest::newRow("item with two fences")
+                << u"- ```js\n  let a = 1;\n  ```\n  #tag\n  ```py\n  b = 2\n  ```\n  - [ ] dziecko\n- dalej\n"_s << 0
+                << u"let a = 1;\n```\n#tag\n```py\nb = 2\n```"_s;
+        QTest::newRow("crlf")
+                << u"```js\r\nlet a = 1;\r\n```\r\n^kod123\r\n\r\n- [ ] zadanie #praca\r\n- [[Inna]]\r\n"_s << 0
+                << u"let a = 1;"_s;
+        QTest::newRow("tabs")
+                << u"- rodzic\n\t- ```js\n\t  let a = 1;\n\t  ```\n\t  ^kod123\n\t\t- [ ] wnuk #praca\n\t- dalej [[Inna]]\n"_s
+                << 1 << u"let a = 1;"_s;
+        QTest::newRow("tildes with info")
+                << u"~~~python {.numberLines}\nlet a = 1;\n~~~\n^kod123\n\n- [ ] zadanie\n"_s << 0 << u"let a = 1;"_s;
+    }
+
+    void typingInCodeKeepsWhatFollowsIt()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(QString, editText);
+        Fixture f(content);
+        const QString indexed = indexedOf(content);
+        QVERIFY(!markdown::parseNote(Page, content).tasks.isEmpty());
+        f.page.startEditing(row, 9);
+        f.page.setEditText(row, f.edit(row).replace(u"let a = 1;"_s, u"let a = 2;"_s), 9);
+        QCOMPARE(f.text(), QString(content).replace(u"let a = 1;"_s, u"let a = 2;"_s));
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // The code editor shows the code: no fence lines, no block id or properties.
+        QCOMPARE(f.edit(row), QString(editText).replace(u"1;"_s, u"2;"_s));
+    }
+
+    void displayFormulaLeftOpenKeepsTheItemsAfterIt()
+    {
+        // Review regression: deleting the closing `$$` of a formula in an outline (or Enter inside
+        // it) saved a page whose `$$` line ran on to the `$$` line of a later item: reopened, the
+        // items between were formula text, their task and reminder gone from the index.
+        const QString content =
+                u"- Wzór:\n  $$\n  a^2\n  $$\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n- Drugi:\n  $$\n  b\n  $$\n"_s;
+        Fixture f(content);
+        QCOMPARE(f.count(), 3);
+        const QString indexed = indexedOf(content);
+        f.page.startEditing(0, 0);
+        f.page.setEditText(0, u"Wzór:\n$$\na^2"_s, 12);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        f.page.setEditText(0, u"Wzór:\n$$\na^2\n$$"_s, 15);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // Enter inside the second formula: two items, the formula's lines as text.
+        f.page.startEditing(2, 0);
+        f.page.split(2, 10);
+        QCOMPARE(f.count(), 4);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+    }
+
+    void codeBlockReferenceThenTyping()
+    {
+        // "Copy block reference" writes the id on its own line after the closing fence; typing in
+        // the code afterwards — a fence-like line too — keeps it and the task after the block.
+        Fixture f(u"```js\nlet a = 1;\n```\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        const QString id = f.page.ensureBlockRef(0);
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(f.text(), u"```js\nlet a = 1;\n```\n^"_s + id + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        f.page.setEditText(0, u"// komentarz\n"_s + f.edit(0));
+        QCOMPARE(f.text(),
+                 u"```js\n// komentarz\nlet a = 1;\n```\n^"_s + id + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"// komentarz\nlet a = 1;"_s);
+        f.page.setEditText(0, u"// komentarz\nlet a = 1;\n```"_s);
+        QCOMPARE(f.text(), u"````js\n// komentarz\nlet a = 1;\n```\n````\n^"_s + id
+                                   + u"\n\n- [ ] zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"// komentarz\nlet a = 1;\n```"_s);
+        const ParsedNote n = markdown::parseNote(Page, f.text());
+        QVERIFY(n.blockIds.contains(id));
+        QCOMPARE(n.tasks.size(), 1);
+        QCOMPARE(n.reminders.size(), 1);
+        verifyReload(f);
+    }
+
+    void typedClosingFenceClosesUnclosedCode()
+    {
+        // A code block whose fence was never closed (a file written elsewhere) runs on over the
+        // task after it; typing the closing fence closes it, as before widening existed.
+        Fixture f(u"Akapit\n\n```js\nkod\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.edit(1), u"kod\n\n- [ ] zadanie"_s);
+        f.page.setEditText(1, u"kod\n```\n\n- [ ] zadanie"_s);
+        QCOMPARE(f.text(), u"Akapit\n\n```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        const markdown::BlockDocument reloaded(f.text());
+        QCOMPARE(reloaded.count(), 3);
+        QCOMPARE(reloaded.at(2).kind, BlockKind::ListItem);
+        QCOMPARE(markdown::parseNote(Page, f.text()).tasks.size(), 1);
+        // At the end of the page: the typed fence becomes the hidden closing fence.
+        Fixture end(u"Akapit\n\n```js\nkod\n"_s);
+        end.page.startEditing(1, 3);
+        end.page.setEditText(1, u"kod\n```"_s, 7);
+        QCOMPARE(end.text(), u"Akapit\n\n```js\nkod\n```\n"_s);
+        QCOMPARE(end.edit(1), u"kod"_s);
+        QCOMPARE(end.page.cursorPosition(), 3);
+        verifyReload(end);
+        // In a list item (where the fence ended at the next item).
+        Fixture item(u"- ```\n  code\n- next\n"_s);
+        item.page.setEditText(0, u"code\n```"_s);
+        QCOMPARE(item.text(), u"- ```\n  code\n  ```\n- next\n"_s);
+        QCOMPARE(item.edit(0), u"code"_s);
+        verifyReload(item);
+    }
+
+    void fenceLikeLineInADisplayFormulaIsNoFence()
+    {
+        // Review regression: a ``` or ~~~ line typed inside a formula between `$$` lines got a
+        // closing fence after the formula, and that one opened a code block running over every
+        // block after it (the line inside the formula is formula, not a fence).
+        const QString content = u"$$\na\nb\n$$\n\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(content);
+        const QString indexed = indexedOf(content);
+        f.page.startEditing(0, 4);
+        f.page.setEditText(0, u"$$\na\n~~~\nb\n$$"_s, 7);
+        QCOMPARE(f.text(), u"$$\na\n~~~\nb\n$$\n\n- [ ] Zadanie ąę ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(indexedOf(f.text()), indexed);
+        verifyReload(f);
+        // In a list item too: the task after it stays a task.
+        Fixture item(u"- Wzór:\n  $$\n  a\n  $$\n- [ ] Zadanie ⏰ 2026-10-22 09:00\n"_s);
+        item.page.startEditing(0, 0);
+        item.page.setEditText(0, u"Wzór:\n$$\na\n```\n$$"_s, 14);
+        QCOMPARE(item.text(), u"- Wzór:\n  $$\n  a\n  ```\n  $$\n- [ ] Zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).tasks.size(), 1);
+        verifyReload(item);
+    }
+
+    void fenceTypedInTextBlockIsClosed()
+    {
+        // ``` typed on a new line of a paragraph (Shift+Enter) opens a fence: its closing fence
+        // is added at the end of the block, so the task after it stays a task in the file.
+        Fixture f(u"Akapit\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        QCOMPARE(f.text(), u"Akapit\n```\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(f.edit(0), u"Akapit\n```\n```"_s);
+        // The caret stays where the user typed, before the added fence.
+        QCOMPARE(textResets.size(), 1);
+        QCOMPARE(textResets[0].at(1).toString(), u"Akapit\n```\n```"_s);
+        QCOMPARE(textResets[0].at(2).toInt(), 10);
+        QCOMPARE(f.page.cursorPosition(), 10);
+        // The pair follows the opening fence: one backtick more, then Backspace over all three.
+        f.page.setEditText(0, u"Akapit\n````\n```"_s, 11);
+        QCOMPARE(f.edit(0), u"Akapit\n````\n````"_s);
+        QCOMPARE(f.page.cursorPosition(), 11);
+        f.page.setEditText(0, u"Akapit\n```\n````"_s, 10);
+        f.page.setEditText(0, u"Akapit\n``\n````"_s, 9);
+        QCOMPARE(f.edit(0), u"Akapit\n``"_s);
+        QCOMPARE(f.page.cursorPosition(), 9);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        QCOMPARE(f.edit(0), u"Akapit\n```\n```"_s);
+        f.page.setEditText(0, u"Akapit\n```js\n```"_s, 12);
+        QCOMPARE(f.text(), u"Akapit\n```js\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        const ParsedNote n = markdown::parseNote(Page, f.text());
+        QCOMPARE(n.tasks.size(), 1);
+        QCOMPARE(n.reminders.size(), 1);
+        QCOMPARE(markdown::BlockDocument(f.text()).count(), 3);
+        // A whole block typed as a fenced snippet becomes a code block.
+        Fixture code(u"Akapit\n\n- [ ] zadanie\n"_s);
+        code.page.setEditText(0, u"```js\nkod"_s);
+        QCOMPARE(code.text(), u"```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(code.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(code.edit(0), u"kod"_s);
+        verifyReload(code);
+        // A lone opening fence stays text while it is typed; the next line makes it a code block.
+        Fixture lone(u"Akapit\n\n- [ ] zadanie\n"_s);
+        lone.page.setEditText(0, u"```js"_s);
+        QCOMPARE(lone.text(), u"```js\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(lone.role(0, "view").toString(), u"text"_s);
+        lone.page.setEditText(0, u"```js\n"_s);
+        QCOMPARE(lone.text(), u"```js\n\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(lone.role(0, "view").toString(), u"code"_s);
+        verifyReload(lone);
+        // In a list item the fence would take the item's children.
+        Fixture item(u"- a\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- b\n"_s);
+        item.page.setEditText(0, u"a\n```"_s);
+        QCOMPARE(item.text(), u"- a\n  ```\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- b\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        QCOMPARE(blocksOf(markdown::BlockDocument(item.text())).size(), 3);
+        // Pasted fenced text without its closing fence gets one too.
+        Fixture paste(u"Akapit\n\nx\n\n- [ ] zadanie\n"_s);
+        paste.page.startEditing(1, 1);
+        paste.page.pasteText(1, 0, 1, u"```js\nkod"_s);
+        QCOMPARE(paste.text(), u"Akapit\n\n```js\nkod\n```\n\n- [ ] zadanie\n"_s);
+        QCOMPARE(markdown::BlockDocument(paste.text()).count(), 3);
+        Fixture mid(u"- abc\n- z\n"_s);
+        mid.page.startEditing(0, 1);
+        mid.page.pasteText(0, 1, 1, u"x\n\n```js\nkod ąę"_s);
+        QCOMPARE(mid.text(), u"- ax\n- ```js\n  kod ąę\n  ```\n- bc\n- z\n"_s);
+        verifyReload(mid);
+    }
+
+    void enterBetweenFenceLinesOfTextBlock()
+    {
+        // Shift+Enter, ```js (its closing fence is added), then Enter: a line break between the
+        // fence lines, as in a code block. A split would leave "```js" unclosed in one block and
+        // a lone "```" in the next, and typing the code there would turn the task into code.
+        Fixture f(u"Akapit\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```"_s, 10);
+        f.page.setEditText(0, u"Akapit\n```js\n```"_s, 12);
+        QCOMPARE(f.page.split(0, 12), (QVariantMap{{u"row"_s, 0}, {u"cursor"_s, 13}}));
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.edit(0), u"Akapit\n```js\n\n```"_s);
+        QCOMPARE(f.page.cursorPosition(), 13);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s, 16);
+        // Enter in the code adds a line too.
+        f.page.split(0, 16);
+        QCOMPARE(f.edit(0), u"Akapit\n```js\nkod\n\n```"_s);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\nżółw\n```"_s, 21);
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\nżółw\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        // Enter after the closing fence starts the next block.
+        QCOMPARE(f.page.split(0, int(f.edit(0).size())).value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.count(), 3);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        // Each Enter is one undo step.
+        f.page.undo(); // the new block
+        f.page.undo(); // "żółw"
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.undo(); // the line break
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        // Enter before the opening fence splits the code off into a code block of its own.
+        Fixture start(u"Akapit\n"_s);
+        start.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s);
+        start.page.split(0, 7);
+        QCOMPARE(start.count(), 2);
+        QCOMPARE(start.role(1, "view").toString(), u"code"_s);
+        QCOMPARE(start.edit(1), u"kod"_s);
+        verifyReload(start);
+        // In a list item the child task stays a child.
+        Fixture item(u"- Przykład:\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej #tag\n"_s);
+        item.page.startEditing(0, 9);
+        item.page.setEditText(0, u"Przykład:\n```"_s, 13);
+        item.page.setEditText(0, u"Przykład:\n```js\n```"_s, 15);
+        QCOMPARE(item.page.split(0, 15).value(u"row"_s).toInt(), 0);
+        item.page.setEditText(0, u"Przykład:\n```js\nkod\n```"_s, 19);
+        QCOMPARE(item.text(),
+                 u"- Przykład:\n  ```js\n  kod\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- dalej #tag\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+        // A snippet pasted between the fence lines goes in as code, blank lines and all.
+        Fixture paste(u"- Przykład:\n- dalej\n"_s);
+        paste.page.startEditing(0, 9);
+        paste.page.setEditText(0, u"Przykład:\n```py\n```"_s, 15);
+        paste.page.split(0, 15);
+        QCOMPARE(paste.page.cursorPosition(), 16);
+        paste.page.pasteText(0, 16, 16, u"a = 1\n\nb = 2"_s);
+        QCOMPARE(paste.count(), 2);
+        QCOMPARE(paste.edit(0), u"Przykład:\n```py\na = 1\n\nb = 2\n```"_s);
+        QCOMPARE(paste.page.cursorPosition(), 28);
+        verifyReload(paste);
+        // A fence that was open in the file already (it ends at the next item): Enter splits.
+        Fixture open(u"- a\n  ```\n  b\n- c\n"_s);
+        QCOMPARE(open.page.split(0, 7).value(u"row"_s).toInt(), 1);
+        QCOMPARE(open.count(), 3);
+    }
+
+    void loneFenceClosedWhenLeft()
+    {
+        // "```js" typed in a block without Enter stays text while the block has the caret (the
+        // language can still be typed), but the saved file never leaves it open: on reload the
+        // code would run on over the blocks after it (the task and its reminder would be lost).
+        // Leaving the block gives it its closing fence: an empty code block.
+        const QString task = u"- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(u"Akapit\n\n"_s + task);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"```js"_s, 5);
+        QCOMPARE(f.edit(0), u"```js"_s);
+        QCOMPARE(f.role(0, "view").toString(), u"text"_s);
+        f.page.setEditText(0, u"```json"_s, 7);
+        QCOMPARE(f.edit(0), u"```json"_s);
+        QCOMPARE(f.text(), u"```json\n\n"_s + task);
+        // Saved while it is edited (save timer, the app going to the background): closed.
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"```json\n```\n\n"_s + task);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+        // The caret moves on: the block itself gets the closing fence.
+        f.page.startEditing(1, 0);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(f.role(0, "view").toString(), u"code"_s);
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task);
+        verifyReload(f);
+        // One undo step with the typing: the text before it, with the caret there (a snapshot with
+        // the lone fence line would be read as code over the task); redo gives the closed fence.
+        f.page.undo();
+        QCOMPARE(f.text(), u"Akapit\n\n"_s + task);
+        QCOMPARE(f.page.editingRow(), 0);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+        f.page.redo();
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task);
+        QCOMPARE(f.count(), 2);
+        QCOMPARE(markdown::parseNote(Page, f.host.file(Page)).reminders.size(), 1);
+
+        // A list item: its children would become code. Editing stopped (Escape, a click
+        // outside) closes it too, with the children kept.
+        Fixture item(u"- a\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.startEditing(0, 1);
+        item.page.setEditText(0, u"```py"_s, 5);
+        QVERIFY(item.page.save());
+        QCOMPARE(item.host.file(Page), u"- ```py\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.stopEditing();
+        QCOMPARE(item.text(), u"- ```py\n  ```\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+
+        // Followed by a sibling only: nothing runs on, the file keeps the line while it is edited;
+        // leaving the edited block still closes it.
+        Fixture sibling(u"- a\n- b ⏰ 2026-10-22 09:00\n"_s);
+        sibling.page.startEditing(0, 1);
+        sibling.page.setEditText(0, u"~~~"_s, 3);
+        QVERIFY(sibling.page.save());
+        QCOMPARE(sibling.host.file(Page), u"- ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, sibling.host.file(Page)).reminders.size(), 1);
+        sibling.page.startEditing(1, 0);
+        QCOMPARE(sibling.text(), u"- ~~~\n  ~~~\n- b ⏰ 2026-10-22 09:00\n"_s);
+        verifyReload(sibling);
+
+        // At the end of the page: typed and left, it is closed; a fence line that came with the
+        // file and was only looked at stays as it is.
+        Fixture last(u"Akapit\n"_s);
+        last.page.startEditing(0, 6);
+        last.page.setEditText(0, u"```"_s, 3);
+        last.page.stopEditing();
+        QCOMPARE(last.text(), u"```\n```\n"_s);
+        verifyReload(last);
+        Fixture file(u"Akapit\n\n```js\n"_s);
+        file.page.startEditing(1, 2);
+        file.page.startEditing(0, 0);
+        file.page.stopEditing();
+        QCOMPARE(file.text(), u"Akapit\n\n```js\n"_s);
+        QVERIFY(file.page.save());
+        QCOMPARE(file.host.file(Page), u"Akapit\n\n```js\n"_s);
+
+        // A task's text that starts with a fence is no fence.
+        Fixture taskText(u"- [ ] a\n- b\n"_s);
+        taskText.page.startEditing(0, 1);
+        taskText.page.setEditText(0, u"```js"_s, 5);
+        taskText.page.startEditing(1, 0);
+        QCOMPARE(taskText.text(), u"- [ ] ```js\n- b\n"_s);
+    }
+
+    void loneFenceComparedAndMergedAsSaved()
+    {
+        // While "```js" is typed the page's text is compared with the file, merged with an
+        // external change and offered to the merge dialog as it is saved: closed. Merged open,
+        // the page would read as code running on over the task (its reminder lost everywhere).
+        const QString task = u"- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s;
+        Fixture f(u"Akapit\n\n"_s + task + u"- c\n"_s, 10000);
+        QString mergedLocal;
+        f.page.setMergeFunction([&mergedLocal](const QString &, const QString &local, const QString &remote) {
+            mergedLocal = local;
+            return MergeOutcome{QString(local).replace(u"- c\n"_s, u"- c zdalnie\n"_s),
+                                remote.endsWith(u"- c zdalnie\n"_s)};
+        });
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"```js"_s, 5);
+        QVERIFY(f.page.save());
+        const QString saved = u"```js\n```\n\n"_s + task + u"- c\n"_s;
+        QCOMPARE(f.host.file(Page), saved);
+        QCOMPARE(f.page.sourceText(), saved);
+        // Typed away from the saved text and back: nothing to save.
+        f.page.setEditText(0, u"```jsx"_s, 6);
+        QVERIFY(f.page.dirty());
+        f.page.setEditText(0, u"```js"_s, 5);
+        QVERIFY(!f.page.dirty());
+        // Dirty when the other device's change comes in: merged closed.
+        f.page.setEditText(0, u"```json"_s, 7);
+        QVERIFY(f.page.dirty());
+        f.host.externalWrite(Page, u"```js\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+        QVERIFY(!f.page.conflict());
+        QCOMPARE(mergedLocal, u"```json\n```\n\n"_s + task + u"- c\n"_s);
+        QCOMPARE(f.text(), u"```json\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"```json\n```\n\n"_s + task + u"- c zdalnie\n"_s);
+    }
+
+    void mergeKeepsClosingFenceOnItsLine()
+    {
+        // Backspace at the start of the block after code written in a text block: the text goes on
+        // the line after the closing fence ("```b" closes nothing: the task after it would become
+        // code).
+        Fixture f(u"Akapit\n\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        f.page.startEditing(0, 6);
+        f.page.setEditText(0, u"Akapit\n```js\nkod\n```"_s, 20);
+        f.page.startEditing(1, 0);
+        QCOMPARE(f.page.mergeWithPrevious(1), (QVariantMap{{u"row"_s, 0}, {u"cursor"_s, 21}}));
+        QCOMPARE(f.edit(0), u"Akapit\n```js\nkod\n```\nb"_s);
+        QCOMPARE(f.page.cursorPosition(), 21);
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        QCOMPARE(markdown::parseNote(Page, f.text()).reminders.size(), 1);
+        f.page.undo(); // one step
+        QCOMPARE(f.text(), u"Akapit\n```js\nkod\n```\n\nb\n\n- [ ] zadanie ⏰ 2026-10-22 09:00\n"_s);
+        // Delete at the end of a list item whose code (from the file) ends it.
+        Fixture item(u"- a\n  ```\n  kod\n  ```\n- b\n  - [ ] dziecko ⏰ 2026-10-22 09:00\n- c\n"_s);
+        item.page.startEditing(0, 13);
+        QCOMPARE(item.page.mergeNext(0).value(u"cursor"_s).toInt(), 14);
+        QCOMPARE(item.edit(0), u"a\n```\nkod\n```\nb"_s);
+        QCOMPARE(markdown::parseNote(Page, item.text()).reminders.size(), 1);
+        verifyReload(item);
+        // Other text joins as before.
+        Fixture plain(u"- a ```\n- b\n"_s);
+        plain.page.mergeWithPrevious(1);
+        QCOMPARE(plain.text(), u"- a ```b\n"_s);
     }
 
     // --- tables ----------------------------------------------------------------------------------------
@@ -1122,6 +1770,20 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(blocks[1].toMap().value(u"html"_s).toString(), u"<pre>b</pre>"_s);
         QCOMPARE(blocks[2].toMap().value(u"view"_s).toString(), u"code"_s);
         QCOMPARE(blocks[2].toMap().value(u"html"_s).toString(), u"<pre>x = 2</pre>"_s);
+        // A code block embedded by its id: the code only, without the fences and the id line.
+        Fixture byId(u"- ![[Inna#^kod123]]\n- ![[Inna#^kod456]]\n"_s);
+        byId.host.setFile(u"Inna.md"_s,
+                          u"```js\nlet a = 1 < 2;\n```\n^kod123\n\n- ```py\n  b = 2\n  ```\n  ^kod456\n"_s);
+        byId.model()->invalidateRendering();
+        for (int r = 0; r < 2; ++r) {
+            const QVariantList embeds = byId.role(r, "transclusions").toList();
+            QCOMPARE(embeds.size(), 1);
+            const QVariantList shown = embeds[0].toMap().value(u"blocks"_s).toList();
+            QCOMPARE(shown.size(), 1);
+            QCOMPARE(shown[0].toMap().value(u"view"_s).toString(), u"code"_s);
+            QCOMPARE(shown[0].toMap().value(u"html"_s).toString(),
+                     r == 0 ? u"<pre>let a = 1 &lt; 2;</pre>"_s : u"<pre>b = 2</pre>"_s);
+        }
     }
 
     void transclusionsOfThisPageAndCycles()
@@ -1223,6 +1885,45 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(zoom.page.titleRow(), 1);
     }
 
+    void noStatusHereAndElsewhere_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("todo") << u"- [ ] Kupić mleko\n"_s << 0 << u"- Kupić mleko\n"_s;
+        QTest::newRow("done date") << u"- [x] Zapłacić czynsz 📅 2026-10-10 ✅ 2026-10-09\n"_s << 0
+                                   << u"- Zapłacić czynsz 📅 2026-10-10\n"_s;
+        QTest::newRow("cancelled date inside")
+                << u"- [-] Wizyta ❌ 2026-10-02 u dentysty\n"_s << 0 << u"- Wizyta u dentysty\n"_s;
+        QTest::newRow("date first") << u"- [x] ✅ 2026-10-14 Pranie\n"_s << 0 << u"- Pranie\n"_s;
+        QTest::newRow("logseq done") << u"- DONE Paczka ✅ 2026-10-01\n"_s << 0 << u"- Paczka\n"_s;
+        QTest::newRow("logseq planning") << u"- LATER Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s << 0
+                                         << u"- Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s;
+        QTest::newRow("block id, crlf") << u"- [/] a ^id1\r\n- b\r\n"_s << 0 << u"- a ^id1\r\n- b\r\n"_s;
+        QTest::newRow("nested") << u"- rodzic\n\t- [>] dziecko #ąę\n"_s << 1 << u"- rodzic\n\t- dziecko #ąę\n"_s;
+        QTest::newRow("numbered") << u"1. [ ] pierwszy\n2. drugi\n"_s << 0 << u"1. pierwszy\n2. drugi\n"_s;
+        QTest::newRow("date in code") << u"- [x] użyj `✅ 2026-01-01` ✅ 2026-10-01\n"_s << 0
+                                      << u"- użyj `✅ 2026-01-01`\n"_s;
+        QTest::newRow("continuation") << u"- [ ] a\n  szczegóły\n"_s << 0 << u"- a\n  szczegóły\n"_s;
+    }
+
+    void noStatusHereAndElsewhere()
+    {
+        // "No status" on this page (an editing command) and in another file (QueryHost,
+        // markdown::removeTaskMarker) writes the same text.
+        QFETCH(QString, content);
+        QFETCH(int, line);
+        QFETCH(QString, expected);
+        Fixture f(content);
+        f.host.setFile(u"Inna.md"_s, content);
+        QVERIFY(f.page.setTaskStatusAt(Page, line, QString()));
+        QVERIFY(f.page.setTaskStatusAt(u"Inna.md"_s, line, QString()));
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(f.host.file(u"Inna.md"_s), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
     void tasksElsewhere()
     {
         Fixture f(u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
@@ -1241,6 +1942,17 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(f.page.toggleTaskAt(u"Zakupy.md"_s, 0, u"todo"_s));
         QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [x] Mleko ✅ 2026-10-15\n"_s);
         QVERIFY(!f.page.toggleTaskAt(u"Nie ma.md"_s, 0, u"todo"_s));
+        // The status menu: any status, "" = no status (the marker goes), here and elsewhere.
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, u"deferred"_s));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [>] Mleko\n"_s);
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString()));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- Mleko\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString())); // nothing left to remove
+        QVERIFY(f.page.setTaskStatusAt(Page, 0, QString()));
+        QCOMPARE(f.text(), u"- Tutaj 📅 2026-10-20\n- zwykły\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(Page, 0, QString()));
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
         QCOMPARE(PageController::toggledStatus(u"doing"_s), u"done"_s);
         QCOMPARE(PageController::toggledStatus(u"cancelled"_s), u"todo"_s);
         QCOMPARE(PageController::toggledStatus(QString()), QString());
@@ -1339,6 +2051,52 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         clipboard->clear();
     }
 
+    void embedsNameFormatsTheDeviceCannotDecode()
+    {
+        // A picture whose format this device has no decoder for (WebP, AVIF without Qt's image
+        // plugins: EditorHost::canDecodePicture) is not loaded: the embed names its format
+        // (EmbedView) instead of "Nie można wczytać".
+        FakeEditorHost host;
+        host.setUndecodablePictureFormats({u"webp"_s});
+        QByteArray png;
+        {
+            QImage image(40, 30, QImage::Format_RGB32);
+            image.fill(Qt::darkGreen);
+            QBuffer buffer(&png);
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+        }
+        QCOMPARE(host.saveAttachment(u"łąka.webp"_s, QByteArray("RIFF\0\0\0\0WEBPVP8 ", 16)), u"assets/łąka.webp"_s);
+        QCOMPARE(host.saveAttachment(u"plan piętra.png"_s, png), u"assets/plan piętra.png"_s);
+        QCOMPARE(host.saveAttachment(u"zdjęcie.AVIF"_s, QByteArray("\0\0\0 ftypavif", 12)), u"assets/zdjęcie.AVIF"_s);
+        QCOMPARE(host.saveAttachment(u"umowa.pdf"_s, "%PDF"), u"assets/umowa.pdf"_s);
+        host.setFile(Page, u"- Łąka ![[łąka.webp]] i ![[plan piętra.png]], ![[zdjęcie.AVIF]], ![[umowa.pdf]]\n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setHost(&host);
+        page.setPath(Page);
+        const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+        const QVariantList embeds = page.blocks()->data(page.blocks()->index(0), roles.key("embeds")).toList();
+        QCOMPARE(embeds.size(), 4);
+        const auto embed = [&](int i, const char *key) { return embeds.at(i).toMap().value(QString::fromLatin1(key)); };
+        QCOMPARE(embed(0, "name").toString(), u"łąka.webp"_s);
+        QVERIFY(embed(0, "image").toBool());
+        QVERIFY(!embed(0, "decodable").toBool());
+        QCOMPARE(embed(0, "format").toString(), u"WEBP"_s);
+        QCOMPARE(embed(0, "width").toInt(), 0);  // nothing read from a file nothing can show
+        QVERIFY(embed(1, "decodable").toBool()); // Qt decodes PNG itself
+        QCOMPARE(embed(1, "format").toString(), u"PNG"_s);
+        QCOMPARE(embed(1, "width").toInt(), 40);
+        QCOMPARE(embed(2, "decodable").toBool(), QImageReader::supportedImageFormats().contains("avif"));
+        QCOMPARE(embed(2, "format").toString(), u"AVIF"_s);
+        QVERIFY(!embed(3, "image").toBool()); // a file: a chip
+        QCOMPARE(embed(3, "format").toString(), QString());
+        // The fake host's default is the device's own decoders, like the shell's Workspace.
+        QVERIFY(!host.canDecodePicture(u"assets/łąka.WEBP"_s));
+        host.setUndecodablePictureFormats({});
+        QCOMPARE(host.canDecodePicture(u"assets/łąka.webp"_s), QImageReader::supportedImageFormats().contains("webp"));
+    }
+
     void imageSlashCommand()
     {
         Fixture f(u"- Zdjęcie /obr\n"_s);
@@ -1347,6 +2105,12 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- Zdjęcie \n"_s);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 8);
         QVERIFY(!f.page.imageNameFilters().isEmpty());
+        // The file dialog offers the pictures the editor embeds as pictures (paths::pictureExtensions):
+        // .ico too, which the HTML export already showed as a picture.
+        const QString filter = f.page.imageNameFilters().constFirst();
+        for (const QString &ext : {u"png"_s, u"jpg"_s, u"jpeg"_s, u"webp"_s, u"svg"_s, u"avif"_s, u"ico"_s})
+            QVERIFY2(filter.contains(u"*."_s + ext + u' ') || filter.contains(u"*."_s + ext + u')'),
+                     qPrintable(filter));
         QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FileDialog outside the browser
     }
 

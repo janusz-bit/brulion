@@ -30,4 +30,15 @@ QSize pictureSize(QIODevice *device, const QString &fileName);
 /// The size of a local picture file, cached per file, modification time and file size.
 QSize localPictureSize(const QString &file);
 
+/// This device has a decoder for the picture format of `fileName`, by its extension: one of
+/// QImageReader's formats — WebP and AVIF need Qt's image plugins, which Android, the browser and
+/// some desktops lack. Whether the file is an attachment picture at all is the caller's question
+/// (paths::isPicturePath). The picture view (Workspace::canDecodePicture) and the editor's embeds
+/// (EditorHost::canDecodePicture) name a format this says no to instead of failing to load it.
+bool canDecodePictureFormat(const QString &fileName);
+
+/// The name of the picture format of `fileName`, its extension in upper case ("assets/łąka.webp"
+/// -> "WEBP"; "" without one): how those messages name it.
+QString pictureFormatName(const QString &fileName);
+
 } // namespace brulion::editor

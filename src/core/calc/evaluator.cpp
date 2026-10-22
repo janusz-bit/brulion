@@ -549,6 +549,14 @@ Q_NEVER_INLINE Value currencyPrefixed(const Value &operand, const QString &symbo
 
 } // namespace
 
+std::optional<std::pair<int, int>> builtinArity(const QString &name)
+{
+    const std::optional<BuiltinInfo> info = findBuiltin(name);
+    if (!info)
+        return std::nullopt;
+    return std::pair(info->minArgs, info->maxArgs);
+}
+
 // --- ops -------------------------------------------------------------------------------------
 
 namespace ops {
@@ -1281,6 +1289,8 @@ Value Evaluator::evalCall(const Node &node)
     const std::optional<BuiltinInfo> info = findBuiltin(name);
     if (!info)
         return fail(CalcErrorCode::UndefinedFunction, name);
+    if (node.ambiguousComma) // `round(2,5)`: 2.5, or 2 rounded to 5 places? Never a guess.
+        return fail(CalcErrorCode::AmbiguousComma, name);
     const qsizetype count = static_cast<qsizetype>(node.children.size());
     if (count < info->minArgs)
         return fail(CalcErrorCode::TooFewArgs, name);

@@ -31,7 +31,7 @@
 <context>
     <name>BDatePicker</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/components/BDatePicker.qml" line="384"/>
+        <location filename="../src/app/qml/components/BDatePicker.qml" line="393"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n item</numerusform>
@@ -111,7 +111,7 @@
 <context>
     <name>CalendarDayPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="155"/>
+        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="158"/>
         <source>All %n overdue in Tasks</source>
         <translation>
             <numerusform>%n overdue in Tasks</numerusform>
@@ -164,7 +164,7 @@
 <context>
     <name>ContentBacklinks</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="141"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="142"/>
         <source>%n linked reference(s)</source>
         <translation>
             <numerusform>%n linked reference</numerusform>
@@ -172,7 +172,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="148"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="149"/>
         <source>in %n page(s)</source>
         <translation>
             <numerusform>in %n page</numerusform>
@@ -180,8 +180,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="175"/>
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="234"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="176"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="235"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -189,7 +189,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="195"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="196"/>
         <source>%n unlinked mention(s)</source>
         <translation>
             <numerusform>%n unlinked mention</numerusform>
@@ -197,7 +197,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="207"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="208"/>
         <source>Linked %n mention(s)</source>
         <translation>
             <numerusform>Linked %n mention</numerusform>
@@ -528,7 +528,7 @@
 <context>
     <name>NextcloudForm</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/NextcloudForm.qml" line="226"/>
+        <location filename="../src/app/qml/io/NextcloudForm.qml" line="227"/>
         <source>Every %n minute(s)</source>
         <translation>
             <numerusform>Every minute</numerusform>
@@ -539,7 +539,7 @@
 <context>
     <name>QueryBlockView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="87"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="88"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -547,7 +547,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="89"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -555,7 +555,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="89"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="90"/>
         <source>%n reminder(s)</source>
         <translation>
             <numerusform>%n reminder</numerusform>
@@ -563,7 +563,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="90"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="91"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>
@@ -571,7 +571,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="414"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="417"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -609,7 +609,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="623"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="633"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -620,7 +620,7 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="240"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
@@ -734,7 +734,7 @@
 <context>
     <name>SyncView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="243"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="249"/>
         <source>%n note(s) changed on two devices at once</source>
         <translation>
             <numerusform>%n note changed on two devices at once</numerusform>
@@ -742,7 +742,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="337"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="343"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>
@@ -857,7 +857,7 @@
 <context>
     <name>TransclusionView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TransclusionView.qml" line="319"/>
+        <location filename="../src/app/qml/editor/TransclusionView.qml" line="325"/>
         <source>%n more block(s) — open the page</source>
         <translation>
             <numerusform>%n more block — open the page</numerusform>
@@ -953,7 +953,7 @@
 <context>
     <name>brulion::ioviews::NextcloudSetup</name>
     <message numerus="yes">
-        <location filename="../src/app/io/syncsetup.cpp" line="471"/>
+        <location filename="../src/app/io/syncsetup.cpp" line="494"/>
         <source>Every %n minute(s)</source>
         <translation>
             <numerusform>Every minute</numerusform>
@@ -961,7 +961,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/syncsetup.cpp" line="471"/>
+        <location filename="../src/app/io/syncsetup.cpp" line="494"/>
         <source>Every %n hour(s)</source>
         <translation>
             <numerusform>Every hour</numerusform>
@@ -983,7 +983,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="193"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="198"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>
@@ -994,7 +994,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="451"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="490"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -1002,7 +1002,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="455"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="494"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -1010,7 +1010,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="739"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="796"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>
