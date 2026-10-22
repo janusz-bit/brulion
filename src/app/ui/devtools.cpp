@@ -98,6 +98,9 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     const int delay = valueAfter(arguments, u"--delay"_s).toInt(&ok);
     if (ok && delay >= 0)
         m_delayMs = delay;
+    const int keyboard = valueAfter(arguments, u"--keyboard"_s).toInt(&ok);
+    if (ok && keyboard >= 0 && keyboard <= 4000)
+        m_keyboard = keyboard;
 
     static const QRegularExpression sizeRe(u"^(\\d{2,5})x(\\d{2,5})$"_s);
     const auto m = sizeRe.match(valueAfter(arguments, u"--size"_s));

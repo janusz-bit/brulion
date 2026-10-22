@@ -151,6 +151,10 @@ public:
     /// Opens the system's settings of the notification channel of `kind`.
     void openSoundSettings(int kind);
 
+    /// Asks the keyboard observer (ImeInsets.kt) to report the keyboard's state again: it
+    /// arrives as imeChanged().
+    void requestImeState();
+
 Q_SIGNALS:
     /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
@@ -159,6 +163,10 @@ Q_SIGNALS:
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).
     void soundPicked(int kind, const QJsonObject &choice);
+    /// The on-screen keyboard covers `overlap` physical pixels of Qt's view (0: hidden, or the
+    /// window was resized above it); `shown` while it is up or coming up; `animating` for every
+    /// frame of its slide (Android 11+), then once more settled (ImeInsets.kt; KeyboardInsets).
+    void imeChanged(int overlap, bool shown, bool animating);
 
 private:
     explicit AndroidBridge(QObject *parent);

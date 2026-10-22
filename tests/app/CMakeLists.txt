@@ -4,6 +4,11 @@
 brulion_add_test(tst_ui_helpers
     SOURCES tst_uihelpers.cpp
     LIBS brulion_ui_helpers)
+# KeyboardInsets (brulion_ui_helpers): the on-screen keyboard's overlap of the window and the
+# choice between a simulated keyboard, the platform's report and Qt's input method.
+brulion_add_test(tst_keyboardinsets
+    SOURCES tst_keyboardinsets.cpp
+    LIBS brulion_ui_helpers)
 
 # App areas add their tests in tests/app/<area>/CMakeLists.txt (picked up automatically).
 file(GLOB _brulion_app_test_dirs LIST_DIRECTORIES true RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)

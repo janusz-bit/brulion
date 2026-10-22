@@ -78,6 +78,12 @@ object BrulionAndroid {
    */
   @JvmStatic external fun nativeSoundPicked(kind: Int, json: String)
 
+  /**
+   * The on-screen keyboard covers [overlap] physical pixels of Qt's view ([ImeInsets]): [shown]
+   * while it is up or coming up, [animating] for each frame of its slide (Android 11+).
+   */
+  @JvmStatic external fun nativeImeChanged(overlap: Int, shown: Boolean, animating: Boolean)
+
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
   // -----------------------------------------------------------------------------------------
@@ -87,6 +93,14 @@ object BrulionAndroid {
   fun attach(context: Context) {
     ReminderNotifier.ensureChannels(context)
     synchronized(lock) { nativeAttached = true }
+    // What the keyboard observer saw before C++ listened.
+    onMain { ImeInsets.reportAgain() }
+  }
+
+  /** C++ asks for the on-screen keyboard's state (it arrives through [nativeImeChanged]). */
+  @JvmStatic
+  fun requestImeState() {
+    onMain { ImeInsets.reportAgain() }
   }
 
   /** C++ is going away (application shutdown): keep activations for [takeActivation]. */
@@ -428,6 +442,23 @@ object BrulionAndroid {
         }
       }
       pendingActivation = activation
+    }
+  }
+
+  /**
+   * Hands the keyboard's state to C++ ([ImeInsets], main thread). False when C++ does not listen
+   * (yet): the observer reports it again on [attach].
+   */
+  internal fun imeChanged(overlap: Int, shown: Boolean, animating: Boolean): Boolean {
+    synchronized(lock) {
+      if (!nativeAttached) return false
+      try {
+        nativeImeChanged(overlap, shown, animating)
+        return true
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native keyboard callback not registered", e)
+        return false
+      }
     }
   }
 

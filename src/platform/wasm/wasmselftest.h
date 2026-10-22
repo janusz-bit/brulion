@@ -3,8 +3,8 @@
 // WebAssembly only (compiled when EMSCRIPTEN is set, see src/platform/CMakeLists.txt).
 //
 // Debug flows for the browser build, driven by scripts/wasm-smoke.mjs. The HTML shell turns
-// `?selftest=storage,notify,glyphs` into the app arguments `--selftest-storage --selftest-notify
-// --selftest-glyphs`.
+// `?selftest=storage,notify,glyphs,keyboard` into the app arguments `--selftest-storage
+// --selftest-notify --selftest-glyphs --selftest-keyboard` (the last: src/app/ui/keyboardsources.h).
 // Results are published as JavaScript globals (and console lines `BRULION_SELFTEST …`).
 // No flow touches notes.
 

@@ -32,7 +32,8 @@ set(BRULION_DEV_QML_ENABLED ${_brulion_dev_qml} CACHE INTERNAL "Effective BRULIO
 message(STATUS "Developer QML: ${BRULION_DEV_QML_ENABLED} (BRULION_DEV_QML=${BRULION_DEV_QML})")
 
 # --- Design system (docs/UI.md): Theme singleton, shared B* components, the dev gallery and
-# their C++ helpers (QML singletons DatesHelper, TextHelper, DiffHelper, DeviceInfo, DevTools).
+# their C++ helpers (QML singletons DatesHelper, TextHelper, DiffHelper, KeyboardInsets,
+# DeviceInfo, DevTools).
 set(BRULION_UI_QML
     qml/theme/Theme.qml
     qml/components/BBadge.qml
@@ -51,6 +52,7 @@ set(BRULION_UI_QML
     qml/components/BIcon.qml
     qml/components/BIconButton.qml
     qml/components/BKbd.qml
+    qml/components/BKeyboardPlaceholder.qml
     qml/components/BListItem.qml
     qml/components/BMenu.qml
     qml/components/BMenuItem.qml
@@ -107,6 +109,7 @@ set(BRULION_UI_SOURCES
     ui/devtools.h ui/devtools.cpp
     ui/scrollprobe.h ${_brulion_scroll_probe_sources}
     ui/deviceinfo.h ui/deviceinfo.cpp
+    ui/keyboardsources.h ui/keyboardsources.cpp
 )
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.

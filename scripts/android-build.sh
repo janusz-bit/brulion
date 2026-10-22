@@ -400,7 +400,7 @@ for component in BrulionActivity AlarmActivity ReminderReceiver ActionReceiver R
     die "$component missing from the merged manifest"
 done
 dex_classes=$(unzip -p "$apk" 'classes*.dex' | grep -a -o 'Lio/github/januszbit/brulion/android/[A-Za-z]*;' | sort -u)
-for class in BrulionAndroid BrulionActivity AlarmScheduler ReminderNotifier AlarmActivity BootReceiver; do
+for class in BrulionAndroid BrulionActivity ImeInsets AlarmScheduler ReminderNotifier AlarmActivity BootReceiver; do
   grep -q "/$class;" <<<"$dex_classes" || die "class $class missing from classes.dex (Kotlin not compiled?)"
 done
 echo "Kotlin classes in dex: $(wc -l <<<"$dex_classes")"

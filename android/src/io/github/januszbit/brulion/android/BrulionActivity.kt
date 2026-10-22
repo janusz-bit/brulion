@@ -9,12 +9,14 @@ import org.qtproject.qt.android.bindings.QtActivity
 /**
  * Brulion's main activity: Qt's activity plus the hooks [BrulionAndroid] needs — the note a
  * tapped notification points at (launch intent or `onNewIntent`, launch mode singleTop), the
- * answers of runtime permission dialogs and of the ringtone pickers.
+ * answers of runtime permission dialogs and of the ringtone pickers — and the on-screen
+ * keyboard's observer ([ImeInsets]).
  */
 class BrulionActivity : QtActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     BrulionAndroid.onActivityCreated(this)
+    ImeInsets.install(this)
   }
 
   override fun onNewIntent(intent: Intent) {
@@ -36,6 +38,7 @@ class BrulionActivity : QtActivity() {
   }
 
   override fun onDestroy() {
+    ImeInsets.uninstall(this)
     BrulionAndroid.onActivityDestroyed(this)
     super.onDestroy()
   }
