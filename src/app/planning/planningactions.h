@@ -6,7 +6,7 @@
 //
 //   toggleTask(path, line, text)        todo/doing/deferred <-> done (markdown::toggleTask:
 //                                       ✅ date, recurring tasks get their next instance)
-//   setTaskStatus(path, line, status, text)
+//   setTaskStatus(path, line, status, text)   the status menus ("" = no status)
 //   undo()                              puts the file back as it was before the last change made
 //                                       here — only while nobody changed it since (canUndo)
 //   appendBlock(path, block)            a new block at the end of a page (a trailing empty
@@ -73,7 +73,8 @@ public:
     /// Toggle the task on `line` of `path` (see the file comment). `text` (the task's plain text,
     /// optional) finds it again when the line moved. Returns whether the file changed.
     Q_INVOKABLE bool toggleTask(const QString &path, int line, const QString &text = QString());
-    /// Set a status ("todo" | "doing" | "done" | "cancelled" | "deferred").
+    /// Set a status ("todo" | "doing" | "done" | "cancelled" | "deferred"; "" = no status: the
+    /// task marker goes, the item and its text stay).
     Q_INVOKABLE bool setTaskStatus(const QString &path, int line, const QString &status,
                                    const QString &text = QString());
     /// Undo the last change made through this object (false when the file changed since).
@@ -106,7 +107,7 @@ Q_SIGNALS:
     void weekStartChanged();
     void localeChanged();
     void undoChanged();
-    /// A task's status was written (`status`: the new status name).
+    /// A task's status was written (`status`: the new status name, "" for no status).
     void taskChanged(const QString &path, int line, const QString &status);
     /// Something could not be done (translated message for a toast).
     void failed(const QString &message);

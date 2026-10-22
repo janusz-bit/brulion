@@ -13,9 +13,20 @@ Zadanie to punkt listy z polem wyboru. Zapis jest zgodny z wtyczką Obsidian Tas
 | `- [/]` | w toku |
 | `- [x]` | zrobione |
 | `- [-]` | anulowane |
-| `- [>]` | odłożone |
+| `- [>]` | oczekujące (odłożone) |
 
-**Ctrl+Enter** w bloku przełącza stan po kolei (brak → do zrobienia → w toku → zrobione). Możesz też kliknąć pole wyboru. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
+**Ctrl+Enter** w bloku przełącza stan po kolei (brak → do zrobienia → w toku → zrobione). Kliknięcie pola wyboru odhacza zadanie albo przywraca je do zrobienia. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
+
+## Wybór stanu
+Każdy stan możesz wybrać od razu, na trzy sposoby:
+
+- **Menu stanu** — kliknij pole wyboru prawym przyciskiem myszy albo przytrzymaj je palcem. Menu ma pozycje Do zrobienia, W toku, Zrobione, Oczekujące, Anulowane i Bez statusu; bieżący stan jest zaznaczony. Działa wszędzie, gdzie widać pole zadania: w notatce i dzienniku, w wynikach [[Zapytania|zapytań]], we wstawionych blokach, w odnośnikach zwrotnych, na stronach tagów, w kalendarzu i w widoku Zadania.
+- **Klawiatura** — **Ctrl+Shift+Enter** w edytowanym (albo zaznaczonym) bloku otwiera to samo menu; strzałki wybierają stan, Enter zatwierdza, Escape zamyka.
+- **Polecenie `/`** — wpisz w bloku `/` i początek nazwy: „Zadanie: do zrobienia”, „Zadanie: w toku”, „Zadanie: zrobione”, „Zadanie: oczekujące”, „Zadanie: anulowane”, „Zadanie: bez statusu”. Wystarczą też słowa takie jak `/czeka`, `/odłożone`, `/anul`, `/bez`, `/todo`, `/doing`, `/done`. Tekst polecenia znika, reszta bloku i kursor zostają.
+
+Na telefonie przytrzymaj przycisk **Zadanie** na pasku nad klawiaturą — otworzy się menu stanu (krótkie dotknięcie przełącza stan po kolei).
+
+Blok, który nie był zadaniem, staje się zadaniem. **Bez statusu** usuwa pole wyboru (i datę ✅ lub ❌), tekst zostaje zwykłym punktem listy. Zadania zapisane znacznikami Logseq zachowują swój styl: `TODO` staje się `DOING`, `LATER` — `NOW`, oczekujące to `WAITING`. Zmianę stanu w otwartej notatce cofniesz przez Ctrl+Z, a w widoku Zadania i w kalendarzu — przyciskiem „Cofnij” w powiadomieniu.
 
 ## Terminy i daty
 Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:

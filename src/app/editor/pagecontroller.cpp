@@ -1416,26 +1416,72 @@ void PageController::cycleTask(int row)
         setTaskStatus(row, QString());
 }
 
-void PageController::setTaskStatus(int row, const QString &status)
+namespace {
+
+/// Where a caret at `cursor` of `before` is in `after`, the same text edited in one place (a
+/// task's ✅ date added or removed, its marker gone): before the edit it stays, after it it moves
+/// with the text, inside it it goes to the end of the new text there.
+int caretThroughEdit(const QString &before, const QString &after, int cursor)
 {
-    if (!validRow(row))
-        return;
+    const TextDelta d = TextDelta::between(before, after);
+    if (cursor <= d.from)
+        return cursor;
+    if (cursor >= d.from + d.removed.size())
+        return cursor + int(d.inserted.size() - d.removed.size());
+    return int(d.from + d.inserted.size());
+}
+
+} // namespace
+
+std::optional<QString> PageController::slashTaskStatus(const QString &command)
+{
+    if (command == u"task")
+        return u"todo"_s;
+    if (command == u"taskDoing")
+        return u"doing"_s;
+    if (command == u"taskDone")
+        return u"done"_s;
+    if (command == u"taskWaiting")
+        return u"deferred"_s;
+    if (command == u"taskCancelled")
+        return u"cancelled"_s;
+    if (command == u"taskNone")
+        return QString();
+    return std::nullopt;
+}
+
+void PageController::applyTaskStatus(int row, const QString &status)
+{
     const QDate day = today();
-    const quint64 uid = m_model->uidAt(row);
-    beginCommand();
     if (status.isEmpty()) {
         // Back to a plain block: reopen first (removes ✅/❌ dates), then drop the marker.
-        if (m_model->shapeAt(row).task) {
-            applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, TaskStatus::Todo, day); });
-            const int r = m_model->rowOfUid(uid);
-            if (r >= 0) {
-                const QString body = withoutTaskMarker(m_model->document().at(r));
-                applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
-            }
+        if (!m_model->shapeAt(row).task)
+            return;
+        const quint64 uid = m_model->uidAt(row);
+        applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, TaskStatus::Todo, day); });
+        const int r = m_model->rowOfUid(uid);
+        if (r >= 0) {
+            const QString body = withoutTaskMarker(m_model->document().at(r));
+            applyOp([&](BlockDocument &d) { return d.setBody(r, body); });
         }
     } else if (const auto s = taskStatusFromName(status)) {
         applyOp([&](BlockDocument &d) { return d.setTaskStatus(row, *s, day); });
     }
+}
+
+void PageController::setTaskStatus(int row, const QString &status)
+{
+    if (!validRow(row))
+        return;
+    // The caret of the block being edited stays in its words when the text before it changes.
+    const quint64 uid = m_model->uidAt(row);
+    const bool editingThis = m_editingUid == uid;
+    const QString editBefore = editingThis ? m_model->editTextAt(row) : QString();
+    beginCommand();
+    applyTaskStatus(row, status);
+    const int r = m_model->rowOfUid(uid);
+    if (editingThis && r >= 0 && m_cursor >= 0)
+        m_cursor = caretThroughEdit(editBefore, m_model->editTextAt(r), m_cursor);
     endCommand(currentFocus());
     Q_EMIT editingRowChanged();
     emitEditTextReset();
@@ -2203,16 +2249,15 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
     const markdown::BlockEntry &entry = m_model->document().at(currentRow());
     const bool listItem = entry.kind == BlockKind::ListItem;
     const QString cmd = command;
-    if (cmd == u"task") {
-        if (!m_model->shapeAt(currentRow()).task) {
-            const int r = currentRow();
-            const int before = int(m_model->editTextAt(r).size());
-            applyOp([&](BlockDocument &d) { return d.setTaskStatus(r, TaskStatus::Todo, today()); });
-            const int r2 = currentRow();
-            focus = {r2, std::max(0, cursor + int(m_model->editTextAt(r2).size()) - before)};
-        }
-    } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled"
-               || cmd == u"recurrence" || cmd == u"date" || cmd == u"template" || cmd == u"image") {
+    if (const auto status = slashTaskStatus(cmd)) {
+        // A task's status (a block that is no task becomes one; "" removes the marker), in the
+        // same undo step as removing the "/command"; the caret stays in the words around it.
+        const QString before = m_model->editTextAt(currentRow());
+        applyTaskStatus(currentRow(), *status);
+        const int r = currentRow();
+        focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
+    } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
+               || cmd == u"date" || cmd == u"template" || cmd == u"image") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -2531,7 +2576,7 @@ QString PageController::toggledStatus(const QString &status)
 
 bool PageController::setTaskStatusAt(const QString &path, int line, const QString &status)
 {
-    if (path.isEmpty() || line < 0 || !taskStatusFromName(status))
+    if (path.isEmpty() || line < 0 || (!status.isEmpty() && !taskStatusFromName(status)))
         return false;
     if (path == m_path) {
         const int row = rowOfLine(line);

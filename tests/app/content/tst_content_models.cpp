@@ -326,6 +326,23 @@ private Q_SLOTS:
         QCOMPARE(resets.size(), 0);
         QVERIFY(!model.toggleTask(0)); // a header
 
+        // The checkbox's status menu: any status, and "no status" removes the marker (the block
+        // stays a backlink, now without a checkbox).
+        QVERIFY(model.setTaskStatus(1, u"deferred"_s));
+        QVERIFY(ws->readFile(u"journals/2026-10-13.md"_s).contains(u"- [>] farba"_s));
+        model.refreshNow();
+        QCOMPARE(model.get(1).value(u"taskStatus"_s).toString(), u"deferred"_s);
+        QVERIFY(!model.setTaskStatus(1, u"deferred"_s)); // unchanged
+        QVERIFY(!model.setTaskStatus(1, u"bogus"_s));
+        QVERIFY(!model.setTaskStatus(0, u"todo"_s)); // a header
+        QVERIFY(model.setTaskStatus(1, QString()));
+        QVERIFY(ws->readFile(u"journals/2026-10-13.md"_s).contains(u"- farba"_s));
+        model.refreshNow();
+        QCOMPARE(model.get(1).value(u"taskStatus"_s).toString(), QString());
+        QVERIFY(!model.setTaskStatus(1, u"todo"_s)); // no task any more
+        QVERIFY(!model.toggleTask(1));
+        QCOMPARE(resets.size(), 0);
+
         // ((abc123)) points at the other page's block.
         BacklinksModel other;
         other.setWorkspace(ws.get());

@@ -21,8 +21,8 @@
 //              "highest"), recurrence? (canonical English rule) },
 //     reminder?: { at: "YYYY-MM-DD HH:mm", alarm: bool, recurrence? } }
 // setTaskStatus(path, line, status) writes the task's new status ("todo", "doing", "done",
-// "cancelled", "deferred"; completing a recurring task writes its next instance) into the file
-// and returns whether it changed.
+// "cancelled", "deferred"; completing a recurring task writes its next instance; "" = no status:
+// markdown::removeTaskMarker) into the file and returns whether it changed.
 #pragma once
 
 #include <QObject>
@@ -38,7 +38,8 @@ public:
     /// Run the query `source` (the body of a ```query block) written in the page `currentPath`
     /// (`page:this`, relative `ref:`); see the file comment for the result.
     virtual QVariantMap runQuery(const QString &source, const QString &currentPath) = 0;
-    /// Set the status of the task on `line` (0-based) of `path`; false when nothing changed.
+    /// Set the status of the task on `line` (0-based) of `path` ("" removes the task marker);
+    /// false when nothing changed.
     virtual bool setTaskStatus(const QString &path, int line, const QString &status) = 0;
 };
 

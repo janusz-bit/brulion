@@ -906,6 +906,165 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(rule.text(), u"- a\n- /lin\n"_s);
     }
 
+    void taskStatusSlashCommands_data()
+    {
+        // The block, the row being edited, the typed "/command" (it is found in the row's edit
+        // text), the command; the page and the caret (edit text position) after it.
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("command");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("cursor");
+        QTest::newRow("list item becomes a task")
+                << u"- Kupić mleko /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] Kupić mleko \n"_s << 12;
+        QTest::newRow("paragraph becomes a done task") << u"Kupić mleko /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                                       << u"- [x] Kupić mleko ✅ 2026-10-15\n"_s << 12;
+        QTest::newRow("command between words")
+                << u"- Kupić /toku mleko\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- [/] Kupić  mleko\n"_s << 6;
+        QTest::newRow("done task back to do")
+                << u"- [x] Zapłacić ✅ 2026-10-14 /do\n"_s << 0 << u"/do"_s << u"task"_s << u"- [ ] Zapłacić \n"_s << 9;
+        QTest::newRow("waiting") << u"- [ ] Odpisać Żanecie /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                 << u"- [>] Odpisać Żanecie \n"_s << 16;
+        QTest::newRow("cancelled") << u"- [/] Wizyta /anul u dentysty\n"_s << 0 << u"/anul"_s << u"taskCancelled"_s
+                                   << u"- [-] Wizyta  u dentysty ❌ 2026-10-15\n"_s << 7;
+        QTest::newRow("no status on a task")
+                << u"- [/] Pisać raport /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać raport \n"_s << 13;
+        QTest::newRow("no status on a done task")
+                << u"- [x] Pranie ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pranie \n"_s << 7;
+        QTest::newRow("no status on a plain item")
+                << u"- Pisać /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Pisać \n"_s << 6;
+        QTest::newRow("no status on a paragraph")
+                << u"Akapit /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"Akapit \n"_s << 7;
+        QTest::newRow("same status") << u"- [/] W toku /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                     << u"- [/] W toku \n"_s << 7;
+        QTest::newRow("nested item") << u"- rodzic\n\t- dziecko /zad\n"_s << 1 << u"/zad"_s << u"task"_s
+                                     << u"- rodzic\n\t- [ ] dziecko \n"_s << 8;
+        QTest::newRow("numbered item") << u"1. pierwszy /zrob\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                                       << u"1. [x] pierwszy ✅ 2026-10-15\n"_s << 9;
+        QTest::newRow("first line of a multi-line item")
+                << u"- pierwsza /zrob\n  druga\n"_s << 0 << u"/zrob"_s << u"taskDone"_s
+                << u"- [x] pierwsza ✅ 2026-10-15\n  druga\n"_s << 9;
+        QTest::newRow("second line of a multi-line item") << u"- pierwsza\n  druga /zad\n"_s << 0 << u"/zad"_s
+                                                          << u"task"_s << u"- [ ] pierwsza\n  druga \n"_s << 15;
+        QTest::newRow("Logseq todo to doing") << u"- TODO Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s
+                                              << u"- DOING Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq later to now")
+                << u"- LATER Zadzwonić /toku\n"_s << 0 << u"/toku"_s << u"taskDoing"_s << u"- NOW Zadzwonić \n"_s << 10;
+        QTest::newRow("Logseq waiting") << u"- TODO Paczka /czeka\n"_s << 0 << u"/czeka"_s << u"taskWaiting"_s
+                                        << u"- WAITING Paczka \n"_s << 7;
+        QTest::newRow("Logseq no status")
+                << u"- DONE Paczka ✅ 2026-10-01 /bez\n"_s << 0 << u"/bez"_s << u"taskNone"_s << u"- Paczka \n"_s << 7;
+        QTest::newRow("crlf kept") << u"- a\r\n- b /zad\r\n- c\r\n"_s << 1 << u"/zad"_s << u"task"_s
+                                   << u"- a\r\n- [ ] b \r\n- c\r\n"_s << 2;
+        QTest::newRow("empty block") << u"- /zad\n"_s << 0 << u"/zad"_s << u"task"_s << u"- [ ] \n"_s << 0;
+    }
+
+    void taskStatusSlashCommands()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(QString, typed);
+        QFETCH(QString, command);
+        QFETCH(QString, expected);
+        QFETCH(int, cursor);
+        Fixture f(content);
+        const int from = int(f.edit(row).indexOf(typed));
+        QVERIFY(from >= 0);
+        const int to = from + int(typed.size());
+        f.page.startEditing(row, to);
+        const QVariantMap r = f.page.applySlashCommand(row, from, to, command);
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(r.value(u"action"_s).toString(), QString());
+        // Still editing that block, the caret where the command was (in edit text coordinates).
+        QCOMPARE(r.value(u"row"_s).toInt(), row);
+        QCOMPARE(f.page.editingRow(), row);
+        QCOMPARE(f.page.cursorPosition(), cursor);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), cursor);
+        // One undo step, the command's text back.
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        f.page.redo();
+        QCOMPARE(f.text(), expected);
+    }
+
+    void taskStatusSlashCommandNames()
+    {
+        QCOMPARE(PageController::slashTaskStatus(u"task"_s), std::optional<QString>(u"todo"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDoing"_s), std::optional<QString>(u"doing"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskDone"_s), std::optional<QString>(u"done"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskWaiting"_s), std::optional<QString>(u"deferred"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskCancelled"_s), std::optional<QString>(u"cancelled"_s));
+        QCOMPARE(PageController::slashTaskStatus(u"taskNone"_s), std::optional<QString>(QString()));
+        QVERIFY(!PageController::slashTaskStatus(u"reminder"_s));
+        QVERIFY(!PageController::slashTaskStatus(QString()));
+        // Each of them is a command of the "/" menu.
+        for (const QString &id :
+             {u"task"_s, u"taskDoing"_s, u"taskDone"_s, u"taskWaiting"_s, u"taskCancelled"_s, u"taskNone"_s})
+            QVERIFY2(slashCommand(id), qPrintable(id));
+    }
+
+    void taskStatusKeepsTheCaret()
+    {
+        // The status menu / Ctrl+Enter while editing: the caret stays in its words when a date
+        // before it goes or one after it comes.
+        Fixture f(u"- [x] Kupić ✅ 2026-10-01 mleko\n"_s);
+        f.page.startEditing(0, 20); // after "mleko"'s "m"
+        QCOMPARE(f.edit(0).mid(20), u"leko"_s);
+        f.page.setTaskStatus(0, u"doing"_s);
+        QCOMPARE(f.text(), u"- [/] Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        f.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(f.text(), u"- [x] Kupić mleko ✅ 2026-10-15\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko ✅ 2026-10-15"_s);
+        f.page.setTaskStatus(0, QString());
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+        QCOMPARE(f.edit(0).mid(f.page.cursorPosition()), u"leko"_s);
+        QCOMPARE(f.page.editingRow(), 0);
+        f.page.setTaskStatus(0, u"bogus"_s); // nothing happens
+        QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
+    }
+
+    void taskStatusOnRecurringTask()
+    {
+        // Done from a "/" command: the next occurrence goes above, in the same undo step as the
+        // status and the command's removal; editing stays on the completed task.
+        const QString recurring = u"- [ ] Podlać kwiaty 📅 2026-10-15 🔁 every week /zrob\n"_s;
+        const QString completed = u"- [ ] Podlać kwiaty 📅 2026-10-22 🔁 every week\n"
+                                  u"- [x] Podlać kwiaty 📅 2026-10-15 🔁 every week ✅ 2026-10-15\n"_s;
+        Fixture f(recurring);
+        const int from = int(f.edit(0).indexOf(u"/zrob"_s));
+        f.page.startEditing(0, from + 5);
+        const QVariantMap r = f.page.applySlashCommand(0, from, from + 5, u"taskDone"_s);
+        QCOMPARE(f.text(), completed);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.edit(1).mid(f.page.cursorPosition()), u"✅ 2026-10-15"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), recurring);
+        f.page.redo();
+        QCOMPARE(f.text(), completed);
+
+        // The status menu: the same, one undo step; cancelled and no status make no new occurrence.
+        const QString open = u"- [/] Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s;
+        Fixture m(open);
+        m.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(m.text(), completed);
+        m.page.undo();
+        QCOMPARE(m.text(), open);
+        m.page.setTaskStatus(0, u"cancelled"_s);
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        m.page.setTaskStatus(0, QString());
+        QCOMPARE(m.text(), u"- Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s);
+        m.page.undo();
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        // In another file (Tasks, the calendar, query results): the same text.
+        m.host.setNow(Now);
+        m.host.setFile(u"Inna.md"_s, open);
+        QVERIFY(m.page.setTaskStatusAt(u"Inna.md"_s, 0, u"done"_s));
+        QCOMPARE(m.host.file(u"Inna.md"_s), completed);
+    }
+
     void pasting()
     {
         // A list pasted into an empty block becomes blocks, nesting kept.
@@ -1678,6 +1837,45 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(zoom.page.titleRow(), 1);
     }
 
+    void noStatusHereAndElsewhere_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("line");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("todo") << u"- [ ] Kupić mleko\n"_s << 0 << u"- Kupić mleko\n"_s;
+        QTest::newRow("done date") << u"- [x] Zapłacić czynsz 📅 2026-10-10 ✅ 2026-10-09\n"_s << 0
+                                   << u"- Zapłacić czynsz 📅 2026-10-10\n"_s;
+        QTest::newRow("cancelled date inside")
+                << u"- [-] Wizyta ❌ 2026-10-02 u dentysty\n"_s << 0 << u"- Wizyta u dentysty\n"_s;
+        QTest::newRow("date first") << u"- [x] ✅ 2026-10-14 Pranie\n"_s << 0 << u"- Pranie\n"_s;
+        QTest::newRow("logseq done") << u"- DONE Paczka ✅ 2026-10-01\n"_s << 0 << u"- Paczka\n"_s;
+        QTest::newRow("logseq planning") << u"- LATER Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s << 0
+                                         << u"- Żurek\n  SCHEDULED: <2026-10-15 Thu>\n"_s;
+        QTest::newRow("block id, crlf") << u"- [/] a ^id1\r\n- b\r\n"_s << 0 << u"- a ^id1\r\n- b\r\n"_s;
+        QTest::newRow("nested") << u"- rodzic\n\t- [>] dziecko #ąę\n"_s << 1 << u"- rodzic\n\t- dziecko #ąę\n"_s;
+        QTest::newRow("numbered") << u"1. [ ] pierwszy\n2. drugi\n"_s << 0 << u"1. pierwszy\n2. drugi\n"_s;
+        QTest::newRow("date in code") << u"- [x] użyj `✅ 2026-01-01` ✅ 2026-10-01\n"_s << 0
+                                      << u"- użyj `✅ 2026-01-01`\n"_s;
+        QTest::newRow("continuation") << u"- [ ] a\n  szczegóły\n"_s << 0 << u"- a\n  szczegóły\n"_s;
+    }
+
+    void noStatusHereAndElsewhere()
+    {
+        // "No status" on this page (an editing command) and in another file (QueryHost,
+        // markdown::removeTaskMarker) writes the same text.
+        QFETCH(QString, content);
+        QFETCH(int, line);
+        QFETCH(QString, expected);
+        Fixture f(content);
+        f.host.setFile(u"Inna.md"_s, content);
+        QVERIFY(f.page.setTaskStatusAt(Page, line, QString()));
+        QVERIFY(f.page.setTaskStatusAt(u"Inna.md"_s, line, QString()));
+        QCOMPARE(f.text(), expected);
+        QCOMPARE(f.host.file(u"Inna.md"_s), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
     void tasksElsewhere()
     {
         Fixture f(u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
@@ -1696,6 +1894,17 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(f.page.toggleTaskAt(u"Zakupy.md"_s, 0, u"todo"_s));
         QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [x] Mleko ✅ 2026-10-15\n"_s);
         QVERIFY(!f.page.toggleTaskAt(u"Nie ma.md"_s, 0, u"todo"_s));
+        // The status menu: any status, "" = no status (the marker goes), here and elsewhere.
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, u"deferred"_s));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [>] Mleko\n"_s);
+        QVERIFY(f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString()));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- Mleko\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(u"Zakupy.md"_s, 0, QString())); // nothing left to remove
+        QVERIFY(f.page.setTaskStatusAt(Page, 0, QString()));
+        QCOMPARE(f.text(), u"- Tutaj 📅 2026-10-20\n- zwykły\n"_s);
+        QVERIFY(!f.page.setTaskStatusAt(Page, 0, QString()));
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Tutaj 📅 2026-10-20\n- zwykły\n"_s);
         QCOMPARE(PageController::toggledStatus(u"doing"_s), u"done"_s);
         QCOMPARE(PageController::toggledStatus(u"cancelled"_s), u"todo"_s);
         QCOMPARE(PageController::toggledStatus(QString()), QString());

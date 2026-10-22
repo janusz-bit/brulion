@@ -203,6 +203,44 @@ private Q_SLOTS:
         QVERIFY(f.page.text().startsWith(u"- [ ] Pomalować ścianę"_s));
     }
 
+    void statusMenuOnResults()
+    {
+        // Another file: through the host, shown at once.
+        Fixture f(u"type:tasks tag:zakupy"_s);
+        const int milk = f.rowOf(u"Mleko"_s);
+        QVERIFY(f.results.setTaskStatus(milk, u"deferred"_s));
+        QCOMPARE(f.row(milk).value(u"status"_s).toString(), u"deferred"_s);
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).startsWith(u"- [>] Mleko #zakupy 📅 2026-10-16\n"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+        QVERIFY(!f.results.setTaskStatus(milk, u"deferred"_s)); // already
+        QVERIFY(!f.results.setTaskStatus(milk, u"nonsense"_s));
+        QCOMPARE(f.host.taskEdits(), 1);
+        // No status: the marker goes, the row is no task any more until the query runs again.
+        QVERIFY(f.results.setTaskStatus(milk, QString()));
+        QCOMPARE(f.row(milk).value(u"isTask"_s).toBool(), false);
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).startsWith(u"- Mleko #zakupy 📅 2026-10-16\n"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+        QVERIFY(!f.results.setTaskStatus(milk, u"todo"_s));
+        f.results.refresh();
+        QCOMPARE(f.rowOf(u"Mleko"_s), -1); // a type:tasks query no longer lists it
+        // This page: an undoable editing command.
+        Fixture here(u"type:tasks tag:remont status:open"_s);
+        const int wall = here.rowOf(u"Pomalować"_s);
+        QVERIFY(here.results.setTaskStatus(wall, u"cancelled"_s));
+        QCOMPARE(here.host.taskEdits(), 0);
+        QVERIFY(here.page.text().startsWith(u"- [-] Pomalować ścianę #remont 📅 2026-10-14 ❌ 2026-10-15\n"_s));
+        here.page.undo();
+        QVERIFY(here.page.text().startsWith(u"- [ ] Pomalować ścianę #remont 📅 2026-10-14\n"_s));
+        here.results.refresh();
+        QVERIFY(here.results.setTaskStatus(here.rowOf(u"Pomalować"_s), QString()));
+        QVERIFY(here.page.text().startsWith(u"- Pomalować ścianę #remont 📅 2026-10-14\n"_s));
+        // Not a task, or a bad row: nothing happens.
+        Fixture pages(u"type:pages tag:zakupy"_s);
+        QVERIFY(!pages.results.setTaskStatus(0, u"done"_s));
+        QVERIFY(!pages.results.setTaskStatus(-1, u"done"_s));
+        QVERIFY(!pages.results.setTaskStatus(99, QString()));
+    }
+
     void followsIndexChanges()
     {
         Fixture f(u"type:tasks tag:zakupy status:open"_s);

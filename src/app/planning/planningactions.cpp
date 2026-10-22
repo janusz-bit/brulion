@@ -176,8 +176,9 @@ bool PlanningActions::toggleTask(const QString &path, int line, const QString &t
 
 bool PlanningActions::setTaskStatus(const QString &path, int line, const QString &status, const QString &text)
 {
+    // "" = no status: the task marker goes (the status menus' "No status").
     const auto s = statusFromName(status);
-    if (!m_host || !s)
+    if (!m_host || (!s && !status.isEmpty()))
         return false;
     bool ok = false;
     const QString content = m_host->read(path, &ok);
@@ -190,7 +191,8 @@ bool PlanningActions::setTaskStatus(const QString &path, int line, const QString
         Q_EMIT failed(tr("The task was changed in the meantime."));
         return false;
     }
-    const QString after = markdown::setTaskStatus(content, at, *s, currentDay());
+    const QString after =
+            s ? markdown::setTaskStatus(content, at, *s, currentDay()) : markdown::removeTaskMarker(content, at);
     if (after == content)
         return false;
     if (!writeChange(path, content, after))

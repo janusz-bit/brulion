@@ -68,6 +68,10 @@ FocusScope {
             toasts.show(wasClosed ? qsTr("Task reopened") : qsTr("Task done"),
                         { kind: "success", actionText: qsTr("Undo"), onAction: () => actions.undo() })
     }
+    function setEntryStatus(entry, status) {
+        if (actions.setTaskStatus(entry.path, entry.line, status, entry.title))
+            toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => actions.undo() })
+    }
     function openJournal(date) {
         if (daySheet.opened)
             daySheet.close()
@@ -190,6 +194,7 @@ FocusScope {
                     date: cal.anchorDate
                     onItemOpened: (entry) => root.openEntry(entry)
                     onItemToggled: (entry) => root.toggleEntry(entry)
+                    onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
                     onJournalOpened: (date) => root.openJournal(date)
                     onAddTaskRequested: (date) => addDialog.openFor("task", date)
                     onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
@@ -215,6 +220,7 @@ FocusScope {
                     date: cal.anchorDate
                     onItemOpened: (entry) => root.openEntry(entry)
                     onItemToggled: (entry) => root.toggleEntry(entry)
+                    onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
                     onJournalOpened: (date) => root.openJournal(date)
                     onAddTaskRequested: (date) => addDialog.openFor("task", date)
                     onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
@@ -251,6 +257,7 @@ FocusScope {
             focus: true
             onItemOpened: (entry) => root.openEntry(entry)
             onItemToggled: (entry) => root.toggleEntry(entry)
+            onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
             onJournalOpened: (date) => root.openJournal(date)
             onDayTapped: (date) => root.showDay(date)
         }
@@ -281,6 +288,7 @@ FocusScope {
             date: cal.anchorDate
             onItemOpened: (entry) => root.openEntry(entry)
             onItemToggled: (entry) => root.toggleEntry(entry)
+            onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
             onJournalOpened: (date) => root.openJournal(date)
             onAddTaskRequested: (date) => {
                 daySheet.close()

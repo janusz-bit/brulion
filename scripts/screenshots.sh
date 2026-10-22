@@ -30,7 +30,7 @@ delay="${DELAY:-900}"
 read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 
-all_sections=(foundations icons buttons inputs selection chips lists feedback menus dialog confirm
+all_sections=(foundations icons buttons inputs selection chips lists feedback menus taskstatus dialog confirm
   datepicker timepicker reminder diff merge palette switcher split)
 if [[ $# -gt 0 ]]; then sections=("$@"); else sections=("${all_sections[@]}"); fi
 

@@ -1,8 +1,8 @@
 // PlanningActions and the pure helpers behind it: toggling tasks through an EditorHost (✅ date,
 // recurring tasks, a line that moved, a task that is gone, undo only while the file is
-// unchanged), appending blocks to a page (template bullets, CRLF, continuation lines), the lines
-// written by the calendar ("Dodaj zadanie" / "Dodaj przypomnienie") and natural-language quick
-// add (Polish and English).
+// unchanged), every status of the status menu (no status included), appending blocks to a page
+// (template bullets, CRLF, continuation lines), the lines written by the calendar ("Dodaj
+// zadanie" / "Dodaj przypomnienie") and natural-language quick add (Polish and English).
 #include "fakeeditorhost.h"
 #include "planningactions.h"
 #include "planningtest.h"
@@ -70,6 +70,46 @@ private Q_SLOTS:
         QVERIFY(!actions.setTaskStatus(u"Dom.md"_s, 2, u"bogus"_s));
         // Without a text the task must be exactly on the line.
         QVERIFY(!actions.toggleTask(u"Dom.md"_s, 0));
+    }
+
+    void statusMenuChoices_data()
+    {
+        QTest::addColumn<QString>("line");
+        QTest::addColumn<QString>("status");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("in progress") << u"- [ ] Pomalować ścianę"_s << u"doing"_s << u"- [/] Pomalować ścianę"_s;
+        QTest::newRow("waiting") << u"- [ ] Pomalować ścianę"_s << u"deferred"_s << u"- [>] Pomalować ścianę"_s;
+        QTest::newRow("cancelled") << u"- [/] Pomalować ścianę"_s << u"cancelled"_s
+                                   << u"- [-] Pomalować ścianę ❌ 2026-10-15"_s;
+        QTest::newRow("done") << u"- [>] Pomalować ścianę"_s << u"done"_s << u"- [x] Pomalować ścianę ✅ 2026-10-15"_s;
+        QTest::newRow("to do") << u"- [x] Pomalować ścianę ✅ 2026-10-01"_s << u"todo"_s << u"- [ ] Pomalować ścianę"_s;
+        QTest::newRow("no status") << u"- [x] Pomalować ścianę ✅ 2026-10-01"_s << QString() << u"- Pomalować ścianę"_s;
+        QTest::newRow("no status, Logseq") << u"- LATER Pomalować ścianę"_s << QString() << u"- Pomalować ścianę"_s;
+        QTest::newRow("Logseq style kept")
+                << u"- LATER Pomalować ścianę"_s << u"doing"_s << u"- NOW Pomalować ścianę"_s;
+    }
+
+    void statusMenuChoices()
+    {
+        QFETCH(QString, line);
+        QFETCH(QString, status);
+        QFETCH(QString, expected);
+        FakeEditorHost host;
+        const QString page = u"# Remont\r\n"_s + line + u"\r\n- [ ] Inne\r\n"_s;
+        host.setFile(u"Dom.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        QSignalSpy changed(&actions, &PlanningActions::taskChanged);
+        QVERIFY(actions.setTaskStatus(u"Dom.md"_s, 1, status, u"Pomalować ścianę"_s));
+        QCOMPARE(host.file(u"Dom.md"_s), u"# Remont\r\n"_s + expected + u"\r\n- [ ] Inne\r\n"_s);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.first().at(2).toString(), status);
+        // The same status again changes nothing (no status: there is no task to find any more);
+        // the toast's Undo puts the line back.
+        QVERIFY(!actions.setTaskStatus(u"Dom.md"_s, 1, status, u"Pomalować ścianę"_s));
+        QVERIFY(actions.undo());
+        QCOMPARE(host.file(u"Dom.md"_s), page);
     }
 
     void recurringCompletion()

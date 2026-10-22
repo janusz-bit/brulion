@@ -5,10 +5,10 @@ import Brulion
 // BlockDelegate — one block of the BlockEditor (one row of BlockListModel): indentation with
 // thin vertical guide lines (one per ancestor level, continuous across rows), the fold arrow
 // (on hover; always shown when folded or on touch), the round bullet of list items (click:
-// zoom into the block; right click / long press: block menu), the task checkbox, and the
-// content for the block's `view` (rendered text / inline editor, code, calc, math, table, query,
-// callout, quote, rule, frontmatter) with image embeds and embedded pages / sections / blocks
-// (TransclusionView) below.
+// zoom into the block; right click / long press: block menu), the task checkbox (click: toggle;
+// right click / long press: the editor's status menu), and the content for the block's `view`
+// (rendered text / inline editor, code, calc, math, table, query, callout, quote, rule,
+// frontmatter) with image embeds and embedded pages / sections / blocks (TransclusionView) below.
 // Document mode (BlockEditor.documentMode): no guides, fold arrows or bullets for paragraphs and
 // headings; a list item shows its Markdown marker in its level's marker column — a bullet (disc,
 // circle, square by depth), its number ("3."), or the checkbox of a task — and the text starts
@@ -320,8 +320,13 @@ Item {
                      : block.levelX + (block.editor.taskBoxWidth - boxSize) / 2 - 2 - (width - boxSize) / 2
         y: block.firstLineCenter - height / 2
         sourceComponent: TaskBox {
+            id: box
+            objectName: "taskBox"
             status: block.taskStatus
             onToggled: block.controller.toggleTask(block.index)
+            // The editor's status menu (it follows the block while it is open).
+            ownMenu: false
+            onMenuRequested: block.editor.openTaskStatusMenu(block.index, box, 0, box.height)
         }
     }
 

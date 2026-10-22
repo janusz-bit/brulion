@@ -8,7 +8,8 @@ import Brulion
 // PlanningItemRows; a day with a daily note offers to open it. Past days are muted. Scrolls to
 // today (or the selected day) when the range changes.
 //
-//   CalendarAgendaList { calendar: cal; onItemOpened: …; onItemToggled: …; onJournalOpened: … }
+//   CalendarAgendaList { calendar: cal; onItemOpened: …; onItemToggled: …; onItemStatusRequested: …
+//                        onJournalOpened: … }
 FocusScope {
     id: root
 
@@ -18,6 +19,8 @@ FocusScope {
 
     signal itemOpened(var entry)
     signal itemToggled(var entry)
+    /// A task's status menu: `status` "todo" … "cancelled", "" = none.
+    signal itemStatusRequested(var entry, string status)
     signal journalOpened(string date)
     signal dayTapped(string date)
 
@@ -180,6 +183,7 @@ FocusScope {
                             entry: modelData
                             onOpened: root.itemOpened(modelData)
                             onTaskToggled: root.itemToggled(modelData)
+                            onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
                         }
                     }
                 }
