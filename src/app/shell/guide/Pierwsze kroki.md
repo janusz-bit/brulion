@@ -16,6 +16,14 @@ Przy pierwszym uruchomieniu wybierasz folder, tworzysz nowy notatnik albo otwier
 
 Strona dnia powstaje dopiero przy pierwszej zmianie — samo zaglądanie niczego nie tworzy.
 
+## Pisanie na telefonie
+Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na każdej stronie, także gdy przewijasz. Ma wcięcia, przenoszenie bloków, zadanie, link `[[`, tag `#`, polecenia `/`, termin, przypomnienie, obraz, cofanie i ponawianie; gdy przycisków jest więcej, niż mieści się na ekranie, przesuń pasek palcem w bok. Dolna nawigacja i przycisk szybkiej notatki chowają się na czas pisania.
+
+- **Ukryj klawiaturę** (ostatni przycisk paska) kończy pisanie: chowa klawiaturę i pasek, a dolna nawigacja wraca.
+- Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, pasek zostaje na dole ekranu z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci.
+- W komórce tabeli pasek ma Cofnij, Ponów, **Następna komórka** i Ukryj klawiaturę; w źródle Markdown (Więcej → Źródło Markdown) — `[[`, `#`, `/`, Cofnij, Ponów i Ukryj klawiaturę.
+- Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy) i podpowiedzi przy pisaniu też zawsze leżą nad klawiaturą.
+
 ## Nowa strona
 - **Ctrl+N**, przycisk z ołówkiem obok nazwy notatnika albo „+” przy sekcji **Strony** w pasku bocznym. Nazwa może zawierać `/`, wtedy strona trafi do folderu: `Projekty/Dom`.
 - W oknie wybierasz tryb: dokument albo konspekt (zobacz [[Dokument i konspekt|Dokument i konspekt]]).
