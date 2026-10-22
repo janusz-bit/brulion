@@ -1030,7 +1030,8 @@ ApplicationWindow {
         return findItem(c, "clockFocusRing")
     }
     /// The number circles the face shows (hours or minutes) and the chosen value's bubble, as
-    /// { label, bubble, x, y, r, textWidth, font } in the face's coordinates.
+    /// { label, bubble, outer (on the outer ring), x, y, r, textWidth, font } in the face's
+    /// coordinates.
     function clockCircles(c) {
         const out = []
         const face = c.focusItem
@@ -1050,25 +1051,29 @@ ApplicationWindow {
                 if (item.children[j].text !== undefined)
                     text = item.children[j]
             }
+            const x = item.x + item.width / 2
+            const y = item.y + item.height / 2
             out.push({ label: bubble ? "bubble " + text.text : text ? text.text : "?", bubble: bubble,
-                       x: item.x + item.width / 2, y: item.y + item.height / 2, r: item.width / 2,
+                       outer: Math.abs(Math.hypot(x - c.center, y - c.center) - c.outerRadius) < 0.5,
+                       x: x, y: y, r: item.width / 2,
                        textWidth: text ? text.contentWidth : 0, font: text ? text.font.pixelSize : 0 })
         }
         return out
     }
     /// The numbers on the face never overlap (nor does the chosen value's bubble reach over a
-    /// neighbour of its number), each holds its text, and a press near a number's edge, towards
-    /// its neighbour, still gives that number.
+    /// neighbour of its number), each holds its text in a legible font — the outer ring's in the
+    /// text size itself, the inner one's at least 12 px —, and a press near a number's edge,
+    /// towards its neighbour, still gives that number.
     function checkClockNumbers(c, what) {
         const circles = clockCircles(c)
         const numbers = circles.filter(n => !n.bubble)
         const bubble = circles.filter(n => n.bubble)[0]
         const overlaps = []
         const cramped = []
-        const fits = (n) => n.textWidth <= 2 * n.r - 2 && n.font >= 10
+        const fits = (n, minFont) => n.textWidth <= 2 * n.r - 2 && n.font >= minFont
         for (let i = 0; i < numbers.length; ++i) {
             const a = numbers[i]
-            if (!fits(a))
+            if (!fits(a, a.outer ? Theme.textSm : Math.min(Theme.textSm, 12)))
                 cramped.push(a.label + " (" + a.textWidth.toFixed(1) + " px text in " + 2 * a.r + ", font " + a.font + ")")
             for (let j = i + 1; j < numbers.length; ++j) {
                 const b = numbers[j]
@@ -1080,7 +1085,7 @@ ApplicationWindow {
             if (bubble && toBubble > 0.5 && toBubble < a.r + bubble.r - 0.01)
                 overlaps.push(bubble.label + "/" + a.label + " " + toBubble.toFixed(1) + " < " + (a.r + bubble.r))
         }
-        if (bubble && !fits(bubble))
+        if (bubble && !fits(bubble, 10))
             cramped.push(bubble.label + " (" + bubble.textWidth.toFixed(1) + " px text in " + 2 * bubble.r + ")")
         const wrong = []
         if (c.mode === "hour") {
@@ -1152,7 +1157,20 @@ ApplicationWindow {
             () => checkClockNumbers(c, "180 px, hours, 13 chosen"),
             () => { c.mode = "minute" },
             () => checkClockNumbers(c, "180 px, minutes"),
-            () => { c.dialSize = window.clockSizeBefore; c.mode = "hour"; c.time = "18:30" },
+            // Larger text (Ustawienia → Rozmiar tekstu → Większy) on the smallest dials: the
+            // outer numbers keep the text size, the inner hours stay legible.
+            () => { window.clockFontScaleBefore = Theme.fontScale; Theme.fontScale = 1.3; c.mode = "hour" },
+            () => checkClockNumbers(c, "180 px, larger text, hours, 13 chosen"),
+            () => { c.mode = "minute" },
+            () => checkClockNumbers(c, "180 px, larger text, minutes"),
+            () => { c.dialSize = 196; c.mode = "hour" },
+            () => checkClockNumbers(c, "196 px, larger text, hours, 13 chosen"),
+            () => {
+                Theme.fontScale = window.clockFontScaleBefore
+                c.dialSize = window.clockSizeBefore
+                c.mode = "hour"
+                c.time = "18:30"
+            },
             // ---- The value of every position --------------------------------------------------
             () => {
                 c.mode = "hour"
@@ -1426,6 +1444,7 @@ ApplicationWindow {
     property var firstClock: null
     property var clockOther: null
     property int clockSizeBefore: 0
+    property real clockFontScaleBefore: 1
 
     function runScript(name) {
         switch (name) {

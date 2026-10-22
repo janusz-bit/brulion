@@ -54,18 +54,25 @@ T.Control {
     readonly property real center: dialSize / 2
     readonly property real outerRadius: center - Math.round(dialSize * 0.115)
     readonly property real innerRadius: outerRadius * 0.62
-    /// A number's circle on the outer ring (and the chosen value's bubble there): two digits with
-    /// room around them, never wider than the gap to the next number (1 px between them).
-    readonly property int labelSize: Math.min(Math.max(Theme.textSm * 2, Math.round(dialSize * 0.12)),
-                                              Math.floor(2 * outerRadius * Math.sin(Math.PI / 12)) - 1)
+    /// A number's circle where the dial has room for it: two digits with room around them.
+    readonly property int labelRoom: Math.max(Theme.textSm * 2, Math.round(dialSize * 0.12))
     /// The inner ring's circles: the twelve hours sit closer together there (24 px apart on a
     /// 196 px dial, 22 on the 180 px the dialog shrinks to), so they are as large as the outer
-    /// ones only where they do not reach the next hour or the outer ring — they never overlap.
-    readonly property int innerLabelSize: Math.min(labelSize,
+    /// ones only where they do not reach the next hour (1 px between them), and take at most
+    /// half the room between the rings.
+    readonly property int innerLabelSize: Math.min(labelRoom,
                                                    Math.floor(2 * innerRadius * Math.sin(Math.PI / 12)) - 1,
-                                                   Math.floor(2 * (outerRadius - innerRadius) - labelSize) - 1)
-    /// The numbers' font: the small one, smaller only where two digits would not fit their circle.
-    readonly property int labelFontSize: Math.min(Theme.textSm, Math.floor(innerLabelSize * 0.62))
+                                                   Math.floor(outerRadius - innerRadius - 0.5))
+    /// A number's circle on the outer ring (and the chosen value's bubble there): never reaching
+    /// the next number nor the inner ring's (1 px between them). Sized after the inner ones, so
+    /// larger text (Theme.fontScale) on a small dial does not squeeze the inner hours.
+    readonly property int labelSize: Math.min(labelRoom,
+                                              Math.floor(2 * outerRadius * Math.sin(Math.PI / 12)) - 1,
+                                              Math.floor(2 * (outerRadius - innerRadius) - innerLabelSize) - 1)
+    /// The numbers' font: the small one, smaller only where two digits would not fit their
+    /// circle (the inner ring's on the smallest dials, like Android's clock).
+    readonly property int labelFontSize: Math.min(Theme.textSm, Math.floor(labelSize * 0.62))
+    readonly property int innerLabelFontSize: Math.min(Theme.textSm, Math.floor(innerLabelSize * 0.62))
     /// The chosen value's bubble: the size of the number it sits on.
     readonly property int selectionSize: mode === "hour" && selectedHour >= 12 ? innerLabelSize : labelSize
     // The hand points at the chosen value: 0° is up, 90° right (QML rotation of a vertical bar).
@@ -483,7 +490,7 @@ T.Control {
                         anchors.centerIn: parent
                         text: control.pad(hourNumber.index)
                         font.family: Theme.fontUi
-                        font.pixelSize: control.labelFontSize
+                        font.pixelSize: hourNumber.index < 12 ? control.labelFontSize : control.innerLabelFontSize
                         font.weight: hourNumber.selected ? Theme.weightSemiBold : Theme.weightNormal
                         font.features: { "tnum": 1 }
                         color: Theme.fg
