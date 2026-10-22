@@ -214,6 +214,9 @@ private Q_SLOTS:
         QTest::newRow("empty bullet planning") << u"- \n  SCHEDULED: <2026-10-15 Thu>\n"_s << u"- ⏳ 2026-10-15\n"_s;
         QTest::newRow("properties kept") << u"- blok\n  typ:: książka\n"_s << u"- blok\n  typ:: książka\n"_s;
         QTest::newRow("star bullet") << u"* TODO gwiazdka\n"_s << u"* [ ] gwiazdka\n"_s;
+        // A code span right after the keyword is the task's text (it was dropped with the space).
+        QTest::newRow("code span first") << u"- TODO `npm i` w katalogu\n- DONE `ą`\n"_s
+                                         << u"- [ ] `npm i` w katalogu\n- [x] `ą`\n"_s;
         QTest::newRow("removed last line") << u"- x\n  id:: y"_s << u"- x ^y\n"_s;
         // Lines that cannot be converted stay as written (never silently dropped).
         QTest::newRow("unparsable planning kept")
