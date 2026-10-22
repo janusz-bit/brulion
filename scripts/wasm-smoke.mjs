@@ -3,7 +3,7 @@
 // Chromium over the DevTools protocol (Node >= 22 for the global WebSocket). See docs/WEB.md.
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
-//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--two-tabs] [--lang pl-PL] \
+//       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--two-tabs] [--lang pl-PL] \
 //       [--index-notes N] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
@@ -15,7 +15,10 @@
 // lets the app show a test notification (?selftest=notify), clicks it and expects the click to
 // reach the app. --glyphs runs ?selftest=glyphs: the bundled fallback fonts must be installed and
 // draw every emoji and symbol Brulion writes (src/app/ui/fallbackfonts.h — Qt for WebAssembly
-// itself has no emoji font, every ⏰ 🔔 📅 was an empty box). --two-tabs opens a second tab,
+// itself has no emoji font, every ⏰ 🔔 📅 was an empty box). --keyboard stubs window.visualViewport
+// (a phone browser's on-screen keyboard shrinks it) and runs ?selftest=keyboard: the app must
+// report how much of the page the keyboard covers (KeyboardInsets, src/app/ui/keyboardsources.h)
+// as the stub changes, 0 for malformed values. --two-tabs opens a second tab,
 // which must wait ("open in another tab") until the first one leaves the app. --index-notes N
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
@@ -32,7 +35,7 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 function parseArgs(argv) {
-  const args = { loads: 1, timeout: 120, selftest: false, notify: false, glyphs: false, lang: 'pl-PL' };
+  const args = { loads: 1, timeout: 120, selftest: false, notify: false, glyphs: false, keyboard: false, lang: 'pl-PL' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -45,6 +48,7 @@ function parseArgs(argv) {
     else if (a === '--selftest') args.selftest = true;
     else if (a === '--notify') args.notify = true;
     else if (a === '--glyphs') args.glyphs = true;
+    else if (a === '--keyboard') args.keyboard = true;
     else if (a === '--two-tabs') args.twoTabs = true;
     else if (a === '--lang') args.lang = next();
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
@@ -106,6 +110,25 @@ function seedVaultScript(count) {
     return entries.length;
   })()`;
 }
+
+// A visualViewport the test controls (installed before the page's own scripts): its height is
+// the window's minus a keyboard set with window.__brulionKeyboard(px, offsetTop).
+const viewportStub = `(() => {
+  const vv = new EventTarget();
+  let keyboard = 0;
+  let offset = 0;
+  Object.defineProperty(vv, 'width', { get: () => window.innerWidth });
+  Object.defineProperty(vv, 'height', { get: () => window.innerHeight - keyboard });
+  Object.defineProperty(vv, 'offsetTop', { get: () => offset });
+  Object.defineProperty(vv, 'offsetLeft', { get: () => 0 });
+  Object.defineProperty(vv, 'scale', { get: () => 1 });
+  Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+  window.__brulionKeyboard = (px, top) => {
+    keyboard = px;
+    offset = top || 0;
+    vv.dispatchEvent(new Event('resize'));
+  };
+})()`;
 
 function findChrome() {
   if (process.env.CHROME) return process.env.CHROME;
@@ -234,11 +257,13 @@ async function main() {
     ...(args.selftest ? ['storage'] : []),
     ...(args.notify ? ['notify'] : []),
     ...(args.glyphs ? ['glyphs'] : []),
+    ...(args.keyboard ? ['keyboard'] : []),
   ];
   if (flows.length) url.searchParams.set('selftest', flows.join(','));
   if (args.notify) {
     await cdp.send('Browser.grantPermissions', { origin: url.origin, permissions: ['notifications'] });
   }
+  if (args.keyboard) await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: viewportStub });
   const shoot = async (file) => {
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(file, Buffer.from(shot.data, 'base64'));
@@ -291,11 +316,12 @@ async function main() {
           selftest: window.brulionSelfTest ?? null,
           notify: window.brulionNotifySelfTest ?? null,
           glyphs: window.brulionGlyphSelfTest ?? null,
+          keyboard: window.brulionKeyboardSelfTest ?? null,
           screenElements: document.getElementById('screen')?.childElementCount ?? 0,
         };
       })()`);
       const appUp = state?.loaderHidden && (!args.selftest || state.selftest) && (!args.notify || state.notify)
-        && (!args.glyphs || state.glyphs);
+        && (!args.glyphs || state.glyphs) && (!args.keyboard || state.keyboard);
       const failed = state && !state.loaderHidden && state.details;
       if (appUp || failed) break;
     }
@@ -355,6 +381,35 @@ async function main() {
     else if (!clicked) problems.push('notification not found in the page (shown via the service worker?)');
     else if (notify?.activated?.id !== 'selftest' || notify?.activated?.line !== 3) {
       problems.push(`notification click did not reach the app: ${JSON.stringify(notify?.activated)}`);
+    }
+  }
+
+  if (args.keyboard) {
+    // The stubbed visualViewport shrinks as a phone's keyboard comes up (Chrome on Android keeps
+    // the page's size: interactive-widget=resizes-visual).
+    const keyboardState = () => evaluate('window.brulionKeyboardSelfTest ?? null');
+    const waitKeyboard = async (pred) => {
+      let k;
+      for (const end = deadline(10); Date.now() < end; await sleep(100)) {
+        k = await keyboardState();
+        if (k && pred(k)) return k;
+      }
+      return k;
+    };
+    const steps = [
+      ['no keyboard', null, (k) => k.overlap === 0 && k.source === 'platform'],
+      ['a 300 px keyboard', '300', (k) => k.overlap === 300 && k.shown && k.source === 'platform'],
+      ['a 250 px keyboard, the page scrolled 20 px (iOS)', '270, 20', (k) => k.overlap === 250 && k.shown],
+      ['malformed (NaN)', 'NaN', (k) => k.overlap === 0 && !k.shown],
+      ['a 300 px keyboard again', '300', (k) => k.overlap === 300],
+      ['the keyboard goes', '0', (k) => k.overlap === 0 && !k.shown],
+    ];
+    for (const [what, call, pred] of steps) {
+      if (call !== null) await evaluate(`window.__brulionKeyboard(${call})`);
+      const k = await waitKeyboard(pred);
+      console.log(`keyboard: ${what}: ${JSON.stringify(k)}`);
+      if (!k || !pred(k)) problems.push(`keyboard: ${what}: the app reported ${JSON.stringify(k)}`);
+      if (what === 'a 300 px keyboard' && args.screenshot) await shoot(args.screenshot.replace(/\.png$/, '-keyboard.png'));
     }
   }
 
