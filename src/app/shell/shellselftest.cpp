@@ -838,6 +838,40 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
     check(refs && waitFor([&] { return refs->isVisible() && refs->property("linkedCount").toInt() >= 2; }),
           "the notes that embed the picture are listed under it");
 
+    // The bar fits the window: next to the size toggle (an icon on phones, named for screen
+    // readers and in its tooltip) the file name keeps its room — the toggle's "Pokaż naturalny
+    // rozmiar" left it none on a phone — and nothing runs off the window's edge. The toggle works.
+    {
+        QQuickItem *name = child(view, "pictureName");
+        QQuickItem *size = child(view, "pictureSizeButton");
+        QQuickItem *textButton = child(view, "pictureTextButton");
+        const auto left = [](QQuickItem *item) { return item->mapToScene(QPointF(0, 0)).x(); };
+        const auto right = [](QQuickItem *item) { return item->mapToScene(QPointF(item->width(), 0)).x(); };
+        const auto nameOf = [](QQuickItem *button) {
+            const QVariant label = button->property("label");
+            return label.isValid() ? label.toString() : button->property("text").toString();
+        };
+        if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
+            std::fprintf(stderr,
+                         "selftest: picture bar: name %.0f of %.0f px, size toggle %.0f–%.0f, text button %.0f–%.0f\n",
+                         name->width(), name->property("implicitWidth").toReal(), left(size), right(size),
+                         left(textButton), right(textButton));
+            check(name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                          && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
+                          && right(textButton) <= window->width() + 0.5
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
+                  "the picture's bar shows the file name next to the size toggle and fits the window");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return view->property("actualSize").toBool(); })
+                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Fit to view"),
+                  "the size toggle shows the picture's own pixels");
+            tapOrClick(window, pointIn(size), touch);
+            check(waitFor([&] { return !view->property("actualSize").toBool(); }), "and fits it into the view again");
+        } else {
+            check(false, "the picture's bar has its name, its size toggle and its text button");
+        }
+    }
+
     // The top bar's More menu on a picture: no "Toggle note mode" (a picture is no note), and its
     // "Markdown source" item says what it does there, like the picture's bar — and does it.
     {
