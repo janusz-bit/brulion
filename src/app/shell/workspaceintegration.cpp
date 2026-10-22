@@ -158,6 +158,9 @@ void wireSync(AppController *app)
         n.url = settings->nextcloudUrl();
         n.user = settings->nextcloudUser();
         n.folder = settings->nextcloudFolder();
+        // Another notebook of this device on the same server folder (set up by 0.3.1–0.3.5; the
+        // settings form refuses that now): nothing syncs until one of them gets another folder.
+        n.sharedWith = n.enabled ? settings->nextcloudFolderUser(n.folder) : QString();
         n.intervalMinutes = settings->syncIntervalMinutes();
         n.password = settings->nextcloudPassword();
         sync->setDeviceName(settings->value(u"sync/deviceName"_s, QString()).toString());
@@ -189,6 +192,8 @@ void wireSync(AppController *app)
     QObject::connect(sync, &WorkspaceSync::statusChanged, app, publish);
     QObject::connect(sync, &WorkspaceSync::configurationChanged, app, publish);
     QObject::connect(app, &AppController::syncRequested, sync, &WorkspaceSync::syncNow);
+    QObject::connect(sync, &WorkspaceSync::folderSharingFound, app,
+                     [app](const QString &message) { app->toast(message, u"warning"_s); });
     QObject::connect(sync, &WorkspaceSync::conflictsFound, app, [app](int count) {
         app->toast(QCoreApplication::translate("brulion::shell::WorkspaceIntegration",
                                                "%n note(s) changed on two devices at once. Both versions are kept: "

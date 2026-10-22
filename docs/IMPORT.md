@@ -13,6 +13,12 @@ Obsługiwane aplikacje i formaty: Obsidian, Logseq, Notion, Evernote, Google Kee
 Simplenote, Roam Research, **Trilium Notes**, Bear, pliki Markdown/TXT, HTML i kalendarze
 iCalendar.
 
+Tekst z aplikacji, które nie piszą w Markdownie (HTML, Evernote, Google Keep, bazy Notion,
+Trilium, kalendarze), zostaje tekstem: znaki, które w Brulionie coś znaczą, dostają `\`.
+Dotyczy to też znaku `$` — ale tylko tam, gdzie dwa `$` utworzyłyby wzór („Cena $10,
+Netflix 15$”, „$x$”); pojedyncze ceny („$5 i $10”, „15$”) zostają bez zmian. Kod i adresy
+linków nie są zmieniane.
+
 ## Trilium Notes
 
 Działa z eksportem ZIP z Trilium 0.10x (projekt TriliumNext, znów nazywany po prostu Trilium),
@@ -92,7 +98,8 @@ Treść notatek:
 | uwaga (*admonition*: notatka, wskazówka, ważne, ostrożnie, ostrzeżenie) | callout `> [!tip]`, `> [!warning]` … |
 | blok zwijany | zwinięty callout `> [!note]- Tytuł` (rozwinięty: `+`) |
 | przypisy (także w notatkach zaimportowanych do Trilium z Markdowna) | `[^1]` w tekście, treść przypisów na końcu strony |
-| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku; gdy `$` z tekstu wokół (np. cena w tym samym akapicie) albo litera czy cyfra tuż za wzorem zmieniłyby, co Brulion uzna za wzór, wzory tej linii zostają kodem `` `$E=mc^2$` `` |
+| wzór w tekście / blokowy | `$E=mc^2$` / blok ```` ```math ```` — Brulion składa wzory, źródło LaTeX zostaje w pliku; `$` z tekstu wokół, który połączyłby się ze wzorem (np. cena w tym samym akapicie), dostaje `\$`; gdy litera czy cyfra tuż za wzorem zmieniłaby, co Brulion uzna za wzór, wzory tej linii zostają kodem `` `$E=mc^2$` `` |
+| `$` w tekście (ceny, `$x$` jako zwykły tekst) | bez zmian, a tam, gdzie dwa `$` utworzyłyby wzór („Cena $10, Netflix 15$”), pierwszy dostaje `\$` — widać go jako `$` |
 | link referencyjny do notatki | `[[Import/Trilium/Projekty/Strona\|Strona]]` (pokazuje tytuł z Trilium) |
 | link z własnym tekstem | `[[Import/Trilium/Projekty/Strona\|tekst]]`; link do notatki dnia — `[[2026-10-16]]` |
 | link do notatki spoza eksportu, wykluczonej albo chronionej | sam tekst linku (ostrzeżenie) |

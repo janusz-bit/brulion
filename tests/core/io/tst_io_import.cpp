@@ -507,6 +507,20 @@ private Q_SLOTS:
         QCOMPARE(r.warnings.size(), 1); // brak.png
     }
 
+    void htmlDollarsShowAsWritten()
+    {
+        // Dollars of a web page are text (SYNTAX §11): prices never pair into a formula in the
+        // imported note, in the editor or the export; code keeps its dollars as written.
+        const ImportResult r =
+                importWith(u"html"_s, {text(u"ceny.html"_s, u"<p>Cena $10, <i>Netflix</i> 15$</p><p>$5 i $10</p>"
+                                                            "<ul><li>Wzór $x$ i <code>$y$</code></li></ul>"_s)});
+        const QString note = iotest::textAt(r, u"ceny.md"_s);
+        QCOMPARE(bodyOf(note), u"Cena \\$10, *Netflix* 15$\n\n$5 i $10\n\n- Wzór \\$x$ i `$y$`\n"_s);
+        for (const bool exported : {false, true}) {
+            QCOMPARE(iotest::shownText(bodyOf(note), exported), u"Cena $10, Netflix 15$\n$5 i $10\nWzór $x$ i $y$"_s);
+        }
+    }
+
     void htmlLegacyCharset()
     {
         // Polish pages saved by old browsers: windows-1250 declared in a <meta> tag.

@@ -218,7 +218,13 @@ FocusScope {
                             Layout.fillWidth: true
                             spacing: Theme.space2
                             BButton {
-                                text: root.sync && root.sync.configured ? qsTr("Settings") : qsTr("Set up Nextcloud")
+                                // Another notebook syncs with this one's server folder: nothing
+                                // syncs until one of them gets another folder (the form below
+                                // the status on the Nextcloud tab).
+                                readonly property bool folderShared: !!root.sync && root.sync.folderSharedWith !== ""
+                                text: folderShared ? qsTr("Choose another folder")
+                                    : root.sync && root.sync.configured ? qsTr("Settings") : qsTr("Set up Nextcloud")
+                                variant: folderShared ? "primary" : "secondary"
                                 iconName: "arrow-right"
                                 iconRight: true
                                 onClicked: root.showTab("nextcloud")

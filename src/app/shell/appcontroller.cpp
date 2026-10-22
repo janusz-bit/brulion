@@ -184,6 +184,10 @@ void AppController::start()
     if (m_started)
         return;
     m_started = true;
+    // The documentation is never a recent notebook (the switcher opens it), but 0.3.0–0.3.5 listed
+    // it there: the start screen and the switcher would offer it until it was opened again.
+    if (const QString docs = docsVaultPath(); !docs.isEmpty())
+        m_settings->forgetRecentVault(docs);
 #ifdef Q_OS_WASM
     platform::WasmNotifier::Activation activation;
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
@@ -777,8 +781,9 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
             toast(tr("Could not write all sample notes: %1").arg(m_workspace->vault()->errorString()), u"error"_s);
         showWelcome = true;
     }
-    if (docs)
-        m_settings->forgetRecentVault(path); // listed by 0.3.0–0.3.5
+    // Also when its folder was opened as a notebook by another spelling (a relative path).
+    if (docs || isDocsPath(m_workspace->rootPath()))
+        m_settings->forgetRecentVault(docsVaultPath()); // listed by 0.3.0–0.3.5
     else
         m_settings->addRecentVault(m_workspace->rootPath());
     m_history.reset();

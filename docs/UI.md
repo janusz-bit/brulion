@@ -60,7 +60,8 @@ components — no Material/Fusion look, so all targets look identical.
   on every open (pages the user changed or deleted stay so). It opens on its table of contents
   from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
   Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
-  user's last notebook), arms no reminders (the user's notebook keeps its armed alarms), quick
+  user's last notebook; the start drops it from the recent notebooks where 0.3.0–0.3.5 listed
+  it), arms no reminders (the user's notebook keeps its armed alarms), quick
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
@@ -158,7 +159,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   item, fenced text pasted without its closing line) gets its closing fence at the end of the
   block, so the code never runs on into the following blocks in the saved file; only a lone
   opening line (```` ```js ```` being typed) stays text until Enter or a line break after it makes
-  it a code block. The two lines then act as a pair: a longer opening fence lengthens the closing
+  it a code block. Such a line is saved closed while it is typed when it would take the blocks
+  after it into its code (any block after a paragraph, a list item's children) — and so it is
+  compared with the file, merged with another device's change and shown in the merge dialog —,
+  and leaving the block (another block gets the caret, editing stops) closes it — an empty code
+  block, one undo step; a lone fence line that came with the file and was only looked at stays
+  as it is. The two lines then act as a pair: a longer opening fence lengthens the closing
   one, Backspace over the opening fence (or deleting its line) removes the closing one, and a
   deleted or changed closing fence is added again at the end of the block. Between them Enter and
   paste work as in a code block: a line break, the pasted text as code (a split would leave half
@@ -501,9 +507,17 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   never a folder another notebook has, holds or is inside); one synced before keeps the folder
   its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
   exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
-  się już z tym folderem…") and is not saved while sync is on. "Wyloguj" switches sync off in
-  every notebook (the dialog says so), saving another server or user in all the others. The
-  switch and folder of 0.3.0 and older go to the notebook they belong to (AppSettings).
+  się już z tym folderem…") and is not saved while sync is on. Two notebooks that 0.3.1–0.3.5
+  left on one folder (or one inside the other) sync nothing while that lasts — no automatic
+  sync and no "Synchronizuj teraz" (it only says why: one click would mix the two notebooks for
+  good, and choosing another folder is one step away): the status ("Synchronizacja wstrzymana:
+  notatnik „Dom” na tym urządzeniu synchronizuje się z tym samym folderem…") stays in the sync
+  footer and the sync center (red, error code `folder-shared`), the event log says it once per
+  notebook opened and folder, a toast too, and the overview's Nextcloud card offers „Wybierz
+  inny folder” (the Nextcloud tab, whose form shows the error under the folder). "Wyloguj"
+  switches sync off in every notebook (the dialog says so), saving another server or user in all
+  the others. The switch and folder of 0.3.0 and older go to the notebook they belong to
+  (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from
   `Workspace.sync.live`, at most four updates a second and once a second for the elapsed time;
   no timer while idle): the phase in words ("Sprawdzanie plików na serwerze…", "Wysyłanie i

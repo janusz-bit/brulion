@@ -434,10 +434,10 @@ std::pair<QString, bool> mathSource(const QString &text)
     return {t, false};
 }
 
-/// A formula the importer writes travels between these private-use characters (removed from the
-/// input first) until finishFormulas() has checked it in its paragraph.
-constexpr char16_t FormulaOpen = 0xE0F2;
-constexpr char16_t FormulaClose = 0xE0F3;
+// A formula the importer writes travels between the formula marks FormulaOpen and FormulaClose
+// (htmlutil_p.h; removed from the input first) until finishFormulas() has checked it in its
+// paragraph. htmlToMarkdown() leaves it alone and escapes the dollars of the text around it that
+// would pair with it or with each other (escapeTextFormulas()).
 
 /// `source` (`$…$`, `$$…$$`) between the formula marks when the editor sees it as one formula
 /// covering the whole string, otherwise a code span. TeX that Markdown would break (a backtick, a
@@ -1906,9 +1906,10 @@ QString formulasAsCode(const QString &line)
 
 /// The importer's formulas in lines [from, to) of a paragraph (lines without a blank one between
 /// them) checked as the editor reads them: each must be exactly one formula of the paragraph's
-/// text (findMathSpans() with code masked, SYNTAX §11). A `$` of the text around it ("Cena $5,$x$")
-/// or a letter or digit right after it ("$x$2") pairs the delimiters differently; then the
-/// formulas of that line become code spans. Bounded: after two such rounds all of them do.
+/// text (findMathSpans() with code masked, SYNTAX §11). htmlToMarkdown() has escaped the dollars
+/// of the text that would pair with them ("Cena $5,$x$" -> "Cena \$5,$x$"); a letter or digit
+/// right after one ("$x$2") still pairs the delimiters differently: then the formulas of that
+/// line become code spans. Bounded: after two such rounds all of them do.
 void checkFormulas(QStringList &lines, qsizetype from, qsizetype to)
 {
     struct Formula {

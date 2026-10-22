@@ -37,8 +37,11 @@ struct HtmlMarkdown {
 /// lists, checkboxes (`<input type="checkbox">` -> `- [ ]` / `- [x]`), **bold**, *italic*,
 /// ~~strike~~, ==highlight== (`<mark>`, background colour), `code`, fenced code (`<pre>`, with
 /// the language of `class="language-x"`), blockquotes, rules, GFM tables (`|` escaped), links
-/// and images. Text is escaped so it is not read as Markdown syntax. Lines are never wrapped;
-/// code blocks keep their lines exactly (blank-line runs, indentation, trailing spaces).
+/// and images. Text is escaped so it is not read as Markdown syntax, also where its dollars
+/// would pair into a formula across styles and lines ("Cena $10, <b>Netflix</b> 15$"; nothing in
+/// code, link destinations or what the callbacks return as a formula — see escapeTextFormulas()
+/// in htmlutil_p.h). Lines are never wrapped; code blocks keep their lines exactly (blank-line
+/// runs, indentation, trailing spaces).
 HtmlMarkdown htmlToMarkdown(const QString &html, const HtmlToMarkdownOptions &options = {});
 
 /// Plain text of HTML: block boundaries and `<br>` become line breaks, entities are decoded,
@@ -46,9 +49,14 @@ HtmlMarkdown htmlToMarkdown(const QString &html, const HtmlToMarkdownOptions &op
 QString htmlToPlainText(const QString &html);
 
 /// Escape plain text for Markdown: characters that would start emphasis, code, links, embeds,
-/// block references, comments, highlights or HTML are backslash-escaped; with `lineStart` also
-/// block syntax at the start (headings, list markers, quotes, fences, rules, task checkboxes).
-/// With `linkLabel` every `[` and `]` is escaped too (text inside `[…](…)` or `![…](…)`).
+/// block references, comments, highlights or HTML are backslash-escaped, and so are the dollars
+/// that would make a formula of the text (docs/SYNTAX.md §11): the opening `$` of "Cena $10,
+/// Netflix 15$" or "$x$" (the closing one when the opening one is in a bare URL) — dollars that
+/// pair with nothing ("$5 i $10") stay as they are. With `lineStart` also block syntax at the
+/// start (headings, list markers, quotes, fences, rules, task checkboxes). With `linkLabel` every
+/// `[` and `]` is escaped too (text inside `[…](…)` or `![…](…)`). Dollars of several pieces put
+/// together can still pair across them: importers check the whole note (htmlToMarkdown() does so
+/// for its result).
 QString escapeMarkdownText(QStringView text, bool lineStart = true, bool linkLabel = false);
 
 } // namespace brulion::io

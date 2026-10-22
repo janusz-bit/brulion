@@ -2,6 +2,7 @@
 // (VTODO) become tasks on a page named after the calendar. Times are converted to the vault's
 // wall-clock zone; simple RRULEs become 🔁 rules, VALARMs ⏰ reminders (⏰! for audio alarms).
 #include "io/htmlmarkdown.h"
+#include "io/htmlutil_p.h"
 #include "io/ical.h"
 #include "io/importers_p.h"
 #include "io/importutil_p.h"
@@ -243,11 +244,13 @@ private:
         return out;
     }
 
+    /// The item: its first line and the detail lines below it. Dollars of the texts that would
+    /// pair into a formula across lines ("Bilet $10" / "parking 5$") are escaped.
     static QString withDetails(QString first, const QStringList &detailLines)
     {
         for (const QString &line : detailLines)
             first += line.isEmpty() ? u"\n"_s : u"\n  "_s + line;
-        return first;
+        return escapeTextFormulas(first);
     }
 
     static QString eventText(const ical::Component &c, const Times &t, State &st)

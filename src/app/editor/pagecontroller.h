@@ -498,6 +498,15 @@ private:
     /// Save now, or write the conflict copy while a conflict is unresolved.
     void flush();
     void updateTitleRow();
+    /// The text written to the file: text() with the lone opening fences of text blocks that
+    /// would run on over the blocks after them closed (loneFenceClosed(), loneFenceRunsOn()) —
+    /// "```js" being typed is saved as a closed, empty code block.
+    QString textToSave() const;
+    /// Leaving block `uid` (the caret moves to another block, editing stops): a body that is only
+    /// an opening fence line gets its closing fence (in the undo step of the typing that wrote
+    /// it, else in one of its own) when it was edited since the block got the caret or would run
+    /// on over the blocks after it.
+    void closeLoneFence(quint64 uid);
     /// Insert embeds of stored attachments (see insertAttachment()).
     QVariantMap insertEmbeds(int row, int from, int to, const QStringList &paths, bool newBlock = false);
     /// Read and store files as attachments (attachmentFailed() for each one that fails).
@@ -555,6 +564,10 @@ private:
     quint64 m_typingUid = 0;
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
     bool m_restoring = false;
+    bool m_undoing = false; ///< restore() runs (undo/redo): moving the caret changes no text
+    /// The block that got the caret last and its body then (closeLoneFence()).
+    quint64 m_focusedUid = 0;
+    QString m_focusedBody;
 };
 
 } // namespace brulion::editor
