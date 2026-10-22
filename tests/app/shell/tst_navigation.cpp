@@ -833,6 +833,55 @@ private Q_SLOTS:
         QVERIFY(alone->settings()->currentVault().isEmpty());
     }
 
+    void startForgetsTheDocumentationAmongRecents()
+    {
+        // 0.3.0–0.3.5 listed the documentation among the recent notebooks; the start screen and
+        // the switcher offered it until it was opened again. Starting drops it, whichever notebook
+        // opens, and opening the documentation never lists it again.
+        const auto listed = [](AppController &a, const QString &path) {
+            for (const QVariant &v : a.settings()->recentVaults()) {
+                if (v.toMap().value(u"path"_s).toString() == path)
+                    return true;
+            }
+            return false;
+        };
+        auto app = makeApp();
+        const QString mine = QDir(m_tmp.filePath(u"zeszyt żółwia"_s)).absolutePath();
+        const QString other = QDir(m_tmp.filePath(u"inny zeszyt"_s)).absolutePath();
+        QVERIFY(QDir().mkpath(mine));
+        QVERIFY(QDir().mkpath(other));
+        app->settings()->addRecentVault(other);
+        app->settings()->addRecentVault(app->docsVaultPath());
+        app->settings()->addRecentVault(mine);
+        QVERIFY(listed(*app, app->docsVaultPath()));
+        app->start();
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QCOMPARE(app->workspace()->rootPath(), mine);
+        QVERIFY(!listed(*app, app->docsVaultPath()));
+        QVERIFY(listed(*app, mine));
+        QVERIFY(listed(*app, other));
+
+        app->toggleDocsVault();
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!listed(*app, app->docsVaultPath()));
+        // Its folder opened by another spelling is the documentation too.
+        app->toggleDocsVault();
+        QTRY_COMPARE(app->workspace()->rootPath(), mine);
+        app->openVault(app->docsVaultPath() + u"/"_s);
+        QTRY_VERIFY(app->inDocsVault());
+        QTRY_COMPARE(app->status(), u"ready"_s);
+        QVERIFY(!listed(*app, app->docsVaultPath()));
+        QVERIFY(listed(*app, mine));
+
+        // Only the documentation listed: the start screen, with an empty list.
+        auto alone = makeApp();
+        alone->settings()->addRecentVault(alone->docsVaultPath());
+        alone->start();
+        QCOMPARE(alone->status(), u"onboarding"_s);
+        QVERIFY(alone->settings()->recentVaults().isEmpty());
+    }
+
     void quickCaptureLeavesTheDocumentation()
     {
         // Ctrl+Shift+N, the "+" button or the launcher while reading the documentation: back to

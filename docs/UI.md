@@ -60,7 +60,8 @@ components — no Material/Fusion look, so all targets look identical.
   on every open (pages the user changed or deleted stay so). It opens on its table of contents
   from the switcher, the palette („Dokumentacja Brulionu” / „Wróć do mojego notatnika”) or
   Ctrl+Shift+B, and is for reading: it is never a recent or start notebook (a restart opens the
-  user's last notebook), arms no reminders (the user's notebook keeps its armed alarms), quick
+  user's last notebook; the start drops it from the recent notebooks where 0.3.0–0.3.5 listed
+  it), arms no reminders (the user's notebook keeps its armed alarms), quick
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
