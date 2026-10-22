@@ -10,14 +10,16 @@
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
+#include <QBuffer>
 #include <QClipboard>
-#include <QFile>
-#include <QImage>
-#include <QMimeData>
-#include <QTemporaryDir>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QGuiApplication>
+#include <QImage>
+#include <QImageReader>
+#include <QMimeData>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
@@ -1669,6 +1671,52 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.pasteImage(0, int(f.edit(0).size()), int(f.edit(0).size()));
         QVERIFY(f.edit(0).endsWith(u"![[skan.pdf]]"_s));
         clipboard->clear();
+    }
+
+    void embedsNameFormatsTheDeviceCannotDecode()
+    {
+        // A picture whose format this device has no decoder for (WebP, AVIF without Qt's image
+        // plugins: EditorHost::canDecodePicture) is not loaded: the embed names its format
+        // (EmbedView) instead of "Nie można wczytać".
+        FakeEditorHost host;
+        host.setUndecodablePictureFormats({u"webp"_s});
+        QByteArray png;
+        {
+            QImage image(40, 30, QImage::Format_RGB32);
+            image.fill(Qt::darkGreen);
+            QBuffer buffer(&png);
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+        }
+        QCOMPARE(host.saveAttachment(u"łąka.webp"_s, QByteArray("RIFF\0\0\0\0WEBPVP8 ", 16)), u"assets/łąka.webp"_s);
+        QCOMPARE(host.saveAttachment(u"plan piętra.png"_s, png), u"assets/plan piętra.png"_s);
+        QCOMPARE(host.saveAttachment(u"zdjęcie.AVIF"_s, QByteArray("\0\0\0 ftypavif", 12)), u"assets/zdjęcie.AVIF"_s);
+        QCOMPARE(host.saveAttachment(u"umowa.pdf"_s, "%PDF"), u"assets/umowa.pdf"_s);
+        host.setFile(Page, u"- Łąka ![[łąka.webp]] i ![[plan piętra.png]], ![[zdjęcie.AVIF]], ![[umowa.pdf]]\n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setHost(&host);
+        page.setPath(Page);
+        const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+        const QVariantList embeds = page.blocks()->data(page.blocks()->index(0), roles.key("embeds")).toList();
+        QCOMPARE(embeds.size(), 4);
+        const auto embed = [&](int i, const char *key) { return embeds.at(i).toMap().value(QString::fromLatin1(key)); };
+        QCOMPARE(embed(0, "name").toString(), u"łąka.webp"_s);
+        QVERIFY(embed(0, "image").toBool());
+        QVERIFY(!embed(0, "decodable").toBool());
+        QCOMPARE(embed(0, "format").toString(), u"WEBP"_s);
+        QCOMPARE(embed(0, "width").toInt(), 0);  // nothing read from a file nothing can show
+        QVERIFY(embed(1, "decodable").toBool()); // Qt decodes PNG itself
+        QCOMPARE(embed(1, "format").toString(), u"PNG"_s);
+        QCOMPARE(embed(1, "width").toInt(), 40);
+        QCOMPARE(embed(2, "decodable").toBool(), QImageReader::supportedImageFormats().contains("avif"));
+        QCOMPARE(embed(2, "format").toString(), u"AVIF"_s);
+        QVERIFY(!embed(3, "image").toBool()); // a file: a chip
+        QCOMPARE(embed(3, "format").toString(), QString());
+        // The fake host's default is the device's own decoders, like the shell's Workspace.
+        QVERIFY(!host.canDecodePicture(u"assets/łąka.WEBP"_s));
+        host.setUndecodablePictureFormats({});
+        QCOMPARE(host.canDecodePicture(u"assets/łąka.webp"_s), QImageReader::supportedImageFormats().contains("webp"));
     }
 
     void imageSlashCommand()

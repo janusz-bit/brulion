@@ -1014,6 +1014,28 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                   return message && message->isVisible();
               }) && message->property("text").toString().contains(decodable ? u"łąka.webp"_s : u"WEBP"_s),
               "a picture that cannot be shown says why");
+
+        // Embedded in a note it says so too, with its name (the embed only said "Nie można
+        // wczytać łąka.webp").
+        const QString note = u"Łąka wiosną.md"_s;
+        check(workspace->writeFile(note, u"Zdjęcie z łąki:\n\n![[łąka.webp]]\n"_s), "a note embeds the WebP picture");
+        app->openPage(note);
+        QQuickItem *embedText = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *embed =
+                          findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "EmbedView"); });
+                  embedText =
+                          embed ? findShown(embed,
+                                            [](QQuickItem *item) {
+                                                return item->inherits("QQuickText")
+                                                       && item->property("text").toString().contains(u"łąka.webp"_s);
+                                            })
+                                : nullptr;
+                  return embedText != nullptr;
+              }) && (decodable || embedText->property("text").toString().contains(u"WEBP"_s)),
+              "an embedded picture that cannot be shown says why");
+        if (embedText)
+            std::fprintf(stderr, "selftest: the embed says: %s\n", qPrintable(embedText->property("text").toString()));
     }
 
     // Back to the sample picture: the picture, the editor still unloaded.

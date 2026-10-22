@@ -13,6 +13,9 @@ import Brulion
 // header), and the view's height is a binding, not the Column's own (a positioner sets it only in
 // its next polish): a block that grew when its picture had loaded moved everything below it while
 // the page or the journal scrolled (docs/UI.md "Scrolling performance").
+// A picture whose format this device cannot decode (the model's `decodable`: WebP or AVIF without
+// Qt's image plugins, EditorHost::canDecodePicture) is not loaded: its frame names the file and
+// the format, like the picture view (ContentPictureView), instead of a load error.
 Column {
     id: root
 
@@ -47,6 +50,7 @@ Column {
             id: embed
             required property var modelData
             readonly property bool image: modelData.image && modelData.url.toString() !== ""
+            readonly property bool decodable: modelData.decodable !== false
             readonly property bool scalable: /\.svgz?$/i.test(modelData.name || "")
             /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
             /// at most 2048 a side; an SVG fitted into 1024 × 420 (rendered at the screen's pixel
@@ -109,7 +113,7 @@ Column {
                     objectName: "embedImage"
                     anchors.fill: parent
                     anchors.margins: 1
-                    source: embed.image ? embed.modelData.url : ""
+                    source: embed.image && embed.decodable ? embed.modelData.url : ""
                     sourceSize: embed.scalable ? Qt.size(1024, 420) : Qt.size(2048, 2048)
                     fillMode: embed.scalable ? Image.PreserveAspectFit : Image.Stretch
                     asynchronous: true
@@ -125,9 +129,18 @@ Column {
                     visible: running
                 }
                 Text {
-                    visible: img.status === Image.Error
+                    objectName: "embedMessage" // (the shell's self-test)
+                    visible: !embed.decodable || img.status === Image.Error
                     anchors.centerIn: parent
-                    text: qsTr("Cannot load %1").arg(embed.modelData.name)
+                    width: parent.width - 2 * Theme.space3
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    // The picture view's own sentence (one translation for both).
+                    text: !embed.decodable
+                          ? embed.modelData.name + "\n"
+                            + qsTranslate("ContentPictureView", "Pictures in the %1 format cannot be shown on this device.")
+                              .arg(embed.modelData.format)
+                          : qsTr("Cannot load %1").arg(embed.modelData.name)
                     textFormat: Text.PlainText
                     font.family: Theme.fontUi
                     font.pixelSize: Theme.textSm

@@ -494,6 +494,11 @@ QUrl FakeEditorHost::assetUrl(const QString &path) const
     return url;
 }
 
+bool FakeEditorHost::canDecodePicture(const QString &path) const
+{
+    return !m_undecodable.contains(pictureFormatName(path), Qt::CaseInsensitive) && EditorHost::canDecodePicture(path);
+}
+
 QString FakeEditorHost::saveAttachment(const QString &fileName, const QByteArray &data)
 {
     const QString path = paths::uniquePath(u"assets/"_s + paths::sanitizeFileName(fileName),

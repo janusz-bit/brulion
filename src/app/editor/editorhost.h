@@ -6,6 +6,8 @@
 // the editor and the shell are developed in parallel against it.
 #pragma once
 
+#include "picturesize.h"
+
 #include <QObject>
 #include <QSize>
 #include <QString>
@@ -61,6 +63,10 @@ public:
         Q_UNUSED(path);
         return {};
     }
+    /// This device can decode the picture at `path` (its format, picturesize.h): the editor's
+    /// embeds name a format it cannot show (WebP, AVIF without Qt's image plugins) instead of
+    /// failing to load it. Hosts (tests) may say less.
+    virtual bool canDecodePicture(const QString &path) const { return editor::canDecodePictureFormat(path); }
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;
 
