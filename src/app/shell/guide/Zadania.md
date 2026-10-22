@@ -15,7 +15,7 @@ Zadanie to punkt listy z polem wyboru. Zapis jest zgodny z wtyczką Obsidian Tas
 | `- [-]` | anulowane |
 | `- [>]` | oczekujące (odłożone) |
 
-**Ctrl+Enter** w bloku przełącza stan po kolei (brak → do zrobienia → w toku → zrobione). Kliknięcie pola wyboru odhacza zadanie albo przywraca je do zrobienia. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
+**Ctrl+Enter** w bloku przełącza stan po kolei (brak → do zrobienia → w toku → zrobione → brak). Kliknięcie pola wyboru odhacza zadanie albo przywraca je do zrobienia. Znaczniki Logseq (`TODO`, `DOING`, `DONE`, `LATER`, `NOW`, `WAITING`, `CANCELED`) też są zadaniami.
 
 ## Wybór stanu
 Każdy stan możesz wybrać od razu, na trzy sposoby:

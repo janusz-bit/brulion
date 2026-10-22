@@ -231,7 +231,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   long press, and for screen readers: as text it left the file name no room) shows those pixels (then
   draggable), the button goes back. Under the
   fitted picture (it moves to the top then) the notes that embed or link it (`ContentBacklinks`);
-  the side panel's Odnośniki list them too. The bar shows the file name as plain text. Its
+  the side panel's Linki tab lists them too. The bar shows the file name as plain text. Its
   "Pokaż jako tekst" / "Pokaż obraz" and Ctrl+E (the palette's "Markdown source", the top bar's
   Więcej → Pokaż jako tekst / Pokaż obraz) switch between the picture and the file read as text —
   read-only, for text-like assets such as SVG (a binary picture is mojibake), at most its first
