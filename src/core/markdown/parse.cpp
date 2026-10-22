@@ -226,7 +226,10 @@ QList<MathSpan> cellFormulas(const ScannedText &scan)
 }
 
 /// Blank the formulas `formulas` (positions in the scanned text) in each scanned line's masked
-/// text: metadata tokens, properties and block ids are not read inside formulas (SYNTAX §11).
+/// text: metadata tokens and properties are not read inside formulas (SYNTAX §11). A block's
+/// identity and folding are: an `id::` or `collapsed::` line and a block id `^id` at the end of a
+/// line stay readable, so a formula that a price on one line makes with a `$` on a later one
+/// ("Cena $5 ^abc123" / "razem 15$") never costs the block its id and the references to it.
 void maskFormulas(const ScannedText &scan, const QList<MathSpan> &formulas)
 {
     if (formulas.isEmpty())
@@ -237,6 +240,23 @@ void maskFormulas(const ScannedText &scan, const QList<MathSpan> &formulas)
             if (!isLineBreak(masked[i]))
                 masked[i] = u' ';
         }
+    }
+    const auto restore = [&](qsizetype from, qsizetype to) {
+        for (qsizetype i = from; i < to; ++i)
+            masked[i] = scan.masked[i];
+    };
+    for (qsizetype k = 0; k < scan.lines.size(); ++k) {
+        const qsizetype from = scan.seg.pos[k];
+        const QStringView line = QStringView(scan.masked).sliced(from, scan.lines[k]->own->view.length);
+        if (const auto pm = matchPropertyLine(line.sliced(indentOf(line).chars))) {
+            const QString key = pm->key.toLower();
+            if (key == u"id" || key == u"collapsed") {
+                restore(from, from + line.size());
+                continue;
+            }
+        }
+        if (const auto id = blockIdAtEnd(line))
+            restore(from + id->from, from + id->to);
     }
     setLineMasks(scan, masked);
 }

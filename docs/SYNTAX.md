@@ -449,8 +449,10 @@ Where a formula is (in a block's inline text, after code spans and comments are 
 * A `$` or `$$` without a partner is text and hides no later formula.
 * What starts inside a formula belongs to it — in the editor, the HTML export and the index
   (tags, backlinks, tasks, reminders) alike, as with a code span: a `#tag`, `[[link]]`, URL,
-  task date (`📅 …`), reminder (`⏰ …`) or `key:: value` there is part of the formula. Whatever
-  starts first wins: a formula in a link label (`[$x^2$](Wykres.md)`) leaves the link a link.
+  task date (`📅 …`), reminder (`⏰ …`) or `key:: value` there is part of the formula. A
+  block's id (`^id`, `id::`) and `collapsed::` stay the block's even there, so references to it
+  keep working. Whatever starts first wins: a formula in a link label (`[$x^2$](Wykres.md)`)
+  leaves the link a link.
   The formula is found in the block's text as the editor shows it: a list item's blank lines
   and code lines end an inline formula like a blank line.
 * `\$` is a literal dollar. `\(`, `\)`, `\[` and `\]` are ordinary escapes (literal brackets,

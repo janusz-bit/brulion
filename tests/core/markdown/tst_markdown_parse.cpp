@@ -577,6 +577,23 @@ private Q_SLOTS:
         QCOMPARE(n.blocks[1].properties.value(u"klucz"_s).toString(), u"wartość"_s);
     }
 
+    void blockIdsSurviveFalseFormulas()
+    {
+        // A price on one line and a `$` on a later one make a formula (SYNTAX §11) that hides the
+        // tags inside it, but never the block's id, which references point to, or its folding.
+        const ParsedNote a = parseNote(u"a.md"_s, u"- Cena $5 #a ^abc123\n  razem 15$"_s);
+        QCOMPARE(a.blocks.size(), 1);
+        QCOMPARE(a.blocks[0].id, u"abc123"_s);
+        QVERIFY(a.tags.isEmpty());
+        QCOMPARE(a.blocks[0].text, u"Cena $5 #a\nrazem 15$"_s);
+        const ParsedNote b =
+                parseNote(u"a.md"_s, u"- Cena $5\n  id:: 6512-abcd\n  collapsed:: true\n  razem 15$\n  - dziecko"_s);
+        QCOMPARE(b.blocks.size(), 2);
+        QCOMPARE(b.blocks[0].id, u"6512-abcd"_s);
+        QCOMPARE(b.blocks[0].properties.value(u"collapsed"_s).toString(), u"true"_s);
+        QCOMPARE(b.blocks[0].text, u"Cena $5\nrazem 15$"_s);
+    }
+
     void polishAndNestedTags()
     {
         const ParsedNote n = parseNote(u"a.md"_s, u"Lista #zakupy/spożywcze i #Żółw oraz #[[Lista życzeń]]");
