@@ -454,9 +454,11 @@ void BlockDocument::protectLeadingRule()
 /// the block keeps the blocks the editor shows (SYNTAX §11: a blank line ends such a formula).
 void BlockDocument::separateDisplayMath()
 {
-    // A line that may close the formula: only `$$` (a line with a `%%comment%%` may be one too).
-    const auto mayClose = [](QStringView line) {
-        return line.trimmed() == u"$$" || (line.contains(u"%%") && line.contains(u"$$"));
+    // A line that closes the formula: only `$$`, comments aside (as the parser reads it).
+    const auto mayClose = [](const QString &line) {
+        if (!line.contains(u"%%"))
+            return QStringView(line).trimmed() == u"$$";
+        return QStringView(maskRanges(line, docCommentRanges(line, text::splitLines(line)))).trimmed() == u"$$";
     };
     // A search that found nothing stopped at the block with a blank line: no block before it closes
     // a formula, so a block before it needs no search (linear on an outline of `- $$` items).

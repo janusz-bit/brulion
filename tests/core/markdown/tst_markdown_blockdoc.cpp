@@ -365,6 +365,18 @@ private Q_SLOTS:
         BlockDocument plain(u"- $$\n- b\n"_s);
         QVERIFY(plain.setBody(1, u"c"_s).changed());
         QCOMPARE(plain.toString(), u"- $$\n- c\n"_s);
+        // Nor when the later `$$` is no line of its own (a formula in the text, a comment beside it).
+        BlockDocument inText(u"- $$\n- b\n- wzór $$x$$ %%uwaga%%\n  $$ %%a%%x\n"_s);
+        QCOMPARE(inText.count(), 3);
+        QVERIFY(inText.setBody(1, u"c"_s).changed());
+        QCOMPARE(inText.toString(), u"- $$\n- c\n- wzór $$x$$ %%uwaga%%\n  $$ %%a%%x\n"_s);
+        QCOMPARE(entries(BlockDocument(inText.toString())), entries(inText));
+        // A comment beside the closing `$$` line: it closes the formula.
+        BlockDocument comment(u"- $$\n- b\n- c\n  $$ %%koniec%%\n"_s);
+        QCOMPARE(comment.count(), 1);
+        BlockDocument split2(u"- $$\n  a\n  b\n  $$ %%koniec%%\n"_s);
+        QVERIFY(split2.split(0, 5).changed());
+        QCOMPARE(entries(BlockDocument(split2.toString())), entries(split2));
     }
 
     // Review regression: a task status for a block that is a display formula (the status menu,
