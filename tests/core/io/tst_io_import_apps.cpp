@@ -371,6 +371,73 @@ private Q_SLOTS:
         QCOMPARE(r.warnings.size(), 2); // invalid JSON, missing attachment
     }
 
+    // --- Dollars of plain text ---------------------------------------------------------------------
+
+    // Notes of these apps hold no formulas: their dollars are text (SYNTAX §11). Imported, the
+    // note shows them as written in the editor and in the HTML export; only the dollars that
+    // would pair into a formula are escaped, prices that pair with nothing stay byte for byte.
+    void dollarsShowAsWritten_data()
+    {
+        QTest::addColumn<QString>("importer");
+        QTest::addColumn<QList<InputFile>>("files");
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QStringList>("shown");
+        QTest::addColumn<QStringList>("written");
+        QTest::newRow("evernote")
+                << u"evernote"_s
+                << QList<InputFile>{text(
+                           u"Ceny.enex"_s,
+                           u"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<en-export><note><title>Ceny</title>"
+                           "<content><![CDATA[<en-note><div>Cena $10, <b>Netflix</b> 15$</div>"
+                           "<div>Wzór $x$ i kod <code>$y$</code></div><div><br/></div><div>$5 i $10</div>"
+                           "</en-note>]]></content><task><title>Zapłacić $5, nie 10$</title>"
+                           "<taskStatus>open</taskStatus></task></note></en-export>\n"_s)}
+                << u"Ceny.md"_s
+                << QStringList{u"Cena $10, Netflix 15$"_s, u"Wzór $x$ i kod $y$"_s, u"$5 i $10"_s,
+                               u"Zapłacić $5, nie 10$"_s}
+                << QStringList{u"Cena \\$10, **Netflix** 15$\nWzór \\$x$ i kod `$y$`\n\n$5 i $10\n"_s,
+                               u"- [ ] Zapłacić \\$5, nie 10$"_s};
+        QTest::newRow("keep")
+                << u"keep"_s
+                << QList<InputFile>{bytes(
+                           u"Takeout/Keep/Ceny.json"_s,
+                           json(u"{'title':'Ceny','isTrashed':false,'userEditedTimestampUsec':1792060200000000,"
+                                "'textContent':'Bilet $10\\nparking 5$\\nKurs $1 i `$x$` w kodzie',"
+                                "'listContent':[{'text':'Wzór $x$','isChecked':false},{'text':'$5 i $10',"
+                                "'isChecked':true}]}"_s))}
+                << u"Ceny.md"_s
+                << QStringList{u"Bilet $10"_s, u"parking 5$"_s, u"Kurs $1 i $x$ w kodzie"_s, u"Wzór $x$"_s,
+                               u"$5 i $10"_s}
+                << QStringList{u"Bilet \\$10\nparking 5$\nKurs $1 i `$x$` w kodzie\n\n- [ ] Wzór \\$x$\n"
+                               "- [x] $5 i $10\n"_s};
+        QTest::newRow("notion database")
+                << u"notion"_s
+                << QList<InputFile>{bytes(u"n.zip"_s,
+                                          writeZip({{u"Ceny "_s + DbId + u".csv"_s,
+                                                     "Nazwa $x$,Kwota\nBilet $10 i parking 5$,$15\n$y$,10$\n"}}))}
+                << u"Ceny.md"_s
+                << QStringList{u"Nazwa $x$ | Kwota"_s, u"Bilet $10 i parking 5$ | $15"_s, u"$y$ | 10$"_s}
+                << QStringList{u"| Nazwa \\$x$ | Kwota |"_s, u"| Bilet \\$10 i parking 5$ | $15 |"_s,
+                               u"| \\$y$ | 10$ |"_s};
+    }
+
+    void dollarsShowAsWritten()
+    {
+        QFETCH(QString, importer);
+        QFETCH(QList<InputFile>, files);
+        QFETCH(QString, path);
+        QFETCH(QStringList, shown);
+        QFETCH(QStringList, written);
+        const QString note = iotest::textAt(importWith(importer, files), path);
+        for (const QString &w : std::as_const(written))
+            QVERIFY2(note.contains(w), qPrintable(note));
+        for (const bool exported : {false, true}) {
+            const QString text = iotest::shownText(note, exported);
+            for (const QString &line : std::as_const(shown))
+                QVERIFY2(text.contains(line), qPrintable(text));
+        }
+    }
+
     // --- Joplin -----------------------------------------------------------------------------------
 
     void joplinJex()

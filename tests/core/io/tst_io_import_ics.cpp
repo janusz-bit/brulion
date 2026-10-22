@@ -114,6 +114,28 @@ private Q_SLOTS:
         QCOMPARE(iotest::textAt(r, u"z.md"_s), u"- [ ] (no title) 📅 2026-10-14 12:00\n"_s);
     }
 
+    void dollarsShowAsWritten()
+    {
+        // A calendar's texts hold no formulas: their dollars that would pair (also across the
+        // description's lines) are escaped, the others stay as written (SYNTAX §11).
+        const QByteArray data = calendar(u"BEGIN:VEVENT\nSUMMARY:Kino $x$\nDTSTART;VALUE=DATE:20261014\n"
+                                         "LOCATION:Sala $5\nDESCRIPTION:Bilet $10\\nparking 5$\\n$3 i $4\nEND:VEVENT\n"
+                                         "BEGIN:VTODO\nSUMMARY:Zapłacić $5\\, nie 10$\nEND:VTODO\n"_s);
+        const ImportResult r =
+                runImport(*importerById(u"ics"), {iotest::bytes(u"kino.ics"_s, data)}, iotest::options());
+        const QString day = iotest::textAt(r, u"journals/2026-10-14.md"_s);
+        // The location (a property) stays as written; its dollar would pair with the text's.
+        QCOMPARE(day, u"- Kino \\$x$\n  location:: Sala $5\n  Bilet \\$10\n  parking 5\\$\n  $3 i $4\n"_s);
+        for (const bool exported : {false, true}) {
+            const QString shown = iotest::shownText(day, exported);
+            for (const QString &line : {u"Kino $x$"_s, u"Bilet $10"_s, u"parking 5$"_s, u"$3 i $4"_s})
+                QVERIFY2(shown.contains(line), qPrintable(shown));
+        }
+        const QString tasks = iotest::textAt(r, u"kino.md"_s);
+        QCOMPARE(tasks, u"- [ ] Zapłacić \\$5, nie 10$\n"_s);
+        QVERIFY(iotest::shownText(tasks).contains(u"Zapłacić $5, nie 10$"_s));
+    }
+
     void summaryEscaping()
     {
         const QByteArray data = calendar(u"BEGIN:VEVENT\nSUMMARY:# [[Nie link]] *gwiazdki*\\nDruga linia\n"

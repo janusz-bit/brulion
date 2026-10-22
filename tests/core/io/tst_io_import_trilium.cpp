@@ -1444,26 +1444,31 @@ private Q_SLOTS:
         QTest::newRow("math") << u"<p>a <span class=\"math-tex\">\\(x_1 &lt; y`\\)</span></p><span "
                                  "class=\"math-tex\">\\[\\int_0^1 x\\,dx\\]</span>"_s
                               << u"a `` $x_1 < y`$ ``\n\n```math\n\\int_0^1 x\\,dx\n```"_s;
-        // A formula is checked in its paragraph as the editor reads it: where a `$` of the text or
-        // a letter or digit right after it would pair the delimiters differently, the formulas
+        // A formula is checked in its paragraph as the editor reads it. A `$` of the text that
+        // would pair with it (or with another `$` of the text) is escaped, so the formula stays;
+        // where a letter or digit right after it pairs the delimiters differently, the formulas
         // of that line stay code with their LaTeX source.
         QTest::newRow("formulas next to prices")
                 << u"<p>Cena $5, a wzór <span class=\"math-tex\">\\(x^2\\)</span>. Kosztuje 5$.<span "
                    "class=\"math-tex\">\\(y\\)</span></p>"_s
                 << u"Cena $5, a wzór $x^2$. Kosztuje 5$.$y$"_s;
+        QTest::newRow("prices pairing next to a formula")
+                << u"<p>Cena $10, Netflix 15$ i wzór <span class=\"math-tex\">\\(x^2\\)</span> – żółw</p>"_s
+                << u"Cena \\$10, Netflix 15$ i wzór $x^2$ – żółw"_s;
         QTest::newRow("formula after a dollar of the text")
                 << u"<p>Zmienna $b,<span class=\"math-tex\">\\(x\\)</span> koniec</p>"_s
-                << u"Zmienna $b,`$x$` koniec"_s;
+                << u"Zmienna \\$b,$x$ koniec"_s;
         QTest::newRow("formula before a digit")
                 << u"<p><span class=\"math-tex\">\\(x\\)</span>2 i <span class=\"math-tex\">\\(y\\)</span></p>"_s
                 << u"`$x$`2 i `$y$`"_s;
         QTest::newRow("dollar on the line before")
                 << u"<p>Cena $b<br>wzór,<span class=\"math-tex\">\\(x\\)</span></p><p>Dalej <span "
                    "class=\"math-tex\">\\(y\\)</span>.</p>"_s
-                << u"Cena $b\nwzór,`$x$`\n\nDalej $y$."_s;
-        // Text that only looks like a formula to the editor is text: its hashtags are escaped.
+                << u"Cena \\$b\nwzór,$x$\n\nDalej $y$."_s;
+        // Text that only looks like a formula to the editor is text: its dollar is escaped, and its
+        // hashtags too.
         QTest::newRow("hashtag between dollars")
-                << u"<p>Plik $a$b #pilne$ koniec</p>"_s << u"Plik $a$b \\#pilne$ koniec"_s;
+                << u"<p>Plik $a$b #pilne$ koniec</p>"_s << u"Plik \\$a$b \\#pilne$ koniec"_s;
         QTest::newRow("footnotes")
                 << u"<p>tekst<span class=\"footnote-reference\" data-footnote-index=\"2\" data-footnote-id=\"ab\"><sup>"
                    "<a href=\"#fnab\">[2]</a></sup></span></p><ol class=\"footnote-section footnotes\"><li "

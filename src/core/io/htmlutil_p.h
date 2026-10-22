@@ -55,4 +55,22 @@ QString splitLongLists(const QString &html, int maxItems, int *parts = nullptr);
 HtmlMarkdown htmlToMarkdownWithListLimit(const QString &html, const HtmlToMarkdownOptions &options, int maxListItems);
 QString htmlToPlainTextWithListLimit(const QString &html, int maxListItems);
 
+/// A formula an importer writes on purpose travels between these private-use characters (the
+/// Trilium importer removes them from its input first) until the importer has checked it in its
+/// paragraph and removed them; escapeTextFormulas() never changes what is between them.
+constexpr char16_t FormulaOpen = 0xE0F2;
+constexpr char16_t FormulaClose = 0xE0F3;
+
+/// `markdown` an importer wrote from plain text (HTML, notes of other apps, calendar texts), with
+/// the dollars that would make a formula of that text in the editor (findMathSpans(), SYNTAX §11:
+/// "Cena $10, Netflix 15$", "$x$", a paragraph that is only `$$`) escaped as `\$`. Found block by
+/// block as the editor renders them (markdown::BlockDocument; table cells one by one, a callout's
+/// title apart; a block's fenced code and quote-only lines end a formula) and escaped as little as
+/// possible: the opening dollar of each such formula, over a few rounds, until none is left.
+/// Dollars that pair with nothing stay byte for byte ("$5 i $10", "15$, 10$"). Never changed:
+/// code spans and fenced code, link destinations, autolinks, wiki links, block references, bare
+/// URLs, `key:: value` properties (a formula they open is broken at its closing dollar instead)
+/// and the formulas between FormulaOpen and FormulaClose. Linear time per round.
+QString escapeTextFormulas(const QString &markdown);
+
 } // namespace brulion::io::detail
