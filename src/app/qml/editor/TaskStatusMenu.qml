@@ -78,11 +78,22 @@ BMenu {
     }
 
     BMenuItem {
+        objectName: "taskStatusOpen"
         visible: menu.showOpen
         height: visible ? implicitHeight : 0
         text: qsTr("Open")
         iconName: "file-text"
+        // Up / Down reach it too, only while it is shown (T.Menu does not look at visibility).
+        focusPolicy: menu.showOpen ? Qt.TabFocus : Qt.NoFocus
         onTriggered: menu.openRequested()
+        Keys.onReturnPressed: {
+            menu.close()
+            menu.openRequested()
+        }
+        Keys.onEnterPressed: {
+            menu.close()
+            menu.openRequested()
+        }
     }
     BMenuSeparator {
         visible: menu.showOpen

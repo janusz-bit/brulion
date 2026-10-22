@@ -127,10 +127,21 @@ void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
 /// A tap on touch UIs (the phone run), a left click otherwise.
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch);
 
+/// Timestamps of synthetic mouse events (increasing).
+int mouseTimestamp = 0;
+
+/// The mouse pointer moved to `scenePos`, no button pressed (hover).
+void mouseMove(QQuickWindow *window, QPointF scenePos)
+{
+    qt_handleMouseEvent(window, scenePos, window->mapToGlobal(scenePos), Qt::NoButton, Qt::NoButton, QEvent::MouseMove,
+                        Qt::NoModifier, mouseTimestamp += 1000);
+    settle(50);
+}
+
 /// A click (left by default) at `scenePos` of the window, as a real mouse sends it.
 void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton)
 {
-    static int timestamp = 0;
+    int &timestamp = mouseTimestamp;
     timestamp += 1000; // never a double click
     const QPointF global = window->mapToGlobal(scenePos);
     qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
@@ -402,6 +413,35 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         box = named(window->contentItem(), u"tasksRowTaskBox"_s);
         check(openStatusMenu(box) && choose("none") && waitFor([&] { return total(u"all"_s) == allBefore - 1; }),
               "“Bez statusu” in Tasks removes a task's checkbox");
+    }
+    // The keyboard: the Menu key opens a row's menu, the arrows reach "Otwórz" (above the
+    // statuses), Enter opens the task's note. First the list catches up with the last change (a
+    // row it rebuilds takes its menu along), and the mouse pointer leaves the place where the
+    // menu opens (the item under it would take the highlight).
+    settle(1500);
+    if (!touch)
+        mouseMove(window, QPointF(1, 1));
+    if (QQuickItem *row = shownWhere(window->contentItem(), [](QQuickItem *item) { return isA(item, "TasksRow"); })) {
+        row->forceActiveFocus(Qt::TabFocusReason);
+        sendKey(window, Qt::Key_Menu);
+        const bool opened = waitFor([&] { return openMenus(window) == 1; });
+        const auto focusName = [window] {
+            const QQuickItem *focus = window->activeFocusItem();
+            return focus ? focus->objectName() : QString();
+        };
+        const QQuickItem *rowBox = named(row, u"tasksRowTaskBox"_s);
+        const QString status = rowBox ? rowBox->property("status").toString() : QString();
+        check(opened && focusName() == u"taskStatus_"_s + status,
+              "the Menu key opens a task's menu in Tasks with its status highlighted");
+        for (int i = 0; i < 8 && opened && focusName() != u"taskStatusOpen"; ++i)
+            sendKey(window, Qt::Key_Up);
+        const bool reached = focusName() == u"taskStatusOpen";
+        sendKey(window, Qt::Key_Return);
+        check(opened && reached && waitFor([&] { return app->currentView() != u"tasks" && openMenus(window) == 0; }),
+              "in a task's menu in Tasks Up reaches “Otwórz” and Enter opens the note");
+        closeMenus(window);
+    } else {
+        check(false, "the tasks view lists tasks for the keyboard");
     }
     restore();
 

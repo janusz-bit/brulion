@@ -67,7 +67,10 @@ T.ItemDelegate {
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: control.taskToggled()
-    Keys.onMenuPressed: control.openMenu(control, Theme.space8, control.height)
+    Keys.onMenuPressed: {
+        control.openMenu(control, Theme.space8, control.height)
+        control.statusMenu.highlightStatus() // the keyboard starts at the task's status
+    }
 
     TapHandler {
         // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so on a phone a
