@@ -15,9 +15,10 @@ import Brulion
 // menu), task-menu-query (a query result's), task-slash (the status commands); the document
 // mode on the sample trip plan (FakeEditorHost.documentPath): document (reading),
 // document-paragraph, document-list, document-heading, document-task (editing one),
-// document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method checks (outline and document
-// mode) and exits; `taskstatus` checks the task status menu and commands (taskStatusTest()) and
-// exits. The in-memory vault runs ```query blocks on the real index (FakeEditorHost).
+// document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
+// checks (outline and document mode) and exits; `taskstatus` checks the task status menu and
+// commands (taskStatusTest()) and exits. The in-memory vault runs ```query blocks on the real
+// index (FakeEditorHost).
 ApplicationWindow {
     id: window
 

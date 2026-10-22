@@ -8,9 +8,9 @@ import Brulion
 // `transclusions`): a quiet frame with the source as a header link ("Budżet domowy ›
 // Październik") and the embedded blocks rendered read-only like the editor renders them —
 // headings, links, tags, chips, nested embeds (depth-limited, a cycle is named instead of
-// repeated). Tasks inside keep a working checkbox (it changes the task in its own file; right-click
-// / long press: the status menu). A click
-// on the header opens the source; a click on the content edits the block with the embed.
+// repeated). Tasks inside keep a working checkbox (it changes the task in its own file; a
+// right-click or long press: the status menu). A click on the header opens the source; a click
+// on the content edits the block with the embed.
 Column {
     id: root
 

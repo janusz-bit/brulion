@@ -6,12 +6,13 @@ import Brulion
 // QueryBlockView — a ```query block (docs/SYNTAX.md §10) with its live results: the query's
 // filters as chips ("typ: zadania", "tag: zakupy"), then the matches from the vault index
 // (QueryResultModel over the host's QueryHost): tasks with a checkbox that changes the task in
-// its own file (this page: an undoable edit; right-click / long press: the status menu), blocks and pages rendered like the editor renders
-// them (links, tags, date chips), `group:` results under group headers, the page of each item
-// (unless grouped by page) as a quiet link. A click on an item opens it at its block; the
-// results follow the index (other devices, edits elsewhere). The header, the filters (or Enter
-// when the block is selected) edit the query source in place; while editing, the results
-// follow the typed query. Without a host that runs queries (QueryHost) only the filters show.
+// its own file (this page: an undoable edit; right-click / long press: the status menu), blocks
+// and pages rendered like the editor renders them (links, tags, date chips), `group:` results
+// under group headers, the page of each item (unless grouped by page) as a quiet link. A click
+// on an item opens it at its block; the results follow the index (other devices, edits
+// elsewhere). The header, the filters (or Enter when the block is selected) edit the query
+// source in place; while editing, the results follow the typed query. Without a host that runs
+// queries (QueryHost) only the filters show.
 Rectangle {
     id: root
 

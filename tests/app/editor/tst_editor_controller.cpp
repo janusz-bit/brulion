@@ -972,6 +972,46 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- Kupić mleko\n"_s);
     }
 
+    void taskStatusOnRecurringTask()
+    {
+        // Done from a "/" command: the next occurrence goes above, in the same undo step as the
+        // status and the command's removal; editing stays on the completed task.
+        const QString recurring = u"- [ ] Podlać kwiaty 📅 2026-10-15 🔁 every week /zrob\n"_s;
+        const QString completed = u"- [ ] Podlać kwiaty 📅 2026-10-22 🔁 every week\n"
+                                  u"- [x] Podlać kwiaty 📅 2026-10-15 🔁 every week ✅ 2026-10-15\n"_s;
+        Fixture f(recurring);
+        const int from = int(f.edit(0).indexOf(u"/zrob"_s));
+        f.page.startEditing(0, from + 5);
+        const QVariantMap r = f.page.applySlashCommand(0, from, from + 5, u"taskDone"_s);
+        QCOMPARE(f.text(), completed);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(f.page.editingRow(), 1);
+        QCOMPARE(f.edit(1).mid(f.page.cursorPosition()), u"✅ 2026-10-15"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), recurring);
+        f.page.redo();
+        QCOMPARE(f.text(), completed);
+
+        // The status menu: the same, one undo step; cancelled and no status make no new occurrence.
+        const QString open = u"- [/] Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s;
+        Fixture m(open);
+        m.page.setTaskStatus(0, u"done"_s);
+        QCOMPARE(m.text(), completed);
+        m.page.undo();
+        QCOMPARE(m.text(), open);
+        m.page.setTaskStatus(0, u"cancelled"_s);
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        m.page.setTaskStatus(0, QString());
+        QCOMPARE(m.text(), u"- Podlać kwiaty 📅 2026-10-15 🔁 every week\n"_s);
+        m.page.undo();
+        QCOMPARE(m.text(), u"- [-] Podlać kwiaty 📅 2026-10-15 🔁 every week ❌ 2026-10-15\n"_s);
+        // In another file (Tasks, the calendar, query results): the same text.
+        m.host.setNow(Now);
+        m.host.setFile(u"Inna.md"_s, open);
+        QVERIFY(m.page.setTaskStatusAt(u"Inna.md"_s, 0, u"done"_s));
+        QCOMPARE(m.host.file(u"Inna.md"_s), completed);
+    }
+
     void pasting()
     {
         // A list pasted into an empty block becomes blocks, nesting kept.
