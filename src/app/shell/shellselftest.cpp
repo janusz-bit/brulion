@@ -1068,6 +1068,28 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
                   return panelRefs && panelRefs->property("linkedCount").toInt() >= 2;
               }),
               "the side panel lists the notes that embed the picture");
+        // A narrower window with the side panel open leaves the picture a narrow view: its size
+        // toggle is an icon there too (the view's width counts, not the window's), and the file
+        // name keeps room next to it.
+        const QSize windowSize = window->size();
+        window->resize(900, windowSize.height());
+        QQuickItem *name = nullptr;
+        QQuickItem *size = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *v = pictureView();
+                  name = child(v, "pictureName");
+                  size = child(v, "pictureSizeButton");
+                  return v && v->width() < 600 && pictureShown() && name && size && size->isVisible()
+                         && isA(size, "BIconButton");
+              }) && name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 40)
+                      && name->mapToScene(QPointF(name->width(), 0)).x() <= size->mapToScene(QPointF(0, 0)).x() + 0.5,
+              "in a narrow view on the desktop the picture's size toggle is an icon, next to the file name");
+        if (name && size)
+            std::fprintf(stderr, "selftest: a narrow picture view: %.0f px, name %.0f of %.0f px\n",
+                         pictureView() ? pictureView()->width() : 0., name->width(),
+                         name->property("implicitWidth").toReal());
+        window->resize(windowSize);
+        waitFor([&] { return pictureView() && pictureView()->width() >= 600; });
         app->setSidePanelVisible(false);
     }
 

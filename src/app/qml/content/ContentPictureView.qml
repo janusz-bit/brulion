@@ -15,8 +15,9 @@ import Brulion
 // and "Pokaż jako tekst" ⇄ "Pokaż obraz": the file read as text, read-only — a binary picture's
 // bytes are mojibake there, and a typed character would have been saved over the picture; the
 // view is for text-like assets such as SVG (`asText`, PageView switches it, Ctrl+E too).
-// On phones the size toggle is an icon, its text in the tooltip and for screen readers (as text
-// it left the file's name no room).
+// In a narrow view (a phone; on the desktop between the sidebar and the side panel) the size
+// toggle is an icon, its text in the tooltip and for screen readers (as text it left the file's
+// name no room).
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
@@ -94,7 +95,10 @@ Item {
     /// The fitted picture is not its own pixels: the size toggle is offered.
     readonly property bool canZoom: root.pictureLoaded && Math.abs(root.fitScale - 1) > 0.01
     readonly property string sizeToggleText: root.actualSize ? qsTr("Fit to view") : qsTr("Zoom to actual size")
-    /// The toggle's icon on phones: which way the picture's size changes.
+    /// The size toggle is an icon (see above): the view is narrow — its own width, not the
+    /// window's.
+    readonly property bool iconSizeToggle: root.width < Theme.compactBreakpoint
+    /// The toggle's icon: which way the picture's size changes.
     readonly property string sizeToggleIcon: (root.fitScale < 1) !== root.actualSize ? "zoom-in" : "zoom-out"
 
     // Another picture: start fitted from the top left (the flickable clamps itself to the
@@ -161,10 +165,10 @@ Item {
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted
             }
-            // The size toggle: with its text where there is room, an icon on phones.
+            // The size toggle: with its text where there is room, an icon in a narrow view.
             BButton {
                 objectName: "pictureSizeButton"
-                visible: !Theme.compact && !root.asText && (root.canZoom || root.actualSize)
+                visible: !root.iconSizeToggle && !root.asText && (root.canZoom || root.actualSize)
                 size: "small"
                 variant: "ghost"
                 text: root.sizeToggleText
@@ -173,7 +177,7 @@ Item {
             }
             BIconButton {
                 objectName: "pictureSizeButton"
-                visible: Theme.compact && !root.asText && (root.canZoom || root.actualSize)
+                visible: root.iconSizeToggle && !root.asText && (root.canZoom || root.actualSize)
                 size: "small"
                 iconName: root.sizeToggleIcon
                 label: root.sizeToggleText
