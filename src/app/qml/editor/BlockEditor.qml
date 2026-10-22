@@ -1086,9 +1086,19 @@ FocusScope {
         else
             taskMenu.popup()
     }
+    /// Can the block get a task status (a list item or a paragraph)? A heading, code, a table, a
+    /// quote… cannot: the keyboard and the toolbar open no menu whose choices would do nothing.
+    function canHaveTaskStatus(row) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return false
+        const kind = controller.blocks.get(row).kind
+        return kind === "listItem" || kind === "paragraph"
+    }
     /// Ctrl+Shift+Enter: the menu under the caret of the block being edited, else under the
     /// selected block's first line.
     function openTaskStatusMenuFor(row) {
+        if (!canHaveTaskStatus(row))
+            return
         const edit = activeEditor
         const item = list.itemAtIndex(row) as BlockDelegate
         if (edit && edit.row === row && edit.active) {
@@ -1105,6 +1115,8 @@ FocusScope {
     /// The touch toolbar's task button held down: the menu right above the button (the toolbar
     /// sits on the keyboard, the window goes on under it).
     function openTaskStatusMenuAbove(row, item) {
+        if (!canHaveTaskStatus(row))
+            return
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
         openTaskStatusMenu(row, item, 0, -taskMenu.openHeight() - Theme.space1)

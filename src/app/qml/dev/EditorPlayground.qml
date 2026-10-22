@@ -1141,6 +1141,26 @@ ApplicationWindow {
                       "a status for the selected block"),
             waitUntil(() => editor.listView.activeFocus && page.selectedRow === window.taskRow,
                       "the selected block keeps the keyboard"),
+            // A heading gets no status: Ctrl+Shift+Enter opens no menu there (selected or edited).
+            () => {
+                window.taskRow = rowOf("Koszty")
+                check(window.taskRow >= 0 && info(window.taskRow).kind === "heading", "the page has the heading “Koszty”")
+                window.taskText = pageText()
+                page.selectedRow = window.taskRow
+                EditorInput.sendKey(editor.listView, Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            () => {
+                check(!editor.taskMenu.visible && pageText() === window.taskText,
+                      "Ctrl+Shift+Enter on a selected heading opens no status menu")
+                editor.startEditing(window.taskRow, -1)
+            },
+            () => realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier),
+            () => {},
+            () => {
+                check(!editor.taskMenu.visible && pageText() === window.taskText && editor.activeEditor !== null
+                      && editor.activeEditor.activeFocus, "Ctrl+Shift+Enter in a heading opens no status menu")
+                page.stopEditing()
+            },
             () => { page.selectedRow = -1 },
             // ---- "/" commands typed with real keys -----------------------------------------------
             () => { window.taskRow = page.insertBlockAfter(rowOf("Ekipa może"), "") },
