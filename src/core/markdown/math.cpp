@@ -1244,6 +1244,28 @@ bool blankLineAfter(QStringView text, qsizetype nl)
     return false;
 }
 
+/// Whether a letter or digit ends right before `i` / starts at `i`. A surrogate pair is one
+/// character: 𝔸 is a letter like ą, an emoji is neither.
+bool letterOrNumberBefore(QStringView text, qsizetype i)
+{
+    if (i <= 0)
+        return false;
+    const QChar c = text[i - 1];
+    if (c.isLowSurrogate() && i >= 2 && text[i - 2].isHighSurrogate())
+        return QChar::isLetterOrNumber(QChar::surrogateToUcs4(text[i - 2], c));
+    return c.isLetterOrNumber();
+}
+
+bool letterOrNumberAt(QStringView text, qsizetype i)
+{
+    if (i >= text.size())
+        return false;
+    const QChar c = text[i];
+    if (c.isHighSurrogate() && i + 1 < text.size() && text[i + 1].isLowSurrogate())
+        return QChar::isLetterOrNumber(QChar::surrogateToUcs4(c, text[i + 1]));
+    return c.isLetterOrNumber();
+}
+
 } // namespace
 
 QList<MathSpan> findMathSpans(QStringView text)
@@ -1297,7 +1319,7 @@ QList<MathSpan> findMathSpans(QStringView text)
         // followed by a letter or digit. A `$` after a space never closes and ends the attempt,
         // as does a blank line ("$5 a wzór $x$": only "$x$").
         const qsizetype open = i + 1;
-        if (open >= text.size() || text[open].isSpace() || (i > 0 && text[i - 1].isLetterOrNumber())) {
+        if (open >= text.size() || text[open].isSpace() || letterOrNumberBefore(text, i)) {
             i = open;
             continue;
         }
@@ -1314,7 +1336,7 @@ QList<MathSpan> findMathSpans(QStringView text)
             if (d == u'$') {
                 if (text[j - 1].isSpace())
                     break;
-                if (j + 1 >= text.size() || !text[j + 1].isLetterOrNumber()) {
+                if (!letterOrNumberAt(text, j + 1)) {
                     end = j;
                     break;
                 }

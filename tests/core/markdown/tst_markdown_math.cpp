@@ -66,6 +66,8 @@ private Q_SLOTS:
         QTest::newRow("escaped bracket before") << u"\\[1] przypis, wzór $x^2$"_s << u"19..24 20..23 inline"_s;
         QTest::newRow("escaped paren before") << u"Uwaga \\( i wzór $x^2$"_s << u"16..21 17..20 inline"_s;
         QTest::newRow("escaped footnote before") << u"Zobacz \\[^1\\] i $x$ potem"_s << u"16..19 17..18 inline"_s;
+        // An emoji next to a `$` is neither letter nor digit (a surrogate pair is one character).
+        QTest::newRow("between emoji") << u"😀$x$😀"_s << u"2..5 3..4 inline"_s;
 
         // Not formulas: nothing to render, the text stays as written.
         QTest::newRow("prices") << u"kosztuje $5 i $10"_s << QString();
@@ -75,6 +77,9 @@ private Q_SLOTS:
         QTest::newRow("shell command") << u"export PATH=$PATH:$HOME/bin"_s << QString();
         QTest::newRow("glued to a word") << u"Niech$x$ będzie"_s << QString();
         QTest::newRow("letter after closing") << u"$x$y"_s << QString();
+        // Letters beyond the BMP (surrogate pairs) count like ą: no formula glued to them.
+        QTest::newRow("double-struck letter before") << u"𝔸$x$ i"_s << QString();
+        QTest::newRow("double-struck letter after") << u"i $x$𝔸"_s << QString();
         QTest::newRow("space after opening") << u"$ x $"_s << QString();
         QTest::newRow("space before closing") << u"$x $"_s << QString();
         QTest::newRow("digit after closing") << u"$x$5"_s << QString();
