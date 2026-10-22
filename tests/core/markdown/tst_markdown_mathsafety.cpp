@@ -239,6 +239,11 @@ private Q_SLOTS:
                 << nested(u"\\frac{\\begin{cases}"_s, u"x"_s, u"\\end{cases}}{y}"_s, 10'000);
         QTest::newRow("delimiters") << nested(u"\\left("_s, u"x"_s, u"\\right)"_s, 20'000);
         QTest::newRow("spaces in text") << u"\\text{"_s + QString(200'000, u' ') + u"a}"_s;
+        // Not nested, but each optional argument without a `]` once searched the rest of the
+        // formula: seconds for a few hundred kilobytes.
+        QTest::newRow("unclosed root indices") << u"\\sqrt["_s.repeated(300'000);
+        QTest::newRow("unclosed fraction options") << u"\\cfrac[x"_s.repeated(300'000);
+        QTest::newRow("root indices closed at the end") << u"\\sqrt["_s.repeated(300'000) + u"]{x}"_s;
     }
 
     void deepNesting()

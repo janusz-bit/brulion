@@ -811,8 +811,19 @@ bool isSizeCommand(const QString &name)
     return sizes.contains(name);
 }
 
-/// The next command or character as a formula, for `\not` and the argument of a command.
-qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool display);
+/// The command at `i` (a backslash) of `s` as nodes; the position after it. `lastBracket`: the
+/// last `]` of `s` for optional arguments (optionalArgumentEnd()), shared by the commands of `s`.
+qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool display, qsizetype &lastBracket);
+
+/// The `]` that ends an optional argument (`\sqrt[3]`, `\cfrac[l]`) opened at `open`; -1 when none
+/// follows. The last `]` of `s` is looked up once (`lastBracket`, -2 until then): a run of unclosed
+/// `\sqrt[` in a hostile note does not search the rest of the formula once per command.
+qsizetype optionalArgumentEnd(QStringView s, qsizetype open, qsizetype &lastBracket)
+{
+    if (lastBracket == -2)
+        lastBracket = s.lastIndexOf(u']');
+    return lastBracket > open ? s.indexOf(u']', open) : -1;
+}
 
 QList<Node> parseRange(QStringView s, bool upright, bool display)
 {
@@ -825,6 +836,7 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
     const auto restore = qScopeGuard([] { --depth; });
 
     QList<Node> nodes;
+    qsizetype lastBracket = -2;
     qsizetype i = 0;
     while (i < s.size()) {
         const QChar c = s[i];
@@ -866,7 +878,7 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
             continue;
         }
         if (c == u'\\') {
-            i = parseCommand(s, i, nodes, display);
+            i = parseCommand(s, i, nodes, display, lastBracket);
             continue;
         }
         if (c.isLetter()) {
@@ -954,7 +966,7 @@ QList<Node> parseRange(QStringView s, bool upright, bool display)
     return nodes;
 }
 
-qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool display)
+qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool display, qsizetype &lastBracket)
 {
     const auto pushN = [&nodes](const QString &html, Kind kind) { push(nodes, html, kind); };
     ++i; // the backslash
@@ -998,7 +1010,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
 
     if (name == u"frac" || name == u"dfrac" || name == u"tfrac" || name == u"cfrac" || name == u"sfrac") {
         if (i < s.size() && s[i] == u'[') { // \cfrac[l]{…}{…}
-            const qsizetype close = s.indexOf(u']', i);
+            const qsizetype close = optionalArgumentEnd(s, i, lastBracket);
             if (close > i)
                 i = close + 1;
         }
@@ -1016,7 +1028,7 @@ qsizetype parseCommand(QStringView s, qsizetype i, QList<Node> &nodes, bool disp
     if (name == u"sqrt") {
         QString index;
         if (i < s.size() && s[i] == u'[') {
-            const qsizetype close = s.indexOf(u']', i);
+            const qsizetype close = optionalArgumentEnd(s, i, lastBracket);
             if (close > i) {
                 index = assemble(parseRange(s.sliced(i + 1, close - i - 1), false, display));
                 i = close + 1;
