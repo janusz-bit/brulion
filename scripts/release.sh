@@ -260,6 +260,13 @@ if last=$(git describe --tags --abbrev=0 "$release_head" 2>/dev/null) &&
   [[ $(news_of "$last") == "$(news_of "$main_head")" ]]; then
   warn "$notes has not changed since $last (its news; commit \"Update release notes for $tag\" on main first)"
 fi
+# The documentation notebook's list of changes has a section "## X.Y.Z — <date>" per release (a
+# pre-release needs none).
+changelog='src/app/shell/guide/Lista zmian.md'
+if [[ $new == "$release" ]] && git cat-file -e "$main_head:$changelog" 2>/dev/null &&
+  ! git show "$main_head:$changelog" | grep -qE "^## ${release//./\\.}( |$)"; then
+  warn "$changelog has no section \"## $release\" (add the changes of $tag to it on main first)"
+fi
 
 files=()
 if [[ $release != "$current" || $nix_current != "$release" ]]; then
