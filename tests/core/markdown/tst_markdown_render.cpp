@@ -382,6 +382,9 @@ private Q_SLOTS:
         QTest::newRow("cancelled") << u"[-] Odwołane ❌ 2026-10-14"_s
                                    << link(u"task:toggle"_s, u"XF"_s, u"☒"_s) + u"&nbsp;Odwołane "_s
                                               + chip(u"XF"_s, u"XB"_s, u"❌ dziś"_s);
+        // A code span right after the checkbox is shown, not taken with the marker's whitespace.
+        QTest::newRow("code span first") << u"[ ] `npm i` w katalogu"_s
+                                         << todo + Code + u"npm i</code> w\u00a0katalogu"_s;
         QTest::newRow("no task") << u"Zwykły blok 📅 2026-10-13"_s
                                  << u"Zwykły blok "_s + chip(u"DF"_s, u"DB"_s, u"📅 wczoraj"_s);
         QTest::newRow("reminder") << u"Spotkanie ⏰ 2026-10-14 09:00"_s

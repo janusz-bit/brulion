@@ -541,6 +541,10 @@ private Q_SLOTS:
                 << u"| Usługa | Cena |\n|---|---|\n| [[Netflix]] | $15 |\n| [[Spotify]] #muzyka | 10$ |\n| $x #y$ | =A1 |"_s
                 << QStringList({u"muzyka"_s}) << QStringList({u"Netflix"_s, u"Spotify"_s}) << QString() << QString()
                 << QStringList();
+        // A formula right after the checkbox is the task's text (Tasks showed only "policzyć").
+        QTest::newRow("formula first in a task")
+                << u"- [ ] $x^2$ policzyć 📅 2026-10-30"_s << QStringList() << QStringList() << u"$x^2$ policzyć"_s
+                << u"2026-10-30"_s << QStringList();
         QTest::newRow("display formula over a blank line")
                 << u"- $$a\n\n  #b [[Ukryta]]$$ #c"_s << QStringList({u"c"_s}) << QStringList() << QString()
                 << QString() << QStringList();
@@ -715,6 +719,15 @@ private Q_SLOTS:
         QCOMPARE(n.tasks.first().text, u"widoczne"_s);
         QVERIFY(n.reminders.isEmpty());
         QVERIFY(n.links.isEmpty());
+    }
+
+    void textRightAfterTheMarkerKept()
+    {
+        // A code span right after the marker is the text's start, not whitespace; a comment there
+        // is left out like any comment.
+        QCOMPARE(parseNote(u"a.md"_s, u"- [ ] `npm i` w katalogu"_s).tasks.first().text, u"`npm i` w katalogu"_s);
+        QCOMPARE(parseNote(u"a.md"_s, u"- TODO `ą` b"_s).tasks.first().text, u"`ą` b"_s);
+        QCOMPARE(parseNote(u"a.md"_s, u"- [ ] %%ważne%% zadzwonić"_s).tasks.first().text, u"zadzwonić"_s);
     }
 
     void inlineMarkdownKeptAndCodeSpansRespected()

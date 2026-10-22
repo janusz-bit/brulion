@@ -118,8 +118,11 @@ std::optional<TaskMarker> matchTaskMarker(QStringView text, QStringView masked, 
     }
     out.from = start;
     out.to = start + len;
+    // The whitespace of the text: in `masked` a code span, formula or comment right after the
+    // marker is blanked too, and would be taken for it ("- [ ] `npm i` w katalogu" lost its code
+    // in the index, in rendered task lines, in Logseq exports and to "no status").
     qsizetype content = out.to;
-    while (isSpaceOrTab(charAt(masked, content)))
+    while (isSpaceOrTab(charAt(text, content)))
         ++content;
     out.contentStart = content;
     return out;

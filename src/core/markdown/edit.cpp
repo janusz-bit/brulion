@@ -542,7 +542,14 @@ QString removeTaskMarker(const QString &content, int line)
         }
         edits.append(e);
     }
-    const QString out = applyEdits(visible, edits);
+    QString out = applyEdits(visible, edits);
+    // The text left must not open a block over the lines after it: "- [ ] ```js" as "- ```js"
+    // would take the item's children into a code block, "- [ ] $$" a formula up to a later `$$`
+    // line (their tasks and reminders gone). Its first character is escaped instead, so the item
+    // keeps its text as text ("- \```js").
+    const QStringView rest = QStringView(out).sliced(marker->from);
+    if (fenceOpen(rest) || rest.trimmed() == u"$$")
+        out.insert(marker->from + indentOf(rest).chars, u'\\');
     const QString tail = t->text.sliced(tailAt);
     const bool glue = !tail.isEmpty() && !isSpaceOrTab(charAt(out, out.size() - 1)) && !isSpaceOrTab(tail[0]);
     const QString docLine = t->st.lines[t->line].text;

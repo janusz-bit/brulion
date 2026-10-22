@@ -157,7 +157,7 @@ i folder na serwerze należą do notatnika: inny notatnik (także dokumentacja) 
 synchronizacji, a folderu, z którym synchronizuje się już inny notatnik na tym urządzeniu,
 Brulion nie zapisze. Dwa notatniki, które wersje 0.3.1–0.3.5 połączyły z jednym folderem,
 nie synchronizują się wcale (także „Synchronizuj teraz”), dopóki jednemu z nich nie wybierzesz
-innego folderu — status synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj”
+innego folderu — stan synchronizacji mówi, z którym notatnikiem dzielą folder. „Wyloguj”
 wyłącza synchronizację we wszystkich notatnikach, a zapisanie innego serwera lub użytkownika —
 w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
@@ -211,7 +211,7 @@ usuwa go w całości.
 | `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
-| `Ctrl+Enter` | zmiana stanu zadania (do zrobienia → w toku → zrobione) |
+| `Ctrl+Enter` | zmiana stanu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
 | `Ctrl+Shift+Enter` | menu stanu zadania (dowolny stan albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
