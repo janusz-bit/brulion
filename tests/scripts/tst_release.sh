@@ -313,6 +313,48 @@ expect "... changes nothing" test "$(snapshot "$work")" = "$before"
 expect "... leaves a clean main" on_main_clean "$work"
 expect "... and pushes nothing" test "$(origin_refs)" = "$origin0"
 
+echo "--- a release branch fast-forwarded to main is refused"
+fixture ff
+git -C "$work" switch -q release
+git -C "$work" merge -q --ff-only main # the habit of the old flow: git merge main on release
+git -C "$work" switch -q main
+commit "$work" .github/release-notes.md '* Poprawka (0.3.6)' "Update release notes for v0.3.6"
+before=$(snapshot "$work") origin0=$(origin_refs)
+rel "$work" patch --yes --push
+expect "a real run fails" test "$status" != 0
+expect "... saying release was fast-forwarded" has "release was fast-forwarded to main: since v0.3.5 its first-parent line has 1 commit of main instead of merges"
+expect "... and how to put it back" has "git branch -f release v0.3.5"
+expect "... changes nothing" test "$(snapshot "$work")" = "$before"
+expect "... and pushes nothing" test "$(origin_refs)" = "$origin0"
+echo "--- ... also when it was pushed so"
+git -C "$work" push -q origin release
+git -C "$work" branch -q -f release "$start"
+before=$(snapshot "$work") origin0=$(origin_refs)
+rel "$work" patch --yes --push
+expect "a real run fails" has "release was fast-forwarded to main"
+expect "... changes nothing" test "$(snapshot "$work")" = "$before"
+expect "... and pushes nothing" test "$(origin_refs)" = "$origin0"
+hint=$(sed -n 's/.*on origin too when it is there: \(git push [^)]*\)).*/\1/p' <<<"$out")
+expect "... with a hint for origin" test -n "$hint"
+(cd -- "$work" && eval "$hint") >/dev/null 2>&1
+expect "the hint puts origin's release back" same "$origin" release "$work" v0.3.5
+rel "$work" patch --yes --push
+expect "then it releases" test "$status/$(sha "$origin" v0.3.6)" = "0/$(sha "$work" release)"
+expect "... merging onto v0.3.5" test "$(sha "$work" release^1)" = "$start"
+
+echo "--- release checked out in another worktree is refused"
+fixture checkout
+git -C "$work" worktree add -q "$tmp/checkout/release-checkout" release
+before=$(snapshot "$work")
+rel "$work" patch --yes
+expect "a real run fails" test "$status" != 0
+expect "... naming the checkout" has "release-checkout: moving the branch would leave that checkout behind"
+expect "... changes nothing" test "$(snapshot "$work")" = "$before"
+expect "... and leaves that checkout clean" test -z "$(git -C "$tmp/checkout/release-checkout" status --porcelain)"
+git -C "$work" worktree remove "$tmp/checkout/release-checkout"
+rel "$work" patch --yes
+expect "once it is gone it releases" test "$status/$(sha "$work" v0.3.6)" = "0/$(sha "$work" release)"
+
 echo "--- pre-releases, and versions that are already recorded"
 fixture rc
 commit "$work" .github/release-notes.md '* Wydanie testowe' "Update release notes for v0.4.0-rc.1"
@@ -331,6 +373,11 @@ expect "... release merges main's fix" test "$(sha "$work" release^1)/$(sha "$wo
 expect "... named after rc.2" test "$(subject "$work" release)" = "Merge main into release for v0.4.0-rc.2"
 expect "... tagged rc.2 and pushed" same "$origin" v0.4.0-rc.2 "$work" release
 expect "... with release" same "$origin" release "$work" release
+before=$(snapshot "$work")
+rel "$work" patch --yes
+expect "patch while 0.4.0 has only pre-releases is refused" has "0.4.0 has pre-releases (v0.4.0-rc.1 v0.4.0-rc.2) but no release: patch would skip it for 0.4.1"
+expect "... naming the way out" has "release it with: scripts/release.sh 0.4.0"
+expect "... changing nothing" test "$(snapshot "$work")" = "$before"
 release0=$(sha "$work" release)
 rel "$work" 0.4.0 --yes --push
 expect "the final release succeeds" test "$status" = 0
@@ -345,6 +392,8 @@ rel "$work" 0.4.0-rc.3 --yes
 expect "a pre-release after the final one is refused" test "$status" != 0
 expect "... as too late" has "v0.4.0 is already released"
 expect "... changing nothing" test "$(snapshot "$work")" = "$before"
+rel "$work" --dry-run patch
+expect "once 0.4.0 is released, patch is fine" lacks "pre-releases"
 rel "$work" v0.4.1-rc.1 --yes
 expect "a leading v is accepted" same "$work" v0.4.1-rc.1 "$work" release
 expect "... and the pre-release bumps to 0.4.1" test "$(subject "$work" main)/$(version_on "$work" main)" = "Release v0.4.1-rc.1/0.4.1"
@@ -474,6 +523,12 @@ expect "... before changing anything" test "$(snapshot "$work")" = "$before"
 rel "$work" patch --yes
 expect "without --push it releases locally" test "$status/$(sha "$work" v0.3.6)" = "0/$(sha "$work" release)"
 expect "... after a warning" has "warning: origin is not reachable"
+git -C "$work" remote set-url origin "$origin"
+commit "$work" .github/release-notes.md '* Następna (0.3.7)' "Update release notes for v0.3.7"
+rel "$work" patch --yes --push
+expect "the next release with --push succeeds" test "$status/$(sha "$origin" v0.3.7)" = "0/$(sha "$work" release)"
+expect "... sending the unpushed merge along" test "$(sha "$origin" release^1)" = "$(sha "$work" v0.3.6)"
+expect "... but says v0.3.6's tag stays here" has "they carry the tags v0.3.6, which this run does not push (git push origin v0.3.6)"
 
 echo
 if ((failed)); then

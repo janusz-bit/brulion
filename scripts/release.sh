@@ -11,16 +11,19 @@
 # the version. The release branch holds nothing but merges of main, one per release, each with
 # its tag. Run it on main with a clean working tree. It first fetches main and release from
 # origin and refuses when main lacks commits of origin/main, when the local release and
-# origin/release have diverged, or when release has a commit that main lacks and that is not a
-# merge (git rev-list --no-merges main..release must be empty), or a merge with changes of its
-# own. The merge is made without checking release out: the working tree stays on main. When a
-# step fails, everything the run did is undone (and nothing is pushed).
+# origin/release have diverged, when release has a commit that main lacks and that is not a
+# merge (git rev-list --no-merges main..release must be empty) or a merge with changes of its
+# own, when release was fast-forwarded to main (main's commits on its first-parent line), or when
+# release is checked out in another worktree. The merge is made without checking release out:
+# the working tree stays on main. When a step fails, everything the run did is undone (and
+# nothing is pushed).
 #
 # Usage: scripts/release.sh <X.Y.Z[-pre] | major | minor | patch> [--push] [--yes] [--dry-run]
 #   X.Y.Z[-pre]  the new version; a suffix (0.2.0-rc.1) only marks the tag as a pre-release
 #                (CMake and the Android versionName keep 0.2.0)
-#   major|minor|patch  bump that part of the current version
-#   --push     then push main, release and the tag, atomically:
+#   major|minor|patch  bump that part of the current version (refused while the current version
+#              has pre-releases but no release: give the version itself)
+#   --push    then push main, release and the tag, atomically:
 #              git push --atomic origin main release refs/tags/v<version>
 #   --yes      do not ask for confirmation
 #   --dry-run  show what a real run would do and what it would refuse; change nothing (no fetch:
@@ -130,7 +133,7 @@ tag=v$new final=v$release
 remote_refs='' have_origin=0 reached=0
 if git remote get-url origin >/dev/null 2>&1; then
   have_origin=1
-  if remote_refs=$(git ls-remote origin refs/heads/main refs/heads/release "refs/tags/$tag" "refs/tags/$final" 2>/dev/null); then
+  if remote_refs=$(git ls-remote origin refs/heads/main refs/heads/release "refs/tags/$tag" "refs/tags/$final" "refs/tags/v$current" 2>/dev/null); then
     reached=1
   else
     warn "origin is not reachable: comparing with the last fetched origin/main and origin/release"
@@ -180,6 +183,9 @@ if [[ -n $origin_release && $origin_release != "$local_release" ]]; then
     release_note="the local release is fast-forwarded to origin/release ($(short "$origin_release"))"
   elif git merge-base --is-ancestor "$origin_release" "$local_release"; then
     warn "the local release is $(commits "$(git rev-list --count "$origin_release..$local_release")") ahead of origin/release (not pushed yet): pushing sends them along"
+    # An earlier release made without --push: its tag is not part of this run's push.
+    unpushed=$(git tag -l 'v[0-9]*' --merged "$local_release" --no-merged "$origin_release" | paste -sd ' ' -)
+    [[ -z $unpushed ]] || warn "they carry the tags $unpushed, which this run does not push (git push origin $unpushed)"
   else
     refuse "the local release and origin/release have diverged (see git log --graph release origin/release; when the local one is wrong: git branch -f release origin/release)"
   fi
@@ -204,7 +210,21 @@ elif ! git diff --quiet "$base" "$release_head"; then
   refuse "release has changes of its own: it differs from $(short "$base"), the commit of main it merged last, in
 $(git diff --name-only "$base" "$release_head" | head -n 10 | sed 's/^/  /')
 $rule Bring the changes to main first (on main: git merge release), then release."
+elif last_release=$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$release_head" 2>/dev/null) &&
+  ff_commits=$(git rev-list --count --first-parent --no-merges "$last_release..$release_head") && ((ff_commits)); then
+  # Main's own commits on release's line: release was fast-forwarded to main (`git merge main`
+  # on release while it had nothing main lacks, or a push of main to release). Main has them,
+  # so the checks above pass, but release would no longer hold only merges.
+  refuse "release was fast-forwarded to main: since $last_release its first-parent line has $(commits "$ff_commits") of main instead of merges
+$rule Put release back at $last_release first (git branch -f release $last_release; on origin too when it is there: git push --force-with-lease origin $last_release^{commit}:refs/heads/release), then release."
 fi
+
+# A checkout of release elsewhere (another worktree) would be left behind when the branch moves:
+# its files and index would show the reverse of the merge as changes of its own. This checkout
+# does not count: a real run has main checked out here (a dry run may be on release).
+release_checkout=$(git worktree list --porcelain | awk -v here="$(git rev-parse --show-toplevel)" '
+  /^worktree / { path = substr($0, 10) }
+  $0 == "branch refs/heads/release" && path != here && !found { print path; found = 1 }')
 
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then refuse "tag $tag already exists"; fi
 [[ -z $(remote_commit "refs/tags/$tag") ]] || refuse "tag $tag already exists on origin"
@@ -212,6 +232,16 @@ if [[ $new != "$release" ]] &&
   { git rev-parse -q --verify "refs/tags/$final" >/dev/null || [[ -n $(remote_commit "refs/tags/$final") ]]; }; then
   refuse "$final is already released: the pre-release $tag would come after it"
 fi
+# After 0.4.0-rc.N the files record 0.4.0, still unreleased: `patch` would skip it for 0.4.1.
+case $bump in
+  major | minor | patch)
+    pre_tags=$(git tag -l "v$current-*" | paste -sd ' ' -)
+    if [[ -n $pre_tags ]] && ! git rev-parse -q --verify "refs/tags/v$current" >/dev/null &&
+      [[ -z $(remote_commit "refs/tags/v$current") ]]; then
+      refuse "$current has pre-releases ($pre_tags) but no release: $bump would skip it for $new (release it with: scripts/release.sh $current; or give $new itself)"
+    fi
+    ;;
+esac
 
 # The notes are published as the release's description: unchanged ones repeat the last release's.
 # Release tags sit on release's merges, which main does not contain: look for them from release.
@@ -229,6 +259,9 @@ fi
 # (e.g. the final release of what the last pre-release merged), which only gets the tag.
 merge=1
 if ((${#files[@]} == 0)) && git merge-base --is-ancestor "$main_head" "$release_head"; then merge=0; fi
+if [[ -n $release_checkout ]] && ((merge || ff_release)); then
+  refuse "release is checked out in $release_checkout: moving the branch would leave that checkout behind (switch it to another branch, or remove it: git worktree remove)"
+fi
 message="Merge main into release for $tag"
 push_cmd=(git push --atomic origin main release "refs/tags/$tag")
 
@@ -251,7 +284,8 @@ if ((dry)); then
 fi
 
 if ((!yes)) && [[ -t 0 ]]; then
-  read -r -p "Release $tag? [y/N] " answer
+  # Ctrl+D (end of input) answers no, instead of ending the script without a word under set -e.
+  read -r -p "Release $tag? [y/N] " answer || answer=''
   [[ $answer == [yY]* ]] || die "aborted"
 fi
 

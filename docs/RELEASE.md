@@ -83,9 +83,18 @@ roboczym:
    którego main nie ma, a który nie jest scaleniem (`git rev-list --no-merges main..release`
    musi być puste), albo scalenie z własnymi zmianami (treść `release` różni się od ostatnio
    scalonego commita z main) — takie commity trzeba najpierw przenieść na main
-   (`git merge release` na main); gdy tag już jest (lokalnie albo w origin). Ostrzega, gdy
+   (`git merge release` na main); gdy `release` przewinięto do main (fast-forward — np. stary
+   nawyk `git merge main` na `release`, póki `release` nie ma nic poza main, albo push main do
+   `release`): od ostatniego taga na jej linii pierwszych rodziców są wtedy commity main
+   zamiast scaleń — trzeba ją cofnąć do tego taga (skrypt podaje `git branch -f` i push
+   z `--force-with-lease`); gdy `release` jest wybrana w innym worktree (przesunięcie gałęzi
+   rozjechałoby tamten checkout); gdy tag już jest (lokalnie albo w origin); przy
+   `patch`/`minor`/`major`, gdy bieżąca wersja ma tylko wydania testowe (np. po `0.4.0-rc.2`
+   `patch` pominąłby 0.4.0 — trzeba podać wersję wprost). Ostrzega, gdy
    `.github/release-notes.md` nie zmienił się od ostatniego taga (wydanie powtórzyłoby
-   poprzednie notatki).
+   poprzednie notatki), i gdy lokalna `release` wyprzedza `origin/release` z tagiem
+   wcześniejszego wydania bez `--push` — push wyśle jego scalenie, ale nie jego tag (skrypt
+   podaje `git push origin <tag>`).
 2. **Wersja na main.** Ustawia wersję w `CMakeLists.txt` (`project(... VERSION ...)` — z niej
    biorą się wersja aplikacji, `versionName` i `versionCode` Androida = major·1000000 +
    minor·1000 + patch) i w `nix/package.nix` i robi na main commit „Release vX.Y.Z”. Gdy
