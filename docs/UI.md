@@ -506,7 +506,14 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   never a folder another notebook has, holds or is inside); one synced before keeps the folder
   its sync bookkeeping names. A folder another notebook on the device syncs with (its folder
   exists, its switch is on) is an error under the field at once ("Notatnik „Dom” synchronizuje
-  się już z tym folderem…") and is not saved while sync is on. "Wyloguj" switches sync off in
+  się już z tym folderem…") and is not saved while sync is on. Two notebooks that 0.3.1–0.3.5
+  left on one folder (or one inside the other) sync nothing while that lasts — no automatic
+  sync and no "Synchronizuj teraz" (it only says why: one click would mix the two notebooks for
+  good, and choosing another folder is one step away): the status ("Nie synchronizuje:
+  notatnik „Dom” na tym urządzeniu synchronizuje się z tym samym folderem…") stays in the sync
+  footer and the sync center (red, error code `folder-shared`), the event log says it once per
+  notebook opened and folder, a toast too, and the overview's Nextcloud card offers „Wybierz
+  inny folder” (the Nextcloud tab, whose form shows the error under the folder). "Wyloguj" switches sync off in
   every notebook (the dialog says so), saving another server or user in all the others. The
   switch and folder of 0.3.0 and older go to the notebook they belong to (AppSettings).
 * **Live progress** (`qml/io/SyncLiveProgress.qml` in the Nextcloud tab's status card, from

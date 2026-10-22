@@ -17,7 +17,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QRegularExpression>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -138,6 +140,121 @@ private Q_SLOTS:
         QVERIFY(m_tmp.isValid());
         // No desktop notification service (whatever the machine has): deterministic reminders.
         qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/brulion-test-bus");
+    }
+
+    // 0.3.1–0.3.5 could give two notebooks of this device one server folder (the settings form
+    // refuses that now), and every sync mixed their notes. Such a notebook syncs nothing — not by
+    // itself, not by "Sync now" — and says why (sync status, event log, one toast) until one of
+    // them gets another folder.
+    void sharedFolderStopsSync_data()
+    {
+        QTest::addColumn<QString>("otherFolder");
+        QTest::addColumn<bool>("otherAccount");
+        QTest::addColumn<bool>("stopped");
+        QTest::newRow("same folder") << u"Notatki"_s << false << true;
+        QTest::newRow("folder inside") << u"Notatki/Praca"_s << false << true;
+        QTest::newRow("different folders") << u"Praca"_s << false << false;
+        // The other notebook synced with another account: signing in with this one switched it off.
+        QTest::newRow("different accounts") << u"Notatki"_s << true << false;
+    }
+
+    void sharedFolderStopsSync()
+    {
+        QFETCH(QString, otherFolder);
+        QFETCH(bool, otherAccount);
+        QFETCH(bool, stopped);
+        FakeWebDavServer server;
+        server.putText(u"Notatki/Z serwera.md"_s, u"- notatka z serwera\n"_s);
+        server.mkdir(u"Notatki A"_s);
+        const Paths p = freshPaths();
+        const QString a = QDir::cleanPath(m_tmp.filePath(u"A-wspólny-%1"_s.arg(m_counter)));
+        const QString b = QDir::cleanPath(m_tmp.filePath(u"Żółw-%1"_s.arg(m_counter)));
+        const QString other = QFileInfo(b).fileName();
+        QVERIFY(synctest::writeFileBehind(a, u"Notatka A.md"_s, "- notatnik A\n"));
+        QVERIFY(synctest::writeFileBehind(b, u"Notatka B.md"_s, "- notatnik B\n"));
+        auto app = makeApp(p, &server);
+        AppSettings *s = app->settings();
+        // The settings as 0.3.1–0.3.5 left them: B and A switched on, A with "Notatki".
+        s->setNextcloudUrl(otherAccount ? u"https://inna.example.org"_s : server.options().origin);
+        s->setNextcloudUser(otherAccount ? u"ola"_s : server.options().username);
+        QVERIFY(s->setNextcloudPassword(server.options().password));
+        s->setCurrentVault(b);
+        s->setNextcloudFolder(otherFolder);
+        s->setNextcloudEnabled(true);
+        s->setCurrentVault(a);
+        if (otherAccount) {
+            s->disableNextcloudEverywhere(true); // what saving another account does
+            s->setNextcloudUrl(server.options().origin);
+            s->setNextcloudUser(server.options().username);
+        }
+        s->setNextcloudFolder(u"Notatki"_s);
+        s->setNextcloudEnabled(true);
+        s->setCurrentVault(QString());
+
+        WorkspaceSync *sync = app->workspace()->sync();
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        QSignalSpy errors(sync, &WorkspaceSync::errorOccurred);
+        const auto warnings = [&] {
+            int n = 0;
+            for (const QList<QVariant> &t : std::as_const(toasts))
+                n += t.at(1).toString() == u"warning" && t.at(0).toString().contains(other) ? 1 : 0;
+            return n;
+        };
+        if (stopped) {
+            QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"Nextcloud sync stopped: the notebook \"%1\""_s.arg(
+                                                       QRegularExpression::escape(other))));
+        }
+        QVERIFY(openAndWait(app.get(), a));
+        QCOMPARE(sync->active(), !stopped);
+        QCOMPARE(app->syncAvailable(), !stopped);
+        if (!stopped) {
+            QVERIFY(sync->folderSharedWith().isEmpty());
+            QCOMPARE(warnings(), 0);
+            QVERIFY(syncAndWait(sync));
+            QVERIFY(server.text(u"Notatki/Notatka A.md"_s).has_value());
+            return;
+        }
+        QCOMPARE(sync->state(), u"error"_s);
+        QCOMPARE(sync->lastErrorCode(), u"folder-shared"_s);
+        QCOMPARE(sync->folderSharedWith(), other);
+        QVERIFY2(sync->statusText().contains(other), qPrintable(sync->statusText()));
+        QVERIFY(sync->statusText().contains(u"Notatki"_s));
+        QCOMPARE(app->syncStatus().value(u"state"_s).toString(), u"error"_s);
+        QCOMPARE(app->syncStatus().value(u"text"_s).toString(), sync->statusText());
+        QCOMPARE(warnings(), 1);
+        // "Sync now" asks nothing of the server (the footer, the sync center and the palette do
+        // not offer it): it says why.
+        server.clearLog();
+        app->requestSync();
+        QVERIFY(errors.isEmpty());
+        sync->syncNow();
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(errors.first().first().toString().contains(other));
+        QCOMPARE(server.logSize(), 0);
+        // Other settings changed: still stopped, no second toast.
+        s->setSyncIntervalMinutes(30);
+        QVERIFY(!sync->active());
+        QCOMPARE(warnings(), 1);
+        QCOMPARE(server.logSize(), 0);
+        // Another folder for A: it syncs, and nothing of B's folder comes down.
+        s->setNextcloudFolder(u"Notatki A"_s);
+        QVERIFY(sync->active());
+        QVERIFY(sync->folderSharedWith().isEmpty());
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(server.text(u"Notatki A/Notatka A.md"_s).has_value());
+        QVERIFY(!server.text(u"Notatki/Notatka A.md"_s).has_value());
+        QVERIFY(!QFile::exists(a + u"/Z serwera.md"_s));
+        // The shared folder again: stopped and warned again.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"Nextcloud sync stopped"_s));
+        s->setNextcloudFolder(u"Notatki"_s);
+        QVERIFY(!sync->active());
+        QCOMPARE(warnings(), 2);
+        // B, opened, is stopped as well; it names A.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"Nextcloud sync stopped"_s));
+        QVERIFY(openAndWait(app.get(), b));
+        QVERIFY(!sync->active());
+        QCOMPARE(sync->folderSharedWith(), QFileInfo(a).fileName());
+        QCOMPARE(server.files(u"Notatki"_s).keys(), QStringList{u"Z serwera.md"_s});
     }
 
     void syncedNotebookMissingAtFirstStart()
