@@ -4,6 +4,7 @@
 #include "markdown/structure_p.h"
 
 #include <QElapsedTimer>
+#include <QSet>
 
 #include <QTest>
 #include <limits>
@@ -1204,6 +1205,84 @@ private Q_SLOTS:
             got.append(kindName(n.kind) + u'/' + n.trailingId + u'/' + QString::number(n.endLine));
         }
         QCOMPARE(got, QStringList({u"table/tbl/3"_s, u"code/code1/9"_s, u"listItem//11"_s, u"paragraph//13"_s}));
+    }
+
+    // ---- findNoteTags ----------------------------------------------------------------------------
+
+    /// "form:name=written@line" for every occurrence (written: the text of its range).
+    static QStringList noteTags(const QString &content)
+    {
+        QStringList out;
+        for (const NoteTag &t : markdown::findNoteTags(content)) {
+            const char *form = t.form == TagForm::Hash        ? "hash"
+                               : t.form == TagForm::Bracketed ? "bracket"
+                               : t.form == TagForm::Property  ? "prop"
+                                                              : "front";
+            out.append(QString::fromLatin1(form) + u':' + t.name + u'=' + content.mid(t.from, t.to - t.from) + u'@'
+                       + QString::number(t.line));
+        }
+        return out;
+    }
+
+    void findNoteTags_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("tags");
+        QTest::newRow("forms") << u"- a #praca i #[[Jan Kowalski]] (#dom/)\n- #Łąka"_s
+                               << QStringList{u"hash:praca=#praca@0"_s, u"bracket:Jan Kowalski=#[[Jan Kowalski]]@0"_s,
+                                              u"hash:dom=#dom@0"_s, u"hash:Łąka=#Łąka@1"_s};
+        QTest::newRow("quote") << u">#cytat\n> #drugi"_s
+                               << QStringList{u"hash:cytat=#cytat@0"_s, u"hash:drugi=#drugi@1"_s};
+        QTest::newRow("no tags") << u"# Tytuł\n#1 i #٣\nzwykły#tekst"_s << QStringList{};
+        QTest::newRow("code") << u"`#kod` i #tak\n```\n#nie\n```"_s << QStringList{u"hash:tak=#tak@0"_s};
+        QTest::newRow("formula") << u"$a #wzór b$ i #tak"_s << QStringList{u"hash:tak=#tak@0"_s};
+        QTest::newRow("url and link target")
+                << u"https://x.pl/#abc [[Strona#Nagłówek]] [t](a.md#b) #tak"_s << QStringList{u"hash:tak=#tak@0"_s};
+        QTest::newRow("html block") << u"<div>\n#nie\n</div>\n\n#tak"_s << QStringList{u"hash:tak=#tak@4"_s};
+        QTest::newRow("comments") << u"%% #nie %% <!-- #nie --> #tak"_s << QStringList{u"hash:tak=#tak@0"_s};
+        QTest::newRow("crlf") << u"- #a\r\n- b #c\r\n"_s << QStringList{u"hash:a=#a@0"_s, u"hash:c=#c@1"_s};
+        QTest::newRow("decomposed") << u"#z\u0307o\u0301\u0142w"_s
+                                    << QStringList{u"hash:\u017C\u00F3\u0142w=#z\u0307o\u0301\u0142w@0"_s};
+        QTest::newRow("properties") << u"- zadanie\n  tags:: dom, \"praca\", #pilne, [[Jan]], a,#b"_s
+                                    << QStringList{u"prop:dom=dom@1"_s, u"prop:praca=praca@1"_s,
+                                                   u"hash:pilne=#pilne@1"_s, u"prop:a=a@1"_s, u"prop:b=b@1"_s};
+        QTest::newRow("page properties") << u"tag:: Projekt\nalias:: Remont\n\n- treść"_s
+                                         << QStringList{u"prop:Projekt=Projekt@0"_s};
+        QTest::newRow("other property with tag") << u"- x\n  typ:: #plan"_s << QStringList{u"hash:plan=#plan@1"_s};
+        QTest::newRow("frontmatter flow") << u"---\ntags: [dom, \"praca\", '#pilne', [[Link]]]\n---\n#tekst"_s
+                                          << QStringList{u"front:dom=dom@1"_s, u"front:praca=praca@1"_s,
+                                                         u"front:pilne=pilne@1"_s, u"hash:tekst=#tekst@3"_s};
+        QTest::newRow("frontmatter block")
+                << u"---\r\ntitle: X\r\ntags:\r\n  - dom # komentarz\r\n  - \"Jan Kowalski\"\r\nother: 1\r\n---\r\n"_s
+                << QStringList{u"front:dom=dom@3"_s, u"front:Jan Kowalski=Jan Kowalski@4"_s};
+        QTest::newRow("frontmatter scalar") << u"---\nTag: a, b c #komentarz\n---\n"_s
+                                            << QStringList{u"front:a=a@1"_s, u"front:b=b@1"_s, u"front:c=c@1"_s};
+        QTest::newRow("frontmatter quoted scalar")
+                << u"---\ntags: \"dom\"\n---\n"_s << QStringList{u"front:dom=dom@1"_s};
+        QTest::newRow("frontmatter multi-line flow")
+                << u"---\ntags: [a,\n  b]\n---\n"_s << QStringList{u"front:a=a@1"_s, u"front:b=b@2"_s};
+        QTest::newRow("frontmatter not placed") << u"---\ntags: {a: 1}\n---\n"_s << QStringList{};
+        QTest::newRow("frontmatter hash in yaml is a comment") << u"---\ntags: #dom\n---\n"_s << QStringList{};
+        QTest::newRow("no frontmatter tags") << u"---\ntitle: #a b\n---\n"_s << QStringList{};
+        QTest::newRow("empty") << QString() << QStringList{};
+        QTest::newRow("garbage") << u"#[[ ]] #[[a|b]] #[[x #[[\n#"_s << QStringList{};
+    }
+
+    void findNoteTags()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, tags);
+        QCOMPARE(noteTags(content), tags);
+        // The same tags as the parser's (keys), page and blocks.
+        QSet<QString> keys;
+        for (const NoteTag &t : markdown::findNoteTags(content))
+            keys.insert(t.name.toLower());
+        const ParsedNote note = parseNote(u"a.md"_s, content);
+        QSet<QString> fromLinks; // `[[…]]` in a tag list is a link, not reported
+        for (const Link &l : note.links)
+            fromLinks.insert(l.target.toLower());
+        for (const QString &k : note.tags)
+            QVERIFY2(keys.contains(k) || fromLinks.contains(k), qPrintable(k));
     }
 
     void nodeAtLineInnermost()

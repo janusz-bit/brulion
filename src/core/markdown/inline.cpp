@@ -793,6 +793,24 @@ QString maskInlineCode(QStringView text)
     return maskInline(text);
 }
 
+QString tagSyntax(QStringView name)
+{
+    QStringView n = name.trimmed();
+    while (n.endsWith(u'/'))
+        n = n.chopped(1).trimmed();
+    if (n.isEmpty())
+        return {};
+    for (const QChar c : n) {
+        if (c == u'[' || c == u']' || c == u'|' || c == u'\n' || c == u'\r')
+            return {};
+    }
+    const QString normalized = nfc(n);
+    // A simple tag reads back as exactly this name; anything else needs the bracket form.
+    if (tagBodyEnd(normalized, 0) == normalized.size() && cleanTagBody(normalized) == normalized)
+        return u'#' + normalized;
+    return u"#[["_s + normalized + u"]]"_s;
+}
+
 QStringList uniqueTags(const QStringList &names)
 {
     QSet<QString> seen;

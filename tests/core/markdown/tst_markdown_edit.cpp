@@ -681,6 +681,123 @@ private Q_SLOTS:
         QCOMPARE(renameLinks(u"[[Old]]"_s, u"Old"_s, u"   "_s), u"[[Old]]"_s);
     }
 
+    // --- renameTags ------------------------------------------------------------------------------
+
+    void renameTags_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("oldName");
+        QTest::addColumn<QString>("newName");
+        QTest::addColumn<QString>("oldPath");
+        QTest::addColumn<QString>("newPath");
+        QTest::addColumn<QString>("expected");
+        const QString none;
+        QTest::newRow("any case") << u"- #Dom #dom #DOM i #domek #dom/łazienka #Domy"_s << u"Dom"_s << u"Mieszkanie"_s
+                                  << none << none
+                                  << u"- #Mieszkanie #Mieszkanie #Mieszkanie i #domek #dom/łazienka #Domy"_s;
+        QTest::newRow("bracket form kept") << u"#[[Dom]] #[[ dom ]] #[[Domek]]"_s << u"Dom"_s << u"Mieszkanie"_s << none
+                                           << none << u"#[[Mieszkanie]] #[[Mieszkanie]] #[[Domek]]"_s;
+        QTest::newRow("to two words") << u"(#dom) #[[dom]]"_s << u"Dom"_s << u"Nowy dom"_s << none << none
+                                      << u"(#[[Nowy dom]]) #[[Nowy dom]]"_s;
+        QTest::newRow("to no simple tag")
+                << u"#dom, #dom."_s << u"Dom"_s << u"C++"_s << none << none << u"#[[C++]], #[[C++]]."_s;
+        QTest::newRow("trailing slash") << u"#dom/ i #dom//"_s << u"dom"_s << u"Dom2"_s << none << none
+                                        << u"#Dom2/ i #Dom2//"_s;
+        QTest::newRow("polish") << u"#Łąka #łąka #laka"_s << u"Łąka"_s << u"Polana"_s << none << none
+                                << u"#Polana #Polana #laka"_s;
+        QTest::newRow("case only") << u"#dom"_s << u"dom"_s << u"Dom"_s << none << none << u"#Dom"_s;
+        QTest::newRow("never in code, comments, formulas")
+                << u"`#dom` %% #dom %% <!-- #dom --> $a #dom b$ https://x.pl/#dom [[x#dom]]\n```\n#dom\n```\n# Dom"_s
+                << u"Dom"_s << u"Mieszkanie"_s << none << none
+                << u"`#dom` %% #dom %% <!-- #dom --> $a #dom b$ https://x.pl/#dom [[x#dom]]\n```\n#dom\n```\n# Dom"_s;
+        QTest::newRow("property items")
+                << u"- zadanie\n  tags:: dom, praca, \"Dom\", #dom, a,#dom"_s << u"Dom"_s << u"Mieszkanie"_s << none
+                << none << u"- zadanie\n  tags:: Mieszkanie, praca, \"Mieszkanie\", #Mieszkanie, a,#Mieszkanie"_s;
+        QTest::newRow("property link left to renameLinks") << u"tags:: [[Dom]], dom"_s << u"Dom"_s << u"Mieszkanie"_s
+                                                           << none << none << u"tags:: [[Dom]], Mieszkanie"_s;
+        QTest::newRow("property name with comma") << u"tag:: dom, praca"_s << u"Dom"_s << u"Kowalski, Jan"_s << none
+                                                  << none << u"tag:: [[Kowalski, Jan]], praca"_s;
+        QTest::newRow("other property") << u"- x\n  typ:: #dom\n  opis:: dom"_s << u"dom"_s << u"Dom2"_s << none << none
+                                        << u"- x\n  typ:: #Dom2\n  opis:: dom"_s;
+        QTest::newRow("frontmatter flow")
+                << u"---\ntags: [dom, praca, \"Dom\", '#dom']\n---\n- #dom"_s << u"Dom"_s << u"Mieszkanie"_s << none
+                << none << u"---\ntags: [Mieszkanie, praca, \"Mieszkanie\", '#Mieszkanie']\n---\n- #Mieszkanie"_s;
+        QTest::newRow("frontmatter block crlf")
+                << u"---\r\ntags:\r\n  - dom # mój dom\r\n  - \"praca\"\r\nstatus: x\r\n---\r\n"_s << u"Dom"_s
+                << u"Mieszkanie"_s << none << none
+                << u"---\r\ntags:\r\n  - Mieszkanie # mój dom\r\n  - \"praca\"\r\nstatus: x\r\n---\r\n"_s;
+        QTest::newRow("frontmatter quoted scalar") << u"---\ntags: \"dom\"\n---\n"_s << u"Dom"_s << u"Mieszkanie"_s
+                                                   << none << none << u"---\ntags: \"Mieszkanie\"\n---\n"_s;
+        QTest::newRow("frontmatter scalar") << u"---\ntags: dom, praca\n---\n"_s << u"Dom"_s << u"Mieszkanie"_s << none
+                                            << none << u"---\ntags: Mieszkanie, praca\n---\n"_s;
+        QTest::newRow("path in place") << u"#Projekty/Dom #projekty/dom #Inne/Dom #dom"_s << u"Dom"_s << u"Mieszkanie"_s
+                                       << u"Projekty/Dom.md"_s << u"Projekty/Mieszkanie.md"_s
+                                       << u"#Projekty/Mieszkanie #projekty/Mieszkanie #Inne/Dom #Mieszkanie"_s;
+        QTest::newRow("path suffix") << u"#Stare/Dom #Dom"_s << u"Dom"_s << u"Stary dom"_s << u"Archiwum/Stare/Dom.md"_s
+                                     << QString() << u"#[[Stare/Stary dom]] #[[Stary dom]]"_s;
+        QTest::newRow("move keeps the name")
+                << u"#Projekty/Dom #Dom #[[Projekty/Dom]]"_s << u"Dom"_s << u"Dom"_s << u"Projekty/Dom.md"_s
+                << u"Archiwum/Dom.md"_s << u"#Archiwum/Dom #Dom #[[Archiwum/Dom]]"_s;
+        QTest::newRow("path only") << u"#dom #Projekty/Dom"_s << QString() << u"Mieszkanie"_s << u"Projekty/Dom.md"_s
+                                   << u"Projekty/Mieszkanie.md"_s << u"#dom #Projekty/Mieszkanie"_s;
+        QTest::newRow("crlf kept") << u"- #dom\r\n- tekst\r\n\r\n"_s << u"dom"_s << u"Mieszkanie"_s << none << none
+                                   << u"- #Mieszkanie\r\n- tekst\r\n\r\n"_s;
+        QTest::newRow("malformed unchanged") << u"#[[Dom #[[Dom|x]] #[[ ]] #[[Dom]x]]"_s << u"Dom"_s << u"Nowy"_s
+                                             << none << none << u"#[[Dom #[[Dom|x]] #[[ ]] #[[Dom]x]]"_s;
+        QTest::newRow("empty old name") << u"#dom"_s << QString() << u"Nowy"_s << none << none << u"#dom"_s;
+        QTest::newRow("empty new name") << u"#dom"_s << u"dom"_s << u"  "_s << none << none << u"#dom"_s;
+        QTest::newRow("new name no tag can hold") << u"#dom #[[dom]]\ntags:: dom"_s << u"dom"_s << u"a|b"_s << none
+                                                  << none << u"#dom #[[dom]]\ntags:: dom"_s;
+        QTest::newRow("same name") << u"#Dom #dom"_s << u"Dom"_s << u"Dom"_s << none << none << u"#Dom #dom"_s;
+    }
+
+    void renameTags()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, oldName);
+        QFETCH(QString, newName);
+        QFETCH(QString, oldPath);
+        QFETCH(QString, newPath);
+        QFETCH(QString, expected);
+        const QString renamed = markdown::renameTags(content, oldName, newName, oldPath, newPath);
+        QCOMPARE(renamed, expected);
+        // tagsToRename() lists what changes: none exactly when nothing changes.
+        QCOMPARE(tagsToRename(content, oldName, newName, oldPath, newPath).isEmpty(), renamed == content);
+        // Idempotent.
+        QCOMPARE(markdown::renameTags(renamed, oldName, newName, oldPath, newPath), renamed);
+    }
+
+    // A frontmatter value the items cannot express: the key is written anew (the page keeps its
+    // tags, now with the new name).
+    void renameTagsRewritesFrontmatterKey()
+    {
+        const QString content = u"---\ntitle: Notatka\ntags: dom praca # dwa tagi\nstatus: x\n---\n- #dom\n"_s;
+        const QString renamed = markdown::renameTags(content, u"Dom"_s, u"Nowy dom"_s);
+        const ParsedNote note = parseNote(u"a.md"_s, renamed);
+        QCOMPARE(note.tags, QStringList({u"nowy dom"_s, u"praca"_s}));
+        QVERIFY(renamed.startsWith(u"---\ntitle: Notatka\n"_s));
+        QVERIFY(renamed.contains(u"\nstatus: x\n---\n- #[[Nowy dom]]\n"_s));
+        QCOMPARE(tagsToRename(content, u"Dom"_s, u"Nowy dom"_s).size(), 2);
+        // A form the scan does not place: the names are still renamed.
+        const QString nested = u"---\ntags: [dom, {a: 1}]\n---\n"_s;
+        const QString renamedNested = markdown::renameTags(nested, u"dom"_s, u"Mieszkanie"_s);
+        QCOMPARE(parseNote(u"a.md"_s, renamedNested).tags, QStringList({u"mieszkanie"_s}));
+        QCOMPARE(tagsToRename(nested, u"dom"_s, u"Mieszkanie"_s).size(), 1);
+    }
+
+    // Together with renameLinks(), as Workspace::renamePage() runs them: every reference follows.
+    void renameLinksAndTags()
+    {
+        const QString content =
+                u"---\naliases: [x]\ntags: [Dom, \"[[Dom]]\"]\n---\n- [[Dom]] i #dom\n  tags:: [[Dom]], dom\n- `#dom` #domek\n"_s;
+        const QString renamed =
+                markdown::renameTags(renameLinks(content, u"Dom"_s, u"Mój dom"_s), u"Dom"_s, u"Mój dom"_s);
+        QCOMPARE(
+                renamed,
+                u"---\naliases: [x]\ntags: [Mój dom, \"[[Mój dom]]\"]\n---\n- [[Mój dom]] i #[[Mój dom]]\n  tags:: [[Mój dom]], Mój dom\n- `#dom` #domek\n"_s);
+        QCOMPARE(parseNote(u"a.md"_s, renamed).tags, QStringList({u"mój dom"_s, u"domek"_s}));
+    }
+
     // --- journals --------------------------------------------------------------------------------
 
     void journalPaths()

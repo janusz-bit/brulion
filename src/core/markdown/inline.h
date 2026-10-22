@@ -35,6 +35,13 @@ struct TagSpan {
 /// extractInline() (SYNTAX §3) — for renderers and exporters that need the positions.
 QList<TagSpan> findTags(QStringView text);
 
+/// The tag that names `name` as it is written (SYNTAX §3): "#name" when the name is a valid
+/// simple tag body ("praca", "żółw", "Remont/Łazienka"), else "#[[name]]" ("Jan Kowalski",
+/// "C++", "2026", "Dr. Nowak"). The name is trimmed and NFC-normalized; trailing '/' are dropped
+/// ("a/" -> "#a"). Empty for an empty name and for one no tag can hold (`[`, `]`, `|`, a line
+/// break). Shared by completion, renaming and copying.
+QString tagSyntax(QStringView name);
+
 /// Mask inline code spans, `%%comments%%` and `<!-- html comments -->` by spaces (same length,
 /// line breaks kept). Unmatched backticks and unclosed comments stay literal.
 QString maskInlineCode(QStringView text);
