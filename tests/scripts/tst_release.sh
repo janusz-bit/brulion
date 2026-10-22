@@ -514,6 +514,23 @@ commit "$work" fix.txt 'kolejna' "Next fix on main"
 rel "$work" --dry-run patch
 expect "after v0.3.6: unchanged since v0.3.6 (its tag is not on main)" has ".github/release-notes.md has not changed since v0.3.6"
 
+echo "--- with a news section only its news count, not the summary line under it"
+fixture news
+news_notes() { # <clone> <news line> <summary line>: rewrites the notes with a news section
+  printf '%s\n' '**Brulion {{VERSION}}** — notatki' '' '**Nowości w {{VERSION}}**' '' "$2" '' "$3" '' \
+    '**Najważniejsze**' '' '* Konspekty i dziennik' >"$1/.github/release-notes.md"
+  git -C "$1" commit -q -am "Update release notes"
+}
+news_notes "$work" '* Zegar (0.3.6)' 'Z wersji 0.3.5: obrazy.'
+rel "$work" patch --yes --push
+expect "a release with a news section" test "$status" = 0
+news_notes "$work" '* Zegar (0.3.6)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
+rel "$work" --dry-run patch
+expect "only the summary changed: still unchanged news" has ".github/release-notes.md has not changed since v0.3.6"
+news_notes "$work" '* Statusy zadań (0.3.7)' 'Z wersji 0.3.6: zegar. Z wersji 0.3.5: obrazy.'
+rel "$work" --dry-run patch
+expect "new news: no warning" lacks "has not changed"
+
 echo "--- a dirty working tree, an unreachable origin"
 fixture misc
 printf '%s\n' 'niezapisane' >>"$work/fix.txt"

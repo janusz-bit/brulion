@@ -245,10 +245,20 @@ esac
 
 # The notes are published as the release's description: unchanged ones repeat the last release's.
 # Release tags sit on release's merges, which main does not contain: look for them from release.
+# Only the news count: the "Nowości w …" section without its "Z wersji …" summary line, so that
+# editing the summary alone does not hide unchanged news (the whole file when it has no section).
 notes=.github/release-notes.md
+news_of() {
+  git show "$1:$notes" 2>/dev/null | awk '
+    /^\*\*Nowości w / { on = 1; seen = 1; next }
+    on && /^\*\*/ { on = 0 }
+    on && !/^Z wersji / { news = news $0 "\n" }
+    { all = all $0 "\n" }
+    END { printf "%s", seen ? news : all }'
+}
 if last=$(git describe --tags --abbrev=0 "$release_head" 2>/dev/null) &&
-  git diff --quiet "$last" "$main_head" -- "$notes"; then
-  warn "$notes has not changed since $last (commit \"Update release notes for $tag\" on main first)"
+  [[ $(news_of "$last") == "$(news_of "$main_head")" ]]; then
+  warn "$notes has not changed since $last (its news; commit \"Update release notes for $tag\" on main first)"
 fi
 
 files=()
