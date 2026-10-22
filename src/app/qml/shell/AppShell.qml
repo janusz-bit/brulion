@@ -16,6 +16,11 @@ import Brulion
 // delete confirmation, about) and the global shortcuts; bars and the sidebar call the open*()
 // functions. Content is laid out edge-to-edge: bars extend under the system bars and pad
 // themselves with the SafeArea margins.
+// On-screen keyboard (docs/UI.md "On-screen keyboard"): the view ends at the keyboard's top
+// (KeyboardInsets.overlap, a spacer under it), so the editing toolbar a view docks on its bottom
+// edge sits on the keyboard; while the keyboard is up or a toolbar is docked (also after the
+// system hid the keyboard, while editing goes on) the bottom navigation and the capture button
+// make way, and the view ends above the system's navigation bar.
 FocusScope {
     id: shell
 
@@ -25,6 +30,20 @@ FocusScope {
 
     readonly property var safe: SafeArea.margins
     readonly property var route: AppController.currentRoute
+    /// How much of the window's bottom the on-screen keyboard covers.
+    readonly property real keyboardOverlap: KeyboardInsets.overlap
+    /// A view's editing toolbar is docked at its bottom edge (touch UIs).
+    readonly property bool toolbarDocked: routeView.viewToolbarDocked
+    /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
+    readonly property bool typing: KeyboardInsets.shown || toolbarDocked
+    /// Room under the view: the keyboard (minus the bottom navigation, when that is still shown);
+    /// while typing at least the system's navigation bar, which the docked toolbar must clear.
+    readonly property real keyboardRoom: bottomNav.visible ? Math.max(0, keyboardOverlap - bottomNav.height)
+                                         : typing ? Math.max(keyboardOverlap, safe.bottom) : keyboardOverlap
+    /// What covers the window's bottom edge for toasts (Main.qml): the keyboard and a docked
+    /// toolbar while typing; else the bottom navigation and the capture button on phones.
+    readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
+                                           : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
     readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
     /// Folders above the current page: [{ title, path }].
     readonly property var crumbs: {
@@ -179,9 +198,19 @@ FocusScope {
                 focus: true
                 route: AppController.currentRoute
             }
+            // The keyboard's room (it covers this part of the window).
+            Rectangle {
+                objectName: "shellKeyboardRoom"
+                Layout.fillWidth: true
+                Layout.preferredHeight: shell.keyboardRoom
+                visible: shell.keyboardRoom > 0
+                // Under the docked toolbar when the keyboard is hidden: the navigation bar's strip.
+                color: Theme.bgElevated
+            }
             ShellBottomNav {
                 id: bottomNav
-                visible: Theme.narrow
+                objectName: "shellBottomNav"
+                visible: Theme.narrow && !shell.typing
                 Layout.fillWidth: true
                 bottomInset: shell.safe.bottom
                 onMenuClicked: drawer.open()
@@ -203,7 +232,7 @@ FocusScope {
         // on views of forms and tools (settings, sync, import/export, history, trash, the graph
         // with its zoom buttons): there it covered their buttons and fields, and capturing a note
         // is not what they are for.
-        visible: Theme.narrow && !routeView.viewEditing
+        visible: Theme.narrow && !routeView.viewEditing && !shell.typing
                  && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom

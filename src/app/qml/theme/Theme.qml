@@ -236,6 +236,9 @@ QtObject {
     readonly property int iconSizeLg: touchUi ? 24 : 20
     readonly property int listItemHeight: touchUi ? 48 : 34
     readonly property int listItemHeightTwoLine: touchUi ? 64 : 48
+    /// The touch editing toolbar docked on the keyboard (MobileEditToolbar): a row of small
+    /// buttons with a hairline above.
+    readonly property int editToolbarHeight: touchTarget + space2 + 1
 
     readonly property int measure: 760          // editor's comfortable text width
     readonly property int sidebarWidth: 272

@@ -27,7 +27,9 @@ import Brulion
 // Esc): Up/Down select, Enter edit, Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter,
 // Ctrl+Shift+Enter, Ctrl+., Esc clear.
 // Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
-// that need input open EditorDialogs; on touch UIs MobileEditToolbar sits above the keyboard.
+// that need input open EditorDialogs; on touch UIs MobileEditToolbar is docked on the keyboard:
+// at the bottom edge of `toolbarHost` (default: the editor), which the shell keeps on the
+// keyboard's top (KeyboardInsets) — for a block, a table cell or the source (toolbarMode).
 // Pictures: Ctrl+V pastes a copied picture (or copied files) as an attachment `![[…]]`, files
 // dropped on the page are stored and embedded (in the block being edited at the caret, else in
 // a new block after the one under the drop), "/Obraz…" and the toolbar pick files.
@@ -89,11 +91,47 @@ FocusScope {
     /// Where the caret/selection lives: the inline editor (TextEdit) being typed in.
     property InlineEditor activeEditor: null
     readonly property bool touch: Theme.touchUi
-    readonly property bool toolbarVisible: touch && controller !== null && controller.editingRow >= 0
-                                           && !controller.sourceMode
-    readonly property real toolbarHeight: Theme.touchTarget + Theme.space2 + 1
-    /// Top of the mobile toolbar (it sits on the virtual keyboard): text below it is hidden.
-    readonly property real toolbarTop: toolbarVisible && toolbarLoader.item ? (toolbarLoader.item as Item).y : height
+
+    // ---- The touch toolbar, docked on the keyboard (docs/UI.md "On-screen keyboard") ------------
+    /// The table whose cell is being edited (TableBlockView sets and clears it), else null.
+    property TableBlockView editingTable: null
+    /// Source mode with its text being edited (SourceEditor: the text has the keyboard).
+    property bool sourceEditing: false
+    /// The tools of the touch toolbar: "block" (a block is being edited), "cell" (a table cell),
+    /// "source" (source mode), "" (none: no toolbar). Stays while the system hides the keyboard
+    /// and the editing goes on. One slot: another tool set docks the same way (a new mode).
+    readonly property string toolbarMode: !touch || controller === null ? ""
+                                          : controller.sourceMode ? (sourceEditing ? "source" : "")
+                                          : controller.editingRow >= 0 ? "block"
+                                          : editingTable !== null ? "cell" : ""
+    readonly property bool toolbarVisible: toolbarMode !== ""
+    readonly property real toolbarHeight: Theme.editToolbarHeight
+    /// Where the toolbar docks: an item that does not scroll with the blocks and whose bottom
+    /// edge the shell keeps on the keyboard — the editor itself (null) on a page, the journal
+    /// stream's frame for its days (ContentJournalDay). The toolbar fills its bottom edge.
+    property Item toolbarHost: null
+    readonly property Item dockHost: toolbarHost !== null ? toolbarHost : editor
+    /// What scrolls the editor instead of its own list (a day of the journal stream: the journal
+    /// list; any object with ensureVisible(item, rect)), else null.
+    property var scroller: null
+    /// The source's text editor in source mode (the toolbar inserts into it), else null.
+    readonly property TextEdit sourceTextEdit: sourceLoader.item ? (sourceLoader.item as SourceEditor).textEdit : null
+
+    /// The bottom of what is seen of the editor, in its own coordinates: the toolbar's top while it
+    /// shows, else the bottom of the dock host (on the keyboard). Computed when asked: the days of
+    /// the journal stream move under their fixed host.
+    function visibleBottom(): real {
+        const host = dockHost
+        const bottom = host.height - (toolbarVisible ? toolbarHeight : 0)
+        return host === editor ? bottom : editor.mapFromItem(host, 0, bottom).y
+    }
+    /// Popup margin that keeps a menu above the toolbar and the keyboard (window coordinates).
+    function menuBottomMargin(): real {
+        const win = editor.Window.window
+        if (!win)
+            return Theme.space2
+        return Math.max(Theme.space2, win.height - editor.mapToItem(null, 0, visibleBottom()).y + Theme.space2)
+    }
 
     /// Something to tell the user (a toast): kind "error" | "info".
     signal notice(string text, string kind)
@@ -324,10 +362,15 @@ FocusScope {
         })
     }
 
-    /// Keep `rect` of `item` (e.g. the caret) inside the visible part of the list.
+    /// Keep `rect` of `item` (e.g. the caret) inside the visible part of the list — or of the
+    /// list scrolling the editor (`scroller`).
     function ensureVisible(item, rect) {
         if (!item || !list || !editor.alive)
             return
+        if (editor.scroller) {
+            editor.scroller.ensureVisible(item, rect)
+            return
+        }
         const p = item.mapToItem(list.contentItem, rect.x, rect.y)
         const margin = editor.lineHeight
         const bottomLimit = list.height - list.bottomMargin
@@ -338,10 +381,40 @@ FocusScope {
                                      Math.max(list.originY, list.contentHeight + list.originY - list.height + list.bottomMargin))
     }
 
-    /// Keep the caret of an inline editor visible (called after layout settled).
+    /// Keep the caret of an inline editor visible (called after layout settled). Not while the
+    /// keyboard slides (the view changes size every frame): once it has settled.
     function ensureCaretVisible(edit) {
-        if (edit && edit.activeFocus)
+        if (edit && edit.activeFocus && !KeyboardInsets.animating)
             ensureVisible(edit, edit.cursorRectangle)
+    }
+    /// Keep what is being edited visible: the caret of the block, else the table cell.
+    function ensureEditVisible() {
+        if (KeyboardInsets.animating || !editor.alive)
+            return
+        if (activeEditor && activeEditor.activeFocus)
+            ensureVisible(activeEditor, activeEditor.cursorRectangle)
+        else if (editingTable && editingTable.cellInput)
+            ensureVisible(editingTable.cellInput, Qt.rect(0, 0, editingTable.cellInput.width, editingTable.cellInput.height))
+    }
+    // The view shrinks with the keyboard (the shell lifts it): what is being edited stays
+    // visible — once the keyboard has settled. (Growing, it covers nothing: the view stays where
+    // the user scrolled it.)
+    property real _lastHeight: 0
+    onHeightChanged: {
+        const shrank = height < _lastHeight - 0.5
+        _lastHeight = height
+        if (shrank && !autoHeight && (activeEditor !== null || editingTable !== null))
+            later(() => editor.ensureEditVisible())
+    }
+    readonly property bool keyboardSliding: KeyboardInsets.animating
+    onKeyboardSlidingChanged: {
+        if (!keyboardSliding && KeyboardInsets.shown && (activeEditor !== null || editingTable !== null))
+            later(() => editor.ensureEditVisible())
+    }
+
+    function releaseSourceKeyboard() {
+        if (sourceLoader.item)
+            (sourceLoader.item as SourceEditor).releaseKeyboard()
     }
 
     function activateLink(row, link) {
@@ -874,13 +947,11 @@ FocusScope {
         displayMarginEnd: editor.autoHeight ? 1000000 : 0
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: false
-        // The toolbar and the keyboard under it cover the bottom of the list.
-        bottomMargin: Math.max(0, editor.height - editor.toolbarTop)
-        // A block starting to be edited near the bottom must not stay hidden under them.
-        onBottomMarginChanged: {
-            if (editor.activeEditor && editor.activeEditor.activeFocus)
-                Qt.callLater(editor.ensureCaretVisible, editor.activeEditor)
-        }
+        // The toolbar docked on the editor's bottom edge covers the bottom of the list (the
+        // keyboard is below the editor: the shell lifts the view above it).
+        bottomMargin: editor.toolbarVisible && editor.dockHost === editor ? editor.toolbarHeight : 0
+        // A block starting to be edited near the bottom must not stay hidden under it.
+        onBottomMarginChanged: if (editor.toolbarVisible) editor.later(() => editor.ensureEditVisible())
         // No press delay: a Flickable that delays presses replays them on release without the
         // release for pointer handlers (Qt sends it only when an item grabbed the replayed press),
         // so a quick tap (< 90 ms) on block text, a link, a bullet or a fold arrow did nothing on
@@ -1068,6 +1139,8 @@ FocusScope {
             return
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        // Above the docked toolbar and the keyboard (it flips above its item when needed).
+        taskMenu.bottomMargin = menuBottomMargin()
         if (taskMenuBlock >= 0)
             controller.untrack(taskMenuBlock)
         taskMenuBlock = controller.trackBlock(row)
@@ -1112,7 +1185,7 @@ FocusScope {
             taskMenu.highlightStatus()
     }
     /// The touch toolbar's task button held down: the menu right above the button (the toolbar
-    /// sits on the keyboard, the window goes on under it).
+    /// is docked on the keyboard).
     function openTaskStatusMenuAbove(row, item) {
         if (!canHaveTaskStatus(row))
             return
@@ -1158,21 +1231,26 @@ FocusScope {
         controller: editor.controller
     }
 
-    // Touch UIs, from the first edit on (then kept: not created again for every edit). Latched
-    // here, not in `active`'s own binding: the Loader loads synchronously inside that binding, so
-    // an onLoaded that changed one of its inputs was a binding loop.
+    // The touch toolbar on the bottom edge of the dock host (the shell keeps it on the keyboard;
+    // a day of the journal stream docks it on the stream's frame, so it never scrolls with the
+    // day). Touch UIs, from the first edit on (then kept: not created again for every edit).
+    // Latched here, not in `active`'s own binding: the Loader loads synchronously inside that
+    // binding, so an onLoaded that changed one of its inputs was a binding loop. The Loader is
+    // the editor's (destroyed with it) even when it is shown in another item.
     onToolbarVisibleChanged: if (toolbarVisible) toolbarLoader.active = true
     Component.onCompleted: if (toolbarVisible) toolbarLoader.active = true
     Loader {
         id: toolbarLoader
+        objectName: "editToolbarSlot"
+        parent: editor.dockHost
         active: false
-        width: parent.width
+        visible: editor.toolbarVisible
+        y: editor.dockHost.height - height
+        width: editor.dockHost.width
+        height: editor.toolbarHeight
         z: 10
         sourceComponent: MobileEditToolbar {
             editor: editor
-            visible: editor.toolbarVisible
-            width: toolbarLoader.width
-            height: editor.toolbarHeight
         }
     }
 

@@ -9,10 +9,12 @@ import Brulion
 // prompt; the first edit creates the file — from the vault's journal template when there is one.
 //
 //   ContentJournalDay { date: model.date; path: model.path; exists: model.exists;
-//                       isToday: model.isToday; scroller: list }
+//                       isToday: model.isToday; scroller: journals; toolbarHost: journals }
 //
-// Caret visibility is the journal list's job (scroller.ensureVisible(item, rect)): scroll
-// requests of the embedded editor (keeping the caret above the keyboard toolbar) are passed on.
+// Caret visibility is the journal list's job (scroller.ensureVisible(item, rect)): the embedded
+// editor asks it instead of its own list (BlockEditor.scroller). The touch toolbar docks on
+// `toolbarHost` — the journal stream's frame, which does not scroll —, so it stays on the keyboard
+// while the list moves, and the day does not grow for it.
 // Ctrl+E (Markdown source) opens the day as a page in source mode instead of a source editor
 // inside the list. Fold state is kept per day like in PageView. Each day is shown in its own note
 // mode (its `brulion:` key, else the notebook's journal mode — outline by default): a day switched
@@ -27,6 +29,8 @@ FocusScope {
     required property bool isToday
     /// The journal list: ensureVisible(item, rect) and scrollBy(dy) (any object with them).
     property var scroller: null
+    /// Where the editor's touch toolbar docks (BlockEditor.toolbarHost); null: the day's editor.
+    property Item toolbarHost: null
     property bool compactHeader: Theme.compact
 
     /// This day's editor got the caret (JournalsView stops editing in the others).
@@ -67,9 +71,7 @@ FocusScope {
                                        : { view: "journal", date: day.date })
     }
     function keepCaretVisible() {
-        const edit = editor.activeEditor
-        if (day.scroller && edit && edit.activeFocus)
-            day.scroller.ensureVisible(edit, edit.cursorRectangle)
+        editor.ensureEditVisible()
     }
     function restoreFolds() {
         if (day._foldsRestored || !page.loaded)
@@ -268,14 +270,15 @@ FocusScope {
         objectName: "journalDayEditor"
         y: emptyPrompt.active ? emptyPrompt.y + emptyPrompt.height : headerRow.height
         width: day.width
-        // As tall as the blocks: the journal list scrolls, not this editor. On touch UIs the
-        // editing toolbar (on the keyboard, else at the editor's bottom) gets its own room.
-        // An empty day shows the prompt instead (the editor stays for its geometry, which the
-        // heading and the prompt use).
-        height: day.empty && page.editingRow < 0 ? 0
-                : editor.listView.contentHeight + editor.listView.y
-                  + (editor.toolbarVisible ? editor.toolbarHeight : 0)
+        // As tall as the blocks: the journal list scrolls, not this editor (the touch toolbar is
+        // docked on the stream's frame, not in the day). An empty day shows the prompt instead
+        // (the editor stays for its geometry, which the heading and the prompt use).
+        height: day.empty && page.editingRow < 0 ? 0 : editor.listView.contentHeight + editor.listView.y
         autoHeight: true
+        scroller: day.scroller
+        toolbarHost: day.toolbarHost
+        // A table cell being edited makes this the active day too (its toolbar shows).
+        onEditingTableChanged: if (editingTable) day.activated()
         // The editor has its width from the start (a binding, not a layout's polish), so its
         // blocks are laid out at their final width right away.
         controller: page
@@ -292,8 +295,8 @@ FocusScope {
         documentInset: Workspace.config.journalMode === "document" ? 0 : outlineGutter
     }
 
-    // Scroll requests of the embedded editor (its list is exactly as tall as its content) go to
-    // the journal list instead.
+    // The embedded editor's list is exactly as tall as its content: what still scrolls it
+    // (positioning a row) scrolls the journal list instead.
     Connections {
         target: editor.listView
         function onContentYChanged() {
@@ -305,9 +308,5 @@ FocusScope {
             if (day.scroller)
                 day.scroller.scrollBy(delta)
         }
-    }
-    Connections {
-        target: editor.activeEditor
-        function onCursorRectangleChanged() { day.keepCaretVisible() }
     }
 }

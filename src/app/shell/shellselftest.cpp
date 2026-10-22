@@ -1575,6 +1575,95 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
+/// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
+///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
+///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
+///     keeps the navigation away until the editing stops.
+void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
+{
+    auto *insets = engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
+    auto *nav = window->findChild<QQuickItem *>(u"shellBottomNav"_s);
+    auto *room = window->findChild<QQuickItem *>(u"shellKeyboardRoom"_s);
+    auto *capture = window->findChild<QObject *>(u"shellCapture"_s);
+    if (!insets || !nav || !room || !capture) {
+        check(false, "the keyboard's room, the bottom navigation and quick capture exist");
+        return;
+    }
+    const qreal keyboard = 300;
+    const qreal top = window->height() - keyboard;
+    const auto near = [](qreal a, qreal b) { return qAbs(a - b) <= 1; };
+    app->goHome();
+    check(waitFor([&] { return nav->isVisible(); }), "the bottom navigation shows without a keyboard");
+
+    insets->setProperty("simulated", keyboard);
+    check(waitFor([&] { return !nav->isVisible() && near(room->mapToScene(QPointF(0, 0)).y(), top); }),
+          "a keyboard comes up: the bottom navigation makes way, the view ends at the keyboard's top");
+
+    // A toast while the keyboard is up: above it.
+    app->toast(u"Zapisano notatkę „Żółw”"_s, u"info"_s);
+    QQuickItem *toast = nullptr;
+    check(waitFor([&] {
+              toast = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToast_"); });
+              return toast && toast->mapToScene(QPointF(0, toast->height())).y() <= top + 1;
+          }),
+          "a toast sits above the keyboard");
+
+    // Quick capture (a bottom sheet on phones) sits on the keyboard.
+    app->requestUiAction(u"capture"_s);
+    check(waitFor([&] {
+              return capture->property("opened").toBool()
+                     && near(capture->property("y").toReal() + capture->property("height").toReal(), top);
+          }),
+          "quick capture's sheet sits on the keyboard");
+    sendKey(window, Qt::Key_Escape);
+    waitFor([&] { return !capture->property("visible").toBool(); });
+
+    insets->setProperty("simulated", 0);
+    check(waitFor([&] {
+              return nav->isVisible() && near(nav->mapToScene(QPointF(0, nav->height())).y(), window->height());
+          }),
+          "the keyboard goes: the bottom navigation is back at the window's bottom");
+
+    // Editing with the keyboard hidden by the system: the toolbar stays docked, no navigation.
+    const QString guide = u"Witaj w Brulionie.md"_s;
+    app->openPage(guide);
+    QQuickItem *editor = nullptr;
+    QObject *page = nullptr;
+    check(waitFor([&] {
+              for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+                  auto *c = e->property("controller").value<QObject *>();
+                  if (c && c->property("path").toString() == guide && c->property("loaded").toBool()
+                      && e->isVisible()) {
+                      editor = e;
+                      page = c;
+                  }
+              }
+              return editor != nullptr;
+          }),
+          "the guide opens");
+    if (editor && page) {
+        int row = -1;
+        QMetaObject::invokeMethod(page, "lastVisibleRow", qReturnArg(row));
+        QMetaObject::invokeMethod(editor, "startEditing", QVariant(row), QVariant(-1));
+        check(waitFor([&] { return editor->property("toolbarVisible").toBool() && !nav->isVisible(); }),
+              "editing with the keyboard hidden: the toolbar is docked and the bottom navigation stays away");
+        // (No keyboard and no navigation bar here: the view, and the toolbar, end at the window's
+        // bottom.)
+        QQuickItem *slot = nullptr;
+        for (QQuickItem *candidate : window->findChildren<QQuickItem *>(u"editToolbarSlot"_s)) {
+            if (candidate->isVisible() && editor->isAncestorOf(candidate))
+                slot = candidate;
+        }
+        // (Laid out with the shell's next polish.)
+        check(waitFor([&] { return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); }),
+              "the docked toolbar sits on the bottom edge of the view");
+        QMetaObject::invokeMethod(page, "stopEditing");
+        check(waitFor([&] { return nav->isVisible(); }), "editing stops: the bottom navigation is back");
+    }
+    insets->setProperty("simulated", -1);
+    app->goHome();
+}
+
 int runChecks(QQmlApplicationEngine *engine, AppController *app)
 {
     int failures = 0;
@@ -1927,7 +2016,12 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                         const QRectF r = edit->property("cursorRectangle").toRectF();
                         return edit->mapToItem(editor, r.bottomLeft()).y();
                     };
-                    check(editorFocused() && waitFor([&] { return caretBottom() <= editor->property("toolbarTop").toReal() + 0.5; }),
+                    const auto visibleBottom = [editor] {
+                        double bottom = 0;
+                        QMetaObject::invokeMethod(editor, "visibleBottom", qReturnArg(bottom));
+                        return bottom;
+                    };
+                    check(editorFocused() && waitFor([&] { return caretBottom() <= visibleBottom() + 0.5; }),
                           "a block edited at the bottom of a phone screen is not hidden under the toolbar");
                     QMetaObject::invokeMethod(page, "stopEditing");
                 } else {
@@ -1974,6 +2068,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkPictureView(window, app, check, controllerFor);
             // 5e. The default reminder time set on a clock in the settings.
             checkSettingsClock(window, app, check);
+            // 5f. The on-screen keyboard (phones).
+            if (window->width() < 900)
+                checkKeyboard(engine, window, app, check);
         } else {
             check(false, "the page view has an editor");
         }

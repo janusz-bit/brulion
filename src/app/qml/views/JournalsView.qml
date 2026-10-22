@@ -15,8 +15,10 @@ import Brulion
 //   route "journal" ({date, path?, source?}): one day as a page (PageView: header with the day
 //     arrows, backlinks, side panel); a day without a note opens with the journal template and
 //     is created by the first change (never just by looking at it).
+// The touch toolbar of the day being edited docks on the stream's frame (`journals`), which the
+// shell keeps on the keyboard: it never scrolls with the days, and the caret is kept above it.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (one day: its date), `sidePanel` and `editing`.
+// (one day: its date), `sidePanel`, `editing` and `toolbarDocked`.
 FocusScope {
     id: root
 
@@ -32,6 +34,9 @@ FocusScope {
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
                                            : (activeDay !== null && activeDay.editing)
+    /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
+    readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
+                                                 : (activeDay !== null && activeDay.editor.toolbarVisible)
     readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
 
     focus: true
@@ -85,23 +90,29 @@ FocusScope {
         FocusScope {
             id: journals
 
-            /// Keep `rect` of `item` (a caret) visible above the keyboard and the editing toolbar.
+            /// The toolbar of the day being edited is docked on this frame's bottom edge.
+            readonly property bool toolbarDocked: root.activeDay !== null && root.activeDay.editor.toolbarVisible
+            /// Where the list scrolls (the autocomplete popup of a day follows it).
+            readonly property real contentY: list.contentY
+
+            /// Keep `rect` of `item` (a caret, a table cell) visible above the editing toolbar —
+            /// the frame ends at the keyboard (the shell lifts it). Not while the keyboard slides:
+            /// the day's editor asks again once it has settled.
             function ensureVisible(item, rect) {
-                if (!item)
+                if (!item || KeyboardInsets.animating)
                     return
                 const p = item.mapToItem(list.contentItem, rect.x, rect.y)
                 const margin = Theme.space8
-                let bottom = list.height
-                const kb = Qt.inputMethod.keyboardRectangle
-                if (Qt.inputMethod.visible && kb.height > 0)
-                    bottom = Math.min(bottom, list.mapFromItem(null, 0, kb.y / Screen.devicePixelRatio).y)
-                if (Theme.touchUi)
-                    bottom -= Theme.touchTarget + Theme.space2 + 1 // the editing toolbar
+                const bottom = list.height - (toolbarDocked ? Theme.editToolbarHeight : 0)
                 const top = p.y - list.contentY
                 if (top < margin)
                     list.contentY = Math.max(list.originY, p.y - margin)
                 else if (top + rect.height > bottom - margin)
                     list.contentY = p.y + rect.height - bottom + margin
+            }
+            function keepCaretInView() {
+                if (root.activeDay)
+                    root.activeDay.keepCaretVisible()
             }
             function scrollBy(dy) {
                 list.contentY = Math.max(list.originY, list.contentY + dy)
@@ -169,8 +180,18 @@ FocusScope {
                 // of the day being edited (tst_content_journals_qml).
                 currentIndex: -1
                 boundsBehavior: Flickable.StopAtBounds
-                // Room for the floating capture button on phones.
-                bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space12
+                // Room for the floating capture button on phones, and for the docked toolbar.
+                bottomMargin: (Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space12)
+                              + (journals.toolbarDocked ? Theme.editToolbarHeight : 0)
+                // The frame shrinks with the keyboard: the caret stays in view (growing, it covers
+                // nothing: the list stays where the user scrolled it).
+                property real lastHeight: 0
+                onHeightChanged: {
+                    const shrank = height < lastHeight - 0.5
+                    lastHeight = height
+                    if (shrank && journals.toolbarDocked)
+                        Qt.callLater(journals.keepCaretInView)
+                }
                 spacing: 0
                 keyNavigationEnabled: false
                 // No press delay: a Flickable that delays presses replays them on release without the
@@ -260,6 +281,7 @@ FocusScope {
                         exists: dayItem.exists
                         isToday: dayItem.isToday
                         scroller: journals
+                        toolbarHost: journals
                         onActivated: {
                             if (root.activeDay && root.activeDay !== dayView) {
                                 root.activeDay.controller.stopEditing()

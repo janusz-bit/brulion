@@ -77,9 +77,14 @@ T.Popup {
     focus: true
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
     width: fullScreen ? overlayWidth : Math.min(640, overlayWidth - 2 * Theme.space6)
-    height: fullScreen ? overlayHeight : Math.min(implicitHeight, overlayHeight * 0.72)
+    // Its results end above the on-screen keyboard.
+    height: fullScreen ? overlayHeight - KeyboardInsets.overlap
+                       : Math.max(0, Math.min(implicitHeight, overlayHeight * 0.72,
+                                              overlayHeight - KeyboardInsets.overlap - topEdge - Theme.space2))
     x: Math.round((overlayWidth - width) / 2)
-    y: fullScreen ? 0 : Math.round(overlayHeight * 0.12)
+    y: topEdge
+    /// Its top edge (not `y`, which the popup keeps inside the window by its height).
+    readonly property real topEdge: fullScreen ? 0 : Math.round(overlayHeight * 0.12)
     padding: 0
 
     implicitHeight: searchRow.implicitHeight + 1 + Math.min(list.contentHeight + 12, 420)
