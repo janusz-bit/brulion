@@ -103,7 +103,8 @@ Service worker (offline) działa tylko na `https://` oraz na `localhost`/`127.0.
 Parametry adresu (do debugowania):
 
 * `?nosw` — nie rejestruj service workera.
-* `?selftest=storage`, `?selftest=notify`, `?selftest=storage,notify` — testy (niżej).
+* `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=storage,notify` —
+  testy (niżej).
 
 Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
 serwując `site/` (`http://127.0.0.1:8000/brulion/`).
@@ -136,6 +137,10 @@ Pozostałe opcje:
 * `--notify` — nadaje stronie zgodę na powiadomienia, aplikacja (`?selftest=notify`) pokazuje
   powiadomienie testowe, skrypt je „klika” i sprawdza, że kliknięcie (id, ścieżka, linia)
   dotarło do C++ (`WasmNotifier::activated`).
+* `--glyphs` — `?selftest=glyphs`: aplikacja sprawdza, czy zapasowe czcionki (niżej,
+  „Czcionki: emoji i symbole”) są zainstalowane i rysują wszystkie emoji i symbole Brulionu
+  bez pustych kwadratów (`window.brulionGlyphSelfTest`: dla każdej czcionki znaki rysowane jako
+  kwadraty przed i po instalacji). CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
@@ -315,7 +320,8 @@ Dlatego aplikacja zawiera dwie małe czcionki zapasowe z `assets/fonts/` (fragme
 i Noto Sans Math, licencja SIL OFL 1.1, robione przez `scripts/fallback-fonts.py`) i w
 przeglądarce zawsze instaluje je przy starcie jako czcionki zapasowe: tekst zostaje w DejaVu, a
 tylko brakujące znaki biorą się z nich. Emoji są jednokolorowe, w kolorze tekstu. Szczegóły,
-zasady na innych platformach i lista znaków: docs/UI.md, „Emoji and symbol fonts”.
+zasady na innych platformach i lista znaków: docs/UI.md, „Emoji and symbol fonts”. Test:
+`scripts/wasm-smoke.mjs --glyphs`.
 
 ## Rozmiar
 

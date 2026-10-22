@@ -313,6 +313,10 @@ int main(int argc, char *argv[])
                                   u"error"_s);
         },
         Qt::SingleShotConnection);
+    // ?selftest=glyphs (scripts/wasm-smoke.mjs --glyphs): did the fallback fonts load and draw
+    // Brulion's emoji and symbols?
+    if (args.contains(u"--selftest-glyphs"_s))
+        wasm::publishSelfTestResult("brulionGlyphSelfTest", brulion::ui::fallbackFontsJson(fallbackFonts));
     wasm::setShellStage(wasm::ShellStage::LoadingNotes);
     storage.start();
 #else

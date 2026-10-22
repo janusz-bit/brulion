@@ -632,11 +632,12 @@ fonts drew ⏰🔔… as boxes") and warns about boxes left. Tests (`tests/app/f
 `src/` is in the probe and in the font, so a new emoji without a regenerated font fails; the box
 check; installing removes the boxes in the default, serif and fixed fonts while letters keep
 their font, and no requested family (nor an unknown one) gets one of these as its font;
-`tst_fallback_fonts_when_missing` — the Linux policy; `tst_fallback_fonts_browser_fonts(_when_missing)`
-— the same with a fontconfig that knows only DejaVu Sans and DejaVu Sans Mono, the browser's
-fonts (there the emoji are boxes first, and lines with emoji keep their height). A new emoji in
-the UI or the syntax: add it to `brulionEmoji()`, re-run `scripts/fallback-fonts.py` (it takes every emoji of
-`src/` by itself), commit `assets/fonts/`.
+`tst_fallback_fonts_when_missing` — the Linux policy; `tst_fallback_fonts_browser_fonts` and
+`…_browser_fonts_when_missing` — the same with a fontconfig that knows only DejaVu Sans and
+DejaVu Sans Mono, the browser's fonts (there the emoji are boxes first, and lines with emoji keep
+their height). In the browser: `scripts/wasm-smoke.mjs --glyphs` (`?selftest=glyphs`,
+docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, re-run
+`scripts/fallback-fonts.py` (it takes every emoji of `src/` by itself), commit `assets/fonts/`.
 
 ## Dev tools, screenshots and UI tests
 
