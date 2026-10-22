@@ -1,5 +1,6 @@
 #include "platform.h"
-#include "ui/devtools.h" // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
+#include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
+#include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
@@ -160,6 +161,31 @@ int main(int argc, char *argv[])
     if (translator.load(QStringLiteral(":/i18n/brulion_") + devTools.language() + QStringLiteral(".qm")))
         QCoreApplication::installTranslator(&translator);
     devTools.setTranslator(&translator);
+
+    // Emoji and symbols where the system has no font for them (ui/fallbackfonts.h), before any
+    // text is laid out: Qt for WebAssembly only has DejaVu Sans and DejaVu Sans Mono (every ⏰ 🔔
+    // 📅 was an empty box), some Linux systems have no emoji font, Android always has one.
+#ifndef Q_OS_ANDROID
+#ifdef Q_OS_WASM
+    const auto fallbackPolicy = brulion::ui::FallbackFontPolicy::Always;
+#else
+    const auto fallbackPolicy = brulion::ui::FallbackFontPolicy::WhenMissing;
+#endif
+    const QList<brulion::ui::FallbackFontReport> fallbackFonts =
+            brulion::ui::installFallbackFonts(fallbackPolicy, QGuiApplication::font());
+    for (const brulion::ui::FallbackFontReport &font : fallbackFonts) {
+        if (!font.missingAfter.isEmpty())
+            qCWarning(brulion::logging::lcApp).noquote() << u"Fallback font %1 %2: %3 still drawn as boxes"_s.arg(
+                    font.family, font.loaded ? u"installed"_s : u"not available"_s, font.missingAfter);
+        else if (font.installed && !font.missingBefore.isEmpty())
+            qCInfo(brulion::logging::lcApp).noquote()
+                    << u"Fallback font %1 installed: the system fonts drew %2 as boxes"_s.arg(font.family,
+                                                                                              font.missingBefore);
+        else
+            qCDebug(brulion::logging::lcApp).noquote()
+                    << u"Fallback font %1 %2"_s.arg(font.family, font.installed ? u"installed"_s : u"not needed"_s);
+    }
+#endif
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 

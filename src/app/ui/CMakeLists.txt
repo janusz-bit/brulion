@@ -27,6 +27,24 @@ target_link_libraries(brulion_ui_touch PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
 qt_extract_metatypes(brulion_ui_touch)
 brulion_set_warnings(brulion_ui_touch)
 
+# brulion_ui_fonts — the fallback fonts for emoji and symbols (fallbackfonts.h; assets/fonts,
+# subsets of Noto Emoji and Noto Sans Math under the SIL OFL 1.1, made by
+# scripts/fallback-fonts.py) as resources ":/fonts/Brulion*.{ttf,otf}" (~165 KB, ~106 KB
+# compressed). Android leaves them out: it always has an emoji font, and the app never loads them
+# there. A static library so that tests/app/fonts checks them without the app.
+qt_add_library(brulion_ui_fonts STATIC
+    fallbackfonts.h fallbackfonts.cpp
+)
+target_include_directories(brulion_ui_fonts PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_fonts PUBLIC Qt6::Gui)
+if(NOT ANDROID)
+    qt_add_resources(brulion_ui_fonts brulion_fallback_fonts
+        PREFIX /fonts
+        BASE ${PROJECT_SOURCE_DIR}/assets/fonts
+        FILES ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionEmoji.ttf ${PROJECT_SOURCE_DIR}/assets/fonts/BrulionMath.otf)
+endif()
+brulion_set_warnings(brulion_ui_fonts)
+
 # Qt's own Polish texts (standard dialog buttons, QtQuick.Dialogs, QFileDialog — QtTranslations):
 # qtbase_pl.qm and qtdeclarative_pl.qm from Qt's translations folder, bundled as resources
 # ":/i18n/qt/…" so Android and the browser have them too. The folder: BRULION_QT_TRANSLATIONS_DIR

@@ -564,7 +564,79 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   `QML_ATTACHED` itself (Qt resolves `qmlAttachedProperties` on the registered class), the app's
   wrapper in `qmlforeign.h` gives it its QML name.
 * **Icons**: Lucide SVGs in `assets/icons/` (see its LICENSE), `BIcon { name: "bell" }`.
-  New icons: copy from `lucide-static`, normalise like the others, re-run CMake.
+  New icons: copy from `lucide-static`, normalise like the others, re-run CMake. They render
+  everywhere, the browser included (the SVG plugin is linked statically there; `BIcon` recolours
+  on the CPU, no shader effect).
+* **Emoji and symbol fonts** (`src/app/ui/fallbackfonts.h`, see below).
+
+### Emoji and symbol fonts
+
+Brulion writes emoji into notes and shows them in the UI: ⏰ reminders, 🔔 alarms in rendered
+blocks, the task fields 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕ 🆔 ⛔ 🏁, ⧉ before block embeds,
+setting descriptions and hints ("⏰ jutro 9:00"). Text never draws them itself: Qt takes each
+character the text's font lacks from a fallback font, and where no font has it, it draws the
+font's missing-glyph box.
+
+**The browser bug** ("white empty squares instead of the bells"): Qt for WebAssembly has no
+system fonts. It brings exactly two, DejaVu Sans and DejaVu Sans Mono
+(`qwasmfontdatabase.cpp`; fonts of the computer only with the Local Font Access API, which Qt
+asks for only on request and which only Chromium has), and DejaVu has none of Brulion's emoji
+— every one of them came out as DejaVu's hollow box, white in the dark theme. ⧉ and some rare
+LaTeX symbols were boxes too. The Lucide icons (`BIcon`) were never affected.
+
+**The fix**: two small fonts in `assets/fonts/` (SIL Open Font License 1.1, `OFL.txt`; sources
+and SHA-256 in its `README.md`), made by `scripts/fallback-fonts.py` from the fonts of the
+nixpkgs that `flake.lock` pins:
+
+* `BrulionEmoji.ttf` ("Brulion Emoji", 157 KB, ~100 KB compressed): Noto Emoji (monochrome,
+  instanced at weight 400), every emoji of `src/` plus ~300 common ones (faces, hearts, hands,
+  notes and work, time and status, a few places, weather, food, activities; single code
+  points — no skin tones, flags or ZWJ sequences). Monochrome glyphs take the text colour, so
+  they look like the rest of the UI.
+* `BrulionMath.otf` ("Brulion Math", 9 KB): Noto Sans Math, the non-emoji characters of `src/`
+  that DejaVu Sans lacks (⧉ ⌢ ⌣ ⎰ ⎱ ⟮ ⟯ ⨄ ⨆ ⨿ 𝒜).
+
+Both carry their own family names and DejaVu Sans's vertical metrics (Noto Sans Math's are half
+as tall again), so a line with a fallback glyph is no taller than one without. `main.cpp`
+installs them right after the application object, before any text is laid out
+(`installFallbackFonts()`):
+
+* the emoji font as the application emoji family: Qt ≥ 6.9 lays out emoji sequences as runs of
+  their own whose fallbacks are the emoji families, colour fonts first;
+* both as application fallback families of Common text (Qt files Latin under it, and gives a
+  symbol the script of the text around it: "Spotkanie ⏰ jutro" is one Latin run), **behind the
+  app's default family**: `[default family, Brulion Emoji, Brulion Math, the system's…]`;
+* first, the families Brulion asks for — the default font, the system fixed font, `serif`
+  (`Theme.fontSerif`), `sans-serif` and `monospace` (formula spans) — are pinned to the fonts
+  Qt resolves them to (`QFont::insertSubstitution`). Qt gives a family name that is no installed
+  family ("serif" in the browser, fontconfig's generic names) the first font of its fallback
+  list; without the pin and the default family at its head, the browser's editor text got Brulion
+  Math as its font (its line metrics moved every block down a few pixels).
+
+Text keeps its own font; only the characters it lacks come from these (tested per character).
+Policies:
+
+* **Browser**: both, always (`FallbackFontPolicy::Always`).
+* **Linux** (packages, AppImage): both only when the system's fonts draw some of
+  `brulionEmoji()` as boxes (`WhenMissing`: one `QTextLayout` of the probe, ~11 ms cold on the
+  reference laptop, most of it loading the system emoji font that the first emoji would load
+  anyway); otherwise nothing changes, and a colour emoji font of the system (Noto Color Emoji,
+  Twemoji…) keeps drawing the emoji. An AppImage on a system without an emoji font thus gets
+  monochrome emoji instead of boxes. The symbols are not looked for first (that costs ~15 ms of
+  fontconfig searching): a system with an emoji font has them too.
+* **Android**: none — it always has Noto Color Emoji; its build leaves the fonts out.
+
+The event log notes a font that fixed boxes ("Fallback font Brulion Emoji installed: the system
+fonts drew ⏰🔔… as boxes") and warns about boxes left. Tests (`tests/app/fonts`):
+`tst_fallback_fonts` — both fonts cover their probes and have DejaVu's metrics; every emoji in
+`src/` is in the probe and in the font, so a new emoji without a regenerated font fails; the box
+check; installing removes the boxes in the default, serif and fixed fonts while letters keep
+their font, and no requested family (nor an unknown one) gets one of these as its font;
+`tst_fallback_fonts_when_missing` — the Linux policy; `tst_fallback_fonts_browser_fonts(_when_missing)`
+— the same with a fontconfig that knows only DejaVu Sans and DejaVu Sans Mono, the browser's
+fonts (there the emoji are boxes first, and lines with emoji keep their height). A new emoji in
+the UI or the syntax: add it to `brulionEmoji()`, re-run `scripts/fallback-fonts.py` (it takes every emoji of
+`src/` by itself), commit `assets/fonts/`.
 
 ## Dev tools, screenshots and UI tests
 
