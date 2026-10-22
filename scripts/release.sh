@@ -23,7 +23,7 @@
 #                (CMake and the Android versionName keep 0.2.0)
 #   major|minor|patch  bump that part of the current version (refused while the current version
 #              has pre-releases but no release: give the version itself)
-#   --push    then push main, release and the tag, atomically:
+#   --push     then push main, release and the tag, atomically:
 #              git push --atomic origin main release refs/tags/v<version>
 #   --yes      do not ask for confirmation
 #   --dry-run  show what a real run would do and what it would refuse; change nothing (no fetch:
