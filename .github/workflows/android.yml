@@ -1,7 +1,9 @@
 # Signed Android APK (artifact "brulion-android-apk") built with scripts/android-build.sh
 # (Qt 6.11.2 for Android via aqt, NDK r27c, JDK 21, Kotlin unit tests + Android lint; R8 and
 # OpenSSL 3 for HTTPS, which CMake downloads from KDAB/android_openssl at the commit and SHA-256
-# sums pinned in src/app/CMakeLists.txt) — see docs/ANDROID.md. Also called by release.yml.
+# sums pinned in src/app/CMakeLists.txt) — see docs/ANDROID.md. Runs by hand, for a push to main
+# with "[ci]" in a commit message (and changes in the paths below; see the job's `if`), and from
+# release.yml.
 # Release signing uses the repository secrets QT_ANDROID_KEYSTORE_BASE64,
 # QT_ANDROID_KEYSTORE_STORE_PASS, QT_ANDROID_KEYSTORE_KEY_PASS and QT_ANDROID_KEYSTORE_ALIAS
 # (create them with scripts/android-new-keystore.sh). Without them the APK is signed with a
@@ -73,6 +75,7 @@ env:
 jobs:
   apk:
     name: Build APK
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     outputs:

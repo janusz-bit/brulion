@@ -163,14 +163,17 @@ Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez Swif
 
 ### GitHub Pages
 
-Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): każdy push na `main`
-(zmiany w `src/`, `wasm/`…) buduje stronę `scripts/wasm-build.sh --setup`, uruchamia test
-dymny w Chrome pod ścieżką `/brulion/` (start, trwałość po przeładowaniu i restarcie
-przeglądarki, pełny indeks 3000 notatek bez żadnego wejścia, start offline z service workera)
-i wdraża `dist-wasm/` na GitHub Pages.
-Jednorazowo: *Settings → Pages → Build and deployment → Source: GitHub Actions*. Ten sam
-workflow wywołany z `release.yml` tylko buduje (`brulion-web-<wersja>.zip` w wydaniu), bez
-wdrożenia.
+Robi to `.github/workflows/wasm.yml` (opis: `docs/RELEASE.md`): buduje stronę
+`scripts/wasm-build.sh --setup`, uruchamia test dymny w Chrome pod ścieżką `/brulion/` (start,
+trwałość po przeładowaniu i restarcie przeglądarki, pełny indeks 3000 notatek bez żadnego
+wejścia, start offline z service workera) i wdraża `dist-wasm/` na GitHub Pages. Sam z siebie
+nie startuje przy każdym pushu: uruchamia się go ręcznie z `main` albo pushem na `main`
+ze znacznikiem `[ci]` w opisie commita (i zmianami w `src/`, `wasm/`…). Wywołany
+z `release.yml` buduje `brulion-web-<wersja>.zip` do wydania, a po publikacji wydania
+`release.yml` wdraża tę samą stronę na Pages — strona to więc ostatnie wydanie (wydanie
+testowe jej nie zmienia), chyba że ktoś ręcznie wdroży nowszy `main`.
+Jednorazowo: *Settings → Pages → Build and deployment → Source: GitHub Actions* oraz
+*Settings → Environments → github-pages → Deployment branches and tags*: `main` i tag `v*`.
 
 GitHub Pages serwuje `.wasm` jako `application/wasm`; kompresją i nagłówkami cache
 (`max-age=600`) steruje GitHub — czy `.wasm` przychodzi skompresowany, widać w nagłówku

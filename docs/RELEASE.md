@@ -3,15 +3,27 @@
 Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryptami z `scripts/`
 (na Raspberry Pi tylko przez `laptop-run` — patrz CLAUDE.md).
 
+Testy w GitHub Actions nie startują same przy każdym pushu. Uruchamia się je:
+
+* **ręcznie** — Actions → wybrany workflow → *Run workflow*, albo
+  `gh workflow run ci.yml --ref main` (tak samo `android.yml`, `appimage.yml`,
+  `wasm.yml -f deploy=false`);
+* **znacznikiem `[ci]`** w opisie któregoś z wypychanych commitów na `main` (np.
+  `git commit -m "Poprawka eksportu [ci]"`) — wtedy rusza `ci.yml`, a `android.yml`,
+  `appimage.yml` i `wasm.yml`, gdy push zmienia ich ścieżki; push bez znacznika pokazuje się
+  w Actions jako przebieg z pominiętymi zadaniami;
+* **zawsze przy wydaniu** — `release.yml` uruchamia `ci.yml` i wszystkie buildy z ich testami,
+  a wydanie publikuje dopiero, gdy wszystko przejdzie.
+
 ## Workflowy
 
 | Plik | Kiedy | Co robi |
 |---|---|---|
-| `.github/workflows/ci.yml` | każdy push na `main` i `release`, każdy pull request | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
-| `.github/workflows/android.yml` | push na `main` (zmiany w `src/`, `android/`…), ręcznie, z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
-| `.github/workflows/wasm.yml` | push na `main` (zmiany w `src/`, `wasm/`…), ręcznie, z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** |
-| `.github/workflows/appimage.yml` | push na `main` (zmiany w `src/`, `tests/`…), ręcznie, z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
-| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia trzy powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie |
+| `.github/workflows/ci.yml` | ręcznie, push na `main` ze znacznikiem `[ci]`, z `release.yml` | **nix** (x86_64 i aarch64): `nix flake check` + `nix build .#brulion` (pakiet bez testów — `doCheck = false`, testy są w zadaniu **linux**; test VM `web-vm` wymaga KVM — runner bez `/dev/kvm` buduje pozostałe checki i pomija go z ostrzeżeniem); **linux**: CMake + Qt 6.11.2 z aqt (`jurplel/install-qt-action`), `-DBRULION_WERROR=ON`, AddressSanitizer + UBSan, `ctest`, `qmllint` (tylko ostrzeżenia); **lint**: actionlint, shellcheck `scripts/*.sh` i `tests/scripts/*.sh`, clang-format zmienionych linii; **perf** (nie blokuje): `scripts/perf-check.sh -s` na suitach benchmarków w Release — skalowanie czasu z rozmiarem danych i pamięć indeksu, bez bezwzględnych czasów; regresja daje ostrzeżenie i podsumowanie, wyniki jako artefakt `perf-smoke` (docs/PERFORMANCE.md) |
+| `.github/workflows/android.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `android/`…), z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
+| `.github/workflows/wasm.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `wasm/`…), z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** (wydanie wdraża swoją wersję po publikacji) |
+| `.github/workflows/appimage.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`…), z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
+| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml`), trzy powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i wdraża jego wersję przeglądarkową na GitHub Pages (wydanie testowe nie) |
 
 Wersje narzędzi są przypięte w skryptach (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
 4.0.7, linuxdeploy z sumami SHA-256); `dependabot.yml` co miesiąc aktualizuje akcje GitHuba
@@ -22,8 +34,10 @@ wersji pobierają się raz od nowa).
 
 Styl kodu opisuje `.clang-format` (clang-format 21 z `nix develop`); `.clang-format-ignore`
 wyłącza kod obcy i pliki z JavaScriptem w `EM_JS`. CI sprawdza **tylko zmienione linie**
-(`git clang-format`) — istniejący kod nie jest przeformatowywany hurtem. W pull requestach
-różnica w formatowaniu jest błędem, przy pushu na `main` tylko ostrzeżeniem. Przed commitem:
+(`git clang-format`) — istniejący kod nie jest przeformatowywany hurtem: przy pushu ze
+znacznikiem `[ci]` linie wypchniętych commitów, przy ręcznym uruchomieniu linie zmienione od
+ostatniego wydania, przy wydaniu — od poprzedniego. Różnica w formatowaniu jest tylko
+ostrzeżeniem. Przed commitem:
 
 ```sh
 nix develop -c git clang-format          # formatuje linie zmienione względem HEAD
@@ -32,7 +46,10 @@ nix develop -c git clang-format          # formatuje linie zmienione względem H
 ## Jednorazowa konfiguracja repozytorium
 
 1. **GitHub Pages:** Settings → Pages → Build and deployment → Source: **GitHub Actions**.
-   Wersja przeglądarkowa trafia pod `https://janusz-bit.github.io/brulion/`.
+   Wersja przeglądarkowa trafia pod `https://janusz-bit.github.io/brulion/`. Żeby wydanie
+   mogło ją wdrożyć: Settings → Environments → `github-pages` → *Deployment branches and
+   tags*: gałąź `main` i tag `v*` (z wiersza poleceń:
+   `gh api -X POST repos/janusz-bit/brulion/environments/github-pages/deployment-branch-policies -f name='v*' -f type=tag`).
 2. **Klucz podpisu Androida:** `scripts/android-new-keystore.sh` tworzy klucz poza
    repozytorium i wypisuje polecenia `gh secret set` dla sekretów `QT_ANDROID_KEYSTORE_BASE64`,
    `QT_ANDROID_KEYSTORE_STORE_PASS`, `QT_ANDROID_KEYSTORE_KEY_PASS`, `QT_ANDROID_KEYSTORE_ALIAS`.
@@ -65,7 +82,7 @@ zbiera wszystkie zmiany wszystkich wersji — każde wydanie dodaje na jej pocz�
 `- [ ]`), bo to żywa notatka. `release.sh` ostrzega, gdy notatki się nie zmieniły albo gdy na
 liście brakuje sekcji wydawanej wersji (wydanie testowe jej nie potrzebuje).
 
-Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się GitHub Pages,
+Dzięki temu `main` zawsze ma wydaną wersję i jej notatki — z niego budują się
 `nix run github:janusz-bit/brulion` (flake bez taga) i artefakty CI (APK z main nie ma
 niższego `versionCode` niż wydany). Na `release` nie commitować niczego innego: poprawka do
 wydania to commit na main i kolejne wydanie. Do v0.3.4 wydania powstawały na main, a v0.3.5
@@ -133,8 +150,10 @@ Push taga uruchamia `release.yml`:
    szkic wydania z opisem z `.github/release-notes.md` (po polsku; `{{VERSION}}`,
    `{{FILE_VERSION}}`, `{{TAG}}`, `{{REPO}}`, `{{PAGES_URL}}` są podstawiane) i automatyczną
    listą zmian.
-2. Równolegle: **Android** (`android.yml`), **Linux** (`appimage.yml`), **Web**
-   (`wasm.yml`, bez wdrożenia na Pages) i **źródła** (`git archive`).
+2. Równolegle: **Tests** (`ci.yml`: build Nix x86_64 i aarch64, build z sanitizerami
+   i `ctest`, lint, pomiar wydajności), **Android** (`android.yml`), **Linux**
+   (`appimage.yml`), **Web** (`wasm.yml`, bez wdrożenia na Pages) i **źródła**
+   (`git archive`).
 3. **publish** — pliki do wydania:
    `brulion-<wersja>-arm64-v8a.apk`, `Brulion-<wersja>-x86_64.AppImage`,
    `Brulion-<wersja>-aarch64.AppImage` (+ `.zsync` do aktualizacji przez AppImageUpdate),
@@ -144,7 +163,10 @@ Push taga uruchamia `release.yml`:
    wskazuje, i że informacja o aktualizacji wbudowana w AppImage
    (`gh-releases-zsync|janusz-bit|brulion|latest|Brulion-*-<arch>.AppImage.zsync`) pasuje
    dokładnie do tego pliku — AppImageUpdate, Gear Lever i AppImageLauncher pobierają go
-   z najnowszego wydania.
+   z najnowszego wydania. Szkic czeka na wszystkie testy (**Tests**) i buildy.
+4. **pages** — opublikowane wydanie wdraża swoją wersję przeglądarkową (ten sam build co
+   `brulion-web-<wersja>.zip`) na GitHub Pages; wydanie testowe (`-rc.1`) i ręczne
+   uruchomienie z gałęzi (nie z taga) zostawiają stronę bez zmian.
 
 Nieudany build: „Re-run failed jobs” w zakładce Actions (szkic wydania jest używany
 ponownie). Ręczne uruchomienie (Actions → Release → Run workflow) dla istniejącego taga trzeba

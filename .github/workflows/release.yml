@@ -1,14 +1,16 @@
 # Release: push a tag v<version> (scripts/release.sh commits the version on main, merges main into
 # the release branch and tags that merge), or run this workflow by hand. It checks the tag
 # against the version in CMakeLists.txt and nix/package.nix, creates a draft GitHub release
-# (notes: .github/release-notes.md), builds
+# (notes: .github/release-notes.md), runs the tests (ci.yml — a push to main runs them only with
+# "[ci]" in a commit message, a release always; the builds below test themselves too), builds
 #   brulion-<version>-arm64-v8a.apk          Android (android.yml, signed with the release key)
 #   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
 #   brulion-<version>-source.tar.gz          the tagged sources (git archive)
 #   SHA256SUMS.txt
-# and publishes the release once every build succeeded. A tag with a suffix (v0.2.0-rc.1)
-# becomes a pre-release; the files carry the CMake version (0.2.0).
+# and publishes the release once the tests passed and every build succeeded; then the release's
+# browser version goes to GitHub Pages. A tag with a suffix (v0.2.0-rc.1) becomes a pre-release
+# (Pages keep the last release); the files carry the CMake version (0.2.0).
 name: Release
 
 on:
@@ -140,6 +142,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  tests:
+    name: Tests
+    needs: draft
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   appimage:
     name: Linux
     needs: draft
@@ -158,7 +167,8 @@ jobs:
   web:
     name: Web
     needs: draft
-    # wasm.yml's Pages deployment job needs these, although it does not run for releases.
+    # wasm.yml's Pages deployment job needs these, although it does not run for releases (the
+    # pages job below deploys the release's site once the release is published).
     permissions:
       contents: read
       pages: write
@@ -166,10 +176,11 @@ jobs:
     uses: ./.github/workflows/wasm.yml
     with:
       deploy: false
+      pages-artifact: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
 
   publish:
     name: Publish the release
-    needs: [draft, source, appimage, android, web]
+    needs: [draft, source, tests, appimage, android, web]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -221,3 +232,27 @@ jobs:
           url=$(gh api -X PATCH "repos/$GH_REPO/releases/$RELEASE_ID" -F draft=false --jq .html_url)
           echo "Published $url"
           echo "### Released [$TAG]($url)" >> "$GITHUB_STEP_SUMMARY"
+
+  pages:
+    name: Deploy the site to GitHub Pages
+    needs: [web, publish]
+    # From a tag only (the github-pages environment admits main and the tags v*), and not for a
+    # pre-release: the site stays at the last release.
+    if: github.ref_type == 'tag' && !contains(github.ref_name, '-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    # Shared with wasm.yml's deployment: one at a time, a running one is allowed to finish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

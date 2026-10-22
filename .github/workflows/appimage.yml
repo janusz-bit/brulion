@@ -1,7 +1,8 @@
 # Linux AppImages (artifacts "brulion-appimage-x86_64" and "brulion-appimage-aarch64": the
 # AppImage and its .zsync update file) built with scripts/appimage-build.sh: Qt 6.11.2 from aqt,
 # Release build, unit tests, linuxdeploy + linuxdeploy-plugin-qt, a headless start of the packed
-# app. Also called by release.yml.
+# app. Runs by hand, for a push to main with "[ci]" in a commit message (and changes in the paths
+# below; see the job's `if`), and from release.yml.
 # The AppImage runs where glibc is at least the build container's: Ubuntu 22.04 (glibc 2.35,
 # GCC 12 — the oldest compiler Brulion is built with) for x86_64; Qt's arm64 binaries need
 # glibc 2.38, so aarch64 builds on Ubuntu 24.04.
@@ -40,6 +41,7 @@ env:
 jobs:
   appimage:
     name: AppImage (${{ matrix.arch }})
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
     timeout-minutes: 60

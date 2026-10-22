@@ -1,8 +1,11 @@
 # Browser version (Qt 6.11.2 for WebAssembly, offline PWA) built with scripts/wasm-build.sh —
-# see docs/WEB.md. Every push to main deploys it to GitHub Pages
+# see docs/WEB.md. Runs by hand and for a push to main with "[ci]" in a commit message (and
+# changes in the paths below; see the build job's `if`); both deploy main to GitHub Pages
 # (https://<owner>.github.io/brulion/; the site uses relative URLs, so any base path works).
-# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
-# Also called by release.yml (deploy: false) for the brulion-web-<version>.zip release asset.
+# Also called by release.yml (deploy: false, pages-artifact) for the brulion-web-<version>.zip
+# release asset; release.yml deploys that site to GitHub Pages once the release is published.
+# One-time setup: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions", and
+# Settings -> Environments -> github-pages -> Deployment branches and tags: main and tag v*.
 name: Web
 
 on:
@@ -31,6 +34,10 @@ on:
         description: Deploy to GitHub Pages (from main only)
         type: boolean
         default: false
+      pages-artifact:
+        description: Upload the site as the GitHub Pages artifact for the caller to deploy
+        type: boolean
+        default: false
     outputs:
       artifact:
         description: Name of the uploaded workflow artifact (the site, dist-wasm/)
@@ -52,6 +59,7 @@ env:
 jobs:
   build:
     name: Build and test the site
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
@@ -143,7 +151,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - if: steps.deploy.outputs.deploy == 'true'
+      - if: steps.deploy.outputs.deploy == 'true' || inputs.pages-artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist-wasm/

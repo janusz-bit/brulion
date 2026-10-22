@@ -1,4 +1,7 @@
-# Checks for every push to main and release and every pull request:
+# Checks, run by hand (Actions -> CI -> Run workflow, or `gh workflow run ci.yml --ref <branch>`),
+# for a push to main with "[ci]" in one of its commit messages, and for every release:
+# release.yml calls this workflow and publishes the release only when it passes. A push to main
+# without the marker runs nothing (its run shows up with every job skipped):
 #  * nix     — `nix flake check` + `nix build .#brulion` (builds the package; tests run in linux) on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
@@ -12,17 +15,21 @@
 name: CI
 
 on:
+  # Every job has the same `if`: a push runs only with "[ci]" in a pushed commit's message.
+  # Under workflow_call the event is the caller's (release.yml: the push of a tag, or by hand).
   push:
-    branches: [main, release]
-  pull_request:
+    branches: [main]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
+# As in android.yml: github.workflow is the caller's name ("Release") under workflow_call, so a
+# run by hand never cancels the tests of a release.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
   QT_VERSION: 6.11.2
@@ -30,6 +37,7 @@ env:
 jobs:
   nix:
     name: Nix (${{ matrix.system }})
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
@@ -69,6 +77,7 @@ jobs:
 
   linux:
     name: Linux (Qt 6.11.2 from aqt, GCC, -Werror, sanitizers)
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -114,6 +123,7 @@ jobs:
 
   lint:
     name: Lint (actionlint, shellcheck, clang-format)
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -137,16 +147,19 @@ jobs:
       - name: shellcheck scripts/*.sh tests/scripts/*.sh
         run: shellcheck scripts/*.sh tests/scripts/*.sh
 
-      # Only the lines a push or pull request changes (the existing code is not reformatted
-      # wholesale). Pull requests fail on a diff; pushes to main only warn.
+      # Only the changed lines (the existing code is not reformatted wholesale): those of the
+      # pushed commits, by hand those since the last release, for a release those since the one
+      # before. A difference only warns.
       - name: clang-format (changed lines)
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          STRICT: ${{ github.event_name == 'pull_request' }}
+          BASE: ${{ github.event.before }}
         run: |
           if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ] ||
             ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            BASE=$(git rev-parse -q --verify HEAD~1 || true)
+            BASE=$(git merge-base HEAD origin/release 2>/dev/null || true)
+            if [ -z "$BASE" ] || [ "$BASE" = "$(git rev-parse HEAD)" ]; then
+              BASE=$(git rev-parse -q --verify HEAD~1 || true)
+            fi
           fi
           if [ -z "$BASE" ]; then
             echo "Nothing to compare with."
@@ -172,12 +185,10 @@ jobs:
             cat "$RUNNER_TEMP/format.diff"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$STRICT" = true ]; then
-            exit "$status"
-          fi
 
   perf:
     name: Performance smoke (scaling + memory, non-blocking)
+    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # A regression warns (annotation + job summary) but never blocks a merge: shared runners are
