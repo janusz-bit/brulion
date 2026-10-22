@@ -475,10 +475,13 @@ Where a formula is (in a block's inline text, after code spans and comments are 
   leaves the link a link.
   The formula is found in the block's text as the editor shows it: a list item's blank lines
   and code lines end an inline formula like a blank line.
-* `\$` is a literal dollar. `\(`, `\)`, `\[` and `\]` are ordinary escapes (literal brackets,
-  as the importers write them), not math delimiters — as in Obsidian. (Brulion 0.3.3–0.3.5
-  read `\(…\)` and `\[…\]` as formulas; such notes now show the brackets and should use
-  `$…$` / `$$…$$`.)
+* `\$` is a literal dollar: importers that write plain text (HTML, Evernote, Google Keep, Notion
+  databases, Trilium, iCalendar) escape the opening `$` of whatever would be a formula by these
+  rules, block by block (`Cena \$10, Netflix 15$`, `\$x$`); dollars that pair with nothing stay
+  as written, code and link targets are never changed. `\(`, `\)`, `\[` and `\]` are ordinary
+  escapes (literal brackets, as the importers write them), not math delimiters — as in
+  Obsidian. (Brulion 0.3.3–0.3.5 read `\(…\)` and `\[…\]` as formulas; such notes now show the
+  brackets and should use `$…$` / `$$…$$`.)
 
 Polish typography (display only, the file is unchanged): a one-letter word (`a`, `i`, `o`, `u`,
 `w`, `z`) never ends a line — the space after it is shown as a no-break space.
