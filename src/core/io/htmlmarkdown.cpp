@@ -1440,17 +1440,13 @@ void leaveOutLines(DollarScan &s, bool callout)
 }
 
 /// Mark as `fixed` what the editor reads as a link target, not as text: Markdown link and image
-/// destinations, autolinks and raw tags, wiki links, block references and bare URLs (their
-/// dollars are never escaped; they still pair with others, as in the editor). Line by line, in
-/// linear time: "<a<a<a…" or "[[[[…" without a closing one never search the rest again.
+/// destinations, autolinks, wiki links, block references and bare URLs, found by the editor's
+/// rules (markdown/inline.cpp: a bare URL is http(s) after a space or "(*_~\"'[>" and runs to a
+/// space, "<", ">", "\"" or a backtick; a raw HTML tag is text). Their dollars are never escaped;
+/// they still pair with others, as in the editor. Line by line, in linear time: "<a<a<a…" or
+/// "[[[[…" without a closing one never search the rest of the line again.
 void protectLinks(QStringView masked, QList<bool> &fixed)
 {
-    // Not a regular expression: QRegularExpression checks the whole subject on every match, which
-    // made a long line full of words quadratic.
-    const auto startsUrl = [](QStringView s) {
-        return s.startsWith(u"https://", Qt::CaseInsensitive) || s.startsWith(u"http://", Qt::CaseInsensitive)
-               || s.startsWith(u"ftp://", Qt::CaseInsensitive) || s.startsWith(u"www.", Qt::CaseInsensitive);
-    };
     /// The first `needle` at or after a position of the line (-1: none), remembered: the searches
     /// of a line go forward, so each one goes on where the last one stopped.
     struct Search {
@@ -1458,6 +1454,8 @@ void protectLinks(QStringView masked, QList<bool> &fixed)
         qsizetype from = -1;
         qsizetype at = -1;
     };
+    const auto urlPreceder = [](QChar c) { return c.isSpace() || QStringView(u"(*_~\"'[>").contains(c); };
+    const auto urlEnds = [](QChar c) { return c.isSpace() || QStringView(u"<>\"`").contains(c); };
     const qsizetype n = masked.size();
     for (qsizetype lineFrom = 0; lineFrom < n;) {
         qsizetype stop = masked.indexOf(u'\n', lineFrom);
@@ -1489,16 +1487,26 @@ void protectLinks(QStringView masked, QList<bool> &fixed)
                 const qsizetype close = find(paren, j);
                 end = close < 0 ? stop : close + 1;
             } else if (c == u'<' && next.isLetter()) {
-                const qsizetype close = find(gt, i);
-                end = close < 0 ? i + 1 : close + 1;
+                // An autolink (<https://…>, <name@host>); scanned up to the next "<" at most.
+                qsizetype j = i + 1;
+                bool target = false;
+                while (j < stop && masked[j] != u'>' && masked[j] != u'<' && !masked[j].isSpace()) {
+                    target = target || masked[j] == u':' || masked[j] == u'@';
+                    ++j;
+                }
+                if (target && j < stop && masked[j] == u'>')
+                    end = j + 1;
             } else if ((c == u'[' && next == u'[') || (c == u'(' && next == u'(')) {
                 const qsizetype close = find(c == u'[' ? brackets : parens, i + 2);
                 end = close < 0 ? i + 2 : close + 2;
-            } else if (c.isLetter() && (i == 0 || !masked[i - 1].isLetterOrNumber())
-                       && startsUrl(masked.sliced(i, std::min<qsizetype>(8, stop - i)))) {
-                end = i;
-                while (end < stop && !masked[end].isSpace() && masked[end] != u'<' && masked[end] != u'>')
-                    ++end;
+            } else if ((c == u'h' || c == u'H') && (i == lineFrom || urlPreceder(masked[i - 1]))) {
+                const QStringView rest = masked.sliced(i, std::min<qsizetype>(8, stop - i));
+                if (rest.startsWith(u"https://", Qt::CaseInsensitive)
+                    || rest.startsWith(u"http://", Qt::CaseInsensitive)) {
+                    end = i;
+                    while (end < stop && !urlEnds(masked[end]))
+                        ++end;
+                }
             }
             if (end > i) {
                 for (qsizetype k = i; k < end; ++k)

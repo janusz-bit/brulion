@@ -728,6 +728,14 @@ private Q_SLOTS:
                 << u"[[Plik $a|etykieta]] ((abc$)) <https://x.org/$1> https://x.org/b$ ![o](a$b.png)\n"_s;
         QTest::newRow("formula opened in a link")
                 << u"[a](https://x.org/$a) b$\n"_s << u"[a](https://x.org/$a) b\\$\n"_s;
+        // What the editor does not link is text: "www." and "ftp://" addresses, "http" right
+        // after a letter, what follows a URL's closing quote, a raw HTML tag.
+        QTest::newRow("no links but text") << u"www.x.org/$a$ i ftp://x/$b$ i zobaczhttps://x.org/$c$\n"_s
+                                           << u"www.x.org/\\$a$ i ftp://x/\\$b$ i zobaczhttps://x.org/\\$c$\n"_s;
+        QTest::newRow("URL ends at a quote") << u"\"https://x.org/a\"$b$ i <https://x.org/$c$>\n"_s
+                                             << u"\"https://x.org/a\"\\$b$ i <https://x.org/$c$>\n"_s;
+        QTest::newRow("raw tag is text") << u"Tekst <span title=\"$x$\">a</span>\n"_s
+                                         << u"Tekst <span title=\"\\$x$\">a</span>\n"_s;
         QTest::newRow("display formula lines") << u"Tekst\n\n$$\n- a\n$$\n"_s << u"Tekst\n\n\\$\\$\n- a\n$$\n"_s;
         // The importer's own formulas (between the formula marks) stay; text dollars that would
         // pair with them are escaped.
@@ -743,6 +751,45 @@ private Q_SLOTS:
         const QString out = detail::escapeTextFormulas(markdown);
         QCOMPARE(out, expected);
         QCOMPARE(detail::escapeTextFormulas(out), out);
+    }
+
+    // Random web text with dollars across styles, lines, paragraphs, list items, table cells,
+    // code, links and URLs: the imported note shows every dollar of the page, in the editor and
+    // in the export — no formula took any (SYNTAX §11).
+    void randomTextShowsItsDollars()
+    {
+        // The pieces, separated by "|".
+        static const QStringList pieces = QStringLiteral(
+                "$|$|$|$$|a|x|ż|5|10| | | |,|.|-|(|)|\\|*|_|#|\"|<b>|</b>|<i>|</i>|<br>|</p><p>|<code>$x$ a</code>|"
+                "<a href=\"https://x.org/\">|</a>| https://x.org/?p=| www.x.org/")
+                        .split(u'|');
+        QRandomGenerator rng(20261022);
+        int formulas = 0; // pages whose note would show a formula without its escapes
+        for (int n = 0; n < 300; ++n) {
+            QString body;
+            const int length = 3 + int(rng.bounded(25));
+            for (int k = 0; k < length; ++k)
+                body += pieces.at(rng.bounded(int(pieces.size())));
+            const int shape = int(rng.bounded(3));
+            QString html;
+            if (shape == 0)
+                html = u"<p>"_s + body + u"</p>"_s;
+            else if (shape == 1)
+                html = u"<ul><li>"_s + body + u"</li><li>"_s + body + u"</li></ul>"_s;
+            else
+                html = u"<table><tr><td>"_s + body + u"</td><td>"_s + body + u"</td></tr></table>"_s;
+            QTextDocument page;
+            page.setHtml(html);
+            const qsizetype dollars = page.toPlainText().count(u'$');
+            const QString note = htmlToMarkdown(html).markdown;
+            for (const bool exported : {false, true}) {
+                const QString shown = iotest::shownText(note, exported);
+                QVERIFY2(shown.count(u'$') == dollars, qPrintable(u"%1\n%2\n%3"_s.arg(html, note, shown)));
+            }
+            if (iotest::shownText(QString(note).replace(u"\\$"_s, u"$"_s)).count(u'$') < dollars)
+                ++formulas;
+        }
+        QVERIFY2(formulas >= 10, qPrintable(QString::number(formulas)));
     }
 
     // A hostile chain of dollars pairing in turn ("$a $b $c … z$ y$ …") ends after a few rounds
