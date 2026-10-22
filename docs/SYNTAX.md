@@ -75,6 +75,7 @@ to these defaults; unknown keys are kept when Brulion saves the file.
 | `((abc123))` | Logseq-style block reference — resolves the id **vault-wide** |
 | `!((abc123))` | block embed |
 | `[text](url)`, `[text](relative/path.md)`, `<https://..>`, bare `https://...` | standard links |
+| `#tag`, `#[[Strona]]`, `#Projekty/Dom` | a tag — also a link to the page it names (§3 "Tags as page links") |
 
 **Link resolution** (`target` → file): 1) exact vault path (with or without `.md`,
 case-insensitive); 2) path relative to the linking file's folder; 3) unique base-name
@@ -100,6 +101,47 @@ start of line, whitespace or `(`. Never recognised inside code spans, fenced cod
 formulas (§11), URLs or link targets. A heading `# Title` is not a tag. Frontmatter
 `tags: [a, b]` or `tags: a, b` also tags the page. Tags compare case-insensitively; display
 keeps the first-seen casing.
+
+### Tagi jako linki do stron / Tags as page links
+
+A tag names a page, as in Logseq: `#praca` is a link to the page "praca" and every tag feature
+keeps working (counts, the tag list and overview, `tag:` queries with sub-tags, colours). This
+covers `#tag`, `#[[multi word]]`, `#a/b`, the items of `tags::` / `tag::` properties and of the
+frontmatter's `tags:`.
+
+* **Resolution** — like `[[tag]]` written at the vault root, so one tag always means one page
+  wherever it is written: 1) exact vault path (± `.md`): `#Projekty/Dom` is `Projekty/Dom.md`,
+  Logseq's namespace tag `#a/b` is `a/b.md`; 2) base name (also a path suffix: `#Stare/Dom`),
+  shortest path, then alphabetical; 3) frontmatter / Logseq aliases (`#Janek` opens "Jan
+  Kowalski"). Notes only, never attachments. Case-insensitive and NFC, **not**
+  diacritic-insensitive (`#zolw` ≠ `Żółw`) — exactly like links. Unlike `[[dom]]` there is no
+  "relative to the linking file" step: with duplicate base names `#dom` names the shortest path
+  everywhere, `#Archiwum/Dom` the other one.
+* **Click** — a tag opens its page. A page that does not exist yet opens empty and is created by
+  its first content, where a link's would be (`newPagesFolder`; `#praca/raporty` →
+  `praca/raporty.md`, a folder; a date-like tag `#2026-10-13` opens that day's journal), named as
+  the tag was first written. The tag overview (the pages and blocks carrying the tag, sub-tags,
+  "Zadania z tym tagiem") stays one tap away. In Tasks a click on a tag filters the list;
+  Ctrl+click or a long press opens the page.
+* **References** — a page's "Odnośniki" list the blocks that link to it *and* the blocks tagged
+  with a tag naming it (one row per block), and pages tagged as a whole (frontmatter `tags:`,
+  leading `tags::`) as a group marked "cała strona"; self-references are excluded. Exactly the
+  tag: sub-tags (`#praca/raporty` under "praca") are pages of their own (chips in the page
+  header). A page that exists only as a tag still lists them, and the unresolved `[[links]]` with
+  its name.
+* **Rename** — renaming a page rewrites the tags that name it (counted in the confirmation):
+  `#old` → `#New` or `#[[New name]]`, `#[[old]]` keeps the bracket form, `tags:: old` and
+  frontmatter items in place (byte-preserving; a YAML value that would read differently is
+  rewritten as a list). Sub-tags are not renamed; an alias tag (`#Janek`) still names the page.
+  A folder rename rewrites path-qualified tags (`#Projekty/Dom` → `#Archiwum/Dom`).
+* **Queries** — `tag:` stays tags-only; `ref:` also matches tags naming the page (§10).
+* **Graph** — a tag naming a page is an edge to it; "#tag" nodes remain only for tags that name
+  no page. Unresolved tags are never "missing pages" (hex colours, issue numbers…).
+* **Writing** — `#` completion offers tags and pages; a name that is no simple tag body is
+  written `#[[C++]]`, `#[[Jan Kowalski]]` (`markdown::tagSyntax`).
+* **Other apps** — Logseq reads tags the same way (the Logseq export writes
+  `#[[Projekty/Dom]]` when the page has another name there); Obsidian keeps tags and pages
+  separate (its export leaves tags unchanged).
 
 ## 4. Blocks and outline
 
@@ -347,7 +389,9 @@ sort:due,-priority limit:20
   of a line is plain text.
 * Quotes `"…"`, `„…”`, `“…”`, `«…»` group a phrase; `[[…]]` may contain spaces.
 * Shorthands: bare words and quoted phrases = `text:`, `#tag` = `tag:tag`,
-  `[[Strona]]` = `ref:Strona`. A value with `//` right after the colon is text (URLs).
+  `[[Strona]]` = `ref:Strona`. A value with `//` right after the colon is text (URLs). Since a tag
+  names a page (§3), `ref:` matches the page's tags too, while `tag:` stays tags-only (with
+  sub-tags).
 * Keys and keyword values are case- and diacritic-insensitive (`ścieżka:` = `sciezka:`,
   `STATUS:Zrobione`) and have Polish spellings. An unknown key or value shows a helpful error
   (in the UI language) instead of results.
@@ -360,7 +404,7 @@ sort:due,-priority limit:20
 | `tag:` (`tags:`, `tagi:`), `#tag` | tag with or without `#`; `projekt` also matches nested `projekt/dom`. A block has its own tags, its ancestors' and the page's tags. |
 | `page:` (`strona:`) | page title, path, alias or link target; `*` wildcards (`page:*akup*`); `this` (`current`, `ta`, `ten`, `bieżąca`, `tutaj`) = the page containing the query |
 | `path:` (`ścieżka:`, `folder:`) | path prefix (`Projekty/`, `journals/2026-10`); with `*` a wildcard pattern matched from the start (`journals/*-13`) |
-| `ref:` (`link:`, `links:`, `linki:`, `odnośnik:`), `[[Strona]]` | items linking to a page (`ref:[[Jan Kowalski]]`, `ref:this`); a block counts when it or an ancestor holds the link |
+| `ref:` (`link:`, `links:`, `linki:`, `odnośnik:`), `[[Strona]]` | items linking to a page (`ref:[[Jan Kowalski]]`, `ref:this`); a block counts when it or an ancestor holds the link **or a tag naming the page** (`ref:Dom` matches `#dom`, `#[[Dom]]`, `#Remont` for an alias; exactly the tag, no sub-tags; a page that does not exist: the tag of that name); a page counts with any of its tags |
 | `text:` (`tekst:`), words, `"phrase"` | contains, case- and diacritic-insensitive (`zolw` finds `żółw`) |
 | `due:` (`termin:`, `deadline:`), `scheduled:` (`zaplanowane:`, `plan:`), `start:` (`początek:`), `done:` (`zrobione:`, `wykonane:`), `created:` (`utworzone:`) | date condition on the task's 📅 ⏳ 🛫 ✅ ➕ date |
 | `remind:` (`reminder:`, `przypomnienie:`) | date condition on ⏰ reminders |
@@ -403,7 +447,7 @@ remind:this-week
 type:pages tag:projekt sort:page        // strony projektów
 ```
 ```query
-ref:this                                // bloki, które linkują do tej strony
+ref:this                                // bloki, które linkują do tej strony (albo mają jej tag)
 ```
 ```query
 type:tasks ref:this status:open group:page

@@ -74,7 +74,9 @@
   scalania.
 * **Dziennik + outliner.** Codzienna strona dziennika, bloki z wcięciami (Tab / Shift+Tab),
   zwijanie, przybliżanie bloku, przenoszenie bloków z dziećmi, odwołania do bloków
-  `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne.
+  `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Tagi działają jak linki do stron, jak
+  w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
+  pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi.
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -285,6 +287,8 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   a page is created and switchable at any time; stored in the note as `brulion: document` /
   `brulion: outline` frontmatter, and notes from Obsidian or Logseq open in the right mode
   without it.
+* Tags are links to pages, as in Logseq: `#work` opens the page "work" (created by its first
+  content), whose linked references list the tagged blocks; renaming a page renames its tags.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.

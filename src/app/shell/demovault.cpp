@@ -104,7 +104,7 @@ Tryb jest zapisany w samej notatce (właściwość `brulion: document` albo `bru
 ## Tagi
 - Tagi zaczynają się od #: #przewodnik, #pomysł, #projekt/dom (tag zagnieżdżony).
 - Tag ze spacjami: #[[do przeczytania]].
-- Kliknij tag, żeby zobaczyć wszystko, co nim oznaczono.
+- Tag to link do strony: kliknij go, a otworzy się jego strona, pod którą są wszystkie bloki z tym tagiem.
 
 ## Zadania
 - [ ] Zwykłe zadanie — kliknij pole wyboru albo naciśnij Ctrl+Enter; prawy przycisk myszy (na telefonie przytrzymanie) pokaże wszystkie stany

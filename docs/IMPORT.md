@@ -19,6 +19,17 @@ Dotyczy to też znaku `$` — ale tylko tam, gdzie dwa `$` utworzyłyby wzór (�
 Netflix 15$”, „$x$”); pojedyncze ceny („$5 i $10”, „15$”) zostają bez zmian. Kod i adresy
 linków nie są zmieniane.
 
+## Tagi a strony
+
+W Brulionie tag nazywa stronę, jak w Logseq: `#praca` prowadzi do strony „praca” (szczegóły:
+[SYNTAX.md](SYNTAX.md) §3). Strony tagów z Logseq (np. `pages/praca.md`) łączą się więc po
+imporcie ze swoimi tagami, a tagi zagnieżdżone `#projekt/dom` — ze stronami przestrzeni nazw,
+które import zapisuje w folderach (`projekt/dom.md`). W Obsidianie tagi i strony są osobne: tag
+`#projekt` obok strony „Projekt” po imporcie zacznie do niej prowadzić, a jej odnośniki pokażą
+bloki z tym tagiem. Przy eksporcie: Obsidian i Markdown dostają tagi bez zmian (Obsidian dalej
+trzyma je osobno), Logseq — `#[[Projekty/Dom]]`, gdy strona ma tam inną nazwę niż tag, a w
+eksporcie HTML tag prowadzi do strony, którą nazywa.
+
 ## Trilium Notes
 
 Działa z eksportem ZIP z Trilium 0.10x (projekt TriliumNext, znów nazywany po prostu Trilium),

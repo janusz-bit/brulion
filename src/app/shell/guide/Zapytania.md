@@ -28,7 +28,7 @@ Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytani
 | `tag:` | tag; `projekt` łapie też `projekt/dom` |
 | `page:` (`strona:`) | strona po tytule, ścieżce albo aliasie; `this` to strona z zapytaniem |
 | `path:` (`ścieżka:`) | początek ścieżki, np. `Projekty/` |
-| `ref:` (`link:`) | elementy linkujące do strony |
+| `ref:` (`link:`) | elementy linkujące do strony albo oznaczone jej tagiem (`ref:Dom` łapie też `#dom`) |
 | `due:`, `scheduled:`, `start:`, `done:`, `created:` | warunek na datę zadania |
 | `remind:` (`przypomnienie:`) | warunek na datę przypomnienia |
 | `date:` (`data:`) | warunek na datę dziennika |
@@ -51,7 +51,7 @@ Przykład: `due:<=+7d` oznacza „termin w ciągu tygodnia, łącznie z zaległy
 - `type:tasks status:open tag:praca due:<=+7d sort:due` — otwarte zadania z tagiem #praca na najbliższy tydzień,
 - `remind:this-week` — przypomnienia na ten tydzień,
 - `type:pages tag:projekt sort:page` — strony projektów,
-- `ref:this` — bloki, które linkują do tej strony,
+- `ref:this` — bloki, które linkują do tej strony albo mają jej tag,
 - `type:tasks ref:this status:open group:page` — otwarte zadania powiązane z tą stroną, pogrupowane.
 
 Zobacz też [[Przypomnienia i alarmy|Przypomnienia i alarmy]]. Jeśli w zapytaniu jest błąd, w miejscu wyników pojawia się opis, co poprawić.
