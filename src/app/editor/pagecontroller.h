@@ -71,6 +71,7 @@
 #include <memory>
 #include <optional>
 
+class QTextDocument;
 class QUndoStack;
 
 namespace brulion {
@@ -477,8 +478,18 @@ public:
     /// the note's own spaces: BlockListModel::readingHtmlAt), bullets, numbers and checkboxes as
     /// characters (so a copy keeps them), headings, code, calculations with their results, tables
     /// with their formulas' values, a query's results (the host's QueryHost; else the query),
-    /// quotes; embedded pictures and pages by name. Colours of the current palette.
+    /// quotes; embedded pictures and pages by name. Colours of the current palette. Every block
+    /// element carries `-qt-user-state: <n>` (QTextBlock::userState once in a QTextDocument): the
+    /// same n for one block's lines — its text, embeds, a query's results — and for the items of
+    /// one list, which readingText() keeps together.
     Q_INVOKABLE QString readingHtml() const;
+    /// The text of positions [from, to) of readingHtml() in a QTextDocument (the "Zaznacz tekst"
+    /// view's TextEdit; EditorInput.textRange) as it is copied — pasted into a note it keeps its
+    /// paragraphs: one block's lines and the items of a list one line break apart, other blocks
+    /// (paragraphs, headings, code, a list and what follows it) a blank line apart; a table's
+    /// cells a tab apart, its rows a line break. Every other character is kept (no-break spaces
+    /// too: QTextCursor::selectedText() turns them into spaces). "" for no document.
+    static QString readingText(const QTextDocument *document, int from, int to);
 
     // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
     /// The text of a link of `kind` to `row`:
@@ -735,11 +746,12 @@ private:
     void recordCut(const QString &text, const QSet<QString> &ids);
     /// A block of this page has `id`.
     bool hasBlockId(const QString &id) const;
-    /// The results of the query `source` as readingHtml() lists them (indented by `indent` px);
-    /// "" without a QueryHost, on an error or with nothing found.
-    QString queryReadingHtml(const QString &source, int indent) const;
-    /// The visible rows from one end of the selection to the other that can have a task status
-    /// (list items, paragraphs).
+    /// The results of the query `source` as readingHtml() lists them (indented by `indent` px, in
+    /// readingHtml()'s group `readingGroup`); "" without a QueryHost, on an error or with nothing
+    /// found.
+    QString queryReadingHtml(const QString &source, int indent, int readingGroup) const;
+    /// The visible rows from one end of the selection to the other (the picked blocks of one with
+    /// gaps) that can have a task status (list items, paragraphs).
     QList<quint64> selectedTaskUids() const;
     /// Save now; while a conflict is unresolved (also one this save found) write the conflict
     /// copy instead — before the page's text goes (another page, another host, destruction).

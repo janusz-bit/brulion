@@ -342,7 +342,9 @@ FocusScope {
     }
 
     ShellCaptureButton {
-        // Not while a view edits text: it would cover the editor's toolbar (and the caret). Nor
+        objectName: "shellCaptureButton"
+        // Not while a view edits text: it would cover the editor's toolbar (and the caret), nor
+        // over a picture or "Zaznacz tekst" (the view's `editing`: it covered their text). Nor
         // on views of forms and tools (settings, sync, import/export, history, trash, the graph
         // with its zoom buttons): there it covered their buttons and fields, and capturing a note
         // is not what they are for.

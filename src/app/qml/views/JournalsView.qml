@@ -32,8 +32,9 @@ FocusScope {
     property ContentJournalDay activeDay: null
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
+    /// A day is being edited or shown in "Zaznacz tekst" (the shell hides its capture button).
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
-                                           : (activeDay !== null && activeDay.editing)
+                                           : (activeDay !== null && (activeDay.editing || activeDay.editor.selectTextOpen))
     /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)

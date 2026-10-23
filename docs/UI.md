@@ -591,12 +591,20 @@ items), one run of blocks or blocks picked one by one with gaps between them (bu
   toast — checked on the emulator, docs/ANDROID.md), elsewhere (the browser on a phone, a
   desktop's touch UI) two handles of the view's own (44 px) move its ends; a tap clears. "Kopiuj"
   copies the selection — the whole page when nothing is selected — as plain text with every
-  character (the note's own no-break spaces too); "Zamknij", Esc and Back close it.
+  character (the note's own no-break spaces too) that keeps its paragraphs when pasted into a note
+  (`PageController::readingText`, `EditorInput.textRange`): blocks — paragraphs, headings, code, a
+  table, a list as a whole — a blank line apart, the lines of one block (its soft line breaks, a
+  calculation's lines, its embeds, a query's results) and the items of a list one line break
+  apart, a table's cells a tab apart and its rows a line break (the reading HTML marks each block's
+  elements with `-qt-user-state`, its group). "Zamknij", Esc and Back close it; while it is open
+  the floating capture button makes way (the view's `editing`: it covered the text on phones).
 * **Browser**: docs/WEB.md "Schowek".
 * **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
-  controller `tst_editor_selection` (the real clipboard read back); the playground's
-  `selectiontest` with real keys, mouse and touch (`tst_editor_qml_selection`, `_touch`); the
-  journal stream's self-test; the shell's self-test (the palette's "Zaznacz tekst");
+  controller `tst_editor_selection` (the real clipboard read back; blocks picked one by one, their
+  copy, cut, delete, paste, undo, statuses, no moves with gaps; the "Zaznacz tekst" text of a
+  page); the playground's `selectiontest` with real keys, mouse and touch
+  (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` — "Pojedynczo"); the journal stream's
+  self-test; the shell's self-test (the palette's "Zaznacz tekst", no capture button over it);
   `scripts/android-emulator-test.sh --selection`.
 
 ## Scrolling performance

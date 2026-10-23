@@ -58,9 +58,10 @@ FocusScope {
     readonly property string journalDate: page.path !== "" ? Workspace.journalDate(page.path) : ""
     /// Top bar title: daily notes by their date; other pages use the shell's default (file name).
     readonly property string title: journalDate !== "" ? DatesHelper.formatLong(journalDate) : ""
-    /// A block (or the source) is being edited, or a picture fills the view: the shell hides
-    /// its floating capture button (it would float over the photo).
-    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
+    /// A block (or the source) is being edited, or a picture or the "Zaznacz tekst" view fills the
+    /// view: the shell hides its floating capture button (it would float over the photo, over the
+    /// text being selected).
+    readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute || editor.selectTextOpen
     /// The editor's touch toolbar is docked at the bottom (on the keyboard): the shell hides its
     /// bottom navigation.
     readonly property bool toolbarDocked: editor.toolbarVisible

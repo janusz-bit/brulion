@@ -2840,6 +2840,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             // "Zaznacz tekst" (the Więcej menu, the palette): the page as one read-only text over the
             // editor, any part of it selectable; Esc closes it (docs/UI.md "Selecting and copying").
             {
+                // Phones: the floating capture button makes way while it is open (it covered the text).
+                auto *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+                const bool captureShown = captureButton && captureButton->isVisible();
                 app->requestUiAction(u"selectText"_s);
                 QQuickItem *text = nullptr;
                 check(waitFor([&] {
@@ -2847,6 +2850,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                           return text && text->hasActiveFocus();
                       }),
                       "the \"Select text\" command shows the page as one text");
+                check(captureButton && !captureButton->isVisible(), "no floating capture button over it");
                 if (text) {
                     QString shownText;
                     QMetaObject::invokeMethod(text, "getText", qReturnArg(shownText), 0,
@@ -2860,6 +2864,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     check(!text->property("selectedText").toString().isEmpty(), "Ctrl+A's select all selects it");
                     sendKey(window, Qt::Key_Escape);
                     check(waitFor([&] { return !shownNamed(editor, u"selectTextEdit"_s); }), "Esc closes it");
+                    if (captureShown)
+                        check(waitFor([&] { return captureButton->isVisible(); }), "the capture button is back");
                 }
             }
 

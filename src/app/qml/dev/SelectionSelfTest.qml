@@ -628,7 +628,8 @@ QtObject {
                 EditorInput.sendKey(text, Qt.Key_C, Qt.ControlModifier, "")
             },
             // (Exactly: no no-break space joins "w" to the next word — the note has a space there.)
-            wait(() => clip().indexOf("Budżet liczymy w Budżet domowy. #podróże\nPlan\nPierwszego dnia") === 0
+            // (A blank line between paragraphs and the heading: pasted into a note they stay apart.)
+            wait(() => clip().indexOf("Budżet liczymy w Budżet domowy. #podróże\n\nPlan\n\nPierwszego dnia") === 0
                        && clip() === EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
                                                            selectTextView().selectionEnd),
                  () => "Ctrl+C copies the selected text as plain text: " + codes(clip()) + " vs "

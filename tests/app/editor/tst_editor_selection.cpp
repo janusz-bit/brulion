@@ -16,6 +16,7 @@
 #include <QMimeData>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTextDocument>
 
 using namespace brulion;
 using namespace brulion::editor;
@@ -1033,6 +1034,37 @@ private Q_SLOTS:
         QVERIFY2(html.contains(u">w domu<"_s), qPrintable(html));
         // The editor itself still joins them.
         QVERIFY(f.role(0, "html").toString().contains(u"w\u00a0góry"_s));
+    }
+
+    // "Zaznacz tekst" copies text that keeps its paragraphs when pasted into a note: blocks a
+    // blank line apart, one block's lines and a list's items one line break apart, table cells a
+    // tab apart (PageController::readingText of the view's QTextDocument).
+    void readingTextKeepsParagraphs()
+    {
+        Fixture f(
+                u"# Plan wyjazdu\n\nPierwszy akapit, w\u00a0nim\ndruga linia.\n\nDrugi akapit.\n\n- [ ] Kupić bilety\n"
+                "- mapa\n\t- [-] stara\n1. pierwszy\n\n```js\nlet a = 1;\nlet b = 2;\n```\n\n| a | b |\n|---|---|\n"
+                "| 1 | 2 |\n| 3 | |\n\n---\n\n> cytat\n\nKoniec\n"_s);
+        QTextDocument doc;
+        doc.setHtml(f.page.readingHtml());
+        const int end = doc.characterCount() - 1;
+        const QString all = PageController::readingText(&doc, 0, end);
+        QCOMPARE(all, u"Plan wyjazdu\n\nPierwszy akapit, w\u00a0nim\ndruga linia.\n\nDrugi akapit.\n\n"
+                      "☐ Kupić bilety\n• mapa\n☒ stara\n1. pierwszy\n\nlet a = 1;\nlet b = 2;\n\n"
+                      "a\tb\n1\t2\n3\t\n\ncytat\n\nKoniec"_s);
+        // Part of it: from inside a paragraph into a list.
+        const auto at = [&](const QString &needle) { return int(doc.toRawText().indexOf(needle)); };
+        QCOMPARE(PageController::readingText(&doc, at(u"akapit."_s) + 2, at(u"mapa"_s) + 2),
+                 u"apit.\n\n☐ Kupić bilety\n• ma"_s);
+        // Backwards is the same; from a paragraph's end the separator comes first.
+        QCOMPARE(PageController::readingText(&doc, at(u"mapa"_s) + 2, at(u"akapit."_s) + 2),
+                 u"apit.\n\n☐ Kupić bilety\n• ma"_s);
+        QCOMPARE(PageController::readingText(&doc, at(u"Drugi"_s) - 1, at(u"Drugi"_s) + 5), u"\n\nDrugi"_s);
+        // Inside one line; nothing; out of range; no document.
+        QCOMPARE(PageController::readingText(&doc, at(u"Kupić"_s), at(u"Kupić"_s) + 5), u"Kupić"_s);
+        QCOMPARE(PageController::readingText(&doc, 5, 5), QString());
+        QCOMPARE(PageController::readingText(&doc, -10, end + 100), all);
+        QCOMPARE(PageController::readingText(nullptr, 0, 10), QString());
     }
 
     void readingHtmlHasResults()

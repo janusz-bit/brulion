@@ -90,11 +90,14 @@
   odwołanie `((…))` także skrótem `Ctrl+Shift+C`; kliknięty przewija do celu i go podświetla.
 * **Zaznaczanie i kopiowanie grup bloków.** Kilka punktów listy albo akapitów dokumentu
   zaznaczysz `Shift+↑/↓`, `Ctrl+A`, `Shift`+kliknięciem, przeciągnięciem myszą albo — na
-  telefonie — przytrzymaniem palca na tekście (potem stuknięcia i uchwyty). Zaznaczone bloki
-  (z dziećmi) kopiujesz, wycinasz, usuwasz, wcinasz i przenosisz razem: w schowku są jako
-  Markdown, a w poczcie czy edytorze dokumentów wklejają się sformatowane; „Kopiuj jako tekst”
-  daje zwykły tekst z punktorami. Dowolny fragment strony — także kawałki kilku akapitów —
-  zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej*, paleta poleceń).
+  telefonie — przytrzymaniem palca na tekście (potem stuknięcia i uchwyty). Pojedyncze punkty z
+  przerwami między nimi (na przykład 1., 3. i 5.) dobierzesz `Ctrl`+kliknięciem, a na telefonie
+  stuknięciami po włączeniu „Pojedynczo” w narzędziach zaznaczenia. Zaznaczone bloki (z dziećmi)
+  kopiujesz, wycinasz i usuwasz razem — wcinasz i przenosisz, gdy są zaznaczone bez przerw: w
+  schowku są jako Markdown, a w poczcie czy edytorze dokumentów wklejają się sformatowane;
+  „Kopiuj jako tekst” daje zwykły tekst z punktorami. Dowolny fragment strony — także kawałki
+  kilku akapitów — zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej*, paleta poleceń); skopiowany
+  i wklejony do notatki zachowuje akapity.
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -288,6 +291,7 @@ usuwa go w całości.
 | `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
 | `Shift+↑` / `Shift+↓` | zaznacz bloki (z edytowanego bloku: gdy zaznaczenie tekstu dojdzie do jego brzegu) |
+| `Ctrl`+kliknięcie | dobierz blok do zaznaczenia albo go z niego wyjmij (przerwy dozwolone) |
 | `Ctrl+A` (dwa razy) | zaznacz tekst bloku, potem wszystkie bloki |
 | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | kopiuj / wytnij / wklej — zaznaczone bloki albo tekst w bloku |
 | `Ctrl+Shift+C` | skopiuj odwołanie do bloku `((…))` |
@@ -386,9 +390,11 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   highlights it.
 * Select groups of blocks — bullets or a document's paragraphs, with their children — with
   `Shift+↑/↓`, `Ctrl+A`, Shift+click, a mouse drag or, on phones, a long press (then taps and
-  grips), and copy, cut, delete, indent or move them together: the clipboard gets Markdown plus
-  formatted HTML for mail and office apps ("Copy as plain text" too). Any part of a page, across
-  paragraphs, is selected in the read-only "Select text" view.
+  grips); pick single ones with gaps between them (bullets 1, 3 and 5) with Ctrl+click, or with
+  taps after "One by one" on phones. Copy, cut or delete them together — indent or move them when
+  there are no gaps: the clipboard gets Markdown plus formatted HTML for mail and office apps
+  ("Copy as plain text" too). Any part of a page, across paragraphs, is selected in the read-only
+  "Select text" view; pasted into a note, its copy keeps the paragraphs.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.

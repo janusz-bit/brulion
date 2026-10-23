@@ -13,6 +13,10 @@
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextTable>
 
 #include <algorithm>
 
@@ -913,7 +917,7 @@ QString unpaddedChips(const QString &html)
 
 } // namespace
 
-QString PageController::queryReadingHtml(const QString &source, int indent) const
+QString PageController::queryReadingHtml(const QString &source, int indent, int readingGroup) const
 {
     auto *queries = m_host ? qobject_cast<QueryHost *>(m_host.data()) : nullptr;
     if (!queries || source.trimmed().isEmpty())
@@ -925,7 +929,9 @@ QString PageController::queryReadingHtml(const QString &source, int indent) cons
         return {};
     const bool pages = r.value(u"type"_s).toString() == u"pages";
     const QString muted = m_model->palette().muted.toHtmlEscaped();
-    const QString style = u"margin-top:2px; margin-bottom:2px; margin-left:%1px; line-height:140%;"_s.arg(indent);
+    const QString style =
+            u"margin-top:2px; margin-bottom:2px; margin-left:%1px; line-height:140%; -qt-user-state:%2;"_s.arg(indent)
+                    .arg(readingGroup);
     // An item as the block lists it: its checkbox or bullet, its text, the page it is on.
     const auto item = [&](const QVariantMap &it) -> QString {
         QString marker = u"• "_s;
@@ -962,11 +968,19 @@ QString PageController::readingHtml() const
     const auto esc = [](const QString &s) { return s.toHtmlEscaped(); };
     const QString muted = esc(palette.muted);
     const QString codeBg = esc(palette.codeBackground);
+    // The group of the block's elements (readingText(): one group's lines stay together): a new
+    // one for every block, except the next item of a list.
+    int group = 0;
+    bool previousListLine = false;
     // A paragraph style: spacing like a page of text, the list levels indented.
-    const auto block = [](int indent, int top, int bottom) {
-        return u"margin-top:%1px; margin-bottom:%2px; margin-left:%3px; line-height:140%;"_s.arg(top).arg(bottom).arg(
-                indent);
+    const auto block = [&group](int indent, int top, int bottom) {
+        return u"margin-top:%1px; margin-bottom:%2px; margin-left:%3px; line-height:140%; -qt-user-state:%4;"_s.arg(top)
+                .arg(bottom)
+                .arg(indent)
+                .arg(group);
     };
+    // Code as one block of lines (a line break in a <pre> would start a block of its own).
+    const auto preText = [&esc](const QString &text) { return esc(text).replace(u'\n', u"<br/>"_s); };
     static const QStringList bullets{u"•"_s, u"◦"_s, u"▪"_s};
     QString out = u"<html><body>"_s;
     for (int row = 0; row < doc.count(); ++row) {
@@ -976,6 +990,10 @@ QString PageController::readingHtml() const
         const QModelIndex index = m_model->index(row);
         const BlockShape shape = m_model->shapeAt(row);
         const bool listItem = e.kind == BlockKind::ListItem;
+        const bool listLine = listItem && shape.view == BlockView::Text;
+        if (!listLine || !previousListLine)
+            ++group;
+        previousListLine = listLine;
         const int indent = listItem ? 24 * e.depth : 0;
         QString marker;
         if (listItem) {
@@ -1016,24 +1034,24 @@ QString PageController::readingHtml() const
                     lines[line] += u" = "_s + value;
             }
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(lines.join(u'\n')));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(lines.join(u'\n')));
             break;
         }
         case BlockView::Query: {
-            const QString results = queryReadingHtml(shape.editText, indent + (listItem ? 18 : 0));
+            const QString results = queryReadingHtml(shape.editText, indent + (listItem ? 18 : 0), group);
             if (!results.isEmpty()) {
                 out += results;
                 break;
             }
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(shape.editText));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(shape.editText));
             break;
         }
         case BlockView::Code:
         case BlockView::Math:
         case BlockView::Html:
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(shape.editText));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(shape.editText));
             break;
         case BlockView::Table: {
             const QVariantMap table = m_model->readingTableAt(row);
@@ -1084,6 +1102,53 @@ QString PageController::readingHtml() const
         }
     }
     out += u"</body></html>"_s;
+    return out;
+}
+
+QString PageController::readingText(const QTextDocument *document, int from, int to)
+{
+    if (!document)
+        return {};
+    const int end = std::max(0, document->characterCount() - 1);
+    from = std::clamp(from, 0, end);
+    to = std::clamp(to, 0, end);
+    if (to < from)
+        std::swap(from, to);
+    if (from == to)
+        return {};
+    // What goes between two blocks of text (readingHtml()'s groups, a table's cells and rows).
+    const auto separator = [](const QTextBlock &a, const QTextBlock &b) {
+        const QTextTable *ta = QTextCursor(a).currentTable();
+        const QTextTable *tb = QTextCursor(b).currentTable();
+        if (ta && ta == tb)
+            return ta->cellAt(a.position()).row() == tb->cellAt(b.position()).row() ? u"\t"_s : u"\n"_s;
+        if (!ta && !tb && a.userState() >= 0 && a.userState() == b.userState())
+            return u"\n"_s;
+        return u"\n\n"_s;
+    };
+    QString out;
+    QTextBlock previous;
+    for (QTextBlock b = document->findBlock(from); b.isValid() && b.position() <= to; b = b.next()) {
+        const QString text = b.text();
+        // The empty block after a table, a rule: no text of its own (an empty cell is a cell).
+        if (text.isEmpty() && !QTextCursor(b).currentTable())
+            continue;
+        // A block boundary crossed on the way (every block after the first one reached).
+        if (previous.isValid())
+            out += separator(previous, b);
+        const int position = b.position();
+        const int start = std::max(from, position) - position;
+        const int stop = std::min(to, position + int(text.size())) - position;
+        if (stop > start)
+            out += QStringView(text).sliced(start, stop - start);
+        previous = b;
+    }
+    for (QChar &c : out) {
+        // Line breaks inside a block (<br/>), frame markers.
+        if (c == QChar::LineSeparator || c == QChar::ParagraphSeparator || c.unicode() == 0xfdd0
+            || c.unicode() == 0xfdd1)
+            c = u'\n';
+    }
     return out;
 }
 
