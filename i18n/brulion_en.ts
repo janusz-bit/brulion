@@ -587,7 +587,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="417"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="419"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
