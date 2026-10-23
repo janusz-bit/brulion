@@ -876,7 +876,8 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   ("Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze"; `WorkspaceSync.folderCountsText`)
   name them; folders a run created or removed here reach the tree at once
   (`WorkspaceSync.foldersChanged` -> `Workspace.notifyFolderChange`: folders make no Vault change
-  of their own).
+  of their own), and a folder the user creates, deletes or renames starts a sync after the
+  debounce like an edit (`WorkspaceSync.notifyLocalChange`).
 * **History** (`SyncHistoryList.qml`, card "Historia synchronizacji"): the last runs (20 kept,
   5 shown, "Pokaż wszystkie"), quiet ones folded ("Bez zmian ×3, 09:25–09:55"); each row: the
   result in words with a coloured icon (never colour alone), when, why ("ręcznie", "po zmianie

@@ -213,6 +213,9 @@ public:
     void detach();
     /// Foreground (true) / background (false), from the application state.
     void setAppActive(bool active);
+    /// The user changed folders (created, deleted, renamed): no Vault change tells the scheduler,
+    /// so sync after the usual debounce, as after an edit.
+    void notifyLocalChange();
 
     sync::SyncEngine *engine() const { return m_engine.get(); }
     sync::SyncScheduler *scheduler() const { return m_scheduler.get(); }

@@ -390,6 +390,12 @@ void WorkspaceSync::rebuild()
     Q_EMIT statusChanged();
 }
 
+void WorkspaceSync::notifyLocalChange()
+{
+    if (m_scheduler)
+        m_scheduler->notifyLocalChange();
+}
+
 void WorkspaceSync::setAppActive(bool active)
 {
     m_appActive = active;

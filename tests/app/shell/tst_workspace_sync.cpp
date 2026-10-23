@@ -249,6 +249,25 @@ private Q_SLOTS:
         QVERIFY(!sync->nextSync().isEmpty()); // the next periodic run is planned
     }
 
+    void folderChangesAreSyncedLikeEdits()
+    {
+        // An empty folder made, removed or renamed in the app makes no Vault change of its own:
+        // the sync still follows after the debounce, like after an edit.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto ws = open(&server, {{u"Automat.md"_s, u"- zsynchronizuj mnie\n"_s}});
+        WorkspaceSync *sync = ws->sync();
+        sync->setAutomatic(true);
+        sync->setNextcloud(account(server));
+        QTRY_VERIFY_WITH_TIMEOUT(server.text(u"Brulion/Automat.md"_s).has_value(), 10000);
+        QTRY_COMPARE(sync->state(), u"idle"_s);
+        sync->scheduler()->setDebounce(200);
+        QCOMPARE(ws->createFolder(u"Pusty żółw"_s), u"Pusty żółw"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(server.isDir(u"Brulion/Pusty żółw"_s), 10000);
+        QTRY_COMPARE(sync->state(), u"idle"_s);
+        QVERIFY(!ws->deletePage(u"Pusty żółw"_s).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!server.isDir(u"Brulion/Pusty żółw"_s), 10000);
+    }
+
     void connectionTest()
     {
         FakeWebDavServer server(synctest::serverOptions(m_clock));
