@@ -1092,6 +1092,14 @@ bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObj
     return true;
 }
 
+void AppController::setRemoteControl(const QVariantMap &status)
+{
+    if (status == m_remoteControl)
+        return;
+    m_remoteControl = status;
+    Q_EMIT remoteControlChanged();
+}
+
 void AppController::quit()
 {
     if (!m_quitting) {

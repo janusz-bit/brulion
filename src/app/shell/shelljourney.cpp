@@ -2,31 +2,20 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "uidriver.h"
 #include "workspace.h"
 
 #include <QCoreApplication>
 #include <QDir>
-#include <QElapsedTimer>
 #include <QImage>
-#include <QKeyEvent>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QThread>
 #include <QTimer>
-#include <qtestsupport_gui.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <functional>
-
-QT_BEGIN_NAMESPACE
-// QtGui's entry point for synthetic mouse input (what QtTest's mouse functions call): the events
-// go through QGuiApplication like real ones, so pointer handlers (TapHandler) see whole clicks.
-Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
-                                      Qt::MouseButtons state, Qt::MouseButton button, QEvent::Type type,
-                                      Qt::KeyboardModifiers mods, int timestamp);
-QT_END_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
@@ -34,77 +23,17 @@ namespace brulion::shell {
 
 namespace {
 
-/// Let the event loop run for `ms` (gestures, transitions, queued calls). Not scaled by
-/// BRULION_TEST_SLOWDOWN: these are real input timings (a longer pause turns a tap into a
-/// long press), unlike waitFor()'s deadlines.
-void settle(int ms)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < ms) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
-        QThread::msleep(2);
-    }
-}
-
-bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000)
-{
-    // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
-    static const int slowdown = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
-    timeoutMs *= slowdown;
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition()) {
-        if (timer.elapsed() > timeoutMs)
-            return false;
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-        QThread::msleep(5);
-    }
-    return true;
-}
+// Input and item finding: uidriver.h (shared with the shell self-test and the remote control).
+using uidriver::hasAncestor;
+using uidriver::isA;
+using uidriver::labelOf;
+using uidriver::settle;
+using uidriver::waitFor;
 
 /// The text a QML file shows for `source` (qsTr() in <context>.qml), in the current language.
 QString ui(const char *context, const char *source)
 {
     return QCoreApplication::translate(context, source);
-}
-
-/// True when the item's QML type (or one it is based on) is `prefix` ("TasksRow" matches the
-/// class "TasksRow_QMLTYPE_12").
-bool isA(const QObject *object, const char *prefix)
-{
-    for (const QMetaObject *m = object->metaObject(); m; m = m->superClass()) {
-        if (QByteArray(m->className()).startsWith(prefix))
-            return true;
-    }
-    return false;
-}
-
-bool hasAncestor(const QQuickItem *item, const char *prefix)
-{
-    for (const QQuickItem *p = item; p; p = p->parentItem()) {
-        if (isA(p, prefix))
-            return true;
-    }
-    return false;
-}
-
-void collect(QQuickItem *item, QList<QQuickItem *> &out)
-{
-    out.append(item);
-    const QList<QQuickItem *> children = item->childItems();
-    for (QQuickItem *child : children)
-        collect(child, out);
-}
-
-QString labelOf(const QQuickItem *item)
-{
-    for (const char *name : { "text", "label", "title" }) {
-        const QVariant v = item->property(name);
-        if (v.metaType() == QMetaType::fromType<QString>() && !v.toString().isEmpty())
-            return v.toString();
-    }
-    return {};
 }
 
 class Journey {
@@ -137,51 +66,12 @@ private:
     }
 
     // ---- Finding items -------------------------------------------------------------------------
-    QList<QQuickItem *> items() const
-    {
-        QList<QQuickItem *> out;
-        collect(m_window->contentItem(), out);
-        return out;
-    }
     /// Visible (effectively, opacity included) and not empty.
-    static bool visibleTree(const QQuickItem *item)
-    {
-        if (item->width() < 1 || item->height() < 1)
-            return false;
-        for (const QQuickItem *p = item; p; p = p->parentItem()) {
-            if (!p->isVisible() || p->opacity() <= 0.01)
-                return false;
-        }
-        return true;
-    }
+    static bool visibleTree(const QQuickItem *item) { return uidriver::shown(item); }
     /// The item's centre is inside the window and every clipping ancestor.
-    bool onScreen(const QQuickItem *item) const
-    {
-        const QPointF c = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
-        if (!QRectF(0, 0, m_window->width(), m_window->height()).contains(c))
-            return false;
-        for (const QQuickItem *p = item->parentItem(); p; p = p->parentItem()) {
-            if (p->clip() && !p->mapRectToScene(QRectF(0, 0, p->width(), p->height())).contains(c))
-                return false;
-        }
-        return true;
-    }
+    bool onScreen(const QQuickItem *item) const { return uidriver::onScreen(m_window, item); }
     /// The topmost visible item matching `pred` (popups first, then the last one painted).
-    QQuickItem *find(const std::function<bool(QQuickItem *)> &pred) const
-    {
-        QQuickItem *best = nullptr;
-        int bestScore = -1;
-        for (QQuickItem *item : items()) {
-            if (!pred(item) || !visibleTree(item))
-                continue;
-            const int score = (hasAncestor(item, "QQuickOverlay") ? 2 : 0) + (onScreen(item) ? 1 : 0);
-            if (score >= bestScore) {
-                best = item;
-                bestScore = score;
-            }
-        }
-        return best;
-    }
+    QQuickItem *find(const std::function<bool(QQuickItem *)> &pred) const { return uidriver::topmost(m_window, pred); }
     QQuickItem *findText(const QString &text, const char *within = nullptr, int timeoutMs = 3000) const
     {
         QQuickItem *found = nullptr;
@@ -204,75 +94,22 @@ private:
     /// Scroll the nearest flickable ancestors so that `item` is on screen.
     void scrollIntoView(QQuickItem *item)
     {
-        for (QQuickItem *p = item->parentItem(); p && !onScreen(item); p = p->parentItem()) {
-            if (!p->inherits("QQuickFlickable"))
-                continue;
-            auto *content = p->property("contentItem").value<QQuickItem *>();
-            if (!content)
-                continue;
-            const QRectF r = item->mapRectToItem(content, QRectF(0, 0, item->width(), item->height()));
-            const qreal h = p->height();
-            const qreal originY = p->property("originY").toReal();
-            const qreal maxY = originY + std::max<qreal>(0, p->property("contentHeight").toReal() - h);
-            const qreal y = std::clamp<qreal>(r.center().y() - h / 2, originY, maxY);
-            p->setProperty("contentY", y);
-            settle(150);
-        }
-    }
-    /// The chain of items under a scene point, topmost first (debugging clicks that do nothing).
-    QString itemsAt(QPointF scenePos) const
-    {
-        QStringList chain;
-        QQuickItem *item = m_window->contentItem();
-        while (item) {
-            QList<QQuickItem *> children = item->childItems();
-            std::stable_sort(children.begin(), children.end(),
-                             [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
-            QQuickItem *next = nullptr;
-            for (auto it = children.crbegin(); it != children.crend(); ++it) {
-                QQuickItem *c = *it;
-                if (!c->isVisible() || c->opacity() <= 0.01)
-                    continue;
-                if (c->contains(c->mapFromScene(scenePos))) {
-                    next = c;
-                    break;
-                }
-            }
-            if (next)
-                chain.append(QString::fromLatin1(next->metaObject()->className()) + u'/' + next->objectName());
-            item = next;
-        }
-        return chain.join(u" > "_s);
+        uidriver::scrollIntoView(m_window, item, [] { settle(150); });
     }
     /// A click with the mouse, or on touch UIs (--touch, the phone runs) a tap with a finger.
     void clickAt(QPointF scenePos)
     {
         if (qEnvironmentVariableIsSet("BRULION_JOURNEY_DEBUG"))
-            log(u"click %1,%2: %3"_s.arg(scenePos.x()).arg(scenePos.y()).arg(itemsAt(scenePos)));
+            log(u"click %1,%2: %3"_s.arg(scenePos.x()).arg(scenePos.y()).arg(uidriver::itemsAt(m_window, scenePos)));
         if (m_touch) {
-            // QTouchEventSequence's constructor is protected (QtTest's touchEvent() subclasses it).
-            struct Sequence : QTest::QTouchEventSequence {
-                Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) {}
-            };
-            static QPointingDevice *device = QTest::createTouchDevice();
-            Sequence sequence(m_window, device);
-            sequence.press(0, scenePos.toPoint(), m_window).commit();
-            settle(50); // a quick tap
-            sequence.release(0, scenePos.toPoint(), m_window).commit();
-            settle(250);
+            uidriver::run(uidriver::touchTap(m_window, scenePos, 50, 250)); // a quick tap
             return;
         }
-        const QPointF global = m_window->mapToGlobal(scenePos);
-        m_timestamp += 1000; // never a double click with the previous one
-        qt_handleMouseEvent(m_window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
-                            m_timestamp);
-        settle(20);
-        qt_handleMouseEvent(m_window, scenePos, global, Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress,
-                            Qt::NoModifier, m_timestamp += 20);
-        settle(40);
-        qt_handleMouseEvent(m_window, scenePos, global, Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease,
-                            Qt::NoModifier, m_timestamp += 80);
-        settle(250);
+        uidriver::ClickTiming timing;
+        timing.afterMove = 20;
+        timing.afterPress = 40;
+        timing.afterRelease = 250;
+        uidriver::run(uidriver::mouseClick(m_window, scenePos, Qt::LeftButton, Qt::NoModifier, timing));
     }
     bool click(QQuickItem *item, qreal fx = 0.5, qreal fy = 0.5)
     {
@@ -295,27 +132,11 @@ private:
     }
     bool key(int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier, const QString &text = QString())
     {
-        QKeyEvent press(QEvent::KeyPress, key, modifiers, text);
-        press.ignore();
-        QCoreApplication::sendEvent(m_window, &press);
-        QKeyEvent release(QEvent::KeyRelease, key, modifiers, text);
-        release.ignore();
-        QCoreApplication::sendEvent(m_window, &release);
-        settle(30);
-        return press.isAccepted() || release.isAccepted();
+        return uidriver::sendKey(m_window, key, modifiers, text, 30);
     }
     void type(const QString &text)
     {
-        for (const QChar ch : text) {
-            const char16_t u = ch.unicode();
-            int code = 0;
-            if (u == u' ')
-                code = Qt::Key_Space;
-            else if (u < 0x80 && ch.isPrint())
-                code = ch.toUpper().unicode(); // Qt::Key_A … Key_Z, digits and ASCII punctuation
-            key(code, Qt::NoModifier, QString(ch));
-        }
-        settle(150);
+        uidriver::run(uidriver::typeText(m_window, text, uidriver::KeyDelivery::FocusItem, 30, 150));
     }
 
     // ---- The app ----------------------------------------------------------------------------------
@@ -396,8 +217,7 @@ private:
     /// (found with Text.linkAt(), clicked in the middle of its line). False when none is shown.
     bool clickLink(QQuickItem *root, const QString &needle)
     {
-        QList<QQuickItem *> inside;
-        collect(root, inside);
+        const QList<QQuickItem *> inside = uidriver::allItems(root);
         for (QQuickItem *item : inside) {
             if (!visibleTree(item) || !onScreen(item) || item->metaObject()->indexOfMethod("linkAt(double,double)") < 0)
                 continue;
@@ -441,7 +261,6 @@ private:
     QQuickWindow *m_window = nullptr;
     int m_shot = 0;
     int m_failures = 0;
-    int m_timestamp = 0;
     bool m_drawerShot = false;
     const bool m_touch = QCoreApplication::arguments().contains(u"--touch"_s);
 };
@@ -564,8 +383,7 @@ void Journey::tasks()
     });
     QQuickItem *box = nullptr;
     if (row) {
-        QList<QQuickItem *> inside;
-        collect(row, inside);
+        const QList<QQuickItem *> inside = uidriver::allItems(row);
         for (QQuickItem *item : inside) {
             if (isA(item, "TaskBox") && visibleTree(item)) {
                 box = item;

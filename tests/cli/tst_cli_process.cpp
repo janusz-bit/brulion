@@ -9,6 +9,8 @@
 // takes them, `app open` against a stand-in app, and the MCP server (initialize, tools/list,
 // tools/call, errors, the warm index seeing a file written meanwhile).
 #include "appmessage.h"
+#include "controlprotocol.h"
+#include "controlserver.h"
 #include "notebook/session.h"
 #include "singleinstance.h"
 
@@ -101,6 +103,32 @@ class TestCliProcess : public QObject {
         p.closeWriteChannel();
         if (!p.waitForFinished(kTimeoutMs)) {
             p.kill();
+            return r;
+        }
+        r.code = p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -2;
+        r.out = p.readAllStandardOutput();
+        r.err = p.readAllStandardError();
+        r.json = QJsonDocument::fromJson(r.out).object();
+        return r;
+    }
+
+    /// cli() while this process's event loop runs (for stand-ins of the app living here).
+    Run cliLive(const QStringList &args)
+    {
+        QProcess p;
+        p.setProcessEnvironment(environment());
+        p.start(QStringLiteral(BRULION_CLI), args);
+        Run r;
+        if (!p.waitForStarted(kTimeoutMs))
+            return r;
+        p.closeWriteChannel();
+        QElapsedTimer t;
+        t.start();
+        while (p.state() != QProcess::NotRunning && t.elapsed() < kTimeoutMs)
+            QTest::qWait(20);
+        if (p.state() != QProcess::NotRunning) {
+            p.kill();
+            p.waitForFinished();
             return r;
         }
         r.code = p.exitStatus() == QProcess::NormalExit ? p.exitCode() : -2;
@@ -873,6 +901,115 @@ private Q_SLOTS:
         QCOMPARE(messages.last().first().toByteArray(), QByteArray("capture"));
     }
 
+    // The running app's remote control (docs/CLI.md "Remote control") as the command line sees it:
+    // refusals before the app is asked, no app, an app without remote control (the hint), and a
+    // stand-in control socket: the requests sent, the answers and the exit codes of its errors.
+    void appRemoteControl()
+    {
+        Run r = cli({u"app"_s, u"state"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"app_not_running"_s);
+        QVERIFY(r.json.value(u"error"_s)
+                        .toObject()
+                        .value(u"details"_s)
+                        .toObject()
+                        .value(u"hint"_s)
+                        .toString()
+                        .contains(u"--remote-control"_s));
+        // Usage errors are found before asking the app.
+        r = cli({u"app"_s, u"click"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_target"_s);
+        r = cli({u"app"_s, u"click"_s, u"h1"_s, u"--x"_s, u"5"_s, u"--y"_s, u"6"_s});
+        QCOMPARE(r.code, 2);
+        r = cli({u"app"_s, u"navigate"_s, u"{zły"_s});
+        QCOMPARE(r.code, 2);
+        r = cli({u"app"_s, u"find"_s});
+        QCOMPARE(r.code, 2);
+        r = cli({u"app"_s, u"scroll"_s});
+        QCOMPARE(r.code, 2);
+        // --dry-run says what it would ask; --read-only refuses input.
+        r = cli({u"--dry-run"_s, u"app"_s, u"click"_s, u"h3"_s, u"--button"_s, u"right"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"method"_s).toString(), u"click"_s);
+        QCOMPARE(r.result().value(u"params"_s).toObject(),
+                 (QJsonObject{{u"handle"_s, u"h3"_s}, {u"button"_s, u"right"_s}}));
+        r = cli({u"--read-only"_s, u"app"_s, u"type"_s, u"żółw"_s});
+        QCOMPARE(r.code, 7);
+
+        // An app without remote control: refused, with the way to allow it.
+        const QString key = brulion::ipc::SingleInstance::keyFor(m_home + u"/data/Brulion/Brulion"_s);
+        brulion::ipc::SingleInstance app(key);
+        QVERIFY(app.listen());
+        r = cliLive({u"app"_s, u"state"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"remote_control_off"_s);
+        QVERIFY(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(u"--remote-control"_s));
+
+        // A stand-in remote control: echoes what it was asked, or fails with the code asked for.
+        brulion::ipc::ControlServer control;
+        QList<brulion::ipc::ControlRequest> requests;
+        control.setHandler([&requests](const brulion::ipc::ControlRequest &request, brulion::ipc::ControlReply reply) {
+            requests.append(request);
+            const QString fail = request.params.value(u"text"_s).toString();
+            if (request.method == u"find" && fail.startsWith(u"fail:"_s))
+                reply.fail(fail.mid(5), u"Nie wyszło"_s);
+            else if (request.method == u"open" && request.params.value(u"ref"_s).toString() == u"today")
+                reply.fail(u"not_ready"_s, u"No notebook is open (status loading)"_s); // still opening
+            else
+                reply.ok(QJsonObject{{u"method"_s, request.method}, {u"params"_s, request.params}});
+        });
+        QVERIFY(control.listen(brulion::ipc::controlKeyFor(key)));
+        r = cliLive({u"app"_s, u"key"_s, u"Ctrl+K"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"method"_s).toString(), u"key"_s);
+        QCOMPARE(r.result().value(u"params"_s).toObject().value(u"sequence"_s).toString(), u"Ctrl+K"_s);
+        r = cliLive({u"app"_s, u"type"_s, u"Zażółć"_s, u"gęślą"_s, u"jaźń"_s});
+        QCOMPARE(requests.last().params.value(u"text"_s).toString(), u"Zażółć gęślą jaźń"_s);
+        r = cliLive({u"app"_s, u"click"_s, u"120,340"_s, u"--modifiers"_s, u"ctrl"_s});
+        QCOMPARE(requests.last().params, (QJsonObject{{u"x"_s, 120}, {u"y"_s, 340}, {u"modifiers"_s, u"ctrl"_s}}));
+        r = cliLive({u"app"_s, u"drag"_s, u"h1"_s, u"Kosz"_s, u"--hold-ms"_s, u"500"_s});
+        QCOMPARE(requests.last().params, (QJsonObject{{u"from"_s, QJsonObject{{u"handle"_s, u"h1"_s}}},
+                                                      {u"to"_s, QJsonObject{{u"text"_s, u"Kosz"_s}}},
+                                                      {u"holdMs"_s, 500}}));
+        r = cliLive({u"app"_s, u"wait"_s, u"--text"_s, u"Zapisano"_s, u"--gone"_s, u"--timeout"_s, u"300"_s});
+        QCOMPARE(requests.last().method, u"waitFor"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"text"_s, u"Zapisano"_s}, {u"gone"_s, true}, {u"ms"_s, 300}}));
+        QDir().mkpath(m_tmp.filePath(u"tu"_s));
+        QProcess p;
+        p.setProcessEnvironment(environment());
+        p.setWorkingDirectory(m_tmp.filePath(u"tu"_s));
+        p.start(QStringLiteral(BRULION_CLI), {u"app"_s, u"screenshot"_s, u"okno.png"_s});
+        QTRY_VERIFY_WITH_TIMEOUT(p.state() == QProcess::NotRunning, kTimeoutMs);
+        QCOMPARE(requests.last().params.value(u"path"_s).toString(), m_tmp.filePath(u"tu/okno.png"_s));
+        // `app open` asks the app (it resolves the ref in the notebook it shows).
+        r = cliLive({u"app"_s, u"open"_s, u"Dom"_s, u"--line"_s, u"3"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"via"_s).toString(), u"control"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"ref"_s, u"Dom"_s}, {u"line"_s, 3}}));
+        // A notebook still opening: the single-instance message, kept by the app until it is ready.
+        QSignalSpy openMessages(&app, &brulion::ipc::SingleInstance::messageReceived);
+        r = cliLive({u"app"_s, u"open"_s, u"today"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"sent"_s).toString(), u"today"_s);
+        QCOMPARE(requests.last().method, u"open"_s);
+        QTRY_COMPARE(openMessages.size(), 1);
+        QCOMPARE(openMessages.first().first().toByteArray(), QByteArray("today"));
+        // `app capture` with a text saves it through the app; without one it opens the dialog.
+        r = cliLive({u"app"_s, u"capture"_s, u"Kupić mleko jutro o 18"_s});
+        QCOMPARE(requests.last().method, u"capture"_s);
+        // The app's errors as exit codes.
+        const QList<std::pair<QString, int>> codes{{u"bad_params"_s, 2},   {u"not_found"_s, 3},     {u"timeout"_s, 3},
+                                                   {u"stale_handle"_s, 4}, {u"ambiguous_ref"_s, 4}, {u"not_ready"_s, 5},
+                                                   {u"refused"_s, 7},      {u"failed"_s, 1}};
+        for (const auto &[code, exit] : codes) {
+            r = cliLive({u"app"_s, u"find"_s, u"fail:"_s + code});
+            QCOMPARE(r.code, exit);
+            QCOMPARE(r.errorCode(), code);
+            QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(), u"Nie wyszło"_s);
+        }
+    }
+
     void mcp()
     {
         const QString dir = vault({{u"Zwierzęta/Żółw.md"_s, "- żółw\n"}});
@@ -908,6 +1045,9 @@ private Q_SLOTS:
         QVERIFY(names.contains(u"brulion_search"_s));
         QVERIFY(!names.contains(u"brulion_page_delete"_s)); // destructive: not without --allow-destructive
         QVERIFY(!names.contains(u"brulion_task_done"_s));   // an alias of brulion_task_set
+        QVERIFY(names.contains(u"brulion_app_open"_s));
+        QVERIFY(!names.contains(u"brulion_app_state"_s)); // the app's remote control: only with --app-control
+        QVERIFY(!names.contains(u"brulion_app_click"_s));
         reply = request(
                 R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"brulion_capture","arguments":{"text":"Kupić mleko jutro o 18"}}})");
         QJsonObject result = reply.value(u"result"_s).toObject();
@@ -989,6 +1129,46 @@ private Q_SLOTS:
         for (const QJsonValue &t : tools)
             QVERIFY2(t.toObject().value(u"annotations"_s).toObject().value(u"readOnlyHint"_s).toBool(),
                      qPrintable(t.toObject().value(u"name"_s).toString()));
+
+        // --app-control: the tools that drive the running app too (read-only: those that only look).
+        for (const bool readOnly : {false, true}) {
+            QProcess ac;
+            ac.setProcessEnvironment(environment());
+            QStringList args{u"--vault"_s, dir, u"mcp"_s, u"--app-control"_s};
+            if (readOnly)
+                args.append(u"--read-only"_s);
+            ac.start(QStringLiteral(BRULION_CLI), args);
+            QVERIFY(ac.waitForStarted(kTimeoutMs));
+            ac.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})"
+                     "\n"
+                     R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"
+                     "\n");
+            ac.closeWriteChannel();
+            QVERIFY(ac.waitForFinished(kTimeoutMs));
+            const QList<QByteArray> lines = ac.readAllStandardOutput().trimmed().split('\n');
+            QCOMPARE(lines.size(), 2);
+            QVERIFY(QJsonDocument::fromJson(lines.first())
+                            .object()
+                            .value(u"result"_s)
+                            .toObject()
+                            .value(u"instructions"_s)
+                            .toString()
+                            .contains(u"brulion_app_state"_s));
+            QStringList appTools;
+            for (const QJsonValue &t : QJsonDocument::fromJson(lines.last())
+                                               .object()
+                                               .value(u"result"_s)
+                                               .toObject()
+                                               .value(u"tools"_s)
+                                               .toArray())
+                appTools.append(t.toObject().value(u"name"_s).toString());
+            QVERIFY(appTools.contains(u"brulion_app_state"_s));
+            QVERIFY(appTools.contains(u"brulion_app_screenshot"_s));
+            QVERIFY(appTools.contains(u"brulion_app_wait"_s));
+            QCOMPARE(appTools.contains(u"brulion_app_click"_s), !readOnly);
+            QCOMPARE(appTools.contains(u"brulion_app_long_press"_s), !readOnly);
+            QCOMPARE(appTools.contains(u"brulion_app_type"_s), !readOnly);
+        }
 
         // --allow-destructive: page write may empty a page (content "" is a text).
         QProcess rw;

@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "uidriver.h"
 #include "workspace.h"
 #include "workspacesync.h"
 
@@ -31,22 +32,12 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
-#include <QThread>
 #include <QTimer>
 #include <QWheelEvent>
-#include <qtestsupport_gui.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <functional>
-
-QT_BEGIN_NAMESPACE
-// QtGui's entry point for synthetic mouse input (what QtTest's mouse functions call): the click
-// goes through QGuiApplication and the delivery agent like a real one.
-Q_GUI_EXPORT void qt_handleMouseEvent(QWindow *window, const QPointF &local, const QPointF &global,
-                                      Qt::MouseButtons state, Qt::MouseButton button, QEvent::Type type,
-                                      Qt::KeyboardModifiers mods, int timestamp);
-QT_END_NAMESPACE
 
 using namespace Qt::StringLiterals;
 
@@ -54,37 +45,23 @@ namespace brulion::shell {
 
 namespace {
 
-/// Let the event loop run for `ms` (gestures, transitions, queued calls). Not scaled by
-/// BRULION_TEST_SLOWDOWN: these are real input timings (a longer pause turns a tap into a
-/// long press), unlike waitFor()'s deadlines.
-void settle(int ms)
-{
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < ms) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
-        QThread::msleep(2);
-    }
-}
+// Input and item finding: uidriver.h (shared with the user journey and the remote control).
+using uidriver::closeMenus;
+using uidriver::enclosingFlickable;
+using uidriver::findShown;
+using uidriver::isA;
+using uidriver::linkPoint;
+using uidriver::openMenus;
+using uidriver::pointIn;
+using uidriver::renderedTextContaining;
+using uidriver::settle;
+using uidriver::shown;
+using uidriver::shownNamed;
+using uidriver::waitFor;
 
-bool waitFor(const std::function<bool()> &condition, int timeoutMs = 3000)
-{
-    // Sanitizer test runs are ~25x slower: ctest passes BRULION_TEST_SLOWDOWN (tests/CMakeLists.txt).
-    static const int slowdown = qMax(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
-    timeoutMs *= slowdown;
-    QElapsedTimer timer;
-    timer.start();
-    while (!condition()) {
-        if (timer.elapsed() > timeoutMs)
-            return false;
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-        QThread::msleep(5);
-    }
-    return true;
-}
-
-/// Press and release `key` in the window. True when an item handled it (accepted the press or
-/// the release) — an unhandled back key is what lets Android close the app.
+/// Press and release `key` in the window, straight to the focused item (window Shortcut objects
+/// are not involved). True when an item handled it (accepted the press or the release) — an
+/// unhandled back key is what lets Android close the app.
 bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier,
              const QString &text = QString())
 {
@@ -95,61 +72,25 @@ bool sendKey(QQuickWindow *window, int key, Qt::KeyboardModifiers modifiers = Qt
         std::fprintf(stderr, "selftest: key %d, window active %d, focus on %s\n", key, window->isActive(),
                      qPrintable(name));
     }
-    // Straight to the focused item (window Shortcut objects are not involved).
-    QKeyEvent press(QEvent::KeyPress, key, modifiers, text);
-    press.ignore();
-    QCoreApplication::sendEvent(window, &press);
-    QKeyEvent release(QEvent::KeyRelease, key, modifiers, text);
-    release.ignore();
-    QCoreApplication::sendEvent(window, &release);
-    settle(50); // let bindings, transitions and queued calls settle
-    return press.isAccepted() || release.isAccepted();
+    return uidriver::sendKey(window, key, modifiers, text, 50); // then bindings, transitions and queued calls settle
 }
 
 /// A tap with one finger at `scenePos`, as a touch screen sends it (press, `holdMs`, release).
 void touchTap(QQuickWindow *window, QPointF scenePos, int holdMs = 110)
 {
-    // QTouchEventSequence's constructor is protected; QtTest's touchEvent() is a subclass too.
-    struct Sequence : QTest::QTouchEventSequence {
-        Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) {}
-    };
-    static QPointingDevice *device = QTest::createTouchDevice();
-    Sequence sequence(window, device);
-    sequence.press(0, scenePos.toPoint(), window).commit();
-    settle(holdMs);
-    sequence.release(0, scenePos.toPoint(), window).commit();
-    settle(100);
+    uidriver::touchTapNow(window, scenePos, holdMs);
 }
 
 /// A finger dragged from `from` by `delta` (scene coordinates) in small steps, then lifted.
 void touchDrag(QQuickWindow *window, QPointF from, QPointF delta)
 {
-    struct Sequence : QTest::QTouchEventSequence {
-        Sequence(QWindow *w, QPointingDevice *d) : QTest::QTouchEventSequence(w, d, false) {}
-    };
-    static QPointingDevice *device = QTest::createTouchDevice();
-    Sequence sequence(window, device);
-    sequence.press(0, from.toPoint(), window).commit();
-    for (int step = 1; step <= 12; ++step) {
-        settle(16);
-        sequence.move(0, (from + delta * step / 12.0).toPoint(), window).commit();
-    }
-    sequence.release(0, (from + delta).toPoint(), window).commit();
-    settle(300);
+    uidriver::touchDragNow(window, from, delta);
 }
-
-/// A tap on touch UIs (the phone run), a left click otherwise.
-void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch);
-
-/// Timestamps of synthetic mouse events (increasing).
-int mouseTimestamp = 0;
 
 /// The mouse pointer moved to `scenePos`, no button pressed (hover).
 void mouseMove(QQuickWindow *window, QPointF scenePos)
 {
-    qt_handleMouseEvent(window, scenePos, window->mapToGlobal(scenePos), Qt::NoButton, Qt::NoButton, QEvent::MouseMove,
-                        Qt::NoModifier, mouseTimestamp += 1000);
-    settle(50);
+    uidriver::mouseMoveNow(window, scenePos);
 }
 
 /// A click (left by default; with `modifiers` held) at `scenePos` of the window, as a real mouse
@@ -157,153 +98,20 @@ void mouseMove(QQuickWindow *window, QPointF scenePos)
 void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton,
                 Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
-    int &timestamp = mouseTimestamp;
-    timestamp += 1000; // never a double click
-    const QPointF global = window->mapToGlobal(scenePos);
-    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, modifiers, timestamp);
-    qt_handleMouseEvent(window, scenePos, global, button, button, QEvent::MouseButtonPress, modifiers, timestamp += 20);
-    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, button, QEvent::MouseButtonRelease, modifiers,
-                        timestamp += 80);
-    settle(100);
+    uidriver::mouseClickNow(window, scenePos, button, modifiers);
 }
 
 /// A left-button drag with the mouse from `from` to `to` (scene coordinates) in small steps; held
 /// there `holdMs`, then — unless `escape` (Escape pressed first, the drag cancelled) — released.
 void mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs = 0, bool escape = false)
 {
-    int &timestamp = mouseTimestamp;
-    timestamp += 1000;
-    const auto global = [window](QPointF p) { return window->mapToGlobal(p); };
-    qt_handleMouseEvent(window, from, global(from), Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
-                        timestamp);
-    qt_handleMouseEvent(window, from, global(from), Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress,
-                        Qt::NoModifier, timestamp += 20);
-    settle(40);
-    constexpr int steps = 16;
-    for (int step = 1; step <= steps; ++step) {
-        const QPointF p = from + (to - from) * step / double(steps);
-        qt_handleMouseEvent(window, p, global(p), Qt::LeftButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
-                            timestamp += 16);
-        settle(16);
-    }
-    settle(holdMs);
-    if (escape) {
-        QKeyEvent press(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
-        QCoreApplication::sendEvent(window, &press);
-        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Escape, Qt::NoModifier);
-        QCoreApplication::sendEvent(window, &release);
-        settle(50);
-    }
-    qt_handleMouseEvent(window, to, global(to), Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease,
-                        Qt::NoModifier, timestamp += 20);
-    settle(200);
+    uidriver::mouseDragNow(window, from, to, holdMs, escape);
 }
 
+/// A tap on touch UIs (the phone run), a left click otherwise.
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
 {
-    if (touch)
-        touchTap(window, scenePos);
-    else
-        mouseClick(window, scenePos);
-}
-
-/// The visible rendered text (a Text with linkAt()) under `root` whose text contains `needle`
-/// and whose middle is on screen inside `root` (lists keep delegates beyond their edges too).
-QQuickItem *renderedTextContaining(QQuickItem *root, const QString &needle)
-{
-    const QRectF area = root->mapRectToScene(QRectF(0, 0, root->width(), root->height()));
-    QList<QQuickItem *> stack{ root };
-    while (!stack.isEmpty()) {
-        QQuickItem *item = stack.takeLast();
-        if (!item->isVisible())
-            continue;
-        if (item->metaObject()->indexOfMethod("linkAt(double,double)") >= 0
-            && item->property("text").toString().contains(needle)
-            && area.contains(item->mapToScene(QPointF(item->width() / 2, item->height() / 2))))
-            return item;
-        stack.append(item->childItems());
-    }
-    return nullptr;
-}
-
-/// A point of `text` (scene coordinates) on its link whose URL contains `url`; (-1, -1) if none.
-QPointF linkPoint(QQuickItem *text, const QString &url)
-{
-    for (qreal y = 2; y < text->height(); y += 3) {
-        for (qreal x = 2; x < text->width(); x += 4) {
-            QString link;
-            QMetaObject::invokeMethod(text, "linkAt", qReturnArg(link), x, y);
-            if (link.contains(url))
-                return text->mapToScene(QPointF(x + 4, y + 4));
-        }
-    }
-    return { -1, -1 };
-}
-
-/// True when the item's QML type (or one it is based on) is `prefix` ("TasksRow" matches the
-/// class "TasksRow_QMLTYPE_12").
-bool isA(const QObject *object, const char *prefix)
-{
-    for (const QMetaObject *m = object->metaObject(); m; m = m->superClass()) {
-        if (QByteArray(m->className()).startsWith(prefix))
-            return true;
-    }
-    return false;
-}
-
-/// The item and all its ancestors are visible.
-bool shown(const QQuickItem *item)
-{
-    for (const QQuickItem *p = item; p; p = p->parentItem()) {
-        if (!p->isVisible() || p->opacity() <= 0.01)
-            return false;
-    }
-    return item->width() >= 1 && item->height() >= 1;
-}
-
-QPointF pointIn(const QQuickItem *item, qreal fx = 0.5, qreal fy = 0.5)
-{
-    return item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
-}
-
-/// The first shown item under `root` (depth first, in child order) for which `pred` holds and
-/// whose middle lies inside `root` (lists keep delegates beyond their edges, pools hide some).
-QQuickItem *findShown(QQuickItem *root, const std::function<bool(QQuickItem *)> &pred)
-{
-    if (!root)
-        return nullptr;
-    const QRectF area = root->mapRectToScene(QRectF(0, 0, root->width(), root->height()));
-    std::function<QQuickItem *(QQuickItem *)> visit = [&](QQuickItem *item) -> QQuickItem * {
-        if (!item->isVisible())
-            return nullptr;
-        if (pred(item) && shown(item) && area.contains(pointIn(item)))
-            return item;
-        const QList<QQuickItem *> children = item->childItems();
-        for (QQuickItem *child : children) {
-            if (QQuickItem *found = visit(child))
-                return found;
-        }
-        return nullptr;
-    };
-    return visit(root);
-}
-
-/// The menus (BMenu) open in the window: their popup items in the overlay (the visual tree also
-/// reaches menus inside list delegates, which the QObject tree of the window does not).
-int openMenus(QQuickWindow *window)
-{
-    int open = 0;
-    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
-        if (!item->isVisible())
-            return;
-        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickMenu"))
-            ++open;
-        const QList<QQuickItem *> children = item->childItems();
-        for (QQuickItem *child : children)
-            visit(child);
-    };
-    visit(window->contentItem());
-    return open;
+    uidriver::tapOrClickNow(window, scenePos, touch);
 }
 
 /// Close the tooltips waiting for deletion, and return those still alive of hidden controls. A
@@ -340,22 +148,6 @@ QStringList closeToolTipsWaitingForDeletion(QQuickWindow *window)
     visit(window->contentItem());
     settle(50);
     return stray;
-}
-
-/// Close the menus open in the window (a failed check must not leave a modal menu behind).
-void closeMenus(QQuickWindow *window)
-{
-    std::function<void(QQuickItem *)> visit = [&](QQuickItem *item) {
-        if (!item->isVisible())
-            return;
-        if (item->inherits("QQuickPopupItem") && item->parent() && item->parent()->inherits("QQuickMenu"))
-            QMetaObject::invokeMethod(item->parent(), "close");
-        const QList<QQuickItem *> children = item->childItems();
-        for (QQuickItem *child : children)
-            visit(child);
-    };
-    visit(window->contentItem());
-    waitFor([window] { return openMenus(window) == 0; });
 }
 
 /// Right-click TapHandlers on screen that a finger triggers too: Qt hands touch points (they have
@@ -2345,32 +2137,6 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     check(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original,
           "the default reminder time is back");
     app->goHome();
-}
-
-/// The shown item called `name` under `root` through the visual tree (Repeater items are not
-/// QObject children of the window), maybe scrolled out of its view; else nullptr.
-QQuickItem *shownNamed(QQuickItem *root, const QString &name)
-{
-    if (!root || !root->isVisible())
-        return nullptr;
-    if (root->objectName() == name)
-        return root;
-    const QList<QQuickItem *> children = root->childItems();
-    for (QQuickItem *child : children) {
-        if (QQuickItem *found = shownNamed(child, name))
-            return found;
-    }
-    return nullptr;
-}
-
-/// The nearest Flickable around `item`, else nullptr.
-QQuickItem *enclosingFlickable(QQuickItem *item)
-{
-    for (QQuickItem *p = item ? item->parentItem() : nullptr; p; p = p->parentItem()) {
-        if (p->inherits("QQuickFlickable"))
-            return p;
-    }
-    return nullptr;
 }
 
 /// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.

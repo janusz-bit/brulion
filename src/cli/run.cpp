@@ -89,7 +89,8 @@ int run(int argc, char **argv)
     }
     if (inv.command->id == u"mcp")
         return serveMcp(ctx, inv.globals.readOnly || inv.args.value(u"readOnly"_s).toBool(),
-                        inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool());
+                        inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool(),
+                        inv.args.value(u"appControl"_s).toBool());
     return output(inv.command, execute(ctx, *inv.command, inv.args));
 }
 

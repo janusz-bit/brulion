@@ -50,6 +50,37 @@ private Q_SLOTS:
         QTest::newRow("help topic") << QStringList{u"help"_s, u"task"_s, u"add"_s} << u"help"_s
                                     << uR"({"topic":"task add"})"_s;
         QTest::newRow("--version") << QStringList{u"--version"_s} << u"version"_s << u"{}"_s;
+        // The running app's remote control.
+        QTest::newRow("app click a point") << QStringList{u"app"_s, u"click"_s, u"120,340"_s, u"--button"_s, u"right"_s}
+                                           << u"app.click"_s << uR"({"button":"right","target":"120,340"})"_s;
+        QTest::newRow("app click Polish text")
+                << QStringList{u"app"_s, u"click"_s, u"Zapisz"_s, u"zmiany"_s, u"--modifiers"_s, u"ctrl+shift"_s}
+                << u"app.click"_s << uR"({"modifiers":"ctrl+shift","target":"Zapisz zmiany"})"_s;
+        QTest::newRow("app long-press") << QStringList{u"app"_s, u"long-press"_s, u"h12"_s, u"--ms"_s, u"900"_s}
+                                        << u"app.long-press"_s << uR"({"ms":"900","target":"h12"})"_s;
+        QTest::newRow("app double-click") << QStringList{u"app"_s, u"double-click"_s, u"--object-name"_s, u"x"_s}
+                                          << u"app.double-click"_s << uR"({"objectName":"x"})"_s;
+        QTest::newRow("app drag") << QStringList{u"app"_s, u"drag"_s, u"h1"_s, u"10,20"_s, u"--hold-ms"_s, u"300"_s}
+                                  << u"app.drag"_s << uR"({"from":"h1","holdMs":"300","to":"10,20"})"_s;
+        QTest::newRow("app scroll up") << QStringList{u"app"_s, u"scroll"_s, u"--dy"_s, u"-200"_s} << u"app.scroll"_s
+                                       << uR"({"dy":"-200"})"_s;
+        QTest::newRow("app type") << QStringList{u"app"_s, u"type"_s, u"zażółć"_s, u"gęślą"_s, u"jaźń"_s}
+                                  << u"app.type"_s << uR"({"text":"zażółć gęślą jaźń"})"_s;
+        QTest::newRow("app key") << QStringList{u"app"_s, u"key"_s, u"Ctrl+K"_s} << u"app.key"_s
+                                 << uR"({"sequence":"Ctrl+K"})"_s;
+        QTest::newRow("app keys") << QStringList{u"app"_s, u"key"_s, u"Down,"_s, u"Return"_s, u"--count"_s, u"2"_s}
+                                  << u"app.key"_s << uR"({"count":"2","sequence":"Down, Return"})"_s;
+        QTest::newRow("app wait") << QStringList{u"app"_s, u"wait"_s, u"--route"_s, u"tasks"_s, u"--idle"_s}
+                                  << u"app.wait"_s << uR"({"idle":true,"route":"tasks"})"_s;
+        QTest::newRow("app find") << QStringList{u"app"_s, u"find"_s, u"Żółw"_s, u"--include-hidden"_s} << u"app.find"_s
+                                  << uR"({"includeHidden":true,"text":"Żółw"})"_s;
+        QTest::newRow("app open a line") << QStringList{u"app"_s, u"open"_s, u"Dom"_s, u"--line"_s, u"4"_s}
+                                         << u"app.open"_s << uR"({"line":"4","target":"Dom"})"_s;
+        QTest::newRow("app alone opens") << QStringList{u"app"_s} << u"app.open"_s << u"{}"_s;
+        QTest::newRow("app capture text") << QStringList{u"app"_s, u"capture"_s, u"Kupić"_s, u"mleko"_s}
+                                          << u"app.capture"_s << uR"({"text":"Kupić mleko"})"_s;
+        QTest::newRow("app drag needs two")
+                << QStringList{u"app"_s, u"drag"_s, u"h1"_s, u"h2"_s, u"h3"_s} << QString() << u"extra_arguments"_s;
         QTest::newRow("unknown command") << QStringList{u"pagez"_s} << QString() << u"unknown_command"_s;
         QTest::newRow("half a command") << QStringList{u"page"_s} << QString() << u"unknown_command"_s;
         QTest::newRow("no command") << QStringList{} << QString() << u"no_command"_s;
@@ -218,8 +249,39 @@ private Q_SLOTS:
                                "app.open",
                                "app.today",
                                "app.capture",
+                               "app.state",
+                               "app.navigate",
+                               "app.commands",
+                               "app.command",
+                               "app.screenshot",
+                               "app.find",
+                               "app.click",
+                               "app.long-press",
+                               "app.double-click",
+                               "app.drag",
+                               "app.scroll",
+                               "app.type",
+                               "app.key",
+                               "app.wait",
+                               "app.quit",
                                "init"})
             QVERIFY2(ids.contains(QString::fromLatin1(id)), id);
+        // The app control commands: "app …", no notebook needed, the input ones refused in
+        // read-only mode (they can change notes).
+        for (const Command &c : commands()) {
+            if (!c.appControl)
+                continue;
+            QVERIFY2(c.id.startsWith(u"app."_s), qPrintable(c.id));
+            QVERIFY2(!c.needsVault && !c.destructive, qPrintable(c.id));
+        }
+        for (const char *id : {"app.click", "app.long-press", "app.double-click", "app.drag", "app.type", "app.key",
+                               "app.command", "app.quit", "app.capture"})
+            QVERIFY2(findCommand(QString::fromLatin1(id))->writes, id);
+        for (const char *id : {"app.state", "app.find", "app.screenshot", "app.wait", "app.navigate", "app.scroll"})
+            QVERIFY2(!findCommand(QString::fromLatin1(id))->writes, id);
+        // Offered over MCP by default (no remote control needed for them).
+        for (const char *id : {"app.open", "app.today", "app.capture"})
+            QVERIFY2(!findCommand(QString::fromLatin1(id))->appControl, id);
         // Destructive as decided: replacing, renaming, moving, deleting and restoring.
         QStringList destructive;
         for (const Command &c : commands()) {
@@ -322,6 +384,7 @@ private Q_SLOTS:
         QVERIFY(completionScript(u"tcsh"_s, u"brulion-cli"_s).isEmpty());
         QCOMPARE(optionName(u"expectHash"_s), u"--expect-hash"_s);
         QCOMPARE(toolName(*findCommand(u"task.add"_s)), u"brulion_task_add"_s);
+        QCOMPARE(toolName(*findCommand(u"app.long-press"_s)), u"brulion_app_long_press"_s);
     }
 
     void diff()
@@ -358,7 +421,7 @@ private Q_SLOTS:
         const qsizetype end = docs.indexOf(u"<!-- /commands -->"_s);
         QVERIFY(start >= 0 && end > start);
         QSet<QString> documented;
-        static const QRegularExpression row(u"^\\| `([a-z]+(?: [a-z]+)?)"_s, QRegularExpression::MultilineOption);
+        static const QRegularExpression row(u"^\\| `([a-z]+(?: [a-z-]+)?)"_s, QRegularExpression::MultilineOption);
         for (const auto &m : row.globalMatch(docs.mid(start, end - start)))
             documented.insert(m.captured(1));
         QSet<QString> registered;

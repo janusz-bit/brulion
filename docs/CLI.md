@@ -7,8 +7,11 @@ mówi, co poszło nie tak. Ten sam zestaw poleceń działa jako serwer MCP (`bru
 agentów AI, np. Hermesa albo Claude Code. Agent dostaje notatki jako zwykły folder (Syncthing,
 klient Nextcloud). Zmiany agenta trafiają do historii wersji z opisem „Zastąpiona z wiersza poleceń
 (agent)”, polecenia, które coś usuwają lub nadpisują, wymagają `--allow-destructive`, a usunięte
-strony idą do kosza. Przewodnik dla użytkownika: strona „Wiersz poleceń i agenci AI” w dokumentacji
-w aplikacji. Poniżej — dokumentacja techniczna (po angielsku).
+strony idą do kosza. Gdy w aplikacji włączysz „Pozwól agentom sterować aplikacją” (Ustawienia →
+Aplikacja → Dla programistów) albo uruchomisz ją z `--remote-control`, agent może też sterować
+działającym oknem: sprawdzić, co pokazuje, kliknąć, pisać, nacisnąć skrót i zrobić zrzut ekranu
+(`brulion-cli app …`, niżej „Remote control”). Przewodnik dla użytkownika: strona „Wiersz poleceń
+i agenci AI” w dokumentacji w aplikacji. Poniżej — dokumentacja techniczna (po angielsku).
 
 ---
 
@@ -20,6 +23,8 @@ settings.
 * Desktop only (Linux): `brulion-cli` in the Nix package and in `cmake --install`; `brulion cli …`
   inside the app's binary (also `Brulion.AppImage cli …`). Android and the browser have no command
   line: agents reach those notes through the synced folder.
+* The `app …` commands talk to the Brulion running in this user session; with its remote control
+  on (off by default) they drive it: state, input, screenshots ("Remote control" below).
 * `nix run github:janusz-bit/brulion#brulion-cli -- …`, or the CLI-only package
   `packages.<system>.brulion-cli` (no Qt Quick, QML, SVG or Wayland: small, quick to build on a
   Raspberry Pi).
@@ -88,7 +93,7 @@ A failure: `{"ok": false, "command": …, "vault": …, "error": {"code": "stale
 "details": {…}}, "warnings": […]}`. Error codes are English and stable (`not_found`,
 `page_not_found`, `ambiguous_ref`, `stale_ref`, `hash_mismatch`, `date_not_understood`,
 `query_error`, `read_only`, `destructive_refused`, `outside_vault`, `no_vault`, `app_not_running`,
-…); messages are for people. Warnings (`date_in_past`, `ignored_words`, `moved`,
+`remote_control_off`, `bad_target`, `stale_handle`, `timeout`, …); messages are for people. Warnings (`date_in_past`, `ignored_words`, `moved`,
 `stdin_invalid_utf8`, `ref_also_a_date`, …) never fail a command.
 
 * Paths are relative to the notebook, NFC, with `/`.
@@ -109,7 +114,7 @@ A failure: `{"ok": false, "command": …, "vault": …, "error": {"code": "stale
 | 2 | usage: unknown command or option, missing or invalid argument, a path outside the notebook or in `.brulion/` / `.trash/` |
 | 3 | not found: page, block, line, heading, history version |
 | 4 | conflict: stale ref, hash mismatch, ambiguous page name (with candidates), target exists, a file that keeps changing, not UTF-8 |
-| 5 | unavailable: no notebook, not a folder, lock timeout, no running app |
+| 5 | unavailable: no notebook, not a folder, lock timeout, no running app, the app's remote control off, no notebook open in the app |
 | 6 | not understood: a date phrase, a recurrence, a query, a calculation |
 | 7 | refused by policy: `--read-only`, a destructive command without `--allow-destructive` |
 
@@ -180,15 +185,30 @@ Never compute a hash yourself.
 | `history list <ref>` | | versions of a page on this device (also a deleted one) | |
 | `history show <id>` | | a version's text | |
 | `history restore <ref> <id>` | | write a version back (the current text is kept as one) | destructive |
-| `app open <target>` | a ref, `today` or `capture` | show the running app there (exit 5 when none runs) | |
+| `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
-| `app capture` | | quick capture in the running app | |
+| `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
+| `app state` | | what the app shows: status, notebook, routes, focused item, the edited block, open popups, last toasts, window, theme, language (remote control, below) | |
+| `app navigate <route>` | a view or `{"view": …}`; `[--side]` | show a view | |
+| `app commands` | | the command palette's commands `{id, title, subtitle, shortcut, enabled}` | |
+| `app command <id>` | | run one (`go.calendar`, `page.source`, `theme.toggle` …) | yes |
+| `app screenshot [<path>]` | a `.png` file | the window as a PNG; default: `$XDG_RUNTIME_DIR/brulion-screenshots/` | |
+| `app find [<text>]` | `[--object-name N] [--type T] [--exact] [--include-hidden] [--within H] [--limit N]` | items, topmost first: `{handle, type, objectName, text, geometry, visible, onScreen, enabled, focus, checked?, secret?}` | |
+| `app click [<target>]` | `[--handle H \| --x X --y Y \| --text T --object-name N --type T --exact] [--button left\|right\|middle] [--modifiers ctrl+shift] [--device mouse\|touch]` | a click (a tap with `--device touch`) | yes |
+| `app long-press [<target>]` | the target options, `[--ms 800] [--device]` | press and hold | yes |
+| `app double-click [<target>]` | the target options, `[--button] [--modifiers] [--device]` | a double click / double tap | yes |
+| `app drag <from> <to>` | `[--hold-ms N] [--button] [--modifiers] [--device]` | drag between two targets | yes |
+| `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle | |
+| `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters, `\n` = Return) | yes |
+| `app key <keys>` | `[--count N]` | press keys: `Ctrl+K`, `Escape`, `"Down, Down, Return"` | yes |
+| `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
+| `app quit` | | quit the running app | yes |
 | `init <path>` | | create a notebook folder | yes |
 | `version` | | `{version, qt, mcpProtocol}` | |
 | `help [<command>]` | `[--json]` | help | |
 | `schema [<command>]` | | JSON Schema (draft 2020-12) of the arguments | |
 | `completion <shell>` | bash, fish, zsh | a completion script (`brulion-cli completion bash > ~/.local/share/bash-completion/completions/brulion-cli`) | |
-| `mcp` | `[--read-only] [--allow-destructive]` | the MCP server (below) | |
+| `mcp` | `[--read-only] [--allow-destructive] [--app-control]` | the MCP server (below) | |
 <!-- /commands -->
 
 `help --json` and `schema` describe every argument (type, required, positional or `--option`); the
@@ -246,8 +266,11 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
 * Results: the same envelope as above, as `structuredContent` and as JSON text; `isError` when it
   failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors.
 * `--read-only` offers only the tools that read; destructive tools are offered only with
-  `--allow-destructive`. Meta commands (help, schema, completion, mcp, init) and the `task done`…
-  aliases are no tools.
+  `--allow-destructive`; the tools that drive the running app (`brulion_app_state`,
+  `brulion_app_click`, `brulion_app_type`, `brulion_app_screenshot`, … — "Remote control" below)
+  only with `--app-control` (`brulion_app_open`, `brulion_app_today` and `brulion_app_capture` are
+  always there). `brulion_app_screenshot` returns the picture too (an `image` content item, PNG).
+  Meta commands (help, schema, completion, mcp, init) and the `task done`… aliases are no tools.
 * The notebook stays open, watched and indexed: calls after the first are fast (on a Raspberry Pi,
   indexing 10 000 notes takes about 15 s once). Files other programs write are seen before the
   next call.
@@ -263,12 +286,129 @@ Hermes on NixOS: see docs/NIXOS.md "Agent AI (Hermes) i wiersz poleceń".
 ## The running app
 
 `app open <ref>` (and `app today`, `app capture`) tell the Brulion running in this user session to
-show a page, a line of it, a block, a daily note or quick capture — through its single-instance
-socket (`src/ipc`). It opens pages of the notebook it shows: a ref of another notebook gives the
-app a notice instead (and the command a warning). Without a running app: exit 5 with
-`{"gui": {"running": false}}`. Full remote control of the running app (its state, navigation,
-screenshots, input) is planned on a socket of its own; the message format (`<verb> <json>`) leaves
-room for it.
+show a page, a line of it, a block, a daily note or quick capture. Without its remote control
+they go through its single-instance socket (`src/ipc/appmessage.h`, one-way): the ref is resolved
+here and the app opens pages of the notebook it shows (a ref of another notebook gives the app a
+notice and the command a warning). Without a running app: exit 5 with `{"gui": {"running": false}}`.
+
+## Remote control
+
+AI agents and scripts can drive the running app itself: see what it shows, navigate, click, type,
+press shortcuts, run palette commands, wait for the UI and take screenshots — to work with the
+user in the app, or to test the UI. Desktop (Linux) only.
+
+**Off by default.** The app listens only while it runs with `--remote-control` or the device
+setting is on: Settings → Application → For developers → „Pozwól agentom sterować aplikacją
+(gniazdo lokalne)” (`devtools/remoteControl` in `Brulion.ini`; switching it takes effect at once — switched off,
+the socket and its connections close; the settings show the socket while it listens).
+`--remote-control` applies to a new run: a second launch while Brulion runs only brings it to
+the front (and says so on stderr). Without it every command below exits 5:
+`app_not_running` when no app runs, `remote_control_off` when it runs without remote control,
+both with a `hint`.
+
+**Security.** The socket is `<single-instance socket>-control` in the user's runtime folder
+(`$XDG_RUNTIME_DIR/brulion-<hash>-control`, a folder only the user can enter), the socket itself
+owner-only (0600), and connections of other users are refused (their credentials are checked).
+But while it is on, **any program of this user can drive the UI and read the notes it shows** (and
+type into them): turn it on only while an agent needs it. `state` holds nothing secret (no
+passwords, no tokens), and the text of a password field never leaves the app (`find`, `state` and
+the input commands describe it as `"secret": true` with no text, a text selector never matches
+it); a screenshot is written only to the path asked for (an absolute `.png` in a
+folder that exists) or, by default, into `$XDG_RUNTIME_DIR/brulion-screenshots/`; every request is
+in the event log ("Rejestr zdarzeń", detailed mode: the method and its parameters — typed and
+captured text only by its length).
+
+```sh
+brulion --remote-control &                       # or the switch in the settings
+brulion-cli app state                            # status, notebook, route, focus, toasts, window
+brulion-cli app open "Projekty/Dom" --heading Zakupy
+brulion-cli app find Zadania --exact             # items with handles and window coordinates
+brulion-cli app click h12                        # or: app click --text Zadania, app click 120,340
+brulion-cli app wait --route tasks
+brulion-cli app key Ctrl+K && brulion-cli app type kalendarz && brulion-cli app key Return
+brulion-cli app screenshot ~/zrzut.png
+brulion-cli app wait --idle                      # nothing moving, nothing indexing, every edit saved
+```
+
+* **Targets** of `click`, `long-press`, `double-click`, `drag` and `scroll`: a handle (`h12`,
+  from `find` or `state`; stable while its item lives — `stale_handle`, exit 4, once it is gone),
+  a point in window coordinates (`120,340`), or the topmost shown item with a text (part of it,
+  any letter case; `--exact` for all of it), an `objectName` or a QML type (`BButton`,
+  `TasksRow`, `TextEdit` — Qt Quick types also by their QML names). An item off screen inside a
+  list is scrolled into view first.
+* **Real input.** Mouse and touch events go through Qt like a device's (pointer handlers see
+  whole clicks and long presses), keys like a keyboard's (shortcuts first, so `Ctrl+K` opens the
+  palette as it does for a user — and a text field keeps the keys it handles). `--device touch`
+  taps, holds and drags with a finger (default: a finger when the app runs with `--touch`, except
+  for `scroll`, which turns the wheel unless asked for a finger: like a real one, a finger where
+  nothing can scroll that way presses what it is on). Input needs a shown, active window: it is
+  shown and asked to be active first.
+* **One at a time, settled.** Gestures are played on the app's event loop, one after another
+  (nothing nested: the app stays in real use), started and answered once the window has stopped
+  changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next
+  command sees a settled UI (a palette that opened has given its field the keyboard). Input asked
+  for by a client that has gone (an interrupted command) is dropped, and its typing stops.
+* `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
+  new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
+  saved.
+* `app open` with remote control on: the app resolves the ref in the notebook it shows, as this
+  command line resolves refs (paths, names as `[[links]]` read them, aliases, `today`, dates,
+  `Dom.md#L12@hash`, `^id`), and answers with the route it opened (`not_found` with
+  `suggestions`, `ambiguous_ref` with `candidates`). With `--vault` (or `BRULION_VAULT`) naming
+  another notebook than the app shows: exit 4 `other_notebook`.
+* `--dry-run` prints the request it would send (`{method, params}`), `--read-only` refuses the
+  commands that can change notes (click, type, key, command, capture, quit …).
+* Exit codes of the app's errors: `bad_params` 2, `not_found` and `timeout` 3, `stale_handle`
+  and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a disabled command, the
+  documentation notebook for capture) 7, `failed` 1.
+
+### Protocol
+
+JSON lines over the socket (`src/ipc/controlprotocol.h`, version 1):
+`{"id": 1, "method": "state", "params": {}}` → `{"id": 1, "ok": true, "result": {…}}` or
+`{"id": 1, "ok": false, "error": {"code": "bad_params", "message": "…", "details": {…}}}`. Requests
+may be pipelined; answers come as they finish (the `id` ties them). Malformed lines get
+`parse_error` / `invalid_request`, unknown methods `unknown_method` (with the list), unknown or
+mistyped parameters `bad_params` (with `param`) before the app runs anything.
+
+| Method | Parameters | Result |
+|---|---|---|
+| `hello` | | `{protocol, app, version, platform, methods}` |
+| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source}, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
+| `navigate` | `route` (a view name or a route object, docs/UI.md "Navigation"), `side` | `{route, sidePanelRoute}` |
+| `open` | `ref`, `line` (0-based), `blockId`, `heading`, `side` | `{route, currentRoute}` |
+| `commands` / `command` | — / `id` | `{commands}` / `{id, route}` |
+| `capture` | `text` | quick capture's `{kind, text, date, time, when, line, path}` |
+| `screenshot` | `path` | `{path, width, height, devicePixelRatio}` |
+| `find` | `text`, `objectName`, `type`, `exact`, `visibleOnly` (true), `within` (a handle), `limit` (50) | `{items, total}` |
+| `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}` |
+| `longPress` | a target, `ms` (800), `device` | the same |
+| `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}` |
+| `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click |
+| `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
+| `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
+| `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` |
+| `quit` | | `{quitting: true}`, then the app quits |
+
+### Android and the browser
+
+Not built there. On Android, debuggable APKs take command-line options through
+`am start … --es applicationArguments '…'` (docs/UI.md, the `--scroll-probe` row), and `adb shell
+input tap|swipe|text` and `adb exec-out screencap -p` drive and capture the app. In the browser,
+drive the page with Playwright or obscura (Chrome DevTools Protocol), as `scripts/wasm-smoke.mjs`
+does with its `?selftest=` checks (docs/WEB.md "Test dymny w przeglądarce bez okna").
+
+### Development
+
+`src/ipc` holds the protocol (`controlprotocol.h`: parsing, the methods and their parameters,
+targets, routes), the socket (`controlserver.h`: owner-only, peer credentials, answers in any
+order) and the client (`controlclient.h`); the app's side is `src/app/shell/remotecontrol.h`
+(created by `main()`, state and methods over `AppController`, `CommandModel` and the window), on
+the UI driver `src/app/shell/uidriver.h` it shares with the shell self-test and the journey;
+the commands are `src/cli/commands_app.cpp`. Tests: `tests/ipc/tst_ipc_control` (the protocol, the
+socket), `tests/app/shell/tst_uidriver` (input and items on a small scene),
+`tests/app/shell/tst_remote_control_qml` (the real app offscreen driven through `brulion-cli app …`),
+`tests/cli` (refusals, a stand-in control socket, the MCP tools).
 
 ## For agents: note text is data
 
@@ -281,7 +421,8 @@ latest read, and check dates with `date parse` before writing them.
 
 `src/cli` (library `brulion_cli` + executable `brulion-cli`): `registry.cpp` (the registry, help,
 schema, completion), `args.cpp` (argv), `context.cpp` (the notebook, refs, dates, writes),
-`commands_*.cpp`, `output.cpp` (envelope, text, diff), `mcp.cpp`, `run.cpp`. Tests: `tests/cli`
+`commands_*.cpp` (`commands_app.cpp`: the running app), `output.cpp` (envelope, text, diff),
+`mcp.cpp`, `run.cpp`. Tests: `tests/cli`
 (`tst_cli_args` in process, `tst_cli_process` runs the binary on temporary notebooks, also the MCP
 server); the shared logic is tested in `tests/core/notebook`. Human messages are English and
 translatable (context `brulion::cli`, not in the Polish catalog yet): error messages through

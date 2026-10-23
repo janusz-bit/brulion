@@ -163,6 +163,10 @@ Pozostałe opcje:
   klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). CI
   uruchamia go z 3000 notatek.
 
+Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
+docs/CLI.md „Remote control”) w przeglądarce nie ma: stronę prowadzi się przez Chrome DevTools
+Protocol — Playwrightem, obscurą albo jak ten skrypt — z jej `?selftest=…`.
+
 Chromium: `$CHROME` albo `chromium`/`google-chrome` z `PATH`; WebGL 2 przez SwiftShader.
 `BRULION_CHROME_NO_SANDBOX=1` (lub `CI=true`) wyłącza sandbox, gdy nie może wystartować
 (kontenery, GitHub Actions na Ubuntu 24.04).

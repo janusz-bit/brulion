@@ -11,7 +11,8 @@ import Brulion
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
 // length, test notification), Synchronizacja (qml/io/SyncSettings: status,
 // the sync center, the Nextcloud account), Aplikacja (close to tray, the event log and its
-// detailed mode, version, licence, source code).
+// detailed mode, version, licence, source code; on the desktop "Dla programistów": the switch
+// that lets AI agents drive the running app, AppController.remoteControl).
 //
 // Wide windows: section list on the left, one section on the right. Narrow: all sections in
 // one scrolling column.
@@ -608,78 +609,118 @@ Item {
 
     Component {
         id: appSection
-        SettingsGroup {
-            heading: qsTr("Application")
+        ColumnLayout {
+            spacing: Theme.space8
 
-            BSwitch {
-                Layout.fillWidth: true
-                visible: AppController.isDesktop
-                enabled: AppController.trayAvailable
-                text: qsTr("Keep running in the system tray")
-                description: AppController.trayAvailable
-                             ? qsTr("Closing the window keeps Brulion in the tray, so reminders still ring.")
-                             : qsTr("No system tray was found on this desktop.")
-                iconName: "monitor"
-                checked: AppSettings.closeToTray
-                onToggled: AppSettings.closeToTray = checked
-            }
-            ShellSettingRow {
-                title: qsTr("Event log")
-                description: qsTr("What the app and the sync did, step by step. It stays on this device; share it when something does not work.")
-                BBadge {
-                    visible: Logs.problemCount > 0
-                    count: Logs.problemCount
-                    variant: "warning"
-                    Accessible.name: qsTr("%n warning(s) or error(s)", "", Logs.problemCount)
+            SettingsGroup {
+                heading: qsTr("Application")
+
+                BSwitch {
+                    Layout.fillWidth: true
+                    visible: AppController.isDesktop
+                    enabled: AppController.trayAvailable
+                    text: qsTr("Keep running in the system tray")
+                    description: AppController.trayAvailable
+                                 ? qsTr("Closing the window keeps Brulion in the tray, so reminders still ring.")
+                                 : qsTr("No system tray was found on this desktop.")
+                    iconName: "monitor"
+                    checked: AppSettings.closeToTray
+                    onToggled: AppSettings.closeToTray = checked
                 }
-                BButton {
-                    objectName: "settingsOpenLog"
-                    text: qsTr("Open")
+                ShellSettingRow {
+                    title: qsTr("Event log")
+                    description: qsTr("What the app and the sync did, step by step. It stays on this device; share it when something does not work.")
+                    BBadge {
+                        visible: Logs.problemCount > 0
+                        count: Logs.problemCount
+                        variant: "warning"
+                        Accessible.name: qsTr("%n warning(s) or error(s)", "", Logs.problemCount)
+                    }
+                    BButton {
+                        objectName: "settingsOpenLog"
+                        text: qsTr("Open")
+                        iconName: "scroll-text"
+                        size: "small"
+                        onClicked: AppController.navigate({ view: "logs" })
+                    }
+                }
+                BSwitch {
+                    objectName: "settingsDetailedLog"
+                    Layout.fillWidth: true
+                    text: qsTr("Detailed log")
+                    description: qsTr("Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.")
                     iconName: "scroll-text"
-                    size: "small"
-                    onClicked: AppController.navigate({ view: "logs" })
+                    checked: Logs.detailed
+                    onToggled: Logs.detailed = checked
+                }
+                ShellSettingRow {
+                    title: qsTr("Version")
+                    description: qsTr("Brulion %1 · %2").arg(AppController.version).arg(AppController.platform)
+                    BButton {
+                        text: qsTr("About")
+                        iconName: "info"
+                        size: "small"
+                        variant: "ghost"
+                        onClicked: AppController.requestUiAction("about")
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Licence")
+                    description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).")
+                    BButton {
+                        text: qsTr("Read")
+                        iconName: "external-link"
+                        size: "small"
+                        variant: "ghost"
+                        onClicked: Workspace.openUrl("https://www.gnu.org/licenses/agpl-3.0.html")
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Source code")
+                    description: "github.com/janusz-bit/brulion"
+                    BButton {
+                        text: qsTr("Open")
+                        iconName: "external-link"
+                        size: "small"
+                        variant: "ghost"
+                        onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion")
+                    }
                 }
             }
-            BSwitch {
-                objectName: "settingsDetailedLog"
-                Layout.fillWidth: true
-                text: qsTr("Detailed log")
-                description: qsTr("Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.")
-                iconName: "scroll-text"
-                checked: Logs.detailed
-                onToggled: Logs.detailed = checked
-            }
-            ShellSettingRow {
-                title: qsTr("Version")
-                description: qsTr("Brulion %1 · %2").arg(AppController.version).arg(AppController.platform)
-                BButton {
-                    text: qsTr("About")
-                    iconName: "info"
-                    size: "small"
-                    variant: "ghost"
-                    onClicked: AppController.requestUiAction("about")
+
+            // AI agents and scripts driving the running app (desktop: src/app/shell/remotecontrol.h,
+            // docs/CLI.md "Remote control"). The setting is this device's; --remote-control turns it
+            // on for one run.
+            SettingsGroup {
+                objectName: "settingsDeveloper"
+                visible: AppController.remoteControl.available === true
+                heading: qsTr("For developers")
+
+                BSwitch {
+                    objectName: "settingsRemoteControl"
+                    Layout.fillWidth: true
+                    text: qsTr("Allow agents to control the app (local socket)")
+                    description: qsTr("AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.")
+                    iconName: "terminal"
+                    checked: AppController.remoteControl.setting === true
+                    onToggled: AppSettings.setValue("devtools/remoteControl", checked)
                 }
-            }
-            ShellSettingRow {
-                title: qsTr("Licence")
-                description: qsTr("Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).")
-                BButton {
-                    text: qsTr("Read")
-                    iconName: "external-link"
-                    size: "small"
-                    variant: "ghost"
-                    onClicked: Workspace.openUrl("https://www.gnu.org/licenses/agpl-3.0.html")
-                }
-            }
-            ShellSettingRow {
-                title: qsTr("Source code")
-                description: "github.com/janusz-bit/brulion"
-                BButton {
-                    text: qsTr("Open")
-                    iconName: "external-link"
-                    size: "small"
-                    variant: "ghost"
-                    onClicked: Workspace.openUrl("https://github.com/janusz-bit/brulion")
+                BText {
+                    objectName: "settingsRemoteControlStatus"
+                    Layout.fillWidth: true
+                    visible: text !== ""
+                    variant: "muted"
+                    font.pixelSize: Theme.textSm
+                    wrapMode: Text.Wrap
+                    text: {
+                        const rc = AppController.remoteControl
+                        if (rc.error)
+                            return qsTr("The socket could not be opened: %1").arg(rc.error)
+                        if (!rc.active)
+                            return ""
+                        return (rc.forced ? qsTr("On for this run (started with --remote-control).") + " " : "")
+                                + qsTr("Listening at %1").arg(rc.socket)
+                    }
                 }
             }
         }
