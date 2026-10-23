@@ -8,6 +8,7 @@
 #include "fakeeditorhost.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
+#include "notebook/links.h"
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
@@ -977,6 +978,44 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(link, u"[[Strona#^"_s + id + u"]]"_s);
         QVERIFY(f.text().endsWith(u"# A\n## B ^"_s + id + u"\n"_s));
         QCOMPARE(copied(10, u"embed"_s), u"![[Strona#^"_s + id + u"]]"_s);
+    }
+
+    // `brulion-cli block link` (notebook::blockLinks) gives the links the editor copies, row by row.
+    void copiedLinksMatchTheCommandLine_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::newRow("blocks") << linkPage();
+        QTest::newRow("repeated headings") << u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n"
+                                              "## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
+    }
+    void copiedLinksMatchTheCommandLine()
+    {
+        QFETCH(QString, content);
+        Fixture f(content);
+        const QString page = f.page.linkTarget();
+        for (int row = 0; row < f.count(); ++row) {
+            const auto copied = [&](const QString &kind) {
+                const QVariantMap r = f.page.linkText(row, kind);
+                return r.value(u"ok"_s).toBool() ? r.value(u"text"_s).toString() : QString();
+            };
+            const QString ref = copied(u"blockRef"_s); // adds the id first, as `block link` does
+            const QString blockLink = copied(u"blockLink"_s);
+            const QString embed = copied(u"embed"_s);
+            const QString heading = copied(u"heading"_s);
+            const auto cli = notebook::blockLinks(f.text(), f.model()->document().at(row).line, page);
+            const QString what = u"row %1: %2"_s.arg(row).arg(f.model()->document().at(row).body);
+            QVERIFY2(cli.has_value() == !ref.isEmpty(), qPrintable(what));
+            if (!cli)
+                continue;
+            QVERIFY2(!cli->added, qPrintable(what)); // the editor wrote the same id
+            QCOMPARE(cli->ref, ref);
+            QCOMPARE(cli->wikiLink, blockLink);
+            QCOMPARE(cli->embed, embed);
+            if (f.page.isHeading(row))
+                QCOMPARE(cli->headingLink.isEmpty() ? cli->wikiLink : cli->headingLink, heading);
+            else
+                QVERIFY2(cli->headingLink.isEmpty(), qPrintable(what));
+        }
     }
 
     void headingSections()

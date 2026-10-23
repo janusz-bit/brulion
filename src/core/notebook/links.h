@@ -26,14 +26,14 @@ struct BlockLinks {
     int line = -1;       ///< the block's first line (0-based)
     QString ref;         ///< "((id))" — the Logseq reference, resolved in the whole notebook
     QString wikiLink;    ///< "[[Page#^id]]"
-    QString embed;       ///< "!((id))", or for a heading with a unique name "![[Page#Heading]]"
+    QString embed;       ///< "!((id))"; a heading: "![[Page#Heading]]" (a unique name), else "![[Page#^id]]"
     QString headingLink; ///< "[[Page#Heading]]" for a heading with a unique name, else ""
 };
 
-/// The links to the block containing `line` of `content` (any line of the block), adding a block id
-/// (markdown::BlockDocument::ensureBlockId, avoiding ids `isTaken` knows) when it has none. nullopt
-/// for a line that is no block or a block that cannot carry an id (a blank line, frontmatter, an
-/// unclosed code fence).
+/// The links to the block containing `line` of `content` (any line of the block, also a blank line
+/// after it), adding a block id (markdown::BlockDocument::ensureBlockId, avoiding ids `isTaken`
+/// knows) when it has none. nullopt for a line in no block or a block that cannot carry an id
+/// (frontmatter, an unclosed code fence).
 std::optional<BlockLinks> blockLinks(const QString &content, int line, const QString &pageTarget,
                                      const std::function<bool(const QString &id)> &isTaken = {});
 

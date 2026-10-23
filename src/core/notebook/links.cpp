@@ -3,11 +3,53 @@
 #include "markdown/blockdocument.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
+#include "markdown/tasks.h"
 #include "util/paths.h"
 
 using namespace Qt::StringLiterals;
 
 namespace brulion::notebook {
+
+namespace {
+
+/// "## Title" -> 2: an ATX heading marker (up to three spaces before it, a space or the end after).
+int atxLevel(QStringView line)
+{
+    qsizetype k = 0;
+    while (k < line.size() && k < 3 && line[k] == u' ')
+        ++k;
+    int level = 0;
+    while (k < line.size() && line[k] == u'#' && level < 7) {
+        ++level;
+        ++k;
+    }
+    if (level == 0 || level > 6 || (k < line.size() && line[k] != u' ' && line[k] != u'\t'))
+        return 0;
+    return level;
+}
+
+/// A block as a heading of the page, as the editor lists them (documentHeadings(), shapeOf()): a
+/// Markdown heading, or a list item whose text — after a task checkbox — starts with "## "
+/// (Logseq writes headings inside list items); its level (0: no heading) and first line.
+int headingOf(const markdown::BlockEntry &e, QString *name)
+{
+    if (e.kind == BlockKind::Heading) {
+        *name = e.body.section(u'\n', 0, 0);
+        return e.headingLevel;
+    }
+    if (e.kind != BlockKind::ListItem)
+        return 0;
+    qsizetype start = 0;
+    if (const auto marker = markdown::matchTaskMarker(e.body, 0))
+        start = marker->contentStart;
+    const QString first = e.body.mid(start).section(u'\n', 0, 0);
+    const int level = atxLevel(first);
+    if (level > 0)
+        *name = first;
+    return level;
+}
+
+} // namespace
 
 QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
                        const std::function<QString(const QString &)> &resolveTitle)
@@ -47,21 +89,25 @@ std::optional<BlockLinks> blockLinks(const QString &content, int line, const QSt
     out.embed = markdown::formatReference(ReferenceKind::BlockEmbed, {}, {}, out.id);
     // A heading: its name, or a heading path when another heading has that name too (the editor's
     // documentHeadings(): every heading-shaped block, its first line).
-    if (doc.at(row).headingLevel > 0) {
+    QString name;
+    if (headingOf(doc.at(row), &name) > 0) {
         QList<Heading> headings;
         int index = -1;
         for (int i = 0; i < doc.count(); ++i) {
-            const markdown::BlockEntry &entry = doc.at(i);
-            if (entry.headingLevel <= 0)
+            const int level = headingOf(doc.at(i), &name);
+            if (level <= 0)
                 continue;
             if (i == row)
                 index = int(headings.size());
-            headings.append(Heading{entry.headingLevel, entry.body.section(u'\n', 0, 0), entry.line});
+            headings.append(Heading{level, name, doc.at(i).line});
         }
         const QString fragment = markdown::uniqueHeadingFragment(headings, index);
         if (!fragment.isEmpty()) {
             out.headingLink = markdown::formatReference(ReferenceKind::HeadingLink, pageTarget, fragment);
             out.embed = markdown::formatReference(ReferenceKind::HeadingEmbed, pageTarget, fragment);
+        } else {
+            // A heading's section embeds through its page ("![[Dom#^id]]"), as the editor copies it.
+            out.embed = markdown::formatReference(ReferenceKind::BlockLinkEmbed, pageTarget, {}, out.id);
         }
     }
     return out;
