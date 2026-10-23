@@ -65,6 +65,11 @@ T.Dialog {
     signal acceptRequested()
 
     function tryAccept() {
+        // A word the on-screen keyboard is still composing in a field becomes its text first: the
+        // handlers read `text` (BTextField.typedText).
+        const focused = control.contentItem ? control.contentItem.Window.activeFocusItem : null
+        if (focused)
+            EditorInput.commitPreedit(focused)
         if (!acceptEnabled || busy)
             return
         acceptRequested()

@@ -47,7 +47,7 @@ BDialog {
     iconColor: mode === "task" ? Theme.fgMuted : Theme.chipReminderFg
     preferredWidth: Theme.dialogWidth
     acceptText: qsTr("Add")
-    acceptEnabled: field.text.trim() !== "" && (mode === "task" || validTime)
+    acceptEnabled: field.typedText.trim() !== "" && (mode === "task" || validTime)
     initialFocusItem: field
 
     footerLeading: [

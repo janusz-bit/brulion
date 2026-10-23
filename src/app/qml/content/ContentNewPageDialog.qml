@@ -29,7 +29,7 @@ BDialog {
     subtitle: folder !== "" ? qsTr("In the folder %1").arg(folder) : ""
     iconName: "square-pen"
     acceptText: qsTr("Create")
-    acceptEnabled: nameField.text.trim() !== ""
+    acceptEnabled: nameField.typedText.trim() !== ""
     initialFocusItem: nameField
     preferredWidth: Theme.dialogWidth
 

@@ -15,7 +15,7 @@ BDialog {
     subtitle: qsTr("Goes to the end of today's journal")
     iconName: "notebook-pen"
     acceptText: qsTr("Add")
-    acceptEnabled: field.text.trim() !== ""
+    acceptEnabled: field.typedText.trim() !== ""
     initialFocusItem: field
 
     onAboutToShow: field.text = ""

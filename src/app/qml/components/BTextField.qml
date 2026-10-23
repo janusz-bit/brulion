@@ -31,6 +31,11 @@ T.TextField {
     /// The window keeps it above the on-screen keyboard while it has the focus
     /// (BKeyboardFocusKeeper).
     readonly property bool keepAboveKeyboard: true
+    /// What is typed, with the word an on-screen keyboard is still composing: Android's keyboards
+    /// keep every word as preedit text outside `text` until a space or a tap elsewhere, so an
+    /// accept button that waited for `text` stayed disabled under a word typed into an empty field.
+    /// For "is anything typed?" (BDialog.tryAccept() commits the word before handlers read `text`).
+    readonly property string typedText: echoMode === TextInput.Normal ? displayText : text + preeditText
 
     signal cleared()
     /// Escape was pressed with nothing to clear (the key is passed on to the parent, so an
@@ -83,7 +88,14 @@ T.TextField {
     // Long values (a folder path, a server address) set while the field is not being edited
     // show their beginning, not their end where the caret would be.
     onTextChanged: if (!activeFocus) cursorPosition = 0
-    onActiveFocusChanged: if (!activeFocus) cursorPosition = 0
+    // Leaving the field — a tap on a dialog's button takes the focus first — also keeps a word the
+    // keyboard was still composing: it becomes text (an input method may not commit it itself).
+    onActiveFocusChanged: {
+        if (!activeFocus && preeditText !== "")
+            EditorInput.commitPreedit(control)
+        if (!activeFocus)
+            cursorPosition = 0
+    }
     Component.onCompleted: if (!activeFocus) cursorPosition = 0
 
     onTrailingItemChanged: {

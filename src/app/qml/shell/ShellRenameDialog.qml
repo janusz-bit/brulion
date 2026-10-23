@@ -19,7 +19,7 @@ BDialog {
     property var impact: ({})
     readonly property int changes: (impact.links || 0) + (impact.tags || 0)
     /// The name typed; a "/" in it moves the page or folder.
-    readonly property string typed: nameField.text.trim()
+    readonly property string typed: nameField.typedText.trim()
     readonly property string currentName: isDir ? path.split("/").pop() : Workspace.pageTitle(path)
     readonly property bool moves: typed.indexOf("/") >= 0
     /// Workspace.renameImpact() of what is typed (exact; a moment after typing stops).

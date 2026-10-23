@@ -21,21 +21,35 @@
 # With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
 # and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
 # stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
-# Kopiuj, Back; then "Zaznacz tekst" on a page: a long press selects a word with the system's
-# handles and popup (Qt gives them to read-only text on Android), the popup's Copy, a handle
-# dragged, Kopiuj, Back.
+# Kopiuj ("Skopiowano 2 bloki"), Back; then "Zaznacz tekst" on a page: a long press selects a
+# word with the system's handles and popup (Qt gives them to read-only text on Android), the
+# popup's Copy, a handle dragged, Kopiuj, Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
+# With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
+# journal opens its page (not created by looking at it) and Back returns; the editing toolbar's
+# "Więcej" opens the block menu, "Kopiuj odnośnik" copies a reference to the block (its id written
+# into the note, the copy pasted back into another block with Ctrl+V on Android 13+); the
+# drawer's "Strony" header "+" makes a folder (its name typed on the keyboard, "Utwórz" tapped
+# while the keyboard still composes the word); a page's "⋯" in the folder tree → "Przenieś do…"
+# (the bottom sheet, the folder searched for, what the move rewrites) moves it there, and the
+# files say so: the page in its new folder, the query filter naming its old folder rewritten.
+# Screenshots of each step (fl-*.png); the same debuggable APK.
+# --selection and --folders find what they tap by its accessible name (UiAutomator reads Qt's
+# accessibility tree; the keyboard's keys and the system's popups from its dump of every window),
+# so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
 #                            the system image are installed with its sdkmanager when missing
-#   BRULION_EMULATOR_IMAGE   default "system-images;android-36;google_apis;x86_64" (--keyboard also
-#                            runs on older ones, e.g. android-30)
-#   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>)
+#   BRULION_EMULATOR_IMAGE   default "system-images;android-36;google_apis;x86_64" (--keyboard,
+#                            --selection and --folders also run on older ones, e.g. android-30)
+#   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
+#                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
 set -euo pipefail
@@ -66,17 +80,21 @@ fi
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
 KEYBOARD=0
 SELECTION=0
+FOLDERS=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
   shift
 elif [[ ${1:-} == --selection ]]; then
   SELECTION=1
   shift
+elif [[ ${1:-} == --folders ]]; then
+  FOLDERS=1
+  shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD || SELECTION)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION || FOLDERS)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -315,6 +333,111 @@ if ((KEYBOARD)); then
   exit 0
 fi
 
+# --- items on screen found by their names (--selection, --folders) -----------------------------
+
+# Qt for Android gives its accessibility tree to UiAutomator (its service turns accessibility on):
+# items are found on screen by their accessible names (content-desc: a button's label and its
+# shortcut, a block's text, a toast with a button; plain labels have none).
+ui_dump() {
+  adb shell rm -f /sdcard/brulion-ui.xml
+  adb shell uiautomator dump /sdcard/brulion-ui.xml >/dev/null 2>&1 || true
+  adb exec-out cat /sdcard/brulion-ui.xml >"$OUT/ui.xml" 2>/dev/null || true
+}
+# The centres "x y" of the nodes whose text or content-desc is the whole ERE, top to bottom (a new
+# dump). Only those on the screen: a row scrolled away or hidden keeps its node (bounds 0,0,0,0).
+ui_find_all() {
+  ui_dump
+  sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep -E "(text|content-desc)=\"($1)\"" |
+    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
+    awk -v w="$SCREEN_W" -v h="$SCREEN_H" '$3 > $1 && $4 > $2 && $3 <= w && $4 <= h {
+      print int(($1 + $3) / 2), int(($2 + $4) / 2) }' | sort -n -k 2
+}
+ui_has() { [[ -n $(ui_find_all "$1") ]]; }
+ui_lacks() { ! ui_has "$1"; }
+ui_y() { ui_find_all "$1" | head -n 1 | cut -d ' ' -f 2; } # <ERE>: the topmost one's centre
+ui_bottom() { # <ERE>: the bottom edge of the topmost one (a new dump)
+  ui_dump
+  sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep -E "(text|content-desc)=\"($1)\"" |
+    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\2 \4/p' |
+    awk '$2 > $1 { print $2 }' | sort -n | head -n 1
+}
+# A tap on a text of any window — the system's own popups over the app (its Copy / Select all of
+# selected text), which have a text, not an accessible name.
+window_text_tap() { # <ERE>
+  local xy
+  adb shell rm -f /sdcard/brulion-windows.xml
+  adb shell uiautomator dump --windows /sdcard/brulion-windows.xml >/dev/null 2>&1 || true
+  xy=$(adb exec-out cat /sdcard/brulion-windows.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep -E "text=\"($1)\"" |
+    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
+    awk '$3 > $1 && $4 > $2 { print int(($1 + $3) / 2), int(($2 + $4) / 2); exit }' || true)
+  if [[ -z $xy ]]; then
+    echo "    no \"$1\" on screen"
+    return 1
+  fi
+  adb shell input tap $xy
+}
+ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost or the bottommost;
+  # a dump taken while something moves can fail: tried again), then a pause (2 s)
+  local xy="" _
+  for _ in 1 2 3 4 5; do
+    if [[ ${2:-first} == last ]]; then xy=$(ui_find_all "$1" | tail -n 1); else xy=$(ui_find_all "$1" | head -n 1); fi
+    [[ -n $xy ]] && break
+    sleep 2
+  done
+  if [[ -z $xy ]]; then
+    echo "    not on screen: $1"
+    return 1
+  fi
+  adb shell input tap $xy
+  sleep "${3:-2}"
+}
+# A word typed with a finger on the on-screen keyboard: its keys found by their names in
+# UiAutomator's dump of every window (`--windows`: the keyboard's too); letters and spaces, the
+# case as the keyboard has it (it capitalizes a field's first letter itself). Not `input text`:
+# Gboard on Android 11 composed the injected keys after the first ones and the word came out
+# shuffled ("Archiwum" -> "rchiwumA"). Without a dump of the keyboard: `input text` after all.
+type_on_keyboard() { # <word>
+  local keys i ch key
+  adb shell rm -f /sdcard/brulion-ime.xml
+  adb shell uiautomator dump --windows /sdcard/brulion-ime.xml >/dev/null 2>&1 || true
+  keys=$(adb exec-out cat /sdcard/brulion-ime.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep 'inputmethod' |
+    sed -nE 's/.*content-desc="([A-Za-z]|Space)".*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4 \5/p' || true)
+  if [[ -z $keys ]]; then
+    echo "    (the keyboard's keys are not in the dump: \`input text\`)"
+    adb shell input text "${1// /%s}"
+    return
+  fi
+  for ((i = 0; i < ${#1}; i++)); do
+    ch=${1:i:1}
+    [[ $ch == " " ]] && ch=Space
+    key=$(awk -v c="$ch" 'tolower($1) == tolower(c) { print int(($2 + $4) / 2), int(($3 + $5) / 2); exit }' <<<"$keys")
+    if [[ -z $key ]]; then
+      echo "    no key \"$ch\" on the keyboard"
+      return 1
+    fi
+    adb shell input tap $key
+    sleep 0.3
+  done
+}
+back_to() { # <ERE>: Back until the item shows (the keyboard first, then the history)
+  local _
+  for _ in 1 2 3; do
+    ui_has "$1" && return 0
+    adb shell input keyevent 4
+    sleep 2
+  done
+  ui_has "$1"
+}
+# The sample notebook's files (the app's private storage: run-as on a debuggable APK).
+VAULT="files/Przykładowy brulion"
+vault_cat() { adb shell run-as "$PKG" cat "\"$VAULT/$1\"" 2>/dev/null | tr -d '\r'; }
+vault_has() { adb shell run-as "$PKG" ls -d "\"$VAULT/$1\"" >/dev/null 2>&1; }
+vault_lacks() { ! vault_has "$1"; }
+vault_grep() { vault_cat "$1" | grep -qE -- "$2"; } # <file> <ERE>
+# The notebook's top-level entry named so in any letter case (a keyboard capitalizes a field's
+# first letter or not).
+vault_name() { adb shell run-as "$PKG" ls "\"$VAULT\"" 2>/dev/null | tr -d '\r' | grep -ix -- "$1" | head -n 1; }
+
 # --- selecting and copying with a finger (--selection) -------------------------------------------
 
 dp() { echo $(($1 * DENSITY / 160)); } # logical px -> physical px
@@ -324,64 +447,189 @@ if ((SELECTION)); then
   info "Selection: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
   adb install -r -g "$APP_APK" >/dev/null
   adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  first_block='Pierwszy dzień z Brulionem #przewodnik'
   start_app '--demo --locale pl --route journals'
   check "the app is running" running
+  check "UiAutomator sees the app's items (accessibility)" wait_for 30 ui_has "$first_block"
   app_shot sel-1-journal
-  # Today's first block (the sample notebook on a Pixel 6: a quarter down the screen).
-  long_press $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  # Today's first block, found by its text.
+  long_press $((SCREEN_W * 24 / 100)) "$(ui_y "$first_block")"
   sleep 2
   app_shot sel-2-long-press
   check "a long press on a block's text brings up no keyboard (the selection mode)" ime_hidden
-  # The next block a few lines down: a tap extends the selection.
-  adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * 31 / 100))
+  check "the selection's tools are docked" ui_has 'Kopiuj, Ctrl\+C'
+  # The next block: a tap extends the selection.
+  adb shell input tap $((SCREEN_W * 30 / 100)) "$(ui_y 'Przejrzeć Remont mieszkania.*')"
   sleep 2
   app_shot sel-3-extended
   check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
-  # Kopiuj: the docked tools' first button after "Zaznaczono …", right above the navigation bar
-  # (its top from `dumpsys window displays`: "type=navigationBars frame=[l,t][r,b]").
-  nav_top=$(adb shell dumpsys window displays | grep -E 'InsetsSource .*type=navigationBars' | head -n 1 |
-    sed -nE 's/.* frame=\[[0-9]+,([0-9]+)\].*/\1/p')
-  nav_top=${nav_top:-$((SCREEN_H - $(dp 24)))}
-  echo "    the navigation bar starts at $nav_top px"
-  adb shell input tap "$(dp 160)" $((nav_top - $(dp 27)))
-  sleep 2
+  # Kopiuj in the docked tools, right above the navigation bar.
+  check "Kopiuj copies the selection" ui_tap 'Kopiuj, Ctrl\+C' last 0
+  check "the toast: two blocks copied" wait_for 6 ui_has 'Skopiowano 2 bloki'
   app_shot sel-4-copied
   adb shell input keyevent 4
   sleep 2
   app_shot sel-5-back
+  check "Back ends the selection mode" ui_lacks 'Kopiuj, Ctrl\+C'
   check "the app is still running" running
   # "Zaznacz tekst" on a page of the sample notebook (route.open). Qt splits the arguments like
   # QProcess::splitCommand: at spaces (a path without them), a quote written as three of them.
   start_app '--demo --locale pl --route {"""view""":"""page""","""path""":"""Przepisy.md""","""open""":"""selectText"""}'
+  check "the view opens with its bar" wait_for 20 ui_has 'Zamknij.*'
   app_shot sel-6-select-text
-  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  # The page's title: the view's first line, under its bar.
+  bar_bottom=$(ui_bottom 'Zamknij.*')
+  title_y=$((${bar_bottom:-$((SCREEN_H * 17 / 100))} + $(dp 48)))
+  long_press $((SCREEN_W * 30 / 100)) "$title_y"
   sleep 2
   app_shot sel-7-word
   # The system's popup over the selection (Android shows its handles and Copy / Select all for
   # read-only text too): its Copy goes through the app's Ctrl+C (the exact text, a toast).
-  adb shell input tap $((SCREEN_W * 10 / 100)) $((SCREEN_H * 163 / 1000))
-  sleep 2
+  check "the system's popup offers Copy" window_text_tap 'Copy|Kopiuj'
+  check "its Copy reaches the app (toast)" wait_for 6 ui_has 'Skopiowano zaznaczony tekst'
   app_shot sel-7b-system-copy
-  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  sleep 4 # (the toast goes)
+  long_press $((SCREEN_W * 30 / 100)) "$title_y"
   sleep 2
   # The system's end handle (under the word's end) dragged down two lines.
-  adb shell input swipe $((SCREEN_W * 36 / 100)) $((SCREEN_H * 25 / 100)) \
-    $((SCREEN_W * 60 / 100)) $((SCREEN_H * 25 / 100 + $(dp 70))) 900
+  adb shell input swipe $((SCREEN_W * 36 / 100)) $((title_y + $(dp 34))) \
+    $((SCREEN_W * 60 / 100)) $((title_y + $(dp 104))) 900
   sleep 2
   app_shot sel-8-handle
-  # Kopiuj: the view's button at the right of its bar, under the app's top bar.
-  adb shell input tap $((SCREEN_W * 887 / 1000)) $((SCREEN_H * 143 / 1000))
-  sleep 2
+  # Kopiuj: the view's button at the right of its bar ("Kopiuj wszystko" with nothing selected).
+  check "the view's Kopiuj copies the selection" ui_tap 'Kopiuj' last 0
+  check "the toast says so" wait_for 6 ui_has 'Skopiowano zaznaczony tekst'
   app_shot sel-9-copied
   adb shell input keyevent 4
   sleep 2
   app_shot sel-10-closed
+  check "Back closes the view" ui_lacks 'Zamknij.*'
   adb logcat -d >"$OUT/selection-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selection-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/selection-logcat.txt'"
   grep -E 'qml|Skopiowano|brulion' "$OUT/selection-logcat.txt" | tail -n 40 >"$OUT/selection-summary.txt" || true
   info "Result"
   cat "$OUT/selection-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- folders, links and tags with a finger (--folders) -------------------------------------------
+
+if ((FOLDERS)); then
+  info "Folders, links and tags: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  today_journal="journals/$(adb shell date +%Y-%m-%d | tr -d '\r').md"
+  first_block='Pierwszy dzień z Brulionem #przewodnik'
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  check "UiAutomator sees the app's items (accessibility)" wait_for 30 ui_has "$first_block"
+  app_shot fl-1-journal
+
+  # A tag is a link to the page it names. "#przewodnik" ends today's first block (three quarters
+  # across on a Pixel 6): the welcome page has the alias "Przewodnik" — it opens with the tag's
+  # strip. "#pomysł" ends the fifth: no page has that name — it opens empty, not created.
+  adb shell input tap $((SCREEN_W * 76 / 100)) "$(ui_y "$first_block")"
+  sleep 3
+  app_shot fl-2-tag-alias
+  check "a tap on #przewodnik opens the page with that alias" ui_has 'Witaj w Brulionie'
+  check "with the tag's strip (Widok tagu)" ui_has 'Widok tagu.*'
+  check "Back returns to the journal" back_to "$first_block"
+  adb shell input tap $((SCREEN_W * 79 / 100)) "$(ui_y 'Pomysł na obiad: .*')"
+  sleep 3
+  app_shot fl-3-tag-page
+  check "a tap on #pomysł opens its page" ui_has 'pomysł'
+  check "the blocks tagged #pomysł are among its references" ui_has 'Pomysł na obiad: .*, Otwiera blok.*'
+  check "the page is not created by looking at it" vault_lacks pomysł.md
+  check "Back returns to the journal" back_to "$first_block"
+
+  # The editing toolbar's "Więcej": the block menu of the block being edited; "Kopiuj odnośnik" →
+  # "Odwołanie do bloku" writes the block's id into the note and copies ((id)).
+  adb shell input tap $((SCREEN_W * 24 / 100)) "$(ui_y "$first_block")"
+  check "a tap on today's first block brings up the keyboard" wait_for 15 ime_shown
+  sleep 2
+  # The toolbar scrolls sideways: "Więcej" is near its end (a finger swipes the row there).
+  bar_y=$(ui_y 'Narzędzia edycji')
+  [[ -n $bar_y ]] && adb shell input swipe $((SCREEN_W * 85 / 100)) "$bar_y" $((SCREEN_W * 10 / 100)) "$bar_y" 300
+  sleep 2
+  app_shot fl-4-toolbar-end
+  # (The top bar has a "Więcej" too: the toolbar's is the lower one.)
+  check "the toolbar's Więcej opens the block menu" ui_tap 'Więcej' last
+  app_shot fl-5-block-menu
+  check "the block menu offers Kopiuj odnośnik" ui_tap 'Kopiuj odnośnik'
+  app_shot fl-6-copy-link-menu
+  # (No pause: its toast goes after a few seconds.)
+  check "Odwołanie do bloku copies the reference" ui_tap 'Odwołanie do bloku.*' first 0
+  check "the toast quotes the copied ((id))" wait_for 6 ui_has 'Skopiowano \(\([A-Za-z0-9_-]+\)\)'
+  app_shot fl-7-link-copied
+  block_id=$(vault_cat "$today_journal" | sed -nE '1s/.* \^([A-Za-z0-9_-]+)[[:space:]]*$/\1/p')
+  echo "    the first block's id in $today_journal: ${block_id:-none}"
+  check "the block got its id in the note" test -n "$block_id"
+  # The clipboard read back through the app: pasted at the end of another block with Ctrl+V
+  # (`input keycombination`, Android 13+), the reference lands in the note.
+  if ((android_api >= 33)); then
+    adb shell input tap $((SCREEN_W * 25 / 100)) "$(ui_y 'Przeczytane dziś: .*')"
+    sleep 2
+    adb shell input keycombination 113 123 # Ctrl+End
+    adb shell input keyevent 62            # a space
+    adb shell input keycombination 113 50  # Ctrl+V
+    sleep 2
+    app_shot fl-8-pasted
+    check "the copied ((id)) pastes back into another block" \
+      wait_for 10 vault_grep "$today_journal" "^- Przeczytane dziś: .*\[\[Książki 2026\]\] \(\($block_id\)\)$"
+  else
+    echo "    (no paste: \`input keycombination\` needs Android 13+)"
+  fi
+
+  # A new folder from the drawer's "Strony" header: its "+" → "Nowy folder", the name typed.
+  ui_tap 'Menu' first
+  check "the drawer shows the Strony section" wait_for 10 ui_has 'Strony.*'
+  app_shot fl-9-drawer
+  check "the Strony header's + opens its menu" ui_tap 'Nowa strona lub folder'
+  check "its Nowy folder opens the dialog" ui_tap 'Nowy folder'
+  # The name typed on the keyboard, "Utwórz" tapped while it still composes the word.
+  type_on_keyboard Archiwum
+  sleep 1
+  app_shot fl-10-new-folder
+  check "Utwórz takes the word the keyboard still composes" ui_tap 'Utwórz' last
+  check "the folder Archiwum is made" wait_for 10 vault_name Archiwum
+  folder=$(vault_name Archiwum || true)
+  folder=${folder:-Archiwum}
+  echo "    the folder: $folder"
+  check "and shows in the tree" ui_has "$folder(, folder .*)?"
+  app_shot fl-11-folder-made
+
+  # "⋯" on a page of the tree → "Przenieś do…": "Remont mieszkania" from Projekty into Archiwum.
+  ui_has 'Więcej: Remont mieszkania' || ui_tap 'Projekty, folder .*'
+  check "the page's row has its ⋯ button" ui_tap 'Więcej: Remont mieszkania'
+  app_shot fl-12-row-menu
+  check "its menu offers Przenieś do…" ui_tap 'Przenieś do…'
+  check "the move sheet opens" ui_has 'Przenieś „Remont mieszkania”'
+  type_on_keyboard Archiwum # its search field has the keyboard
+  sleep 1
+  adb shell input keyevent 66 # Enter: the first folder found
+  sleep 2
+  # (Its "Zaktualizowane linki: 1 (w 1 notatce)" is plain text: the screenshot shows it.)
+  app_shot fl-13-move-sheet
+  check "Przenieś tutaj moves it" ui_tap 'Przenieś tutaj' last
+  moved_toast='Przeniesiono do „'"$folder"'”, zaktualizowano 1 link'
+  check "the toast says what the move rewrote, with Cofnij" wait_for 6 ui_has "$moved_toast"
+  app_shot fl-14-moved
+  check "the page is in $folder" vault_has "$folder/Remont mieszkania.md"
+  check "and no longer in Projekty" vault_lacks 'Projekty/Remont mieszkania.md'
+  check "its query's filter path:Projekty follows it (path:$folder)" \
+    vault_grep "$folder/Remont mieszkania.md" "^type:tasks path:$folder status:open sort:due\$"
+  check "the journal's links to it are unchanged" vault_grep "$today_journal" '\[\[Remont mieszkania\]\]'
+
+  adb logcat -d >"$OUT/folders-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/folders-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/folders-logcat.txt'"
+  grep -E 'qml|brulion' "$OUT/folders-logcat.txt" | tail -n 40 >"$OUT/folders-summary.txt" || true
+  info "Result"
+  cat "$OUT/folders-summary.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

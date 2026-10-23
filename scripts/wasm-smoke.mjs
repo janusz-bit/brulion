@@ -4,7 +4,7 @@
 //
 //   node scripts/wasm-smoke.mjs --url http://127.0.0.1:8123/brulion/ --profile /tmp/p \
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--keyboard] [--two-tabs] [--lang pl-PL] \
-//       [--index-notes N] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
+//       [--index-notes N] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] [--timeout 120]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
 // has replaced the loading screen. With --selftest the page runs `?selftest=storage`
@@ -24,8 +24,12 @@
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
 // (brulionShell.indexed(), wasm/index.html) with no input at all — Qt's WebAssembly timers once
-// stalled until the mouse moved (docs/WEB.md). --loader-screenshot throttles the first download
-// and captures the loading screen. Exit code 0 = all checks passed.
+// stalled until the mouse moved (docs/WEB.md). --copy writes a notebook with today's journal into
+// IndexedDB the same way and copies blocks with real input: a click on the first block's text,
+// Escape (the block selected), Shift+Down (the next one with its child), Ctrl+C — the browser's
+// clipboard (navigator.clipboard, permission granted) must then hold their Markdown as text/plain
+// and Brulion's HTML as text/html (docs/WEB.md "Schowek"). --loader-screenshot throttles the
+// first download and captures the loading screen. Exit code 0 = all checks passed.
 //
 // Chromium: $CHROME or chromium/chromium-browser/google-chrome on PATH. WebGL 2 comes from
 // SwiftShader (software). Set BRULION_CHROME_NO_SANDBOX=1 (or CI=true) where the sandbox
@@ -55,6 +59,7 @@ function parseArgs(argv) {
     else if (a === '--loader-screenshot') args.loaderScreenshot = next();
     else if (a === '--expect-first') args.expectFirst = Number(next());
     else if (a === '--index-notes') args.indexNotes = Number(next());
+    else if (a === '--copy') args.copy = true;
     else if (a === '--screenshot') args.screenshot = next();
     else if (a === '--timeout') args.timeout = Number(next());
     else throw new Error(`unknown option ${a}`);
@@ -67,8 +72,9 @@ function parseArgs(argv) {
 // way Emscripten's IDBFS stores the app's mounts (src/platform/wasm/wasmstorage.h): one database
 // per mount point (version 21, store FILE_DATA keyed by absolute path, index "timestamp"; files
 // {timestamp, mode, contents}, folders {timestamp, mode}), plus the app's settings.ini naming it
-// the current vault. Runs in a page of the site's origin.
-function seedVaultScript(count) {
+// the current vault — and, given `journal`, today's journal note (journals/yyyy-MM-dd.md by the
+// browser's local date, the app's clock). Runs in a page of the site's origin.
+function seedVaultScript(count, journal = null) {
   return `(async () => {
     const root = '/home/web_user/Brulion';
     const appData = '/home/web_user/.local/share/Brulion/Brulion';
@@ -89,6 +95,14 @@ function seedVaultScript(count) {
       }
       text += '- [ ] zadanie ' + i + '\\n';
       entries.push([dir + '/Notatka ' + i + '.md', { timestamp, mode: 33188, contents: enc.encode(text) }]);
+    }
+    const journal = ${JSON.stringify(journal)};
+    if (journal !== null) {
+      const now = new Date();
+      const day = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-'
+        + String(now.getDate()).padStart(2, '0');
+      dirs.add(root + '/journals');
+      entries.push([root + '/journals/' + day + '.md', { timestamp, mode: 33188, contents: enc.encode(journal) }]);
     }
     for (const d of dirs) entries.push([d, { timestamp, mode: 16877 }]);
     const put = (dbName, rows) => new Promise((resolve, reject) => {
@@ -111,6 +125,18 @@ function seedVaultScript(count) {
     return entries.length;
   })()`;
 }
+
+// Today's journal for --copy: the first two top blocks (the second with its child) are selected
+// and copied; their Markdown is what the clipboard must hold (markdown::blocksMarkdown: as
+// written, LF, no trailing line break).
+const copyJournal = [
+  '- Pierwszy blok — zażółć gęślą jaźń',
+  '- Drugi blok z **pogrubieniem** i [[Łódź]]',
+  '  - dziecko drugiego bloku',
+  '- Trzeci blok zostaje',
+  '',
+].join('\n');
+const copyExpected = copyJournal.split('\n').slice(0, 3).join('\n');
 
 // A visualViewport the test controls (installed before the page's own scripts): its height is
 // the window's minus a keyboard, divided by a pinch zoom — window.__brulionKeyboard(px,
@@ -283,15 +309,16 @@ async function main() {
     console.log(`screenshot: ${file}`);
   };
 
-  if (args.indexNotes > 0) {
+  if (args.indexNotes > 0 || args.copy) {
     // Any document of the site's origin can write its IndexedDB; the logo does not start the app.
     const logo = new URL('icons/logo.svg', url).href;
     await cdp.send('Page.navigate', { url: logo });
     for (const end = deadline(30); Date.now() < end; await sleep(250)) {
       if ((await evaluate('location.href + " " + document.readyState').catch(() => '')) === `${logo} complete`) break;
     }
-    const written = await evaluate(seedVaultScript(args.indexNotes), true).catch(() => undefined);
-    console.log(`vault of ${args.indexNotes} notes written into IndexedDB (${written} entries)`);
+    const written = await evaluate(seedVaultScript(args.indexNotes || 0, args.copy ? copyJournal : null), true)
+      .catch(() => undefined);
+    console.log(`vault of ${args.indexNotes || 0} notes${args.copy ? ' and today\'s journal' : ''} written into IndexedDB (${written} entries)`);
     if (!written) problems.push('could not write the test vault into IndexedDB');
   }
 
@@ -433,6 +460,67 @@ async function main() {
         if (scrollY !== scrollAfter) problems.push(`keyboard: ${what}: the page stays scrolled ${scrollY} px`);
       }
       if (what === 'a 300 px keyboard' && args.screenshot) await shoot(args.screenshot.replace(/\.png$/, '-keyboard.png'));
+    }
+  }
+
+  if (args.copy) {
+    // Blocks copied with real input (trusted mouse and key events): Qt writes the browser's
+    // clipboard through the asynchronous Clipboard API, which needs a focused page and the user's
+    // gesture (the key press). The test reads the clipboard back with the permission granted.
+    await cdp.send('Browser.grantPermissions', {
+      origin: url.origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+    });
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+    const keys = {
+      Escape: { code: 'Escape', vk: 27 }, ArrowDown: { code: 'ArrowDown', vk: 40 }, c: { code: 'KeyC', vk: 67 },
+    };
+    const press = async (key, modifiers = 0) => { // modifiers: 2 Ctrl, 8 Shift
+      const k = keys[key];
+      const common = { key, code: k.code, windowsVirtualKeyCode: k.vk, nativeVirtualKeyCode: k.vk, modifiers };
+      await cdp.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...common });
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...common });
+      await sleep(400);
+    };
+    const click = async (x, y) => {
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 });
+      await sleep(800);
+    };
+    const readText = () => evaluate('navigator.clipboard.readText().catch((e) => "(error) " + e.message)', true);
+    const marker = 'brulion-smoke: nothing copied yet';
+    // Today's first block on the 1280×800 window: the journal right of the sidebar, its first line
+    // under the day's title, about 153 px down the page (a few heights tried: fonts differ).
+    let copied;
+    for (const y of [153, 147, 160, 167, 140]) {
+      await evaluate(`navigator.clipboard.writeText(${JSON.stringify(marker)})`, true);
+      await click(560, y);
+      await press('Escape'); // the edited block becomes the selection
+      await press('ArrowDown', 8); // Shift+Down: the next block, with its child
+      await press('c', 2); // Ctrl+C
+      for (const end = deadline(5); Date.now() < end; await sleep(250)) {
+        copied = await readText();
+        if (copied !== marker) break;
+      }
+      console.log(`copy: a click at (560, ${y}), Escape, Shift+Down, Ctrl+C: ${JSON.stringify(copied)}`);
+      if (copied === copyExpected) break;
+      await press('Escape'); // leave whatever was selected
+    }
+    if (args.screenshot) await shoot(args.screenshot.replace(/\.png$/, '-copy.png'));
+    if (copied !== copyExpected) {
+      problems.push(`copy: the clipboard holds ${JSON.stringify(copied)}, expected ${JSON.stringify(copyExpected)}`);
+    } else {
+      // The HTML flavour for mail and office apps: Brulion's own, with its generator mark.
+      const html = await evaluate(`(async () => {
+        for (const item of await navigator.clipboard.read()) {
+          if (item.types.includes('text/html')) return await (await item.getType('text/html')).text();
+        }
+        return null;
+      })().catch((e) => "(error) " + e.message)`, true);
+      console.log(`copy: text/html ${JSON.stringify(html?.slice(0, 400))}`);
+      if (!html || !html.includes('content="Brulion"') || !html.includes('<strong>pogrubieniem</strong>')) {
+        problems.push(`copy: no Brulion HTML on the clipboard: ${JSON.stringify(html?.slice(0, 200))}`);
+      }
     }
   }
 

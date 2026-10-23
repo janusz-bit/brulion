@@ -199,7 +199,12 @@ everything near the bottom, the same way on Android, in the browser and with a s
   `adjustResize`), so `BKeyboardFocusKeeper` (once in `Main.qml`) scrolls the Flickables around
   the focused `BTextField` / `BTextArea` (`keepAboveKeyboard`) until it is above the keyboard —
   when it gets the focus, when the keyboard has settled, when the window or the caret moves.
-  Onboarding ends at the keyboard like the shell's content.
+  Onboarding ends at the keyboard like the shell's content. A word the keyboard is still
+  composing (Android's keyboards keep every word as preedit text, outside `text`, until a space)
+  counts as typed: dialogs enable their accept button by `typedText` (quick capture's "Dodaj",
+  "Utwórz" of a new page or folder, rename), and the word becomes text when the field loses the
+  focus (`EditorInput.commitPreedit`) or the dialog is accepted (`BDialog.tryAccept`) — a single
+  word typed into an empty field used to leave the button disabled.
 * **What is being edited stays above the toolbar**: the caret or the table cell
   (`BlockEditor.ensureEditVisible()`, the journal's `ensureVisible()` with the toolbar's height;
   a day's editor asks the journal list, `BlockEditor.scroller`), checked again when the view's
@@ -207,7 +212,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
   likewise.
 * **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it;
   menus (`BMenu.bottomMargin`) stay above it, the editor's task status menu also above the
-  toolbar; autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
+  toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
+  safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
+  above the toolbar used to leave its first items untappable; one taller than the room left
+  scrolls); autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
   the keyboard and the toolbar (`AppShell.toastClearance`); the command palette ends at it.
 * **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
   `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and
@@ -220,7 +228,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   above the keyboard, a page in the side panel of a wide touch window),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
   `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
-  `scripts/android-emulator-test.sh --keyboard`, in the browser `scripts/wasm-smoke.mjs --keyboard`.
+  `scripts/android-emulator-test.sh --keyboard` (and `--folders`: the toolbar's "Więcej" and the
+  block menu with a real finger), in the browser `scripts/wasm-smoke.mjs --keyboard`.
 
 ## Keyboard shortcuts (desktop)
 
