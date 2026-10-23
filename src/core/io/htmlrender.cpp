@@ -566,7 +566,7 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (isAttachmentTarget(l.target)) {
                 const auto url = m_links.attachment ? m_links.attachment(l.target) : std::nullopt;
                 const QString label = l.display.isEmpty() ? paths::basename(l.target) : l.display;
-                html = url ? mediaHtml(*url, label, l.target)
+                html = url ? mediaHtml(*url, label, m_links.mediaAsLinks ? QString() : l.target)
                            : QString(u"<span class=\"missing\">"_s + esc(label) + u"</span>"_s);
             } else {
                 const auto href = m_links.page ? m_links.page(l.target, l.heading, l.blockId) : std::nullopt;
@@ -581,6 +581,8 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (hasScheme(l.target)) {
                 if (!safeExternal(l.target)) {
                     html = esc(source);
+                } else if (image && m_links.mediaAsLinks) {
+                    html = mediaHtml(l.target, l.display.isEmpty() ? l.target : l.display, QString());
                 } else if (image) {
                     html = u"<img src="_s + attr(l.target) + u" alt="_s + attr(l.display) + u" loading=\"lazy\">"_s;
                 } else {
@@ -602,7 +604,9 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (!url) {
                 html = u"<span class=\"missing\">"_s + esc(l.display.isEmpty() ? l.target : l.display) + u"</span>"_s;
             } else if (image) {
-                html = mediaHtml(*url, l.display, l.target);
+                html = m_links.mediaAsLinks
+                               ? mediaHtml(*url, l.display.isEmpty() ? paths::basename(l.target) : l.display, QString())
+                               : mediaHtml(*url, l.display, l.target);
             } else {
                 QString shown = renderInline(l.display, true);
                 if (shown.isEmpty())
@@ -615,6 +619,10 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
         case LinkKind::BlockEmbed: {
             const auto ref = m_links.block ? m_links.block(l.target) : std::nullopt;
             const QString cls = l.kind == LinkKind::BlockRef ? u"block-ref"_s : u"block-embed"_s;
+            if (ref && ref->first.isEmpty()) {
+                html = u"<span class=\""_s + cls + u"\">"_s + renderInline(ref->second, true) + u"</span>"_s;
+                break;
+            }
             html = ref ? QString(u"<a class=\""_s + cls + u"\" href="_s + attr(ref->first) + u'>'
                                  + renderInline(ref->second, true) + u"</a>"_s)
                        : QString(u"<span class=\"missing\">(("_s + esc(l.target) + u"))</span>"_s);

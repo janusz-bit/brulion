@@ -25,12 +25,15 @@ struct HtmlLinks {
     std::function<std::optional<QString>(const QString &target)> attachment;
     /// href of a tag page; unset: tags are plain spans.
     std::function<QString(const QString &tag)> tag;
-    /// href and text of a referenced block; nullopt when unknown.
+    /// href and text of a referenced block (an empty href: the text alone); nullopt when unknown.
     std::function<std::optional<std::pair<QString, QString>>(const QString &id)> block;
     /// HTML of an embedded page (`![[Page]]` alone in a block); empty when unavailable.
     std::function<QString(const QString &target, const QString &heading, const QString &blockId)> embed;
     /// Prefix of element ids (several notes in one document need distinct ids).
     QString idPrefix;
+    /// Pictures, audio and video as links to them instead of <img> / <audio> / <video> (the
+    /// clipboard: clipboardHtml()).
+    bool mediaAsLinks = false;
 };
 
 class HtmlRenderer {

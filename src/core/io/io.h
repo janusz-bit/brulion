@@ -51,11 +51,14 @@
 //                  (QTextDocument parses — no resources ever loaded —, own Markdown writer:
 //                  no wrapping, GFM tables, checkboxes, code languages), htmlToPlainText,
 //                  escapeMarkdownText(text, lineStart, linkLabel)
+//   clipboardhtml.h clipboardHtml(markdown, {config, attachmentUrl, blockText}) — copied blocks
+//                  as escaped HTML for the clipboard (pictures as links, never data: URLs)
 //
 // Malformed input never crashes or throws: importers and readers report warnings and import
 // what they can.
 #pragma once
 
+#include "io/clipboardhtml.h"
 #include "io/csv.h"
 #include "io/exporter.h"
 #include "io/files.h"

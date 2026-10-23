@@ -1,6 +1,7 @@
 // HTML -> Markdown conversion (QTextDocument parsing, own Markdown writer) and Markdown escaping.
 #include "iotest.h"
 
+#include "io/clipboardhtml.h"
 #include "io/htmlmarkdown.h"
 #include "io/htmlrender_p.h"
 #include "io/htmlutil_p.h"
@@ -320,6 +321,37 @@ private Q_SLOTS:
         QFETCH(QString, html);
         QFETCH(QString, markdown);
         QCOMPARE(htmlToMarkdown(html).markdown, markdown);
+    }
+
+    // The clipboard's HTML of copied blocks (io/clipboardhtml.h): semantic, escaped, no links into
+    // the notebook, pictures as links (never data: URLs), block references as their text.
+    void clipboardHtmlOfBlocks()
+    {
+        io::ClipboardHtmlOptions options;
+        options.attachmentUrl = [](const QString &target) {
+            return target == u"zdjęcie.png"  ? u"file:///notatki/zdjęcie.png"_s
+                   : target == u"inline.png" ? u"data:image/png;base64,AAAA"_s
+                                             : QString();
+        };
+        options.blockText = [](const QString &id) { return id == u"abc123" ? u"Treść **bloku**"_s : QString(); };
+        const QString html = io::clipboardHtml(
+                u"# Zakupy\n\n- [ ] Kupić żółć i\u00a0źdźbło #dom\n\t- [x] mleko\n- [[Strona]] i ((abc123)) "
+                u"((brak))\n\n"
+                "![[zdjęcie.png]] ![[inline.png]] ![x](https://example.com/a.png)\n\n<script>alert(1)</script>\n"_s,
+                options);
+        QVERIFY(html.startsWith(u"<meta charset=\"utf-8\">"_s));
+        QVERIFY2(html.contains(u"<h1"_s) && html.contains(u"Zakupy"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"<ul"_s) && html.contains(u"type=\"checkbox\""_s), qPrintable(html));
+        QVERIFY2(html.contains(u"Kupić żółć i\u00a0źdźbło"_s) || html.contains(u"Kupić żółć i&nbsp;źdźbło"_s),
+                 qPrintable(html));
+        QVERIFY2(!html.contains(u"href=\"page"_s) && html.contains(u"Strona"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"Treść <strong>bloku</strong>"_s) && html.contains(u"((brak))"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"href=\"file:///notatki/zdjęcie.png\""_s) && !html.contains(u"<img"_s),
+                 qPrintable(html));
+        QVERIFY2(!html.contains(u"data:"_s) && html.contains(u"inline.png"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"href=\"https://example.com/a.png\""_s), qPrintable(html));
+        QVERIFY2(!html.contains(u"<script"_s) && html.contains(u"&lt;script&gt;"_s), qPrintable(html));
+        QCOMPARE(io::clipboardHtml(u"  \n"_s), QString());
     }
 
     void title()
