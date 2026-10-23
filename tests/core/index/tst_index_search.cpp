@@ -445,6 +445,46 @@ private Q_SLOTS:
         QCOMPARE(texts, QStringList({u"nowy z id"_s, u"z id"_s, u"nowy bez id"_s, u"bez id"_s}));
         QCOMPARE(index.suggestBlocks(QString(), 1).size(), 1);
     }
+
+    // ---- suggestTags (`#` completion: tags in use, then pages a tag would name) -----------------
+
+    void suggestTags_data()
+    {
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QStringList>("entries"); // "tag kind count path"
+        QTest::newRow("tags in use first, then the page")
+                << u"pra"_s << QStringList{u"praca tag 3 "_s, u"Prawo jazdy page 0 Prawo jazdy.md"_s};
+        QTest::newRow("'#' and diacritics ignored in what is typed")
+                << u"#zolw"_s << QStringList{u"Żółw page 0 Zwierzęta/Żółw.md"_s};
+        QTest::newRow("a tag in use names its page; the other Dom by its shortest tag")
+                << u"dom"_s << QStringList{u"dom tag 2 Dom.md"_s, u"Projekty/Dom page 0 Projekty/Dom.md"_s};
+        QTest::newRow("a sub-tag starting with the text") << u"proj"_s << QStringList{u"projekt/kuchnia tag 1 "_s};
+        QTest::newRow("tags containing the text come last")
+                << u"kuch"_s << QStringList{u"Kuchnia page 0 Kuchnia.md"_s, u"projekt/kuchnia tag 1 "_s};
+        QTest::newRow("a page whose tag in use only contains the text: as that tag")
+                << u"om"_s << QStringList{u"dom tag 2 Dom.md"_s, u"Projekty/Dom page 0 Projekty/Dom.md"_s};
+        QTest::newRow("an alias") << u"janek"_s << QStringList{u"Janek page 0 Ludzie/Jan Kowalski.md"_s};
+        QTest::newRow("nothing") << u"qqq"_s << QStringList();
+    }
+    void suggestTags()
+    {
+        QFETCH(QString, typed);
+        QFETCH(QStringList, entries);
+        VaultIndex index;
+        index.update(u"Dom.md"_s, u"- strona\n"_s);
+        index.update(u"Projekty/Dom.md"_s, u"- druga strona Dom\n"_s);
+        index.update(u"Prawo jazdy.md"_s, u"- kurs\n"_s);
+        index.update(u"Zwierzęta/Żółw.md"_s, u"- gad\n"_s);
+        index.update(u"Kuchnia.md"_s, u"- przepisy\n"_s);
+        index.update(u"Ludzie/Jan Kowalski.md"_s, u"---\naliases: [Janek]\n---\n- kontakt\n"_s);
+        index.update(u"Notatki.md"_s, u"- #praca #dom\n- #praca\n- #Dom #projekt/kuchnia\n- #praca\n"_s);
+        QStringList got;
+        for (const TagSuggestion &s : index.suggestTags(typed))
+            got.append(s.tag + (s.page ? u" page "_s : u" tag "_s) + QString::number(s.count) + u' ' + s.path);
+        QCOMPARE(got, entries);
+        QCOMPARE(index.suggestTags(typed, 0).size(), 0);
+        QCOMPARE(index.suggestTags(typed, 1).size(), std::min<qsizetype>(1, entries.size()));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIndexSearch)

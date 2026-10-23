@@ -598,71 +598,16 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
     QVariantList out;
     if (!m_index || limit <= 0)
         return out;
-    const QStringView typed = prefix.startsWith(u'#') ? QStringView(prefix).mid(1) : QStringView(prefix);
-    const QString key = text::foldKey(typed); // what was typed matches without diacritics …
-    // … but a tag names a page with them (#zolw is not Żółw): one entry per tag key.
-    const auto tagKey = [](const QString &name) { return name.normalized(QString::NormalizationForm_C).toLower(); };
-    QSet<QString> seen; // tag keys offered so far
-    const auto tagItem = [&](const TagCount &t) {
-        const QString name = t.display.isEmpty() ? t.tag : t.display;
-        QVariantMap m{{u"tag"_s, name}, {u"count"_s, t.count}, {u"kind"_s, u"tag"_s}};
-        if (const auto page = m_index->resolveTag(t.tag)) {
-            m.insert(u"path"_s, *page);
-            m.insert(u"title"_s, paths::pageTitle(*page));
-            m.insert(u"folder"_s, paths::dirname(*page));
+    // VaultIndex::suggestTags(): tags in use, then pages no tag names yet, then tags containing
+    // the text (a tag names a page, docs/SYNTAX.md §3).
+    for (const TagSuggestion &s : m_index->suggestTags(prefix, limit)) {
+        QVariantMap m{{u"tag"_s, s.tag}, {u"count"_s, s.count}, {u"kind"_s, s.page ? u"page"_s : u"tag"_s}};
+        if (!s.path.isEmpty()) {
+            m.insert(u"path"_s, s.path);
+            m.insert(u"title"_s, paths::pageTitle(s.path));
+            m.insert(u"folder"_s, paths::dirname(s.path));
         }
-        seen.insert(t.tag);
-        return m;
-    };
-    // Tags in use (most used first) that start with the text, then pages no tag names yet (a tag
-    // names a page, docs/SYNTAX.md §3), then tags that contain the text. A page whose tag is in
-    // use is offered as that tag (with its count).
-    QHash<QString, const TagCount *> contains;
-    QList<const TagCount *> containsOrder;
-    const QList<TagCount> tags = m_index->tags();
-    for (const TagCount &t : tags) {
-        const QString folded = text::foldKey(t.tag);
-        if (key.isEmpty() || folded.startsWith(key)) {
-            out.append(tagItem(t));
-        } else if (folded.contains(key)) {
-            contains.insert(t.tag, &t);
-            containsOrder.append(&t);
-        }
-        if (out.size() >= limit)
-            return out;
-    }
-    for (const PageSuggestion &s : m_index->suggestPages(typed.toString(), limit)) {
-        // What was typed is in the name (no fuzzy matches among the tags).
-        if (!key.isEmpty() && !text::foldKey(s.alias.isEmpty() ? s.title : s.alias).contains(key)
-            && !text::foldKey(s.path).contains(key))
-            continue;
-        // The name of the tag: the alias that matched or the title — or the path, when that name
-        // is another page's (a duplicate base name).
-        QString name = s.alias.isEmpty() ? s.title : s.alias;
-        if (m_index->resolveTag(name) != s.path)
-            name = paths::stripMarkdownExtension(s.path);
-        const QString k = tagKey(name);
-        if (seen.contains(k) || markdown::tagSyntax(name).isEmpty())
-            continue;
-        if (const TagCount *inUse = contains.value(k)) {
-            out.append(tagItem(*inUse));
-        } else {
-            seen.insert(k);
-            out.append(QVariantMap{{u"tag"_s, name},
-                                   {u"count"_s, 0},
-                                   {u"kind"_s, u"page"_s},
-                                   {u"path"_s, s.path},
-                                   {u"title"_s, s.title},
-                                   {u"folder"_s, paths::dirname(s.path)}});
-        }
-        if (out.size() >= limit)
-            return out;
-    }
-    for (const TagCount *t : std::as_const(containsOrder)) {
-        if (out.size() >= limit)
-            break;
-        if (!seen.contains(t->tag))
-            out.append(tagItem(*t));
+        out.append(m);
     }
     return out;
 }

@@ -107,6 +107,14 @@ struct PageSuggestion {
     QString alias; ///< the frontmatter alias that matched, empty when the title/path matched
 };
 
+/// A `#` completion (VaultIndex::suggestTags()): a tag in use, or a page no tag in use names yet.
+struct TagSuggestion {
+    QString tag;       ///< the name to write, without '#' (as first written; a page's tagTarget())
+    int count = 0;     ///< tagged blocks (0 for a page)
+    bool page = false; ///< a page no tag names yet (else a tag in use)
+    VaultPath path;    ///< the page the tag names ("" when none)
+};
+
 /// A link target that does not exist (yet).
 struct MissingPage {
     QString name;             ///< target as first written (fragment stripped, NFC)
@@ -376,6 +384,13 @@ public:
     /// query, then blocks of more recently updated notes. Empty text: blocks with ids of the most
     /// recently updated notes, then other blocks.
     QList<BlockRef> suggestBlocks(const QString &text, int limit = 20) const;
+    /// Completions for `#` (a tag names a page, docs/SYNTAX.md §3): the tags in use that start with
+    /// `prefix` (most used first; '#' and diacritics ignored), then pages no tag in use names yet
+    /// (suggestPages(), no fuzzy matches; named by the title or alias that matched, or — that
+    /// name being another page's — by the shortest tag that names the page, tagTarget(); a page
+    /// whose tag is in use is offered as that tag), then the tags that contain `prefix`. One entry
+    /// per tag key (case-insensitive, NFC, not diacritic-insensitive: #lodz is not Łódź).
+    QList<TagSuggestion> suggestTags(const QString &prefix, int limit = 20) const;
 
     // ---- graph ----------------------------------------------------------------------------------
 
