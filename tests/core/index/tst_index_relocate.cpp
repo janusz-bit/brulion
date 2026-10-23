@@ -455,6 +455,63 @@ private Q_SLOTS:
         QCOMPARE(planned(twice, u"Notatka.md"_s), u"[[A]]"_s);
     }
 
+    // RelocationPlanner: the plan of planRelocation() a note at a time; dropped when the index
+    // changes in between.
+    void plannerMakesThePlanInSteps()
+    {
+        VaultIndex index;
+        fixture::build(index);
+        build(index, {{u"Zapytania.md"_s, u"```query\ntag:dom path:Projekty/ ref:[[Projekty/Dom]]\n```\n"_s},
+                      {u"Łąka/Notatka.md"_s, u"- [[Projekty/Dom]] #[[Projekty/Dom]] [[Dom]]\n"_s}});
+        QList<FileMove> moves;
+        for (const VaultPath &p : index.paths() + index.attachments()) {
+            if (p.startsWith(u"Projekty/"_s))
+                moves.append({p, u"Archiwum 2026/"_s + p.mid(9)});
+        }
+        QVERIFY(moves.size() > 1);
+        const RelocationPlan whole = index.planRelocation(moves);
+        QVERIFY(whole.files().size() > 2);
+        RelocationPlanner planner(index, moves);
+        QVERIFY(planner.valid());
+        int steps = 0;
+        while (!planner.step(0))
+            ++steps;
+        QVERIFY(steps > 0);
+        QVERIFY(planner.done());
+        const RelocationPlan stepped = planner.plan();
+        QCOMPARE(stepped.moves(), whole.moves());
+        QCOMPARE(stepped.files().size(), whole.files().size());
+        for (qsizetype i = 0; i < whole.files().size(); ++i) {
+            const RelocationPlan::File &a = whole.files().at(i);
+            const RelocationPlan::File &b = stepped.files().at(i);
+            QCOMPARE(b.path, a.path);
+            QCOMPARE(b.newPath, a.newPath);
+            QCOMPARE(b.after, a.after);
+            QCOMPARE(b.links, a.links);
+            QCOMPARE(b.tags, a.tags);
+            QCOMPARE(b.queries, a.queries);
+        }
+        QCOMPARE(stepped.links(), whole.links());
+        QCOMPARE(stepped.tags(), whole.tags());
+        QCOMPARE(stepped.queries(), whole.queries());
+
+        // The index changes half way: the planner stops (its caller makes a new one).
+        RelocationPlanner interrupted(index, moves);
+        QVERIFY(!interrupted.step(0));
+        index.update(u"Nowa.md"_s, u"- [[Projekty/Dom]]\n"_s);
+        QVERIFY(!interrupted.valid());
+        const qsizetype planned = interrupted.plan().files().size();
+        QVERIFY(!interrupted.step(1000));
+        QCOMPARE(interrupted.plan().files().size(), planned);
+
+        // Nothing to move: done at once, an empty plan.
+        RelocationPlanner nothing(index, {{u"Brak.md"_s, u"Inne.md"_s}});
+        QVERIFY(nothing.done());
+        QVERIFY(nothing.step(0));
+        QVERIFY(nothing.plan().moves().isEmpty());
+        QVERIFY(nothing.plan().files().isEmpty());
+    }
+
     // The fixture vault: Projekty → Archiwum/Projekty keeps every link of every note.
     void fixtureFolderMoveKeepsEveryLink()
     {

@@ -70,6 +70,10 @@ public:
     void addAttachment(const VaultPath &path);
     void removeAttachment(const VaultPath &path);
     void clear();
+    /// Make this an empty table that reads `base` wherever it was not changed itself — the names
+    /// after a move (VaultIndex::planRelocation(): a few names change; a changed copy of the whole
+    /// table would cost O(notes)). `base` must outlive this table and stay unchanged.
+    void overlay(const NameTable *base);
 
     /// Resolve `target` written in `from` (see the file comment). An empty target (`[[#^id]]`)
     /// resolves to `from`. Returns an empty path when nothing matches.
@@ -90,10 +94,23 @@ private:
     VaultPath lookupName(const QString &lowerPath) const;
     VaultPath lookupAlias(const QString &target) const;
 
-    QHash<QString, QSet<VaultPath>> m_byPath;    ///< pathKey -> notes and attachments
-    QHash<QString, QSet<VaultPath>> m_noteNames; ///< noteNameKey -> notes
-    QHash<QString, QSet<VaultPath>> m_fileNames; ///< fileNameKey -> attachments
-    QHash<QString, QSet<VaultPath>> m_aliases;   ///< aliasKey -> notes
+    using Map = QHash<QString, QSet<VaultPath>>;
+    /// The files under `key` in the map `field`, the base's when this overlay did not change
+    /// them; nullptr when there are none.
+    const QSet<VaultPath> *find(Map NameTable::*field, const QString &key) const;
+    /// Has the map `field` (or the base's) any key? (A fast path: may say yes for an overlay
+    /// that hides every one of them.)
+    bool hasAny(Map NameTable::*field) const;
+    void add(Map NameTable::*field, const QString &key, const VaultPath &path);
+    void remove(Map NameTable::*field, const QString &key, const VaultPath &path);
+
+    Map m_byPath;    ///< pathKey -> notes and attachments
+    Map m_noteNames; ///< noteNameKey -> notes
+    Map m_fileNames; ///< fileNameKey -> attachments
+    Map m_aliases;   ///< aliasKey -> notes
+    /// overlay(): the table read where this one has no entry (an entry with no files hides the
+    /// base's).
+    const NameTable *m_base = nullptr;
 };
 
 /// Add `value` to the set stored under `key`.

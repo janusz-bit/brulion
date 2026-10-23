@@ -36,12 +36,6 @@ VaultPath pickBestIf(const QSet<VaultPath> *set, const std::function<bool(const 
     return pickBest(filtered);
 }
 
-const QSet<VaultPath> *lookup(const QHash<QString, QSet<VaultPath>> &map, const QString &key)
-{
-    const auto it = map.constFind(key);
-    return it == map.constEnd() ? nullptr : &*it;
-}
-
 } // namespace
 
 QString pathKey(const QString &path)
@@ -152,33 +146,33 @@ VaultPath pickBest(const QSet<VaultPath> &paths)
 
 void NameTable::addNote(const VaultPath &path, const QStringList &aliases)
 {
-    multiAdd(m_byPath, pathKey(path), path);
-    multiAdd(m_noteNames, noteNameKey(path), path);
+    add(&NameTable::m_byPath, pathKey(path), path);
+    add(&NameTable::m_noteNames, noteNameKey(path), path);
     for (const QString &a : aliases) {
         const QString k = aliasKey(a);
         if (!k.isEmpty())
-            multiAdd(m_aliases, k, path);
+            add(&NameTable::m_aliases, k, path);
     }
 }
 
 void NameTable::removeNote(const VaultPath &path, const QStringList &aliases)
 {
-    multiRemove(m_byPath, pathKey(path), path);
-    multiRemove(m_noteNames, noteNameKey(path), path);
+    remove(&NameTable::m_byPath, pathKey(path), path);
+    remove(&NameTable::m_noteNames, noteNameKey(path), path);
     for (const QString &a : aliases)
-        multiRemove(m_aliases, aliasKey(a), path);
+        remove(&NameTable::m_aliases, aliasKey(a), path);
 }
 
 void NameTable::addAttachment(const VaultPath &path)
 {
-    multiAdd(m_byPath, pathKey(path), path);
-    multiAdd(m_fileNames, fileNameKey(path), path);
+    add(&NameTable::m_byPath, pathKey(path), path);
+    add(&NameTable::m_fileNames, fileNameKey(path), path);
 }
 
 void NameTable::removeAttachment(const VaultPath &path)
 {
-    multiRemove(m_byPath, pathKey(path), path);
-    multiRemove(m_fileNames, fileNameKey(path), path);
+    remove(&NameTable::m_byPath, pathKey(path), path);
+    remove(&NameTable::m_fileNames, fileNameKey(path), path);
 }
 
 void NameTable::clear()
@@ -187,6 +181,61 @@ void NameTable::clear()
     m_noteNames.clear();
     m_fileNames.clear();
     m_aliases.clear();
+    m_base = nullptr;
+}
+
+void NameTable::overlay(const NameTable *base)
+{
+    clear();
+    m_base = base;
+}
+
+const QSet<VaultPath> *NameTable::find(Map NameTable::*field, const QString &key) const
+{
+    const Map &map = this->*field;
+    const auto it = map.constFind(key);
+    if (it != map.constEnd())
+        return it->isEmpty() ? nullptr : &*it;
+    return m_base ? m_base->find(field, key) : nullptr;
+}
+
+bool NameTable::hasAny(Map NameTable::*field) const
+{
+    return !(this->*field).isEmpty() || (m_base && m_base->hasAny(field));
+}
+
+void NameTable::add(Map NameTable::*field, const QString &key, const VaultPath &path)
+{
+    Map &map = this->*field;
+    auto it = map.find(key);
+    if (it == map.end()) {
+        // An overlay starts from the base's files under the key.
+        const QSet<VaultPath> *base = m_base ? m_base->find(field, key) : nullptr;
+        it = map.insert(key, base ? *base : QSet<VaultPath>());
+    }
+    it->insert(path);
+}
+
+void NameTable::remove(Map NameTable::*field, const QString &key, const VaultPath &path)
+{
+    Map &map = this->*field;
+    auto it = map.find(key);
+    if (!m_base) {
+        if (it == map.end())
+            return;
+        it->remove(path);
+        if (it->isEmpty())
+            map.erase(it);
+        return;
+    }
+    // An overlay keeps an emptied entry: it hides the base's files under the key.
+    if (it == map.end()) {
+        const QSet<VaultPath> *base = m_base->find(field, key);
+        if (!base || !base->contains(path))
+            return;
+        it = map.insert(key, *base);
+    }
+    it->remove(path);
 }
 
 VaultPath NameTable::resolve(const QString &target, const VaultPath &from, TargetForm form) const
@@ -235,7 +284,7 @@ VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
         return hit;
     // 2) base name, for a target with folders a path suffix (shortest path, then alphabetical).
     const QString stem = md ? paths::stripMarkdownExtension(key) : key;
-    if (const QSet<VaultPath> *set = lookup(m_noteNames, paths::basename(stem))) {
+    if (const QSet<VaultPath> *set = find(&NameTable::m_noteNames, paths::basename(stem))) {
         hit = !stem.contains(u'/') ? pickBest(*set) : pickBestIf(set, [&](const VaultPath &p) {
             return endsWithSegments(paths::stripMarkdownExtension(pathKey(p)), stem);
         });
@@ -260,8 +309,8 @@ VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) c
     }
     // 3) base name (shortest path, then alphabetical).
     const bool md = isMarkdownExtension(ext);
-    const QSet<VaultPath> *notes = lookup(m_noteNames, md ? paths::stripMarkdownExtension(lowered) : lowered);
-    const QSet<VaultPath> *files = md ? nullptr : lookup(m_fileNames, lowered);
+    const QSet<VaultPath> *notes = find(&NameTable::m_noteNames, md ? paths::stripMarkdownExtension(lowered) : lowered);
+    const QSet<VaultPath> *files = md ? nullptr : find(&NameTable::m_fileNames, lowered);
     const VaultPath bestNote = notes ? pickBest(*notes) : VaultPath();
     const VaultPath bestFile = files ? pickBest(*files) : VaultPath();
     const VaultPath best =
@@ -292,7 +341,7 @@ VaultPath NameTable::lookupPath(const QString &path, bool attachmentFirst) const
 
 VaultPath NameTable::lookupExact(const QString &key, const QString &spelled) const
 {
-    const QSet<VaultPath> *set = lookup(m_byPath, key);
+    const QSet<VaultPath> *set = find(&NameTable::m_byPath, key);
     if (!set || set->isEmpty())
         return {};
     if (set->size() == 1)
@@ -311,7 +360,7 @@ VaultPath NameTable::lookupName(const QString &lowerPath) const
     const bool hasDir = lowerPath.contains(u'/');
     auto notes = [&]() -> VaultPath {
         const QString stem = md ? paths::stripMarkdownExtension(lowerPath) : lowerPath;
-        const QSet<VaultPath> *set = lookup(m_noteNames, hasDir ? paths::basename(stem) : stem);
+        const QSet<VaultPath> *set = find(&NameTable::m_noteNames, hasDir ? paths::basename(stem) : stem);
         if (!set)
             return {};
         if (!hasDir)
@@ -321,9 +370,9 @@ VaultPath NameTable::lookupName(const QString &lowerPath) const
         });
     };
     auto files = [&]() -> VaultPath {
-        if (md || m_fileNames.isEmpty())
+        if (md || !hasAny(&NameTable::m_fileNames))
             return {};
-        const QSet<VaultPath> *set = lookup(m_fileNames, hasDir ? paths::basename(lowerPath) : lowerPath);
+        const QSet<VaultPath> *set = find(&NameTable::m_fileNames, hasDir ? paths::basename(lowerPath) : lowerPath);
         if (!set)
             return {};
         if (!hasDir)
@@ -340,9 +389,9 @@ VaultPath NameTable::lookupName(const QString &lowerPath) const
 
 VaultPath NameTable::lookupAlias(const QString &target) const
 {
-    if (m_aliases.isEmpty())
+    if (!hasAny(&NameTable::m_aliases))
         return {};
-    const QSet<VaultPath> *set = lookup(m_aliases, aliasKey(target));
+    const QSet<VaultPath> *set = find(&NameTable::m_aliases, aliasKey(target));
     return set ? pickBest(*set) : VaultPath();
 }
 

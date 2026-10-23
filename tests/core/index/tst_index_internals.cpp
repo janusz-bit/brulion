@@ -5,6 +5,7 @@
 #include "index/textutil_p.h"
 
 #include "text/text.h"
+#include "util/paths.h"
 
 #include <QRandomGenerator>
 #include <QTest>
@@ -366,6 +367,71 @@ private Q_SLOTS:
             if (r.bounded(3) == 0)
                 b = b.toUpper();
             QCOMPARE(compareNameKeys(nameSortKey(a), a, nameSortKey(b), b), brulion::index_detail::compareNames(a, b));
+        }
+    }
+
+    // NameTable::overlay() (the names after a move): every resolution is that of a copy of the
+    // whole table changed the same way — random notebooks with duplicate names, aliases and
+    // attachments, random moves and removals.
+    void nameTableOverlayResolvesLikeACopy()
+    {
+        QRandomGenerator r(20261023);
+        const QStringList names{u"Dom"_s, u"dom"_s, u"Łąka"_s, u"Plan"_s, u"Żółw"_s};
+        const QStringList folders{QString(), u"A"_s, u"Projekty"_s, u"Projekty/Dom"_s, u"B/C"_s};
+        const auto pathIn = [](const QString &folder, const QString &file) {
+            return folder.isEmpty() ? file : folder + u'/' + file;
+        };
+        for (int round = 0; round < 200; ++round) {
+            struct File {
+                QString path;
+                QStringList aliases;
+                bool note = true;
+            };
+            QList<File> files;
+            for (int i = 0; i < 10; ++i) {
+                const QString folder = folders.at(r.bounded(int(folders.size())));
+                const QString name = names.at(r.bounded(int(names.size())));
+                File f;
+                f.note = r.bounded(4) != 0;
+                f.path = pathIn(folder, name + (f.note ? u".md"_s : u".png"_s));
+                if (f.note && r.bounded(3) == 0)
+                    f.aliases = {names.at(r.bounded(int(names.size()))) + u" alias"_s};
+                if (std::none_of(files.cbegin(), files.cend(), [&](const File &o) { return o.path == f.path; }))
+                    files.append(f);
+            }
+            NameTable base;
+            for (const File &f : std::as_const(files))
+                f.note ? base.addNote(f.path, f.aliases) : base.addAttachment(f.path);
+            NameTable copy = base;
+            NameTable overlay;
+            overlay.overlay(&base);
+            // Moves (remove, then add elsewhere) and removals, the same on both.
+            QStringList present;
+            for (int op = 0; op < 4 && !files.isEmpty(); ++op) {
+                const File f = files.takeAt(r.bounded(int(files.size())));
+                f.note ? copy.removeNote(f.path, f.aliases) : copy.removeAttachment(f.path);
+                f.note ? overlay.removeNote(f.path, f.aliases) : overlay.removeAttachment(f.path);
+                if (r.bounded(3) == 0)
+                    continue;
+                File moved = f;
+                moved.path = pathIn(folders.at(r.bounded(int(folders.size()))), brulion::paths::basename(f.path));
+                moved.note ? copy.addNote(moved.path, moved.aliases) : copy.addAttachment(moved.path);
+                moved.note ? overlay.addNote(moved.path, moved.aliases) : overlay.addAttachment(moved.path);
+                files.append(moved);
+            }
+            QStringList targets;
+            for (const QString &n : names) {
+                targets << n << n + u".md"_s << n + u".png"_s << n + u" alias"_s;
+                for (const QString &folder : folders)
+                    targets << pathIn(folder, n) << pathIn(folder, n + u".png"_s);
+            }
+            for (const QString &t : std::as_const(targets)) {
+                QCOMPARE(overlay.resolveNote(t, TargetForm::Parsed), copy.resolveNote(t, TargetForm::Parsed));
+                for (const QString &folder : folders) {
+                    const QString from = pathIn(folder, u"Notatka.md"_s);
+                    QCOMPARE(overlay.resolve(t, from, TargetForm::Parsed), copy.resolve(t, from, TargetForm::Parsed));
+                }
+            }
         }
     }
 

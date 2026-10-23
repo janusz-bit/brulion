@@ -17,7 +17,10 @@
 #include "text/text.h"
 #include "util/paths.h"
 
+#include <QElapsedTimer>
+
 #include <algorithm>
+#include <limits>
 
 namespace brulion {
 
@@ -101,8 +104,12 @@ bool sameFolder(const VaultPath &a, const VaultPath &b)
 // ---------------------------------------------------------------------------------------------
 
 struct RelocationPlan::Private {
+    Private() = default;
+    Private(const Private &) = delete; // `after` reads its own `before`
+    Private &operator=(const Private &) = delete;
+
     NameTable before;
-    NameTable after;
+    NameTable after;                   ///< an overlay on before
     QHash<VaultPath, VaultPath> moved; ///< old path -> new path
     QList<FileMove> moves;
     QSet<QString> keys;               ///< link keys whose resolution the moves can change
@@ -465,7 +472,29 @@ std::optional<QString> VaultIndex::tagTarget(const VaultPath &rawPath) const
 
 RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
 {
+    RelocationPlanner planner(*this, moves);
+    while (!planner.step(std::numeric_limits<int>::max())) { }
+    return planner.plan();
+}
+
+// ---------------------------------------------------------------------------------------------
+// RelocationPlanner
+// ---------------------------------------------------------------------------------------------
+
+struct RelocationPlanner::State {
+    const VaultIndex *index = nullptr;
+    int version = 0;
     RelocationPlan plan;
+    QList<VaultPath> sources; ///< the notes to look at, by path
+    qsizetype next = 0;       ///< the next of them
+};
+
+RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMove> &moves)
+    : s(std::make_unique<State>())
+{
+    s->index = &index;
+    s->version = index.version();
+    const std::unique_ptr<VaultIndex::Private> &d = index.d;
     auto p = std::make_shared<RelocationPlan::Private>();
     struct Known {
         FileMove move;
@@ -478,7 +507,7 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
         const VaultPath to = paths::normalize(m.to);
         if (from.isEmpty() || to.isEmpty() || from == to || p->moved.contains(from))
             continue;
-        if (const Private::Entry *e = d->entry(from))
+        if (const VaultIndex::Private::Entry *e = d->entry(from))
             known.append({{from, to}, e->note.aliases, true});
         else if (d->attachmentSet.contains(from))
             known.append({{from, to}, {}, false});
@@ -488,9 +517,9 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
         p->moves.append({from, to});
     }
     if (known.isEmpty())
-        return plan;
+        return;
     p->before = d->names;
-    p->after = d->names;
+    p->after.overlay(&p->before); // the names that change, over those of before
     // Every name a moved file answers to, before and after: the links filed under these keys are
     // the ones whose resolution can change.
     for (const Known &k : std::as_const(known)) {
@@ -548,8 +577,8 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
     // The notes with ```query blocks: their filters may name a moved file or a renamed tag.
     const QList<VaultPath> &queryNotes = d->queryNotes();
     if (!queryNotes.isEmpty()) {
-        p->allPaths = paths();
-        p->allPaths.append(attachments());
+        p->allPaths = index.paths();
+        p->allPaths.append(index.attachments());
         for (const VaultPath &q : queryNotes) {
             sources.insert(q);
             p->queryNotes.insert(q);
@@ -567,18 +596,47 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
         if (k.note)
             sources.insert(k.move.from);
     }
-    QList<VaultPath> sorted(sources.cbegin(), sources.cend());
-    std::sort(sorted.begin(), sorted.end());
-    plan.d = p;
-    for (const VaultPath &source : std::as_const(sorted)) {
-        const Private::Entry *e = d->entry(source);
+    s->sources = QList<VaultPath>(sources.cbegin(), sources.cend());
+    std::sort(s->sources.begin(), s->sources.end());
+    s->plan.d = p;
+}
+
+RelocationPlanner::~RelocationPlanner() = default;
+
+bool RelocationPlanner::step(int budgetMs)
+{
+    if (done())
+        return true;
+    if (!valid())
+        return false;
+    const RelocationPlan::Private &p = *s->plan.d;
+    QElapsedTimer clock;
+    clock.start();
+    do {
+        const VaultPath &source = s->sources.at(s->next++);
+        const VaultIndex::Private::Entry *e = s->index->d->entry(source);
         if (!e)
             continue;
-        RelocationPlan::File f = p->planFile(source, e->content, e);
+        RelocationPlan::File f = p.planFile(source, e->content, e);
         if (f.after != f.before)
-            plan.m_files.append(std::move(f));
-    }
-    return plan;
+            s->plan.m_files.append(std::move(f));
+    } while (!done() && clock.elapsed() < budgetMs);
+    return done();
+}
+
+bool RelocationPlanner::done() const
+{
+    return s->next >= s->sources.size();
+}
+
+bool RelocationPlanner::valid() const
+{
+    return s->index->version() == s->version;
+}
+
+RelocationPlan RelocationPlanner::plan() const
+{
+    return s->plan;
 }
 
 } // namespace brulion

@@ -642,6 +642,57 @@ private Q_SLOTS:
         QVERIFY(impact.notes > 0);
     }
 
+    // The same plans a few notes per event-loop turn (RelocationPlanner, Workspace's
+    // requestMoveImpact() for the dragged row's ghost: 8 ms per turn): what the GUI thread is
+    // blocked for at most — the preparation (lookup tables, the notes to look at), then the
+    // longest step; and the number of turns.
+    void relocationSteps_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("what");
+        for (int n : bench::sizes({1250, 5000, 20000}, {1250, 5000})) {
+            for (const QString &w : {u"folder move prepare"_s, u"folder move longest step"_s, u"folder move turns"_s,
+                                     u"folder rename prepare"_s, u"folder rename longest step"_s})
+                QTest::newRow(qPrintable(u"%1 notes %2"_s.arg(n).arg(w))) << n << w;
+        }
+    }
+    void relocationSteps()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, what);
+        Fixture &f = relocation(notes);
+        const QList<FileMove> moves = what.contains(u"rename"_s)
+                                              ? movesOf(f.files, u"Projekty"_s, u"Archiwum"_s)
+                                              : movesOf(f.files, u"Projekty"_s, u"Archiwum/Projekty"_s);
+        if (what.endsWith(u"prepare"_s)) {
+            QBENCHMARK {
+                RelocationPlanner planner(*f.index, moves);
+                QVERIFY(!planner.done());
+            }
+            return;
+        }
+        // One planner per repetition: the longest step (or the number of turns) of the median run.
+        QList<qreal> results;
+        for (int run = 0; run < 7; ++run) {
+            RelocationPlanner planner(*f.index, moves);
+            qint64 longest = 0;
+            int turns = 0;
+            bool done = false;
+            while (!done) {
+                QElapsedTimer t;
+                t.start();
+                done = planner.step(8);
+                longest = std::max(longest, t.nsecsElapsed());
+                ++turns;
+            }
+            QVERIFY(!planner.plan().files().isEmpty());
+            results.append(what.endsWith(u"turns"_s) ? qreal(turns) : qreal(longest) / 1e6);
+        }
+        std::sort(results.begin(), results.end());
+        QTest::setBenchmarkResult(results.at(results.size() / 2),
+                                  what.endsWith(u"turns"_s) ? QTest::Events : QTest::WalltimeMilliseconds);
+    }
+
     // ---- tags as pages ----------------------------------------------------------------------------
 
     // Opening the page a tag names (PageTools::pageInfo, the references list): the tag list, the

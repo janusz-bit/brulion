@@ -92,6 +92,8 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
 #endif
     m_indexTimer.setInterval(kIndexIntervalMs);
     connect(&m_indexTimer, &QTimer::timeout, this, &Workspace::indexChunk);
+    m_impactTimer.setInterval(0);
+    connect(&m_impactTimer, &QTimer::timeout, this, &Workspace::moveImpactStep);
 
     m_reminders = new WorkspaceReminders([this] { return now(); }, this);
     connect(m_reminders, &WorkspaceReminders::navigationRequested, this,
@@ -182,6 +184,8 @@ void Workspace::close()
     m_reminders->detach();
     m_sync->detach();
     m_indexTimer.stop();
+    cancelMoveImpact(); // its planner reads the index
+    m_impacts = ImpactCache();
     const bool wasIndexing = !m_indexQueue.isEmpty();
     m_indexQueue.clear();
     m_indexTotal = 0;

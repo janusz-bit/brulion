@@ -287,6 +287,13 @@ public:
     /// .brulion/config.json that follow: "journals" | "templates" | "attachments" | "newPages" |
     /// "journalTemplate") }.
     Q_INVOKABLE QVariantMap moveImpact(const QString &path, const QString &targetFolder);
+    /// moveImpact() without blocking, for the dragged row's ghost: the plan is made a few
+    /// milliseconds per event-loop turn (RelocationPlanner) and moveImpactReady(path,
+    /// targetFolder, impact) delivers it — on the next turn when it is known already (impacts are
+    /// kept per target until the notebook changes). A new request or cancelMoveImpact() drops
+    /// the one in progress; a change of the notebook meanwhile starts it again.
+    Q_INVOKABLE void requestMoveImpact(const QString &path, const QString &targetFolder);
+    Q_INVOKABLE void cancelMoveImpact();
     /// The same for a rename (renamePage() / renameFolder() with `newName` and `slashMoves`):
     /// { path } is "" when the name is not usable.
     Q_INVOKABLE QVariantMap renameImpact(const QString &path, const QString &newName, bool isDir,
@@ -428,6 +435,8 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     /// Something the user should know that is not an error (translated; an info toast).
     void noticeOccurred(const QString &message);
+    /// requestMoveImpact(path, targetFolder) is known: moveImpact()'s map.
+    void moveImpactReady(const QString &path, const QString &targetFolder, const QVariantMap &impact);
 
 private:
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
@@ -446,6 +455,14 @@ private:
     QString pathProblemMessage(const notebook::PathProblem &problem) const;
     /// What relocate(from, to) rewrites: { ok, error, path, links, tags, notes, specials }.
     QVariantMap relocationImpact(const QString &from, const QString &to);
+    /// notebook::RelocationImpact as moveImpact() returns it.
+    QVariantMap impactMap(const notebook::RelocationImpact &impact) const;
+    /// The impact of moving `from` to `to` known for this state of the notebook (the index's
+    /// version, the vault's revision); an empty map when there is none.
+    QVariantMap cachedImpact(const QString &from, const QString &to);
+    void storeImpact(const QString &from, const QString &to, const QVariantMap &impact);
+    /// One event-loop turn of requestMoveImpact().
+    void moveImpactStep();
     /// Move or rename `from` to `to` keeping every link and tag (renamePage, renameFolder,
     /// movePath: notebook::relocate()); returns `to` or "" (an error was emitted). Settings naming
     /// `from` or a path in it follow it (a notice says so).
@@ -455,6 +472,16 @@ private:
 
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;
+    /// Relocation impacts (ok ones) for one state of the notebook: key "from\nto".
+    struct ImpactCache {
+        int version = -1;
+        int revision = -1;
+        QHash<QString, QVariantMap> maps;
+    };
+    ImpactCache m_impacts;
+    struct PendingImpact;
+    std::shared_ptr<PendingImpact> m_pendingImpact; ///< requestMoveImpact() in progress
+    QTimer m_impactTimer;
     QStringList m_indexQueue;
     qsizetype m_indexTotal = 0;
     QTimer m_indexTimer;

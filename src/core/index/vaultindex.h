@@ -196,9 +196,38 @@ public:
 
 private:
     friend class VaultIndex;
+    friend class RelocationPlanner;
     struct Private;
     std::shared_ptr<const Private> d;
     QList<File> m_files;
+};
+
+class VaultIndex;
+
+/// VaultIndex::planRelocation() a few notes at a time, for a caller that must stay responsive
+/// (the dragged row's ghost asks for every folder it rests on): the lookup tables and the notes
+/// to look at are prepared at once, step() plans notes until its time is up. The plan equals
+/// planRelocation()'s; it holds only while the index does not change (valid(); a planner whose
+/// index changed is dropped and made anew). The index must outlive the planner.
+class RelocationPlanner {
+public:
+    RelocationPlanner(const VaultIndex &index, const QList<FileMove> &moves);
+    ~RelocationPlanner();
+    RelocationPlanner(const RelocationPlanner &) = delete;
+    RelocationPlanner &operator=(const RelocationPlanner &) = delete;
+
+    /// Plan notes for about `budgetMs` milliseconds (at least one note while there are any);
+    /// true once every note is planned. Does nothing when !valid().
+    bool step(int budgetMs);
+    bool done() const;
+    /// The index has not changed since the planner was made.
+    bool valid() const;
+    /// The plan (complete once done()).
+    RelocationPlan plan() const;
+
+private:
+    struct State;
+    std::unique_ptr<State> s;
 };
 
 /// Incremental in-memory index of a vault's notes.
@@ -329,6 +358,7 @@ public:
     /// Plan moving or renaming files (notes and attachments; a folder is all the files in it)
     /// so that links and tags keep their targets: see RelocationPlan. Files the index does not
     /// know are left out. Nothing is changed: apply the plan after the files moved.
+    /// RelocationPlanner makes the same plan a few notes at a time.
     RelocationPlan planRelocation(const QList<FileMove> &moves) const;
 
     // ---- blocks, tags, tasks, reminders, journals ---------------------------------------------
@@ -408,6 +438,7 @@ Q_SIGNALS:
 
 private:
     friend struct index_detail::IndexAccess;
+    friend class RelocationPlanner;
     struct Private;
     std::unique_ptr<Private> d;
 };
