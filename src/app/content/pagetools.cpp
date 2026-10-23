@@ -32,6 +32,8 @@ QString withoutMd(const QString &title)
 /// The tag that names the page at `path` (docs/SYNTAX.md §3): its key and how it is shown —
 /// the title, or the path when the title names another page (a duplicate base name); when that
 /// tag is not in use but another one naming the page is (an alias: #Janek), the most used of those.
+/// A page not written yet: the tag in use that names it most exactly (#praca/raporty for
+/// praca/raporty.md rather than #raporty). Nothing for an attachment: tags name notes only.
 struct PageTag {
     QString key;
     QString display;
@@ -39,6 +41,8 @@ struct PageTag {
 
 PageTag pageTag(const VaultIndex *idx, const QString &path)
 {
+    if (!paths::isMarkdown(path))
+        return {};
     const QString title = paths::pageTitle(path);
     PageTag tag{title.normalized(QString::NormalizationForm_C).toLower(), title};
     if (!idx)
@@ -47,6 +51,18 @@ PageTag pageTag(const VaultIndex *idx, const QString &path)
         tag.display = paths::stripMarkdownExtension(path);
         tag.key = tag.display.normalized(QString::NormalizationForm_C).toLower();
     }
+    const QStringList naming = idx->tagsNaming(path);
+    if (!idx->note(path)) {
+        QString exact;
+        for (const QString &key : naming) {
+            const qsizetype depth = key.count(u'/');
+            const qsizetype best = exact.count(u'/');
+            if (exact.isEmpty() || depth > best || (depth == best && key.size() > exact.size()))
+                exact = key;
+        }
+        if (!exact.isEmpty())
+            tag = {exact, exact};
+    }
     PageTag other;
     for (const TagCount &t : idx->tags()) { // most used first
         if (t.tag == tag.key) {
@@ -54,7 +70,7 @@ PageTag pageTag(const VaultIndex *idx, const QString &path)
                 tag.display = t.display;
             return tag;
         }
-        if (other.key.isEmpty() && idx->resolveTag(t.tag) == path)
+        if (other.key.isEmpty() && naming.contains(t.tag))
             other = {t.tag, t.display.isEmpty() ? t.tag : t.display};
     }
     return other.key.isEmpty() ? tag : other;
@@ -140,7 +156,8 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
 QString PageTools::tagFor(const QString &rawPath) const
 {
     const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
-    return markdown::tagSyntax(pageTag(idx, paths::normalize(rawPath)).display);
+    const PageTag tag = pageTag(idx, paths::normalize(rawPath));
+    return tag.key.isEmpty() ? QString() : markdown::tagSyntax(tag.display);
 }
 
 QString PageTools::validateTitle(const QString &rawPath, const QString &rawTitle) const
@@ -267,7 +284,7 @@ QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int r
     const PageTag tag = pageTag(idx, path);
     QVariantList subTags;
     const QString prefix = tag.key + u'/';
-    if (idx) {
+    if (idx && !tag.key.isEmpty()) {
         for (const TagCount &t : idx->tags()) {
             if (t.tag.startsWith(prefix))
                 subTags.append(QVariantMap{{u"tag"_s, t.tag},
@@ -277,7 +294,7 @@ QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int r
     }
     return {{u"key"_s, tag.key},
             {u"display"_s, tag.display},
-            {u"text"_s, markdown::tagSyntax(tag.display)},
+            {u"text"_s, tag.key.isEmpty() ? QString() : markdown::tagSyntax(tag.display)},
             {u"references"_s, references},
             {u"subTags"_s, subTags}};
 }

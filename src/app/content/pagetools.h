@@ -39,7 +39,7 @@ public:
     /// `tags::` and frontmatter items — docs/SYNTAX.md §3) }.
     Q_INVOKABLE QVariantMap renameImpact(const QString &path) const;
     /// The tag that names the page ("#praca", "#[[Jan Kowalski]]", "#Projekty/Dom" for a duplicate
-    /// base name; markdown::tagSyntax()); "" when no tag can name it.
+    /// base name; markdown::tagSyntax()); "" when no tag can name it (an attachment).
     Q_INVOKABLE QString tagFor(const QString &path) const;
     /// "" when `title` is a good new title for `path`, else a translated reason (empty, invalid
     /// characters, a page with that title exists in the folder).
@@ -49,7 +49,8 @@ public:
     ///   properties), words, backlinks (pages linking here or tagging it),
     ///   tag: { key, display, text ("#praca" / "#[[Jan Kowalski]]"), references (blocks and pages
     ///   tagged with it), subTags: [{ tag, display, count }] (praca/… under praca) } — the tag that
-    ///   names this page (docs/SYNTAX.md §3), also for a page not written yet }.
+    ///   names this page (docs/SYNTAX.md §3), also for a page not written yet (the one in use that
+    ///   names it most exactly: #praca/raporty for praca/raporty.md); key "" for an attachment }.
     Q_INVOKABLE QVariantMap summary(const QString &path) const;
     /// "[[Dom]]", or "[[Projekty/Dom]]" when the title alone would not reach this page.
     Q_INVOKABLE QString wikiLink(const QString &path) const;
