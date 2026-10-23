@@ -46,6 +46,8 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
     c.blockText = [](const QString &id) -> std::optional<QString> {
         if (id == u"abc")
             return u"Treść <b>bloku</b>"_s;
+        if (id == u"znaczniki")
+            return u"Umowa z **sąsiadami** z [[2026-10-22]] i [[Dom|domem]]"_s;
         return std::nullopt;
     };
     // The block a [[target#^id]] leads to: per page ("Inna" has its own ^abc).
@@ -60,6 +62,8 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
             return QString(57, u'a') + u" 📅 i dalej tekst"_s;
         if (id == u"akcent") // "é" as e + a combining acute accent at 58–59
             return QString(58, u'b') + u"e\u0301 i dalej tekst"_s;
+        if (id == u"znaczniki") // the index keeps a block's Markdown
+            return u"Ekipa o 9:00 (umowa z **sąsiadami** z [[2026-10-22]] i [[Dom|domem]], `kod`)"_s;
         return std::nullopt;
     };
     c.inlineCalc = [](const QString &expr) { return expr == u"2 + 2" ? u"4"_s : QString(); };
@@ -167,6 +171,12 @@ private Q_SLOTS:
         QTest::newRow("block link cut before an accent")
                 << u"[[Strona#^akcent]]"_s
                 << link(u"page:Strona#^akcent"_s, u"L"_s, u"Strona › "_s + QString(58, u'b') + u"…"_s);
+        // The block's Markdown as the text it shows: links by their labels, no emphasis marks —
+        // never raw "[[" cut by the 60 characters.
+        QTest::newRow("block link text without markup")
+                << u"[[Strona#^znaczniki]]"_s
+                << link(u"page:Strona#^znaczniki"_s, u"L"_s,
+                        u"Strona › Ekipa o 9:00 (umowa z sąsiadami z 2026-10-22 i domem, kod)"_s);
         // Another page's block with the same id is another block.
         QTest::newRow("block link same id elsewhere")
                 << u"[[Inna#^abc]]"_s << link(u"page:Inna#^abc"_s, u"L"_s, u"Inna › Inny blok, to samo id"_s);
@@ -200,6 +210,9 @@ private Q_SLOTS:
         QTest::newRow("tag") << u"#zakupy/spożywcze"_s << tag(u"zakupy%2Fspo%C5%BCywcze"_s, u"zakupy/spożywcze"_s);
         QTest::newRow("bracket tag") << u"#[[dwa słowa]]"_s << tag(u"dwa%20s%C5%82owa"_s, u"dwa słowa"_s);
         QTest::newRow("block ref") << u"((abc))"_s << link(u"block:abc"_s, u"L"_s, u"Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("block ref without markup")
+                << u"((znaczniki))"_s
+                << link(u"block:znaczniki"_s, u"L"_s, u"Umowa z sąsiadami z 2026-10-22 i domem"_s);
         QTest::newRow("unknown block ref") << u"((nieznany))"_s << link(u"block:nieznany"_s, u"U"_s, u"((nieznany))"_s);
         QTest::newRow("block embed") << u"!((abc))"_s
                                      << link(u"block:abc"_s, u"L"_s, u"⧉ Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
