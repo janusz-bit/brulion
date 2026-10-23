@@ -206,8 +206,9 @@ brulion-cli --format text journal wczoraj              # wczorajszy dziennik, cz
 
 Notatnik to `--vault <folder>`, zmienna `BRULION_VAULT` albo bieżący notatnik aplikacji. Wynik to
 JSON (dla ludzi: `--format text`), a kod wyjścia mówi, co się stało. Zmiany z wiersza poleceń
-trafiają do historii wersji („Zastąpiona z wiersza poleceń (agent)”) i nigdy nie nadpisują tego, co
-właśnie zapisała aplikacja albo Syncthing. Polecenia, które coś usuwają, przenoszą lub nadpisują,
+trafiają do historii wersji urządzenia, na którym działa program (aplikacja na tym samym komputerze
+pokazuje je jako „Zastąpiona z wiersza poleceń (agent)”), i nigdy nie nadpisują tego, co właśnie
+zapisała aplikacja albo Syncthing. Polecenia, które coś usuwają, przenoszą lub nadpisują,
 wymagają `--allow-destructive`, a usunięte strony trafiają do kosza.
 
 **Agenci AI** (np. Hermes, Claude Code) dostają te same polecenia jako narzędzia MCP:

@@ -18,9 +18,12 @@ outlines, Polish first). `brulion-cli` changes the notebook exactly as the app d
 - Destructive commands (`page write`, `page rename`, `page move`, `page delete`, `folder move`,
   `folder rename`, `folder delete`, `history restore`) need `--allow-destructive`; only use them
   when the user asked for exactly that change. Deletes go to the notebook's trash (`.trash/`).
-- `--dry-run` shows the unified diff of a change without writing; use it when unsure.
-- Every change is kept in the device's version history (reason "cli"): the user can undo it in
-  the app or with `history restore`.
+- `--dry-run` shows the unified diff of a change without writing (rename/move: `changes`, the diff
+  of every note whose links follow; delete: the `files` going to the trash); use it when unsure.
+- Every change is kept in the version history of the device brulion-cli runs on (reason "cli"):
+  `history restore` undoes it. The app shows it as a command-line change when it runs on the same
+  computer; on another device (the folder synced) it shows a change from sync or another program,
+  which the user can restore there too.
 
 ## Running it
 

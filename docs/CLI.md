@@ -212,8 +212,10 @@ The command line is meant to run next to the app, Syncthing and Nextcloud:
   line the edit does not touch keep their bytes. A file that is not UTF-8 is refused rather than
   rewritten.
 * **History.** The text a write replaces is kept in the device's version history with the reason
-  `cli` — the app shows it as „Zastąpiona z wiersza poleceń (agent)” and can restore it; so does
-  `history restore`.
+  `cli` — `history restore` brings it back, and the app on the same computer shows it as
+  „Zastąpiona z wiersza poleceń (agent)” and can restore it. An agent on another device (the Pi
+  next to a desktop, the folder synced) keeps that history on its own device; the desktop app
+  records the change when it arrives as one from sync or another program — restorable there too.
 * **Additive by default.** Destructive commands (page write, rename, move, delete; folder move,
   rename, delete; history restore) need `--allow-destructive`; deleting moves to `.trash/`
   (the app's trash). `--read-only` refuses every write; `--dry-run` shows the unified diff.
