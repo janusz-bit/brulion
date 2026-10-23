@@ -18,6 +18,11 @@ set_tests_properties(tst_editor_controller PROPERTIES TIMEOUT ${_controller_time
 brulion_add_test(tst_editor_calc
     SOURCES tst_editor_calc.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
+# The block selection: ranges, Shift+arrows, copy / cut / paste with the real clipboard, range
+# operations and their undo steps, ids on paste, HTML from other apps, the "Zaznacz tekst" page.
+brulion_add_test(tst_editor_selection
+    SOURCES tst_editor_selection.cpp
+    LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_suggestions
     SOURCES tst_editor_suggestions.cpp
     LIBS brulion_editor)

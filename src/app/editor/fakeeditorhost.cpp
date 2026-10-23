@@ -22,6 +22,7 @@
 #include <QPainterPath>
 #include <QRadialGradient>
 #include <QSet>
+#include <QTextDocument>
 #include <QTimer>
 
 #include <algorithm>
@@ -595,6 +596,19 @@ void FakeEditorHost::navigate(const QVariantMap &route, bool newPane)
 void FakeEditorHost::openUrl(const QUrl &url)
 {
     Q_EMIT urlOpened(url);
+}
+
+QString FakeEditorHost::renderHtml(const QString &markdown, const QString &fromPath) const
+{
+    Q_UNUSED(fromPath);
+    return u"<pre>"_s + markdown.toHtmlEscaped() + u"</pre>"_s;
+}
+
+QString FakeEditorHost::htmlToMarkdown(const QString &html) const
+{
+    QTextDocument doc;
+    doc.setHtml(html);
+    return doc.toMarkdown(QTextDocument::MarkdownDialectGitHub).trimmed();
 }
 
 void FakeEditorHost::setFile(const QString &path, const QString &content)

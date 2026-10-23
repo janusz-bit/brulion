@@ -22,10 +22,24 @@ namespace brulion::editor {
 
 namespace {
 
-const QList<int> StructuralRoles{BlockListModel::DepthRole,      BlockListModel::HasChildrenRole,
-                                 BlockListModel::CollapsedRole,  BlockListModel::VisibleRole,
-                                 BlockListModel::IsEditingRole,  BlockListModel::IsSelectedRole,
-                                 BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole};
+const QList<int> StructuralRoles{
+        BlockListModel::DepthRole,      BlockListModel::HasChildrenRole, BlockListModel::CollapsedRole,
+        BlockListModel::VisibleRole,    BlockListModel::IsEditingRole,   BlockListModel::IsSelectedRole,
+        BlockListModel::IsZoomRootRole, BlockListModel::PrevKindRole,    BlockListModel::SelectionEdgeRole};
+
+/// Where a selected row sits in the band of selected visible rows (selectionEdge role).
+enum SelectionEdge : quint8 { NoEdge, SingleEdge, FirstEdge, MiddleEdge, LastEdge };
+
+QString selectionEdgeName(quint8 edge)
+{
+    switch (edge) {
+    case SingleEdge: return u"single"_s;
+    case FirstEdge: return u"first"_s;
+    case MiddleEdge: return u"middle"_s;
+    case LastEdge: return u"last"_s;
+    default: return {};
+    }
+}
 
 QString alignName(calc::TableAlign a)
 {
@@ -243,6 +257,7 @@ QHash<int, QByteArray> BlockListModel::roleNames() const
             {TransclusionsRole, "transclusions"},
             {ListMarkerRole, "listMarker"},
             {PrevKindRole, "prevKind"},
+            {SelectionEdgeRole, "selectionEdge"},
             {NoteModeOnlyRole, "noteModeOnly"},
     };
 }
@@ -342,7 +357,7 @@ void BlockListModel::resetContent(const QString &content)
     m_zoomUid = 0;
     m_collapsed.clear();
     m_editingUid = 0;
-    m_selectedUid = 0;
+    m_selectedUids.clear();
     calcContentChanged();
     refresh(true);
     endResetModel();
@@ -419,7 +434,12 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
     }
     m_collapsed = collapsed;
     m_editingUid = remap(m_editingUid);
-    m_selectedUid = remap(m_selectedUid);
+    QSet<quint64> selected;
+    for (const quint64 uid : std::as_const(m_selectedUids)) {
+        if (const quint64 n = remap(uid))
+            selected.insert(n);
+    }
+    m_selectedUids = selected;
 
     // Insert rows for new blocks.
     const int newCount = m_doc.count();
@@ -618,7 +638,8 @@ void BlockListModel::refresh(bool contentChanged)
             ++it;
     }
 
-    QList<int> structural;
+    QList<char> dirty(n, 0); // structural state changed
+    QList<int> visibleRows;  // in order (selection edges)
     QList<int> calcRows;
     QList<int> tableRows;
     QList<int> htmlRows;
@@ -641,7 +662,7 @@ void BlockListModel::refresh(bool contentChanged)
         const bool hasChildren = m_doc.hasChildren(i);
         const bool collapsed = m_foldingEnabled && hasChildren && m_collapsed.contains(e.uid);
         const bool editing = m_editingUid && e.uid == m_editingUid;
-        const bool selected = m_selectedUid && e.uid == m_selectedUid;
+        const bool selected = !m_selectedUids.isEmpty() && m_selectedUids.contains(e.uid);
         bool visible = zoomRow < 0 || (i >= zoomRange.first && i <= zoomRange.last());
         if (visible && m_foldingEnabled && !m_collapsed.isEmpty()) {
             for (int p = e.parent; p >= 0; p = m_doc.at(p).parent) {
@@ -669,11 +690,15 @@ void BlockListModel::refresh(bool contentChanged)
             st.selected = selected;
             st.zoomRoot = zoomRoot;
             st.prevKind = prevKind;
-            structural.append(row);
+            dirty[row] = 1;
         }
         if (visible) {
             prevKind = kindName(e.kind);
             ++visibleCount;
+            visibleRows.append(row);
+        } else if (st.selectionEdge != NoEdge) {
+            st.selectionEdge = NoEdge;
+            dirty[row] = 1;
         }
         if (!contentChanged)
             continue;
@@ -720,6 +745,30 @@ void BlockListModel::refresh(bool contentChanged)
     }
     if (contentChanged)
         m_hasCalcConsumers = calcConsumers;
+    // The selection band's ends over the visible rows (every row has its state by now: the
+    // pointers stay valid, nothing is inserted into m_state below).
+    QList<RowState *> shown;
+    shown.reserve(visibleRows.size());
+    for (const int row : std::as_const(visibleRows))
+        shown.append(&stateFor(m_rows[row]));
+    for (qsizetype k = 0; k < shown.size(); ++k) {
+        RowState &st = *shown[k];
+        quint8 edge = NoEdge;
+        if (st.selected) {
+            const bool before = k > 0 && shown[k - 1]->selected;
+            const bool after = k + 1 < shown.size() && shown[k + 1]->selected;
+            edge = before && after ? MiddleEdge : before ? LastEdge : after ? FirstEdge : SingleEdge;
+        }
+        if (edge != st.selectionEdge) {
+            st.selectionEdge = edge;
+            dirty[visibleRows[k]] = 1;
+        }
+    }
+    QList<int> structural;
+    for (int row = 0; row < n; ++row) {
+        if (dirty[row])
+            structural.append(row);
+    }
     emitRowsChanged(structural, StructuralRoles);
     if (visibleCount != m_visibleCount) {
         m_visibleCount = visibleCount;
@@ -1200,6 +1249,7 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case ListMarkerRole: return e.kind == BlockKind::ListItem ? e.prefix.trimmed() : QString();
     case PrevKindRole: return st.prevKind;
     case NoteModeOnlyRole: (void)cachedShape(row); return stateFor(e.uid).noteModeOnly;
+    case SelectionEdgeRole: return selectionEdgeName(st.selectionEdge);
     default: return {};
     }
 }
@@ -1272,12 +1322,18 @@ void BlockListModel::setEditingUid(quint64 uid)
     refresh(false);
 }
 
-void BlockListModel::setSelectedUid(quint64 uid)
+void BlockListModel::setSelectedUids(const QSet<quint64> &uids)
 {
-    if (m_selectedUid == uid)
+    if (m_selectedUids == uids)
         return;
-    m_selectedUid = uid;
+    m_selectedUids = uids;
     refresh(false);
+}
+
+bool BlockListModel::isRowSelected(int row) const
+{
+    const RowState *st = stateOf(row);
+    return st && st->selected;
 }
 
 bool BlockListModel::isRowVisible(int row) const

@@ -314,11 +314,16 @@ int PageController::selectedRow() const
 void PageController::setSelectedRow(int row)
 {
     const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
-    if (uid == m_selectedUid)
+    if (uid == m_selectedUid && uid == m_anchorUid)
         return;
     m_selectedUid = uid;
-    m_model->setSelectedUid(uid);
-    Q_EMIT selectedRowChanged();
+    m_anchorUid = uid;
+    updateSelection();
+}
+
+int PageController::selectionAnchorRow() const
+{
+    return m_anchorUid ? m_model->rowOfUid(m_anchorUid) : -1;
 }
 
 qsizetype PageController::undoHistorySize() const
@@ -470,7 +475,7 @@ void PageController::load()
     m_undo->clear();
     m_typingOpen = false;
     m_editingUid = 0;
-    m_selectedUid = 0;
+    resetSelection();
     for (auto it = m_tracked.begin(); it != m_tracked.end(); ++it)
         it.value() = 0; // another file (or a reload): tracked blocks are gone
     m_cursor = -1;
@@ -501,6 +506,7 @@ void PageController::load()
     Q_EMIT loadingChanged();
     Q_EMIT editingRowChanged();
     Q_EMIT selectedRowChanged();
+    updateSelection();
     if (hadZoom)
         Q_EMIT zoomChanged();
     Q_EMIT foldStateChanged();
@@ -742,7 +748,7 @@ void PageController::onFileChanged(const QString &path)
         if (editing && !m_editingUid && m_model->count() > 0)
             m_editingUid = m_model->uidAt(std::clamp(row, 0, m_model->count() - 1));
         m_model->setEditingUid(m_editingUid);
-        m_model->setSelectedUid(m_selectedUid);
+        updateSelection();
         m_undo->clear();
         m_typingOpen = false;
         Q_EMIT editingRowChanged();
@@ -816,7 +822,7 @@ bool PageController::validRow(int row) const
 
 PageController::Focus PageController::currentFocus() const
 {
-    return {editingRow(), m_cursor};
+    return {editingRow(), m_cursor, selectionAnchorRow(), selectedRow()};
 }
 
 void PageController::beginCommand()
@@ -842,7 +848,10 @@ void PageController::endCommand(const Focus &after)
 
 EditResult PageController::applyOp(const std::function<EditResult(BlockDocument &)> &op)
 {
-    return m_model->apply(op);
+    const EditResult r = m_model->apply(op);
+    if (m_selectedUid || m_anchorUid)
+        updateSelection(); // the selected subtrees may have changed
+    return r;
 }
 
 void PageController::restore(const QString &snapshot, const Focus &focus)
@@ -853,7 +862,12 @@ void PageController::restore(const QString &snapshot, const Focus &focus)
     const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot);
     m_restoring = false;
     remapBlocks(mapping);
-    m_model->setSelectedUid(m_selectedUid);
+    if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
+        // The block selection of that version (an undone deletion selects its blocks again).
+        m_anchorUid = m_model->uidAt(focus.selectionAnchor);
+        m_selectedUid = m_model->uidAt(focus.selectionFocus);
+    }
+    updateSelection();
     if (focus.row >= 0 && validRow(focus.row)) {
         setFocus(focus, true);
     } else {
@@ -901,10 +915,9 @@ void PageController::setFocus(const Focus &target, bool resetText)
     const int len = int(m_model->editTextAt(focus.row).size());
     m_cursor = focus.cursor < 0 ? len : snapToCharacter(m_model->editTextAt(focus.row), focus.cursor);
     m_model->setEditingUid(uid);
-    if (m_selectedUid) {
-        m_selectedUid = 0;
-        m_model->setSelectedUid(0);
-        Q_EMIT selectedRowChanged();
+    if (m_selectedUid || m_anchorUid) {
+        resetSelection();
+        updateSelection();
     }
     Q_EMIT editingRowChanged();
     Q_EMIT cursorPositionChanged();
@@ -964,7 +977,7 @@ void PageController::applyText(const QString &newText, const Focus &after)
     m_restoring = false;
     remapBlocks(mapping);
     m_model->setEditingUid(m_editingUid);
-    m_model->setSelectedUid(m_selectedUid);
+    updateSelection();
     endCommand(after);
     if (after.row >= 0)
         setFocus(after, true);
@@ -1509,6 +1522,7 @@ int PageController::deleteBlock(int row)
     const bool wasZoom = row == zoomBlock();
     const int prev = m_model->previousVisibleRow(row);
     const bool editingThis = editingRow() == row;
+    const bool hadSelection = m_selectedUid != 0;
     beginCommand();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.remove(row, true); });
     int focusRow = -1;
@@ -1527,10 +1541,8 @@ int PageController::deleteBlock(int row)
         else
             stopEditing();
     }
-    if (m_selectedUid && editingRow() < 0) {
-        m_selectedUid = 0;
+    if (hadSelection && editingRow() < 0)
         setSelectedRow(focusRow);
-    }
     return focusRow;
 }
 
@@ -1727,6 +1739,7 @@ void PageController::zoomInto(int row)
     const int editing = editingRow();
     if (editing >= 0 && !m_model->isRowVisible(editing))
         stopEditing();
+    clearSelection(); // its rows may be outside the zoom
     Q_EMIT zoomChanged();
 }
 
@@ -1740,7 +1753,10 @@ void PageController::zoomOut()
 
 void PageController::zoomTo(int row)
 {
-    m_model->setZoomUid(validRow(row) ? m_model->uidAt(row) : 0);
+    const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
+    if (uid != m_model->zoomUid())
+        clearSelection(); // its rows may be outside the zoom
+    m_model->setZoomUid(uid);
     Q_EMIT zoomChanged();
 }
 
@@ -1761,6 +1777,7 @@ void PageController::setFolded(int row, bool folded)
     const int editing = editingRow();
     if (folded && editing >= 0 && !m_model->isRowVisible(editing))
         setFocus({row, -1}, true);
+    updateSelection(); // rows shown changed (a fold keeps a selected parent's children selected)
     Q_EMIT foldStateChanged();
 }
 
@@ -1780,6 +1797,7 @@ void PageController::foldAll(bool folded)
     const int editing = editingRow();
     if (editing >= 0 && !m_model->isRowVisible(editing))
         stopEditing();
+    updateSelection();
     Q_EMIT foldStateChanged();
 }
 
@@ -1793,6 +1811,7 @@ void PageController::setFoldState(const QVariantList &lines)
             uids.insert(doc.at(i).uid);
     }
     m_model->setCollapsedUids(uids);
+    updateSelection();
     Q_EMIT foldStateChanged();
 }
 
@@ -1811,6 +1830,7 @@ void PageController::reveal(int row)
         if (m_model->isCollapsed(p))
             m_model->setCollapsed(p, false);
     }
+    updateSelection();
     Q_EMIT foldStateChanged();
 }
 
@@ -1855,6 +1875,7 @@ void PageController::remapBlocks(const QHash<quint64, quint64> &mapping)
 {
     m_editingUid = mapping.value(m_editingUid, 0);
     m_selectedUid = mapping.value(m_selectedUid, 0);
+    m_anchorUid = mapping.value(m_anchorUid, 0);
     for (auto it = m_tracked.begin(); it != m_tracked.end(); ++it)
         it.value() = mapping.value(it.value(), 0);
 }
@@ -1907,6 +1928,9 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
         return result(-1, -1);
     QString text = pasted;
     text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    // Block ids that resolve elsewhere would be duplicated (`((id))` is vault-wide): dropped,
+    // unless this is the text of the last cut (a move).
+    text = withoutTakenIds(text, cutIdsFor(text));
     const BlockShape shape = m_model->shapeAt(row);
     const QString edit = shape.editText;
     from = snapToCharacter(edit, from);

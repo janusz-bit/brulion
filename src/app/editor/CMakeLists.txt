@@ -27,7 +27,7 @@ qt_add_library(brulion_editor STATIC
     blocklistmodel.h blocklistmodel.cpp blocklistmodel_transclusions.cpp
     queryhost.h
     queryresultmodel.h queryresultmodel.cpp
-    pagecontroller.h pagecontroller.cpp
+    pagecontroller.h pagecontroller.cpp pagecontroller_selection.cpp
     dayclock.h dayclock.cpp
     markdownhighlighter.h markdownhighlighter.cpp
     suggestionmodel.h suggestionmodel.cpp

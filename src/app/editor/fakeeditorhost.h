@@ -73,6 +73,10 @@ public:
     QVariantMap vaultConfig() const override;
     void navigate(const QVariantMap &route, bool newPane = false) override;
     void openUrl(const QUrl &url) override;
+    /// The clipboard's HTML for tests: the Markdown escaped in a <pre> (the real app renders it).
+    QString renderHtml(const QString &markdown, const QString &fromPath) const override;
+    /// Pasted HTML as Markdown through QTextDocument (the real app has the io module's converter).
+    QString htmlToMarkdown(const QString &html) const override;
 
     // QueryHost (also invokable, like the shell's Workspace)
     Q_INVOKABLE QVariantMap runQuery(const QString &source, const QString &currentPath) override;
