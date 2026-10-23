@@ -4,7 +4,7 @@
 <context>
     <name>AllPagesView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="152"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="174"/>
         <source>%1 of %n page(s)</source>
         <translation>
             <numerusform>%1 of %n page</numerusform>
@@ -12,7 +12,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="153"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="175"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="278"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -20,11 +21,38 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/AllPagesView.qml" line="373"/>
+        <location filename="../src/app/qml/views/AllPagesView.qml" line="431"/>
         <source>%n link(s)</source>
         <translation>
             <numerusform>%n link</numerusform>
             <numerusform>%n links</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>AppShell</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="186"/>
+        <source>Moved to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Moved to “%1”, %n link or tag updated</numerusform>
+            <numerusform>Moved to “%1”, %n links and tags updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="187"/>
+        <source>Moved to “%1”, %n link(s) updated</source>
+        <translation>
+            <numerusform>Moved to “%1”, %n link updated</numerusform>
+            <numerusform>Moved to “%1”, %n links updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/AppShell.qml" line="482"/>
+        <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
+        <translation>
+            <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
+            <numerusform>The folder “%1” and %n pages in it will be moved to the trash.</numerusform>
         </translation>
     </message>
 </context>
@@ -598,7 +626,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="152"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="174"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -606,7 +634,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="153"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="175"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -614,7 +642,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="250"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="272"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
@@ -634,9 +662,60 @@
     </message>
 </context>
 <context>
+    <name>ShellMoveDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="90"/>
+        <source>Updated links and tags: %n</source>
+        <translation>
+            <numerusform>Updated links and tags: %n</numerusform>
+            <numerusform>Updated links and tags: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="90"/>
+        <source>Updated links: %n</source>
+        <translation>
+            <numerusform>Updated links: %n</numerusform>
+            <numerusform>Updated links: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="91"/>
+        <source>(in %n note(s))</source>
+        <translation>
+            <numerusform>(in %n note)</numerusform>
+            <numerusform>(in %n notes)</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>ShellRenameDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="32"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <source>Updated links and tags: %n</source>
+        <translation>
+            <numerusform>Updated links and tags: %n</numerusform>
+            <numerusform>Updated links and tags: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <source>Updated links: %n</source>
+        <translation>
+            <numerusform>Updated links: %n</numerusform>
+            <numerusform>Updated links: %n</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="52"/>
+        <source>(in %n note(s))</source>
+        <translation>
+            <numerusform>(in %n note)</numerusform>
+            <numerusform>(in %n notes)</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="68"/>
         <source>%n link(s) and tag(s) %1 will be updated to the new name.</source>
         <translation>
             <numerusform>%n link or tag %1 will be updated to the new name.</numerusform>
@@ -644,7 +723,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="33"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="69"/>
         <source>%n link(s) %1 will be updated to the new name.</source>
         <translation>
             <numerusform>%n link %1 will be updated to the new name.</numerusform>
@@ -652,7 +731,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="34"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="70"/>
         <source>in %n note(s)</source>
         <translation>
             <numerusform>in %n note</numerusform>
@@ -660,7 +739,23 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="49"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="91"/>
+        <source>Moved to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Moved to “%1”, %n link or tag updated</numerusform>
+            <numerusform>Moved to “%1”, %n links and tags updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="92"/>
+        <source>Moved to “%1”, %n link(s) updated</source>
+        <translation>
+            <numerusform>Moved to “%1”, %n link updated</numerusform>
+            <numerusform>Moved to “%1”, %n links updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="96"/>
         <source>Renamed to “%1”, %n link(s) and tag(s) updated</source>
         <translation>
             <numerusform>Renamed to “%1”, %n link or tag updated</numerusform>
@@ -668,7 +763,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="97"/>
         <source>Renamed to “%1”, %n link(s) updated</source>
         <translation>
             <numerusform>Renamed to “%1”, %n link updated</numerusform>
@@ -963,7 +1058,7 @@
 <context>
     <name>brulion::editor::SuggestionModel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/suggestionmodel.cpp" line="274"/>
+        <location filename="../src/app/editor/suggestionmodel.cpp" line="279"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>

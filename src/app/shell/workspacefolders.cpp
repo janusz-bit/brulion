@@ -412,8 +412,10 @@ QString Workspace::relocate(const QString &rawFrom, const QString &rawTo)
     finishIndexing();
     const RelocationPlan plan = m_index ? m_index->planRelocation(fileMoves(from, to)) : RelocationPlan();
     if (!m_vault->rename(from, to, ChangeSource::User)) {
-        Q_EMIT errorOccurred((folder ? tr("Could not move the folder: %1") : tr("Could not move the page: %1"))
-                                     .arg(m_vault->errorString()));
+        const bool moving = paths::dirname(from) != paths::dirname(to);
+        const QString message = folder ? (moving ? tr("Could not move the folder: %1") : tr("Could not rename the folder: %1"))
+                                       : (moving ? tr("Could not move the page: %1") : tr("Could not rename the page: %1"));
+        Q_EMIT errorOccurred(message.arg(m_vault->errorString()));
         return {};
     }
     // The planned notes, where they are now (also a moved note itself); one write — one history
