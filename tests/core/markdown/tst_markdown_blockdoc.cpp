@@ -242,7 +242,8 @@ private Q_SLOTS:
                 const int n = doc.count();
                 const int i = n ? int(rnd(quint32(n))) : -1;
                 EditResult r;
-                switch (rnd(14)) {
+                const int j = n ? int(rnd(quint32(n))) : -1;
+                switch (rnd(19)) {
                 case 0: r = doc.setBody(i, u"nowy **tekst** #tag\ndruga linia"_s); break;
                 case 1: r = doc.split(i, int(rnd(20))); break;
                 case 2: r = doc.insertAfter(i, u"wstawiony"_s, int(rnd(3))); break;
@@ -256,6 +257,11 @@ private Q_SLOTS:
                 case 10: r = doc.ensureBlockId(i).edit; break;
                 case 11: r = doc.convertToList(i); break;
                 case 12: r = doc.convertToParagraph(i); break;
+                case 13: r = doc.removeRange(std::min(i, j), std::max(i, j)); break;
+                case 14: r = doc.indentRange(std::min(i, j), std::max(i, j)); break;
+                case 15: r = doc.outdentRange(std::min(i, j), std::max(i, j)); break;
+                case 16: r = doc.moveRangeUp(std::min(i, j), std::max(i, j)); break;
+                case 17: r = doc.moveRangeDown(std::min(i, j), std::max(i, j)); break;
                 default: r = doc.insertAfter(i, u"akapit"_s, 0, false); break;
                 }
                 QString why;
@@ -816,6 +822,177 @@ private Q_SLOTS:
         doc.moveUp(3);
         QCOMPARE(doc.toString(), u"# Tytuł\n\n- a\n\nAkapit\n\n- b\n"_s);
         QCOMPARE(entries(doc), QStringList({u"h:0:|# Tytuł"_s, u"li:0:- |a"_s, u"p:0:|Akapit"_s, u"li:0:- |b"_s}));
+    }
+
+    // --- ranges (a block selection) ----------------------------------------------------------------
+
+    void rangeTops()
+    {
+        const BlockDocument doc(u"---\na: 1\n---\n- a\n\t- b\n\t\t- c\n\t- d\n- e\n"_s);
+        QCOMPARE(doc.rangeTops(1, 5), QList<int>({1, 5}));
+        QCOMPARE(doc.rangeTops(3, 5), QList<int>({3, 4, 5}));
+        QCOMPARE(doc.rangeTops(0, 1), QList<int>({1}));
+        QCOMPARE(doc.rangeTops(2, 1), QList<int>());
+        QCOMPARE(doc.rangeTops(-1, 3), QList<int>());
+        QCOMPARE(doc.rangeTops(4, 99), QList<int>());
+    }
+
+    void removeRanges()
+    {
+        BlockDocument doc(u"- a\n\t- a1\n- b\n- c\n"_s);
+        const QList<quint64> before = uids(doc);
+        EditResult r = doc.removeRange(1, 2);
+        QCOMPARE(doc.toString(), u"- a\n- c\n"_s);
+        QCOMPARE(describe(r.changes), u"removed 1+2, changed 0+1"_s);
+        QString why;
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why));
+        QCOMPARE(r.focus, 0);
+        // A parent goes with its whole subtree, also when only it is in the range.
+        BlockDocument tree(u"- a\n\t- a1\n\t- a2\n- b\n"_s);
+        tree.removeRange(0, 0);
+        QCOMPARE(tree.toString(), u"- b\n"_s);
+        BlockDocument numbered(u"1. a\n2. b\n3. c\n4. d\n"_s);
+        numbered.removeRange(1, 2);
+        QCOMPARE(numbered.toString(), u"1. a\n2. d\n"_s);
+        BlockDocument nested(u"1. a\n\t1. x\n\t2. y\n\t3. z\n2. b\n"_s);
+        nested.removeRange(2, 4);
+        QCOMPARE(nested.toString(), u"1. a\n\t1. x\n"_s);
+        BlockDocument paras(u"Akapit 1\n\nAkapit 2\n\nAkapit 3\n"_s);
+        r = paras.removeRange(1, 1);
+        QCOMPARE(paras.toString(), u"Akapit 1\n\nAkapit 3\n"_s);
+        BlockDocument all(u"Akapit 1\n\n- a\n"_s);
+        r = all.removeRange(0, 1);
+        QCOMPARE(all.toString(), QString());
+        QCOMPARE(r.focus, -1);
+        BlockDocument noFinal(u"- a\n- b\n- c"_s);
+        noFinal.removeRange(1, 2);
+        QCOMPARE(noFinal.toString(), u"- a"_s);
+        BlockDocument crlf(u"Zażółć\r\n\r\n- gęślą\r\n- jaźń\r\n"_s);
+        crlf.removeRange(1, 1);
+        QCOMPARE(crlf.toString(), u"Zażółć\r\n\r\n- jaźń\r\n"_s);
+        // A paragraph that would join the list before it gets its blank line.
+        BlockDocument join(u"- a\n- b\n\nAkapit\n"_s);
+        join.removeRange(1, 1);
+        QCOMPARE(join.toString(), u"- a\n\nAkapit\n"_s);
+        QVERIFY(!join.removeRange(1, 0).changed());
+        QVERIFY(!join.removeRange(0, 5).changed());
+    }
+
+    void indentRanges()
+    {
+        BlockDocument doc(u"- a\n- b\n- c\n- d\n"_s);
+        const QList<quint64> before = uids(doc);
+        const EditResult r = doc.indentRange(1, 2);
+        QCOMPARE(doc.toString(), u"- a\n\t- b\n\t- c\n- d\n"_s);
+        QString why;
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why));
+        QCOMPARE(r.focus, 1);
+        // All or nothing: the first item of a list has no previous sibling.
+        BlockDocument first(u"- a\n- b\n- c\n"_s);
+        QVERIFY(!first.indentRange(0, 1).changed());
+        QCOMPARE(first.toString(), u"- a\n- b\n- c\n"_s);
+        BlockDocument nestedFirst(u"- a\n\t- b\n\t- c\n- d\n"_s);
+        QVERIFY(!nestedFirst.indentRange(1, 3).changed());
+        QCOMPARE(nestedFirst.toString(), u"- a\n\t- b\n\t- c\n- d\n"_s);
+        // Each top item one level deeper, also in a range rising through levels.
+        BlockDocument rising(u"- a\n\t- b\n\t- c\n- d\n- e\n"_s);
+        QVERIFY(rising.indentRange(2, 3).changed());
+        QCOMPARE(rising.toString(), u"- a\n\t- b\n\t\t- c\n\t- d\n- e\n"_s);
+        // Children come along; numbering follows.
+        BlockDocument subtree(u"- a\n- b\n  - b1\n- c\n"_s);
+        subtree.indentRange(1, 3);
+        QCOMPARE(subtree.toString(), u"- a\n  - b\n    - b1\n  - c\n"_s);
+        BlockDocument numbered(u"1. a\n2. b\n3. c\n4. d\n"_s);
+        numbered.indentRange(1, 2);
+        QCOMPARE(numbered.toString(), u"1. a\n\t1. b\n\t2. c\n2. d\n"_s);
+        // A paragraph after a non-list block cannot go deeper: nothing changes.
+        BlockDocument para(u"# H\n\nAkapit\n"_s);
+        QVERIFY(!para.indentRange(1, 1).changed());
+        QCOMPARE(para.toString(), u"# H\n\nAkapit\n"_s);
+        // A paragraph after a list item becomes its child (the outline's Tab).
+        BlockDocument outline(u"- a\n\nAkapit\n"_s);
+        QVERIFY(outline.indentRange(1, 1).changed());
+        QCOMPARE(outline.toString(), u"- a\n\n\t- Akapit\n"_s);
+    }
+
+    void outdentRanges()
+    {
+        BlockDocument doc(u"- a\n\t- b\n\t- c\n\t- d\n"_s);
+        const QList<quint64> before = uids(doc);
+        const EditResult r = doc.outdentRange(1, 2);
+        QCOMPARE(doc.toString(), u"- a\n- b\n- c\n\t- d\n"_s);
+        QString why;
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why));
+        QCOMPARE(entries(doc), QStringList({u"li:0:- |a"_s, u"li:0:- |b"_s, u"li:0:- |c"_s, u"li:1:→- |d"_s}));
+        BlockDocument top(u"- a\n- b\n"_s);
+        QVERIFY(!top.outdentRange(0, 1).changed());
+        // Items that cannot move out stay; the others do, in order.
+        BlockDocument mixed(u"- a\n\t- b\n- c\n"_s);
+        QVERIFY(mixed.outdentRange(1, 2).changed());
+        QCOMPARE(mixed.toString(), u"- a\n- b\n- c\n"_s);
+        BlockDocument numbered(u"1. a\n\t1. x\n\t2. y\n"_s);
+        numbered.outdentRange(1, 2);
+        QCOMPARE(numbered.toString(), u"1. a\n2. x\n3. y\n"_s);
+    }
+
+    void moveRanges()
+    {
+        BlockDocument doc(u"- a\n- b\n- c\n- d\n"_s);
+        QList<quint64> before = uids(doc);
+        EditResult r = doc.moveRangeUp(2, 3);
+        QCOMPARE(doc.toString(), u"- a\n- c\n- d\n- b\n"_s);
+        QCOMPARE(describe(r.changes), u"moved 2+2->1"_s);
+        QCOMPARE(r.focus, 1);
+        QString why;
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why));
+        before = uids(doc);
+        r = doc.moveRangeDown(1, 2);
+        QCOMPARE(doc.toString(), u"- a\n- b\n- c\n- d\n"_s);
+        QVERIFY2(changesReplay(before, uids(doc), r.changes, &why), qPrintable(why));
+        QCOMPARE(r.focus, 2);
+        QVERIFY(!doc.moveRangeUp(0, 1).changed());
+        QVERIFY(!doc.moveRangeDown(2, 3).changed());
+        // With subtrees.
+        BlockDocument tree(u"- a\n- b\n\t- b1\n- c\n- d\n"_s);
+        tree.moveRangeDown(1, 3);
+        QCOMPARE(tree.toString(), u"- a\n- d\n- b\n\t- b1\n- c\n"_s);
+        // Not consecutive siblings (rising through levels): nothing.
+        BlockDocument rising(u"- a\n\t- b\n- c\n- d\n"_s);
+        QVERIFY(!rising.moveRangeUp(1, 2).changed());
+        QVERIFY(!rising.moveRangeDown(1, 2).changed());
+        // Ordered lists are renumbered, separators stay in place.
+        BlockDocument numbered(u"1. a\n2. b\n3. c\n"_s);
+        numbered.moveRangeUp(1, 2);
+        QCOMPARE(numbered.toString(), u"1. b\n2. c\n3. a\n"_s);
+        BlockDocument paras(u"Akapit 1\n\nAkapit 2\n\nAkapit 3\n"_s);
+        paras.moveRangeDown(0, 1);
+        QCOMPARE(paras.toString(), u"Akapit 3\n\nAkapit 1\n\nAkapit 2\n"_s);
+        BlockDocument crlf(u"# T\r\n\r\n- x\r\n- y\r\n- z\r\n"_s);
+        crlf.moveRangeUp(2, 3);
+        QCOMPARE(crlf.toString(), u"# T\r\n\r\n- y\r\n- z\r\n- x\r\n"_s);
+        // The frontmatter never moves and nothing goes above it.
+        BlockDocument pinned(u"---\na: 1\n---\n- x\n- y\n"_s);
+        QVERIFY(!pinned.moveRangeUp(1, 2).changed());
+        QVERIFY(!pinned.moveRangeUp(0, 2).changed());
+        QVERIFY(pinned.moveRangeDown(0, 1).changed());
+        QCOMPARE(pinned.toString(), u"---\na: 1\n---\n- y\n- x\n"_s);
+    }
+
+    void rangesKeepUntouchedBytes()
+    {
+        // Blocks outside the range keep their exact bytes (mixed indentation, trailing spaces).
+        const QString head = u"Wstęp  \n\n"_s;
+        const QString tail = u"\n\nKoniec z\u00a0twardą spacją \t\n"_s;
+        BlockDocument doc(head + u"- a\n  - b\n- c\n- d"_s + tail);
+        doc.moveRangeDown(1, 2);
+        QVERIFY(doc.toString().startsWith(head));
+        QVERIFY(doc.toString().endsWith(tail));
+        doc.indentRange(3, 3);
+        QVERIFY(doc.toString().startsWith(head));
+        QVERIFY(doc.toString().endsWith(tail));
+        doc.removeRange(1, 1);
+        QVERIFY(doc.toString().startsWith(head));
+        QVERIFY(doc.toString().endsWith(tail));
     }
 
     void frontmatterStaysAtTheTop()

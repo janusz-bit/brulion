@@ -71,6 +71,12 @@
 //                  EditResult{changes (Removed/Moved/Inserted/Changed rows),
 //                  focus, cursor}; subtreeRange, parent, hasChildren, indexAtLine. Frontmatter /
 //                  page-property blocks at the top are pinned (never moved, nothing goes above).
+//                  Ranges (a block selection): rangeTops, removeRange, indentRange (all or
+//                  nothing), outdentRange, moveRangeUp / moveRangeDown
+//   blockclipboard.h  what a block selection copies: topRows(doc, rows), blocksMarkdown(doc,
+//                  tops) (exact blocks re-based to column 0, LF, no BOM, no frontmatter),
+//                  blocksPlainText(doc, tops, {blockText}) ("• ", ☐/☑, no markup),
+//                  stripInlineMarkup(text), withoutBlockIds(markdown, drop), blockIdsOf(markdown)
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
 //                  inlineCalc, today, locale, palette, taskCheckbox}).render(body) /
 //                  renderBlock(body, kind) ->
@@ -80,6 +86,7 @@
 //                  renderBlock())
 #pragma once
 
+#include "markdown/blockclipboard.h"
 #include "markdown/blockdocument.h"
 #include "markdown/edit.h"
 #include "markdown/frontmatter.h"

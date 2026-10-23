@@ -192,6 +192,31 @@ public:
     /// Focus: the block, caret at the start.
     EditResult convertToParagraph(int i);
 
+    // --- Ranges: a block selection (docs/UI.md "Selecting and copying") -----------------------------
+    // Rows [first, last] stand for their top blocks — the rows whose parent is outside the range —
+    // each with its whole subtree (folded children too). One EditResult for the whole range.
+
+    /// The top blocks of rows [first, last] (see above), ascending; frontmatter / page-property
+    /// blocks are left out. Empty for an invalid range.
+    QList<int> rangeTops(int first, int last) const;
+    /// Remove rows [first, last] with the whole subtrees of their top blocks; ordered lists around
+    /// them are renumbered. Focus: the block before the range (caret at its end), else the new
+    /// first block.
+    EditResult removeRange(int first, int last);
+    /// Tab on a range: every top block becomes the last child of its previous sibling (indent()) —
+    /// all or nothing: when one of them cannot go one level deeper (the first item of a list, a
+    /// block after a non-list block) nothing changes (Logseq).
+    EditResult indentRange(int first, int last);
+    /// Shift+Tab on a range: every top list item that has a parent moves one level up (outdent()),
+    /// the last one first, so the range keeps its order. Nothing changes when none can.
+    EditResult outdentRange(int first, int last);
+    /// Alt+Up / Alt+Down on a range of sibling blocks (consecutive siblings, each with its subtree):
+    /// swapped with the previous / next sibling subtree. Nothing changes without one, when the top
+    /// blocks are not consecutive siblings (a range rising through levels) or when it would move
+    /// the frontmatter / page-property blocks or something above them.
+    EditResult moveRangeUp(int first, int last);
+    EditResult moveRangeDown(int first, int last);
+
 private:
     struct Item {
         BlockEntry entry;
