@@ -1576,6 +1576,32 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
+/// The shown item called `name` under `root` through the visual tree (Repeater items are not
+/// QObject children of the window), maybe scrolled out of its view; else nullptr.
+QQuickItem *shownNamed(QQuickItem *root, const QString &name)
+{
+    if (!root || !root->isVisible())
+        return nullptr;
+    if (root->objectName() == name)
+        return root;
+    const QList<QQuickItem *> children = root->childItems();
+    for (QQuickItem *child : children) {
+        if (QQuickItem *found = shownNamed(child, name))
+            return found;
+    }
+    return nullptr;
+}
+
+/// The nearest Flickable around `item`, else nullptr.
+QQuickItem *enclosingFlickable(QQuickItem *item)
+{
+    for (QQuickItem *p = item ? item->parentItem() : nullptr; p; p = p->parentItem()) {
+        if (p->inherits("QQuickFlickable"))
+            return p;
+    }
+    return nullptr;
+}
+
 /// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.
 std::pair<QQuickItem *, QObject *> shownPageEditor(QQuickWindow *window, QQuickItem *root, const QString &path)
 {
@@ -1601,8 +1627,9 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
-///     keeps the navigation away until the editing stops, above the system's navigation bar; on
-///     a wide touch window a page in the side panel docks its toolbar on the keyboard too.
+///     keeps the navigation away until the editing stops, above the system's navigation bar; a
+///     settings field that gets the focus is scrolled above the keyboard; on a wide touch window
+///     a page in the side panel docks its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
 {
     auto *insets = engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
@@ -1702,6 +1729,41 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         QMetaObject::invokeMethod(page, "stopEditing");
         check(waitFor([&] { return nav->isVisible(); }), "editing stops: the bottom navigation is back");
     }
+
+    // A form field low in the settings: the window is never panned to it, it is scrolled above
+    // the keyboard when it gets the focus (BKeyboardFocusKeeper).
+    app->navigate({{u"view"_s, u"settings"_s}});
+    QQuickItem *field = nullptr;
+    check(waitFor([&] {
+              return (field = shownNamed(window->contentItem(), u"defaultReminderTimeField"_s)) != nullptr;
+          }),
+          "the settings show the default reminder time");
+    QQuickItem *flick = enclosingFlickable(field);
+    if (field && flick) {
+        settle(300);
+        // The field low on the screen, where the keyboard will come.
+        const qreal low = window->height() - 100 - field->height();
+        flick->setProperty("contentY", qMax<qreal>(0, flick->property("contentY").toReal()
+                                                              + field->mapToScene(QPointF(0, 0)).y() - low));
+        settle(100);
+        const qreal before = field->mapToScene(QPointF(0, field->height())).y();
+        insets->setProperty("simulated", keyboard);
+        field->forceActiveFocus();
+        const auto fieldShown = [&] {
+            const qreal fieldTop = field->mapToScene(QPointF(0, 0)).y();
+            const qreal fieldBottom = field->mapToScene(QPointF(0, field->height())).y();
+            return field->hasActiveFocus() && fieldBottom <= top && fieldTop >= flick->mapToScene(QPointF(0, 0)).y();
+        };
+        check(before > top && waitFor(fieldShown),
+              "a settings field that gets the focus is scrolled above the keyboard");
+        std::fprintf(stderr, "selftest: the settings field: bottom %.0f, then %.0f (keyboard's top %.0f)\n", before,
+                     field->mapToScene(QPointF(0, field->height())).y(), top);
+        window->contentItem()->forceActiveFocus();
+        insets->setProperty("simulated", 0);
+    } else {
+        check(false, "the settings field is in a Flickable");
+    }
+    app->goHome();
 
     // A wide touch window (a tablet, a phone in landscape): the side panel ends at the keyboard
     // too, so an editor in it docks its toolbar on the keyboard.

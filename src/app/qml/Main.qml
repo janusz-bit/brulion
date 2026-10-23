@@ -12,8 +12,9 @@ import Brulion
 //
 // Edge-to-edge (Android): the window draws behind the status and navigation bars — its top and
 // bottom padding is 0 and the shell's bars pad themselves with the SafeArea margins. The on-screen
-// keyboard: AppShell lifts its content above it (KeyboardInsets), toasts stay above it; a simulated
-// keyboard (--keyboard <px>, tests) is drawn as a grey block.
+// keyboard: AppShell lifts its content above it (KeyboardInsets), toasts stay above it, the
+// focused form field is scrolled above it (BKeyboardFocusKeeper); a simulated keyboard
+// (--keyboard <px>, tests) is drawn as a grey block.
 ApplicationWindow {
     id: window
 
@@ -112,6 +113,9 @@ ApplicationWindow {
     }
 
     readonly property AppShell shell: stage.item as AppShell
+
+    // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.
+    BKeyboardFocusKeeper { window: window }
 
     BToastHost {
         id: toastHost

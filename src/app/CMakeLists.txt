@@ -52,6 +52,7 @@ set(BRULION_UI_QML
     qml/components/BIcon.qml
     qml/components/BIconButton.qml
     qml/components/BKbd.qml
+    qml/components/BKeyboardFocusKeeper.qml
     qml/components/BKeyboardPlaceholder.qml
     qml/components/BListItem.qml
     qml/components/BMenu.qml
