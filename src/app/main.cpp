@@ -28,6 +28,8 @@
 
 #ifdef BRULION_DESKTOP_INTEGRATION
 // Linux desktop: system tray (Qt Widgets, hence QApplication) and one instance per session.
+#include "appmessage.h"
+#include "cli.h" // `brulion cli …`: the command line (src/cli)
 #include "desktop/desktoptray.h"
 #include "ioselftest.h"
 #include "notifyselftest.h"
@@ -35,6 +37,7 @@
 #include "shellselftest.h"
 #include "singleinstance.h"
 #include <QApplication>
+#include <QJsonObject>
 #include <QThread>
 #endif
 
@@ -69,6 +72,13 @@ QString argValue(const QStringList &args, const QString &option)
 
 int main(int argc, char *argv[])
 {
+#ifdef BRULION_DESKTOP_INTEGRATION
+    // `brulion cli …` (also `Brulion.AppImage cli …`, the AppImage's one entry point): the command
+    // line for scripts and AI agents (docs/CLI.md) — before anything of the app: no window, no
+    // log file, no single-instance claim, no settings.
+    if (argc > 1 && qstrcmp(argv[1], "cli") == 0)
+        return brulion::cli::run(argc - 1, argv + 1);
+#endif
     brulion::ui::DevTools::applyEarlyArguments(argc, argv); // --scale (before the app exists)
 #ifdef BRULION_DESKTOP_INTEGRATION
     QApplication app(argc, argv);
@@ -99,10 +109,10 @@ int main(int argc, char *argv[])
 
 #ifdef BRULION_DESKTOP_INTEGRATION
     // A second launch brings the running Brulion to the front and ends.
-    std::unique_ptr<brulion::shell::SingleInstance> singleInstance;
+    std::unique_ptr<brulion::ipc::SingleInstance> singleInstance;
     if (mainUi && !devTools.screenshotMode() && !args.contains(u"--no-single-instance"_s)) {
-        singleInstance = std::make_unique<brulion::shell::SingleInstance>(
-            brulion::shell::SingleInstance::keyFor(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
+        singleInstance = std::make_unique<brulion::ipc::SingleInstance>(brulion::ipc::SingleInstance::keyFor(
+                QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
         const QByteArray message = args.contains(u"--capture"_s) ? "capture"
                                    : args.contains(u"--today"_s)  ? "today"
                                                                   : "activate";
@@ -252,14 +262,23 @@ int main(int argc, char *argv[])
                              &AppController::setTrayAvailable);
         }
         if (singleInstance) {
-            QObject::connect(singleInstance.get(), &brulion::shell::SingleInstance::messageReceived,
-                             controller.get(), [ctl = controller.get()](const QByteArray &message) {
+            // A second launch or brulion-cli (`app open …`): src/ipc/appmessage.h.
+            QObject::connect(singleInstance.get(), &brulion::ipc::SingleInstance::messageReceived, controller.get(),
+                             [ctl = controller.get()](const QByteArray &line) {
+                                 const auto message = brulion::ipc::parseMessage(line);
+                                 if (!message) {
+                                     qCWarning(brulion::logging::lcApp) << "Ignoring a malformed instance message";
+                                     return;
+                                 }
                                  ctl->showWindow();
-                                 // Both wait for the notebook when it is still opening.
-                                 if (message == "capture")
+                                 // They wait for the notebook when it is still opening.
+                                 if (message->verb == "capture")
                                      ctl->quickCapture();
-                                 else if (message == "today")
+                                 else if (message->verb == "today")
                                      ctl->openToday();
+                                 else if (message->verb == "open")
+                                     ctl->openRoute(message->payload.value(u"route"_s).toObject().toVariantMap(),
+                                                    message->payload.value(u"vault"_s).toString());
                              });
         }
 #endif

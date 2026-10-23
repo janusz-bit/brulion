@@ -601,6 +601,18 @@ private Q_SLOTS:
         QVERIFY(app.capture(u"Kupić mleko jutro o 18"_s));
         QCOMPARE(ws->readFile(u"journals/2026-10-14.md"_s), u"- [ ] Kupić mleko ⏰ 2026-10-15 18:00\n"_s);
 
+        // brulion-cli `app open` (ipc/appmessage.h): a route of the notebook that is open is shown,
+        // one of another notebook is refused with a notice.
+        QSignalSpy toasts(&app, &AppController::toastRequested);
+        app.openRoute({{u"view"_s, u"page"_s}, {u"path"_s, u"Start.md"_s}, {u"line"_s, 0}}, root);
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+        app.openRoute({{u"view"_s, u"journal"_s}, {u"date"_s, u"2026-10-14"_s}}, newRoot());
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+        QCOMPARE(toasts.size(), 1);
+        app.openRoute({{u"view"_s, u"nonsense"_s}});
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+
         // The sync seam: off until Nextcloud is set up completely.
         QVERIFY(!app.syncAvailable());
         QCOMPARE(app.syncStatus().value(u"state"_s).toString(), u"disabled"_s);

@@ -183,6 +183,11 @@ public:
     Q_INVOKABLE void openJournal(const QString &date);
     /// Today's journal; while the notebook is still opening, once it is ready.
     Q_INVOKABLE void openToday();
+    /// A route asked for from outside (brulion-cli `app open`, ipc/appmessage.h): navigate to it
+    /// once the notebook is ready (resolved like the editor's routes: Workspace::resolveRoute).
+    /// `vault`, when given, must be the notebook that is open (or opening): a route of another
+    /// notebook is refused with a notice.
+    void openRoute(const QVariantMap &route, const QString &vault = QString());
     /// "YYYY-MM-DD" of today (+ `offsetDays`) by the app clock.
     Q_INVOKABLE QString today(int offsetDays = 0) const;
     /// The page the tag names (docs/SYNTAX.md §3; created by its first content when it does not
@@ -385,6 +390,7 @@ private:
     bool m_startCapture = false;
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()
+    QString m_routeAfterOpenVault; ///< openRoute() while opening: the notebook the route belongs to
 #ifdef Q_OS_WASM
     platform::WasmNotifier *m_wasmNotifier = nullptr;
 #endif

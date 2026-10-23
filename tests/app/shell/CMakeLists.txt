@@ -1,6 +1,6 @@
 # Tests of the app shell's C++ (library brulion_shell, src/app/shell/area.cmake): navigation
 # history, settings persistence, the Workspace's EditorHost implementation against a real vault
-# folder, the sample vault, commands, the folder tree and (desktop) single-instance messages.
+# folder, the sample vault, commands and the folder tree (single-instance messages: tests/ipc).
 brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_shell)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
@@ -10,8 +10,6 @@ brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
 # The block editor's compare-and-swap saves on the real Workspace (an external append during a
 # debounced save is merged, never overwritten).
 brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIBS brulion_shell brulion_editor)
-# Tests are desktop-only builds, where SingleInstance exists.
-brulion_add_test(tst_shell_singleinstance SOURCES tst_singleinstance.cpp LIBS brulion_shell Qt6::Network)
 
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the

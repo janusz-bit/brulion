@@ -7,11 +7,12 @@
 //       return 0;                              // another one started at the same moment and won
 //   connect(&instance, &SingleInstance::messageReceived, ...);
 //
-// Messages are short lines of UTF-8 ("activate", "capture"). The primary holds a lock file next
-// to the socket; a crashed instance's stale lock and socket are replaced, a live primary is
-// never taken over. The socket lives in
-// the user's runtime folder ($XDG_RUNTIME_DIR) when there is one. Not used on Android (the
-// system keeps one activity) or in the browser (the HTML shell handles a second tab).
+// Messages are short lines of UTF-8 ("activate", "capture", "open {…}": ipc/appmessage.h). The
+// primary holds a lock file next to the socket; a crashed instance's stale lock and socket are
+// replaced, a live primary is never taken over. The socket lives in the user's runtime folder
+// ($XDG_RUNTIME_DIR) when there is one. brulion-cli reaches the running app through it
+// (`brulion-cli app open …`). Not used on Android (the system keeps one activity) or in the
+// browser (the HTML shell handles a second tab). Library brulion_ipc (src/ipc, desktop only).
 #pragma once
 
 #include <QByteArray>
@@ -23,7 +24,7 @@
 class QLocalServer;
 class QLockFile;
 
-namespace brulion::shell {
+namespace brulion::ipc {
 
 class SingleInstance : public QObject {
     Q_OBJECT
@@ -39,6 +40,8 @@ public:
     QString key() const { return m_key; }
     /// Deliver `message` to a running primary instance. False when there is none.
     bool sendToPrimary(const QByteArray &message, int timeoutMs = 1000);
+    /// Does a primary instance listen at this key? (Connects without sending anything.)
+    bool isPrimaryRunning(int timeoutMs = 300) const;
     /// Become the primary instance. False when the socket cannot be created or another
     /// instance listens already (it won a simultaneous start: send it the message instead).
     bool listen();
@@ -53,4 +56,4 @@ private:
     std::unique_ptr<QLockFile> m_lock; ///< held while this is the primary instance
 };
 
-} // namespace brulion::shell
+} // namespace brulion::ipc

@@ -379,6 +379,33 @@ void AppController::openToday()
         openJournal(today());
 }
 
+void AppController::openRoute(const QVariantMap &route, const QString &vault)
+{
+    const QVariantMap r = normalizeRoute(route);
+    if (r.isEmpty()) {
+        qCWarning(lcApp) << "Ignoring an invalid route from outside" << route;
+        return;
+    }
+    const auto sameNotebook = [&](const QString &root) {
+        return vault.isEmpty() || (!root.isEmpty() && Vault::idForPath(vault) == Vault::idForPath(root));
+    };
+    // Still opening: once the notebook is ready (finishOpening() checks the notebook then).
+    if (m_status == u"boot" || m_status == u"loading") {
+        m_routeAfterOpen = r;
+        m_routeAfterOpenVault = vault;
+        return;
+    }
+    if (m_status != u"ready")
+        return;
+    if (!sameNotebook(m_workspace->rootPath())) {
+        toast(tr("The command line asked to open a page of another notebook (%1).")
+                      .arg(QDir::toNativeSeparators(vault)),
+              u"warning"_s);
+        return;
+    }
+    navigate(m_workspace->resolveRoute(r));
+}
+
 QString AppController::today(int offsetDays) const
 {
     return now().date().addDays(offsetDays).toString(Qt::ISODate);
@@ -657,6 +684,7 @@ bool AppController::openRecentVault(const QString &rawPath)
 void AppController::openVaultAt(const QString &path, const QVariantMap &route)
 {
     m_routeAfterOpen = normalizeRoute(route);
+    m_routeAfterOpenVault.clear();
     openVault(path);
 }
 
@@ -675,6 +703,7 @@ void AppController::openDocsVault()
         return;
     // Always the table of contents, not the journal: this notebook is for reading.
     m_routeAfterOpen = normalizeRoute({ { u"view"_s, u"page"_s }, { u"path"_s, docsWelcomePage() } });
+    m_routeAfterOpenVault.clear();
     setStatus(u"loading"_s);
     scheduleOpening(docsVaultPath(), true);
 }
@@ -716,6 +745,7 @@ void AppController::toggleDocsVault()
 void AppController::openDemoVault()
 {
     m_routeAfterOpen.clear(); // the sample notebook opens on its welcome page
+    m_routeAfterOpenVault.clear();
     setStatus(u"loading"_s);
     scheduleOpening(demoVaultPath(), true);
 }
@@ -789,6 +819,7 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     if (!m_workspace->open(path, deviceStatePath(path), &error)) {
         m_settings->setCurrentVault(previousVault);
         m_routeAfterOpen.clear();
+        m_routeAfterOpenVault.clear();
         m_failedPath = path;
         m_failedSeedDemo = seedDemo;
         setStatus(u"error"_s, tr("Could not open the notebook %1: %2").arg(QDir::toNativeSeparators(path), error));
@@ -825,9 +856,12 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
 
     // The first route before "ready": the shell is built then and shows it right away.
     const QVariantMap first = initialRoute();
-    if (const QVariantMap after = std::exchange(m_routeAfterOpen, {}); !after.isEmpty()) {
+    const QString afterVault = std::exchange(m_routeAfterOpenVault, {});
+    if (const QVariantMap after = std::exchange(m_routeAfterOpen, {});
+        !after.isEmpty()
+        && (afterVault.isEmpty() || Vault::idForPath(afterVault) == Vault::idForPath(m_workspace->rootPath()))) {
         m_startToday = false;
-        m_history.navigate(after);
+        m_history.navigate(afterVault.isEmpty() ? after : m_workspace->resolveRoute(after));
     } else if (m_startToday) {
         m_startToday = false;
         const QString date = today();

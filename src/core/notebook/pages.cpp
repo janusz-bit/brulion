@@ -84,8 +84,7 @@ VaultPath newPagePath(const Vault &vault, const QString &target)
     return vault.existingCase(base.isEmpty() ? relative : paths::join(base, relative));
 }
 
-CreatedPage createPage(Vault &vault, const QString &title, const QString &folder, std::optional<NoteMode> mode,
-                       const QString &content, ChangeSource source)
+CreatedPage plannedPage(const Vault &vault, const QString &title, const QString &folder)
 {
     CreatedPage out;
     // "Projekty/Dom" creates the page "Dom" in the folder "Projekty".
@@ -103,6 +102,7 @@ CreatedPage createPage(Vault &vault, const QString &title, const QString &folder
     const QString relative = parts.join(u'/') + u".md"_s;
     const QString wanted = base.isEmpty() ? relative : paths::join(base, relative);
     out.wanted = wanted;
+    out.path = wanted;
     // A page whose name differs only in letter case ("dom" next to "Dom"): one file on Android's
     // shared storage and other case-insensitive folders a synced vault may land in, and one page
     // for links — that page is the result instead of a second one.
@@ -110,17 +110,25 @@ CreatedPage createPage(Vault &vault, const QString &title, const QString &folder
     if (const auto existing = spelled != wanted ? vault.stat(spelled) : std::nullopt; existing && !existing->isDir) {
         out.path = spelled;
         out.existing = true;
-        return out;
     }
+    return out;
+}
+
+CreatedPage createPage(Vault &vault, const QString &title, const QString &folder, std::optional<NoteMode> mode,
+                       const QString &content, ChangeSource source)
+{
+    CreatedPage out = plannedPage(vault, title, folder);
+    if (out.path.isEmpty() || out.existing)
+        return out;
     // The mode chosen for the page is written only when the new page would not get it anyway
     // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
     QString text = content;
     if (mode) {
         const VaultConfig config = vault.config();
-        text = markdown::withNoteModeChoice(text, *mode, markdown::journalDateFromPath(wanted, config).has_value(),
+        text = markdown::withNoteModeChoice(text, *mode, markdown::journalDateFromPath(out.wanted, config).has_value(),
                                             config);
     }
-    out.path = vault.create(wanted, text, source);
+    out.path = vault.create(out.wanted, text, source);
     if (out.path.isEmpty())
         out.problem = problem(PathProblem::Failed, QString(), vault.errorString());
     return out;

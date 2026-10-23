@@ -69,6 +69,10 @@ struct CreatedPage {
     PathProblem problem;   ///< NoName or Failed when `path` is ""
 };
 
+/// Where createPage() would put the page, without writing: `path` is the case twin (`existing`)
+/// or the path asked for (createPage() picks "Dom 2.md" when that is taken).
+CreatedPage plannedPage(const Vault &vault, const QString &title, const QString &folder = QString());
+
 /// Create a page `title` ("Projekty/Dom" creates folders) in `folder` (a null string: the vault's
 /// newPagesFolder; "" the root) with `content`. `mode`, when given, is written as the frontmatter
 /// key `brulion:` only when the page would not get that mode anyway (markdown::
