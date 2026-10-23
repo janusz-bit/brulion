@@ -225,6 +225,12 @@ private Q_SLOTS:
         QCOMPARE(strokes.at(6).key, 0);
         QCOMPARE(strokes.at(6).text, u"😀"_s);
         QCOMPARE(strokes.at(7).key, int(Qt::Key_Return)); // "\r\n" is one Return
+        // A backslash and an "n" written out (docs/CLI.md `app type`) are those two characters.
+        const QList<ud::KeyStroke> written = ud::strokesFor(uR"(a\nb)"_s);
+        QCOMPARE(written.size(), 4);
+        QCOMPARE(written.at(1).text, u"\\"_s);
+        QCOMPARE(written.at(2).text, u"n"_s);
+        QVERIFY(written.at(1).key != int(Qt::Key_Return) && written.at(2).key != int(Qt::Key_Return));
     }
 
     void typing_data()

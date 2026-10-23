@@ -199,7 +199,7 @@ Never compute a hash yourself.
 | `app double-click [<target>]` | the target options, `[--button] [--modifiers] [--device]` | a double click / double tap | yes |
 | `app drag <from> <to>` | `[--hold-ms N] [--button] [--modifiers] [--device]` | drag between two targets | yes |
 | `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle | |
-| `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters, `\n` = Return) | yes |
+| `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters; a real line break in the text is Return and a tab Tab — the two characters `\n` are typed as they are: pass a line break itself, e.g. `$'a\nb'` in bash or with `--stdin`) | yes |
 | `app key <keys>` | `[--count N]` | press keys: `Ctrl+K`, `Escape`, `"Down, Down, Return"` | yes |
 | `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
 | `app quit` | | quit the running app | yes |
