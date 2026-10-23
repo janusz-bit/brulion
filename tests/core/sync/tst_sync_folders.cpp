@@ -372,6 +372,30 @@ private Q_SLOTS:
         QVERIFY(!isLocalDir(p.b, u"Archiwum"_s));
     }
 
+    void networkFailureDuringTheFolderPassIsRetried()
+    {
+        Pair p(notesIn(u""_s, 2));
+        p.a.sync();
+        QVERIFY(p.a.vault->createFolder(u"Pusty A"_s));
+        QVERIFY(p.a.vault->createFolder(u"Pusty B"_s));
+        bool failed = false;
+        p.server.hooks.append([&](const HttpRequest &request, const QString &) -> std::optional<HttpResponse> {
+            if (request.method == "MKCOL" && !std::exchange(failed, true))
+                return FakeWebDavServer::status(0); // no answer: the run stops
+            return std::nullopt;
+        });
+        const SyncReport r = p.a.sync();
+        QVERIFY(r.remoteError.is(WebDavErrorCode::Network));
+        QCOMPARE(r.foldersCreated, 0);
+        QVERIFY(!p.a.engine->knowsFolder(u"Pusty A"_s));
+        const SyncReport again = p.a.sync();
+        QVERIFY(!again.failed());
+        QCOMPARE(again.foldersCreated, 2);
+        QVERIFY(p.server.isDir(u"Notatki/Pusty A"_s));
+        QVERIFY(p.server.isDir(u"Notatki/Pusty B"_s));
+        QVERIFY(p.a.engine->knowsFolder(u"Pusty B"_s));
+    }
+
     void resetForgetsTheFolders()
     {
         Pair p;
