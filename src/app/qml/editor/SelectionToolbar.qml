@@ -6,7 +6,8 @@ import Brulion
 // SelectionToolbar — the tools of a block selection (docs/UI.md "Selecting and copying"):
 // "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej (Kopiuj jako tekst, the block
 // menu's "Kopiuj odnośnik" for a single block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę / w dół,
-// the task status, Zaznacz tekst) and, docked, Gotowe (leaves the selection mode). Two places:
+// the task status, Zaznacz tekst) and Gotowe (docked, first: leaves the selection mode) or ×
+// (floating, last: clears the selection). Two places:
 //   * docked: the "selection" tool set of MobileEditToolbar on touch UIs — in the editing
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
@@ -37,15 +38,36 @@ Row {
         enabled: bar.count > 0
     }
 
+    // Docked: "Gotowe" first (Android's contextual bars), always on screen however narrow.
+    Tool {
+        objectName: "selectionDone"
+        visible: bar.docked
+        iconName: "check"
+        label: qsTr("Done", "leave the selection mode")
+        enabled: true
+        onClicked: bar.editor.leaveSelectionMode()
+    }
+    Rectangle {
+        visible: bar.docked
+        anchors.verticalCenter: parent.verticalCenter
+        width: 1
+        height: Theme.controlHeightSm
+        color: Theme.border
+    }
     Text {
         objectName: "selectionCount"
         anchors.verticalCenter: parent.verticalCenter
+        // A phone: on two lines when needed, so every tool fits the bar.
+        width: bar.docked && Theme.compact ? Math.min(implicitWidth, 92) : implicitWidth
         leftPadding: Theme.space2
         rightPadding: Theme.space2
         text: qsTr("%n block(s) selected", "", bar.count)
         textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
+        elide: Text.ElideRight
         font.family: Theme.fontUi
-        font.pixelSize: Theme.textSm
+        font.pixelSize: bar.docked && Theme.compact ? Theme.textXs : Theme.textSm
         font.weight: Theme.weightMedium
         color: Theme.fg
     }
@@ -85,18 +107,12 @@ Row {
         label: qsTr("More")
         onClicked: bar.openMenu()
     }
-    Rectangle {
-        visible: bar.docked
-        anchors.verticalCenter: parent.verticalCenter
-        width: 1
-        height: Theme.controlHeightSm
-        color: Theme.border
-    }
     Tool {
-        objectName: bar.docked ? "selectionDone" : "selectionClear"
-        iconName: bar.docked ? "check" : "x"
-        label: bar.docked ? qsTr("Done", "leave the selection mode") : qsTr("Clear selection")
-        shortcut: bar.docked ? "" : "Esc"
+        objectName: "selectionClear"
+        visible: !bar.docked
+        iconName: "x"
+        label: qsTr("Clear selection")
+        shortcut: "Esc"
         enabled: true
         onClicked: bar.editor.leaveSelectionMode()
     }

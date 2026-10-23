@@ -509,7 +509,12 @@ QtObject {
             () => tap(shown(toolbar(), "toolbarSelect")),
             wait(() => editor.selectionMode && page.selectedRow === test.rowA && page.editingRow < 0,
                  "Zaznacz selects the edited block (the selection mode)"),
-            () => key(Qt.Key_Back),
+            () => {
+                const done = shown(toolbar(), "selectionDone")
+                check(done !== null && done.mapToItem(null, 0, 0).x < 60, "Gotowe is the bar's first tool")
+                tap(done)
+            },
+            () => check(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode"),
             // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
             ...longPress(() => delegateAt(rowOf("Kolejność")), (d) => d.bulletX, (d) => d.firstLineCenter),
             wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a bullet's long press opens the block menu"),
