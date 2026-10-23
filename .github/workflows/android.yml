@@ -62,7 +62,7 @@ permissions:
 # github.workflow is the caller's name there ("Release"), so a push to main never cancels the
 # APK build of a release (and vice versa).
 concurrency:
-  group: android-${{ github.workflow }}-${{ github.ref }}
+  group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.ref_type == 'branch' }}
 
 env:
