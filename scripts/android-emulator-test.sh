@@ -349,9 +349,9 @@ if ((SELECTION)); then
   sleep 2
   app_shot sel-5-back
   check "the app is still running" running
-  # "Zaznacz tekst" on a page of the sample notebook (route.open; Qt splits the arguments at
-  # spaces: a path without them): a long press on a word of its first paragraph.
-  start_app '--demo --locale pl --route {"view":"page","path":"Przepisy.md","open":"selectText"}'
+  # "Zaznacz tekst" on a page of the sample notebook (route.open). Qt splits the arguments like
+  # QProcess::splitCommand: at spaces (a path without them), a quote written as three of them.
+  start_app '--demo --locale pl --route {"""view""":"""page""","""path""":"""Przepisy.md""","""open""":"""selectText"""}'
   app_shot sel-6-select-text
   long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
   sleep 2
