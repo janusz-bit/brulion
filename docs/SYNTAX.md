@@ -108,6 +108,22 @@ naming the same file; only its target changes (`|alias`, `#Heading`, `#^id`, `!`
   `[[New]]`), a path-qualified link gets the new path (`[[Projekty/Dom]]` → `[[Archiwum/Dom]]`;
   a rename in place keeps the written folder prefix, `[[../b/Old]]` → `[[../b/New]]`), a
   Markdown link the new vault path (`[x](Projekty/Mój%20dom.md)`);
+* **Markdown links and pictures** (`[x](…)`, `![x](…)`) whose written path names the file
+  exactly — relative to the linking note's folder or from the vault root, read in the order links
+  resolve (an explicit `./` / `../` path relative to the note; one starting with `/` from the
+  root; any other first from the root, then from the note's folder; in a note at the vault root
+  the two readings are one: relative) — keep naming it exactly, as Obsidian, GitHub and any
+  Markdown viewer read them, even where Brulion would still find the file by a path suffix or its
+  name: a relative path stays relative, also when the linking note itself moves
+  (`[x](../Zakupy.md)` in `Projekty/Plan.md` → `[x](../../Zakupy.md)` once Projekty is
+  `Archiwum/Projekty`), a vault path stays a vault path (with its leading `/`):
+  `[x](Projekty/Remont%20mieszkania.md)` → `[x](Archiwum/Projekty/Remont%20mieszkania.md)` when
+  the folder Projekty moves to Archiwum/Projekty. `./` (unless the path climbs with `../`), the
+  extension as written (also none), `#fragment`, the title and `<…>` stay, and so does the
+  percent-encoding as written (spaces as `%20`, letters beyond ASCII as `%C5%BC` when the link
+  had them so, in lower case when it did). A relative path that Brulion would read from the vault
+  root as another file gets `./`. Links that named their file otherwise (a path suffix
+  `[x](Stare/Dom.md)`, a base name, an alias) and wiki links follow the rules above;
 * when that name would reach another file — or a link to a file that did not move would now
   reach a moved one (a page moved to a shallower folder takes `[[Dom]]` over) — the **shortest
   unique path**: `[[Projekty/Dom]]` (the title, then longer path suffixes, then the vault path;

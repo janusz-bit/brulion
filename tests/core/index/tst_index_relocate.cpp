@@ -180,16 +180,22 @@ private Q_SLOTS:
 
     // ---- planRelocation ---------------------------------------------------------------------
 
-    // A unique page moved: its links still reach it, nothing is rewritten.
-    void moveUniquePageRewritesNothing()
+    // A unique page moved: its wiki links and tags still reach it and stay; a Markdown link that
+    // named it by its path follows it (Markdown readers read paths). Nothing else is rewritten.
+    void moveUniquePageRewritesOnlyPaths()
     {
         VaultIndex index;
         build(index, {{u"Dom.md"_s, u"x"_s}, {u"Notatka.md"_s, u"[[Dom]] [[Dom|d]] ![[Dom#^id]] [x](Dom.md) #dom"_s}});
         const RelocationPlan plan = index.planRelocation({{u"Dom.md"_s, u"Projekty/Dom.md"_s}});
         QCOMPARE(plan.moves().size(), 1);
-        QVERIFY(plan.files().isEmpty());
-        QCOMPARE(plan.links(), 0);
+        QCOMPARE(planned(plan, u"Notatka.md"_s), u"[[Dom]] [[Dom|d]] ![[Dom#^id]] [x](Projekty/Dom.md) #dom"_s);
+        QCOMPARE(plan.files().size(), 1);
+        QCOMPARE(plan.links(), 1);
         QCOMPARE(plan.tags(), 0);
+        // Without a Markdown link: nothing at all.
+        VaultIndex wiki;
+        build(wiki, {{u"Dom.md"_s, u"x"_s}, {u"Notatka.md"_s, u"[[Dom]] [[Dom|d]] ![[Dom#^id]] #dom"_s}});
+        QVERIFY(wiki.planRelocation({{u"Dom.md"_s, u"Projekty/Dom.md"_s}}).files().isEmpty());
     }
 
     // Renaming Projekty/Dom to "Ogród" next to a root Ogród.md: [[Ogród]] would name the root
@@ -269,18 +275,134 @@ private Q_SLOTS:
         QCOMPARE(resolutions(index), before);
     }
 
-    // A moved note's links relative to its old folder keep their targets.
+    // A moved note's links relative to its old folder keep their targets: Markdown paths
+    // relative to the note stay relative to it (from its new folder), vault paths stay.
     void movedNoteKeepsRelativeLinks()
     {
         VaultIndex index;
         build(index, {{u"Projekty/B.md"_s, u"x"_s},
                       {u"Xy/B.md"_s, u"x"_s},
-                      {u"Projekty/A.md"_s, u"[[B]], [[#Nagłówek]], [z](../Xy/B.md) i [w](./B.md)"_s}});
+                      {u"Projekty/A.md"_s, u"[[B]], [[#Nagłówek]], [z](../Xy/B.md) i [w](./B.md)\r\n"
+                                           u"- [v](B.md) [u](Projekty/B.md) [t](/Xy/B.md) [s](#Nagłówek)\r\n"_s}});
         const RelocationPlan plan = index.planRelocation({{u"Projekty/A.md"_s, u"Archiwum/Głęboko/A.md"_s}});
         QCOMPARE(planned(plan, u"Projekty/A.md"_s),
-                 u"[[Projekty/B]], [[#Nagłówek]], [z](../Xy/B.md) i [w](Projekty/B.md)"_s);
+                 u"[[Projekty/B]], [[#Nagłówek]], [z](../../Xy/B.md) i [w](../../Projekty/B.md)\r\n"
+                 u"- [v](../../Projekty/B.md) [u](Projekty/B.md) [t](/Xy/B.md) [s](#Nagłówek)\r\n"_s);
         const QStringList before = resolutions(index, {{u"Projekty/A.md"_s, u"Archiwum/Głęboko/A.md"_s}});
+        checkPlanOfTheText(index, plan);
         apply(index, plan);
+        QCOMPARE(resolutions(index), before);
+    }
+
+    // The folder Projekty moved to Archiwum/Projekty: Markdown links and pictures that named its
+    // files by their exact path get the new one — Brulion would still find them by the path
+    // suffix, other Markdown readers would not —, as they were written: relative or from the
+    // vault root, %20, the #fragment and the title kept; the moved notes' relative links to each
+    // other stay, to a note that stays they climb one folder more. Wiki links as before.
+    void markdownPathsFollowAMovedFolder()
+    {
+        VaultIndex index;
+        build(index,
+              {{u"Projekty/Remont mieszkania.md"_s, u"# Remont\n## Kosztorys\n"_s},
+               {u"Projekty/plan.png"_s, QString()},
+               {u"Notatka.md"_s,
+                u"- [x](Projekty/Remont%20mieszkania.md \"Remont\") i "
+                u"[y](Projekty/Remont%20mieszkania.md#Kosztorys)\r\n"
+                u"- ![plan](Projekty/plan.png) [z](<Projekty/Remont mieszkania.md>) "
+                u"[bez](Projekty/Remont%20mieszkania)\r\n"
+                u"- [[Projekty/Remont mieszkania]] [[Remont mieszkania]] ![[Projekty/plan.png]]\r\n"_s},
+               {u"journals/2026-10-14.md"_s, u"- [r](Projekty/Remont%20mieszkania.md) [k](/Projekty/plan.png)\n"_s},
+               {u"Projekty/Kosztorys.md"_s, u"- [r](Remont%20mieszkania.md) [p](./plan.png) [n](../Notatka.md)\n"_s}});
+        QList<FileMove> moves;
+        QHash<QString, QString> moved;
+        for (const VaultPath &p : index.paths() + index.attachments()) {
+            if (p.startsWith(u"Projekty/"_s)) {
+                moves.append({p, u"Archiwum/"_s + p});
+                moved.insert(p, u"Archiwum/"_s + p);
+            }
+        }
+        const QStringList before = resolutions(index, moved);
+        const RelocationPlan plan = index.planRelocation(moves);
+        QCOMPARE(planned(plan, u"Notatka.md"_s),
+                 u"- [x](Archiwum/Projekty/Remont%20mieszkania.md \"Remont\") i "
+                 u"[y](Archiwum/Projekty/Remont%20mieszkania.md#Kosztorys)\r\n"
+                 u"- ![plan](Archiwum/Projekty/plan.png) [z](<Archiwum/Projekty/Remont mieszkania.md>) "
+                 u"[bez](Archiwum/Projekty/Remont%20mieszkania)\r\n"
+                 u"- [[Projekty/Remont mieszkania]] [[Remont mieszkania]] ![[Projekty/plan.png]]\r\n"_s);
+        QCOMPARE(planned(plan, u"journals/2026-10-14.md"_s),
+                 u"- [r](Archiwum/Projekty/Remont%20mieszkania.md) [k](/Archiwum/Projekty/plan.png)\n"_s);
+        QCOMPARE(planned(plan, u"Projekty/Kosztorys.md"_s),
+                 u"- [r](Remont%20mieszkania.md) [p](./plan.png) [n](../../Notatka.md)\n"_s);
+        QCOMPARE(plan.links(), 8);
+        checkPlanOfTheText(index, plan);
+        apply(index, plan);
+        QCOMPARE(resolutions(index), before);
+    }
+
+    // The percent-encoding as written: letters beyond ASCII encoded (GitHub writes them so), in
+    // lower case, or not at all; an angle-bracket path without %20.
+    void markdownPathsKeepTheirEncoding_data()
+    {
+        QTest::addColumn<QString>("link");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("encoded letters") << u"[a](Projekty/%C5%BB%C3%B3%C5%82ta%20%C5%82%C4%85ka.md)"_s
+                                         << u"[a](Archiwum/Projekty/%C5%BB%C3%B3%C5%82ta%20%C5%82%C4%85ka.md)"_s;
+        QTest::newRow("encoded letters, lower case")
+                << u"[a](Projekty/%c5%bb%c3%b3%c5%82ta%20%c5%82%c4%85ka.md)"_s
+                << u"[a](Archiwum/Projekty/%c5%bb%c3%b3%c5%82ta%20%c5%82%c4%85ka.md)"_s;
+        QTest::newRow("letters as they are")
+                << u"[a](Projekty/Żółta%20łąka.md)"_s << u"[a](Archiwum/Projekty/Żółta%20łąka.md)"_s;
+        QTest::newRow("angle brackets") << u"[a](<Projekty/Żółta łąka.md>)"_s
+                                        << u"[a](<Archiwum/Projekty/Żółta łąka.md>)"_s;
+        QTest::newRow("angle brackets with %20")
+                << u"[a](<Projekty/Żółta%20łąka.md>)"_s << u"[a](<Archiwum/Projekty/Żółta%20łąka.md>)"_s;
+        QTest::newRow("picture with a title") << u"![p](Projekty/zdj%C4%99cie%20(1).png \"Łąka\")"_s
+                                              << u"![p](Archiwum/Projekty/zdj%C4%99cie%20%281%29.png \"Łąka\")"_s;
+    }
+    void markdownPathsKeepTheirEncoding()
+    {
+        QFETCH(QString, link);
+        QFETCH(QString, expected);
+        VaultIndex index;
+        build(index, {{u"Projekty/Żółta łąka.md"_s, u"x"_s},
+                      {u"Projekty/zdjęcie (1).png"_s, QString()},
+                      {u"Notatki/Łąki.md"_s, u"- "_s + link + u"\n"_s}});
+        QList<FileMove> moves{{u"Projekty/Żółta łąka.md"_s, u"Archiwum/Projekty/Żółta łąka.md"_s},
+                              {u"Projekty/zdjęcie (1).png"_s, u"Archiwum/Projekty/zdjęcie (1).png"_s}};
+        const RelocationPlan plan = index.planRelocation(moves);
+        QCOMPARE(planned(plan, u"Notatki/Łąki.md"_s), u"- "_s + expected + u"\n"_s);
+        const QStringList before = resolutions(index, {{moves[0].from, moves[0].to}, {moves[1].from, moves[1].to}});
+        apply(index, plan);
+        QCOMPARE(resolutions(index), before);
+    }
+
+    // Relative paths in a renamed folder, "./" as written; a relative path Brulion would read
+    // from the vault root as another file gets "./"; a path that named its file only by a
+    // suffix stays (as wiki links do) while Brulion still finds it.
+    void markdownRelativePaths()
+    {
+        VaultIndex index;
+        build(index, {{u"A/x/Dom.md"_s, u"x"_s},
+                      {u"y/Dom.md"_s, u"inny"_s},
+                      {u"A/Stare/Plan.md"_s, u"x"_s},
+                      {u"A/Notatka.md"_s, u"- [d](x/Dom.md) [e](./x/Dom.md) [p](Stare/Plan.md)\n"_s},
+                      {u"Główna.md"_s, u"- [s](Stare/Plan.md) [d](A/x/Dom.md)\n"_s}});
+        // x → y inside A: "y/Dom.md" from A/ would be the root's y/Dom.md in Brulion.
+        const RelocationPlan plan = index.planRelocation({{u"A/x/Dom.md"_s, u"A/y/Dom.md"_s}});
+        QCOMPARE(planned(plan, u"A/Notatka.md"_s), u"- [d](./y/Dom.md) [e](./y/Dom.md) [p](Stare/Plan.md)\n"_s);
+        QCOMPARE(planned(plan, u"Główna.md"_s), u"- [s](Stare/Plan.md) [d](A/y/Dom.md)\n"_s);
+        QStringList before = resolutions(index, {{u"A/x/Dom.md"_s, u"A/y/Dom.md"_s}});
+        apply(index, plan);
+        QCOMPARE(resolutions(index), before);
+        // A rename in place: the relative path keeps its folder; the suffix link (to A/Stare/Plan.md
+        // from the root) stays while Brulion still finds the file by it.
+        const RelocationPlan rename = index.planRelocation(
+                {{u"A/y/Dom.md"_s, u"A/y/Chata.md"_s}, {u"A/Stare/Plan.md"_s, u"A/B/Stare/Plan.md"_s}});
+        QCOMPARE(planned(rename, u"A/Notatka.md"_s), u"- [d](./y/Chata.md) [e](./y/Chata.md) [p](B/Stare/Plan.md)\n"_s);
+        QCOMPARE(planned(rename, u"Główna.md"_s), u"- [s](Stare/Plan.md) [d](A/y/Chata.md)\n"_s);
+        before = resolutions(index,
+                             {{u"A/y/Dom.md"_s, u"A/y/Chata.md"_s}, {u"A/Stare/Plan.md"_s, u"A/B/Stare/Plan.md"_s}});
+        apply(index, rename);
         QCOMPARE(resolutions(index), before);
     }
 
