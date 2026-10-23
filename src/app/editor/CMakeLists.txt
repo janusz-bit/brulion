@@ -37,7 +37,8 @@ qt_add_library(brulion_editor STATIC
 target_include_directories(brulion_editor PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor
     PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_markdown
-    PRIVATE brulion_core_calc brulion_core_dates brulion_core_text brulion_core_util brulion_core_index)
+    PRIVATE brulion_core_calc brulion_core_dates brulion_core_text brulion_core_util brulion_core_index
+            brulion_core_notebook)
 # External changes while the page has unsaved edits are merged three-way with sync::merge3 when
 # the sync module is part of the build (otherwise the local text is kept and a conflict flagged).
 if(TARGET brulion_core_sync)

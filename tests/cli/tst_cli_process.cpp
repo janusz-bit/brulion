@@ -568,6 +568,28 @@ private Q_SLOTS:
         QCOMPARE(r.code, 3);
     }
 
+    // A page whose title another page has too: the link names it by the shortest folder path that
+    // tells them apart (notebook::pageLinkTarget, the app's "Kopiuj odnośnik" and page menu alike).
+    void blockLinkSameNames()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- główny\n"},
+                                   {u"Archiwum/Projekty/Dom.md"_s, "## Zażółć gęślą jaźń\n- farba\n"},
+                                   {u"journals/2026-10-14.md"_s, "- dziś\n"},
+                                   {u"Stare/2026-10-14.md"_s, "- kopia\n"}});
+        Run r = run(dir, {u"block"_s, u"link"_s, u"Archiwum/Projekty/Dom.md#L2"_s}); // "- farba"
+        QCOMPARE(r.code, 0);
+        const QString id = r.result().value(u"id"_s).toString();
+        QCOMPARE(r.result().value(u"wikiLink"_s).toString(), u"[[Projekty/Dom#^%1]]"_s.arg(id));
+        r = run(dir, {u"block"_s, u"link"_s, u"Archiwum/Projekty/Dom.md#L1"_s}); // the heading
+        QCOMPARE(r.result().value(u"headingLink"_s).toString(), u"[[Projekty/Dom#Zażółć gęślą jaźń]]"_s);
+        QCOMPARE(r.result().value(u"embed"_s).toString(), u"![[Projekty/Dom#Zażółć gęślą jaźń]]"_s);
+        // A daily note keeps its file name (it reads as the date).
+        r = run(dir, {u"block"_s, u"link"_s, u"journals/2026-10-14.md#L1"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"wikiLink"_s).toString(),
+                 u"[[2026-10-14#^%1]]"_s.arg(r.result().value(u"id"_s).toString()));
+    }
+
     // The other commands' JSON shapes and exit codes.
     void moreCommands()
     {

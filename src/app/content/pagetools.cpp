@@ -5,6 +5,7 @@
 #include "io/exporter.h"
 #include "markdown/inline.h"
 #include "markdown/rename.h"
+#include "notebook/links.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
@@ -299,9 +300,18 @@ QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int r
             {u"subTags"_s, subTags}};
 }
 
-QString PageTools::wikiLink(const QString &path) const
+QString PageTools::wikiLink(const QString &rawPath) const
 {
-    return wikiLinkFor(m_workspace ? m_workspace->index() : nullptr, paths::normalize(path));
+    const VaultPath path = paths::normalize(rawPath);
+    const VaultIndex *index = m_workspace ? m_workspace->index() : nullptr;
+    // A note: the page part of every copied link (notebook::pageLinkTarget — the editor's and the
+    // command line's too); an attachment: the shortest name that reaches it.
+    if (paths::isMarkdown(path)) {
+        const Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+        return u"[["_s + notebook::pageLinkTarget(path, vault ? vault->config() : VaultConfig(), index) + u"]]"_s;
+    }
+    const auto target = index ? index->linkTarget(path) : std::nullopt;
+    return u"[["_s + target.value_or(paths::basename(path)) + u"]]"_s;
 }
 
 bool PageTools::openLink(const QString &url, const QString &fromPath, bool newPane) const

@@ -86,9 +86,6 @@ struct MentionEdit {
 MentionEdit linkMention(const QString &content, int line, const QStringList &names,
                         const std::function<QString(const QString &mention)> &linkFor = {});
 
-/// Link text for a page: "[[Dom]]", or "[[Projekty/Dom]]" when "Dom" alone would resolve to
-/// another page (or not at all), as seen from `fromPath` ("" = the vault root).
-QString wikiLinkFor(const VaultIndex *index, const VaultPath &path, const VaultPath &fromPath = {});
 /// The link a mention should become so that it resolves to `target` from `fromPath`:
 /// "[[<mention>]]" when that already resolves there, else "[[<target without .md>|<mention>]]".
 QString mentionLink(const VaultIndex *index, const QString &mention, const VaultPath &target, const VaultPath &fromPath);

@@ -3,7 +3,9 @@
 // [[Page#Heading]] / ![[Page#Heading]] — or, when its name is not unique, the links through its id
 // ![[Page#^id]], as the editor copies them (the editor's own parity check: tests/app/editor
 // tst_editor_controller copiedLinksMatchTheCommandLine) — and the page part of a link.
+#include "index/vaultindex.h"
 #include "notebook/links.h"
+#include "util/paths.h"
 
 #include <QTest>
 
@@ -84,16 +86,55 @@ private Q_SLOTS:
     void pageLinkTarget()
     {
         const VaultConfig config;
+        const auto noShortest = [](const VaultPath &) { return QString(); };
         const auto nowhere = [](const QString &) { return QString(); };
-        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, nowhere), u"Dom"_s);
-        // The title leads to another page: the path.
+        // The index's shortest target wins.
+        const auto shortest = [](const VaultPath &) { return u"Projekty/Dom"_s; };
+        QCOMPARE(notebook::pageLinkTarget(u"Archiwum/Projekty/Dom.md"_s, config, shortest, nowhere), u"Projekty/Dom"_s);
+        // Not indexed yet (a new page): the title, or the path when the title leads elsewhere.
+        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, noShortest, nowhere), u"Dom"_s);
         const auto elsewhere = [](const QString &) { return u"Dom.md"_s; };
-        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, elsewhere), u"Projekty/Dom"_s);
+        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, noShortest, elsewhere), u"Projekty/Dom"_s);
         const auto here = [](const QString &) { return u"Projekty/Dom.md"_s; };
-        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, here), u"Dom"_s);
-        // A daily note by its name, whatever the title resolves to.
-        QCOMPARE(notebook::pageLinkTarget(u"journals/2026-10-22.md"_s, config, elsewhere), u"2026-10-22"_s);
-        QCOMPARE(notebook::pageLinkTarget(QString(), config, nowhere), QString());
+        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, noShortest, here), u"Dom"_s);
+        QCOMPARE(notebook::pageLinkTarget(u"Projekty/Dom.md"_s, config, {}, {}), u"Dom"_s);
+        // A daily note by its name, whatever the index says.
+        QCOMPARE(notebook::pageLinkTarget(u"journals/2026-10-22.md"_s, config, shortest, elsewhere), u"2026-10-22"_s);
+        QCOMPARE(notebook::pageLinkTarget(QString(), config, shortest, nowhere), QString());
+    }
+
+    // With an index: VaultIndex::linkTarget(), the shortest target that tells same-named pages
+    // in different folders apart — the text every copy-link command writes.
+    void pageLinkTargetWithIndex_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("target");
+        QTest::newRow("unique title") << u"Zakupy/Spożywcze.md"_s << u"Spożywcze"_s;
+        QTest::newRow("the shortest of two Dom") << u"Dom.md"_s << u"Dom"_s;
+        QTest::newRow("the other Dom by its folder") << u"Archiwum/Projekty/Dom.md"_s << u"Projekty/Dom"_s;
+        QTest::newRow("Żółw twice, deeper") << u"Zwierzęta/Gady/Żółw.md"_s << u"Gady/Żółw"_s;
+        QTest::newRow("Żółw twice, shallower") << u"Ogród/Żółw.md"_s << u"Żółw"_s;
+        QTest::newRow("a daily note") << u"journals/2026-10-22.md"_s << u"2026-10-22"_s;
+        QTest::newRow("a daily note named twice") << u"journals/2026-10-23.md"_s << u"2026-10-23"_s;
+        QTest::newRow("a page not written yet") << u"Nowe/Plan wakacji.md"_s << u"Plan wakacji"_s;
+        QTest::newRow("a new page named like another") << u"Nowe/Dom.md"_s << u"Nowe/Dom"_s;
+    }
+    void pageLinkTargetWithIndex()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, target);
+        VaultIndex index;
+        for (const QString &p :
+             {u"Dom.md"_s, u"Archiwum/Projekty/Dom.md"_s, u"Zakupy/Spożywcze.md"_s, u"Zwierzęta/Gady/Żółw.md"_s,
+              u"Ogród/Żółw.md"_s, u"journals/2026-10-22.md"_s, u"journals/2026-10-23.md"_s, u"Stare/2026-10-23.md"_s})
+            index.update(p, u"- notatka\n"_s);
+        QCOMPARE(notebook::pageLinkTarget(path, index.config(), &index), target);
+        // The target reaches the page (once it exists) — a daily note keeps its file name, which
+        // reads as the date, even when another page has that name too.
+        if (index.contains(path) && !path.startsWith(u"journals/"_s))
+            QCOMPARE(index.resolveLink(notebook::pageLinkTarget(path, index.config(), &index)).value_or(QString()),
+                     path);
+        QCOMPARE(notebook::pageLinkTarget(path, index.config(), nullptr), paths::pageTitle(path));
     }
 };
 

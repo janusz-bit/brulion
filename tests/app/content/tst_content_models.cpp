@@ -1021,6 +1021,12 @@ private Q_SLOTS:
 
         QCOMPARE(tools.wikiLink(u"Projekty/Dom.md"_s), u"[[Projekty/Dom]]"_s); // "Dom" alone is ambiguous
         QCOMPARE(tools.wikiLink(u"Projekty/Inne.md"_s), u"[[Inne]]"_s);
+        // The page part of every copied link (notebook::pageLinkTarget): a daily note by its file
+        // name, an attachment by the shortest name that reaches it, a page not written yet by its
+        // title.
+        QCOMPARE(tools.wikiLink(u"journals/2026_10_13.md"_s), u"[[2026_10_13]]"_s);
+        QCOMPARE(tools.wikiLink(u"assets/plan.png"_s), u"[[plan.png]]"_s);
+        QCOMPARE(tools.wikiLink(u"Nowe/Plan podróży.md"_s), u"[[Plan podróży]]"_s);
         QCOMPARE(tools.journalPathFor(u"2026-10-13"_s), u"journals/2026_10_13.md"_s); // Logseq's name
         QCOMPARE(tools.journalPathFor(u"2026-10-12"_s), u"journals/2026-10-12.md"_s); // not there yet
         QVERIFY(!ws->exists(u"journals/2026-10-12.md"_s));

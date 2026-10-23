@@ -176,9 +176,12 @@ the side panel's outline (docs/UI.md "The block editor"; `PageController::copyLi
 | Osadzenie | `!((id))`; on a heading its section `![[Page#Heading]]` (same fallbacks, `![[Page#^id]]`) |
 | Kopiuj link do strony | `[[Page]]` |
 
-* `Page` is the page's title, or its vault path without `.md` when the title leads to another page
-  (the same name in another folder); a daily note is named by its file name
-  (`[[2026-10-22#^abc123]]`).
+* `Page` is the same in every copied link — the editor's, the page menu's and the folder tree's
+  "Kopiuj link", `brulion-cli block link` (`notebook::pageLinkTarget`): the page's title, or, when
+  the title leads to another page (the same name in another folder), the shortest unique path
+  `VaultIndex::linkTarget()` gives (`[[Projekty/Dom]]`, not `[[Archiwum/2025/Projekty/Dom]]`; what
+  `[[` completion and moves write too); a daily note is named by its file name
+  (`[[2026-10-22#^abc123]]`), also when a page elsewhere has that name.
 * The block kinds use the block's `^id` or its Logseq `id::` (a UUID, as it is); a block without
   one gets a generated id (§4 "Block id": placement, 6 characters `[a-z0-9]`, never one any block
   of the vault has, also a block without text) as one undoable edit. Heading and page links change

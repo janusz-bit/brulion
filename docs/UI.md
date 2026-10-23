@@ -105,8 +105,8 @@ rename and move").
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
   folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
-  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`[[…]]` with the shortest target:
-  `Workspace.linkTarget`), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
+  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`PageTools.wikiLink`: the page part of every
+  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
   file here like any other — renamed, moved and dragged (a misfiled day can be put right) — also
   in All pages, F2 and the Więcej menu of a daily note opened as a page; only the journal view
   (by date) and the page's own menu there offer neither. The "Strony" header's "+": Nowa strona,

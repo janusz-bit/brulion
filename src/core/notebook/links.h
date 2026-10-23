@@ -10,14 +10,25 @@
 #include <functional>
 #include <optional>
 
+namespace brulion {
+class VaultIndex;
+}
+
 namespace brulion::notebook {
 
-/// The page part of a copied link to `path` (PageController::linkTarget()): a daily note by its
-/// title ([[2026-10-22]] reads as the date), else the title — unless the title leads to another
-/// page (`resolveTitle` gives that page's path), then the path without ".md". A title that leads
-/// nowhere yet leads here once the page exists.
+/// The page part of every link Brulion copies to `path` (docs/SYNTAX.md §2 "Copied links") — the
+/// page menu's and the folder tree's "Kopiuj link", the editor's "Kopiuj odnośnik" and
+/// `brulion-cli block link` alike: a daily note by its file name ([[2026-10-22]] reads as the
+/// date, also before the note exists); any other page by the shortest [[target]] that reaches it
+/// from anywhere, VaultIndex::linkTarget() — the title, or the shortest folder path suffix
+/// ("Projekty/Dom") when the title names another page too —, which `shortestTarget` gives ("" when
+/// the index has no such page). A page the index does not have yet (a new one) by its title, or by
+/// its path without ".md" when the title leads to another page (`resolveTitle`: title -> path).
 QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
+                       const std::function<QString(const VaultPath &path)> &shortestTarget,
                        const std::function<QString(const QString &title)> &resolveTitle);
+/// pageLinkTarget() with the index's linkTarget() and resolveLink() (no index: the title).
+QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const VaultIndex *index);
 
 struct BlockLinks {
     QString id;          ///< the block id (without '^')

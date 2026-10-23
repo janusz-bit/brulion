@@ -479,8 +479,10 @@ public:
     /// linkText() put on the clipboard. Not ok with reason "noClipboard" (and the text) when the
     /// platform has no clipboard or it did not take the text — success is never claimed then.
     Q_INVOKABLE QVariantMap copyLink(int row, const QString &kind);
-    /// The page as links name it: its title, or its vault path without ".md" when the title
-    /// would lead to another page (the title of a daily note always: its file name).
+    /// The page as every copied link names it (notebook::pageLinkTarget(), the same text as the
+    /// page menu and `brulion-cli block link`): a daily note by its file name, else the host's
+    /// shortest link target (EditorHost::linkTarget(): the title, or the shortest folder path
+    /// that tells it from a page of the same name, "Projekty/Dom").
     Q_INVOKABLE QString linkTarget() const;
     /// The row of the heading `fragment` names ([[Page#Heading]], an Obsidian heading path
     /// [[Page#A#B]], a fragment written by hand; markdown::findHeading — the matcher embeds use

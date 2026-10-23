@@ -18,9 +18,10 @@
 //                special folders rebase .brulion/config.json), relocationImpact (counts and the
 //                notes' rewritten texts, for a dry run), renamePage, renameFolder,
 //                movePath; deletePath (to .trash/); problems as PathProblem kinds
-//   links.h      pageLinkTarget(path, config, resolveTitle) and blockLinks(content, line, page,
-//                isTaken) -> {id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink} — the
-//                links the editor copies
+//   links.h      pageLinkTarget(path, config, index) (a daily note's file name, else
+//                VaultIndex::linkTarget(): the one page part of every copied link) and
+//                blockLinks(content, line, page, isTaken) -> {id, ref ((id)), wikiLink
+//                [[Page#^id]], embed, headingLink} — the links the editor copies
 //   itemref.h    ItemRef "Dom.md#L12@3f9a01bc" / "Dom.md#^id" / "^id" / "((id))": parse, format,
 //                lineHash, resolve(content, ref) -> Ok | Moved | Stale | NotFound
 //   json.h       QJsonObject of tasks, reminders, blocks, query results, search hits, calendar

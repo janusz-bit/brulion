@@ -14,6 +14,7 @@
 #include "markdown/notemode.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
+#include "notebook/links.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -2131,16 +2132,13 @@ QString PageController::linkTarget() const
 {
     if (m_path.isEmpty())
         return {};
-    const QString title = paths::pageTitle(m_path);
-    // A daily note by its file name ([[2026-10-22]] reads as the date), also before it exists.
-    if (m_host && markdown::journalDateFromPath(m_path, vaultConfigFromMap(m_host->vaultConfig())))
-        return title;
-    // The title, unless it leads to another page (the same name in another folder): then the
-    // path. A title that leads nowhere yet (a new page) will lead here once the page is saved.
-    const QString resolved = m_host ? m_host->resolveLink(title, QString()) : QString();
-    if (resolved.isEmpty() || resolved == m_path)
-        return title;
-    return paths::stripMarkdownExtension(m_path);
+    // One rule for every copied link (notebook::pageLinkTarget): a daily note by its file name,
+    // else the index's shortest target ("Dom", "Projekty/Dom" next to another Dom).
+    const VaultConfig config = m_host ? vaultConfigFromMap(m_host->vaultConfig()) : VaultConfig();
+    return notebook::pageLinkTarget(
+            m_path, config,
+            [this](const VaultPath &path) { return m_host ? m_host->linkTarget(path, QString()) : QString(); },
+            [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
 }
 
 QVariantMap PageController::linkText(int row, const QString &kind)

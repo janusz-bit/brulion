@@ -176,7 +176,7 @@ Never compute a hash yourself.
 | `date parse <phrase>` | | how Brulion reads a date phrase: `{date, time, spec, human, past, matched, rest}` | |
 | `calc <expression>` | `[--stdin]` | Brulion's calculator (units, percent, Polish decimal comma) | |
 | `calc page <ref>` | | the results of a page's calc blocks and inline `= …` | |
-| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Kopiuj odnośnik", adding the id | yes |
+| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Kopiuj odnośnik" (the same page name: the shortest unique target, a daily note's file name), adding the id | yes |
 | `history list <ref>` | | versions of a page on this device (also a deleted one) | |
 | `history show <id>` | | a version's text | |
 | `history restore <ref> <id>` | | write a version back (the current text is kept as one) | destructive |

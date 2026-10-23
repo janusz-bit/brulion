@@ -52,7 +52,10 @@ public:
     ///   names this page (docs/SYNTAX.md §3), also for a page not written yet (the one in use that
     ///   names it most exactly: #praca/raporty for praca/raporty.md); key "" for an attachment }.
     Q_INVOKABLE QVariantMap summary(const QString &path) const;
-    /// "[[Dom]]", or "[[Projekty/Dom]]" when the title alone would not reach this page.
+    /// The page menu's and the folder tree's "Kopiuj link": "[[Dom]]", "[[Projekty/Dom]]" when the
+    /// title alone names another page (the shortest path that tells them apart), a daily note by
+    /// its file name — notebook::pageLinkTarget(), the page part of every copied link; an
+    /// attachment by the shortest name that reaches it ("[[plan.png]]").
     Q_INVOKABLE QString wikiLink(const QString &path) const;
     /// Follow a link of rendered note text (InlineRenderer URLs: page:, tag:, block:, ext:) found
     /// in the note `fromPath` — like the editor does: links resolve from that note, a link to a

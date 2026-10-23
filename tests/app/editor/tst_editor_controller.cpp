@@ -6,6 +6,7 @@
 #include "blocktext.h"
 #include "dayclock.h"
 #include "fakeeditorhost.h"
+#include "index/vaultindex.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "notebook/links.h"
@@ -41,14 +42,17 @@ struct Fixture {
     PageController page;
     std::unique_ptr<QAbstractItemModelTester> tester;
 
-    explicit Fixture(const QString &content, int saveDelay = 0)
+    explicit Fixture(const QString &content, int saveDelay = 0, const QString &path = Page,
+                     const QStringList &others = {})
     {
-        host.setFile(Page, content);
+        host.setFile(path, content);
         host.setFile(u"Inna.md"_s, u"- Blok z innej strony #inne ^inny1\n- Drugi blok\n"_s);
+        for (const QString &other : others)
+            host.setFile(other, u"- inna strona o tej nazwie\n"_s);
         page.setNow(Now);
         page.setSaveDelay(saveDelay);
         page.setHost(&host);
-        page.setPath(Page);
+        page.setPath(path);
         tester = std::make_unique<QAbstractItemModelTester>(page.blocks(), QAbstractItemModelTester::FailureReportingMode::QtTest);
     }
 
@@ -936,6 +940,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.copyLink(0, u"blockLink"_s).value(u"text"_s).toString(),
                  u"[[Notatki/Strona#^"_s + f.model()->document().at(0).blockId + u"]]"_s);
         QCOMPARE(f.page.copyLink(-1, u"page"_s).value(u"text"_s).toString(), u"[[Notatki/Strona]]"_s);
+        // Deeper: the shortest folder path that tells the pages apart (VaultIndex::linkTarget),
+        // not the whole path.
+        f.host.setFile(u"Archiwum/2025/Notatki/Strona.md"_s, u"- archiwalna\n"_s);
+        PageController deep;
+        deep.setHost(&f.host);
+        deep.setPath(u"Archiwum/2025/Notatki/Strona.md"_s);
+        QCOMPARE(deep.linkTarget(), u"2025/Notatki/Strona"_s);
+        QCOMPARE(deep.copyLink(-1, u"page"_s).value(u"text"_s).toString(), u"[[2025/Notatki/Strona]]"_s);
+        QCOMPARE(f.page.linkTarget(), u"Notatki/Strona"_s); // an exact path: still this page
         // A page not written yet: its title.
         PageController fresh;
         fresh.setHost(&f.host);
@@ -980,19 +993,44 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(copied(10, u"embed"_s), u"![[Strona#^"_s + id + u"]]"_s);
     }
 
-    // `brulion-cli block link` (notebook::blockLinks) gives the links the editor copies, row by row.
+    // `brulion-cli block link` (notebook::blockLinks) gives the links the editor copies, row by row,
+    // and both name the page alike (notebook::pageLinkTarget on the real index — the page menu's
+    // "Kopiuj link" too): also next to pages of the same name in other folders.
     void copiedLinksMatchTheCommandLine_data()
     {
         QTest::addColumn<QString>("content");
-        QTest::newRow("blocks") << linkPage();
-        QTest::newRow("repeated headings") << u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n"
-                                              "## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QStringList>("others"); // pages of the same name elsewhere
+        QTest::addColumn<QString>("target");     // the page part of every link
+        const QString headings = u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n"
+                                 "## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
+        QTest::newRow("blocks") << linkPage() << Page << QStringList() << u"Strona"_s;
+        QTest::newRow("repeated headings") << headings << Page << QStringList() << u"Strona"_s;
+        QTest::newRow("same name in another folder")
+                << linkPage() << Page << QStringList{u"Stare/Strona.md"_s} << u"Notatki/Strona"_s;
+        QTest::newRow("same name, deeper: the shortest path that tells them apart")
+                << headings << u"Archiwum/2025/Projekty/Żółw.md"_s << QStringList{u"Żółw.md"_s, u"Projekty/Żółw.md"_s}
+                << u"2025/Projekty/Żółw"_s;
+        QTest::newRow("the shorter of two pages keeps its title")
+                << linkPage() << u"Ogród/Żółw.md"_s << QStringList{u"Zwierzęta/Gady/Żółw.md"_s} << u"Żółw"_s;
+        QTest::newRow("a daily note named like a page") << linkPage() << u"journals/2026-10-22.md"_s
+                                                        << QStringList{u"Stare/2026-10-22.md"_s} << u"2026-10-22"_s;
     }
     void copiedLinksMatchTheCommandLine()
     {
         QFETCH(QString, content);
-        Fixture f(content);
+        QFETCH(QString, path);
+        QFETCH(QStringList, others);
+        QFETCH(QString, target);
+        Fixture f(content, 0, path, others);
         const QString page = f.page.linkTarget();
+        QCOMPARE(page, target);
+        // The command line's page part: the same rule on an index of the same files.
+        VaultIndex index(vaultConfigFromMap(f.host.vaultConfig()));
+        for (const QString &file : f.host.files())
+            index.update(file, f.host.file(file));
+        QCOMPARE(notebook::pageLinkTarget(path, index.config(), &index), page);
+        QCOMPARE(f.page.copyLink(-1, u"page"_s).value(u"text"_s).toString(), u"[["_s + page + u"]]"_s);
         for (int row = 0; row < f.count(); ++row) {
             const auto copied = [&](const QString &kind) {
                 const QVariantMap r = f.page.linkText(row, kind);

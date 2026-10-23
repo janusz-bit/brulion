@@ -125,9 +125,9 @@ Rectangle {
         if (currentPath !== "")
             reveal(currentPath, false)
     }
+    /// "Kopiuj link": the same text as the page menu's and the editor's (PageTools.wikiLink).
     function copyLink(path) {
-        const target = Workspace.linkTarget(path, "")
-        const link = "[[" + (target !== "" ? target : Workspace.pageTitle(path)) + "]]"
+        const link = tools.wikiLink(path)
         if (tools.copyText(link))
             AppController.toast(qsTr("Copied %1").arg(link), "success")
     }

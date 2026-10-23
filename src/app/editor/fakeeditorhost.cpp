@@ -197,6 +197,25 @@ void FakeEditorHost::filesChanged(bool announce)
     });
 }
 
+const VaultIndex &FakeEditorHost::currentIndex() const
+{
+    if (!m_index || m_indexDirty) {
+        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
+        VaultIndex::Batch batch(*m_index);
+        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
+            m_index->update(it.key(), it.value());
+        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
+            m_index->update(it.key(), QString());
+        m_indexDirty = false;
+    }
+    return *m_index;
+}
+
+QString FakeEditorHost::linkTarget(const QString &path, const QString &fromPath) const
+{
+    return currentIndex().linkTarget(path, fromPath).value_or(QString());
+}
+
 void FakeEditorHost::setNow(const QString &now)
 {
     if (m_now == now)
@@ -220,30 +239,22 @@ QVariantMap FakeEditorHost::runQuery(const QString &source, const QString &curre
         out.insert(u"error"_s, *error);
         return out;
     }
-    if (!m_index || m_indexDirty) {
-        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
-        VaultIndex::Batch batch(*m_index);
-        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
-            m_index->update(it.key(), it.value());
-        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
-            m_index->update(it.key(), QString());
-        m_indexDirty = false;
-    }
+    const VaultIndex &index = currentIndex();
     QDateTime current = QDateTime::currentDateTime();
     if (const auto spec = dates::parseDateSpec(m_now))
         current = spec->toLocalDateTime();
     QueryOptions options;
     options.currentPath = paths::normalize(currentPath);
     options.now = current.time();
-    const QueryResult result = brulion::runQuery(std::get<Query>(parsed), *m_index, current.date(), Qt::Monday, options);
+    const QueryResult result = brulion::runQuery(std::get<Query>(parsed), index, current.date(), Qt::Monday, options);
     QVariantList items;
     for (const QueryItem &item : result.items)
-        items.append(queryItemMap(item, *m_index));
+        items.append(queryItemMap(item, index));
     QVariantList groups;
     for (const QueryGroup &group : result.groups) {
         QVariantList groupItems;
         for (const QueryItem &item : group.items)
-            groupItems.append(queryItemMap(item, *m_index));
+            groupItems.append(queryItemMap(item, index));
         groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
     }
     out.insert(u"ok"_s, true);

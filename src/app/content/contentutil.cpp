@@ -367,18 +367,6 @@ MentionEdit linkMention(const QString &content, int line, const QStringList &nam
     return edit;
 }
 
-QString wikiLinkFor(const VaultIndex *index, const VaultPath &path, const VaultPath &fromPath)
-{
-    const QString title = paths::pageTitle(path);
-    if (index) {
-        const auto resolved = index->resolveLink(title, fromPath);
-        if (resolved && *resolved == path)
-            return u"[["_s + title + u"]]"_s;
-        return u"[["_s + paths::stripMarkdownExtension(path) + u"]]"_s;
-    }
-    return u"[["_s + title + u"]]"_s;
-}
-
 QString mentionLink(const VaultIndex *index, const QString &mention, const VaultPath &target, const VaultPath &fromPath)
 {
     if (index) {

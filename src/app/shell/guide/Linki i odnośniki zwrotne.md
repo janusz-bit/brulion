@@ -48,7 +48,7 @@ Menu bloku otwierasz prawym przyciskiem myszy na dowolnym bloku (tekst, nagłów
 - Link do nagłówka niczego nie dopisuje, ale przestaje prowadzić do celu, gdy zmienisz treść nagłówka. Odwołanie do bloku przetrwa i zmianę nagłówka, i przeniesienie bloku.
 - W linku do nagłówka znikają formatowanie, krzyżyki tagów i znaki, które psują linki (`#`, `|`, `^`, `:`, nawiasy kwadratowe): z „Plan: **wrzesień** #praca” powstaje `[[Strona#Plan wrzesień praca]]`. Wielkość liter i polskie znaki nie mają znaczenia przy wyszukiwaniu nagłówka.
 - Gdy dwa nagłówki na stronie mają tę samą treść, Brulion kopiuje ścieżkę jak Obsidian: `[[Strona#Rozdział#Nagłówek]]`; jeśli i ona się powtarza — link do bloku.
-- Nazwa strony w odnośniku to jej tytuł, a gdy kilka stron ma ten sam tytuł — ścieżka (`[[Projekty/Dom#^abc123]]`). Dzień dziennika ma nazwę pliku: `[[2026-10-22#^abc123]]`.
+- Nazwa strony w odnośniku to jej tytuł, a gdy kilka stron ma ten sam tytuł — najkrótsza ścieżka, która je rozróżnia (`[[Projekty/Dom#^abc123]]`). Tak samo nazywają stronę „Kopiuj link” w menu strony i w drzewie folderów oraz `brulion-cli block link`. Dzień dziennika ma nazwę pliku: `[[2026-10-22#^abc123]]`.
 - W tej dokumentacji odnośniki do bloków nie są tworzone, bo zmieniłyby jej strony; linki do nagłówków i stron działają.
 
 Kliknięcie odnośnika do bloku lub nagłówka przewija stronę do celu, zaznacza go i na chwilę podświetla — także gdy cel jest na tej samej stronie albo w tym samym dniu dziennika. Gdy celu nie ma, Brulion o tym mówi. Link do bloku, który przeniesiono na inną stronę, otwiera stronę, na której blok jest teraz.
