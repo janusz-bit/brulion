@@ -594,8 +594,10 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
     if (!m_index || limit <= 0)
         return out;
     const QStringView typed = prefix.startsWith(u'#') ? QStringView(prefix).mid(1) : QStringView(prefix);
-    const QString key = text::foldKey(typed);
-    QSet<QString> seen; // folded names offered so far
+    const QString key = text::foldKey(typed); // what was typed matches without diacritics …
+    // … but a tag names a page with them (#zolw is not Żółw): one entry per tag key.
+    const auto tagKey = [](const QString &name) { return name.normalized(QString::NormalizationForm_C).toLower(); };
+    QSet<QString> seen; // tag keys offered so far
     const auto tagItem = [&](const TagCount &t) {
         const QString name = t.display.isEmpty() ? t.tag : t.display;
         QVariantMap m{{u"tag"_s, name}, {u"count"_s, t.count}, {u"kind"_s, u"tag"_s}};
@@ -604,19 +606,23 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
             m.insert(u"title"_s, paths::pageTitle(*page));
             m.insert(u"folder"_s, paths::dirname(*page));
         }
-        seen.insert(text::foldKey(name));
+        seen.insert(t.tag);
         return m;
     };
     // Tags in use (most used first) that start with the text, then pages no tag names yet (a tag
-    // names a page, docs/SYNTAX.md §3), then tags that contain the text.
-    QList<const TagCount *> contains;
+    // names a page, docs/SYNTAX.md §3), then tags that contain the text. A page whose tag is in
+    // use is offered as that tag (with its count).
+    QHash<QString, const TagCount *> contains;
+    QList<const TagCount *> containsOrder;
     const QList<TagCount> tags = m_index->tags();
     for (const TagCount &t : tags) {
         const QString folded = text::foldKey(t.tag);
-        if (key.isEmpty() || folded.startsWith(key))
+        if (key.isEmpty() || folded.startsWith(key)) {
             out.append(tagItem(t));
-        else if (folded.contains(key))
-            contains.append(&t);
+        } else if (folded.contains(key)) {
+            contains.insert(t.tag, &t);
+            containsOrder.append(&t);
+        }
         if (out.size() >= limit)
             return out;
     }
@@ -630,23 +636,27 @@ QVariantList Workspace::suggestTags(const QString &prefix, int limit) const
         QString name = s.alias.isEmpty() ? s.title : s.alias;
         if (m_index->resolveTag(name) != s.path)
             name = paths::stripMarkdownExtension(s.path);
-        const QString folded = text::foldKey(name);
-        if (seen.contains(folded) || markdown::tagSyntax(name).isEmpty())
+        const QString k = tagKey(name);
+        if (seen.contains(k) || markdown::tagSyntax(name).isEmpty())
             continue;
-        seen.insert(folded);
-        out.append(QVariantMap{{u"tag"_s, name},
-                               {u"count"_s, 0},
-                               {u"kind"_s, u"page"_s},
-                               {u"path"_s, s.path},
-                               {u"title"_s, s.title},
-                               {u"folder"_s, paths::dirname(s.path)}});
+        if (const TagCount *inUse = contains.value(k)) {
+            out.append(tagItem(*inUse));
+        } else {
+            seen.insert(k);
+            out.append(QVariantMap{{u"tag"_s, name},
+                                   {u"count"_s, 0},
+                                   {u"kind"_s, u"page"_s},
+                                   {u"path"_s, s.path},
+                                   {u"title"_s, s.title},
+                                   {u"folder"_s, paths::dirname(s.path)}});
+        }
         if (out.size() >= limit)
             return out;
     }
-    for (const TagCount *t : std::as_const(contains)) {
+    for (const TagCount *t : std::as_const(containsOrder)) {
         if (out.size() >= limit)
             break;
-        if (!seen.contains(text::foldKey(t->display.isEmpty() ? t->tag : t->display)))
+        if (!seen.contains(t->tag))
             out.append(tagItem(*t));
     }
     return out;

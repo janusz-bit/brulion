@@ -933,6 +933,28 @@ private Q_SLOTS:
         QCOMPARE(moved->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
     }
 
+    // "#" completion: one entry per tag key, and diacritics count — #lodz does not name Łódź, so
+    // the page is offered too; a tag in use (here one matched inside its name) stays a tag.
+    void suggestTagsByTagKey()
+    {
+        auto ws = open({{u"Łódź.md"_s, u"- miasto\n"_s},
+                        {u"projekt-dom.md"_s, u"- x\n"_s},
+                        {u"Notatki.md"_s, u"- #lodz i #projekt-dom\n- #Projekt-Dom\n"_s}});
+        const auto entries = [&](const QString &typed) {
+            QStringList out;
+            for (const QVariant &v : ws->suggestTags(typed)) {
+                const QVariantMap m = v.toMap();
+                out.append(m.value(u"tag"_s).toString() + u' ' + m.value(u"kind"_s).toString() + u' '
+                           + m.value(u"count"_s).toString() + u' ' + m.value(u"path"_s).toString());
+            }
+            return out;
+        };
+        const QStringList lodz{u"lodz tag 1 "_s, u"Łódź page 0 Łódź.md"_s};
+        QCOMPARE(entries(u"lod"_s), lodz);
+        QCOMPARE(entries(u"#łód"_s), lodz);
+        QCOMPARE(entries(u"dom"_s), QStringList{u"projekt-dom tag 2 projekt-dom.md"_s});
+    }
+
     void renameFolderRewritesPathTags()
     {
         auto ws = open({{u"Projekty/Dom.md"_s, u"- x\n"_s},

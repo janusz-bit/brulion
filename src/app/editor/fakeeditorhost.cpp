@@ -388,7 +388,9 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
             return a.second > b.second;
         return a.first < b.first;
     });
-    // Tags (with the page they name), then pages no tag names yet (docs/SYNTAX.md §3).
+    // Tags (with the page they name), then pages no tag names yet (docs/SYNTAX.md §3), one entry
+    // per tag key (case-insensitive, not diacritic-insensitive: #zolw is not Żółw).
+    const auto tagKey = [](const QString &name) { return name.normalized(QString::NormalizationForm_C).toLower(); };
     QVariantList out;
     QSet<QString> seen;
     for (const auto &[tag, count] : std::as_const(tags)) {
@@ -401,7 +403,7 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
             m.insert(u"title"_s, paths::pageTitle(page));
             m.insert(u"folder"_s, paths::dirname(page));
         }
-        seen.insert(text::foldKey(tag));
+        seen.insert(tagKey(tag));
         out.append(m);
     }
     for (const QVariant &v : suggestPages(prefix, limit)) {
@@ -410,9 +412,9 @@ QVariantList FakeEditorHost::suggestTags(const QString &prefix, int limit) const
         const QVariantMap p = v.toMap();
         const QString name = p.value(u"alias"_s).toString().isEmpty() ? p.value(u"title"_s).toString()
                                                                       : p.value(u"alias"_s).toString();
-        if (seen.contains(text::foldKey(name)) || markdown::tagSyntax(name).isEmpty())
+        if (seen.contains(tagKey(name)) || markdown::tagSyntax(name).isEmpty())
             continue;
-        seen.insert(text::foldKey(name));
+        seen.insert(tagKey(name));
         out.append(QVariantMap{{u"tag"_s, name},
                                {u"count"_s, 0},
                                {u"kind"_s, u"page"_s},
