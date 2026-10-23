@@ -199,14 +199,15 @@ Rectangle {
             visible: !root.block.editing && (root.filters.length > 0 || root.terms.length > 0)
             spacing: 6
             // The Flow's own height comes with its next polish: the same lines here (a chip goes
-            // to the next line when it does not fit).
+            // to the next line when it does not fit). (`revision`: itemAt() notifies nothing, items
+            // may come after the count; read for real — a bare `void` read is compiled away.)
             height: {
+                if (filterChips.revision < 0 || termChips.revision < 0)
+                    return 0
                 let x = 0
                 let line = 0
                 let total = 0
                 const repeaters = [filterChips, termChips]
-                void filterChips.revision // (itemAt() notifies nothing; items may come after the count)
-                void termChips.revision
                 for (const r of repeaters) {
                     for (let i = 0; i < r.count; ++i) {
                         const chip = r.itemAt(i)
@@ -291,13 +292,19 @@ Rectangle {
 
         Column {
             id: resultList
+            objectName: "queryResultList" // (the editor's self-tests)
             y: column.separatorBottom + column.spacing
             width: parent.width
             visible: root.live && results.ok && !root.emptySource
             spacing: Theme.touchUi ? 0 : 2
+            // (`revision`: itemAt() notifies nothing, items may come after the count, and new results
+            // with as many rows replace them without a count change; read for real — qmlcachegen
+            // compiles a bare `void resultRows.revision` away with the dependency: the list kept the
+            // old rows' height.)
             height: {
+                if (resultRows.revision < 0)
+                    return 0
                 let h = 0
-                void resultRows.revision // (itemAt() notifies nothing; items may come after the count)
                 for (let i = 0; i < resultRows.count; ++i) {
                     const row = resultRows.itemAt(i)
                     if (row)

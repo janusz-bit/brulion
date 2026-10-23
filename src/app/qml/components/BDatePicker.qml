@@ -180,13 +180,12 @@ T.Control {
             showMonthOf(start)
     }
 
-    readonly property var cells: {
-        void DatesHelper.today   // re-evaluate at midnight (today marker)
-        return DatesHelper.monthGrid(displayYear, displayMonth, weekStart)
-    }
+    // Method calls are not tracked: `today` (the today marker moves at midnight) and `locale` are
+    // read for real — qmlcachegen compiles a bare `void DatesHelper.today` away with the dependency.
+    readonly property var cells: DatesHelper.today !== "" ? DatesHelper.monthGrid(displayYear, displayMonth, weekStart)
+                                                          : []
     readonly property var weekdayLabels: {
-        void DatesHelper.locale   // method calls are not tracked: depend on the locale explicitly
-        const names = DatesHelper.weekdayNames("short")
+        const names = DatesHelper.weekdayNames("short", DatesHelper.locale)
         const out = []
         for (let i = 0; i < 7; ++i)
             out.push(names[(weekStart - 1 + i) % 7])
@@ -274,11 +273,13 @@ T.Control {
             spacing: 2
 
             Text {
+                objectName: "datePickerMonthTitle"
                 Layout.fillWidth: true
                 Layout.leftMargin: 4
+                // (`locale` read for real: monthTitle() is a method call, not tracked.)
                 text: {
-                    void DatesHelper.locale
-                    const t = DatesHelper.monthTitle(control.displayYear, control.displayMonth)
+                    const t = DatesHelper.locale !== ""
+                            ? DatesHelper.monthTitle(control.displayYear, control.displayMonth) : ""
                     return t.charAt(0).toLocaleUpperCase() + t.slice(1)
                 }
                 font.family: Theme.fontUi

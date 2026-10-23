@@ -253,9 +253,12 @@ FocusScope {
                 id: handle
                 required property int index
                 readonly property bool atStart: index === 0
+                // width and contentHeight read for real: positionToRectangle() is a method call,
+                // not tracked, and a bare `void text.width` is compiled away with the dependency
+                // (the handles stayed put when a narrower window wrapped the text again).
                 readonly property rect at: {
-                    void text.width
-                    void text.contentHeight
+                    if (text.width < 0 || text.contentHeight < 0)
+                        return Qt.rect(0, 0, 0, 0)
                     return text.positionToRectangle(handle.atStart ? text.selectionStart : text.selectionEnd)
                 }
                 objectName: atStart ? "selectTextHandleStart" : "selectTextHandleEnd"

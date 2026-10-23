@@ -28,10 +28,12 @@ Column {
     // The heights are bindings, not the Columns' own (a positioner sets those only in its next
     // polish): the block has its final height when the editor's list creates it (docs/UI.md
     // "Scrolling performance"). (`revision`: itemAt() notifies nothing, a Repeater's items may
-    // come after its count.)
+    // come after its count; read for real — qmlcachegen compiles a bare `void frames.revision` away
+    // with the dependency.)
     height: {
+        if (frames.revision < 0)
+            return 0
         let h = 0
-        void frames.revision
         for (let i = 0; i < frames.count; ++i) {
             const frame = frames.itemAt(i)
             if (frame)
@@ -110,8 +112,9 @@ Column {
                 width: parent.width - Theme.space3 - Theme.space2
                 spacing: 0
                 height: {
+                    if (entryRows.revision < 0) // (see the view's height)
+                        return 0
                     let h = header.height
-                    void entryRows.revision
                     for (let i = 0; i < entryRows.count; ++i) {
                         const row = entryRows.itemAt(i)
                         if (row)

@@ -161,9 +161,12 @@ FocusScope {
                     id: entries
                     y: header.y + header.height + Theme.space1
                     width: parent.width
+                    // (`revision`: itemAt() notifies nothing, items may come after the count; read for
+                    // real — qmlcachegen compiles a bare `void rows.revision` away with the dependency.)
                     height: {
+                        if (rows.revision < 0)
+                            return 0
                         let h = 0
-                        void rows.revision // (itemAt() notifies nothing; items may come after the count)
                         for (let i = 0; i < rows.count; ++i) {
                             const row = rows.itemAt(i)
                             if (row)

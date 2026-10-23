@@ -37,10 +37,9 @@ FocusScope {
     signal addReminderRequested(string date)
     signal allOverdueRequested()
 
-    readonly property var entries: {
-        void calendar.revision
-        return date !== "" ? calendar.dayItems(date) : []
-    }
+    // (`calendar.revision` read for real: dayItems() is a method call, not tracked, and a bare
+    // `void calendar.revision` is compiled away with the dependency.)
+    readonly property var entries: date !== "" && calendar.revision >= 0 ? calendar.dayItems(date) : []
     readonly property var journal: entries.find(e => e.kind === "journal") || null
     readonly property var items: entries.filter(e => e.kind !== "journal")
     readonly property string heading: {

@@ -135,6 +135,23 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
                 TIMEOUT 120 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # Views following what they depend on (`--editor-script refreshtest`,
+        # qml/dev/RefreshSelfTest.qml): a query's results replaced by as many rows of another
+        # height, an embedded section changed in its own note, a date picker's today marker after
+        # midnight, the reminder dialog after a language change, a calculation's results and (touch)
+        # the text selection's handles after the window narrowed. Each binding once read what it
+        # follows with a bare `void x`, which qmlcachegen compiles away with the dependency.
+        foreach(_refresh "tst_editor_qml_refresh;1280x800;" "tst_editor_qml_refresh_touch;412x915;--touch")
+            list(GET _refresh 0 _refresh_test)
+            list(GET _refresh 1 _refresh_size)
+            list(GET _refresh 2 _refresh_touch)
+            add_test(NAME ${_refresh_test}
+                COMMAND brulion --editor --editor-script refreshtest --no-single-instance
+                    --size ${_refresh_size} ${_refresh_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_refresh_test} PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # The touch toolbar docked on a simulated on-screen keyboard (`--editor-script keyboard`,
         # KeyboardInsets): a block in an outline and a document, a keyboard sliding in frame by
         # frame, the system hiding it while editing goes on, the caret, autocomplete, source mode

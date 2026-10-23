@@ -31,9 +31,12 @@ Column {
     }
 
     spacing: Theme.space2
+    // (`revision`: itemAt() notifies nothing, a Repeater's items may come after its count; read for
+    // real — qmlcachegen compiles a bare `void pictures.revision` away with the dependency.)
     height: {
+        if (pictures.revision < 0)
+            return 0
         let h = 0
-        void pictures.revision // (itemAt() notifies nothing; a Repeater's items may come after its count)
         for (let i = 0; i < pictures.count; ++i) {
             const item = pictures.itemAt(i)
             if (item)

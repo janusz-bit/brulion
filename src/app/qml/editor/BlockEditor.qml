@@ -297,7 +297,13 @@ FocusScope {
     component LineProbe: TextEdit {
         id: probe
         property int level: 0
-        readonly property real firstBaselineY: { void probe.contentHeight; void probe.font; return probe.positionToRectangle(0).y + probeMetrics.ascent }
+        // contentHeight and font read for real: positionToRectangle() is a method call, not
+        // tracked, and a bare `void probe.font` is compiled away with the dependency.
+        readonly property real firstBaselineY: {
+            if (probe.contentHeight < 0 || probe.font.pixelSize === 0)
+                return probeMetrics.ascent
+            return probe.positionToRectangle(0).y + probeMetrics.ascent
+        }
         readonly property real xHeight: probeMetrics.xHeight
         visible: false
         enabled: false

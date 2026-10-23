@@ -26,9 +26,10 @@ FocusScope {
     readonly property int pillHeight: Theme.touchUi ? 20 : 18
     readonly property int pillsTop: Theme.touchUi ? 34 : 30
     readonly property int maxPills: Math.max(0, Math.floor((cellHeight - pillsTop - 2) / (pillHeight + 2)))
+    // (The locale passed for real: a method call is not tracked, and a bare `void DatesHelper.locale`
+    // is compiled away with the dependency.)
     readonly property var weekdayNames: {
-        void DatesHelper.locale
-        const names = DatesHelper.weekdayNames(dots ? "short" : "short")
+        const names = DatesHelper.weekdayNames(dots ? "short" : "short", DatesHelper.locale)
         const start = calendar.effectiveWeekStart
         const out = []
         for (let i = 0; i < 7; ++i)
