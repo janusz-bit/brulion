@@ -323,15 +323,82 @@ QString stripInlineMarkup(const QString &text)
 {
     static const QRegularExpression wikiAlias(u"!?\\[\\[(?:[^\\]|\\n]*\\|)?([^\\]\\n]*)\\]\\]"_s);
     static const QRegularExpression mdLink(u"!?\\[([^\\]\\n]*)\\]\\([^)\\n]*\\)"_s);
-    static const QRegularExpression marks(u"(\\*\\*|__|~~|==|`)"_s);
+    // Marks in pairs around text that starts and ends with a non-space (`**b**`, `==h==`); a lone
+    // or spaced-out one is text ("2**3", "a == b").
+    static const QRegularExpression pairs(u"(\\*\\*|__|~~|==)(?=\\S)([^\\n]*?\\S)\\1"_s);
     // A single * or _ around a word or words (not inside words: snake_case, 2*3*4 stay).
     static const QRegularExpression single(u"(?<![\\w*\\\\])([*_])(?=\\S)([^*_\\n]*?\\S)\\1(?![\\w*])"_s);
-    QString t = text;
+    // Code spans (a run of backticks up to the next run as long on the same line) are what they
+    // show, verbatim: each is one private-use character while the rest is stripped. (A text that
+    // has such characters itself keeps its code marks instead.)
+    constexpr char16_t placeholder = 0xE000;
+    constexpr qsizetype maxSpans = 0x1800;
+    const bool canMask = std::none_of(text.cbegin(), text.cend(), [](QChar c) {
+        return c.unicode() >= placeholder && c.unicode() < placeholder + maxSpans;
+    });
+    QStringList code;
+    QString t;
+    t.reserve(text.size());
+    for (qsizetype i = 0; i < text.size();) {
+        if (text[i] != u'`' || !canMask || code.size() >= maxSpans) {
+            t += text[i++];
+            continue;
+        }
+        const auto runAt = [&](qsizetype at) {
+            qsizetype n = 0;
+            while (at + n < text.size() && text[at + n] == u'`')
+                ++n;
+            return n;
+        };
+        const qsizetype n = runAt(i);
+        qsizetype close = -1;
+        for (qsizetype j = i + n; j < text.size() && text[j] != u'\n';) {
+            const qsizetype m = text[j] == u'`' ? runAt(j) : 0;
+            if (m == n) {
+                close = j;
+                break;
+            }
+            j += std::max<qsizetype>(1, m);
+        }
+        if (close < 0) {
+            t += text.sliced(i, n); // no closing run: backticks as written
+            i += n;
+            continue;
+        }
+        QString inner = text.sliced(i + n, close - i - n);
+        // One space on both sides is padding (`` ` `x` ` ``), unless it is all spaces.
+        if (inner.size() >= 2 && inner.front() == u' ' && inner.back() == u' ' && !inner.trimmed().isEmpty())
+            inner = inner.sliced(1, inner.size() - 2);
+        t += QChar(char16_t(placeholder + code.size()));
+        code.append(inner);
+        i = close + n;
+    }
+    if (!canMask) {
+        static const QRegularExpression codeSpan(u"(?<!`)(`+)(?!`)([^\\n]*?[^`\\n])\\1(?!`)"_s);
+        t.replace(codeSpan, u"\\2"_s);
+    }
     t.replace(wikiAlias, u"\\1"_s);
     t.replace(mdLink, u"\\1"_s);
-    t.replace(marks, QString());
+    // Nested pairs ("**__b__**") come off one level per pass.
+    for (int pass = 0; pass < 4; ++pass) {
+        const QString before = t;
+        t.replace(pairs, u"\\2"_s);
+        if (t == before)
+            break;
+    }
     t.replace(single, u"\\2"_s);
-    return t;
+    if (code.isEmpty())
+        return t;
+    QString out;
+    out.reserve(t.size());
+    for (const QChar c : std::as_const(t)) {
+        const qsizetype k = qsizetype(c.unicode()) - placeholder;
+        if (k >= 0 && k < code.size())
+            out += code.at(k);
+        else
+            out += c;
+    }
+    return out;
 }
 
 QStringList blockIdsOf(const QString &markdown)

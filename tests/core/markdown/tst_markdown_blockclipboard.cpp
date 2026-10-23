@@ -201,6 +201,15 @@ private Q_SLOTS:
         QTest::newRow("lines kept") << u"a **b**\nc"_s << u"a b\nc"_s;
         QTest::newRow("unbalanced brackets") << u"[[niezamknięty i [x]("_s << u"[[niezamknięty i [x]("_s;
         QTest::newRow("Polish") << u"**Zażółć** gęślą jaźń"_s << u"Zażółć gęślą jaźń"_s;
+        QTest::newRow("code spans are their code")
+                << u"Warunek `x == 0` i `__init__` oraz `a*b*c`"_s << u"Warunek x == 0 i __init__ oraz a*b*c"_s;
+        QTest::newRow("links inside code stay") << u"`[[Strona]]` i [[Strona]]"_s << u"[[Strona]] i Strona"_s;
+        QTest::newRow("double backticks") << u"``a ` b`` i `` `x` ``"_s << u"a ` b i `x`"_s;
+        QTest::newRow("an unclosed backtick") << u"jeden ` dwa\n`trzy`"_s << u"jeden ` dwa\ntrzy"_s;
+        QTest::newRow("unpaired marks stay") << u"2**3 i a == b oraz ~~ i __"_s << u"2**3 i a == b oraz ~~ i __"_s;
+        QTest::newRow("emphasis around code") << u"**ważne `x`** i ==`y`=="_s << u"ważne x i y"_s;
+        QTest::newRow("nested pairs") << u"**__żółć__** ~~==b==~~"_s << u"żółć b"_s;
+        QTest::newRow("private-use characters") << u"\ue000 `kod`"_s << u"\ue000 kod"_s;
     }
     void inlineMarkup()
     {
