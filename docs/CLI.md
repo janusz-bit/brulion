@@ -346,7 +346,8 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
 * **One at a time, settled.** Gestures are played on the app's event loop, one after another
   (nothing nested: the app stays in real use), started and answered once the window has stopped
   changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next
-  command sees a settled UI (a palette that opened has given its field the keyboard).
+  command sees a settled UI (a palette that opened has given its field the keyboard). Input asked
+  for by a client that has gone (an interrupted command) is dropped, and its typing stops.
 * `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
   new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
   saved.

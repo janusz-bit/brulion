@@ -954,6 +954,8 @@ private Q_SLOTS:
             const QString fail = request.params.value(u"text"_s).toString();
             if (request.method == u"find" && fail.startsWith(u"fail:"_s))
                 reply.fail(fail.mid(5), u"Nie wyszło"_s);
+            else if (request.method == u"open" && request.params.value(u"ref"_s).toString() == u"today")
+                reply.fail(u"not_ready"_s, u"No notebook is open (status loading)"_s); // still opening
             else
                 reply.ok(QJsonObject{{u"method"_s, request.method}, {u"params"_s, request.params}});
         });
@@ -985,6 +987,14 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"via"_s).toString(), u"control"_s);
         QCOMPARE(requests.last().params, (QJsonObject{{u"ref"_s, u"Dom"_s}, {u"line"_s, 3}}));
+        // A notebook still opening: the single-instance message, kept by the app until it is ready.
+        QSignalSpy openMessages(&app, &brulion::ipc::SingleInstance::messageReceived);
+        r = cliLive({u"app"_s, u"open"_s, u"today"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"sent"_s).toString(), u"today"_s);
+        QCOMPARE(requests.last().method, u"open"_s);
+        QTRY_COMPARE(openMessages.size(), 1);
+        QCOMPARE(openMessages.first().first().toByteArray(), QByteArray("today"));
         // `app capture` with a text saves it through the app; without one it opens the dialog.
         r = cliLive({u"app"_s, u"capture"_s, u"Kupić mleko jutro o 18"_s});
         QCOMPARE(requests.last().method, u"capture"_s);

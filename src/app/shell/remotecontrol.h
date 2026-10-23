@@ -7,13 +7,14 @@
 // Off unless the app runs with --remote-control or the device setting devtools/remoteControl is on
 // (Settings → Application → "For developers"; switching it takes effect at once). The socket is
 // owner-only and refuses other users, but while it is on any program of this user can drive the
-// UI and read the notes it shows: nothing secret is in `state` (no passwords or tokens), a
-// screenshot is written only where asked (else into the runtime folder), every request is logged
-// at debug level in the event log.
+// UI and read the notes it shows: nothing secret is in `state` (no passwords or tokens; a password
+// field's text is never given or matched), a screenshot is written only where asked (else into
+// the runtime folder), every request is logged at debug level in the event log.
 //
 // Nothing runs nested: input is played from timers (uidriver::play), one gesture at a time (later
-// ones queue), started and answered once the window stopped changing (no new frame for 100 ms, at
-// most 2 s: a popup that opened has given its field the keyboard); waitFor is answered when its
+// ones queue; those of a client that left are dropped, its typing stops), started and answered
+// once the window stopped changing (no new frame for 100 ms and no popup in a transition, at most
+// 2 s: a popup that opened has given its field the keyboard); waitFor is answered when its
 // condition holds or its time is up, polled on the event loop. Item handles ("h12", from find,
 // state, click) are stable while their item lives.
 //

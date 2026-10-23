@@ -254,8 +254,16 @@ Result appOpen(Call &call)
     if (call.dryRun())
         return appResult(call, u"open"_s, params);
     const auto result = askApp(call, u"open"_s, params);
-    if (!result)
+    if (!result) {
+        // A notebook still opening: the message, which the app keeps until the notebook is ready.
+        if (call.error && call.error->code == QLatin1String(ipc::ControlError::NotReady)) {
+            call.error.reset();
+            if (target.isEmpty() || target == u"today")
+                return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
+            return openByMessage(call, target);
+        }
         return call.failed();
+    }
     QJsonObject out = result->toObject();
     out.insert(u"via"_s, u"control"_s);
     out.insert(u"gui"_s, QJsonObject{{u"running"_s, true}, {u"remoteControl"_s, true}});
