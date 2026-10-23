@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Releases Brulion from main: commits the new version on main ("Release v<version>"), merges
-# main into the release branch ("Merge main into release for v<version>", always a merge
-# commit) and puts the annotated tag v<version> on that merge. Pushing the tag starts
+# Releases Brulion from main: commits the new version on main ("Release v<version>"), moves the
+# release branch forward to that commit (a fast-forward, never a merge) and puts the annotated
+# tag v<version> on it: the same commit on main and on release. Pushing the tag starts
 # .github/workflows/release.yml (Android APK, Linux AppImages, web zip, source tarball ->
 # GitHub release).
 #
 # Every commit goes on main: the development, the release notes (.github/release-notes.md) and
-# the version. The release branch holds nothing but merges of main, one per release, each with
-# its tag. Run it on main with a clean working tree. It first fetches main and release from
-# origin and refuses when main lacks commits of origin/main, when the local release and
-# origin/release have diverged, when release has a commit that main lacks and that is not a
-# merge (git rev-list --no-merges main..release must be empty) or a merge with changes of its
-# own, when release was fast-forwarded to main (main's commits on its first-parent line), or when
-# release is checked out in another worktree. The merge is made without checking release out:
-# the working tree stays on main. When a step fails, everything the run did is undone (and
-# nothing is pushed).
+# the version. The release branch has nothing but commits of main: it is main or an ancestor of
+# main (git rev-list main..release is empty), at the last release's tagged commit, so the two
+# branches differ only in how many commits they have. Run it on main with a clean working tree.
+# It first fetches main and release from origin and refuses when main lacks commits of
+# origin/main, when the local release and origin/release have diverged, when release has a
+# commit that main lacks (a commit of its own, or a merge — the releases up to v0.3.7 were
+# merges of main into release), or when release is checked out in another worktree. The branch
+# moves without checking release out: the working tree stays on main. When a step fails,
+# everything the run did is undone (and nothing is pushed).
 #
 # Usage: scripts/release.sh <X.Y.Z[-pre] | major | minor | patch> [--push] [--yes] [--dry-run]
 #   X.Y.Z[-pre]  the new version; a suffix (0.2.0-rc.1) only marks the tag as a pre-release
@@ -33,8 +33,8 @@
 # Updated files: CMakeLists.txt (project VERSION — the app, the Android versionName and
 # versionCode = major*1000000 + minor*1000 + patch, so minor and patch stay below 1000) and
 # nix/package.nix (`version = "...";`). Releasing the version that is already recorded (a
-# further pre-release, or the final release after its pre-releases) makes no version commit: it
-# merges main when main has anything release lacks, and otherwise tags release's last merge.
+# further pre-release, or the final release after its pre-releases) makes no version commit:
+# release moves to main's last commit (when it is not there already) and the tag goes on that.
 set -euo pipefail
 
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -166,7 +166,7 @@ if [[ -n $origin_main && $origin_main != "$main_head" ]]; then
   fi
 fi
 
-# The release branch the merge goes onto: the local one, created from origin/release when there
+# The release branch that moves to main: the local one, created from origin/release when there
 # is none, fast-forwarded to origin/release when that moved on.
 local_release=$(known refs/heads/release)
 if [[ -n $origin_release ]] && ! git cat-file -e "$origin_release^{commit}" 2>/dev/null; then
@@ -182,10 +182,13 @@ if [[ -n $origin_release && $origin_release != "$local_release" ]]; then
     release_head=$origin_release ff_release=1
     release_note="the local release is fast-forwarded to origin/release ($(short "$origin_release"))"
   elif git merge-base --is-ancestor "$origin_release" "$local_release"; then
-    warn "the local release is $(commits "$(git rev-list --count "$origin_release..$local_release")") ahead of origin/release (not pushed yet): pushing sends them along"
-    # An earlier release made without --push: its tag is not part of this run's push.
-    unpushed=$(git tag -l 'v[0-9]*' --merged "$local_release" --no-merged "$origin_release" | paste -sd ' ' -)
-    [[ -z $unpushed ]] || warn "they carry the tags $unpushed, which this run does not push (git push origin $unpushed)"
+    # An earlier release made without --push (a release with commits of its own is refused below).
+    if git merge-base --is-ancestor "$local_release" "$main_head"; then
+      warn "the local release is $(commits "$(git rev-list --count "$origin_release..$local_release")") ahead of origin/release (not pushed yet): pushing sends them along"
+      # Its tag is not part of this run's push.
+      unpushed=$(git tag -l 'v[0-9]*' --merged "$local_release" --no-merged "$origin_release" | paste -sd ' ' -)
+      [[ -z $unpushed ]] || warn "they carry the tags $unpushed, which this run does not push (git push origin $unpushed)"
+    fi
   else
     refuse "the local release and origin/release have diverged (see git log --graph release origin/release; when the local one is wrong: git branch -f release origin/release)"
   fi
@@ -193,35 +196,35 @@ fi
 [[ -n $release_head ]] ||
   die "there is no release branch, neither here nor on origin (create it once at the last release: git branch release v<version> && git push origin release)"
 
-# The rule: release holds only merges of main, so that every release is exactly a state of main. A
-# commit of release's own would ship without ever being on main (nor in what GitHub Pages and the
-# CI build from it), and later merges could conflict with it.
-rule="The release branch holds only merges of main: every commit goes on main."
-stray=$(git rev-list --count --no-merges "$main_head..$release_head")
-if ((stray)); then
+# The rule: release has nothing but commits of main (it is main or an ancestor of main), so that
+# every release is exactly a commit of main and releasing only moves release forward. A commit of
+# release's own, or a merge, would ship without ever being on main (nor in what GitHub Pages and
+# the CI build from it). When main itself lacks commits of origin/main that release has (another
+# machine released), that is refused above: git pull --ff-only, not a reset of release.
+rule="The release branch has nothing but commits of main: main or an ancestor of main, which a release moves forward."
+if ! git merge-base --is-ancestor "$release_head" "$main_head" &&
+  ! { [[ -n $origin_main ]] && git merge-base --is-ancestor "$release_head" "$origin_main" 2>/dev/null; }; then
+  ahead=$(git rev-list --count "$main_head..$release_head")
   more=''
-  ((stray <= 10)) || more=$'\n'"  … and $((stray - 10)) more"
-  refuse "release has commits that main lacks and that are not merges (git rev-list --no-merges main..release must be empty):
-$(git log --no-merges --format='  %h %s' -n 10 "$main_head..$release_head")$more
-$rule Bring them to main first (on main: git merge release), then release."
-elif ! base=$(git merge-base "$main_head" "$release_head"); then
-  refuse "main and release have no commit in common"
-elif ! git diff --quiet "$base" "$release_head"; then
-  refuse "release has changes of its own: it differs from $(short "$base"), the commit of main it merged last, in
-$(git diff --name-only "$base" "$release_head" | head -n 10 | sed 's/^/  /')
-$rule Bring the changes to main first (on main: git merge release), then release."
-elif last_release=$(git describe --tags --abbrev=0 --first-parent --match 'v[0-9]*' "$release_head" 2>/dev/null) &&
-  ff_commits=$(git rev-list --count --first-parent --no-merges "$last_release..$release_head") && ((ff_commits)); then
-  # Main's own commits on release's line: release was fast-forwarded to main (`git merge main`
-  # on release while it had nothing main lacks, or a push of main to release). Main has them,
-  # so the checks above pass, but release would no longer hold only merges.
-  refuse "release was fast-forwarded to main: since $last_release its first-parent line has $(commits "$ff_commits") of main instead of merges
-$rule Put release back at $last_release first (git branch -f release $last_release; on origin too when it is there: git push --force-with-lease origin $last_release^{commit}:refs/heads/release), then release."
+  ((ahead <= 10)) || more=$'\n'"  … and $((ahead - 10)) more"
+  if base=$(git merge-base "$main_head" "$release_head"); then
+    # The last commit of main that release has: the last release's commit (main's "Release v…",
+    # also when release still is a merge of it).
+    fix="Put release back at $(git log -1 --format='%h "%s"' "$base"), the last commit of main it has: git branch -f release $(short "$base")"
+    if [[ -n $origin_release ]] && ! git merge-base --is-ancestor "$origin_release" "$main_head" 2>/dev/null; then
+      fix+=" (on origin too: git push --force-with-lease origin $(short "$base"):refs/heads/release)"
+    fi
+  else
+    fix="Main and release have no commit in common: put release at the commit of main of the last release (git branch -f release <commit>)"
+  fi
+  refuse "release has $(commits "$ahead") that main lacks (git rev-list main..release must be empty):
+$(git log --format='  %h %s' -n 10 "$main_head..$release_head")$more
+$rule $fix. A change among them that main needs goes on main first (git cherry-pick <commit> on main); then release."
 fi
 
 # A checkout of release elsewhere (another worktree) would be left behind when the branch moves:
-# its files and index would show the reverse of the merge as changes of its own. This checkout
-# does not count: a real run has main checked out here (a dry run may be on release).
+# its files and index would show the reverse of the fast-forward as changes of its own. This
+# checkout does not count: a real run has main checked out here (a dry run may be on release).
 release_checkout=$(git worktree list --porcelain | awk -v here="$(git rev-parse --show-toplevel)" '
   /^worktree / { path = substr($0, 10) }
   $0 == "branch refs/heads/release" && path != here && !found { print path; found = 1 }')
@@ -243,10 +246,11 @@ case $bump in
     ;;
 esac
 
-# The notes are published as the release's description: unchanged ones repeat the last release's.
-# Release tags sit on release's merges, which main does not contain: look for them from release.
-# Only the news count: the "Nowości w …" section without its "Z wersji …" summary line, so that
-# editing the summary alone does not hide unchanged news (the whole file when it has no section).
+# The notes are published as the release's description: unchanged ones repeat the last release's,
+# which are those of release's commit (named by its tag; the tags v0.3.6 and v0.3.7 sit on merges
+# of main, not on main's "Release v0.3.7" where release starts). Only the news count: the
+# "Nowości w …" section without its "Z wersji …" summary line, so that editing the summary alone
+# does not hide unchanged news (the whole file when it has no section).
 notes=.github/release-notes.md
 news_of() {
   git show "$1:$notes" 2>/dev/null | awk '
@@ -256,8 +260,9 @@ news_of() {
     { all = all $0 "\n" }
     END { printf "%s", seen ? news : all }'
 }
-if last=$(git describe --tags --abbrev=0 "$release_head" 2>/dev/null) &&
-  [[ $(news_of "$last") == "$(news_of "$main_head")" ]]; then
+if [[ $(news_of "$release_head") == "$(news_of "$main_head")" ]]; then
+  last=$(git describe --tags --exact-match --match 'v[0-9]*' "$release_head" 2>/dev/null) ||
+    last=$(git log -1 --format='%h "%s"' "$release_head")
   warn "$notes has not changed since $last (its news; commit \"Update release notes for $tag\" on main first)"
 fi
 # The documentation notebook's list of changes has a section "## X.Y.Z — <date>" per release (a
@@ -272,14 +277,14 @@ files=()
 if [[ $release != "$current" || $nix_current != "$release" ]]; then
   files=("$cmake_file" "$nix_file")
 fi
-# Without a version commit main may bring nothing new: then the release is release's last commit
-# (e.g. the final release of what the last pre-release merged), which only gets the tag.
-merge=1
-if ((${#files[@]} == 0)) && git merge-base --is-ancestor "$main_head" "$release_head"; then merge=0; fi
-if [[ -n $release_checkout ]] && ((merge || ff_release)); then
+# Release moves to main's head (the version commit, or main as it is). Without a version commit
+# main may bring nothing new: then release is there already (e.g. the final release of what the
+# last pre-release had), and its commit only gets the tag.
+move=1
+if ((${#files[@]} == 0)) && [[ $release_head == "$main_head" ]]; then move=0; fi
+if [[ -n $release_checkout ]] && ((move || ff_release)); then
   refuse "release is checked out in $release_checkout: moving the branch would leave that checkout behind (switch it to another branch, or remove it: git worktree remove)"
 fi
-message="Merge main into release for $tag"
 push_cmd=(git push --atomic origin main release "refs/tags/$tag")
 
 echo "Brulion $current -> $new (tag $tag, from $from)"
@@ -289,10 +294,16 @@ else
   echo "  main:    $cmake_file already has $release: no version commit"
 fi
 [[ -z $release_note ]] || echo "  release: $release_note"
-if ((merge)); then
-  echo "  release: merges main onto $(short "$release_head") (\"$message\") and tags the merge $tag"
+forward=$(git rev-list --count "$release_head..$main_head" 2>/dev/null || echo 0)
+if ((${#files[@]})); then
+  forward=$((forward + 1)) head_of_main="\"Release $tag\""
 else
-  echo "  release: has everything on main already: tags its last commit $(git log -1 --format='%h "%s"' "$release_head") $tag"
+  head_of_main=$(git log -1 --format='%h "%s"' "$main_head")
+fi
+if ((move)); then
+  echo "  release: fast-forwards from $(short "$release_head") to main's $head_of_main ($(commits "$forward") of main) and tags it $tag"
+else
+  echo "  release: is at main's $head_of_main already: tags it $tag"
 fi
 if ((push)); then echo "  push:    ${push_cmd[*]}"; fi
 if ((dry)); then
@@ -370,16 +381,15 @@ if ((${#files[@]})); then
   git commit -q -m "Release $tag" -- "${files[@]}"
 fi
 
-target=$release_head
-if ((merge)); then
-  # `git merge --no-ff main` on release without checking it out (no file on disk changes, so
-  # nothing gets rebuilt): release carries nothing main lacks (checked above), so the merge's
-  # tree is main's.
-  step="merging main into release"
-  main_new=$(git rev-parse HEAD)
-  target=$(git commit-tree -p "$release_head" -p "$main_new" -m "$message" "$main_new^{tree}")
+# The release is main's head: the tag goes there, on main and release alike.
+target=$(git rev-parse HEAD)
+if ((move)); then
+  # `git merge --ff-only main` on release without checking it out (no file on disk changes, so
+  # nothing gets rebuilt): release is an ancestor of main (checked above). The old value makes
+  # the update fail when release moved since.
+  step="fast-forwarding release to main"
   release_moved=1
-  git update-ref -m "release.sh: $message" refs/heads/release "$target" "$release_head"
+  git update-ref -m "release.sh: fast-forward to main for $tag" refs/heads/release "$target" "$release_head"
 fi
 
 step="tagging $(short "$target") $tag"
@@ -392,12 +402,12 @@ if ((push)); then
 fi
 finished=1
 
-echo "Released $tag: release $(git log -1 --format='%h "%s"' "$target"), main $(git log -1 --format='%h "%s"' HEAD)."
+echo "Released $tag: main and release at $(git log -1 --format='%h "%s"' "$target")."
 if ((push)); then
   echo "Pushed main, release and $tag to origin: release.yml builds and publishes the release."
 else
   undo_cmd="git tag -d $tag"
-  if ((merge)); then undo_cmd+=" && git branch -f release $(short "$release_head")"; fi
+  if ((move)); then undo_cmd+=" && git branch -f release $(short "$release_head")"; fi
   if ((${#files[@]})); then undo_cmd+=" && git reset --keep $(short "$orig_main")"; fi
   echo "Publish it with:  ${push_cmd[*]}"
   echo "Undo it (before pushing) with:  $undo_cmd"
