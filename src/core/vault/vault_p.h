@@ -148,6 +148,7 @@ public:
     QByteArray readDisk(const VaultPath &path, bool *ok) const;
     QByteArray readFile(const VaultPath &path, bool asText, bool *ok);
     void snapshotCached(const VaultPath &path, ChangeSource reason);
+    void snapshotCached(const VaultPath &path, const QString &reason);
     bool usesBom(const VaultPath &path) const;
 
     // --- writing (vault.cpp)
@@ -241,6 +242,7 @@ public:
     bool isOpen = false;
     QString error;
     std::function<QDateTime()> clock;
+    QString historyReason; ///< Vault::setHistoryReason(): reason of own writes' snapshots ("" = source)
     std::function<QString(const QString &)> storageProbe; ///< see Vault::setStorageProbe()
 
     // Known entries. Every tracked ancestor of a known file is a known folder.

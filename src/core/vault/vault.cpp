@@ -701,13 +701,18 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok)
 
 void VaultPrivate::snapshotCached(const VaultPath &path, ChangeSource reason)
 {
+    snapshotCached(path, changeSourceName(reason));
+}
+
+void VaultPrivate::snapshotCached(const VaultPath &path, const QString &reason)
+{
     if (!history)
         return;
     const std::optional<QByteArray> bytes = contents.get(path);
     if (!bytes)
         return;
     // The bytes as they were: a BOM, CRLF or a legacy encoding stays recoverable.
-    if (!history->snapshotBytes(path, *bytes, changeSourceName(reason)))
+    if (!history->snapshotBytes(path, *bytes, reason))
         qCWarning(lcVault).noquote() << "History snapshot failed:" << history->errorString();
 }
 
@@ -821,7 +826,7 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     if (tracked && files.contains(path)) {
         if (hashes.value(path) == text::fnv1a64Hex(data))
             return true; // unchanged: no write, no change
-        snapshotCached(path, source);
+        snapshotCached(path, historyReason.isEmpty() ? changeSourceName(source) : historyReason);
     }
     const bool existed = tracked ? files.contains(path) : disk.has_value();
     if (!ensureDirs(paths::dirname(path), changes))
@@ -1116,6 +1121,42 @@ bool Vault::writeBinary(const VaultPath &path, const QByteArray &data, ChangeSou
     return d->write(paths::normalize(path), data, source, false);
 }
 
+WriteOutcome Vault::writeTextIfUnchanged(const VaultPath &rawPath, const QString &content, const QString &expected,
+                                         ChangeSource source)
+{
+    if (!d->requireOpen() || !d->requireStorage())
+        return WriteOutcome::Failed;
+    const VaultPath path = paths::normalize(rawPath);
+    if (path.isEmpty()) {
+        d->fail(tr("Cannot write: empty path"));
+        return WriteOutcome::Failed;
+    }
+    d->resolveSpelling(path);
+    // What the file holds now — on disk, not what the vault remembers: another program may have
+    // written it a moment ago, before its change reached the vault.
+    const QFileInfo info(d->absPath(path));
+    if (info.isFile()) {
+        bool ok = false;
+        const QByteArray bytes = d->readDisk(path, &ok);
+        if (!ok) {
+            d->fail(tr("Cannot read %1").arg(path));
+            return WriteOutcome::Failed;
+        }
+        if (vaultutil::decodeUtf8(bytes) != expected) {
+            // Take the other program's change in now (External, its predecessor kept in
+            // History), so the caller sees it, instead of overwriting it.
+            if (vaultutil::isTracked(path)) {
+                if (const auto hash = d->hashes.constFind(path);
+                    hash != d->hashes.cend() && *hash != text::fnv1a64Hex(bytes))
+                    d->staleContent.insert(path); // other content behind an unchanged stat
+                d->finish(d->reconcile(ScanScope{{}, {}, {path}}, ChangeSource::External));
+            }
+            return WriteOutcome::Changed;
+        }
+    }
+    return d->write(path, content.toUtf8(), source, true) ? WriteOutcome::Written : WriteOutcome::Failed;
+}
+
 VaultPath Vault::create(const VaultPath &path, const QString &content, ChangeSource source)
 {
     return d->create(path, content.toUtf8(), source, true);
@@ -1149,6 +1190,11 @@ History *Vault::history() const
 LocalStore *Vault::store() const
 {
     return d->store;
+}
+
+void Vault::setHistoryReason(const QString &reason)
+{
+    d->historyReason = reason;
 }
 
 void Vault::setClock(std::function<QDateTime()> clock)
