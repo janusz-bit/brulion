@@ -10,10 +10,11 @@
 //   BENCH_OUT        JSON-lines output (default stderr)
 //   BENCH_T0         CLOCK_MONOTONIC ns at launch (the runner sets it just before exec); times
 //                    in the output are ms since then (default: the library's load)
-//   BENCH_SCENARIO   startup | open-page | typing | search | switcher | views | journal-scroll |
-//                    switch-pages | idle | idle-edit | workload (see buildScenario())
-//   BENCH_PAGE       page path for open-page / typing / idle-edit ("Bench/Konspekt 5000.md")
-//   BENCH_ROW        row to edit (typing; default 10)
+//   BENCH_SCENARIO   startup | open-page | typing | select-copy | search | switcher | views |
+//                    journal-scroll | switch-pages | idle | idle-edit | workload (see buildScenario())
+//   BENCH_PAGE       page path for open-page / typing / select-copy / idle-edit
+//                    ("Bench/Konspekt 5000.md")
+//   BENCH_ROW        row to edit (typing, select-copy; default 10)
 //   BENCH_PAGES      file with one page path per line (switch-pages, workload)
 //   BENCH_IDLE_MS    idle duration (default 30000)
 //   BENCH_TIMEOUT_MS whole-run watchdog (default 240000): exit code 3
@@ -34,6 +35,7 @@
 //   * memory (VmRSS, VmHWM, RssAnon, malloc in-use) and CPU (getrusage) at marks;
 //   * model signals of a watched QAbstractItemModel (search results).
 #include <QAbstractItemModel>
+#include <QClipboard>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -784,6 +786,35 @@ private:
         action(u"mem"_s, [this] { markMem(u"typing_end"_s); });
     }
 
+    /// Select every block of the page and copy it (docs/UI.md "Selecting and copying"), three
+    /// times: Ctrl+A (the block's text), Ctrl+A (every block: PageController::selectAll()),
+    /// Ctrl+C (copySelection(): the Markdown, its HTML, the clipboard), Escape, editing again.
+    void selectCopySteps()
+    {
+        for (int round = 0; round < 3; ++round) {
+            startEditing(m_page, m_row);
+            keyStep(Qt::Key_A, Qt::ControlModifier, u"select-text"_s, 400);
+            keyStep(Qt::Key_A, Qt::ControlModifier, u"select-blocks"_s, 800);
+            action(u"selected"_s, [this] {
+                QObject *ctl = nullptr;
+                pageEditor(m_page, &ctl);
+                emitJson({{u"ev"_s, u"note"_s},
+                          {u"what"_s, u"selection"_s},
+                          {u"count"_s, ctl ? ctl->property("selectionCount").toInt() : -1}});
+            });
+            keyStep(Qt::Key_C, Qt::ControlModifier, u"copy"_s, 1200);
+            action(u"copied"_s, [this] {
+                const QClipboard *clipboard = QGuiApplication::clipboard();
+                emitJson({{u"ev"_s, u"note"_s},
+                          {u"what"_s, u"clipboard"_s},
+                          {u"chars"_s, clipboard ? int(clipboard->text().size()) : -1}});
+            });
+            keyStep(Qt::Key_Escape, Qt::NoModifier, u"escape"_s, 600);
+        }
+        waitSettled(u"select_settled"_s, 1000, 30000);
+        action(u"mem"_s, [this] { markMem(u"select_end"_s); });
+    }
+
     void watchListModel(QQuickItem *root)
     {
         QQuickItem *list = largestList(root, true);
@@ -1019,6 +1050,9 @@ private:
         } else if (s == u"typing") {
             openPageSteps(m_page, u"1"_s);
             typingSteps();
+        } else if (s == u"select-copy") {
+            openPageSteps(m_page, u"1"_s);
+            selectCopySteps();
         } else if (s == u"search") {
             searchSteps();
         } else if (s == u"switcher") {

@@ -133,6 +133,7 @@ bool Workspace::open(const QString &rootPath, const QString &deviceStatePath, QS
     connect(m_vault.get(), &Vault::changed, this, &Workspace::onVaultChanged);
     connect(m_vault.get(), &Vault::configChanged, this, [this] {
         m_index->setConfig(m_vault->config());
+        m_impacts = ImpactCache(); // the settings a move rebases are the new ones
         Q_EMIT configChanged();
     });
     connect(m_index.get(), &VaultIndex::changed, this, &EditorHost::indexChanged);

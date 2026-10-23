@@ -1274,6 +1274,12 @@ private Q_SLOTS:
         QVERIFY(!ready.first().at(2).toMap().value(u"ok"_s).toBool());
         QCOMPARE(ready.first().at(2).toMap().value(u"error"_s).toString(), u"A folder cannot be moved into itself."_s);
 
+        // New settings: the special folders that follow are the new ones.
+        QVERIFY(ws->moveImpact(u"Projekty"_s, u"Archiwum"_s).value(u"specials"_s).toStringList().isEmpty());
+        QVERIFY(ws->setConfig({{u"newPagesFolder"_s, u"Projekty"_s}}));
+        QCOMPARE(ws->moveImpact(u"Projekty"_s, u"Archiwum"_s).value(u"specials"_s).toStringList(),
+                 (QStringList{u"newPages"_s}));
+
         // A note saved since: planned anew (one more query names the folder's page).
         QVERIFY(ws->write(u"Nowa.md"_s, u"```query\npath:Projekty/Łąka\n```\n"_s));
         ready.clear();

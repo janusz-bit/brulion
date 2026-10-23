@@ -11,7 +11,7 @@ the `pageEditor` / `pageController` objects.
 
 | File | What |
 |---|---|
-| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `search`, `switcher`, `views`, `journal-scroll`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
+| `probe/benchprobe.cpp` | the probe (scenarios: `startup`, `open-page`, `typing`, `select-copy`, `search`, `switcher`, `views`, `journal-scroll`, `switch-pages`, `idle`, `idle-edit`, `workload`; see the header) |
 | `build-probe.sh <dir>` | builds `libbenchprobe.so` against the dev shell's Qt (a throw-away CMake project in `<dir>`) |
 | `make-bench-vault.py <dir>` | a deterministic synthetic notebook: 10 000 notes (≈ 650 journal days over two years + pages in 40 folders, links, tags, tasks with dates and reminders, a few queries), `Bench/Konspekt 5000.md` (5000-block outline), `Bench/Dokument 5000.md` (5000-block document), `Bench/Mała strona.md`; `<dir>.pages.txt` lists 50 pages for page switching |
 | `run-bench.py` | runs one scenario N times (fresh working copy of the vault per run; `--start first\|warm\|cold`; Xvfb or offscreen); writes one JSONL per run |
@@ -70,6 +70,10 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   handling, `*_frame` = key press → the frame that shows the change; `char` (a typed letter),
   `enter`, `tab`, `shift-tab`, `undo` (Ctrl+Z), `redo` (Ctrl+Shift+Z); `autosave_blocked` = GUI
   time blocked in the 1.7 s after a burst of typing (the 400 ms autosave and what follows it).
+* `select-copy` (three rounds on the page: editing row 10, Ctrl+A — the block's text —, Ctrl+A —
+  every block, `PageController::selectAll()` —, Ctrl+C — `copySelection()`: the Markdown, its
+  HTML and the clipboard —, Escape): `select-blocks_*` and `copy_*` handle / frame like the
+  keys of `typing`; `selected_blocks` and `copied_chars` show that it happened.
 * `search` / `switcher`: key echo (`*_frame`) and `*_results` (key → the frame after the result
   model changed; the search field debounces 180 ms), `*_query_blocked` = GUI time blocked by
   the query.

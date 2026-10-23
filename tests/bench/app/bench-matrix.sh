@@ -6,8 +6,8 @@
 #   VAULT_DEMO=vaults/demo VAULT_BIG=vaults/big10k OUT=results/laptop PLATFORM=xvfb RUNS=5 \
 #   LOCK=/path/laptop.lock tests/bench/app/bench-matrix.sh [groups…]
 #
-# Groups (default: all): startup-demo startup-big (startup-big-short) open-page typing search switcher views
-#   journal-scroll switch-pages idle workload
+# Groups (default: all): startup-demo startup-big (startup-big-short) open-page typing select-copy search
+#   switcher views journal-scroll switch-pages idle workload
 # Labels run alternately per group (base, cur, base, cur … when ROUNDS > 1) to spread drift.
 # RUN_TIMEOUT: seconds one app run may take (default 300; a scenario's own --timeout wins);
 # BENCH_TIMEOUT_MS (exported) is the probe's watchdog inside the app (default 240000).
@@ -22,7 +22,8 @@ work="${WORKDIR:-$(mktemp -d)}"
 mkdir -p "$OUT" "$work"
 read -r -a bins <<< "$BINS"
 if [[ $# -gt 0 ]]; then groups=("$@"); else
-  groups=(startup-demo startup-big open-page typing search switcher views journal-scroll switch-pages idle workload); fi
+  groups=(startup-demo startup-big open-page typing select-copy search switcher views journal-scroll switch-pages idle
+    workload); fi
 
 run() { # run <label> <bin> <run-bench args…>
   local label="$1" bin="$2"; shift 2
@@ -60,6 +61,11 @@ group() { # group <name> : runs every label for that group
             --env "BENCH_PAGE=Bench/Konspekt 5000.md"
           run "$label" "$bin" --vault "$VAULT_BIG" --scenario typing --name typing-document5000 --start first --runs "$n" \
             --env "BENCH_PAGE=Bench/Dokument 5000.md" ;;
+        select-copy)
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario select-copy --name select-copy-outline5000 --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Konspekt 5000.md"
+          run "$label" "$bin" --vault "$VAULT_BIG" --scenario select-copy --name select-copy-document5000 --start first \
+            --runs "$n" --env "BENCH_PAGE=Bench/Dokument 5000.md" ;;
         search) run "$label" "$bin" --vault "$VAULT_BIG" --scenario search --name search-10k --start first --runs "$n" ;;
         switcher) run "$label" "$bin" --vault "$VAULT_BIG" --scenario switcher --name switcher-10k --start first --runs "$n" ;;
         views) run "$label" "$bin" --vault "$VAULT_BIG" --scenario views --name views-10k --start first --runs "$n" ;;

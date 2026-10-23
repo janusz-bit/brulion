@@ -117,10 +117,12 @@ rename and move").
   and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
   list scrolls near its edges, the target following the rows that pass under the pointer) or a
   page (its folder), or onto the "Strony" header while it shows (the root), is moved there by
-  `Workspace.movePath`; the ghost names the target and, a moment later, what the move rewrites
-  (`Workspace.moveImpact`: "Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow)
-  or why it cannot move there; the target is outlined, Escape cancels. The toast has Undo (moving
-  it back).
+  `Workspace.movePath`; the ghost names the target and, a moment later (150 ms on one target),
+  what the move rewrites ("Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow) or
+  why it cannot move there — `Workspace.requestMoveImpact()`, planned a few milliseconds per frame
+  (`RelocationPlanner`) and dropped when the target changes, so a big folder never stalls the
+  drag; impacts are kept per target until the notebook changes. The target is outlined, Escape
+  cancels. The toast has Undo (moving it back).
 * **"Przenieś do…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
   (fuzzy: names, then paths), "Główny folder notatnika" first, the current folder shown but
   disabled, a folder's own subtree left out, and "Nowy folder „…”" for the name typed (created,
@@ -325,7 +327,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags and pages (a tag names a
   page: tags in use first, with the page they open, then pages no tag names yet with their
-  folder — a duplicate base name path-qualified —; a name that is no simple tag is written
+  folder — a duplicate base name by the shortest path that names it, `VaultIndex::suggestTags` /
+  `tagTarget` —; a name that is no simple tag is written
   `#[[Jan Kowalski]]`, `#[[C++]]`), `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";
   `@` also offers the journal link and a reminder).

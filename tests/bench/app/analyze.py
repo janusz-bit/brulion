@@ -19,7 +19,7 @@ import sys
 
 def load(path):
     run = {"marks": {}, "marklist": [], "sync": [], "swap": [], "stalls": [], "actions": [],
-           "model": [], "saved": [], "errors": [], "end": None}
+           "model": [], "saved": [], "errors": [], "notes": [], "end": None}
     with open(path) as f:
         for line in f:
             try:
@@ -40,6 +40,8 @@ def load(path):
                 run["model"], run["saved"] = o["model"], o["saved"]
             elif ev == "error":
                 run["errors"].append(o)
+            elif ev == "note":
+                run["notes"].append(o)
             elif ev == "end":
                 run["end"] = o
     return run
@@ -161,7 +163,8 @@ def m_open_page(run):
     return out
 
 
-KEY_KINDS = ("enter", "tab", "shift-tab", "undo", "redo", "backspace", "escape", "clear", "select-all")
+KEY_KINDS = ("enter", "tab", "shift-tab", "undo", "redo", "backspace", "escape", "clear", "select-all",
+             "select-text", "select-blocks", "copy")
 
 
 def key_metrics(run, actions, prefix):
@@ -219,6 +222,20 @@ def phase_bounds(run):
     for i, (name, t) in enumerate(phases):
         bounds[name] = (t, phases[i + 1][1] if i + 1 < len(phases) else end)
     return bounds
+
+
+def m_select_copy(run):
+    """select-copy: Ctrl+A twice (every block), Ctrl+C, Escape — key handling and key -> frame,
+    the blocks selected and the characters copied (a check that it really happened)."""
+    out = key_metrics(run, run["actions"], "")
+    sel = [n["count"] for n in run["notes"] if n.get("what") == "selection"]
+    clip = [n["chars"] for n in run["notes"] if n.get("what") == "clipboard"]
+    if sel:
+        out["selected_blocks"] = min(sel)
+    if clip:
+        out["copied_chars"] = min(clip)
+    out.update(mem(run, "select_end"))
+    return out
 
 
 def m_search(run):
@@ -390,7 +407,8 @@ def m_workload(run):
 
 
 SCENARIOS = {
-    "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "search": m_search,
+    "startup": m_startup, "open-page": m_open_page, "typing": m_typing, "select-copy": m_select_copy,
+    "search": m_search,
     "switcher": m_switcher, "views": m_views, "journal-scroll": m_journal_scroll,
     "switch-pages": m_switch_pages, "idle": m_idle, "idle-edit": m_idle, "workload": m_workload,
 }
