@@ -681,17 +681,33 @@ private Q_SLOTS:
         QVERIFY(!p.server.isDir(u"Notatki/Projekty"_s));
     }
 
+    void caseOnlyFolderRename_data()
+    {
+        QTest::addColumn<bool>("otherNotes");
+        QTest::addColumn<bool>("supportsMove");
+        QTest::newRow("MOVE") << true << true;
+        QTest::newRow("MOVE, every note in the folder") << false << true;
+        QTest::newRow("no MOVE, every note in the folder") << false << false;
+    }
+
     void caseOnlyFolderRename()
     {
-        Pair p(notesIn(u"projekty"_s, 12) + notesIn(u""_s, 2, 20));
+        QFETCH(bool, otherNotes);
+        QFETCH(bool, supportsMove);
+        FakeWebDavServer::Options options;
+        options.supportsMove = supportsMove;
+        Pair p(notesIn(u"projekty"_s, 12) + (otherNotes ? notesIn(u""_s, 2, 20) : QMap<QString, QByteArray>()),
+               options);
         p.settle();
         QVERIFY(p.a.vault->rename(u"projekty"_s, u"Projekty"_s));
         const SyncReport r = p.a.sync();
+        QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
         QVERIFY(!r.needsConfirmation);
-        QCOMPARE(r.foldersMoved, 1);
+        QCOMPARE(r.foldersMoved, supportsMove ? 1 : 0);
         QCOMPARE(p.server.files(kFolder), p.a.files());
         QVERIFY(!p.server.isDir(u"Notatki/projekty"_s));
         const SyncReport rb = p.b.sync();
+        QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
         QVERIFY(!rb.needsConfirmation);
         QCOMPARE(counts(rb), (Counts{.down = 12, .delL = 12}));
         QCOMPARE(p.b.files(), p.a.files());
@@ -711,6 +727,88 @@ private Q_SLOTS:
         QVERIFY(!rb.needsConfirmation);
         QCOMPARE(counts(rb), (Counts{.down = 12, .delL = 12}));
         QCOMPARE(p.b.files(), p.a.files());
+    }
+
+    void renameAndAConflictKeepBothVersions()
+    {
+        Pair p(notesIn(u"Projekty"_s, 2) + notesIn(u""_s, 2, 10));
+        p.settle();
+        const QString old = u"Projekty/"_s + noteName(0);
+        const QString text = p.a.read(old);
+        QVERIFY(p.b.write(old, QString(text).replace(u"Druga linia"_s, u"Druga linia z telefonu"_s)));
+        p.b.sync();
+        QVERIFY(p.a.vault->rename(u"Projekty"_s, u"Projekty 2"_s));
+        const QString moved = u"Projekty 2/"_s + noteName(0);
+        QVERIFY(p.a.write(moved, QString(text).replace(u"Druga linia"_s, u"Druga linia z laptopa"_s)));
+        const SyncReport r = p.a.sync();
+        QCOMPARE(r.foldersMoved, 1);
+        QCOMPARE(r.conflicts, QList<VaultPath>{moved});
+        QCOMPARE(r.conflictCopies.size(), 1);
+        // The local version at the new path, the server's next to it: nothing lost.
+        QVERIFY(p.a.read(moved).contains(u"z laptopa"_s));
+        QVERIFY(r.conflictCopies.first().startsWith(u"Projekty 2/"_s));
+        QVERIFY(p.a.read(r.conflictCopies.first()).contains(u"z telefonu"_s));
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+        p.b.sync();
+        QCOMPARE(p.b.files(), p.a.files());
+        // A folder holding a conflict copy moves with it.
+        QVERIFY(p.b.vault->rename(u"Projekty 2"_s, u"Archiwum/Projekty"_s));
+        p.server.clearLog();
+        QCOMPARE(p.b.sync().foldersMoved, 1);
+        QVERIFY(p.server.requests("PUT").isEmpty());
+        p.a.sync();
+        QCOMPARE(p.a.files(), p.b.files());
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+        QVERIFY(!isLocalDir(p.a, u"Projekty 2"_s));
+    }
+
+    void cancelledAfterTheMoveResumes()
+    {
+        Pair p(notesIn(u"Projekty"_s, 12) + notesIn(u""_s, 2, 20));
+        p.settle();
+        QVERIFY(p.a.vault->rename(u"Projekty"_s, u"Archiwum"_s));
+        QVERIFY(p.a.write(u"Archiwum/Nowa.md"_s, u"nowa\n"_s));
+        p.server.hooks.append([&](const HttpRequest &request, const QString &) -> std::optional<HttpResponse> {
+            if (request.method == "MOVE")
+                p.a.engine->cancel(); // the MOVE itself goes through
+            return std::nullopt;
+        });
+        const SyncReport r = p.a.sync();
+        QVERIFY(r.cancelled);
+        QCOMPARE(r.foldersMoved, 1);
+        p.server.hooks.clear();
+        QCOMPARE(counts(p.a.sync()), Counts{.up = 1});
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+        QCOMPARE(counts(p.b.sync()), (Counts{.down = 13, .delL = 12}));
+        QCOMPARE(p.b.files(), p.a.files());
+    }
+
+    void unsyncedContentOfAMovedFolderTravelsAlong()
+    {
+        Pair p(notesIn(u"Projekty"_s, 3) + notesIn(u""_s, 2, 10));
+        p.settle();
+        p.server.putText(u"Notatki/Projekty/.git/HEAD"_s, u"ref\n"_s);
+        QVERIFY(writeFileBehind(p.a.root, u"Projekty/.git/HEAD"_s, "ref\n"));
+        QVERIFY(p.a.vault->rename(u"Projekty"_s, u"Projekty 2"_s));
+        QCOMPARE(p.a.sync().foldersMoved, 1);
+        QCOMPARE(p.server.text(u"Notatki/Projekty 2/.git/HEAD"_s), std::optional<QString>(u"ref\n"_s));
+        QVERIFY(!p.server.isDir(u"Notatki/Projekty"_s));
+    }
+
+    void emptyFolderRenamed()
+    {
+        Pair p(notesIn(u""_s, 2));
+        QVERIFY(p.a.vault->createFolder(u"Pusty"_s));
+        p.settle();
+        QVERIFY(p.a.vault->rename(u"Pusty"_s, u"Pusty 2"_s));
+        const SyncReport r = p.a.sync();
+        QCOMPARE(folderChanges(r, SyncAction::DeleteFolderRemote), QStringList{u"Pusty"_s});
+        QCOMPARE(folderChanges(r, SyncAction::CreateFolderRemote), QStringList{u"Pusty 2"_s});
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(folderChanges(rb, SyncAction::DeleteFolderLocal), QStringList{u"Pusty"_s});
+        QCOMPARE(folderChanges(rb, SyncAction::CreateFolderLocal), QStringList{u"Pusty 2"_s});
+        QVERIFY(isLocalDir(p.b, u"Pusty 2"_s));
+        QVERIFY(!isLocalDir(p.b, u"Pusty"_s));
     }
 
     void moveAnsweredTooLateLosesNothing()

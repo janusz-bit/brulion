@@ -198,7 +198,12 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
     std::sort(files.begin(), files.end());
     const auto renamedTo = [&](const VaultPath &to) {
         if (taken.contains(to) || isWithin(to, from) || isWithin(from, to) || !isSyncablePath(to)
-            || !localFolders.contains(to) || known.contains(to) || m_states.contains(to)) {
+            || !localFolders.contains(to)) {
+            return false;
+        }
+        // A folder never synced: nothing known at or below it (its files are all new).
+        if (std::any_of(known.cbegin(), known.cend(), [&to](const VaultPath &k) { return isWithin(k, to); })
+            || std::any_of(m_states.keyBegin(), m_states.keyEnd(), [&to](const VaultPath &k) { return isWithin(k, to); })) {
             return false;
         }
         // Nothing on the server at or below the new name, in any letter case, but the old folder
