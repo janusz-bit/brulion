@@ -1426,7 +1426,8 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     const QString today = ws->journalPath(app->today(0));
     QObject *day = nullptr;
     std::function<QQuickItem *(QQuickItem *)> dayEditorIn = [&](QQuickItem *item) -> QQuickItem * {
-        const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>() : nullptr;
+        const auto *c =
+                item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>() : nullptr;
         if (c && c->property("path").toString() == today && c->property("loaded").toBool())
             return item;
         const QList<QQuickItem *> children = item->childItems();
@@ -1448,11 +1449,10 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
         waitFor([&] { return day->property("editingRow").toInt() == 0; });
         if (QClipboard *clipboard = QGuiApplication::clipboard())
             clipboard->clear();
-        check(app->commands()->run(u"page.copyLink"_s)
-                      && waitFor([&] {
-                             return QGuiApplication::clipboard()
-                                    && QGuiApplication::clipboard()->text() == u"[["_s + paths::pageTitle(today) + u"]]"_s;
-                         }),
+        check(app->commands()->run(u"page.copyLink"_s) && waitFor([&] {
+                  return QGuiApplication::clipboard()
+                         && QGuiApplication::clipboard()->text() == u"[["_s + paths::pageTitle(today) + u"]]"_s;
+              }),
               "in the journal the palette's “Copy link to page” copies the day's link by its file name");
         QMetaObject::invokeMethod(day, "stopEditing");
         bool saved = false;

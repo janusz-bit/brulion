@@ -385,7 +385,8 @@ private Q_SLOTS:
                     continue;
                 if (link.heading.isEmpty() && link.blockId.isEmpty())
                     continue;
-                const QString path = link.target.isEmpty() ? f.path : index.resolveLink(link.target, f.path).value_or(QString());
+                const QString path =
+                        link.target.isEmpty() ? f.path : index.resolveLink(link.target, f.path).value_or(QString());
                 const ParsedNote *target = index.note(path);
                 QVERIFY2(target, qPrintable(f.path + u": "_s + link.target));
                 if (!link.blockId.isEmpty()) {
