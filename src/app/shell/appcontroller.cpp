@@ -338,6 +338,14 @@ void AppController::setSidePanelAllowed(bool allowed)
     Q_EMIT sidePanelAllowedChanged();
 }
 
+void AppController::setSourceModeShown(bool shown)
+{
+    if (m_sourceModeShown == shown)
+        return;
+    m_sourceModeShown = shown;
+    Q_EMIT sourceModeShownChanged();
+}
+
 void AppController::clearSidePanelRoute()
 {
     if (m_sideRoute.isEmpty())

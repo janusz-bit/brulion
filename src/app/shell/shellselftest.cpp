@@ -2810,6 +2810,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             }
             sendKey(window, Qt::Key_E, Qt::ControlModifier);
             check(page->property("sourceMode").toBool(), "Ctrl+E in a block switches to Markdown source");
+            check(waitFor([&] { return app->sourceModeShown(); }),
+                  "Markdown source turns the palette's block link commands off (AppController.sourceModeShown)");
             // Phones: a finger dragged over the source scrolls it (a TextEdit that selects by
             // dragging kept the finger: the source never moved) and selects nothing; a tap still
             // puts the cursor where it lands.
@@ -2897,6 +2899,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             app->requestUiAction(u"toggleSourceMode"_s);
             check(waitFor([&] { return !page->property("sourceMode").toBool(); }),
                   "the \"Markdown source\" command switches back");
+            check(waitFor([&] { return !app->sourceModeShown(); }), "back to blocks: the block commands are on again");
             bool saved = false;
             QMetaObject::invokeMethod(page, "save", qReturnArg(saved));
             check(saved && app->workspace()->readFile(guide).contains(u"żeby edytować. Żółw ąę"_s), "the edit is saved to the file");

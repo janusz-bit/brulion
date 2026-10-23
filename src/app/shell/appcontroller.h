@@ -81,6 +81,9 @@ class AppController : public QObject {
     Q_PROPERTY(bool sidePanelVisible READ sidePanelVisible WRITE setSidePanelVisible NOTIFY sidePanelVisibleChanged FINAL)
     /// Set by the shell: a side panel fits (wide window). Otherwise newPane opens in the main view.
     Q_PROPERTY(bool sidePanelAllowed READ sidePanelAllowed WRITE setSidePanelAllowed NOTIFY sidePanelAllowedChanged FINAL)
+    /// Set by the shell: the main view's editor shows its page as Markdown source (source mode,
+    /// Ctrl+E). The palette's commands for blocks and headings are off then.
+    Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
 
     // ---- Platform -----------------------------------------------------------------------
     /// "linux", "android" or "wasm".
@@ -169,6 +172,8 @@ public:
     void setSidePanelVisible(bool visible);
     bool sidePanelAllowed() const { return m_sidePanelAllowed; }
     void setSidePanelAllowed(bool allowed);
+    bool sourceModeShown() const { return m_sourceModeShown; }
+    void setSourceModeShown(bool shown);
 
     Q_INVOKABLE void navigate(const QVariantMap &route, bool newPane = false);
     Q_INVOKABLE void replaceRoute(const QVariantMap &route);
@@ -323,6 +328,7 @@ Q_SIGNALS:
     void sidePanelRouteChanged();
     void sidePanelVisibleChanged();
     void sidePanelAllowedChanged();
+    void sourceModeShownChanged();
     void trayAvailableChanged();
     void quittingChanged();
     void pendingVaultPathChanged();
@@ -372,6 +378,7 @@ private:
     QVariantMap m_sideRoute;
     bool m_sidePanelVisible = false;
     bool m_sidePanelAllowed = true;
+    bool m_sourceModeShown = false;
     bool m_trayAvailable = false;
     bool m_startHidden = false;
     bool m_quitting = false;

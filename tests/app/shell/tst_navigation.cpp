@@ -1088,6 +1088,20 @@ private Q_SLOTS:
             return QVariantMap();
         };
         QCOMPARE(commandNamed(u"block.copyRef"_s).value(u"shortcut"_s).toString(), u"Ctrl+Shift+C"_s);
+        // Source mode: no blocks to point at — the block and heading commands are off (not a toast
+        // after choosing them), the page's link stays; back to blocks, they are on again.
+        QSignalSpy commandsChanged(model, &CommandModel::commandsChanged);
+        app->setSourceModeShown(true);
+        QCOMPARE(commandsChanged.size(), 1);
+        for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
+            QVERIFY(!commandNamed(command).value(u"enabled"_s).toBool());
+            QVERIFY(!model->run(command));
+        }
+        QVERIFY(commandNamed(u"page.copyLink"_s).value(u"enabled"_s).toBool());
+        QVERIFY(commandNamed(u"page.source"_s).value(u"enabled"_s).toBool()); // the way back
+        app->setSourceModeShown(false);
+        for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s})
+            QVERIFY(commandNamed(command).value(u"enabled"_s).toBool());
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
         QVERIFY(!model->run(u"page.mode"_s));

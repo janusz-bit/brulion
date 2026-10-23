@@ -77,7 +77,8 @@ components — no Material/Fusion look, so all targets look identical.
   do bloku", "Kopiuj link do nagłówka": the current block is the one being edited (a table whose
   cell is edited too; a cell left for the palette leaves its table selected), else the selected
   one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok lub umieść
-  w nim kursor"), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
+  w nim kursor"; in Markdown source the three block and heading commands are disabled — the
+  page's views report it as `sourceMode`, AppShell binds `AppController.sourceModeShown`), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
   line → today's journal; dates in the text become ⏰ / 📅), new page / folder, rename, move
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,

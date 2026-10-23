@@ -43,6 +43,7 @@ CommandModel::CommandModel(AppController *app) : QObject(nullptr), m_app(app)
     connect(app, &AppController::historyChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::syncStatusChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::sidePanelAllowedChanged, this, &CommandModel::commandsChanged);
+    connect(app, &AppController::sourceModeShownChanged, this, &CommandModel::commandsChanged);
     connect(app, &AppController::languageChanged, this, &CommandModel::commandsChanged);
     connect(app->workspace(), &Workspace::favoritesChanged, this, &CommandModel::commandsChanged);
 }
@@ -175,15 +176,17 @@ static bool runFolderCommand(AppController *app, const QString &id)
 /// The commands that copy a link (docs/SYNTAX.md §2 "Copied links") to the page, the current block
 /// (the one being edited, else the selected one) and the heading of its section. The editor of
 /// the page or day on screen copies them: uiAction "copyLink:<kind>" (page | blockRef | blockLink
-/// | heading, BlockEditor.copyCurrentLink()); Ctrl+Shift+C copies the block reference there.
-static QList<Command> linkCommands(bool inEditor)
+/// | heading, BlockEditor.copyCurrentLink()); Ctrl+Shift+C copies the block reference there. In
+/// source mode there are no blocks to point at (and no id can be added): only the page's link.
+static QList<Command> linkCommands(bool inEditor, bool sourceMode)
 {
+    const bool blocks = inEditor && !sourceMode;
     return {
             {u"page.copyLink"_s, CommandModel::tr("Copy link to page"), u"[[…]]"_s, u"link"_s, {}, inEditor},
             {u"block.copyRef"_s, CommandModel::tr("Copy block reference"), u"((…))"_s, u"link"_s, u"Ctrl+Shift+C"_s,
-             inEditor},
-            {u"block.copyLink"_s, CommandModel::tr("Copy link to block"), u"[[…#^…]]"_s, u"link"_s, {}, inEditor},
-            {u"heading.copyLink"_s, CommandModel::tr("Copy link to heading"), u"[[…#…]]"_s, u"heading"_s, {}, inEditor},
+             blocks},
+            {u"block.copyLink"_s, CommandModel::tr("Copy link to block"), u"[[…#^…]]"_s, u"link"_s, {}, blocks},
+            {u"heading.copyLink"_s, CommandModel::tr("Copy link to heading"), u"[[…#…]]"_s, u"heading"_s, {}, blocks},
     };
 }
 
@@ -223,7 +226,7 @@ static QList<Command> allCommands(const AppController *app)
     // Copying links, after the note mode: where it is available.
     const auto mode = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.mode"; });
     qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
-    for (const Command &c : linkCommands(inEditor))
+    for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))
         out.insert(at++, c);
     // "Zaznacz tekst": the page (the journal's day) as one read-only text to select any part of it
     // (docs/UI.md "Selecting and copying"; uiAction "selectText", the editor of the view opens it).

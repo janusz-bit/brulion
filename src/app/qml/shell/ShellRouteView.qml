@@ -13,7 +13,8 @@ import Brulion
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge,
 // on the keyboard: the bottom navigation hides),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
-// menu acts on it).
+// menu acts on it), `sourceMode` (PageView: the page is shown as Markdown source — the palette's
+// block commands are off).
 Item {
     id: root
 
@@ -37,6 +38,8 @@ Item {
     /// The view shows a picture attachment (not a note), and that picture's text instead.
     readonly property bool viewPicture: !!_view && _view.pictureRoute === true
     readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true
+    /// The view's editor shows the page's Markdown source (source mode).
+    readonly property bool viewSourceMode: !!_view && _view.sourceMode === true
 
     function componentFor(view) {
         switch (view) {

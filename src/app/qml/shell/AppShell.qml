@@ -306,6 +306,8 @@ FocusScope {
                 focus: true
                 route: AppController.currentRoute
             }
+            // The palette's block commands follow the main view's source mode (CommandModel).
+            Binding { target: AppController; property: "sourceModeShown"; value: routeView.viewSourceMode }
             ShellBottomNav {
                 id: bottomNav
                 objectName: "shellBottomNav"

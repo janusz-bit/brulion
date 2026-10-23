@@ -45,7 +45,7 @@ import Brulion
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (daily notes by their date), `sidePanel`, `editing` and `toolbarDocked`. `--editor-script <state>` drives the
+// (daily notes by their date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`. `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
@@ -64,6 +64,8 @@ FocusScope {
     /// The editor's touch toolbar is docked at the bottom (on the keyboard): the shell hides its
     /// bottom navigation.
     readonly property bool toolbarDocked: editor.toolbarVisible
+    /// The page is shown as Markdown source (the shell turns the palette's block commands off).
+    readonly property bool sourceMode: page.sourceMode && !root.pictureRoute
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     readonly property alias controller: page
     readonly property alias editor: editor
