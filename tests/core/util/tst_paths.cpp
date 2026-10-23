@@ -35,6 +35,29 @@ private Q_SLOTS:
         QCOMPARE(paths::normalize(path), normalized);
         QCOMPARE(paths::normalize(paths::normalize(path)), normalized);
     }
+    void stripMarkdownExtension_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("stripped");
+        QTest::addColumn<QString>("title");
+        QTest::newRow("md") << u"Projekty/Dom.md"_s << u"Projekty/Dom"_s << u"Dom"_s;
+        QTest::newRow("markdown, upper case") << u"Żółw.MARKDOWN"_s << u"Żółw"_s << u"Żółw"_s;
+        QTest::newRow("Md") << u"a/Łąka.Md"_s << u"a/Łąka"_s << u"Łąka"_s;
+        QTest::newRow("only the last one") << u"Notatka.md.md"_s << u"Notatka.md"_s << u"Notatka.md"_s;
+        QTest::newRow("another extension") << u"assets/plan.png"_s << u"assets/plan.png"_s << u"plan.png"_s;
+        QTest::newRow("md inside the name") << u"a.md/b.mdx"_s << u"a.md/b.mdx"_s << u"b.mdx"_s;
+        QTest::newRow("no dot") << u"Projekty/md"_s << u"Projekty/md"_s << u"md"_s;
+        QTest::newRow("only the extension") << u".md"_s << QString() << QString();
+        QTest::newRow("empty") << QString() << QString() << QString();
+    }
+    void stripMarkdownExtension()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, stripped);
+        QFETCH(QString, title);
+        QCOMPARE(paths::stripMarkdownExtension(path), stripped);
+        QCOMPARE(paths::pageTitle(path), title);
+    }
     void ignored()
     {
         QVERIFY(paths::isIgnored(QStringLiteral(".obsidian/app.json")));

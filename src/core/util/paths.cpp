@@ -84,9 +84,12 @@ bool isPicturePath(const VaultPath &path)
 
 QString stripMarkdownExtension(const VaultPath &path)
 {
-    static const QRegularExpression re(QStringLiteral("\\.(md|markdown)$"), QRegularExpression::CaseInsensitiveOption);
-    QString out = path;
-    return out.remove(re);
+    // (Called for every link and title: no regular expression.)
+    for (const QLatin1StringView ext : {QLatin1StringView(".md"), QLatin1StringView(".markdown")}) {
+        if (path.endsWith(ext, Qt::CaseInsensitive))
+            return path.chopped(ext.size());
+    }
+    return path;
 }
 
 QString pageTitle(const VaultPath &path)
