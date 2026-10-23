@@ -374,7 +374,7 @@ window_text_tap() { # <ERE>
     echo "    no \"$1\" on screen"
     return 1
   fi
-  adb shell input tap $xy
+  adb shell input tap "$xy"
 }
 ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost or the bottommost;
   # a dump taken while something moves can fail: tried again), then a pause (2 s)
@@ -388,7 +388,7 @@ ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost
     echo "    not on screen: $1"
     return 1
   fi
-  adb shell input tap $xy
+  adb shell input tap "$xy"
   sleep "${3:-2}"
 }
 # A word typed with a finger on the on-screen keyboard: its keys found by their names in
@@ -415,7 +415,7 @@ type_on_keyboard() { # <word>
       echo "    no key \"$ch\" on the keyboard"
       return 1
     fi
-    adb shell input tap $key
+    adb shell input tap "$key"
     sleep 0.3
   done
 }

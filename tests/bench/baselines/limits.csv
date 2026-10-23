@@ -25,7 +25,7 @@ scaling,bench_io,htmlToMarkdown,flat list # items,1.5,small,N10 (k 1.89 before)
 scaling,bench_io,htmlToMarkdown,nested list # items,1.5,small,N10 (k 1.70 before)
 scaling,bench_index,planRelocation,# notes folder rename,1.3,full,wave 4: move plans linear (a tenth of the notes renamed; k 1.05 now)
 scaling,bench_index,planRelocation,# notes page rename,1.3,full,wave 4: the most linked page renamed (k 1.05 now)
-scaling,bench_index,tagPageOpen,# notes after a save,1.3,full,wave 4: tags as pages on page open
+scaling,bench_index,tagPageOpen,# notes after a save,1.5,full,wave 4: tags as pages on page open (k 1.25-1.4: memory effects at 20000 notes; quadratic would be ~2)
 scaling,bench_markdown,selectAllCopy,# blocks markdown,1.3,full,wave 4: select all + copy (Markdown)
 scaling,bench_markdown,selectAllCopy,# blocks plain text,1.3,full,wave 4: select all + copy as text
 scaling,bench_io,clipboardHtml,# blocks,1.3,full,wave 4: the HTML flavour of a copy
