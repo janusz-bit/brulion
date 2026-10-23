@@ -258,6 +258,12 @@ public:
     /// NFC, not diacritic-insensitive. Notes only (never attachments); nullopt when no note has
     /// that name. `#Projekty/Dom` names Projekty/Dom.md, `#dom` the shortest Dom.md.
     std::optional<VaultPath> resolveTag(const QString &tag) const;
+    /// The tags in use that name `path` (resolveTag(); keys: lower-case NFC, no '#'), sorted —
+    /// what tagReferences() and tagsTo() follow, and what a rename of `path` rewrites
+    /// (markdown::renameTags()). For a page that does not exist (yet), the unresolved tags that
+    /// would name it once written ("praca/raporty" and "raporty" for praca/raporty.md). Empty
+    /// for an attachment.
+    QStringList tagsNaming(const VaultPath &path) const;
     /// The blocks and pages of other notes carrying a tag that names `path` (resolveTag()), one
     /// entry per block (a block tagged twice is listed once) and one per page tagged as a whole
     /// (blockIndex -1, listed before its blocks); journals first (newest first), then other notes

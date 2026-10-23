@@ -74,6 +74,11 @@ public:
     /// Resolve `target` written in `from` (see the file comment). An empty target (`[[#^id]]`)
     /// resolves to `from`. Returns an empty path when nothing matches.
     VaultPath resolve(const QString &target, const VaultPath &from = {}, TargetForm form = TargetForm::Raw) const;
+    /// resolve() of `target` written at the vault root, among notes only (a tag names a note,
+    /// docs/SYNTAX.md §3): exact path ± `.md` / `.markdown`, base name or path suffix (shortest
+    /// path, then alphabetical), aliases. An attachment of that name (a `TODO` file next to
+    /// Projekty/TODO.md) never hides a note. Empty when no note matches.
+    VaultPath resolveNote(const QString &target, TargetForm form = TargetForm::Raw) const;
 
 private:
     VaultPath resolveBare(const QString &target, const VaultPath &from) const;

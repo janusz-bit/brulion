@@ -113,10 +113,11 @@ frontmatter's `tags:`.
   wherever it is written: 1) exact vault path (± `.md`): `#Projekty/Dom` is `Projekty/Dom.md`,
   Logseq's namespace tag `#a/b` is `a/b.md`; 2) base name (also a path suffix: `#Stare/Dom`),
   shortest path, then alphabetical; 3) frontmatter / Logseq aliases (`#Janek` opens "Jan
-  Kowalski"). Notes only, never attachments. Case-insensitive and NFC, **not**
-  diacritic-insensitive (`#zolw` ≠ `Żółw`) — exactly like links. Unlike `[[dom]]` there is no
-  "relative to the linking file" step: with duplicate base names `#dom` names the shortest path
-  everywhere, `#Archiwum/Dom` the other one.
+  Kowalski"). Notes only: a tag never names an attachment, and a file that is no note does not
+  hide one (with a `TODO` file at the root `#todo` names `Projekty/TODO.md`). Case-insensitive
+  and NFC, **not** diacritic-insensitive (`#zolw` ≠ `Żółw`) — exactly like links. Unlike
+  `[[dom]]` there is no "relative to the linking file" step: with duplicate base names `#dom`
+  names the shortest path everywhere, `#Archiwum/Dom` the other one.
 * **Click** — a tag opens its page. A page that does not exist yet opens empty and is created by
   its first content, where a link's would be (`newPagesFolder`; `#praca/raporty` →
   `praca/raporty.md`, a folder; a date-like tag `#2026-10-13` opens that day's journal), named as

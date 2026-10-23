@@ -68,8 +68,6 @@ private:
 /// Access to VaultIndex internals for the module's own free functions (runQuery).
 struct IndexAccess {
     static const Entry *entry(const VaultIndex &index, const VaultPath &path);
-    /// The tag keys that name note `path` (resolveTag()); empty for a path that is no note.
-    static QStringList tagKeysNaming(const VaultIndex &index, const VaultPath &path);
 };
 
 /// Journals first (newest first), then other notes by path.

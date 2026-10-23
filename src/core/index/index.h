@@ -23,7 +23,8 @@
 //                           rename), unlinkedReferences(path) -> UnlinkedRef{path, line,
 //                           excerpt} (title/aliases as whole words, ≤ 200), missingPages()
 //                  tags as page links (SYNTAX §3): resolveTag(tag) -> optional<VaultPath> (like
-//                           [[tag]] at the vault root, notes only), tagReferences(path) ->
+//                           [[tag]] at the vault root, notes only), tagsNaming(path) (the tag
+//                           keys naming it; for a missing page those that would), tagReferences(path) ->
 //                           TagReference{path, blockIndex (-1 = whole page), tag} (blocks and
 //                           pages tagged with a tag naming `path`; self excluded; a missing page
 //                           by its name), tagsTo(path) (files to rewrite on rename)

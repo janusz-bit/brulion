@@ -344,9 +344,9 @@ const QSet<QString> &Runner::refTags(const QString &value)
     };
     if (isThisPage(folded(value.trimmed()))) {
         if (!m_options.currentPath.isEmpty())
-            add(IndexAccess::tagKeysNaming(m_index, m_options.currentPath));
+            add(m_index.tagsNaming(m_options.currentPath));
     } else if (const std::optional<VaultPath> target = resolveCached(value)) {
-        add(IndexAccess::tagKeysNaming(m_index, *target));
+        add(m_index.tagsNaming(*target));
     } else if (const QString name = tagName(cleanTarget(value)); !name.isEmpty()) {
         keys.insert(name.toLower()); // no page (yet): the tag of that name
     }

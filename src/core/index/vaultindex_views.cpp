@@ -115,11 +115,6 @@ QStringList pageLevelTags(const ParsedNote &note)
     return out;
 }
 
-QStringList IndexAccess::tagKeysNaming(const VaultIndex &index, const VaultPath &path)
-{
-    return index.d->tagKeysFor(path);
-}
-
 } // namespace index_detail
 
 VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
@@ -127,8 +122,9 @@ VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
     const QString name = tagName(tag);
     if (name.isEmpty())
         return {};
-    // Like [[name]] written at the vault root: one tag names one page wherever it is written.
-    const VaultPath hit = names.resolve(name, {}, TargetForm::Parsed);
+    // Like [[name]] written at the vault root, among notes: one tag names one page wherever it is
+    // written, and a file of that name that is no note never hides one.
+    const VaultPath hit = names.resolveNote(name, TargetForm::Parsed);
     return entry(hit) ? hit : VaultPath();
 }
 
@@ -152,7 +148,7 @@ const TagTargets &VaultIndex::Private::tagTargets()
 
 QStringList VaultIndex::Private::tagKeysFor(const VaultPath &path)
 {
-    if (path.isEmpty() || attachmentSet.contains(path))
+    if (path.isEmpty() || !paths::isMarkdown(path)) // tags name notes, never attachments
         return {};
     const TagTargets &targets = tagTargets();
     if (entry(path))
@@ -463,6 +459,11 @@ std::optional<VaultPath> VaultIndex::resolveTag(const QString &tag) const
     if (page.isEmpty())
         return std::nullopt;
     return page;
+}
+
+QStringList VaultIndex::tagsNaming(const VaultPath &path) const
+{
+    return d->tagKeysFor(path);
 }
 
 QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
