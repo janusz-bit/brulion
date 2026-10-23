@@ -1405,6 +1405,8 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             if (ws->exists(folder))
                 ws->deletePage(folder);
         }
+        if (ws->exists(u"Projekty/TCP IP.md"_s))
+            ws->renamePage(u"Projekty/TCP IP.md"_s, u"Remont mieszkania"_s);
         settle(200);
     };
 
@@ -1528,6 +1530,42 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
               "a click on a row still opens the page");
     }
     restore();
+
+    // ---- A "/" typed into the page header's title is part of the title: the page stays in its
+    //      folder ("TCP/IP" -> "Projekty/TCP IP.md"), the confirmation names the new title.
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, remont}, {u"open"_s, u"rename"_s}});
+    check(waitFor([window] {
+              const QQuickItem *f = window->activeFocusItem();
+              return f && f->inherits("QQuickTextInput")
+                     && f->property("selectedText").toString() == u"Remont mieszkania";
+          }),
+          "the page header's title edit starts with the title selected");
+    for (const QChar ch : u"TCP/IP"_s)
+        sendKey(window, 0, Qt::NoModifier, QString(ch));
+    sendKey(window, Qt::Key_Return);
+    // (Every page view has its dialog: the one that opened.)
+    QObject *confirm = nullptr;
+    waitFor([&] {
+        for (QObject *d : window->findChildren<QObject *>(u"pageRenameDialog"_s)) {
+            if (d->property("opened").toBool())
+                confirm = d;
+        }
+        return confirm != nullptr;
+    });
+    if (confirm)
+        std::fprintf(stderr, "selftest: title rename asks: %s -> %s, %d link(s), %d tag(s)\n",
+                     qPrintable(confirm->property("path").toString()),
+                     qPrintable(confirm->property("newName").toString()), confirm->property("links").toInt(),
+                     confirm->property("tags").toInt());
+    check(confirm && confirm->property("newName").toString() == u"TCP IP" && confirm->property("links").toInt() > 0,
+          "renaming a linked page asks first, naming the title it gets");
+    if (confirm && confirm->property("opened").toBool())
+        QMetaObject::invokeMethod(confirm, "tryAccept");
+    check(waitFor([&] { return ws->exists(u"Projekty/TCP IP.md"_s); }) && !ws->exists(u"TCP/IP.md"_s)
+                  && !ws->exists(remont),
+          "a “/” in the page header's title keeps the page in its folder");
+    restore();
+    check(ws->exists(remont), "the renamed page gets its name back");
     closeDrawer();
 
     // ---- All pages as a folder browser; the breadcrumb goes back.

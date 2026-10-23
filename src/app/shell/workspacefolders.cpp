@@ -44,10 +44,13 @@ bool hiddenName(const QString &segment)
 }
 
 /// A folder name typed in a rename that the vault would hide (a page's own name is sanitised
-/// instead), else "". A "/" moves: every segment before the last names a folder.
-QString hiddenTypedSegment(const QString &newName, bool isDir)
+/// instead), else "". With `slashMoves` a "/" moves: every segment before the last names a folder;
+/// without it the whole name is one (its "/" sanitised).
+QString hiddenTypedSegment(const QString &newName, bool isDir, bool slashMoves)
 {
-    const QStringList segments = QString(newName).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts);
+    QString unified = QString(newName).replace(u'\\', u'/');
+    const QStringList segments =
+            slashMoves ? unified.split(u'/', Qt::SkipEmptyParts) : QStringList{unified.replace(u'/', u' ')};
     for (qsizetype i = 0; i < segments.size(); ++i) {
         const QString segment = segments.at(i).trimmed();
         if ((isDir || i + 1 < segments.size()) && hiddenName(segment))
@@ -245,7 +248,7 @@ QString Workspace::spelledFolders(const QString &path) const
     return paths::join(folder, paths::basename(path));
 }
 
-QString Workspace::renamedPath(const QString &rawPath, const QString &newName, bool isDir) const
+QString Workspace::renamedPath(const QString &rawPath, const QString &newName, bool isDir, bool slashMoves) const
 {
     const QString path = paths::normalize(rawPath);
     if (path.isEmpty())
@@ -254,8 +257,12 @@ QString Workspace::renamedPath(const QString &rawPath, const QString &newName, b
     const QString ext = isDir ? QString() : (paths::extension(path).isEmpty() ? u".md"_s : paths::extension(path));
     // Typed with the extension ("Notatka.md"): one extension.
     const QString typed = note ? withoutMd(newName) : newName.trimmed();
+    // A title: its "/" is sanitised like the other characters a file name cannot have ("TCP/IP"
+    // -> "TCP IP"); in the Rename dialog it separates folders.
+    const bool moves = slashMoves && typed.contains(u'/');
     QStringList parts;
-    for (const QString &part : QString(typed).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts)) {
+    for (const QString &part :
+         moves ? QString(typed).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts) : QStringList{typed}) {
         if (!part.trimmed().isEmpty())
             parts.append(paths::sanitizeFileName(part.trimmed()));
     }
@@ -268,7 +275,7 @@ QString Workspace::renamedPath(const QString &rawPath, const QString &newName, b
     else if (note)
         name += ext;
     // "/" in the name: a path from the notebook root; else the item stays in its folder.
-    const QString folder = typed.contains(u'/') ? parts.join(u'/') : paths::dirname(path);
+    const QString folder = moves ? parts.join(u'/') : paths::dirname(path);
     return folder.isEmpty() ? name : folder + u'/' + name;
 }
 
@@ -381,13 +388,13 @@ QVariantMap Workspace::moveImpact(const QString &path, const QString &targetFold
     return relocationImpact(from, folder.isEmpty() ? name : folder + u'/' + name);
 }
 
-QVariantMap Workspace::renameImpact(const QString &path, const QString &newName, bool isDir)
+QVariantMap Workspace::renameImpact(const QString &path, const QString &newName, bool isDir, bool slashMoves)
 {
-    if (const QString hidden = hiddenTypedSegment(newName, isDir); !hidden.isEmpty())
+    if (const QString hidden = hiddenTypedSegment(newName, isDir, slashMoves); !hidden.isEmpty())
         return {{u"ok"_s, false},
                 {u"path"_s, QString()},
                 {u"error"_s, tr("A folder named “%1” would be hidden — choose another name.").arg(hidden)}};
-    const QString to = renamedPath(path, newName, isDir);
+    const QString to = renamedPath(path, newName, isDir, slashMoves);
     if (to.isEmpty())
         return {{u"ok"_s, false}, {u"path"_s, QString()}, {u"error"_s, tr("Enter a name.")}};
     return relocationImpact(path, to);
@@ -461,24 +468,24 @@ void Workspace::rebaseConfig(const QString &from, const QString &to)
     Q_EMIT noticeOccurred(tr("Notebook settings updated: %1").arg(said.join(u", "_s)));
 }
 
-QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
+QString Workspace::renamePage(const QString &rawPath, const QString &newTitle, bool slashMoves)
 {
     if (!m_vault)
         return {};
     const QString path = paths::normalize(rawPath);
     if (!m_vault->exists(path))
         return {};
-    if (const QString hidden = hiddenTypedSegment(newTitle, false); !hidden.isEmpty()) {
+    if (const QString hidden = hiddenTypedSegment(newTitle, false, slashMoves); !hidden.isEmpty()) {
         Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
         return {};
     }
-    const QString to = renamedPath(path, newTitle, false);
+    const QString to = renamedPath(path, newTitle, false, slashMoves);
     if (to.isEmpty())
         return {};
     return relocate(path, to);
 }
 
-QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
+QString Workspace::renameFolder(const QString &rawPath, const QString &newName, bool slashMoves)
 {
     if (!m_vault)
         return {};
@@ -486,11 +493,11 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
     if (path.isEmpty() || newName.trimmed().isEmpty())
         return {};
     // A name the vault would hide is refused (as for a new folder), before it is sanitised.
-    if (const QString hidden = hiddenTypedSegment(newName, true); !hidden.isEmpty()) {
+    if (const QString hidden = hiddenTypedSegment(newName, true, slashMoves); !hidden.isEmpty()) {
         Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
         return {};
     }
-    const QString to = renamedPath(path, newName, true);
+    const QString to = renamedPath(path, newName, true, slashMoves);
     if (to.isEmpty())
         return {};
     return relocate(path, to);

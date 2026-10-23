@@ -1005,8 +1005,10 @@ private Q_SLOTS:
     void renameKeepsTargets_data()
     {
         QTest::addColumn<QStringList>("files"); // "path=content"
-        QTest::addColumn<QString>(
-                "action"); // "page:<path>:<new title>", "folder:<path>:<name>", "move:<path>:<folder>"
+        // "page:<path>:<new name>" and "folder:<path>:<name>" (the Rename dialog: a "/" moves),
+        // "title:<path>:<new title>" (the page header's title edit: a "/" is part of the title),
+        // "move:<path>:<folder>".
+        QTest::addColumn<QString>("action");
         QTest::addColumn<QString>("newPath");
         QTest::addColumn<QStringList>("expected"); // "path=content" after
         QTest::newRow("rename next to a root page of that name")
@@ -1040,6 +1042,11 @@ private Q_SLOTS:
         QTest::newRow("slash moves the folder")
                 << QStringList{u"A/B/Dom.md=x"_s, u"Notatka.md=[[A/B/Dom]]"_s} << u"folder:A/B:Archiwum/B2"_s
                 << u"Archiwum/B2"_s << QStringList{u"Notatka.md=[[Archiwum/B2/Dom]]"_s};
+        QTest::newRow("slash in a title stays in the folder")
+                << QStringList{u"Projekty/Sieci.md=x"_s, u"Sieci.md=y"_s,
+                               u"Notatka.md=[[Projekty/Sieci]] i #Projekty/Sieci"_s}
+                << u"title:Projekty/Sieci.md:TCP/IP"_s << u"Projekty/TCP IP.md"_s
+                << QStringList{u"Notatka.md=[[Projekty/TCP IP]] i #[[Projekty/TCP IP]]"_s};
         QTest::newRow("moved page's relative links")
                 << QStringList{u"Projekty/B.md=x"_s, u"Xy/B.md=x"_s, u"Projekty/A.md=[[B]] [[#Nagłówek]]"_s}
                 << u"move:Projekty/A.md:Archiwum"_s << u"Archiwum/A.md"_s
@@ -1059,18 +1066,20 @@ private Q_SLOTS:
         QHash<QString, QString> map;
         for (const QString &f : std::as_const(files))
             map.insert(f.section(u'=', 0, 0), f.section(u'=', 1));
-        auto ws = open(map);
+        QString root;
+        auto ws = open(map, &root);
         const QString kind = action.section(u':', 0, 0);
         const QString path = action.section(u':', 1, 1);
         const QString arg = action.section(u':', 2);
+        const bool slashMoves = kind != u"title";
         // The impact is known before.
-        const QVariantMap impact =
-                kind == u"move" ? ws->moveImpact(path, arg) : ws->renameImpact(path, arg, kind == u"folder");
+        const QVariantMap impact = kind == u"move" ? ws->moveImpact(path, arg)
+                                                   : ws->renameImpact(path, arg, kind == u"folder", slashMoves);
         QVERIFY(impact.value(u"ok"_s).toBool());
         QCOMPARE(impact.value(u"path"_s).toString(), newPath);
-        const QString result = kind == u"page"     ? ws->renamePage(path, arg)
-                               : kind == u"folder" ? ws->renameFolder(path, arg)
-                                                   : ws->movePath(path, arg);
+        const QString result = kind == u"folder" ? ws->renameFolder(path, arg, slashMoves)
+                               : kind == u"move" ? ws->movePath(path, arg)
+                                                 : ws->renamePage(path, arg, slashMoves);
         QCOMPARE(result, newPath);
         QVERIFY(ws->exists(newPath));
         QVERIFY(!ws->exists(path));
@@ -1078,7 +1087,10 @@ private Q_SLOTS:
         for (const QString &e : std::as_const(expected)) {
             const QString file = e.section(u'=', 0, 0);
             const QString text = e.section(u'=', 1);
-            QCOMPARE(ws->readFile(file).prepend(text.startsWith(QChar(0xFEFF)) ? u"\uFEFF"_s : QString()), text);
+            // The bytes on disk: line endings and a BOM kept.
+            QFile disk(root + u'/' + file);
+            QVERIFY(disk.open(QIODevice::ReadOnly));
+            QCOMPARE(disk.readAll(), text.toUtf8()); // (QString::fromUtf8 would drop a BOM)
             ++changedNotes;
         }
         QCOMPARE(impact.value(u"notes"_s).toInt(), changedNotes);
@@ -1197,10 +1209,16 @@ private Q_SLOTS:
         QCOMPARE(files.size(), 1);
         QCOMPARE(files.first().first().toStringList(), (QStringList{u"Pusty"_s, u"Pełny"_s}));
         QVERIFY(ws->exists(u"Pełny/Głębszy"_s));
-        // A hidden name is refused.
+        // A hidden name is refused (in the Rename dialog a "/" moves it).
         QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
         QVERIFY(ws->renameFolder(u"Pełny"_s, u".ukryty"_s).isEmpty());
-        QVERIFY(ws->renameFolder(u"Pełny"_s, u"Ok/node_modules"_s).isEmpty());
+        QVERIFY(ws->renameFolder(u"Pełny"_s, u"Ok/node_modules"_s, true).isEmpty());
+        QCOMPARE(errors.size(), 2);
+        // Without it a "/" is part of the name.
+        QCOMPARE(ws->renameFolder(u"Pełny"_s, u"Ok/node_modules"_s), u"Ok node_modules"_s);
+        QCOMPARE(ws->renameImpact(u"Ok node_modules"_s, u"Raz/Dwa"_s, true).value(u"path"_s).toString(), u"Raz Dwa"_s);
+        QCOMPARE(ws->renameImpact(u"Ok node_modules"_s, u"Raz/Dwa"_s, true, true).value(u"path"_s).toString(),
+                 u"Raz/Dwa"_s);
         QCOMPARE(errors.size(), 2);
     }
 

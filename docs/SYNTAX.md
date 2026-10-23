@@ -34,11 +34,14 @@ This file is the single source of truth for parsers, renderers, importers and ex
   `node_modules`, …) — is refused ("Folder o nazwie „…” byłby ukryty"). Nothing is ever moved
   into an ignored folder.
 * **Moving and renaming** (pages, attachments, folders — "Przenieś do…", drag and drop, a `/` in
-  a new name is a path from the vault root): refused onto a name that exists (also in another
-  letter case) and into the item itself; every link and tag keeps its target (§2 "Rewriting on
-  rename and move"). Renaming or moving a special folder of `.brulion/config.json`
-  (`journalsFolder`, `templatesFolder`, `attachmentsFolder`, `newPagesFolder`), a folder holding
-  one, or the `journalTemplate` file updates those keys in the same operation.
+  a name typed in the Rename dialog is a path from the vault root; in a page title edited in place
+  it is sanitised like the other characters a file name cannot have, `TCP/IP` → `TCP IP.md`):
+  refused onto a name that exists (also in another letter case) and into the item itself, and a
+  folder name the vault would hide (also once sanitised: `logseq?`); every link and tag keeps its
+  target (§2 "Rewriting on rename and move"). Renaming or moving a special folder of
+  `.brulion/config.json` (`journalsFolder`, `templatesFolder`, `attachmentsFolder`,
+  `newPagesFolder`), a folder holding one, or the `journalTemplate` file updates those keys in the
+  same operation.
 * Device-local state (sync bookkeeping, merge bases, history snapshots, caches) is **never**
   stored inside the vault — it lives in the app data directory on the device (`QStandardPaths::AppDataLocation`). This keeps Syncthing /
   Nextcloud from syncing machine-specific data.

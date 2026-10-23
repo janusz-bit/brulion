@@ -249,13 +249,16 @@ public:
     /// (a leading '.', or one of the ignored folders: logseq, node_modules, …) is refused with an
     /// error. Returns the folder's path ("" on failure); an existing folder is fine.
     Q_INVOKABLE QString createFolder(const QString &path);
-    /// Rename a page and rewrite what names it in every file (links, tags: docs/SYNTAX.md §2,
-    /// §3; every link keeps its target, an ambiguous one gets the shortest path). A "/" in
-    /// `newTitle` moves the page: the path from the notebook root ("Archiwum/Dom"). Returns the new
-    /// path or "" (target exists, invalid name, I/O error).
-    Q_INVOKABLE QString renamePage(const QString &path, const QString &newTitle);
-    /// Rename a folder the same way (a "/" in `newName` moves it, from the notebook root).
-    Q_INVOKABLE QString renameFolder(const QString &path, const QString &newName);
+    /// Rename a page in its folder and rewrite what names it in every file (links, tags:
+    /// docs/SYNTAX.md §2, §3; every link keeps its target, an ambiguous one gets the shortest
+    /// path). `newTitle` is a title: a "/" in it is sanitised like any character a file name cannot
+    /// have ("TCP/IP" -> "TCP IP.md", the page header's title edit) — unless `slashMoves` (the
+    /// Rename dialog): then it moves the page, the path from the notebook root ("Archiwum/Dom").
+    /// Returns the new path or "" (target exists, invalid name, I/O error).
+    Q_INVOKABLE QString renamePage(const QString &path, const QString &newTitle, bool slashMoves = false);
+    /// Rename a folder the same way (with `slashMoves` a "/" in `newName` moves it, from the
+    /// notebook root).
+    Q_INVOKABLE QString renameFolder(const QString &path, const QString &newName, bool slashMoves = false);
     /// Move a page, an attachment or a folder into `targetFolder` ("" = the notebook root):
     /// every link and tag that named a moved file still names it (VaultIndex::planRelocation(),
     /// one history step per rewritten note); favourites, recent pages, fold state, history and
@@ -267,9 +270,10 @@ public:
     /// What movePath(path, targetFolder) would do: { ok, error (translated, when not ok), path (the
     /// new path), links, tags (rewritten), notes (rewritten files), special (see folderInfo) }.
     Q_INVOKABLE QVariantMap moveImpact(const QString &path, const QString &targetFolder);
-    /// The same for a rename (renamePage() / renameFolder() with `newName`, "/" moves): also
-    /// { path } — "" when the name is not usable.
-    Q_INVOKABLE QVariantMap renameImpact(const QString &path, const QString &newName, bool isDir);
+    /// The same for a rename (renamePage() / renameFolder() with `newName` and `slashMoves`):
+    /// { path } is "" when the name is not usable.
+    Q_INVOKABLE QVariantMap renameImpact(const QString &path, const QString &newName, bool isDir,
+                                         bool slashMoves = false);
     /// Tracked folders (not hidden or ignored ones) in Polish alphabetical order of their paths.
     Q_INVOKABLE QStringList folderPaths() const;
     /// { exists, pages (Markdown files inside, at any depth, without conflict copies),
@@ -426,8 +430,11 @@ private:
     QVariantMap queryItem(const brulion::QueryItem &item) const;
     /// Why `from` cannot be moved or renamed to `to` (translated), "" when it can.
     QString relocationError(const QString &from, const QString &to) const;
-    /// The path a rename gives `path` (`newName`, "/" = from the notebook root); "" when unusable.
-    QString renamedPath(const QString &path, const QString &newName, bool isDir) const;
+    /// The path a rename gives `path` (`newName` in its folder; with `slashMoves` a "/" makes it a
+    /// path from the notebook root); "" when unusable.
+    QString renamedPath(const QString &path, const QString &newName, bool isDir, bool slashMoves) const;
+    /// The settings of .brulion/config.json naming `path` or something in it: [{ special, path }].
+    QVariantList specialsWithin(const QString &path) const;
     /// `path` with its folders spelled as the vault spells them (case-insensitive storage).
     QString spelledFolders(const QString &path) const;
     /// The file moves of moving `from` (a file or a folder with everything in it) to `to`.

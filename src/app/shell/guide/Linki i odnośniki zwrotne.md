@@ -35,7 +35,7 @@ Osadzony fragment pokazuje bieżący tekst źródła; zmieniasz go u źródła.
 Żeby odwołać się do bloku, wpisz `((` i zacznij pisać jego treść — Brulion doda blokowi identyfikator, czyli końcówkę ` ^abc123`. Odwołanie `((abc123))` działa w całym notatniku, więc przeniesienie bloku na inną stronę niczego nie psuje.
 
 ## Zmiana nazwy i przenoszenie
-Zmiana nazwy strony (F2) aktualizuje linki do niej i tagi, które ją nazywają, w pozostałych notatkach. Tak samo przeniesienie strony, załącznika albo całego folderu („Przenieś do…”, przeciągnięcie w drzewie, ukośnik w nowej nazwie): każdy link i tag dalej prowadzi do tej samej strony, a okno przenoszenia mówi wcześniej, ile ich się zmieni.
+Zmiana nazwy strony (F2) aktualizuje linki do niej i tagi, które ją nazywają, w pozostałych notatkach. Tak samo przeniesienie strony, załącznika albo całego folderu („Przenieś do…”, przeciągnięcie w drzewie, ukośnik w nowej nazwie w oknie zmiany nazwy): każdy link i tag dalej prowadzi do tej samej strony, a okno przenoszenia (i podpowiedź przy przeciąganiu) mówi wcześniej, ile ich się zmieni.
 - Link po samej nazwie zostaje, dopóki wskazuje tę stronę: `[[Dom]]` po przeniesieniu jedynej strony „Dom” się nie zmienia.
 - Gdy po przeniesieniu nazwa wskazywałaby inną stronę (np. w notatniku jest drugi „Dom” o krótszej ścieżce), link dostaje najkrótszą jednoznaczną ścieżkę: `[[Projekty/Dom]]`. Tak samo tagi: `#dom` → `#Projekty/Dom`.
 - Linki ze ścieżką idą za stroną: `[[Projekty/Dom]]` → `[[Archiwum/Dom]]`; także obrazy i pliki z przenoszonego folderu: `![[Projekty/plan.png]]`.

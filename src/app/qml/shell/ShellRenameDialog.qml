@@ -5,14 +5,17 @@ import Brulion
 
 // ShellRenameDialog — rename a page or a folder. The links and tags that name the page (or a page
 // in the folder) are rewritten in every note so each keeps its target (docs/SYNTAX.md §2, §3); the
-// dialog says how many. A "/" in the name moves it — a path from the notebook root ("Archiwum/Dom")
-// —, with a live "Nowe miejsce: …" line and what the move rewrites (Workspace.renameImpact).
+// dialog says how many — exactly, for the name typed (Workspace.renameImpact: also the links to
+// other pages a new name would take over). A "/" in the name moves it — a path from the notebook
+// root ("Archiwum/Dom") —, with a live "Nowe miejsce: …" line. (Only here: the page header's
+// title edit keeps a "/" in the title.)
 BDialog {
     id: dialog
 
     property string path
     property bool isDir: false
-    /// PageTools.renameImpact() of the page: { notes, links, tags } — what any new name rewrites.
+    /// PageTools.renameImpact() of the page: { notes, links, tags } — the links and tags naming it,
+    /// which any new name rewrites (said before a name is typed).
     property var impact: ({})
     readonly property int changes: (impact.links || 0) + (impact.tags || 0)
     /// The name typed; a "/" in it moves the page or folder.
@@ -21,8 +24,8 @@ BDialog {
     readonly property bool moves: typed.indexOf("/") >= 0
     /// Workspace.renameImpact() of what is typed (exact; a moment after typing stops).
     property var live: ({})
-    /// The live impact applies: a move, or a folder renamed (its pages keep their bare links).
-    readonly property bool useLive: (moves || isDir) && typed !== "" && typed !== currentName && live.typed === typed
+    /// The live impact applies: a new name typed.
+    readonly property bool useLive: typed !== "" && typed !== currentName && live.typed === typed
 
     function openFor(itemPath, folder) {
         path = itemPath
@@ -37,7 +40,7 @@ BDialog {
             live = ({})
             return
         }
-        const result = Workspace.renameImpact(path, typed, isDir)
+        const result = Workspace.renameImpact(path, typed, isDir, true)
         result.typed = typed
         live = result
     }
@@ -77,13 +80,14 @@ BDialog {
     onOpened: nameField.selectAll()
     onAccepted: {
         const name = typed
-        // What the rename rewrites, counted now (not a moment ago).
-        const result = (moves || isDir) ? Workspace.renameImpact(dialog.path, name, dialog.isDir) : null
-        const renamed = dialog.isDir ? Workspace.renameFolder(dialog.path, name) : Workspace.renamePage(dialog.path, name)
+        // What the rename rewrites, counted now (not a moment ago); a "/" moves.
+        const result = Workspace.renameImpact(dialog.path, name, dialog.isDir, true)
+        const renamed = dialog.isDir ? Workspace.renameFolder(dialog.path, name, true)
+                                     : Workspace.renamePage(dialog.path, name, true)
         if (renamed === "" || renamed === dialog.path)
             return
-        const n = result ? (result.links || 0) + (result.tags || 0) : dialog.changes
-        const tags = result ? (result.tags || 0) > 0 : (dialog.impact.tags || 0) > 0
+        const n = (result.links || 0) + (result.tags || 0)
+        const tags = (result.tags || 0) > 0
         if (moves) {
             const folder = Workspace.folderOf(renamed)
             const place = folder !== "" ? folder.split("/").pop() : qsTr("Notebook root")

@@ -3,32 +3,39 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ContentRenameDialog — confirms renaming a page when other notes link to it or carry a tag that
-// names it (docs/SYNTAX.md §3): how many links and tags in how many notes Workspace.renamePage
-// rewrites. renamed(path) follows a successful rename.
+// ContentRenameDialog — confirms renaming a page in its folder (the page header's title edit) when
+// that rewrites other notes (docs/SYNTAX.md §2, §3): how many links and tags in how many notes
+// Workspace.renamePage rewrites, as Workspace.renameImpact counts them. The title is a title: a
+// "/" in it stays in the folder ("TCP/IP" -> "TCP IP"). renamed(path) follows a successful rename.
 //
 //   ContentRenameDialog { id: renameDialog; onRenamed: (path) => … }
-//   renameDialog.openFor(page.path, "Nowy tytuł", tools.renameImpact(page.path))
+//   renameDialog.openFor(page.path, "Nowy tytuł", Workspace.renameImpact(page.path, "Nowy tytuł", false))
 BDialog {
     id: dialog
 
     property string path
     property string newTitle
+    /// The page's name after the rename ("TCP IP" for "TCP/IP").
+    property string newName
     property int notes: 0
     property int links: 0
     property int tags: 0
 
     signal renamed(string newPath)
 
-    function openFor(pagePath, title, impact) {
+    /// Ask about renaming `pagePath` to `title`, with Workspace.renameImpact() of it (`show`
+    /// false: only set it up, for rename() at once).
+    function openFor(pagePath, title, impact, show) {
         path = pagePath
         newTitle = title
+        newName = impact && impact.path ? Workspace.pageTitle(impact.path) : title
         notes = impact && impact.notes ? impact.notes : 0
         links = impact && impact.links ? impact.links : 0
         tags = impact && impact.tags ? impact.tags : 0
-        open()
+        if (show !== false)
+            open()
     }
-    /// Rename now (also without the dialog when nothing links to the page).
+    /// Rename now (also without the dialog when nothing else changes).
     function rename() {
         const renamed = Workspace.renamePage(dialog.path, dialog.newTitle)
         if (renamed !== "" && renamed !== dialog.path) {
@@ -49,7 +56,7 @@ BDialog {
 
     BText {
         Layout.fillWidth: true
-        text: qsTr("“%1” becomes “%2”.").arg(Workspace.pageTitle(dialog.path)).arg(dialog.newTitle)
+        text: qsTr("“%1” becomes “%2”.").arg(Workspace.pageTitle(dialog.path)).arg(dialog.newName)
         wrapMode: Text.Wrap
     }
     RowLayout {
