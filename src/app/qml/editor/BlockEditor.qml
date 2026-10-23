@@ -1449,6 +1449,10 @@ FocusScope {
         displayMarginEnd: editor.autoHeight ? 1000000 : 0
         boundsBehavior: Flickable.StopAtBounds
         keyNavigationEnabled: false
+        // No current item: a ListView gives its current item the focus whenever that item changes
+        // (the first rows after a load, rows replaced by another program's change merged in) —
+        // the block being edited lost the keyboard to a delegate and the next keys went nowhere.
+        currentIndex: -1
         // The toolbar docked on the editor's bottom edge covers the bottom of the list (the
         // keyboard is below the editor: the shell lifts the view above it).
         bottomMargin: editor.toolbarVisible && editor.dockHost === editor ? editor.toolbarHeight : 0

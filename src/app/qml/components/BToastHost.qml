@@ -84,6 +84,11 @@ Item {
         width: Theme.compact ? parent.width - 2 * Theme.space3 : Math.min(480, parent.width - 2 * Theme.space4)
         height: Math.min(contentHeight, parent.height - host.bottomMargin)
         interactive: false
+        // No current item: a view gives its current item the focus, and the first toast shown
+        // (none before it) took the keyboard from whatever had it — the block being edited when
+        // "Merged changes made elsewhere" arrived while typing, the keys after it went nowhere.
+        currentIndex: -1
+        keyNavigationEnabled: false
         spacing: Theme.space2
         verticalLayoutDirection: ListView.BottomToTop
         model: toastModel

@@ -2565,6 +2565,33 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                   "a block starts editing and has the keyboard");
             typeText(u" Żółw ąę"_s);
             check(source(page).contains(u"żeby edytować. Żółw ąę"_s), "typed keys reach the block (Polish letters)");
+            // Another program (an agent's brulion-cli, Syncthing) changes the page while the block
+            // is being edited and no toast is shown: the typing goes on in the block — neither the
+            // "merged" toast (the first one of its list) nor the editor list's current row takes
+            // the keyboard (the keys after it went nowhere).
+            if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+                QMetaObject::invokeMethod(toasts, "clear");
+            settle(200);
+            typeText(u" i"_s);
+            {
+                QFile file(app->workspace()->rootPath() + u'/' + guide);
+                if (file.open(QIODevice::Append))
+                    file.write("\n- Dopisek innego programu: żółw\n");
+            }
+            check(waitFor([&] { return source(page).contains(u"Dopisek innego programu: żółw"_s); }),
+                  "another program's change reaches the page being edited");
+            settle(300);
+            check(editorFocused() && page->property("editingRow").toInt() == row,
+                  "the edited block keeps the keyboard after another program's change");
+            typeText(u" jeż"_s);
+            check(source(page).contains(u"Żółw ąę i jeż"_s), "keys typed after that change reach the block");
+            // Any toast arriving while typing (a reminder, a sync) leaves the keyboard there too.
+            if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+                QMetaObject::invokeMethod(toasts, "clear");
+            settle(200);
+            app->toast(u"Zsynchronizowano: żółw"_s, u"info"_s);
+            settle(300);
+            check(editorFocused(), "a toast shown while typing leaves the keyboard in the edited block");
             // Ctrl+K is the command palette, but Qt binds it to "delete to the end of the line" in
             // text editors on Linux: the edited block must leave it to the shell's shortcut (the
             // shortcut map asks the focused item with a ShortcutOverride event first).
