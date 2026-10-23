@@ -361,7 +361,8 @@ FocusScope {
         visible: !root.pictureRoute
         controller: page
         // Problems the editor reports (a picture that could not be added) as the window's toast.
-        onNotice: (text, kind) => AppController.toast(text, kind)
+        onMessage: (text, kind, action) => action ? AppController.toastAction(text, kind, action.text, action.run)
+                                                  : AppController.toast(text, kind)
         focus: true
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         // The side panel is narrow: phone-like margins there.

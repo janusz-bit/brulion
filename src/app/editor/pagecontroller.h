@@ -586,6 +586,13 @@ public:
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
+    /// Where the undo history stands — taken right after an edit, it names that edit for a
+    /// toast's "Cofnij" (undoStep()).
+    Q_INVOKABLE QString undoToken() const;
+    /// Undo the edit `token` (undoToken() right after it) while it is still the last step of the
+    /// history: false — nothing undone — when other edits came after it, it was undone already,
+    /// the history was reset (another page, a reload) or the page is in source mode.
+    Q_INVOKABLE bool undoStep(const QString &token);
 
     // --- Conflicts --------------------------------------------------------------------------------
     /// Use `text` (e.g. from BMergeView) and save it.
@@ -733,6 +740,7 @@ private:
     QString m_shownPath;
     BlockListModel *m_model = nullptr;
     QUndoStack *m_undo = nullptr;
+    int m_undoGeneration = 0; ///< bumped whenever m_undo is cleared (undoToken())
     QTimer m_saveTimer;
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
     QString m_savedText;

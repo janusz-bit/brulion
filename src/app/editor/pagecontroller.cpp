@@ -477,6 +477,7 @@ void PageController::load()
     m_model->resetContent(ok ? content : QString());
     m_savedText = ok ? content : QString();
     m_undo->clear();
+    ++m_undoGeneration;
     m_typingOpen = false;
     m_editingUid = 0;
     resetSelection();
@@ -777,6 +778,7 @@ void PageController::onFileChanged(const QString &path)
         m_model->setEditingUid(m_editingUid);
         updateSelection();
         m_undo->clear();
+        ++m_undoGeneration;
         m_typingOpen = false;
         Q_EMIT editingRowChanged();
         Q_EMIT selectedRowChanged();
@@ -1750,6 +1752,7 @@ int PageController::startNewPage(const QString &templatePath)
     }
     m_savedText = text();
     m_undo->clear();
+    ++m_undoGeneration;
     m_typingOpen = false;
     m_saveTimer.stop();
     setDirty(false);
@@ -3048,6 +3051,21 @@ void PageController::undo()
         return;
     m_typingOpen = false;
     m_undo->undo();
+}
+
+QString PageController::undoToken() const
+{
+    return u"%1:%2"_s.arg(m_undoGeneration).arg(m_undo->index());
+}
+
+bool PageController::undoStep(const QString &token)
+{
+    // Only while the edit is the last step of this history: undoing it later would undo the
+    // edits made after it first (or, after a reload, an unrelated step).
+    if (m_sourceMode || token.isEmpty() || token != undoToken() || !m_undo->canUndo())
+        return false;
+    undo();
+    return true;
 }
 
 void PageController::redo()

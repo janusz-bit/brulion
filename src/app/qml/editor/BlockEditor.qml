@@ -40,7 +40,8 @@ import Brulion
 // a new block after the one under the drop), "/Obraz…" and the toolbar pick files.
 // A leading "# Title" repeating the page title is shown above the page properties
 // (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
-// `notice(text, kind)` tells about problems the host should show as a toast.
+// `message(text, kind, action)` (emitted by notice()) tells what the host should show as a toast;
+// `action` — { text, run } or null — is its button (deleting or cutting blocks: "Cofnij").
 // Block selection (docs/UI.md "Selecting and copying"; PageController keeps it as two uids):
 // Shift+↑/↓ (also from the first / last line of an edited block), Ctrl+A twice, Shift+click, a
 // mouse drag from one block into another (the list no longer scrolls with a left drag on non-touch
@@ -150,8 +151,40 @@ FocusScope {
         return Math.max(Theme.space2, win.height - editor.mapToItem(null, 0, visibleBottom()).y + Theme.space2)
     }
 
-    /// Something to tell the user (a toast): kind "error" | "info" | "success".
-    signal notice(string text, string kind)
+    /// Something to tell the user (a toast): kind "error" | "info" | "success"; `action` — { text,
+    /// run } or null — a button on the toast (after deleting or cutting blocks: "Cofnij",
+    /// undoAction()).
+    signal message(string text, string kind, var action)
+    /// Say `text` (message()); `action` is optional.
+    function notice(text, kind, action) {
+        message(text, kind, action ? action : null)
+    }
+    /// The "Cofnij" of a toast about the edit just made (`before`: controller.undoToken() before
+    /// it; null when it changed nothing): undoes that edit while it is still the last step of this
+    /// page's history (PageController.undoStep) — after other edits, on another page or once undone
+    /// it says so instead.
+    function undoAction(before) {
+        const ctl = controller
+        if (!ctl)
+            return null
+        const token = ctl.undoToken()
+        if (token === before)
+            return null
+        const path = ctl.path
+        return {
+            text: qsTr("Undo"),
+            run: () => {
+                try {
+                    if (ctl.path === path && ctl.undoStep(token))
+                        return
+                    if (editor.controller === ctl)
+                        editor.notice(qsTr("Not undone: the page has changed since"), "info")
+                } catch (e) {
+                    // The page (or the whole editor) is gone: nothing to undo here.
+                }
+            }
+        }
+    }
 
     // ---- Block selection (docs/UI.md "Selecting and copying") -----------------------------------
     /// Touch UIs: the selection mode (a long press on a block's text, "Zaznacz" in the block menu or
@@ -548,9 +581,10 @@ FocusScope {
     function cutSelection() {
         if (!controller)
             return false
+        const before = controller.undoToken()
         const r = controller.cutSelection()
         if (r.ok) {
-            notice(qsTr("Cut %n block(s)", "", r.count), "success")
+            notice(qsTr("Cut %n block(s)", "", r.count), "success", undoAction(before))
             if (controller.selectedRow >= 0)
                 ensureRowVisible(controller.selectedRow)
         } else {
@@ -563,9 +597,10 @@ FocusScope {
             return
         const count = Math.max(1, controller.selectionCount)
         const multiple = controller.multiSelection
+        const before = controller.undoToken()
         const focus = controller.deleteSelection()
         if (multiple)
-            notice(qsTr("Deleted %n block(s)", "", count), "info")
+            notice(qsTr("Deleted %n block(s)", "", count), "info", undoAction(before))
         if (focus >= 0)
             ensureRowVisible(focus)
     }

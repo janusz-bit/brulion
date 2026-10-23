@@ -149,6 +149,11 @@ ApplicationWindow {
             // Errors (a note could not be saved, storage is missing) stay until closed.
             toastHost.show(text, kind === "error" ? { kind: kind, timeout: 0 } : { kind: kind })
         }
+        // A toast with a button (the editor's "Cofnij" after deleting or cutting blocks).
+        function onToastActionRequested(text, kind, actionText, onAction) {
+            toastHost.show(text, { kind: kind, actionText: actionText,
+                                   onAction: () => { if (typeof onAction === "function") onAction() } })
+        }
         function onShowWindowRequested() {
             window.showAndRaise()
         }

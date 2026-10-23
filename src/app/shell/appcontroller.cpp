@@ -1148,6 +1148,12 @@ void AppController::toast(const QString &text, const QString &kind)
     Q_EMIT toastRequested(text, kind);
 }
 
+void AppController::toastAction(const QString &text, const QString &kind, const QString &actionText,
+                                const QJSValue &onAction)
+{
+    Q_EMIT toastActionRequested(text, kind, actionText, onAction);
+}
+
 void AppController::requestUiAction(const QString &action)
 {
     Q_EMIT uiActionRequested(action);

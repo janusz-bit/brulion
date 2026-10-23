@@ -221,7 +221,8 @@ ApplicationWindow {
         anchors.bottomMargin: KeyboardInsets.overlap
         controller: page
         focus: true
-        onNotice: (text, kind) => toasts.show(text, { kind: kind })
+        onMessage: (text, kind, action) => toasts.show(text, action ? { kind: kind, actionText: action.text, onAction: action.run }
+                                                           : { kind: kind })
         header: Component {
             Item {
                 width: editor.width
@@ -1938,6 +1939,10 @@ ApplicationWindow {
     // said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the palette after the
     // cell lost the keyboard; (desktop) a right-click on a title drawn above the page's properties.
     property string lastNotice: ""
+    /// The last toast's button ({ text, run }), else null.
+    property var lastNoticeAction: null
+    /// The playground's toasts (the self-tests press their buttons).
+    readonly property BToastHost toastHost: toasts
     property string copiedId: ""
     property string expectedLink: ""
     property Item focusProbe: null
@@ -1945,7 +1950,10 @@ ApplicationWindow {
     property int targetRow: -1
     Connections {
         target: editor
-        function onNotice(text, kind) { window.lastNotice = text }
+        function onMessage(text, kind, action) {
+            window.lastNotice = text
+            window.lastNoticeAction = action
+        }
     }
     /// What the clipboard holds (pasted into a hidden text field).
     function clipboardText() {

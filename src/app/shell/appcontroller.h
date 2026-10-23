@@ -41,6 +41,7 @@
 #include "workspace.h"
 
 #include <QDateTime>
+#include <QJSValue>
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
@@ -300,6 +301,10 @@ public:
     Q_INVOKABLE void hiddenToTray();
     /// Show a toast: kind "info" | "success" | "warning" | "error".
     Q_INVOKABLE void toast(const QString &text, const QString &kind = QStringLiteral("info"));
+    /// Show a toast with a button (the editor's "Cofnij"): `onAction`, a function, runs when it is
+    /// pressed (Main.qml shows it like toast()).
+    Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
+                                 const QJSValue &onAction);
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
     /// "about", "toggleTheme", "toggleSidePanel".
     Q_INVOKABLE void requestUiAction(const QString &action);
@@ -338,6 +343,8 @@ Q_SIGNALS:
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
+    void toastActionRequested(const QString &text, const QString &kind, const QString &actionText,
+                              const QJSValue &onAction);
     void showWindowRequested();
     void uiActionRequested(const QString &action);
     void itemActionRequested(const QString &action, const QString &path);

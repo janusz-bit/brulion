@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJSEngine>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -1041,6 +1042,30 @@ private Q_SLOTS:
         QCOMPARE(alone->currentRoute(), before);
         QCOMPARE(toasts.size(), 1);
         QVERIFY(alone->inDocsVault());
+    }
+
+    // The editor's toasts with a button ("Cofnij" after deleting blocks): AppController carries the
+    // function to the shell's toast host (Main.qml), which calls it when the button is pressed.
+    void toastWithAction()
+    {
+        auto app = openApp(u"toastaction"_s);
+        QJSEngine engine;
+        const QJSValue undo = engine.evaluate(u"var undone = 0; (function () { undone += 1 })"_s);
+        QVERIFY(undo.isCallable());
+        QSignalSpy plain(app.get(), &AppController::toastRequested);
+        QSignalSpy withAction(app.get(), &AppController::toastActionRequested);
+        app->toastAction(u"Usunięto 3 bloki"_s, u"info"_s, u"Cofnij"_s, undo);
+        QCOMPARE(withAction.size(), 1);
+        QCOMPARE(plain.size(), 0);
+        const QList<QVariant> args = withAction.first();
+        QCOMPARE(args.at(0).toString(), u"Usunięto 3 bloki"_s);
+        QCOMPARE(args.at(1).toString(), u"info"_s);
+        QCOMPARE(args.at(2).toString(), u"Cofnij"_s);
+        QJSValue carried = args.at(3).value<QJSValue>();
+        QVERIFY(carried.isCallable());
+        const QJSValue result = carried.call();
+        QVERIFY2(!result.isError(), qPrintable(result.toString()));
+        QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
     }
 
     void commands()

@@ -84,12 +84,15 @@ T.Control {
 
             T.Button {
                 id: action
+                objectName: "toastAction" // the self-tests press it
                 anchors.verticalCenter: parent.verticalCenter
                 visible: control.actionText !== ""
                 text: control.actionText
                 implicitHeight: Theme.touchUi ? Theme.touchTarget : 32
                 implicitWidth: actionLabel.implicitWidth + 20
-                focusPolicy: Qt.StrongFocus
+                // Tab reaches it; a click or tap leaves the focus where it was (the editor whose
+                // "Cofnij" it is keeps the keys: Delete, Ctrl+Z right after).
+                focusPolicy: Qt.TabFocus
                 hoverEnabled: !Theme.touchUi
                 Accessible.name: text
                 onClicked: control.actionTriggered()

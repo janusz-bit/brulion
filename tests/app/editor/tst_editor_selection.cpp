@@ -302,6 +302,68 @@ private Q_SLOTS:
         QCOMPARE(f.text(), u"- b\n\t- b1\n- c\n- d\n"_s);
     }
 
+    // The toasts' "Cofnij" after deleting or cutting blocks (BlockEditor.undoAction): undoStep()
+    // undoes exactly the edit its token names, only while that is the last step of the history.
+    void toastUndoNamesItsEdit()
+    {
+        const QString content = u"- Zażółć\r\n\t- gęślą\r\n- jaźń\r\n- łódź\r\n"_s;
+        Fixture f(content);
+        QVERIFY(!f.page.undoStep(f.page.undoToken())); // nothing to undo yet
+        QVERIFY(!f.page.undoStep(QString()));
+        f.page.selectRange(0, 2);
+        const QString before = f.page.undoToken();
+        f.page.deleteSelection();
+        const QString token = f.page.undoToken();
+        QVERIFY(token != before);
+        QCOMPARE(f.text(), u"- łódź\r\n"_s);
+        QVERIFY(f.page.undoStep(token));
+        QCOMPARE(f.text(), content); // byte for byte, CRLF too
+        QCOMPARE(f.selected(), QList<int>({0, 1, 2}));
+        QVERIFY(!f.page.undoStep(token)); // undone already
+        QCOMPARE(f.text(), content);
+        // Redone: the same edit is the last step again.
+        f.page.redo();
+        QVERIFY(f.page.undoStep(token));
+        QCOMPARE(f.text(), content);
+
+        // Another edit after it: the toast's Cofnij undoes nothing (not even that edit).
+        f.page.selectRange(0, 2);
+        f.page.deleteSelection();
+        const QString stale = f.page.undoToken();
+        f.page.setEditText(0, u"łódka"_s);
+        const QString edited = f.text();
+        QVERIFY(edited != u"- łódź\r\n"_s);
+        QVERIFY(f.page.undoToken() != stale);
+        QVERIFY(!f.page.undoStep(stale));
+        QCOMPARE(f.text(), edited);
+
+        // Cut: the same.
+        Fixture g(content);
+        g.page.selectRange(2, 3);
+        QVERIFY(g.page.cutSelection().value(u"ok"_s).toBool());
+        const QString cut = g.page.undoToken();
+        QCOMPARE(g.text(), u"- Zażółć\r\n\t- gęślą\r\n"_s);
+        // Source mode: no block edits.
+        g.page.setSourceMode(true);
+        QVERIFY(!g.page.undoStep(cut));
+        g.page.setSourceMode(false);
+        QVERIFY(g.page.undoStep(cut));
+        QCOMPARE(g.text(), content);
+
+        // A reload resets the history: an old token never undoes a new edit at the same position.
+        Fixture h(content);
+        h.page.selectRange(0, 0);
+        h.page.deleteSelection();
+        const QString old = h.page.undoToken();
+        QVERIFY(h.page.save());
+        h.host.externalWrite(Page, u"- inna treść\n- druga\n"_s);
+        QTRY_COMPARE(h.text(), u"- inna treść\n- druga\n"_s);
+        h.page.selectRange(0, 0);
+        h.page.deleteSelection();
+        QVERIFY(!h.page.undoStep(old));
+        QCOMPARE(h.text(), u"- druga\n"_s);
+    }
+
     void indentOutdentAndMove()
     {
         Fixture f(Outline);

@@ -9,7 +9,8 @@ import Brulion
 // touch through the window like a real device; the clipboard is read back.
 //   desktop: Esc (Ctrl+Enter then changes the parent alone, not its children) then Shift+↓ twice and
 //     Ctrl+C (three blocks with their children), Shift+↑ from an edited block's first line, Shift+↓
-//     from inside one, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, Alt+↓ and Tab on a range (undone
+//     from inside one, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (also one whose
+//     deletion was undone already: nothing else is undone), Alt+↓ and Tab on a range (undone
 //     from another edited block: the range selected again), Ctrl+V over a selection, one copied block
 //     pasted into an empty bullet (no second marker), Shift+click on a calculation and a table,
 //     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block
@@ -19,7 +20,8 @@ import Brulion
 //     turns stay in it, a mouse selection across paragraphs, Ctrl+C, a theme change keeping the
 //     selection, "Kopiuj wszystko", Esc);
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
-//     it, Kopiuj, the end grip dragged, Usuń (still in the selection mode) and Ctrl+Z, a long press
+//     it, Kopiuj, the end grip dragged, Usuń (still in the selection mode), a tap on the toast's Cofnij,
+//     Usuń and Ctrl+Z, a long press
 //     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Zaznacz", Esc and
 //     Shift+↓ from a keyboard, the bullet menu's "Zaznacz", and "Zaznacz tekst" (a long press on a
 //     word, its handles dragged — the start one past the end —, Kopiuj, Back).
@@ -40,6 +42,8 @@ QtObject {
     property string textBefore: ""
     property int countBefore: 0
     property string themeBefore: ""
+    /// A toast's Cofnij kept after its edit was undone another way.
+    property var staleUndo: null
 
     // ---- Helpers ------------------------------------------------------------------------------------
     readonly property ListView list: editor.listView
@@ -133,6 +137,9 @@ QtObject {
         flick.contentX = Math.max(0, Math.min(x - Theme.space8, flick.contentWidth - flick.width))
     }
     function selectTextView() { return window.findItem(editor.dockHost, "selectTextEdit") }
+    /// The button of a toast ("Cofnij"), when one is shown (clearToasts() first: one at a time).
+    function toastUndo() { return window.findShown(window.toastHost, "toastAction") }
+    function clearToasts() { window.toastHost.clear() }
 
     Component.onCompleted: window.runSteps(Theme.touchUi ? touchSteps() : desktopSteps())
 
@@ -239,6 +246,40 @@ QtObject {
             wait(() => window.pageText() === test.textBefore, "Ctrl+Z brings them back byte for byte"),
             () => check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
                         "selected again"),
+            // ---- The toast's "Cofnij" (a click on its button), and a stale one --------------------------
+            () => clearToasts(),
+            wait(() => toastUndo() === null, "no toast is left"),
+            () => {
+                window.lastNoticeAction = null
+                key(Qt.Key_Delete)
+            },
+            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0 && toastUndo() !== null,
+                 () => "Delete again: the toast says so and offers Cofnij: “" + window.lastNotice + "”"),
+            () => {
+                const button = toastUndo()
+                check(window.lastNoticeAction !== null && button.text === window.lastNoticeAction.text,
+                      "the toast's button is the editor's action: " + window.lastNotice)
+                events.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+            },
+            wait(() => window.pageText() === test.textBefore, "the toast's Cofnij brings them back byte for byte"),
+            () => check(page.selectionAnchorRow === rowOf("Zmierzyć") && page.selectedRow === rowOf("Wywieźć"),
+                        "and selects them again"),
+            () => {
+                window.lastNoticeAction = null
+                key(Qt.Key_Delete)
+            },
+            wait(() => window.lastNoticeAction !== null, "deleted once more"),
+            () => {
+                test.staleUndo = window.lastNoticeAction
+                key(Qt.Key_Z, Qt.ControlModifier) // undone already (another way)
+            },
+            wait(() => window.pageText() === test.textBefore, "Ctrl+Z undoes the deletion"),
+            () => {
+                window.lastNotice = ""
+                test.staleUndo.run()
+            },
+            () => check(window.pageText() === test.textBefore && window.lastNotice !== "",
+                        "a Cofnij whose edit was undone already undoes nothing else, and says so: " + window.lastNotice),
             // ---- Alt+↓ and Tab on a range ------------------------------------------------------------
             () => {
                 page.selectRange(rowOf("Skuć"), rowOf("Położyć"))
@@ -583,7 +624,9 @@ QtObject {
             },
             () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić"),
                         "dragging the end grip moves the selection's end: " + page.selectedRow),
-            // ---- Usuń keeps the selection mode (the block before them selected); Ctrl+Z ------------------
+            // ---- Usuń keeps the selection mode (the block before them selected); the toast's Cofnij, Ctrl+Z --
+            () => clearToasts(),
+            wait(() => toastUndo() === null, "no toast is left"),
             () => {
                 test.textBefore = window.pageText()
                 revealTool(shown(toolbar(), "selectionDelete"))
@@ -593,6 +636,15 @@ QtObject {
             () => check(editor.selectionMode && editor.toolbarMode === "selection" && page.selectionCount === 1
                         && page.editingRow < 0,
                         "the block before them is selected, in the selection mode with its tools: " + page.selectionCount),
+            wait(() => toastUndo() !== null, "the toast offers Cofnij above the docked tools"),
+            () => tap(toastUndo()),
+            wait(() => window.pageText() === test.textBefore, "a tap on the toast's Cofnij brings them back"),
+            () => {
+                check(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
+                      "selected again")
+                tap(shown(toolbar(), "selectionDelete"))
+            },
+            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0, "Usuń deletes them again"),
             () => key(Qt.Key_Z, Qt.ControlModifier),
             wait(() => window.pageText() === test.textBefore, "Ctrl+Z brings them back"),
             () => check(editor.selectionMode && page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
