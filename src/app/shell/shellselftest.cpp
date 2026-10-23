@@ -2839,10 +2839,13 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     waitFor([&] { return !sourceView->property("moving").toBool(); });
                     const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
                     const QPointF at = pointIn(sourceView, 0.5, 0.5);
-                    touchTap(window, at);
+                    // The text under the finger before the tap: the tap brings up the touch
+                    // toolbar, the view shrinks and keeps the cursor above it, so the same scene
+                    // point may lie over another line afterwards.
                     const QPointF local = sourceEdit->mapFromScene(at);
                     int expected = -1;
                     QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+                    touchTap(window, at);
                     const int cursor = sourceEdit->property("cursorPosition").toInt();
                     std::fprintf(stderr,
                                  "selftest: the tap in the source: cursor %d (before %d, under the finger %d)\n",
@@ -2851,7 +2854,19 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                                   && sourceEdit->property("selectedText").toString().isEmpty(),
                           "a tap in the Markdown source puts the cursor there");
                     // A long press selects the word under the finger (where the platform has
-                    // selection handles, they take it on from there).
+                    // selection handles, they take it on from there). First the view settles
+                    // after the tap (the toolbar it brought up keeps the cursor above it).
+                    qreal settledY = -1;
+                    QElapsedTimer stillFor;
+                    waitFor([&] {
+                        const qreal y = sourceView->property("contentY").toReal();
+                        if (y != settledY || sourceView->property("moving").toBool()) {
+                            settledY = y;
+                            stillFor.start();
+                            return false;
+                        }
+                        return stillFor.elapsed() >= 150;
+                    });
                     const qreal scrolled = sourceView->property("contentY").toReal();
                     const auto textAt = [&](int from, int to) {
                         QString text;
