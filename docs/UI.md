@@ -199,7 +199,12 @@ everything near the bottom, the same way on Android, in the browser and with a s
   `adjustResize`), so `BKeyboardFocusKeeper` (once in `Main.qml`) scrolls the Flickables around
   the focused `BTextField` / `BTextArea` (`keepAboveKeyboard`) until it is above the keyboard —
   when it gets the focus, when the keyboard has settled, when the window or the caret moves.
-  Onboarding ends at the keyboard like the shell's content.
+  Onboarding ends at the keyboard like the shell's content. A word the keyboard is still
+  composing (Android's keyboards keep every word as preedit text, outside `text`, until a space)
+  counts as typed: dialogs enable their accept button by `typedText` (quick capture's "Dodaj",
+  "Utwórz" of a new page or folder, rename), and the word becomes text when the field loses the
+  focus (`EditorInput.commitPreedit`) or the dialog is accepted (`BDialog.tryAccept`) — a single
+  word typed into an empty field used to leave the button disabled.
 * **What is being edited stays above the toolbar**: the caret or the table cell
   (`BlockEditor.ensureEditVisible()`, the journal's `ensureVisible()` with the toolbar's height;
   a day's editor asks the journal list, `BlockEditor.scroller`), checked again when the view's

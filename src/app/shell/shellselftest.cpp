@@ -24,6 +24,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QInputDevice>
+#include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -112,6 +113,16 @@ void mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs = 0, b
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
 {
     uidriver::tapOrClickNow(window, scenePos, touch);
+}
+
+/// `word` typed on an on-screen keyboard that still composes it: preedit text of `item`, nothing
+/// committed (Android's keyboards keep every word so until a space or a tap elsewhere).
+void composeWord(QQuickItem *item, const QString &word)
+{
+    if (!item)
+        return;
+    QInputMethodEvent event(word, {{QInputMethodEvent::Cursor, int(word.size()), 1, QVariant()}});
+    QCoreApplication::sendEvent(item, &event);
 }
 
 /// Close the tooltips waiting for deletion, and return those still alive of hidden controls. A
@@ -1295,9 +1306,21 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             const QQuickItem *f = window->activeFocusItem();
             return f && f->inherits("QQuickTextInput");
         });
-        for (const QChar ch : u"Zażółć"_s)
-            sendKey(window, 0, Qt::NoModifier, QString(ch));
-        sendKey(window, Qt::Key_Return);
+        if (touch) {
+            // A phone's keyboard still composes the word when "Utwórz" is tapped: preedit text,
+            // outside the field's text (Android's keyboards compose every word).
+            composeWord(window->activeFocusItem(), u"Zażółć"_s);
+            const QString create = QCoreApplication::translate("ShellNewPageDialog", "Create");
+            QQuickItem *accept = findShown(window->contentItem(), [&](QQuickItem *item) {
+                return isA(item, "BButton") && item->property("text").toString() == create;
+            });
+            check(accept && accept->isEnabled(), "a name still being composed enables “Utwórz”");
+            tap(accept);
+        } else {
+            for (const QChar ch : u"Zażółć"_s)
+                sendKey(window, 0, Qt::NoModifier, QString(ch));
+            sendKey(window, Qt::Key_Return);
+        }
         check(waitFor([&] { return ws->exists(u"Zażółć"_s); }), "the typed folder is created at the root");
         openDrawer();
         check(waitFor([&] { return treeRow(u"Zażółć"_s) != nullptr; }), "the new folder shows in the tree");
@@ -2203,8 +2226,31 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
                      && near(capture->property("y").toReal() + capture->property("height").toReal(), top);
           }),
           "quick capture's sheet sits on the keyboard");
-    sendKey(window, Qt::Key_Escape);
-    waitFor([&] { return !capture->property("visible").toBool(); });
+    // A word the keyboard is still composing (preedit, outside the field's text) counts: "Dodaj"
+    // is enabled under it and adds it.
+    Workspace *ws = app->workspace();
+    const QString today = ws->journalPath(app->today(0));
+    const QString journal = ws->readFile(today);
+    QQuickItem *captureField = window->activeFocusItem();
+    check(captureField && captureField->inherits("QQuickTextEdit"), "quick capture's field has the keys");
+    composeWord(captureField, u"Żółw"_s);
+    const QString addText = QCoreApplication::translate("ShellQuickCapture", "Add");
+    QQuickItem *add = findShown(window->contentItem(), [&](QQuickItem *item) {
+        return isA(item, "BButton") && item->property("text").toString() == addText;
+    });
+    check(add && add->isEnabled(), "a word still being composed enables “Dodaj”");
+    if (add && add->isEnabled())
+        tapOrClick(window, add->mapToScene(QPointF(add->width() / 2, add->height() / 2)), true);
+    else
+        sendKey(window, Qt::Key_Escape);
+    check(waitFor([&] { return !capture->property("visible").toBool(); })
+                  && ws->readFile(today).endsWith(u"- Żółw\n"_s),
+          "“Dodaj” adds the composed word to today's journal");
+    if (ws->readFile(today) != journal)
+        ws->writeFile(today, journal);
+    // (Its toast with "Otwórz" stays 7 s over the bottom rows of the views checked next.)
+    if (QQuickItem *toasts = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToastHost"); }))
+        QMetaObject::invokeMethod(toasts, "clear");
 
     insets->setProperty("simulated", 0);
     check(waitFor([&] {

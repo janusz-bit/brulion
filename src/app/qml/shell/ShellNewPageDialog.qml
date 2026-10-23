@@ -36,7 +36,7 @@ BDialog {
     subtitle: !folderMode ? "" : folder !== "" ? qsTr("In %1").arg(folder) : qsTr("In the notebook root")
     iconName: folderMode ? "folder-plus" : "square-pen"
     acceptText: qsTr("Create")
-    acceptEnabled: nameField.text.replace(/[\/\\\s]/g, "") !== ""
+    acceptEnabled: nameField.typedText.replace(/[\/\\\s]/g, "") !== ""
     initialFocusItem: nameField
     preferredWidth: folderMode ? Theme.dialogWidthSm : Theme.dialogWidth
 

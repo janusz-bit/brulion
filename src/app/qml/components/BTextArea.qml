@@ -19,6 +19,14 @@ T.TextArea {
     /// The window keeps it (or its caret) above the on-screen keyboard while it has the focus
     /// (BKeyboardFocusKeeper).
     readonly property bool keepAboveKeyboard: true
+    /// What is typed, with the word an on-screen keyboard is still composing (preedit text, outside
+    /// `text` until a space or a tap elsewhere — BTextField.typedText).
+    readonly property string typedText: preeditText === "" ? text
+                                        : text.slice(0, cursorPosition) + preeditText + text.slice(cursorPosition)
+
+    // Leaving the field (a dialog's button takes the focus first) keeps a word the keyboard was
+    // still composing: it becomes text (an input method may not commit it itself).
+    onActiveFocusChanged: if (!activeFocus && preeditText !== "") EditorInput.commitPreedit(control)
 
     implicitWidth: Math.max(contentWidth + leftPadding + rightPadding,
                             implicitBackgroundWidth + leftInset + rightInset,
