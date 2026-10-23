@@ -731,6 +731,33 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
               "the sidebar's rename dialog counts the links and tags naming the page");
         QMetaObject::invokeMethod(rename, "close");
         waitFor([&] { return !rename->property("opened").toBool(); });
+        // A "/" moves the page, here renamed too: the toast names the folder and the new name.
+        const QString probe = u"Próba przenosin.md"_s;
+        app->workspace()->writeFile(probe, u"- żółw\n"_s);
+        QString toast;
+        const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
+                                                                [&toast](const QString &text) { toast = text; });
+        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(probe)),
+                                  Q_ARG(QVariant, QVariant(false)));
+        QQuickItem *field = nullptr;
+        waitFor([&] {
+            field = findShown(window->contentItem(),
+                              [](QQuickItem *item) { return item->objectName() == u"renameField"; });
+            return field != nullptr;
+        });
+        if (field) {
+            field->setProperty("text", u"Projekty/Próba po zmianie"_s);
+            QMetaObject::invokeMethod(rename, "tryAccept");
+        }
+        const QString expected = QCoreApplication::translate("ShellMoveWords", "Moved to “%1” as “%2”")
+                                         .arg(u"Projekty"_s, u"Próba po zmianie"_s);
+        const bool moved = field && waitFor([&] { return toast == expected; });
+        if (!moved)
+            std::fprintf(stderr, "selftest: the move's toast: %s\n", qPrintable(toast));
+        check(moved && app->workspace()->exists(u"Projekty/Próba po zmianie.md"_s),
+              "a “/” in the rename dialog moves the page, renamed too: the toast names the folder and the new name");
+        QObject::disconnect(toasts);
+        app->workspace()->deletePage(app->workspace()->exists(probe) ? probe : u"Projekty/Próba po zmianie.md"_s);
     }
     app->goHome();
     settle(200);

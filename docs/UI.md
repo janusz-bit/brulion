@@ -131,7 +131,8 @@ rename and move").
   cannot move) before "Przenieś tutaj". From the tree, the Więcej menu, the page's menu, All
   pages' rows and the palette. Its pick mode is the new-page dialog's folder picker.
 * **Rename** (`ShellRenameDialog`): a "/" moves — a path from the notebook root ("Archiwum/Dom"),
-  with a live "Nowe miejsce: …"; for any name typed it counts exactly what is rewritten
+  with a live "Nowe miejsce: …", and its toast names the new name too when the move renames
+  ("Przeniesiono do „Archiwum” jako „Dom 2”"); for any name typed it counts exactly what is rewritten
   (`Workspace.renameImpact`: also links a new name would otherwise take over), hidden folder
   names are refused. The page header's title edit renames in place: a "/" there is part of the
   title ("TCP/IP" -> "TCP IP.md"), and its confirmation counts the same way.
