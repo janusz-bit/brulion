@@ -1224,77 +1224,77 @@
         <translation>Nic do wklejenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1382"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1383"/>
         <source>Could not add “%1” to the notebook</source>
         <translation>Nie udało się dodać „%1” do notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1400"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1401"/>
         <source>Conflicting changes</source>
         <translation>Sprzeczne zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1409"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1410"/>
         <source>This page was also changed elsewhere and the changes could not be merged automatically. Your version is kept and not saved until you decide.</source>
         <translation>Ta strona zmieniła się też w innym miejscu i nie udało się automatycznie scalić zmian. Twoja wersja zostaje, ale nie zostanie zapisana, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1423"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1424"/>
         <source>Compare and merge…</source>
         <translation>Porównaj i scal…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1428"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1429"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1433"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1434"/>
         <source>Use the other version</source>
         <translation>Użyj drugiej wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1454"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1455"/>
         <source>Merge changes</source>
         <translation>Scal zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1463"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1464"/>
         <source>This device</source>
         <translation>To urządzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1464"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1465"/>
         <source>Other version</source>
         <translation>Druga wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1890"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1900"/>
         <source>Drop to add to this page</source>
         <translation>Upuść, aby dodać do tej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2284"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2294"/>
         <source>Cut</source>
         <translation>Wytnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2292"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2302"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2303"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2313"/>
         <source>Paste</source>
         <translation>Wklej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2316"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2326"/>
         <source>Select all</source>
         <translation>Zaznacz wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2322"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2332"/>
         <source>Block…</source>
         <translation>Blok…</translation>
     </message>

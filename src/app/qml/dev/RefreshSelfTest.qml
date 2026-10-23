@@ -15,6 +15,10 @@ import Brulion
 //     picker's weekday labels and month title;
 //   a calculation's results beside their lines after the window narrowed (the lines wrap again);
 //   (touch) the handles of a "Zaznacz tekst" selection after the window narrowed.
+// The window narrows step by step until the text in question wraps again: which width does that
+// depends on the fonts. Then on until the page's header changes its height (smaller paddings in a
+// compact window, the title wrapping again): the view, moved down the page by the test as the
+// caret moved with the keys moves it (no drag or wheel), does not go back to the top.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -32,6 +36,8 @@ QtObject {
     property real widthBefore: 0
     property int calcRow: -1
     property real calcLinesBefore: 0
+    property Item calcDelegate: null
+    property real headerBefore: 0
     property var handlesBefore: null
 
     function check(ok, what) { window.check(ok, what) }
@@ -180,10 +186,38 @@ QtObject {
         const text = input ? String(input.text) : ""
         return input ? input.positionToRectangle(text.indexOf("\n") + 1).y : 0
     }
+    /// The calculation's block as it was when the window narrowed (a new one would place its
+    /// results from scratch: the check is that the same one follows).
+    function sameCalc() { return calcDelegate !== null && window.delegateAt(calcRow) === calcDelegate }
+    /// Where the calculation stands now (the checks' messages).
+    function calcState() {
+        return "window " + window.width + " px; second line at " + secondLineY() + " px, was " + calcLinesBefore
+               + "; results at " + calcResults().map(r => r.y).join(", ") + (sameCalc() ? "" : "; another block")
+    }
+    /// The list's header (the page's title, its folder).
+    function headerHeight() { return editor.listView.headerItem ? editor.listView.headerItem.height : 0 }
+    /// The view shows the top of the page.
+    function atTop() { return editor.listView.contentY <= editor.listView.originY + 1 }
+    /// A step narrowing the window by a tenth, again on the next steps while `more()` (at most down
+    /// to 160 px): the width at which text wraps again depends on the fonts.
+    function narrowWhile(more) {
+        return () => {
+            if (more() && window.width > 160) {
+                window.width = Math.max(160, Math.round(window.width * 0.9))
+                window.stepIndex -= 1
+            }
+        }
+    }
 
     // ---- "Zaznacz tekst" (touch UIs: its handles) ----------------------------------------------
     function selectText() { return window.findItem(editor.dockHost, "selectTextEdit") }
     function handle(name) { return window.findItem(editor.dockHost, name) }
+    /// The selection's start is somewhere else than before (the text wrapped again).
+    function selectionMoved() {
+        const text = selectText()
+        const at = text ? text.positionToRectangle(text.selectionStart) : null
+        return at !== null && (!near(at.x, handlesBefore.x) || !near(at.y, handlesBefore.y))
+    }
     /// Both handles where the selection's ends are, as computed now.
     function handlesOnEnds() {
         const text = selectText()
@@ -279,14 +313,28 @@ QtObject {
             wait(() => calcAligned(), "its results sit on their lines"),
             () => {
                 calcLinesBefore = secondLineY()
+                calcDelegate = window.delegateAt(calcRow)
                 widthBefore = window.width
-                window.width = Theme.touchUi ? 330 : 560
             },
-            wait(() => secondLineY() > calcLinesBefore + 1 && calcAligned(),
-                 () => "the window narrowed, the first line wraps again: the results follow their lines ("
-                       + calcResults().map(r => r.y).join(", ") + ")"),
+            narrowWhile(() => secondLineY() <= calcLinesBefore + 1),
+            wait(() => sameCalc() && secondLineY() > calcLinesBefore + 1 && calcAligned(),
+                 () => "the window narrowed, the first line wraps again: the results follow their lines (" + calcState() + ")"),
             () => window.width = widthBefore,
-            wait(() => near(secondLineY(), calcLinesBefore) && calcAligned(), "and back at the old width"),
+            wait(() => sameCalc() && near(secondLineY(), calcLinesBefore) && calcAligned(),
+                 () => "and back at the old width (" + calcState() + ")"),
+
+            // ---- The page's header changing its height while the view is further down ---------------------
+            () => {
+                headerBefore = headerHeight()
+                check(!atTop(), "the view is down the page, at the calculation")
+            },
+            narrowWhile(() => near(headerHeight(), headerBefore)),
+            wait(() => !near(headerHeight(), headerBefore) && !atTop(),
+                 () => "the window narrowed to " + window.width + " px, the header changed its height ("
+                       + headerHeight() + " px, was " + headerBefore + "): the view stays down the page ("
+                       + editor.listView.contentY + ", top " + editor.listView.originY + ")"),
+            () => window.width = widthBefore,
+            wait(() => near(headerHeight(), headerBefore) && !atTop(), "and back at the old width"),
         ]
         if (Theme.touchUi) {
             out.push(
@@ -303,14 +351,11 @@ QtObject {
                     const text = selectText()
                     handlesBefore = text.positionToRectangle(text.selectionStart)
                     widthBefore = window.width
-                    window.width = 330
                 },
-                wait(() => {
-                    const text = selectText()
-                    const at = text.positionToRectangle(text.selectionStart)
-                    return (!near(at.x, handlesBefore.x) || !near(at.y, handlesBefore.y)) && handlesOnEnds()
-                }, () => "the window narrowed, the text wraps again: the handles follow the selection ("
-                         + handle("selectTextHandleStart").at + ")"),
+                narrowWhile(() => !selectionMoved()),
+                wait(() => selectionMoved() && handlesOnEnds(),
+                     () => "the window narrowed to " + window.width + " px, the text wraps again: the handles follow "
+                           + "the selection (" + handle("selectTextHandleStart").at + ")"),
                 () => window.width = widthBefore,
                 wait(() => handlesOnEnds(), "and back at the old width"),
                 () => editor.closeSelectText())

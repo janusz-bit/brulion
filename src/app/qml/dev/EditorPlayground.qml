@@ -452,22 +452,30 @@ ApplicationWindow {
         for (let i = 0; i < s.length; ++i)
             EditorInput.sendKey(editor.activeEditor ? editor.activeEditor : editor, 0, 0, s.charAt(i))
     }
+    /// A step is running. A step that processes events (a touch sequence's commit() does) lets the
+    /// timer fire from inside it when the step outlasts the interval (a slow sanitizer build): that
+    /// tick is skipped — it ran the same step again and then skipped the next one.
+    property bool inStep: false
     Timer {
         id: stepTimer
         interval: 120
         repeat: true
         onTriggered: {
+            if (window.inStep)
+                return
             if (window.stepIndex >= window.steps.length) {
                 stop()
                 console.log("SELFTEST DONE failures=" + window.failures)
                 Qt.exit(window.failures === 0 ? 0 : 1)
                 return
             }
+            window.inStep = true
             try {
                 window.steps[window.stepIndex]()
             } catch (e) {
                 window.check(false, "step " + window.stepIndex + " threw: " + e)
             }
+            window.inStep = false
             window.stepIndex += 1
         }
     }
@@ -1571,6 +1579,43 @@ ApplicationWindow {
         }
         return null
     }
+    /// The query block's live results (QueryResultModel), or null.
+    function queryResults() {
+        const item = editor.listView.itemAtIndex(viewRow("query")) as BlockDelegate
+        const view = item ? item.contentItem as QueryBlockView : null
+        return view ? view.results : null
+    }
+    /// The query's results show what the index has now: each row's page, line and status as a run
+    /// of the query now gives them. A status written from a result re-runs the query a moment later
+    /// (debounced, after the index followed the file) and replaces the rows: a gesture on a row
+    /// before that went to a checkbox about to go, and its menu went with it.
+    function queryResultsSettled() {
+        const results = queryResults()
+        if (!results || !results.ready)
+            return false
+        const now = host.runQuery(results.source, page.path)
+        const items = now.items || []
+        const shownCount = Math.min(items.length, results.maxItems)
+        if (!now.ok || results.rowCount() !== shownCount)
+            return false
+        for (let i = 0; i < shownCount; ++i) {
+            const shown = results.get(i)
+            if (shown.path !== items[i].path || shown.line !== items[i].line
+                    || shown.status !== (items[i].task ? items[i].task.status : ""))
+                return false
+        }
+        return true
+    }
+    /// The status menu of the result whose text starts with `prefix` is open.
+    function resultMenuOpen(prefix) {
+        const box = resultTaskBox(prefix)
+        return box !== null && box.statusMenu !== null && box.statusMenu.opened
+    }
+    function editorMenuOpen() { return editor.taskMenu !== null && editor.taskMenu.opened }
+    function embedMenuOpen() {
+        const box = embedTaskBox()
+        return box !== null && box.statusMenu !== null && box.statusMenu.opened
+    }
     function menuIndexOf(menu, name) {
         for (let i = 0; menu && i < menu.count; ++i) {
             const item = menu.itemAt(i)
@@ -1601,8 +1646,10 @@ ApplicationWindow {
         }
     }
     /// The steps of the context-menu gesture on `target()`: a right-click, or on touch UIs a finger
-    /// held down for a second (TaskBox's press-and-hold) and lifted.
-    function menuGesture(target) {
+    /// held down until `shown()` (TaskBox's press-and-hold opened the menu) and lifted — as a user
+    /// lifts it once the menu shows. (A fixed hold lifted it too early in a slow sanitizer build: a
+    /// tap, which toggled the task.)
+    function menuGesture(target, shown) {
         if (!Theme.touchUi) {
             return [() => {
                 const item = target()
@@ -1611,26 +1658,40 @@ ApplicationWindow {
                     taskEvents.mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton, Qt.NoModifier, -1)
             }]
         }
-        const steps = [() => {
-            const item = target()
-            check(item !== null, "the checkbox is there for the long press")
-            if (item)
-                taskEvents.touchEvent(item).press(0, item, item.width / 2, item.height / 2).commit()
-        }]
-        for (let i = 0; i < 9; ++i)
-            steps.push(() => {})
-        steps.push(() => {
-            const item = target()
-            if (item)
-                taskEvents.touchEvent(item).release(0, item, item.width / 2, item.height / 2).commit()
-        })
-        return steps
+        return [
+            () => {
+                const item = target()
+                check(item !== null, "the checkbox is there for the long press")
+                if (item)
+                    taskEvents.touchEvent(item).press(0, item, item.width / 2, item.height / 2).commit()
+            },
+            holdStep(shown),
+            () => {
+                const item = target()
+                if (item)
+                    taskEvents.touchEvent(item).release(0, item, item.width / 2, item.height / 2).commit()
+            }
+        ]
     }
-    /// Steps that wait until `ready()` (at most ~3 s), then go on. `what`: the check's text, or a
-    /// function giving it (read when the step runs).
+    /// How many steps a wait for something asynchronous lasts at most: ~3 s, times
+    /// BRULION_TEST_SLOWDOWN (ctest sets it, 25 in sanitizer builds: tests/CMakeLists.txt).
+    readonly property int waitLimit: 25 * DevTools.testSlowdown
+    /// A step that repeats until `ready()` (at most waitLimit times) and checks nothing: a finger
+    /// held down until the menu shows (the step after it lifts the finger, the next checks).
+    function holdStep(ready) {
+        return () => {
+            if (!ready() && window.waits++ < window.waitLimit) {
+                window.stepIndex -= 1
+                return
+            }
+            window.waits = 0
+        }
+    }
+    /// Steps that wait until `ready()` (at most waitLimit steps), then go on. `what`: the check's
+    /// text, or a function giving it (read when the step runs).
     function waitStep(ready, what) {
         return () => {
-            if (!ready() && window.waits++ < 25) {
+            if (!ready() && window.waits++ < window.waitLimit) {
                 window.stepIndex -= 1
                 return
             }
@@ -1673,8 +1734,8 @@ ApplicationWindow {
             () => check(info(window.taskRow).taskStatus === "todo" && blockTaskBox(window.taskRow) !== null,
                         "the block shows its checkbox"),
             // ---- The editor's checkbox: the menu, a status, undo, a plain click, no status ---------
-            ...menuGesture(() => blockTaskBox(window.taskRow)),
-            waitStep(() => editor.taskMenu !== null && editor.taskMenu.opened, gesture + " on a checkbox opens the status menu"),
+            ...menuGesture(() => blockTaskBox(window.taskRow), editorMenuOpen),
+            waitStep(editorMenuOpen, gesture + " on a checkbox opens the status menu"),
             () => {
                 const menu = editor.taskMenu
                 check(info(window.taskRow).taskStatus === "todo", gesture + " does not toggle the task")
@@ -1697,8 +1758,8 @@ ApplicationWindow {
                       tap + " on the checkbox still toggles, without a menu")
                 page.undo()
             },
-            ...menuGesture(() => blockTaskBox(window.taskRow)),
-            waitStep(() => editor.taskMenu.opened, "the menu opens again"),
+            ...menuGesture(() => blockTaskBox(window.taskRow), editorMenuOpen),
+            waitStep(editorMenuOpen, "the menu opens again"),
             () => {
                 const doing = menuItemNamed(editor.taskMenu, "taskStatus_doing")
                 check(!doing.checked && menuItemNamed(editor.taskMenu, "taskStatus_todo").checked,
@@ -1803,12 +1864,11 @@ ApplicationWindow {
                       && editor.suggestions.model.get(0).command === "taskWaiting",
                       "“/czeka” offers “Zadanie: oczekujące” first"),
             () => realKey(Qt.Key_Return),
-            () => {
-                check(info(window.taskRow).taskStatus === "deferred" && editor.activeEditor.plain() === "Zadzwonić do Żanety "
+            // (The list closes with a transition: a step later it may still be fading out.)
+            waitStep(() => info(window.taskRow).taskStatus === "deferred" && editor.activeEditor.plain() === "Zadzwonić do Żanety "
                       && editor.activeEditor.cursorPosition === 20 && !editor.suggestionsOpen,
-                      "the command sets the status, its text goes, the caret stays: " + editor.activeEditor.plain())
-                page.undo()
-            },
+                      () => "the command sets the status, its text goes, the caret stays: " + editor.activeEditor.plain()),
+            () => page.undo(),
             () => check(editor.activeEditor.plain() === "Zadzwonić do Żanety /czeka" && info(window.taskRow).taskStatus === "",
                         "one undo step brings the command text back: " + editor.activeEditor.plain()),
             () => {
@@ -1869,12 +1929,15 @@ ApplicationWindow {
                         "the Logseq keyword follows: " + fileLineOf(pageText(), "kafelki")),
             () => page.stopEditing(),
             // ---- A query result's checkbox: its own menu, the task in its own file ----------------
-            () => editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning),
-            waitStep(() => resultTaskBox("Mleko") !== null && resultTaskBox("Śrubki") !== null,
+            () => {
+                page.save()
+                editor.listView.positionViewAtIndex(viewRow("query"), ListView.Beginning)
+            },
+            // The page's edits above re-run the query too: its rows are replaced until it settled.
+            waitStep(() => resultTaskBox("Mleko") !== null && resultTaskBox("Śrubki") !== null && queryResultsSettled(),
                       "the query block lists the shopping tasks"),
-            ...menuGesture(() => resultTaskBox("Mleko")),
-            waitStep(() => resultTaskBox("Mleko") !== null && resultTaskBox("Mleko").statusMenu !== null
-                      && resultTaskBox("Mleko").statusMenu.opened, gesture + " on a query result's checkbox opens its menu"),
+            ...menuGesture(() => resultTaskBox("Mleko"), () => resultMenuOpen("Mleko")),
+            waitStep(() => resultMenuOpen("Mleko"), gesture + " on a query result's checkbox opens its menu"),
             () => {
                 window.ownMenu = resultTaskBox("Mleko").statusMenu
                 check(host.file("Zakupy.md").indexOf("- [ ] Mleko") === 0, gesture + " does not toggle the result")
@@ -1883,19 +1946,20 @@ ApplicationWindow {
             },
             waitStep(() => host.file("Zakupy.md").indexOf("- [>] Mleko #zakupy") === 0,
                       () => "a result's status is written in its own file: " + host.file("Zakupy.md").split("\n")[0]),
-            ...menuGesture(() => resultTaskBox("Śrubki")),
-            waitStep(() => resultTaskBox("Śrubki") !== null && resultTaskBox("Śrubki").statusMenu !== null
-                      && resultTaskBox("Śrubki").statusMenu.opened, "the next result's menu opens"),
+            // The next gesture once the results followed: "status:open" lists no waiting task.
+            waitStep(() => queryResultsSettled() && resultTaskBox("Mleko") === null && resultTaskBox("Śrubki") !== null,
+                      "the results follow: the waiting task is no open task any more"),
+            ...menuGesture(() => resultTaskBox("Śrubki"), () => resultMenuOpen("Śrubki")),
+            waitStep(() => resultMenuOpen("Śrubki"), "the next result's menu opens"),
             () => tapItem(menuItemNamed(resultTaskBox("Śrubki").statusMenu, "taskStatus_none")),
             waitStep(() => fileLine("Zakupy.md", "Śrubki") === "- Śrubki do półki #zakupy",
                       () => "“No status” on a result removes the task's checkbox in its file: " + fileLine("Zakupy.md", "Śrubki")),
-            waitStep(() => resultTaskBox("Śrubki") === null, "the result is no task any more"),
+            waitStep(() => resultTaskBox("Śrubki") === null && queryResultsSettled(), "the result is no task any more"),
             // ---- An embedded section's task (Budżet domowy#Październik) --------------------------
             () => editor.listView.positionViewAtIndex(rowOf("Budżet na październik") + 1, ListView.Center),
             waitStep(() => embedTaskBox() !== null, "the embedded section shows its task's checkbox"),
-            ...menuGesture(() => embedTaskBox()),
-            waitStep(() => embedTaskBox() !== null && embedTaskBox().statusMenu !== null && embedTaskBox().statusMenu.opened,
-                      gesture + " on an embedded task opens its menu"),
+            ...menuGesture(() => embedTaskBox(), embedMenuOpen),
+            waitStep(embedMenuOpen, gesture + " on an embedded task opens its menu"),
             () => tapItem(menuItemNamed(embedTaskBox().statusMenu, "taskStatus_done")),
             waitStep(() => fileLine("Budżet domowy.md", "czynsz") === "- [x] Opłacić czynsz 📅 2026-10-20 #finanse ✅ 2026-10-15",
                       () => "an embedded task's status is written in its own file: " + fileLine("Budżet domowy.md", "czynsz")),
@@ -1915,12 +1979,12 @@ ApplicationWindow {
                 const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
                 taskEvents.touchEvent(button).press(0, button, button.width / 2, button.height / 2).commit()
             },
-            () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+            holdStep(editorMenuOpen),
             () => {
                 const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
                 taskEvents.touchEvent(button).release(0, button, button.width / 2, button.height / 2).commit()
             },
-            waitStep(() => editor.taskMenu.opened, "holding the toolbar's task button opens the status menu"),
+            waitStep(editorMenuOpen, "holding the toolbar's task button opens the status menu"),
             () => {
                 const button = findItem(findItem(editor, "toolbarWriting"), "toolbarTask")
                 const menuBottom = editor.taskMenu.contentItem.mapToItem(null, 0, editor.taskMenu.contentItem.height).y

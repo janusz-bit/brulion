@@ -1370,6 +1370,7 @@ FocusScope {
         function onLoadingChanged() {
             if (!editor.controller.loading) {
                 list.userMoved = false
+                list.showsTop = true
                 // The editor may be gone by then (a day of the journal stream scrolled away).
                 editor.later(() => list.positionViewAtBeginning())
             }
@@ -1498,6 +1499,7 @@ FocusScope {
             if (rowCache > 0 && cacheBuffer > 0 && contentY < lastContentY - 0.5 && !dragging && !flicking)
                 cacheBuffer = cacheBuffer === rowCache ? rowCache + 1 : rowCache
             lastContentY = contentY
+            showsTop = contentY <= originY - topMargin + 1
         }
         // autoHeight: every row is in the range the list fills at once (synchronously, or with
         // the incubation of the item holding the editor) — none waits for the asynchronous cache.
@@ -1528,11 +1530,19 @@ FocusScope {
         /// The user scrolled: header size changes no longer move the view to the top.
         property bool userMoved: false
         onMovementStarted: userMoved = true
+        /// The view shows the page's top (the header), as it does after loading. Kept as the view
+        /// moves: the header growing upwards moves no contentY, so it still says where the view
+        /// was when the header's height changes.
+        property bool showsTop: true
 
         header: Column {
             width: list.width
-            // The header (page title) gets its final height after the first layout.
-            onHeightChanged: if (!list.userMoved) list.positionViewAtBeginning()
+            // The header (page title) gets its final height after the first layout: the top stays
+            // in view. Only while the view shows it: scrolled further without a drag or the wheel
+            // (the caret moved down the page with the keys, a selection dragged to the view's edge),
+            // a title wrapping again in a narrower window moved the view back to the top, away from
+            // the block being read or edited.
+            onHeightChanged: if (!list.userMoved && list.showsTop) list.positionViewAtBeginning()
             Loader {
                 width: parent.width
                 active: editor.header !== null

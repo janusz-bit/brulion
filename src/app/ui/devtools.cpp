@@ -79,6 +79,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
     m_touch = arguments.contains(u"--touch"_s);
     m_reducedMotion = arguments.contains(u"--reduced-motion"_s);
+    m_testSlowdown = std::max(1, qEnvironmentVariableIntValue("BRULION_TEST_SLOWDOWN"));
     if (std::any_of(arguments.cbegin(), arguments.cend(),
                     [](const QString &arg) { return arg.startsWith(u"--scroll-probe"_s); }))
         m_probeArguments = arguments;
