@@ -277,6 +277,19 @@ IoCard {
                                 .arg(panel.report.deletedLocal).arg(panel.report.deletedRemote) : ""
     }
 
+    BText {
+        readonly property string folders: panel.hasReport && panel.sync
+            ? panel.sync.folderCountsText(panel.report.foldersCreated || 0, panel.report.foldersDeleted || 0,
+                                          panel.report.foldersMoved || 0)
+            : ""
+        Layout.fillWidth: true
+        visible: folders !== ""
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+        text: folders
+    }
+
     RowLayout {
         Layout.fillWidth: true
         visible: panel.hasReport && panel.report.conflicts > 0

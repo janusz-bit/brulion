@@ -546,6 +546,48 @@ private Q_SLOTS:
         QVERIFY(!sync->needsConfirmation());
     }
 
+    void foldersTravelAndTheTreeFollows()
+    {
+        // Empty folders come down (the tree hears of them: folders make no Vault change of their
+        // own), a folder renamed in the app is moved on the server, and both show in the history.
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        QMap<QString, QString> files;
+        for (int i = 0; i < 12; ++i)
+            files.insert(u"Projekty/Strona %1 ąę.md"_s.arg(i), u"- treść %1\n"_s.arg(i));
+        auto ws = open(&server, files);
+        WorkspaceSync *sync = ws->sync();
+        sync->setNextcloud(account(server));
+        QVERIFY(syncAndWait(sync));
+        server.mkdir(u"Brulion/Z chmury/Puste żółw"_s);
+        QSignalSpy filesChanged(ws.get(), &Workspace::filesChanged);
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(ws->folderPaths().contains(u"Z chmury/Puste żółw"_s));
+        QStringList announced;
+        for (const QList<QVariant> &args : std::as_const(filesChanged))
+            announced += args.at(0).toStringList();
+        QVERIFY2(announced.contains(u"Z chmury/Puste żółw"_s), qPrintable(announced.join(u", "_s)));
+        QCOMPARE(sync->lastReport().value(u"foldersCreated"_s).toInt(), 2);
+        QVERIFY2(sync->history().first().toMap().value(u"summary"_s).toString().contains(u"2 new folder(s)"_s),
+                 qPrintable(sync->history().first().toMap().value(u"summary"_s).toString()));
+        QVERIFY(sync->runDetailsText(2).contains(u"Folders: 2 new"_s));
+
+        QCOMPARE(ws->renameFolder(u"Projekty"_s, u"Projekty 2026"_s), u"Projekty 2026"_s);
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(!sync->needsConfirmation());
+        QCOMPARE(server.requests("MOVE").size(), 1);
+        QCOMPARE(server.files(u"Brulion/Projekty 2026"_s).size(), 12);
+        QVERIFY(!server.isDir(u"Brulion/Projekty"_s));
+        QCOMPARE(sync->lastReport().value(u"foldersMoved"_s).toInt(), 1);
+        const QVariantMap row = sync->history().first().toMap();
+        QCOMPARE(row.value(u"outcome"_s).toString(), u"ok"_s);
+        QVERIFY2(row.value(u"summary"_s).toString().contains(u"1 folder(s) moved"_s),
+                 qPrintable(row.value(u"summary"_s).toString()));
+        QCOMPARE(sync->folderCountsText(0, 0, 0), QString());
+        QCOMPARE(sync->folderCountsText(2, 1, 1), u"Folders: 2 new, 1 deleted, 1 moved on the server"_s);
+    }
+
     void cancelMidSync()
     {
         // A long first sync (slow uploads) stopped with cancelSync(): what is done stays synced,

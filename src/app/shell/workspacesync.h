@@ -21,9 +21,10 @@
 // QML values (all plain data):
 //   state        "disabled" | "idle" | "syncing" | "error" | "offline" (not set up: "disabled")
 //   statusText   one translated line for the status bar ("Zsynchronizowano o 10:32", …)
-//   lastReport   { uploaded, downloaded, merged, deletedLocal, deletedRemote, conflicts,
-//                  conflictPaths, errors: [{ path, message }], skipped, changes, started,
-//                  finished, cancelled, failed, failure }
+//   lastReport   { uploaded, downloaded, merged, deletedLocal, deletedRemote, foldersCreated,
+//                  foldersDeleted, foldersMoved, conflicts, conflictPaths,
+//                  errors: [{ path, message }], skipped, changes, started, finished, cancelled,
+//                  failed, failure }
 //   pendingDeletions  [{ path, action: "delete-local" | "delete-remote" }]
 //   syncthing    { enabled, folder (the vault has a .stfolder), state, completion, needBytes,
 //                  globalBytes, connected (-1 unknown), errors, folderId, folderLabel, error,
@@ -41,7 +42,8 @@
 //                [{ number, started, startedText, durationMs, durationText, trigger, triggerText,
 //                   outcome, outcomeText, tone ("success" | "warning" | "danger" | "info"),
 //                   summary, errorCode, errorText, needsUser, repeats, quiet }]
-//   runDetails(n) one run for the "Szczegóły" dialog (phases, requests, errors, conflicts)
+//   runDetails(n) one run for the "Szczegóły" dialog (phases, requests, errors, conflicts,
+//                counts with the folders created, deleted and moved)
 #pragma once
 
 #include "types.h"
@@ -287,6 +289,8 @@ public:
     Q_INVOKABLE QVariantMap runDetails(int number) const;
     /// The same as plain text ("Kopiuj szczegóły"): translated labels, technical values.
     Q_INVOKABLE QString runDetailsText(int number) const;
+    /// "Foldery: 2 nowe, 1 usunięty, 1 przeniesiony" (the counts > 0 only; "" when none).
+    Q_INVOKABLE QString folderCountsText(int created, int deleted, int moved) const;
     /// Forget the kept runs.
     Q_INVOKABLE void clearHistory();
 
@@ -300,6 +304,9 @@ Q_SIGNALS:
     void connectionTested(bool ok, const QString &message);
     /// A sync created new conflict copies (count of conflicts of that run).
     void conflictsFound(int count);
+    /// A sync created or removed folders in the vault (folders produce no Vault change of their
+    /// own): the tree and the lists refresh.
+    void foldersChanged(const QStringList &paths);
     /// Something failed that the user should know about (translated).
     void errorOccurred(const QString &message);
     /// The open notebook's server folder is another notebook's too, so it does not sync (a

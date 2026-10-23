@@ -99,6 +99,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_sync = new WorkspaceSync(this);
     m_sync->setClock([this] { return now(); });
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
+    connect(m_sync, &WorkspaceSync::foldersChanged, this, &Workspace::notifyFolderChange);
     if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
         connect(app, &QGuiApplication::applicationStateChanged, this, &Workspace::applicationStateChanged);
 }

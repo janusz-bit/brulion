@@ -149,6 +149,9 @@ SyncRunRecord SyncRunRecord::fromReport(const SyncReport &report, bool stalled)
     r.fileErrors = int(report.errors.size());
     r.skipped = int(report.skipped.size());
     r.pendingDeletions = int(report.pendingDeletions.size());
+    r.foldersCreated = report.foldersCreated;
+    r.foldersDeleted = report.foldersDeleted;
+    r.foldersMoved = report.foldersMoved;
     r.phases = report.phases;
     r.stats = report.stats;
     for (const SyncFileError &e : report.errors) {
@@ -170,7 +173,8 @@ bool SyncRunRecord::isQuiet() const
 
 int SyncRunRecord::changeCount() const
 {
-    return uploaded + downloaded + merged + deletedLocal + deletedRemote + conflicts;
+    return uploaded + downloaded + merged + deletedLocal + deletedRemote + conflicts + foldersCreated + foldersDeleted
+           + foldersMoved;
 }
 
 QJsonObject toJson(const SyncPhaseTime &phase)
@@ -296,6 +300,13 @@ QJsonObject SyncRunRecord::toJson() const
             {u"phases"_s, phaseArray},
             {u"stats"_s, sync::toJson(stats)},
     };
+    // Folder counts only when there were any (records of older versions have none).
+    if (foldersCreated > 0)
+        json.insert(u"foldersNew"_s, foldersCreated);
+    if (foldersDeleted > 0)
+        json.insert(u"foldersDel"_s, foldersDeleted);
+    if (foldersMoved > 0)
+        json.insert(u"foldersMoved"_s, foldersMoved);
     if (!errorCode.isEmpty())
         json.insert(u"code"_s, errorCode);
     if (!errorMessage.isEmpty())
@@ -339,6 +350,9 @@ std::optional<SyncRunRecord> SyncRunRecord::fromJson(const QJsonObject &json)
     r.fileErrors = intOf(json, u"fileErrors"_s);
     r.skipped = intOf(json, u"skipped"_s);
     r.pendingDeletions = intOf(json, u"pending"_s);
+    r.foldersCreated = qMax(0, intOf(json, u"foldersNew"_s));
+    r.foldersDeleted = qMax(0, intOf(json, u"foldersDel"_s));
+    r.foldersMoved = qMax(0, intOf(json, u"foldersMoved"_s));
     for (const QJsonValue &v : json.value(u"phases"_s).toArray()) {
         if (const std::optional<SyncPhaseTime> p = phaseTimeFromJson(v.toObject()))
             r.phases.append(*p);

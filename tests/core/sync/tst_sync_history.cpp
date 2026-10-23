@@ -203,7 +203,13 @@ void TestSyncHistory::jsonRoundTrip()
     r.stats.timeouts = 1;
     r.stats.preconditionRetries = 2;
     r.stats.longestStallMs = 48'000;
+    r.foldersCreated = 2;
+    r.foldersMoved = 1;
     SyncRunRecord rec = SyncRunRecord::fromReport(r);
+    QCOMPARE(rec.foldersCreated, 2);
+    QCOMPARE(rec.foldersDeleted, 0);
+    QCOMPARE(rec.foldersMoved, 1);
+    QCOMPARE(rec.changeCount(), 3 + 1 + 1 + 2 + 1); // up, down, the conflict, the folders
     rec.repeats = 3;
     rec.firstStarted = kStart;
     const QJsonObject json = rec.toJson();
@@ -216,6 +222,9 @@ void TestSyncHistory::jsonRoundTrip()
     QCOMPARE(back->stats.requestsByMethod.value("PROPFIND"), 41);
     QCOMPARE(back->errors.at(0).code, u"locked"_s);
     QCOMPARE(back->skipped, 1);
+    QCOMPARE(back->foldersCreated, 2);
+    QCOMPARE(back->foldersMoved, 1);
+    QVERIFY(!json.contains(u"foldersDel"_s)); // only counts that happened are written
 }
 
 void TestSyncHistory::malformedRecordsAreSkipped()
@@ -306,6 +315,15 @@ void TestSyncHistory::foldsQuietRuns()
     skipped.skipped = {u"duży.bin"_s};
     history.add(skipped);
     QCOMPARE(history.runs().first().repeats, 1);
+    // Nor is a run that only moved or created folders.
+    history.add(report(9));
+    SyncReport folders = report(10);
+    folders.foldersMoved = 1;
+    folders.changes = {SyncChange{u"Archiwum/Projekty"_s, SyncAction::MoveRemote}};
+    history.add(folders);
+    QCOMPARE(history.runs().first().number, 10);
+    QCOMPARE(history.runs().first().repeats, 1);
+    QVERIFY(!history.runs().first().isQuiet());
 }
 
 void TestSyncHistory::numbers()
