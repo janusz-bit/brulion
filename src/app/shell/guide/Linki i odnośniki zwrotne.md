@@ -42,7 +42,7 @@ Menu bloku ma pozycję **Kopiuj odnośnik**, która kładzie odnośnik w schowku
 - **Link do nagłówka** (tylko na nagłówkach) — `[[Strona#Nagłówek]]`: nie zmienia pliku,
 - **Osadzenie** — `!((abc123))`, a dla nagłówka `![[Strona#Nagłówek]]`, czyli cała sekcja.
 
-Menu bloku otwierasz prawym przyciskiem myszy na dowolnym bloku (tekst, nagłówek, kod, tabela, cytat), przytrzymaniem kropki albo numeru punktu, a na telefonie przyciskiem **Więcej** (⋯) na pasku nad klawiaturą, gdy edytujesz blok. Z klawiatury **Ctrl+Shift+C** kopiuje odwołanie do edytowanego albo zaznaczonego bloku. W palecie poleceń (Ctrl+K) są „Kopiuj link do strony”, „Kopiuj odwołanie do bloku”, „Kopiuj link do bloku” i „Kopiuj link do nagłówka” — tego, pod którym stoi kursor. W panelu bocznym, w zakładce **Konspekt**, prawy przycisk albo przytrzymanie nagłówka kopiuje link do niego lub jego osadzenie. Po każdym kopiowaniu Brulion pokazuje, co skopiował.
+Menu bloku otwierasz prawym przyciskiem myszy na dowolnym bloku (tekst, nagłówek, kod, tabela, cytat), przytrzymaniem kropki albo numeru punktu, a na telefonie przyciskiem **Więcej** (⋯) na pasku nad klawiaturą, gdy edytujesz blok albo komórkę tabeli. Z klawiatury **Ctrl+Shift+C** kopiuje odwołanie do edytowanego albo zaznaczonego bloku. W palecie poleceń (Ctrl+K) są „Kopiuj link do strony”, „Kopiuj odwołanie do bloku”, „Kopiuj link do bloku” i „Kopiuj link do nagłówka” — tego, pod którym stoi kursor. W panelu bocznym, w zakładce **Konspekt**, prawy przycisk albo przytrzymanie nagłówka kopiuje link do niego lub jego osadzenie. Po każdym kopiowaniu Brulion pokazuje, co skopiował.
 
 - Odwołanie, link do bloku i osadzenie bloku dopisują mu identyfikator (` ^abc123`), jeśli go nie miał — to jedna zmiana, którą cofa Ctrl+Z. Identyfikator Logseqa (`id::`) zostaje użyty bez zmian.
 - Link do nagłówka niczego nie dopisuje, ale przestaje prowadzić do celu, gdy zmienisz treść nagłówka. Odwołanie do bloku przetrwa i zmianę nagłówka, i przeniesienie bloku.
@@ -51,7 +51,7 @@ Menu bloku otwierasz prawym przyciskiem myszy na dowolnym bloku (tekst, nagłów
 - Nazwa strony w odnośniku to jej tytuł, a gdy kilka stron ma ten sam tytuł — ścieżka (`[[Projekty/Dom#^abc123]]`). Dzień dziennika ma nazwę pliku: `[[2026-10-22#^abc123]]`.
 - W tej dokumentacji odnośniki do bloków nie są tworzone, bo zmieniłyby jej strony; linki do nagłówków i stron działają.
 
-Kliknięcie odnośnika do bloku lub nagłówka przewija stronę do celu, zaznacza go i na chwilę podświetla — także gdy cel jest na tej samej stronie. Gdy celu nie ma, Brulion o tym mówi. Link do bloku, który przeniesiono na inną stronę, otwiera stronę, na której blok jest teraz.
+Kliknięcie odnośnika do bloku lub nagłówka przewija stronę do celu, zaznacza go i na chwilę podświetla — także gdy cel jest na tej samej stronie albo w tym samym dniu dziennika. Gdy celu nie ma, Brulion o tym mówi. Link do bloku, który przeniesiono na inną stronę, otwiera stronę, na której blok jest teraz.
 
 ## Zmiana nazwy
 Zmiana nazwy strony (F2) aktualizuje linki do niej i tagi, które ją nazywają, w pozostałych notatkach. Historia strony i kosz pozwalają cofnąć pomyłki.

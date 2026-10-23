@@ -94,7 +94,9 @@ and AVIF are often missing): the picture view then names the format instead of a
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;
 with the year when it is not the current one). The file keeps `[[2026-10-13]]`. A
 `[[Page#^id]]` without an alias shows "Page › " and the first 60 characters of the block's text,
-like `((id))` does (the id itself while the block is unknown).
+like `((id))` does: the block with that id on that page (Obsidian ids are the page's own: another
+page may have the same one), else, moved away, the block the link now leads to (below); the id
+itself while the block is unknown.
 
 ### Headings and blocks in links / Linki do nagłówków i bloków
 
@@ -122,9 +124,12 @@ case and diacritics folded (`[[Page#zazolc gesla]]` finds "Zażółć **gęślą
 
 **Following** a link to a block or heading scrolls to it, selects it and flashes it, also when it
 is on the page already shown (`[[#Heading]]`, `[[#^id]]`, a link naming the current page — again
-on every click). A `[[Page#^id]]` whose block is no longer on that page opens the page holding the
-id now (vault-wide block ids, like `((id))`). A heading or block that is nowhere: the page opens at
-its top and the editor says so.
+on every click; in the journal stream the stream scrolls to it). In a query result a same-page
+link names the result's own page. A `[[Page#^id]]` whose block is no longer on that page opens the
+page holding the id now (vault-wide block ids, like `((id))`). A heading or block that is nowhere:
+the page opens at its top and the editor says so. "Nowhere" is decided on the complete index
+(right after opening a notebook it is still being built: it is completed first). The HTML export
+finds headings by the same matcher (sections of `![[Page#Heading]]`, anchors of links).
 
 **Copied links** — the block menu's "Kopiuj odnośnik", the command palette, Ctrl+Shift+C,
 the side panel's outline (docs/UI.md "The block editor"; `PageController::copyLink`,
