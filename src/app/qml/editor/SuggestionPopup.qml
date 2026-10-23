@@ -40,15 +40,16 @@ T.Popup {
         open()
     }
     /// Under the caret, above it when there is no room below; always inside the editor's visible
-    /// part (above the mobile toolbar). Called again while open: the list scrolls under the caret
-    /// (the toolbar appearing, the caret kept visible) and the list of items grows.
+    /// part (above the touch toolbar docked on the keyboard: editor.visibleBottom()). Called again
+    /// while open: the list scrolls under the caret (the toolbar appearing, the caret kept
+    /// visible, the keyboard sliding in) and the list of items grows.
     function place() {
         if (!target || !editor)
             return
         const rect = target.cursorRectangle
         const caret = target.mapToItem(editor, rect.x, rect.y)
         const h = implicitHeight
-        const bottomLimit = editor.toolbarTop
+        const bottomLimit = editor.visibleBottom()
         const below = caret.y + rect.height + 4
         const above = caret.y - h - 4
         x = Math.max(Theme.space2, Math.min(caret.x - Theme.space3, editor.width - width - Theme.space2))
@@ -68,8 +69,19 @@ T.Popup {
     }
     Connections {
         target: popup.visible ? popup.editor : null
-        function onToolbarTopChanged() { popup.place() }
+        function onToolbarVisibleChanged() { popup.place() }
         function onHeightChanged() { popup.place() }
+    }
+    // The dock host (the page's editor; the journal stream's frame) shrinks and grows with the
+    // keyboard, and the journal list moves the day under it.
+    Connections {
+        target: popup.visible ? popup.editor.dockHost : null
+        function onHeightChanged() { popup.place() }
+    }
+    Connections {
+        target: popup.visible && popup.editor.scroller ? popup.editor.scroller : null
+        ignoreUnknownSignals: true
+        function onContentYChanged() { popup.place() }
     }
     function move(delta) {
         if (model.count === 0)

@@ -93,5 +93,15 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
                 TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # The touch toolbar docked on a simulated on-screen keyboard (`--editor-script keyboard`,
+        # KeyboardInsets): a block in an outline and a document, a keyboard sliding in frame by
+        # frame, the system hiding it while editing goes on, the caret, autocomplete, source mode
+        # and a table cell above the toolbar, its buttons tapped with a finger.
+        add_test(NAME tst_editor_qml_keyboard_touch
+            COMMAND brulion --editor --editor-script keyboard --no-single-instance
+                --size 412x915 --touch --keyboard 0 --now "2026-10-15 10:00" --locale pl)
+        set_tests_properties(tst_editor_qml_keyboard_touch PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+            TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
     endif()
 endif()

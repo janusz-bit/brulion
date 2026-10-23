@@ -15,7 +15,11 @@ import Brulion
 //   * a day scrolled away while its editor has deferred work queued: nothing runs on it then;
 //   * midnight while a day is being edited (the list's today moves on): the new day is listed
 //     first, the edited day keeps its editor and caret, is no longer "today", and what is typed
-//     after midnight lands in its own file — nothing is written to the new day.
+//     after midnight lands in its own file — nothing is written to the new day;
+//   * the touch toolbar on a simulated keyboard (KeyboardInsets): docked on the keyboard, not at
+//     the day's bottom, the day does not grow for it, it stays put while the list scrolls (also
+//     by a finger), the caret of a day typed into near the keyboard stays above it without
+//     runaway scrolling, one toolbar when another day is edited.
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 Item {
     id: test
@@ -33,6 +37,12 @@ Item {
     property string trackedPath: ""
     property string trackedDate: ""
     property string secondPath: ""
+    property real dayHeight: 0
+    property real slotY: 0
+    property real contentBefore: 0
+    property int linesBefore: 0
+    property var events: null
+    property int dragStep: 0
 
     function check(ok, what) {
         if (!ok)
@@ -60,6 +70,51 @@ Item {
     }
     function fileHas(path, text) {
         return Workspace.readFile(path).indexOf(text) >= 0
+    }
+    // ---- The touch toolbar, docked on the journal stream's frame (the list's parent) -----------
+    function visibleSlots() {
+        const frame = test.list.parent
+        const out = []
+        for (let i = 0; frame && i < frame.children.length; ++i) {
+            const item = frame.children[i]
+            if (item.objectName === "editToolbarSlot" && item.visible)
+                out.push(item)
+        }
+        return out
+    }
+    function slotTop() {
+        const slots = visibleSlots()
+        return slots.length === 1 ? slots[0].mapToItem(null, 0, 0).y : -1
+    }
+    function slotBottom() {
+        const slots = visibleSlots()
+        return slots.length === 1 ? slots[0].mapToItem(null, 0, slots[0].height).y : -1
+    }
+    function windowHeight() {
+        return test.Window.window ? test.Window.window.height : 0
+    }
+    function near(a, b) {
+        return Math.abs(a - b) <= 1
+    }
+    function caretBottom(day) {
+        const edit = day ? day.editor.activeEditor : null
+        if (!edit || !edit.activeFocus)
+            return 1e9
+        const r = edit.cursorRectangle
+        return edit.mapToItem(null, r.x, r.y + r.height).y
+    }
+    /// A finger dragging over the list (QtTest's TestEvent), one move per step.
+    function dragSteps() {
+        const x = test.list.width / 2
+        const y0 = test.list.height * 0.45
+        const out = [() => {
+            test.dragStep = 0
+            test.events.touchEvent(test.list).press(0, test.list, x, y0).commit()
+        }]
+        for (let i = 1; i <= 6; ++i)
+            out.push(() => { test.events.touchEvent(test.list).move(0, test.list, x, y0 - 30 * i).commit() })
+        out.push(() => { test.events.touchEvent(test.list).release(0, test.list, x, y0 - 180).commit() })
+        return out
     }
 
     Timer {
@@ -148,6 +203,71 @@ Item {
                 test.dayAt(0).controller.setMode("outline")
             },
             () => Workspace.config.journalMode === "outline" && !test.dayAt(0).controller.documentMode,
+            // ---- The touch toolbar on a keyboard (simulated) -----------------------------------------
+            () => {
+                test.list.positionViewAtBeginning()
+                test.tracked = test.dayAt(0)
+                test.dayHeight = test.tracked.height
+                test.tracked.editor.startEditing(test.tracked.controller.lastVisibleRow(), -1)
+                KeyboardInsets.simulated = 300
+            },
+            () => test.editing(test.tracked) && test.visibleSlots().length === 1
+                  && test.near(test.slotBottom(), test.windowHeight() - 300),
+            () => {
+                test.check(Math.abs(test.tracked.height - test.dayHeight) < 1,
+                           "the day does not grow for the toolbar: " + test.tracked.height + " = " + test.dayHeight)
+                test.check(test.near(test.slotBottom(), test.windowHeight() - 300),
+                           "today's toolbar sits on the keyboard, not at the day's bottom: " + test.slotBottom())
+                test.slotY = test.slotTop()
+                test.list.contentY += 200
+            },
+            () => {
+                test.check(test.visibleSlots().length === 1 && test.near(test.slotTop(), test.slotY),
+                           "scrolling the journal by 200 px leaves the toolbar on the keyboard: " + test.slotTop() + " = " + test.slotY)
+                try {
+                    test.events = Qt.createQmlObject('import QtTest; TestEvent {}', test, "journalEvents")
+                } catch (e) {
+                    test.events = null
+                }
+                test.list.positionViewAtBeginning()
+            },
+            ...(() => {
+                // A finger flick over the list (without QtTest's TestEvent: skipped).
+                const steps = test.dragSteps()
+                return steps.map(step => () => { if (test.events) step() })
+            })(),
+            () => !test.list.moving,
+            () => {
+                if (test.events)
+                    test.check(test.list.contentY > 50 && test.visibleSlots().length === 1 && test.near(test.slotTop(), test.slotY),
+                               "a finger flicking the journal leaves the toolbar on the keyboard: " + test.slotTop() + " (list at "
+                               + test.list.contentY + ")")
+                test.tracked.controller.stopEditing()
+                test.list.positionViewAtIndex(6, ListView.End)
+            },
+            () => test.dayAt(6) !== null && test.dayAt(6).controller.loaded,
+            () => {
+                test.tracked = test.dayAt(6)
+                test.tracked.editor.startEditing(test.tracked.controller.lastVisibleRow(), -1)
+            },
+            () => test.editing(test.tracked) && test.caretBottom(test.tracked) <= test.slotTop(),
+            () => {
+                test.check(test.visibleSlots().length === 1, "another day edited: one toolbar")
+                test.contentBefore = test.list.contentY
+                test.linesBefore = test.tracked.editor.activeEditor.lineCount
+                test.typeKeys(test.tracked.editor.activeEditor, " — zażółć gęślą jaźń, źdźbło i łódź")
+            },
+            () => test.caretBottom(test.tracked) <= test.slotTop(),
+            () => {
+                const lines = test.tracked.editor.activeEditor.lineCount - test.linesBefore
+                const moved = test.list.contentY - test.contentBefore
+                test.check(moved >= -1 && moved <= lines * test.tracked.editor.lineHeight + 1,
+                           "typing near the keyboard scrolls at most a line per new line: " + moved + " px, " + lines + " line(s)")
+                test.check(test.caretBottom(test.tracked) <= test.slotTop(), "the caret stays above the toolbar")
+                test.tracked.controller.stopEditing()
+                KeyboardInsets.simulated = -1
+            },
+            () => test.visibleSlots().length === 0,
             // ---- An older day: typed, composing, scrolled away before the save --------------------
             () => test.list.positionViewAtIndex(20, ListView.Beginning),
             () => test.dayAt(20) !== null && test.dayAt(20).controller.loaded,

@@ -17,6 +17,9 @@ Rectangle {
 
     readonly property var pinned: AppController.sidePanelRoute
     readonly property bool hasPinned: pinned && pinned.view !== undefined
+    /// The pinned view's editing toolbar is docked at its bottom edge (touch UIs; AppShell keeps
+    /// the panel's bottom on the keyboard).
+    readonly property bool toolbarDocked: visible && hasPinned && pinnedView.viewToolbarDocked
 
     color: Theme.bg
     Accessible.role: Accessible.Pane
@@ -87,6 +90,7 @@ Rectangle {
         }
 
         ShellRouteView {
+            id: pinnedView
             visible: panel.hasPinned
             Layout.fillWidth: true
             Layout.fillHeight: true

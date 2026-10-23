@@ -28,6 +28,9 @@ T.TextField {
     property string size: "normal"
     property Item trailingItem: null
     property string accessibleName: placeholderText
+    /// The window keeps it above the on-screen keyboard while it has the focus
+    /// (BKeyboardFocusKeeper).
+    readonly property bool keepAboveKeyboard: true
 
     signal cleared()
     /// Escape was pressed with nothing to clear (the key is passed on to the parent, so an

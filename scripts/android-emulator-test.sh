@@ -9,13 +9,24 @@
 #      notification taps reach C++ (cold start and while running, Polish path).
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
+# With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
+# "Klawiatura ekranowa") — the sample notebook's journal stream and a page, a block edited with a
+# finger, the system's keyboard up: the toolbar sits right on its top edge (the IME window's frame
+# from dumpsys against the app's KeyboardInsets log and the screenshot), follows its slide frame
+# by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls, stays
+# docked right above the system's navigation bar when Back hides the keyboard (the shell's log);
+# a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
+# app arguments and environment only to those):
+#   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
+#        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
 #                            the system image are installed with its sdkmanager when missing
-#   BRULION_EMULATOR_IMAGE   default "system-images;android-36;google_apis;x86_64"
+#   BRULION_EMULATOR_IMAGE   default "system-images;android-36;google_apis;x86_64" (--keyboard also
+#                            runs on older ones, e.g. android-30)
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
 # On NixOS the emulator runs under steam-run (its bundled libraries expect an FHS system).
@@ -45,10 +56,15 @@ if [[ -e /etc/NIXOS && -z ${BRULION_ANDROID_IN_NIX_SHELL:-} ]]; then
 fi
 
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
+KEYBOARD=0
+if [[ ${1:-} == --keyboard ]]; then
+  KEYBOARD=1
+  shift
+fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-[[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -147,6 +163,145 @@ wait_for() { # <seconds> <command...>
   done
   return 1
 }
+
+# --- the editing toolbar on the keyboard (--keyboard) -------------------------------------------
+
+screen_size=$(adb shell wm size | sed -nE 's/.*: ([0-9]+)x([0-9]+).*/\1 \2/p' | tail -n 1)
+read -r SCREEN_W SCREEN_H <<<"$screen_size"
+DENSITY=$(adb shell wm density | sed -nE 's/.*: ([0-9]+).*/\1/p' | tail -n 1)
+ime_shown() { adb shell dumpsys input_method | grep -qE 'mInputShown=true|isInputViewShown=true'; }
+ime_hidden() { ! ime_shown; }
+# The top of the keyboard on screen (physical px): the visible IME insets source of
+# `dumpsys window displays` — "type=ime frame=[l,t][r,b] visible=true" (Android 12+), "type=ITYPE_IME
+# frame=… visibleFrame=[l,t][r,b] visible=true" (Android 11).
+ime_top() {
+  adb shell dumpsys window displays >"$OUT/dumpsys-displays.txt"
+  adb shell dumpsys window InputMethod >"$OUT/dumpsys-ime.txt"
+  grep -E 'InsetsSource .*type=(ime|ITYPE_IME) .*visible=true' "$OUT/dumpsys-displays.txt" | head -n 1 |
+    awk '{ v = ""; f = "";
+           if (match($0, /visibleFrame=\[[0-9]+,[0-9]+\]/)) { v = substr($0, RSTART, RLENGTH); gsub(/.*,|\]/, "", v) }
+           if (match($0, / frame=\[[0-9]+,[0-9]+\]/)) { f = substr($0, RSTART, RLENGTH); gsub(/.*,|\]/, "", f) }
+           print (v != "" && v > 0) ? v : f }'
+}
+# The app's last settled report: KeyboardInsets (logical px, C++) …
+app_overlap() {
+  adb logcat -d | grep -oE 'On-screen keyboard (shown|hidden), overlap [0-9]+ px \(platform\)' | tail -n 1 |
+    sed -nE 's/.*overlap ([0-9]+) px.*/\1/p'
+}
+# … and the observer's own (ImeInsets.kt, physical px): "view <top>..<bottom>: overlap <px>".
+observer_report() {
+  adb logcat -d -s BrulionIme:D | grep 'animating=false' | tail -n 1 |
+    sed -nE 's/.*view [0-9]+\.\.([0-9]+): overlap ([0-9]+) .*/\1 \2/p'
+}
+# What the app shows ends at the keyboard's top: the bottom of Qt's view minus the reported overlap
+# is the IME's top (±3 px; a window the system resized above the keyboard reports 0), and C++ got
+# the same overlap (±1 dp).
+keyboard_matches() {
+  local top report overlap
+  top=$(ime_top)
+  report=$(observer_report)
+  overlap=$(app_overlap)
+  echo "    IME top ${top:-?} px; Qt's view ends at ${report% *} px, covered ${report#* } px; KeyboardInsets ${overlap:-?} dp"
+  [[ -n $top && -n $report && -n $overlap ]] || return 1
+  awk -v top="$top" -v r="$report" -v ov="$overlap" -v d="$DENSITY" 'BEGIN {
+    split(r, a, " "); bottom = a[1]; px = a[2]
+    gap = bottom - px - top; if (gap < 0) gap = -gap
+    dp = px * 160 / d - ov; if (dp < 0) dp = -dp
+    exit !(gap <= 3 && dp <= 1) }'
+}
+keyboard_reported_hidden() { adb logcat -d | grep 'On-screen keyboard' | tail -n 1 | grep -q 'hidden, overlap 0'; }
+# The shell's last settled layout while typing (AppShell.qml, logical px): "Typing: the content
+# ends <room> px above the window's bottom (keyboard <k> px, navigation bar <s> px), editing
+# toolbar docked". With the keyboard hidden by the system the toolbar stays docked right above the
+# navigation bar: the content ends exactly that far above the bottom.
+typing_report() {
+  adb logcat -d | grep -oE "Typing: the content ends [0-9]+ px above the window's bottom \(keyboard [0-9]+ px, navigation bar [0-9]+ px\), editing toolbar (docked|not docked)" |
+    tail -n 1
+}
+toolbar_above_navigation_bar() {
+  local report
+  report=$(typing_report)
+  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ 0\ px,\ navigation\ bar\ ([0-9]+)\ px.*toolbar\ docked$ ]] &&
+    ((BASH_REMATCH[1] == BASH_REMATCH[2]))
+}
+app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
+start_app() { # <app arguments> [more am start arguments]
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  adb shell am start -W -n "$ACTIVITY" --es applicationArguments "'$1'" \
+    --es extraenvvars_QT_LOGGING_RULES "brulion.platform.debug=true" "${@:2}" >/dev/null
+  sleep 25
+}
+# Reports of the keyboard observer (ImeInsets.kt logs each one with this property set).
+ime_frames() { adb logcat -d -s BrulionIme:D | grep -c 'animating=true' || true; }
+android_api=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+
+if ((KEYBOARD)); then
+  info "Keyboard: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell setprop log.tag.BrulionIme DEBUG
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # The journal stream: today's first block tapped with a finger (the sample notebook on a
+  # Pixel 6: "Pierwszy dzień z Brulionem" a quarter down the screen).
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  app_shot keyboard-journal-start
+  adb shell input tap $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  check "a tap on today's block brings up the keyboard" wait_for 15 ime_shown
+  sleep 3
+  app_shot keyboard-journal
+  check "the app reports the keyboard (KeyboardInsets, platform)" wait_for 10 log_has 'On-screen keyboard shown, overlap'
+  check "the app's view ends at the keyboard's top" keyboard_matches
+  frames=$(ime_frames)
+  report=$(observer_report)
+  if ((android_api >= 30)); then
+    # (Android 11+: the window is drawn behind the system bars and keeps its size, the keyboard
+    # covers its bottom; keyboardsources.cpp.)
+    check "the window keeps its size: the keyboard covers its bottom (Android 11+)" test "${report#* }" -gt 0
+    check "the keyboard's slide is followed frame by frame (Android 11+, $frames frames)" test "$frames" -ge 3
+  else
+    echo "    the system resized the window above the keyboard ($frames frame(s) of a slide reported)"
+  fi
+  # The journal scrolls (a finger on the days above the keyboard): the toolbar stays on it.
+  adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * 35 / 100)) $((SCREEN_W / 2)) $((SCREEN_H * 15 / 100)) 400
+  sleep 2
+  app_shot keyboard-journal-scrolled
+  check "scrolling the journal leaves the keyboard up" ime_shown
+  # Back hides the keyboard; the toolbar stays docked at the bottom while editing goes on.
+  adb shell input keyevent 4
+  check "Back hides the keyboard" wait_for 10 ime_hidden
+  sleep 2
+  app_shot keyboard-journal-hidden
+  check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
+  check "the toolbar stays docked right above the system's navigation bar, editing goes on" \
+    wait_for 10 toolbar_above_navigation_bar
+  echo "    $(typing_report)"
+  # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
+  start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
+  app_shot keyboard-page-start
+  # Its first paragraphs lie 25–45 % down the screen (the system bars differ between versions).
+  for fraction in 40 30 35 45 27; do
+    adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * fraction / 100))
+    wait_for 6 ime_shown && break
+  done
+  check "a tap on the guide's text brings up the keyboard" wait_for 10 ime_shown
+  sleep 3
+  app_shot keyboard-page
+  check "the page's view ends at the keyboard's top" keyboard_matches
+  # The window is drawn behind the system bars (Android 11+): their icons follow the app's theme
+  # (the screenshots: dark icons over the light theme above, light ones over the dark theme here).
+  start_app '--demo --locale pl --theme dark --route journals'
+  app_shot keyboard-dark-theme
+  adb logcat -d >"$OUT/keyboard-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/keyboard-logcat.txt'"
+  grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true
+  info "Result"
+  cat "$OUT/keyboard-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
 
 # --- 1. the app --------------------------------------------------------------------------------
 

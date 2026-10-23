@@ -15,7 +15,8 @@ import Brulion
 //
 // Keyboard: Up/Down (wrapping), Enter/Space activate, Right opens a submenu, Left/Escape
 // close. Opening by keyboard highlights the first item. Use `popup()` (at the pointer or
-// at an item) — never blocking; react in each item's triggered().
+// at an item) — never blocking; react in each item's triggered(). Menus stay above the on-screen
+// keyboard (bottomMargin; they flip above their item when there is no room below).
 T.Menu {
     id: control
 
@@ -24,6 +25,7 @@ T.Menu {
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              contentHeight + topPadding + bottomPadding)
     margins: 8
+    bottomMargin: 8 + KeyboardInsets.overlap
     padding: 4
     overlap: 4
     focus: true

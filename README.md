@@ -59,8 +59,8 @@
 <p align="center">
   <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji i przyciskiem szybkiej notatki">
   &nbsp;&nbsp;&nbsp;
-  <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi nad klawiaturą">
-  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją oraz edycja z paskiem narzędzi nad klawiaturą (motyw ciemny)</sub>
+  <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi tuż nad klawiaturą">
+  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją oraz edycja z paskiem narzędzi tuż nad klawiaturą (motyw ciemny)</sub>
 </p>
 
 ## Dlaczego Brulion?
@@ -226,8 +226,12 @@ punkcie kończy listę (w liście zagnieżdżonej: wysuwa punkt o poziom), a `Ba
 punktu usuwa znacznik listy, jak w Obsidianie.
 
 Na telefonie wcięcia, przenoszenie bloków, zadania, linki, tagi, polecenia, terminy,
-przypomnienia i cofanie są w pasku narzędzi nad klawiaturą, a widoki bez własnego przycisku
-(centrum synchronizacji, import i eksport, kosz, ustawienia) — w menu *Więcej* (⋮).
+przypomnienia i cofanie są w pasku narzędzi, który zawsze leży tuż nad klawiaturą — w
+dzienniku i na stronach, także przy przewijaniu, w komórkach tabel (Następna komórka) i w
+źródle Markdown; dolna nawigacja chowa się na czas pisania, a okna wysuwane od dołu, menu i
+pola formularzy nigdy nie trafiają pod klawiaturę (także w przeglądarce na telefonie). Widoki
+bez własnego przycisku (centrum synchronizacji, import i eksport, kosz, ustawienia) są w menu
+*Więcej* (⋮).
 Wszystkie skróty: [docs/UI.md](docs/UI.md#keyboard-shortcuts-desktop).
 
 ## Dla programistów
@@ -278,7 +282,8 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
   alarms that fire while the app is closed) and in the **browser** (Qt for WebAssembly,
-  works offline).
+  works offline). On phones the editing toolbar always sits right on the on-screen keyboard
+  (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard).

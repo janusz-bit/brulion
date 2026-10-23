@@ -16,6 +16,9 @@ T.TextArea {
     property bool monospace: false
     property string errorText
     property string accessibleName: placeholderText
+    /// The window keeps it (or its caret) above the on-screen keyboard while it has the focus
+    /// (BKeyboardFocusKeeper).
+    readonly property bool keepAboveKeyboard: true
 
     implicitWidth: Math.max(contentWidth + leftPadding + rightPadding,
                             implicitBackgroundWidth + leftInset + rightInset,

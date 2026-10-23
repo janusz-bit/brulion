@@ -122,6 +122,21 @@ void JNICALL nativeSoundPicked(JNIEnv *env, jclass, jint kind, jstring json)
             Qt::QueuedConnection);
 }
 
+/// The keyboard observer (ImeInsets.kt) reports, also every frame of the keyboard's slide: queued
+/// to Qt's thread like the other callbacks. Malformed values (negative) count as 0.
+void JNICALL nativeImeChanged(JNIEnv *, jclass, jint overlap, jboolean shown, jboolean animating)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    const int pixels = std::max(0, static_cast<int>(overlap));
+    const bool isShown = shown != JNI_FALSE;
+    const bool isAnimating = animating != JNI_FALSE;
+    QMetaObject::invokeMethod(
+            bridge, [bridge, pixels, isShown, isAnimating] { Q_EMIT bridge->imeChanged(pixels, isShown, isAnimating); },
+            Qt::QueuedConnection);
+}
+
 } // namespace
 
 AndroidBridge *AndroidBridge::instance()
@@ -143,6 +158,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
+            {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
     };
     QJniEnvironment env;
     if (env.registerNativeMethods(kClass, methods, int(std::size(methods))))
@@ -564,6 +580,18 @@ void AndroidBridge::openSoundSettings(int kind)
     QJniObject::callStaticMethod<void>(kClass, "openSoundSettings", "(Landroid/content/Context;I)V", context.object(),
                                        jint(kind));
     failed("openSoundSettings");
+}
+
+void AndroidBridge::requestImeState()
+{
+    QJniObject::callStaticMethod<void>(kClass, "requestImeState", "()V");
+    failed("requestImeState");
+}
+
+void AndroidBridge::setSystemBarsLight(bool light)
+{
+    QJniObject::callStaticMethod<void>(kClass, "setSystemBarsLight", "(Z)V", jboolean(light));
+    failed("setSystemBarsLight");
 }
 
 void AndroidBridge::deliverPendingActivation()

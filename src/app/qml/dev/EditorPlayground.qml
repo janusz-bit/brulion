@@ -18,8 +18,10 @@ import Brulion
 // document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
 // checks (outline and document mode) and exits; `clock` checks the round clock and its buttons
 // (clockTest()) and exits; `taskstatus` checks the task status menu and commands
-// (taskStatusTest()) and exits. The in-memory vault runs ```query blocks on the real index
-// (FakeEditorHost).
+// (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
+// keyboard (keyboardTest(): KeyboardInsets.simulated) and exits. The in-memory vault runs
+// ```query blocks on the real index (FakeEditorHost). Like the app's shell, the editor ends at
+// the on-screen keyboard (KeyboardInsets.overlap); a simulated one is drawn grey.
 ApplicationWindow {
     id: window
 
@@ -207,6 +209,8 @@ ApplicationWindow {
     BlockEditor {
         id: editor
         anchors.fill: parent
+        // Ends at the on-screen keyboard (as AppShell does for the app's views).
+        anchors.bottomMargin: KeyboardInsets.overlap
         controller: page
         focus: true
         onNotice: (text, kind) => toasts.show(text, { kind: kind })
@@ -252,6 +256,18 @@ ApplicationWindow {
         parent: T.Overlay.overlay
         anchors.fill: parent
         z: 1000
+        bottomMargin: Theme.space4 + KeyboardInsets.overlap + (editor.toolbarVisible ? editor.toolbarHeight : 0)
+    }
+    // A simulated on-screen keyboard (--keyboard <px>, keyboardTest()).
+    Loader {
+        parent: T.Overlay.overlay
+        z: 2000
+        active: KeyboardInsets.source === "simulated" && KeyboardInsets.overlap > 0
+        anchors.left: parent ? parent.left : undefined
+        anchors.right: parent ? parent.right : undefined
+        anchors.bottom: parent ? parent.bottom : undefined
+        height: KeyboardInsets.overlap
+        sourceComponent: BKeyboardPlaceholder {}
     }
 
     // ---- Scripted states for screenshots -----------------------------------------------------
@@ -1884,6 +1900,294 @@ ApplicationWindow {
         stepIndex = 0
         stepTimer.start()
     }
+    // ---- The touch toolbar on a simulated keyboard (`--editor-script keyboard`) -----------------
+    // Run with --touch --keyboard 0 (ctest tst_editor_qml_keyboard_touch): the toolbar is docked on
+    // the keyboard's top for a block (outline and document), the source and a table cell, follows
+    // a keyboard that slides in frame by frame without scrolling until it has settled, stays at the
+    // bottom when the system hides the keyboard while editing goes on; the caret, the cell and the
+    // autocomplete stay above it.
+    function toolbarSlot() {
+        return findItem(editor, "editToolbarSlot")
+    }
+    function slotTop() {
+        const slot = toolbarSlot()
+        return slot ? slot.mapToItem(null, 0, 0).y : -1
+    }
+    function slotBottom() {
+        const slot = toolbarSlot()
+        return slot ? slot.mapToItem(null, 0, slot.height).y : -1
+    }
+    function near(a, b) {
+        return Math.abs(a - b) <= 1
+    }
+    /// The toolbar is shown with its bottom edge on a keyboard of `px` (0: the window's bottom).
+    function dockedOn(px) {
+        const slot = toolbarSlot()
+        return editor.toolbarVisible && slot !== null && slot.visible && slot.item !== null
+               && near(slotBottom(), window.height - px)
+    }
+    function caretBottom() {
+        const edit = editor.activeEditor
+        if (!edit || !edit.activeFocus)
+            return 1e9
+        const r = edit.cursorRectangle
+        return edit.mapToItem(null, r.x, r.y + r.height).y
+    }
+    function sourceCaretBottom() {
+        const edit = editor.sourceTextEdit
+        if (!edit)
+            return 1e9
+        const r = edit.cursorRectangle
+        return edit.mapToItem(null, r.x, r.y + r.height).y
+    }
+    function cellBottom() {
+        const input = editor.editingTable ? editor.editingTable.cellInput : null
+        return input ? input.mapToItem(null, 0, input.height).y : 1e9
+    }
+    /// The shown item called `name` under `item` (hidden tool sets keep theirs), or null.
+    function findShown(item, name) {
+        if (!item || !item.visible)
+            return null
+        if (item.objectName === name)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findShown(item.children[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
+    function toolbarButton(name) {
+        return findShown(toolbarSlot(), name)
+    }
+    /// Cell (r, c) is being edited, with the cell tools on the keyboard.
+    function cellEdited(r, c) {
+        const table = editor.editingTable
+        return editor.toolbarMode === "cell" && table !== null && table.editRow === r && table.editColumn === c
+               && table.cellInput !== null && table.cellInput.activeFocus && dockedOn(320)
+               && toolbarButton("toolbarCellTools") !== null
+    }
+    /// A finger's tap at (x, y) of `item`.
+    function fingerTap(item, x, y) {
+        taskEvents.touchEvent(item).press(0, item, x, y).commit()
+        taskEvents.touchEvent(item).release(0, item, x, y).commit()
+    }
+    property real contentBefore: 0
+    property var toolsBefore: null
+    property real toolsScroll: 0
+    property int linesBefore: 0
+    function keyboardTest() {
+        taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "keyboardEvents")
+        const lh = editor.lineHeight
+        steps = [
+            () => {
+                KeyboardInsets.simulated = 0
+                // A text block at the end of the long page (the last rows may be a query or code).
+                window.realRow = page.insertBlockAfter(page.lastVisibleRow(), "Ostatni punkt: zażółć gęślą jaźń")
+                editor.startEditing(window.realRow, -1)
+            },
+            waitStep(() => dockedOn(0) && editor.activeEditor !== null && editor.activeEditor.activeFocus,
+                     () => "no keyboard: the toolbar is docked on the editor's bottom edge: " + slotBottom() + " = " + window.height),
+            // (a) The keyboard comes up: the toolbar sits on it, the caret above the toolbar.
+            () => KeyboardInsets.simulated = 320,
+            waitStep(() => dockedOn(320), () => "the toolbar sits on the keyboard: " + slotBottom() + " = " + (window.height - 320)),
+            waitStep(() => caretBottom() <= slotTop() - lh / 2,
+                     () => "the caret of the last block is scrolled above the toolbar: " + caretBottom() + " ≤ " + slotTop()),
+            // (c) Typing with real keys: no runaway scrolling, the caret stays visible.
+            () => {
+                window.contentBefore = editor.listView.contentY
+                window.linesBefore = editor.activeEditor.lineCount
+                typeKeys(" zażółć gęślą jaźń, Łódź i Kraków")
+            },
+            waitStep(() => caretBottom() <= slotTop() && editor.listView.contentY - window.contentBefore
+                           <= (editor.activeEditor.lineCount - window.linesBefore) * lh + 1,
+                     () => "typing keeps the caret above the toolbar, scrolling at most a line per new line: "
+                           + (editor.listView.contentY - window.contentBefore) + " px for "
+                           + (editor.activeEditor.lineCount - window.linesBefore) + " line(s)"),
+            () => {
+                window.contentBefore = editor.listView.contentY
+                typeKeys("ąę")
+            },
+            () => check(near(editor.listView.contentY, window.contentBefore) && caretBottom() <= slotTop(),
+                        "typing on the same line does not scroll"),
+            () => check(findAll(editor, "editToolbarSlot").length === 1, "one toolbar"),
+            // (d) The system hides the keyboard (Back) while the block is still being edited.
+            () => KeyboardInsets.simulated = 0,
+            waitStep(() => dockedOn(0) && page.editingRow === window.realRow,
+                     "the keyboard hidden by the system: the toolbar stays docked at the bottom, editing goes on"),
+            // (e) The keyboard slides in frame by frame: the toolbar follows each frame, nothing
+            // scrolls until it has settled. (The caret low on the screen first: the keyboard will
+            // cover it.)
+            () => {
+                const list = editor.listView
+                list.contentY = Math.max(list.originY, list.contentY - ((window.height - 150) - caretBottom()))
+            },
+            waitStep(() => caretBottom() > window.height - 320 && caretBottom() < window.height - editor.toolbarHeight,
+                     () => "the caret is low on the screen, where the keyboard will come: " + caretBottom()),
+            () => {
+                window.contentBefore = editor.listView.contentY
+                KeyboardInsets.simulate(100, true)
+            },
+            () => check(dockedOn(100) && near(editor.listView.contentY, window.contentBefore),
+                        "100 px into the slide: the toolbar follows, the text does not move"),
+            () => KeyboardInsets.simulate(200, true),
+            () => check(dockedOn(200) && near(editor.listView.contentY, window.contentBefore),
+                        "200 px into the slide: the toolbar follows, the text does not move"),
+            () => KeyboardInsets.simulate(320, true),
+            () => check(dockedOn(320) && near(editor.listView.contentY, window.contentBefore) && KeyboardInsets.animating,
+                        "320 px, still sliding: the toolbar follows, the text does not move"),
+            () => KeyboardInsets.simulate(320, false),
+            waitStep(() => caretBottom() <= slotTop() - lh / 2,
+                     () => "the keyboard settled: the caret is scrolled above the toolbar: " + caretBottom() + " ≤ " + slotTop()),
+            // (i) Autocomplete near the keyboard stays above the toolbar.
+            () => {
+                const row = page.insertBlockAfter(page.lastVisibleRow(), "")
+                editor.startEditing(row, -1)
+            },
+            waitStep(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && dockedOn(320),
+                     "a new block at the end is edited with the toolbar on the keyboard"),
+            () => typeKeys("Zobacz [[Re"),
+            waitStep(() => editor.suggestionsOpen && editor.suggestions.opened, "[[ near the keyboard opens the suggestions"),
+            waitStep(() => {
+                const popup = editor.suggestions
+                return editor.mapToItem(null, 0, popup.y + popup.height).y <= slotTop() + 1
+            }, () => "the suggestions are above the toolbar: "
+                     + editor.mapToItem(null, 0, editor.suggestions.y + editor.suggestions.height).y + " ≤ " + slotTop()),
+            () => {
+                editor.closeSuggestions()
+                page.undo()
+                // The tools scrolled to their end before the editing stops.
+                const flick = toolbarButton("editToolbarFlick")
+                flick.contentX = flick.contentWidth - flick.width
+                window.toolsScroll = flick.contentX
+                window.toolsBefore = toolbarButton("toolbarBlockTools")
+                page.stopEditing()
+            },
+            waitStep(() => !editor.toolbarVisible, "stopping the editing takes the toolbar away"),
+            // The next edit shows the same tools (not made again), where they were scrolled to.
+            () => editor.startEditing(window.realRow, -1),
+            waitStep(() => editor.toolbarMode === "block" && dockedOn(320) && toolbarButton("toolbarBlockTools") !== null,
+                     "editing again brings the toolbar back"),
+            () => check(window.toolsScroll > 0 && toolbarButton("toolbarBlockTools") === window.toolsBefore
+                        && near(toolbarButton("editToolbarFlick").contentX, window.toolsScroll),
+                        "the block tools are kept between two edits, scrolled where they were: "
+                        + toolbarButton("editToolbarFlick").contentX + " = " + window.toolsScroll),
+            () => page.stopEditing(),
+            waitStep(() => !editor.toolbarVisible, "the editing stops again"),
+            // (g) Source mode: the toolbar with the source tools on the keyboard.
+            () => editor.toggleSourceMode(),
+            waitStep(() => page.sourceMode && editor.sourceTextEdit !== null && editor.sourceTextEdit.activeFocus,
+                     "source mode: the source has the keyboard"),
+            waitStep(() => editor.toolbarMode === "source" && dockedOn(320) && toolbarButton("toolbarSourceTag") !== null,
+                     "source mode: the toolbar with the source tools sits on the keyboard"),
+            // A tap on the bar beside its buttons stays on the bar: it moved the caret to the
+            // text under the bar.
+            () => editor.sourceTextEdit.cursorPosition = 0,
+            waitStep(() => sourceCaretBottom() < slotTop() / 2, "source mode: the caret at the start of the file"),
+            () => {
+                const slot = toolbarSlot()
+                fingerTap(slot, slot.width - 24, slot.height / 2)
+            },
+            () => check(editor.toolbarMode === "source" && editor.sourceTextEdit.activeFocus
+                        && editor.sourceTextEdit.cursorPosition === 0,
+                        "source mode: a tap on the bar beside its buttons leaves the caret where it was: "
+                        + editor.sourceTextEdit.cursorPosition),
+            () => {
+                const edit = editor.sourceTextEdit
+                edit.cursorPosition = edit.length
+            },
+            waitStep(() => sourceCaretBottom() <= slotTop(),
+                     () => "source mode: the caret at the end of the file is above the toolbar: " + sourceCaretBottom() + " ≤ " + slotTop()),
+            () => {
+                window.textBefore = EditorInput.plainText(editor.sourceTextEdit.textDocument)
+                tapItem(toolbarButton("toolbarSourceTag"))
+            },
+            waitStep(() => EditorInput.plainText(editor.sourceTextEdit.textDocument).length === window.textBefore.length + 1
+                           && page.sourceText.indexOf("#") >= 0,
+                     "the toolbar's # goes into the source"),
+            () => tapItem(toolbarButton("toolbarSourceUndo")),
+            waitStep(() => EditorInput.plainText(editor.sourceTextEdit.textDocument) === window.textBefore,
+                     "the toolbar's undo takes it back"),
+            () => tapItem(toolbarButton("toolbarHideKeyboard")),
+            waitStep(() => editor.toolbarMode === "" && !editor.sourceTextEdit.activeFocus,
+                     "hide keyboard: the source gives up the keyboard and the toolbar goes"),
+            () => editor.toggleSourceMode(),
+            waitStep(() => !page.sourceMode, "back from source mode"),
+            // (h) A table cell: the cell tools, the cell above the toolbar, the next cell.
+            () => {
+                window.realRow = viewRow("table")
+                editor.listView.positionViewAtIndex(window.realRow, ListView.End)
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                check(item !== null, "the table is on screen")
+                if (item)
+                    item.focusContent()
+            },
+            waitStep(() => editor.toolbarMode === "cell" && editor.editingTable !== null && editor.editingTable.cellInput !== null
+                           && dockedOn(320) && toolbarButton("toolbarNextCell") !== null,
+                     "a table cell: the toolbar with the cell tools sits on the keyboard"),
+            waitStep(() => cellBottom() <= slotTop(), () => "the cell being edited is above the toolbar: " + cellBottom() + " ≤ " + slotTop()),
+            () => {
+                window.baseRow = editor.editingTable.editRow
+                window.pasteRow = editor.editingTable.editColumn
+            },
+            // A word the keyboard is still composing (Android) goes into the cell left with the
+            // toolbar's next cell.
+            () => EditorInput.sendInputMethod(editor.editingTable.cellInput, "Kminek"),
+            () => check(editor.editingTable.cellInput.preeditText === "Kminek", "a word composed in the cell is preedit"),
+            () => tapItem(toolbarButton("toolbarNextCell")),
+            waitStep(() => editor.editingTable !== null && editor.editingTable.cellInput !== null
+                           && editor.editingTable.cellInput.activeFocus
+                           && (editor.editingTable.editRow !== window.baseRow || editor.editingTable.editColumn !== window.pasteRow),
+                     "the toolbar's next cell moves to the next cell"),
+            () => check(editor.editingTable.rawText(window.baseRow, window.pasteRow).endsWith("Kminek"),
+                        "the word being composed is kept in the cell left: " + editor.editingTable.rawText(window.baseRow, window.pasteRow)),
+            // Undo and redo keep the cell edited (the toolbar and the keyboard stay).
+            () => {
+                const table = editor.editingTable
+                window.baseRow = table.editRow
+                window.pasteRow = table.editColumn
+                window.textBefore = table.rawText(table.editRow, table.editColumn)
+                EditorInput.sendInputMethod(table.cellInput, "Szczaw")
+            },
+            () => tapItem(toolbarButton("toolbarCellUndo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow) && editor.editingTable.cellInput.text === window.textBefore
+                           && editor.editingTable.rawText(window.baseRow, window.pasteRow) === window.textBefore,
+                     () => "the toolbar's undo takes the cell's typing back (the composed word too), the cell stays edited: "
+                           + (editor.editingTable && editor.editingTable.cellInput ? editor.editingTable.cellInput.text : "(no cell)")),
+            () => tapItem(toolbarButton("toolbarCellRedo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow)
+                           && editor.editingTable.cellInput.text === window.textBefore + "Szczaw",
+                     () => "the toolbar's redo brings it back, the cell stays edited: "
+                           + (editor.editingTable && editor.editingTable.cellInput ? editor.editingTable.cellInput.text : "(no cell)")),
+            () => tapItem(toolbarButton("toolbarCellUndo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow) && editor.editingTable.cellInput.text === window.textBefore,
+                     "undo again, still in the cell"),
+            // Hide keyboard ends the cell's editing, with the word being composed.
+            () => EditorInput.sendInputMethod(editor.editingTable.cellInput, "Rzodkiew"),
+            () => tapItem(toolbarButton("toolbarHideKeyboard")),
+            waitStep(() => editor.editingTable === null && !editor.toolbarVisible, "hide keyboard ends the cell's editing and the toolbar"),
+            () => check(page.sourceText.indexOf("Rzodkiew") >= 0, "the word being composed is kept in the cell"),
+            // (f) The document mode: the same docking.
+            () => page.path = host.documentPath,
+            waitStep(() => page.path === host.documentPath && page.loaded && page.documentMode, "the trip plan opens as a document"),
+            () => {
+                window.realRow = page.insertBlockAfter(page.lastVisibleRow(), "Na koniec: źródło przy schronisku")
+                editor.startEditing(window.realRow, -1)
+            },
+            waitStep(() => dockedOn(320) && caretBottom() <= slotTop() - lh / 2,
+                     () => "document mode: the toolbar on the keyboard, the caret above it: " + caretBottom() + " ≤ " + slotTop()),
+            () => {
+                page.stopEditing()
+                KeyboardInsets.simulated = 0
+            },
+            waitStep(() => !editor.toolbarVisible && editor.height > window.height - 400, "the keyboard and the toolbar are gone"),
+        ]
+        stepIndex = 0
+        stepTimer.start()
+    }
+
     function fileLineOf(text, needle) {
         const lines = text.split("\n")
         for (const line of lines) {
@@ -1903,6 +2207,9 @@ ApplicationWindow {
             break
         case "taskstatus":
             taskStatusTest()
+            break
+        case "keyboard":
+            keyboardTest()
             break
         case "task-menu": {
             // The status menu of a block's checkbox (screenshots).

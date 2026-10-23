@@ -37,7 +37,9 @@ Rectangle {
         id: flick
         anchors.fill: parent
         anchors.topMargin: root.safe.top
-        anchors.bottomMargin: root.safe.bottom
+        // Ends at the on-screen keyboard (it covers the navigation bar too): the window's
+        // BKeyboardFocusKeeper scrolls the focused folder field above it.
+        anchors.bottomMargin: Math.max(root.safe.bottom, KeyboardInsets.overlap)
         contentWidth: width
         contentHeight: column.implicitHeight + 2 * margin
         clip: true

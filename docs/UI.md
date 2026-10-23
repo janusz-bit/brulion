@@ -17,8 +17,9 @@ components — no Material/Fusion look, so all targets look identical.
 * Outliner look like Logseq: round bullets, thin vertical guide lines per nesting level, fold
   arrows, clicking a bullet zooms into the block (breadcrumb to zoom out) — in outline mode; in
   document mode a note reads like an Obsidian page (see "Note modes" below).
-* Touch (Android, `--touch`): targets ≥ 44 px, bottom navigation, drawer, toolbar above the
-  keyboard, dialogs as bottom sheets.
+* Touch (Android, `--touch`): targets ≥ 44 px, bottom navigation, drawer, an editing toolbar
+  docked on the on-screen keyboard (the bottom navigation makes way while typing), dialogs as
+  bottom sheets on the keyboard ("On-screen keyboard" below).
 
 ## Window layout (`qml/Main.qml`, `qml/shell/AppShell.qml`)
 
@@ -42,7 +43,9 @@ components — no Material/Fusion look, so all targets look identical.
   Menu, or a swipe from the left edge — on Android with gesture navigation that edge swipe is the
   system's back gesture, so there the buttons open it); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
   a **bottom navigation** bar (Dziennik, Kalendarz, Szukaj, Zadania, Menu → drawer); a floating
-  quick-capture button (hidden while editing). The Android back key / gesture walks back
+  quick-capture button (hidden while editing). Both make way while typing: the on-screen
+  keyboard is up, or an editing toolbar is docked ("On-screen keyboard"). The Android back key /
+  gesture walks back
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
@@ -70,6 +73,78 @@ components — no Material/Fusion look, so all targets look identical.
   new page, capture, theme, language, sync, panels, settings, about), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
   the text become ⏰ / 📅), new page / folder, rename, delete confirmation, about; toasts.
+
+## On-screen keyboard (`KeyboardInsets`)
+
+One number — how much of the window's bottom edge the on-screen keyboard covers — places
+everything near the bottom, the same way on Android, in the browser and with a simulated keyboard:
+
+* **`KeyboardInsets`** (QML singleton; `src/app/ui/keyboardinsets.h`, QtCore only, unit-tested by
+  `tst_keyboardinsets`): `overlap` (logical px; 0 when the keyboard is hidden or the system already
+  resized the window above it), `shown` (up or coming up), `animating` (sliding: `overlap` follows
+  it frame by frame), `simulated`, `source`. Sources by priority: a simulated keyboard
+  (`--keyboard <px>`, the self-tests), the platform's own report — Android's IME insets
+  (`android/src/…/ImeInsets.kt`, every frame of the slide on Android 11+, where the window is drawn
+  behind the system bars and keeps its size — Qt's expanded client area, set on Android 11–14 by
+  `keyboardsources.cpp`, always so on 15+; Android 9–10 resize the window once, no frames;
+  docs/ANDROID.md "Klawiatura ekranowa"), the browser's `visualViewport` (docs/WEB.md) — and, as
+  the fallback,
+  Qt's `QInputMethod::keyboardRectangle` mapped by `keyboardOverlap()` (native pixels on Android,
+  the window's place on a split screen, clamped; malformed values give 0). `ui/keyboardsources.cpp`
+  connects them. Settled changes are logged (detailed event log): "On-screen keyboard shown,
+  overlap 336 px (platform)".
+* **The shell** (`AppShell`) ends its content — the sidebar, the current view and the side panel
+  (a page pinned there on a wide touch window, a tablet or a phone held sideways, docks its
+  toolbar on the keyboard too) — at the keyboard's top (a strip of `overlap` under it). While
+  typing — the keyboard is up, or an editing toolbar is docked in the view or the side panel
+  (also after the system hid the keyboard, Back or the keyboard's own key, while the editing goes
+  on) — the bottom navigation and the floating capture button make way, and the content ends
+  above the system's navigation bar. Views tell the shell with `toolbarDocked` (view contract,
+  `ShellRouteView`). Once the keyboard has settled, the detailed event log notes where the
+  content ends ("Typing: the content ends 48 px above the window's bottom (keyboard 0 px,
+  navigation bar 48 px), editing toolbar docked").
+* **The touch editing toolbar** (`MobileEditToolbar`) docks on the bottom edge of a dock host that
+  never scrolls (`BlockEditor.toolbarHost`): the editor itself on a page, the journal stream's
+  frame for its days (a day's toolbar used to scroll with the day and sit at its bottom in the
+  middle of the screen). So it sits on the keyboard, follows its slide frame by frame where the
+  platform reports the slide (Android 11+; elsewhere it moves once; no animation of its own), and
+  stays docked at the bottom when the system hides the keyboard while
+  editing goes on; "Ukryj klawiaturę" ends the editing and takes it away. Its tools follow
+  `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Cofnij, Ponów, Następna komórka,
+  Ukryj klawiaturę; `BlockEditor.editingTable`; after Cofnij / Ponów the same cell goes on being
+  edited, and every cell tool first commits the word the keyboard is still composing),
+  `source` (source mode — `[[`, `#`, `/`, the source's own Cofnij / Ponów, Ukryj klawiaturę).
+  Taps beside the buttons stay on the bar. The slot is one Loader per editor (`editToolbarSlot`,
+  created on the first edit) and each mode's row is made the first time it is used, then kept
+  (hidden between edits, where it was scrolled): another tool set — a selection's — docks the
+  same way as another mode with its own row, a new button goes into its mode's row.
+* **Form fields** (single-line fields and text areas: settings, sync and import forms,
+  onboarding, dialogs) have no toolbar; nothing pans the window to them any more (Android:
+  `adjustResize`), so `BKeyboardFocusKeeper` (once in `Main.qml`) scrolls the Flickables around
+  the focused `BTextField` / `BTextArea` (`keepAboveKeyboard`) until it is above the keyboard —
+  when it gets the focus, when the keyboard has settled, when the window or the caret moves.
+  Onboarding ends at the keyboard like the shell's content.
+* **What is being edited stays above the toolbar**: the caret or the table cell
+  (`BlockEditor.ensureEditVisible()`, the journal's `ensureVisible()` with the toolbar's height;
+  a day's editor asks the journal list, `BlockEditor.scroller`), checked again when the view's
+  height changes — not while the keyboard slides, once it has settled; the source's caret
+  likewise.
+* **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it;
+  menus (`BMenu.bottomMargin`) stay above it, the editor's task status menu also above the
+  toolbar; autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
+  the keyboard and the toolbar (`AppShell.toastClearance`); the command palette ends at it.
+* **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
+  `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and
+  a document, a slide frame by frame, the system hiding the keyboard, typing, autocomplete,
+  source mode and a tap beside the bar's buttons, a table cell — a word being composed, undo and
+  redo in the cell —, the tool rows kept between edits), the journal stream's self-test (`tst_content_journals_qml`: the
+  toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
+  `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast, the docked toolbar
+  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a settings field scrolled
+  above the keyboard, a page in the side panel of a wide touch window),
+  `tst_appio_import_qml` (onboarding's folder field); screenshots
+  `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
+  `scripts/android-emulator-test.sh --keyboard`, in the browser `scripts/wasm-smoke.mjs --keyboard`.
 
 ## Keyboard shortcuts (desktop)
 
@@ -256,10 +331,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `decodable` and `format` from `EditorHost::canDecodePicture`, one helper with the picture
   view: `canDecodePictureFormat`, picturesize.h). `route.open` on a picture: `text`, `links` | `outline` |
   `calendar`.
-* Mobile toolbar (`MobileEditToolbar`, touch UIs, above the keyboard; scrolls sideways):
-  Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a tap: the next status like
-  Ctrl+Enter; held down: the task status menu, above the toolbar), Link do strony (`[[`), Tag
-  (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów, Ukryj klawiaturę.
+* Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
+  scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
+  tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
+  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów,
+  Ukryj klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Ukryj klawiaturę; in source
+  mode Link do strony, Tag, Polecenia, Cofnij, Ponów, Ukryj klawiaturę.
 
 ## Scrolling performance
 
@@ -621,7 +698,9 @@ text; the outer numbers keep the small text size, the inner ones get a smaller f
 digits would not fit), `BReminderDialog` (date/time, alarm switch, recurrence picker,
 quick picks: za 10 min, za godzinę, dziś 19:00, jutro 8:00, poniedziałek 9:00), `BDiffView`,
 `BMergeView` (per-conflict choice: Moja / Ich / Obie / Ręcznie), `BPalette` with `BCommandPalette` and
-`BQuickSwitcher`. Icons: SVGs in `assets/icons/` (Lucide, ISC licence) via `BIcon`.
+`BQuickSwitcher`, `BKeyboardFocusKeeper` (the focused form field above the on-screen keyboard,
+"On-screen keyboard"), `BKeyboardPlaceholder` (a simulated keyboard's grey block). Icons: SVGs in
+`assets/icons/` (Lucide, ISC licence) via `BIcon`.
 
 ## Strings
 
@@ -669,7 +748,8 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers
-  line diff, word-level highlights, conflict hunks), `DeviceInfo`, `DevTools`. The first three
+  line diff, word-level highlights, conflict hunks), `KeyboardInsets` (the on-screen keyboard's
+  overlap of the window, "On-screen keyboard"), `DeviceInfo`, `DevTools`. The first four
   are QML-free classes in the static library `brulion_ui_helpers` (`src/app/ui/CMakeLists.txt`,
   QtCore + core modules, unit-tested by `tests/app/tst_uihelpers.cpp`); the app registers them
   through `QML_FOREIGN` wrappers in `src/app/ui/qmlforeign.h`. New helper API: add it to the
@@ -783,13 +863,14 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `mode-tooltip`, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
+| `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
 | `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
@@ -817,7 +898,9 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
   outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,
   `doc-journal-mixed`: one document day among outlines), settings, palette, switcher, new page
-  (with the mode choice), capture, drawer.
+  (with the mode choice), capture, drawer; with a simulated keyboard (`--keyboard 300`) the guide
+  being edited (`page-editing-keyboard`), today in the journal stream
+  (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks; the io script also seeds a sync history and an earlier
@@ -859,4 +942,4 @@ nixpkgs#oxipng`; keep each under 150 KB):
 | `graf-ciemny.png` | planning `graph` | desktop, dark |
 | `synchronizacja.png` | io `sync-conflict-merge`, run without the Nextcloud account of `io_nextcloud_home` (so the sidebar footer shows no connection error) | desktop, light |
 | `telefon-dziennik.png` | content `journals` | phone, light |
-| `telefon-edycja-ciemny.png` | shell `page-editing` | phone, dark |
+| `telefon-edycja-ciemny.png` | shell `page-editing-keyboard` | phone, dark |

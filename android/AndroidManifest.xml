@@ -65,10 +65,14 @@
         android:allowBackup="true"
         android:fullBackupOnly="false">
 
-        <!-- QtActivity + notification taps (path/line extras) forwarded to C++ (AndroidBridge). -->
+        <!-- QtActivity + notification taps (path/line extras) forwarded to C++ (AndroidBridge).
+             adjustResize: the window is never panned for the keyboard (Qt would pick pan or
+             resize per text field); the keyboard's insets reach ImeInsets, and the shell keeps
+             the editing toolbar on the keyboard (docs/ANDROID.md, "Klawiatura ekranowa"). -->
         <activity
             android:name="io.github.januszbit.brulion.android.BrulionActivity"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+            android:windowSoftInputMode="adjustResize|stateUnchanged"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>

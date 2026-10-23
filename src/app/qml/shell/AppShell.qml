@@ -16,6 +16,12 @@ import Brulion
 // delete confirmation, about) and the global shortcuts; bars and the sidebar call the open*()
 // functions. Content is laid out edge-to-edge: bars extend under the system bars and pad
 // themselves with the SafeArea margins.
+// On-screen keyboard (docs/UI.md "On-screen keyboard"): the content — sidebar, view and side
+// panel — ends at the keyboard's top (KeyboardInsets.overlap, a strip under it), so the editing
+// toolbar a view docks on its bottom edge sits on the keyboard, in the side panel too; while the
+// keyboard is up or a toolbar is docked (also after the system hid the keyboard, while editing
+// goes on) the bottom navigation and the capture button make way, and the content ends above the
+// system's navigation bar.
 FocusScope {
     id: shell
 
@@ -25,6 +31,22 @@ FocusScope {
 
     readonly property var safe: SafeArea.margins
     readonly property var route: AppController.currentRoute
+    /// How much of the window's bottom the on-screen keyboard covers.
+    readonly property real keyboardOverlap: KeyboardInsets.overlap
+    /// A view's editing toolbar is docked at its bottom edge (touch UIs): the main view's or the
+    /// side panel's.
+    readonly property bool toolbarDocked: routeView.viewToolbarDocked || sidePanel.toolbarDocked
+    /// Typing: the keyboard is up, or a toolbar stays docked after the system hid it.
+    readonly property bool typing: KeyboardInsets.shown || toolbarDocked
+    /// Room under the content: the keyboard (minus the bottom navigation, when that is still
+    /// shown); while typing at least the system's navigation bar, which the docked toolbar must
+    /// clear.
+    readonly property real keyboardRoom: bottomNav.visible ? Math.max(0, keyboardOverlap - bottomNav.height)
+                                         : typing ? Math.max(keyboardOverlap, safe.bottom) : keyboardOverlap
+    /// What covers the window's bottom edge for toasts (Main.qml): the keyboard and a docked
+    /// toolbar while typing; else the bottom navigation and the capture button on phones.
+    readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
+                                           : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
     readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
     /// Folders above the current page: [{ title, path }].
     readonly property var crumbs: {
@@ -39,6 +61,31 @@ FocusScope {
 
     function flag(value) {
         return value === true || value === "true"
+    }
+
+    // The detailed event log notes where the content ends while typing, once the keyboard has
+    // settled (scripts/android-emulator-test.sh --keyboard checks a docked toolbar above the
+    // system's navigation bar with it).
+    LoggingCategory {
+        id: platformLog
+        name: "brulion.platform"
+        defaultLogLevel: LoggingCategory.Info
+    }
+    readonly property string typingReport: !typing ? ""
+        : "Typing: the content ends %1 px above the window's bottom (keyboard %2 px, navigation bar %3 px), editing toolbar %4"
+          .arg(Math.round(keyboardRoom)).arg(Math.round(keyboardOverlap)).arg(Math.round(safe.bottom))
+          .arg(toolbarDocked ? "docked" : "not docked")
+    property string _loggedTyping: ""
+    function logTyping() {
+        if (KeyboardInsets.animating || typingReport === _loggedTyping)
+            return
+        console.debug(platformLog, typingReport !== "" ? typingReport : "Typing ended")
+        _loggedTyping = typingReport
+    }
+    onTypingReportChanged: Qt.callLater(shell.logTyping)
+    Connections {
+        target: KeyboardInsets
+        function onAnimatingChanged() { Qt.callLater(shell.logTyping) }
     }
 
     /// A page's title as people read it: daily notes by their date ("środa, 14 października
@@ -129,6 +176,9 @@ FocusScope {
     SplitView {
         id: split
         anchors.fill: parent
+        // Everything ends at the keyboard's top: an editor in the side panel docks its toolbar
+        // on the keyboard as well as the main view's.
+        anchors.bottomMargin: shell.keyboardRoom
         orientation: Qt.Horizontal
         handle: BSplitHandle { orientation: Qt.Horizontal }
 
@@ -141,7 +191,8 @@ FocusScope {
             SplitView.maximumWidth: 440
             sourceComponent: ShellSidebar {
                 topInset: shell.safe.top
-                bottomInset: shell.safe.bottom
+                // (The navigation bar's part the keyboard's room leaves.)
+                bottomInset: Math.max(0, shell.safe.bottom - shell.keyboardRoom)
                 onNewPageRequested: (folder) => shell.openNewPage(folder)
                 onNewFolderRequested: (folder) => shell.openNewFolder(folder)
                 onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
@@ -181,7 +232,8 @@ FocusScope {
             }
             ShellBottomNav {
                 id: bottomNav
-                visible: Theme.narrow
+                objectName: "shellBottomNav"
+                visible: Theme.narrow && !shell.typing
                 Layout.fillWidth: true
                 bottomInset: shell.safe.bottom
                 onMenuClicked: drawer.open()
@@ -189,6 +241,7 @@ FocusScope {
         }
 
         ShellSidePanel {
+            id: sidePanel
             visible: !Theme.narrow && AppController.sidePanelVisible
             SplitView.preferredWidth: 340
             SplitView.minimumWidth: 260
@@ -198,12 +251,24 @@ FocusScope {
         }
     }
 
+    // The keyboard's room (it covers this part of the window); under a docked toolbar when the
+    // keyboard is hidden: the navigation bar's strip.
+    Rectangle {
+        objectName: "shellKeyboardRoom"
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: shell.keyboardRoom
+        visible: shell.keyboardRoom > 0
+        color: Theme.bgElevated
+    }
+
     ShellCaptureButton {
         // Not while a view edits text: it would cover the editor's toolbar (and the caret). Nor
         // on views of forms and tools (settings, sync, import/export, history, trash, the graph
         // with its zoom buttons): there it covered their buttons and fields, and capturing a note
         // is not what they are for.
-        visible: Theme.narrow && !routeView.viewEditing
+        visible: Theme.narrow && !routeView.viewEditing && !shell.typing
                  && ["settings", "sync", "importExport", "history", "trash", "graph"].indexOf(shell.route.view) < 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom

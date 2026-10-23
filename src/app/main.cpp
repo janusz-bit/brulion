@@ -1,6 +1,8 @@
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
 #include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
+#include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
+#include "ui/keyboardsources.h"
 
 #include "appcontroller.h" // the shell (src/app/shell): app state, vault, navigation
 #include "appsettings.h"
@@ -194,6 +196,11 @@ int main(int argc, char *argv[])
 
     // Declared before the engine: QML singletons point into them, so they must outlive the engine.
     brulion::diag::LogController logs;
+    // How much of the window the on-screen keyboard covers (QML singleton KeyboardInsets), fed by
+    // the platform (keyboardsources.h); --keyboard <px> simulates one.
+    brulion::ui::KeyboardInsets keyboardInsets;
+    if (devTools.keyboard() >= 0)
+        keyboardInsets.setSimulated(devTools.keyboard());
     std::unique_ptr<AppController> controller;
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
@@ -210,6 +217,7 @@ int main(int argc, char *argv[])
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     devTools.attach(&engine); // --size, --screenshot
+    brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
 
     // The shell's controller: settings, the vault, navigation (src/app/shell/appcontroller.h).
     const auto createController = [&](const QString &settingsFile) {

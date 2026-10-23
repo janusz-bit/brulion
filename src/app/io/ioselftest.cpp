@@ -246,6 +246,40 @@ private:
         return home;
     }
 
+    // 1a. Phones: the folder field low on the screen gets the focus with the on-screen keyboard
+    //     up (a simulated one): it is scrolled above the keyboard (the window is never panned to
+    //     it, docs/UI.md "On-screen keyboard").
+    void keyboardOverField(QQuickItem *field)
+    {
+        auto *insets = m_engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
+        QQuickItem *flick = field->parentItem();
+        while (flick && !flick->inherits("QQuickFlickable"))
+            flick = flick->parentItem();
+        if (!insets || !flick) {
+            check(false, "onboarding: the keyboard and the folder field's Flickable exist");
+            return;
+        }
+        const qreal keyboard = 336;
+        const qreal top = m_window->height() - keyboard;
+        const auto bottom = [field] { return field->mapToScene(QPointF(0, field->height())).y(); };
+        // Low on the screen, where the keyboard comes (as on a phone in portrait).
+        const qreal low = m_window->height() - 120;
+        flick->setProperty("contentY", qMax<qreal>(0, flick->property("contentY").toReal() + bottom() - low));
+        settle(100);
+        const qreal before = bottom();
+        insets->setProperty("simulated", keyboard);
+        field->forceActiveFocus();
+        check(before > top && waitFor([&] {
+                  return field->hasActiveFocus() && bottom() <= top && bottom() > field->height();
+              }),
+              "onboarding: the folder field that gets the focus is scrolled above the keyboard");
+        std::fprintf(stderr, "selftest: the folder field ends at %.0f, then %.0f (the keyboard's top %.0f)\n", before,
+                     bottom(), top);
+        m_window->contentItem()->forceActiveFocus();
+        insets->setProperty("simulated", -1);
+        settle(200);
+    }
+
     // 1. Onboarding: a new notebook folder, "Import notes".
     void fromOnboarding()
     {
@@ -254,6 +288,8 @@ private:
         check(shown(path) && shown(button), "onboarding shows “Import notes” next to the notebook folder");
         if (!path || !button)
             return;
+        if (m_touch)
+            keyboardOverField(path);
         m_vault = scratch().filePath(u"Nowy notatnik"_s);
         path->setProperty("text", m_vault);
         settle(100);

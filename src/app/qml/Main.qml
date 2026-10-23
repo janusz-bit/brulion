@@ -11,7 +11,10 @@ import Brulion
 // requests: show/raise (tray, second launch, notification tap), close to the tray, quit.
 //
 // Edge-to-edge (Android): the window draws behind the status and navigation bars — its top and
-// bottom padding is 0 and the shell's bars pad themselves with the SafeArea margins.
+// bottom padding is 0 and the shell's bars pad themselves with the SafeArea margins. The on-screen
+// keyboard: AppShell lifts its content above it (KeyboardInsets), toasts stay above it, the
+// focused form field is scrolled above it (BKeyboardFocusKeeper); a simulated keyboard
+// (--keyboard <px>, tests) is drawn as a grey block.
 ApplicationWindow {
     id: window
 
@@ -109,6 +112,11 @@ ApplicationWindow {
         }
     }
 
+    readonly property AppShell shell: stage.item as AppShell
+
+    // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.
+    BKeyboardFocusKeeper { window: window }
+
     BToastHost {
         id: toastHost
         parent: T.Overlay.overlay
@@ -116,8 +124,22 @@ ApplicationWindow {
         z: 1000
         // Above the bottom navigation, the quick-capture button (56 + its margin) and the
         // Android navigation bar: an error toast stays until closed and must not hide them.
-        bottomMargin: Theme.space4 + (Theme.narrow && AppController.status === "ready" ? 60 + 56 + Theme.space4 : 0)
-                      + (parent ? parent.SafeArea.margins.bottom : 0)
+        // While typing above the keyboard and the editing toolbar docked on it (AppShell).
+        bottomMargin: Theme.space4 + (window.shell ? window.shell.toastClearance
+                                                    : (parent ? parent.SafeArea.margins.bottom : 0) + KeyboardInsets.overlap)
+    }
+
+    // A simulated on-screen keyboard (--keyboard <px>, the self-tests): a grey block with rows of
+    // keys where a real one would be, above everything (screenshots show the toolbar on it).
+    Loader {
+        parent: T.Overlay.overlay
+        z: 2000
+        active: KeyboardInsets.source === "simulated" && KeyboardInsets.overlap > 0
+        anchors.left: parent ? parent.left : undefined
+        anchors.right: parent ? parent.right : undefined
+        anchors.bottom: parent ? parent.bottom : undefined
+        height: KeyboardInsets.overlap
+        sourceComponent: BKeyboardPlaceholder {}
     }
 
     Connections {

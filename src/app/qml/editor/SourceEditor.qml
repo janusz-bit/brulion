@@ -15,19 +15,53 @@ import Brulion
 // finger alone too, so on touch UIs a TapHandler above it places the cursor where a tap lands
 // and selects the word under a long press (the system's selection handles, QInputMethod, take it
 // on from there where the platform has them).
+// Touch UIs: while the text has the keyboard the editor's toolbar is docked on it with the source
+// tools ([[, #, /, undo, redo, hide keyboard; BlockEditor.toolbarMode "source"); the view ends at
+// the keyboard (the shell lifts it), the caret is kept above the toolbar.
 Flickable {
     id: root
 
     property BlockEditor editor
     property PageController controller
+    /// The source's text editor (the touch toolbar inserts into it and uses its undo).
+    readonly property alias textEdit: source
+    /// Room at the bottom for the toolbar docked on the editor's bottom edge.
+    readonly property real toolbarRoom: editor && editor.toolbarVisible && editor.dockHost === editor ? editor.toolbarHeight : 0
 
     contentWidth: width
     contentHeight: source.height + 2 * Theme.space6
+    bottomMargin: toolbarRoom
     boundsBehavior: Flickable.StopAtBounds
     clip: true
     TouchFlick.enabled: true
 
     function focusEditor() { source.forceActiveFocus() }
+    /// "Hide keyboard" on the toolbar: the text gives up the keyboard (a tap brings it back).
+    function releaseKeyboard() { source.focus = false }
+    /// Keep the caret inside the visible part (above the toolbar), not while the keyboard slides.
+    function keepCaretVisible() {
+        if (!source.activeFocus || KeyboardInsets.animating)
+            return
+        const top = source.y + source.cursorRectangle.y
+        const bottom = top + source.cursorRectangle.height
+        const visibleHeight = root.height - root.toolbarRoom
+        if (top < root.contentY + Theme.space4)
+            root.contentY = Math.max(0, top - Theme.space4)
+        else if (bottom > root.contentY + visibleHeight - Theme.space4)
+            root.contentY = bottom - visibleHeight + Theme.space4
+    }
+    // The view shrinks with the keyboard; the toolbar comes and goes.
+    property real lastHeight: 0
+    onHeightChanged: {
+        const shrank = height < lastHeight - 0.5
+        lastHeight = height
+        if (shrank)
+            Qt.callLater(root.keepCaretVisible)
+    }
+    onToolbarRoomChanged: Qt.callLater(root.keepCaretVisible)
+    readonly property bool keyboardSliding: KeyboardInsets.animating
+    onKeyboardSlidingChanged: if (!keyboardSliding && KeyboardInsets.shown) Qt.callLater(root.keepCaretVisible)
+    Component.onDestruction: if (editor) editor.sourceEditing = false
 
     T.ScrollBar.vertical: BScrollBar {}
 
@@ -95,13 +129,9 @@ Flickable {
             root.controller.sourceText = t
             pushing = false
         }
-        onCursorRectangleChanged: {
-            const top = y + cursorRectangle.y
-            if (top < root.contentY + Theme.space4)
-                root.contentY = Math.max(0, top - Theme.space4)
-            else if (top + cursorRectangle.height > root.contentY + root.height - Theme.space4)
-                root.contentY = top + cursorRectangle.height - root.height + Theme.space4
-        }
+        onCursorRectangleChanged: root.keepCaretVisible()
+        // The editor's toolbar shows the source tools while the text has the keyboard.
+        onActiveFocusChanged: if (root.editor) root.editor.sourceEditing = activeFocus
 
         Connections {
             target: root.controller

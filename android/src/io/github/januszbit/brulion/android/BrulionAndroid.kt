@@ -16,6 +16,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -61,6 +62,8 @@ object BrulionAndroid {
   private var nativeAttached = false
 
   @Volatile private var activityRef: WeakReference<Activity>? = null
+  /** [setSystemBarsLight]'s value, null before C++ asked. */
+  @Volatile private var systemBarsLight: Boolean? = null
 
   // -----------------------------------------------------------------------------------------
   // Native methods, registered from C++ (QJniEnvironment::registerNativeMethods)
@@ -78,6 +81,12 @@ object BrulionAndroid {
    */
   @JvmStatic external fun nativeSoundPicked(kind: Int, json: String)
 
+  /**
+   * The on-screen keyboard covers [overlap] physical pixels of Qt's view ([ImeInsets]): [shown]
+   * while it is up or coming up, [animating] for each frame of its slide (Android 11+).
+   */
+  @JvmStatic external fun nativeImeChanged(overlap: Int, shown: Boolean, animating: Boolean)
+
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
   // -----------------------------------------------------------------------------------------
@@ -87,6 +96,25 @@ object BrulionAndroid {
   fun attach(context: Context) {
     ReminderNotifier.ensureChannels(context)
     synchronized(lock) { nativeAttached = true }
+    // What the keyboard observer saw before C++ listened.
+    onMain { ImeInsets.reportAgain() }
+  }
+
+  /** C++ asks for the on-screen keyboard's state (it arrives through [nativeImeChanged]). */
+  @JvmStatic
+  fun requestImeState() {
+    onMain { ImeInsets.reportAgain() }
+  }
+
+  /**
+   * The window is drawn behind the system bars (Android 11+, src/app/ui/keyboardsources.cpp): their
+   * icons are dark over a [light] window, light over a dark one — the app's theme, not the
+   * system's day/night mode, which a theme chosen in the settings may differ from.
+   */
+  @JvmStatic
+  fun setSystemBarsLight(light: Boolean) {
+    systemBarsLight = light
+    onMain { applySystemBars() }
   }
 
   /** C++ is going away (application shutdown): keep activations for [takeActivation]. */
@@ -355,8 +383,23 @@ object BrulionAndroid {
 
   internal fun onActivityCreated(activity: Activity) {
     activityRef = WeakReference(activity)
+    applySystemBars()
     ReminderNotifier.ensureChannels(activity)
     onActivityIntent(activity, activity.intent)
+  }
+
+  /**
+   * The system bars' icons as C++ asked ([setSystemBarsLight]) — again after a configuration
+   * change, where Qt sets them after the system's day/night mode.
+   */
+  internal fun applySystemBars() {
+    val light = systemBarsLight ?: return
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    val window = currentActivity()?.window ?: return
+    WindowCompat.getInsetsController(window, window.decorView).run {
+      isAppearanceLightStatusBars = light
+      isAppearanceLightNavigationBars = light
+    }
   }
 
   internal fun onActivityDestroyed(activity: Activity) {
@@ -428,6 +471,23 @@ object BrulionAndroid {
         }
       }
       pendingActivation = activation
+    }
+  }
+
+  /**
+   * Hands the keyboard's state to C++ ([ImeInsets], main thread). False when C++ does not listen
+   * (yet): the observer reports it again on [attach].
+   */
+  internal fun imeChanged(overlap: Int, shown: Boolean, animating: Boolean): Boolean {
+    synchronized(lock) {
+      if (!nativeAttached) return false
+      try {
+        nativeImeChanged(overlap, shown, animating)
+        return true
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native keyboard callback not registered", e)
+        return false
+      }
     }
   }
 

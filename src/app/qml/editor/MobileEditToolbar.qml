@@ -2,37 +2,44 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// MobileEditToolbar — the editing toolbar of touch UIs, sitting right above the virtual
-// keyboard (Qt.inputMethod.keyboardRectangle; at the bottom when the window is resized for the
-// keyboard): outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
-// status menu), [[, #, /, date, reminder, picture, undo, redo, hide keyboard. In the document
-// mode the writing tools come first — a list button (paragraph ↔ list item), task, [[, #, / —
-// then outdent / indent (list items only) and move up/down, so a phone's first screen of buttons
-// holds no outline tools that are disabled in a paragraph.
-// Buttons never take focus, so the caret stays in the block being edited. Scrolls sideways when
-// the window is narrower than the buttons.
+// MobileEditToolbar — the editing toolbar of touch UIs, docked on the virtual keyboard: BlockEditor
+// places it on the bottom edge of its dock host (the editor on a page, the journal stream's frame
+// for its days), which the shell keeps on the keyboard's top (KeyboardInsets, docs/UI.md
+// "On-screen keyboard"); it stays there when the system hides the keyboard while editing goes on.
+// The tools follow `mode` (BlockEditor.toolbarMode):
+//   "block"   outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
+//             status menu), [[, #, /, date, reminder, picture, undo, redo, hide keyboard. In the
+//             document mode the writing tools come first — a list button (paragraph ↔ list
+//             item), task, [[, #, / — then outdent / indent (list items only) and move up/down, so
+//             a phone's first screen of buttons holds no outline tools that are disabled in a
+//             paragraph;
+//   "cell"    a table cell: undo, redo, next cell, hide keyboard;
+//   "source"  source mode: [[, #, /, undo, redo (the source's own), hide keyboard.
+// "Hide keyboard" ends the editing (the toolbar goes with it). Buttons never take focus, so the
+// caret stays where it is; a tap beside them stays on the bar. Scrolls sideways when the window is
+// narrower than the buttons. Each tool set is made the first time its mode is used and kept (the
+// bar is hidden, not rebuilt, between two edits: the scroll position stays).
+// Extending it: a new button goes into its mode's row; another tool set (a selection's) is a new
+// mode of BlockEditor.toolbarMode with its own row here, docked in the same slot.
 Rectangle {
     id: bar
 
     property BlockEditor editor
+    /// "block" | "cell" | "source" (see above).
+    readonly property string mode: editor ? editor.toolbarMode : ""
+    /// The tools shown: `mode`, kept while the bar is hidden between two edits.
+    property string shownMode: ""
     readonly property PageController controller: editor ? editor.controller : null
     readonly property int row: controller ? controller.editingRow : -1
     readonly property InlineEditor edit: editor ? editor.activeEditor : null
+    /// Source mode: its text editor (insertions, its own undo).
+    readonly property TextEdit sourceEdit: editor && mode === "source" ? editor.sourceTextEdit : null
+    /// The table whose cell is being edited.
+    readonly property TableBlockView table: editor && mode === "cell" ? editor.editingTable : null
     readonly property bool documentMode: editor !== null && editor.documentMode
     /// The edited block is a list item (the document mode indents only those).
     readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
-    /// Top of the virtual keyboard in the editor's coordinates (its height when hidden).
-    readonly property real keyboardTop: {
-        const kb = Qt.inputMethod.keyboardRectangle
-        if (!Qt.inputMethod.visible || kb.height <= 0 || !editor)
-            return editor ? editor.height : 0
-        const p = editor.mapFromItem(null, 0, kb.y / Screen.devicePixelRatio)
-        return Math.min(editor.height, p.y)
-    }
 
-    height: Theme.touchTarget + Theme.space2 + 1
-    y: keyboardTop - height
-    z: 10
     color: Theme.bgElevated
 
     Accessible.role: Accessible.ToolBar
@@ -44,6 +51,22 @@ Rectangle {
         color: Theme.border
     }
 
+    onModeChanged: showMode()
+    Component.onCompleted: showMode()
+    // A tool set is made when its mode first comes (latched here: a Loader loads synchronously
+    // inside its `active` binding) and then kept.
+    function showMode() {
+        if (mode === "")
+            return
+        shownMode = mode
+        if (mode === "block")
+            blockLoader.active = true
+        else if (mode === "cell")
+            cellLoader.active = true
+        else if (mode === "source")
+            sourceLoader.active = true
+    }
+
     /// Commit the word the keyboard is composing before a button acts on the block: otherwise
     /// it is dropped when the controller resets the block's text.
     function commitComposition() {
@@ -51,15 +74,40 @@ Rectangle {
             EditorInput.commitPreedit(edit)
     }
 
+    /// Insert `s` at the caret of the block (or of the source in source mode).
     function insertText(s) {
-        if (!edit || edit.readOnly)
+        const target = bar.mode === "source" ? bar.sourceEdit : bar.edit
+        if (!target || target.readOnly)
             return
-        commitComposition()
-        if (edit.selectedText !== "")
-            edit.remove(edit.selectionStart, edit.selectionEnd)
-        const before = edit.cursorPosition > 0 ? edit.text.charAt(edit.cursorPosition - 1) : ""
+        if (target === bar.edit)
+            commitComposition()
+        else
+            EditorInput.commitPreedit(target)
+        if (target.selectedText !== "")
+            target.remove(target.selectionStart, target.selectionEnd)
+        const before = target.cursorPosition > 0 ? target.getText(target.cursorPosition - 1, target.cursorPosition) : ""
         const lead = (s === "#" || s === "/") && before !== "" && before !== " " && before !== "\n" ? " " : ""
-        edit.insert(edit.cursorPosition, lead + s)
+        target.insert(target.cursorPosition, lead + s)
+    }
+    /// Close the keyboard and end the editing (the toolbar goes with it).
+    function hideKeyboard() {
+        if (bar.mode === "block") {
+            bar.commitComposition()
+            Qt.inputMethod.hide()
+            bar.editor.stopEditing(false)
+        } else if (bar.mode === "cell") {
+            // The composed word first: hiding the keyboard may drop it.
+            if (bar.table && bar.table.cellInput)
+                EditorInput.commitPreedit(bar.table.cellInput)
+            Qt.inputMethod.hide()
+            if (bar.table)
+                bar.table.closeCell()
+        } else if (bar.mode === "source") {
+            if (bar.sourceEdit)
+                EditorInput.commitPreedit(bar.sourceEdit)
+            Qt.inputMethod.hide()
+            bar.editor.releaseSourceKeyboard()
+        }
     }
 
     component ToolButton: BIconButton {
@@ -131,8 +179,18 @@ Rectangle {
         }
     }
 
+    // Taps between and beside the buttons stay on the bar (the Flickable takes them only while
+    // the buttons are wider than the bar): they went through to what the bar covers — a block
+    // started being edited, the source's caret moved under the bar.
+    MouseArea {
+        objectName: "editToolbarBackground"
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+    }
+
     Flickable {
         id: flick
+        objectName: "editToolbarFlick"
         anchors.fill: parent
         anchors.topMargin: 1
         contentWidth: buttons.width
@@ -148,6 +206,38 @@ Rectangle {
             leftPadding: Theme.space1
             rightPadding: Theme.space1
             spacing: 0
+
+            // One tool set at a time (the Loaders take their Row's width; hidden ones take no
+            // room). Made when first needed (showMode()), then kept.
+            Loader {
+                id: blockLoader
+                height: parent.height
+                active: false
+                visible: bar.shownMode === "block"
+                sourceComponent: blockTools
+            }
+            Loader {
+                id: cellLoader
+                height: parent.height
+                active: false
+                visible: bar.shownMode === "cell"
+                sourceComponent: cellTools
+            }
+            Loader {
+                id: sourceLoader
+                height: parent.height
+                active: false
+                visible: bar.shownMode === "source"
+                sourceComponent: sourceTools
+            }
+        }
+    }
+
+    // ---- A block being edited ------------------------------------------------------------------
+    Component {
+        id: blockTools
+        Row {
+            objectName: "toolbarBlockTools"
 
             // Document: list, task, [[, #, / | outdent, indent, up, down | …
             // Outline:  outdent, indent, up, down | task, [[, #, / …
@@ -196,13 +286,100 @@ Rectangle {
                 onClicked: { bar.commitComposition(); bar.controller.redo() }
             }
             ToolButton {
+                objectName: "toolbarHideKeyboard"
                 iconName: "keyboard-off"
                 label: qsTr("Hide keyboard")
-                onClicked: {
-                    bar.commitComposition()
-                    Qt.inputMethod.hide()
-                    bar.editor.stopEditing(false)
-                }
+                onClicked: bar.hideKeyboard()
+            }
+        }
+    }
+
+    // ---- A table cell being edited -------------------------------------------------------------
+    Component {
+        id: cellTools
+        Row {
+            objectName: "toolbarCellTools"
+            ToolButton {
+                objectName: "toolbarCellUndo"
+                iconName: "undo-2"
+                label: qsTr("Undo")
+                enabled: bar.table !== null && bar.controller !== null && bar.controller.canUndo
+                onClicked: bar.table.undoInCell()
+            }
+            ToolButton {
+                objectName: "toolbarCellRedo"
+                iconName: "redo-2"
+                label: qsTr("Redo")
+                enabled: bar.table !== null && bar.controller !== null && bar.controller.canRedo
+                onClicked: bar.table.redoInCell()
+            }
+            Separator {}
+            ToolButton {
+                objectName: "toolbarNextCell"
+                iconName: "arrow-right"
+                label: qsTr("Next cell")
+                enabled: bar.table !== null
+                onClicked: bar.table.nextCell()
+            }
+            Separator {}
+            ToolButton {
+                objectName: "toolbarHideKeyboard"
+                iconName: "keyboard-off"
+                label: qsTr("Hide keyboard")
+                enabled: bar.table !== null
+                onClicked: bar.hideKeyboard()
+            }
+        }
+    }
+
+    // ---- Source mode ---------------------------------------------------------------------------
+    Component {
+        id: sourceTools
+        Row {
+            objectName: "toolbarSourceTools"
+            ToolButton {
+                objectName: "toolbarSourceLink"
+                iconName: "link"
+                label: qsTr("Link to page")
+                enabled: bar.sourceEdit !== null
+                onClicked: bar.insertText("[[")
+            }
+            ToolButton {
+                objectName: "toolbarSourceTag"
+                iconName: "hash"
+                label: qsTr("Tag")
+                enabled: bar.sourceEdit !== null
+                onClicked: bar.insertText("#")
+            }
+            ToolButton {
+                objectName: "toolbarSourceCommands"
+                iconName: "slash"
+                label: qsTr("Commands")
+                enabled: bar.sourceEdit !== null
+                onClicked: bar.insertText("/")
+            }
+            Separator {}
+            ToolButton {
+                objectName: "toolbarSourceUndo"
+                iconName: "undo-2"
+                label: qsTr("Undo")
+                enabled: bar.sourceEdit !== null && bar.sourceEdit.canUndo
+                onClicked: bar.sourceEdit.undo()
+            }
+            ToolButton {
+                objectName: "toolbarSourceRedo"
+                iconName: "redo-2"
+                label: qsTr("Redo")
+                enabled: bar.sourceEdit !== null && bar.sourceEdit.canRedo
+                onClicked: bar.sourceEdit.redo()
+            }
+            Separator {}
+            ToolButton {
+                objectName: "toolbarHideKeyboard"
+                iconName: "keyboard-off"
+                label: qsTr("Hide keyboard")
+                enabled: bar.sourceEdit !== null
+                onClicked: bar.hideKeyboard()
             }
         }
     }

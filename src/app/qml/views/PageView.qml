@@ -39,7 +39,7 @@ import Brulion
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (daily notes by their date), `sidePanel` and `editing`. `--editor-script <state>` drives the
+// (daily notes by their date), `sidePanel`, `editing` and `toolbarDocked`. `--editor-script <state>` drives the
 // editor for screenshots through qml/dev/PageScript.qml.
 FocusScope {
     id: root
@@ -55,6 +55,9 @@ FocusScope {
     /// A block (or the source) is being edited, or a picture fills the view: the shell hides
     /// its floating capture button (it would float over the photo).
     readonly property bool editing: page.editingRow >= 0 || page.sourceMode || root.pictureRoute
+    /// The editor's touch toolbar is docked at the bottom (on the keyboard): the shell hides its
+    /// bottom navigation.
+    readonly property bool toolbarDocked: editor.toolbarVisible
     readonly property Component sidePanel: inSidePanel ? null : sidePanelComponent
     readonly property alias controller: page
     readonly property alias editor: editor
@@ -92,12 +95,31 @@ FocusScope {
     // One event-loop turn late: on a rename the shell rewrites its routes before
     // Workspace.pathRenamed reaches followRename() below; setting the new path first would save
     // unsaved edits under the old name and bring that page back as a duplicate.
-    onRouteChanged: Qt.callLater(root.applyRoute)
+    // (Once per turn of the event loop; not after the view went away — the shell switching to
+    // another view updates the route first.)
+    onRouteChanged: {
+        if (_routeQueued)
+            return
+        _routeQueued = true
+        Qt.callLater(() => {
+            if (!root || !root.alive)
+                return
+            root._routeQueued = false
+            root.applyRoute()
+        })
+    }
+    property bool _routeQueued: false
     // A new path: a picture opens as a picture again (before applyRoute, called later).
     onRoutePathChanged: root.pictureAsText = false
     Component.onCompleted: applyRoute()
     // The editor's delegates go first, while the editor still exists (they read its geometry).
-    Component.onDestruction: editor.controller = null
+    Component.onDestruction: {
+        alive = false
+        editor.controller = null
+    }
+    /// False once the view is being destroyed: a route change queued just before (the shell
+    /// switching to another view) does nothing then.
+    property bool alive: true
 
     function applyRoute() {
         if (root.routePath === "")

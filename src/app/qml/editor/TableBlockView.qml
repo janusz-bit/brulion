@@ -13,6 +13,10 @@ import Brulion
 // the app is suspended or closed is saved like any text. Rows and columns are added with
 // the buttons below the grid: always shown on touch screens; with a mouse while the table is
 // selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
+// While a cell is edited the editor knows (BlockEditor.editingTable): on touch UIs its toolbar,
+// docked on the keyboard, offers undo, redo, the next cell and "hide keyboard" (nextCell(),
+// undoInCell(), redoInCell(), closeCell(): the cell stays edited after undo and redo), and the
+// cell is kept above it.
 Item {
     id: root
 
@@ -28,6 +32,8 @@ Item {
     readonly property real firstLineCenter: rowHeight / 2
     property int editRow: -2   // -2 none, -1 header
     property int editColumn: -1
+    /// The text field of the cell being edited (null when none): leave(), next(), undoTable().
+    property var cellInput: null
     readonly property bool active: editRow > -2 || block.model.isSelected
     /// The row of buttons below the grid. Not on hover: a table that grew under the resting mouse
     /// pointer moved everything below it while the page scrolled past, and room kept for hidden
@@ -94,6 +100,71 @@ Item {
     function finish() {
         editRow = -2
         editColumn = -1
+    }
+    // The editor's toolbar follows the cell being edited (a table delegate destroyed while a cell
+    // is edited hands it back too).
+    onEditRowChanged: {
+        const editor = root.block ? root.block.editor : null
+        if (!editor)
+            return
+        if (editRow > -2)
+            editor.editingTable = root
+        else if (editor.editingTable === root)
+            editor.editingTable = null
+    }
+    Component.onDestruction: {
+        const editor = root.block ? root.block.editor : null
+        if (editor && editor.editingTable === root)
+            editor.editingTable = null
+    }
+    // ---- The touch toolbar's cell tools -----------------------------------------------------------
+    // Each commits the word the keyboard is still composing first: Android keyboards compose
+    // every word, and it is not in the field's text until committed (a cell left without that
+    // lost the word).
+    /// The next cell (Tab: the next column, else the first one of the next row — a new row after
+    /// the last).
+    function nextCell() {
+        const input = root.cellInput
+        if (!input)
+            return
+        EditorInput.commitPreedit(input)
+        input.next()
+    }
+    /// Undo / redo: like Ctrl+Z in a cell (the cell's typing first), but the same cell goes on
+    /// being edited, with the text the step left in it — the toolbar and the keyboard stay. (A
+    /// step that takes the caret to a block leaves the editing there.)
+    function undoInCell() {
+        stepInCell(true)
+    }
+    function redoInCell() {
+        stepInCell(false)
+    }
+    function stepInCell(back) {
+        const input = root.cellInput
+        if (!input)
+            return
+        EditorInput.commitPreedit(input)
+        const r = editRow
+        const c = editColumn
+        const controller = root.block.controller
+        const editor = root.block.editor
+        const blockRow = root.block.index
+        input.leave()
+        if (back)
+            controller.undo()
+        else
+            controller.redo()
+        // A changed table is a new delegate: the editor finds it again.
+        if (controller.editingRow < 0)
+            editor.editTableCell(blockRow, r, c)
+    }
+    /// End the cell's editing, keeping its text ("hide keyboard").
+    function closeCell() {
+        const input = root.cellInput
+        if (!input)
+            return
+        EditorInput.commitPreedit(input)
+        input.leave()
     }
 
     Flickable {
@@ -273,7 +344,32 @@ Item {
                                         text = root.rawText(rowItem.r, cell.c)
                                         cursorPosition = length
                                         ready = true
+                                        root.cellInput = input
                                         forceActiveFocus()
+                                        // Above the toolbar and the keyboard (also once they show).
+                                        Qt.callLater(() => {
+                                            if (root && root.cellInput === input)
+                                                root.block.editor.ensureEditVisible()
+                                        })
+                                    }
+                                    Component.onDestruction: if (root.cellInput === input) root.cellInput = null
+                                    function next() {
+                                        const r = rowItem.r
+                                        const c = cell.c
+                                        if (c + 1 < root.columns) leave(r, c + 1)
+                                        else leave(r + 1, 0)
+                                    }
+                                    function undoTable() {
+                                        done = true
+                                        root.finish()
+                                        const controller = root.block.controller
+                                        const list = root.block.editor.listView
+                                        const blockRow = root.block.index
+                                        controller.undo()
+                                        if (controller.editingRow < 0) {
+                                            controller.selectedRow = Math.min(blockRow, controller.blocks.count - 1)
+                                            list.forceActiveFocus()
+                                        }
                                     }
                                     onTextChanged: {
                                         if (!ready || done)
@@ -300,24 +396,14 @@ Item {
                                             leave(r + 1, c)
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Tab) {
-                                            if (c + 1 < root.columns) leave(r, c + 1)
-                                            else leave(r + 1, 0)
+                                            next()
                                             event.accepted = true
                                         } else if (event.key === Qt.Key_Backtab) {
                                             if (c > 0) leave(r, c - 1)
                                             else if (r > -1) leave(r - 1, root.columns - 1)
                                             event.accepted = true
                                         } else if ((event.modifiers & Qt.ControlModifier) && event.key === Qt.Key_Z) {
-                                            done = true
-                                            root.finish()
-                                            const controller = root.block.controller
-                                            const list = root.block.editor.listView
-                                            const blockRow = root.block.index
-                                            controller.undo()
-                                            if (controller.editingRow < 0) {
-                                                controller.selectedRow = Math.min(blockRow, controller.blocks.count - 1)
-                                                list.forceActiveFocus()
-                                            }
+                                            undoTable()
                                             event.accepted = true
                                         }
                                     }

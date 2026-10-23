@@ -11,7 +11,10 @@
 <html lang="pl">
   <head>
     <meta charset="utf-8">
-    <!-- 1:1 mapping between CSS pixels and Qt device independent pixels (as in Qt's shell). -->
+    <!-- 1:1 mapping between CSS pixels and Qt device independent pixels (as in Qt's shell).
+         The on-screen keyboard keeps the browser's default (interactive-widget=resizes-visual):
+         the page and Qt's screen keep their size, and the app lifts its content by the part the
+         keyboard covers, read from window.visualViewport (src/platform/wasm/wasmshell.cpp). -->
     <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, user-scalable=0">
     <title>Brulion</title>
     <meta name="description" content="Brulion — notatki offline w Markdown: konspekt, dziennik, kalendarz, przypomnienia.">
@@ -315,10 +318,12 @@
         function start() {
           setStatus(T.download);
           var params = new URLSearchParams(location.search);
-          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs
+          // Debug flows (src/platform/wasm/wasmselftest.h): ?selftest=storage,notify,glyphs,keyboard
           var args = [];
           (params.get('selftest') || '').split(',').forEach(function (name) {
-            if (name === 'storage' || name === 'notify' || name === 'glyphs') args.push('--selftest-' + name);
+            if (name === 'storage' || name === 'notify' || name === 'glyphs' || name === 'keyboard') {
+              args.push('--selftest-' + name);
+            }
           });
 
           // Start the big download first; the small scripts load in parallel.

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Screenshots of the app shell (the real app, not the component gallery): onboarding, the main
 # window with the sample notebook (journals, the guide page and its editor states: page-editing,
-# page-suggest, page-reminder, …), settings, the command palette, the
+# page-suggest, page-reminder, …; with a simulated on-screen keyboard: page-editing-keyboard,
+# journals-editing-keyboard, capture-keyboard), settings, the command palette, the
 # quick switcher, quick capture and the phone drawer — × {desktop 1280×800, phone 412×915
 # --touch} × {light, dark} — into tests/screenshots/shell-<shot>-<size>-<theme>.png.
 #
@@ -51,6 +52,11 @@ declare -A shot_args=(
   [drawer]="--demo --route journals --popup drawer"
   # The block editor in the real app on the guide page (qml/dev/PageScript.qml).
   [page-editing]="--demo --editor-script editing"
+  # A simulated on-screen keyboard (--keyboard, drawn grey): the touch toolbar docked on it, the
+  # bottom navigation out of the way — a page, today in the journal stream, quick capture's sheet.
+  [page-editing-keyboard]="--demo --editor-script editing --keyboard 300"
+  [journals-editing-keyboard]="--demo --route {\"view\":\"journals\",\"open\":\"write\"} --keyboard 300"
+  [capture-keyboard]="--demo --route journals --popup capture --keyboard 300"
   [page-suggest]="--demo --editor-script suggest"
   [page-tags]="--demo --editor-script tags"
   [page-slash]="--demo --editor-script slash"
@@ -98,7 +104,8 @@ declare -A shot_notemode=(
   [doc-long-heading]=page [doc-long-number]=page [doc-long-select]=page [doc-long-toggle]=page [doc-journal]=journal
   [doc-journal-mixed]=journal-mixed
 )
-all_shots=(onboarding journals page page-editing page-suggest page-tags page-slash page-date page-reminder
+all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
+  page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
@@ -120,7 +127,7 @@ for shot in "${shots[@]}"; do
   read -r -a args <<< "${shot_args[$shot]}"
   # Editor states are scripted after the page loaded (typing, scrolling): give them time.
   shot_delay="$delay"
-  [[ "$shot" == page-* || "$shot" == doc-* ]] && shot_delay=$((delay + 800))
+  [[ "$shot" == page-* || "$shot" == doc-* || "$shot" == journals-editing-* ]] && shot_delay=$((delay + 800))
   for size in "${sizes[@]}"; do
     case "$size" in
       desktop) geometry=1280x800; extra=() ;;

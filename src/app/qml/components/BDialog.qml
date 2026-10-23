@@ -26,6 +26,8 @@ import Brulion
 // acceptRequested() comes first when the accept button or Ctrl+Enter asks to accept: apply
 // text still being typed there (a field keeps the focus with Ctrl+Enter or a touch keyboard);
 // `acceptEnabled` is checked again afterwards (onAcceptRequested: picker.commitPending()).
+// The on-screen keyboard (KeyboardInsets): a sheet sits on it and a centred dialog stays above
+// it, so the field being typed in is never under the keyboard.
 T.Dialog {
     id: control
 
@@ -51,8 +53,13 @@ T.Dialog {
     readonly property real overlayWidth: parent ? parent.width : Theme.windowWidth
     readonly property real overlayHeight: parent ? parent.height : Theme.windowHeight
     readonly property bool sheet: sheetOnNarrow && overlayWidth < Theme.narrowBreakpoint
-    readonly property real safeBottom: parent && parent.SafeArea ? parent.SafeArea.margins.bottom : 0
     readonly property real safeTop: parent && parent.SafeArea ? parent.SafeArea.margins.top : 0
+    /// The on-screen keyboard over the window's bottom (it also covers the navigation bar).
+    readonly property real keyboard: KeyboardInsets.overlap
+    /// The sheet's bottom padding: the navigation bar's height, none on the keyboard.
+    readonly property real safeBottom: keyboard > 0 ? 0 : parent && parent.SafeArea ? parent.SafeArea.margins.bottom : 0
+    /// The height left above the keyboard.
+    readonly property real roomAboveKeyboard: overlayHeight - keyboard
     property real dragOffset: 0
 
     signal acceptRequested()
@@ -72,10 +79,10 @@ T.Dialog {
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
 
     width: sheet ? overlayWidth : Math.min(preferredWidth, overlayWidth - 2 * Theme.space6)
-    height: Math.min(implicitHeight, overlayHeight - (sheet ? safeTop + Theme.space10 : 2 * Theme.space6))
+    height: Math.max(0, Math.min(implicitHeight, roomAboveKeyboard - (sheet ? safeTop + Theme.space10 : 2 * Theme.space6)))
     x: sheet ? 0 : Math.round((overlayWidth - width) / 2)
-    y: sheet ? overlayHeight - height + dragOffset
-             : Math.max(Theme.space6, Math.round((overlayHeight - height) * 0.42))
+    y: sheet ? roomAboveKeyboard - height + dragOffset
+             : Math.max(Theme.space6, Math.round((roomAboveKeyboard - height) * 0.42))
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding,

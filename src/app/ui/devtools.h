@@ -14,6 +14,8 @@
 //   --theme light|dark     force the colour scheme (Theme.mode)
 //   --locale pl|en         UI language (translation + DatesHelper.locale)
 //   --touch                touch UI sizes (Theme.forceTouch), as on a phone
+//   --keyboard <px>        a simulated on-screen keyboard of that height (KeyboardInsets.simulated;
+//                          0 = none, and no real one either), drawn grey in the window
 //   --reduced-motion       Theme.reducedMotion
 //   --now "<date> <time>"  fixed clock for DatesHelper ("2026-10-14 10:00"), for reproducible
 //                          screenshots
@@ -53,6 +55,8 @@ class DevTools : public QObject {
     Q_PROPERTY(QString theme READ theme CONSTANT FINAL)
     Q_PROPERTY(QString language READ language NOTIFY languageChanged FINAL)
     Q_PROPERTY(bool touch READ touch CONSTANT FINAL)
+    /// --keyboard <px>: the simulated keyboard's height, -1 without the option.
+    Q_PROPERTY(int keyboard READ keyboard CONSTANT FINAL)
     Q_PROPERTY(bool reducedMotion READ reducedMotion CONSTANT FINAL)
     /// True when the run ends with a screenshot (QML may skip intro animations).
     Q_PROPERTY(bool screenshotMode READ screenshotMode CONSTANT FINAL)
@@ -75,6 +79,7 @@ public:
     /// "pl" or "en": --locale, else English when the system locale is English, else Polish.
     QString language() const { return m_language; }
     bool touch() const { return m_touch; }
+    int keyboard() const { return m_keyboard; }
     bool reducedMotion() const { return m_reducedMotion; }
     bool screenshotMode() const { return !m_screenshot.isEmpty(); }
 
@@ -108,6 +113,7 @@ private:
     int m_delayMs = 800;
     QSize m_size;
     bool m_touch = false;
+    int m_keyboard = -1;
     bool m_reducedMotion = false;
     QPointer<QQmlApplicationEngine> m_engine;
     /// The arguments, kept when they ask for the scroll probe (scrollprobe.h).

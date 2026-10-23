@@ -10,6 +10,8 @@ import Brulion
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
 // `property bool editing` (text is being edited: the floating capture button hides),
+// `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge,
+// on the keyboard: the bottom navigation hides),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's
 // menu acts on it).
 Item {
@@ -30,6 +32,8 @@ Item {
     /// The view is editing text (a block, source mode): the floating capture button would cover
     /// the editor's toolbar and caret.
     readonly property bool viewEditing: !!_view && _view.editing === true
+    /// The view's editing toolbar is docked at its bottom edge (touch UIs).
+    readonly property bool viewToolbarDocked: !!_view && _view.toolbarDocked === true
     /// The view shows a picture attachment (not a note), and that picture's text instead.
     readonly property bool viewPicture: !!_view && _view.pictureRoute === true
     readonly property bool viewPictureAsText: viewPicture && _view.pictureAsText === true

@@ -105,8 +105,8 @@ Service worker (offline) działa tylko na `https://` oraz na `localhost`/`127.0.
 Parametry adresu (do debugowania):
 
 * `?nosw` — nie rejestruj service workera.
-* `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=storage,notify` —
-  testy (niżej).
+* `?selftest=storage`, `?selftest=notify`, `?selftest=glyphs`, `?selftest=keyboard`,
+  `?selftest=storage,notify` — testy (niżej).
 
 Ścieżkę GitHub Pages da się sprawdzić lokalnie, kopiując `dist-wasm/` do `site/brulion/` i
 serwując `site/` (`http://127.0.0.1:8000/brulion/`).
@@ -143,6 +143,14 @@ Pozostałe opcje:
   „Czcionki: emoji i symbole”) są zainstalowane i rysują wszystkie emoji i symbole Brulionu
   bez pustych kwadratów (`window.brulionGlyphSelfTest`: dla każdej czcionki znaki rysowane jako
   kwadraty przed i po instalacji). CI uruchamia go przy pierwszym teście.
+* `--keyboard` — podstawia stronie własny `window.visualViewport` (przed jej skryptami) i
+  uruchamia `?selftest=keyboard`: aplikacja przy każdej zmianie publikuje
+  `window.brulionKeyboardSelfTest` (`{overlap, shown, animating, source}`), a skrypt „otwiera”
+  klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS), podaje wartość
+  błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0), przewija stronę
+  o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę — za każdym razem
+  aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”). Ze `--screenshot`
+  dochodzi zrzut `…-keyboard.png`. CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi
@@ -350,6 +358,26 @@ Build dla przeglądarki nie zawiera QML deweloperskiego (galerii, placu zabaw ed
 i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 014 B surowego
 `brulion.wasm` (−160 008 B po gzip -9, −104 716 B po brotli).
 
+## Klawiatura ekranowa (telefon)
+
+Chrome i Firefox na Androidzie przy otwartej klawiaturze nie zmieniają rozmiaru strony (domyślne
+`interactive-widget=resizes-visual`, którego `wasm/index.html` nie zmienia): zmniejsza się tylko
+widoczny obszar, `window.visualViewport`. Ekran Qt (`#screen`) zostaje więc w pełnym rozmiarze —
+zmiana rozmiaru ekranu Qt przy każdym otwarciu klawiatury przebudowywałaby całe okno —, a powłoka
+(`watchVisualViewport` w `src/platform/wasm/wasmshell.cpp`) przy każdym zdarzeniu `resize` /
+`scroll` widoku zgłasza aplikacji, ile dołu strony zakrywa klawiatura:
+`innerHeight − visualViewport.height − visualViewport.offsetTop` (piksele CSS to piksele
+logiczne Qt; strona powiększona gestem — `visualViewport.scale` > 1, np. touchpad na komputerze —
+to nie klawiatura: 0). `KeyboardInsets` (docs/UI.md „On-screen keyboard”) podnosi o tyle widok, pasek
+narzędzi edycji, okna wysuwane od dołu, menu i komunikaty — tak samo jak na Androidzie. Bez
+`visualViewport` (stare przeglądarki) nic nie jest zgłaszane, a Qt nie zna klawiatury
+(`keyboardRectangle` w przeglądarce jest pusty).
+
+iOS Safari — tylko „best effort”, nie sprawdzone na urządzeniu: przy klawiaturze przewija stronę
+do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z powrotem na górę
+(`scrollTo(0, 0)`) i uwzględnia `offsetTop`, ale to może się z przeglądarką przepychać. Test:
+`scripts/wasm-smoke.mjs --keyboard` (wyżej).
+
 ## Ograniczenia techniczne
 
 * Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
@@ -390,7 +418,7 @@ i samotestów `--editor-script`; opcja `BRULION_DEV_QML`, docs/UI.md): −597 01
 |---|---|
 | `wasm/index.html`, `wasm/sw.js`, `wasm/manifest.webmanifest` | powłoka HTML, service worker, manifest |
 | `wasm/icons/` | ikony PWA; PNG wygenerowane z `assets/logo.svg` i `wasm/icons/maskable.svg` (odstęp bezpieczny dla ikon maskowalnych) oraz `badge.svg` (monochromatyczna plakietka powiadomień) |
-| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania (`wasmshell.h`), test trwałości (`wasmselftest.h`) |
+| `src/platform/wasm/` | `WasmStorage` (IDBFS), `WasmNotifier`, most do ekranu ładowania i `visualViewport` (klawiatura ekranowa; `wasmshell.h`), test trwałości (`wasmselftest.h`) |
 | `assets/fonts/`, `src/app/ui/fallbackfonts.h` | czcionki zapasowe emoji i symboli (bez nich: puste kwadraty), `scripts/fallback-fonts.py` je odtwarza |
 | `scripts/wasm-build.sh`, `scripts/wasm-smoke.mjs` | build + złożenie strony, test w Chromium |
 
