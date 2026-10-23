@@ -17,8 +17,14 @@ import Brulion
 // close. Opening by keyboard highlights the first item. Use `popup()` (at the pointer or
 // at an item) — never blocking; react in each item's triggered(). Menus stay above the on-screen
 // keyboard (bottomMargin; they flip above their item when there is no room below).
+// A submenu is a BMenu inside the menu (its `title` and `iconName` make its item); it opens beside
+// the menu with a mouse, in place of it on touch UIs (one menu at a time on a phone's width).
+//   BMenu { BMenu { title: qsTr("Kopiuj odnośnik"); iconName: "link"; BMenuItem { … } } }
 T.Menu {
     id: control
+
+    /// The icon of this menu's item in its parent menu (a submenu).
+    property string iconName
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             contentWidth + leftPadding + rightPadding)
@@ -31,6 +37,7 @@ T.Menu {
     focus: true
     modal: Theme.touchUi
     dim: false
+    cascade: !Theme.touchUi
 
     delegate: BMenuItem {}
 

@@ -13,6 +13,8 @@ import Brulion
 //   * text typed into an older day and scrolled away at once (before the debounced save, its
 //     delegate destroyed) is in the file, also the word the keyboard was still composing;
 //   * a day scrolled away while its editor has deferred work queued: nothing runs on it then;
+//   * a same-day link to a heading far up a long day scrolls the stream there (the day's own list
+//     never scrolls) and selects the heading;
 //   * midnight while a day is being edited (the list's today moves on): the new day is listed
 //     first, the edited day keeps its editor and caret, is no longer "today", and what is typed
 //     after midnight lands in its own file — nothing is written to the new day;
@@ -43,6 +45,7 @@ Item {
     property int linesBefore: 0
     property var events: null
     property int dragStep: 0
+    property int linkRow: -1
 
     function check(ok, what) {
         if (!ok)
@@ -154,7 +157,14 @@ Item {
                     if (Workspace.exists(path))
                         continue
                     let md = ""
-                    for (let b = 0; b < 10; ++b)
+                    if (n === 45) {
+                        // A long day: its heading far above a link to it.
+                        md = "## Cel podróży\n\n"
+                        for (let b = 0; b < 40; ++b)
+                            md += "- Dzień " + n + ", punkt " + b + "\n"
+                        md += "- Zobacz [[#Cel podróży]]\n"
+                    }
+                    for (let b = 0; n !== 45 && b < 10; ++b)
                         md += "- Dzień " + n + ", notatka " + b + ": zażółć gęślą jaźń\n"
                     Workspace.writeFile(path, md)
                 }
@@ -304,6 +314,35 @@ Item {
                 test.list.positionViewAtBeginning()
             },
             () => test.dayAt(30) === null,
+            // ---- A same-day heading link: the stream scrolls up to the heading ------------------------
+            () => {
+                test.linkRow = test.days.rowOfDate(DatesHelper.addDays(DatesHelper.today, -45))
+                test.check(test.linkRow > 0, "the long day is listed")
+                test.list.positionViewAtIndex(test.linkRow, ListView.End)
+            },
+            () => test.dayAt(test.linkRow) !== null && test.dayAt(test.linkRow).controller.loaded,
+            () => {
+                // Its end in view once it has its height.
+                test.list.positionViewAtIndex(test.linkRow, ListView.End)
+                test.tracked = test.dayAt(test.linkRow)
+            },
+            () => {
+                const day = test.tracked
+                const head = day ? day.editor.listView.itemAtIndex(0) : null
+                test.check(head !== null && day.controller.isHeading(0) && head.mapToItem(test.list, 0, head.height).y < 0,
+                           "the day's heading is above the visible part")
+                if (day)
+                    day.editor.activateLink(day.controller.lastVisibleRow(), "page:#Cel%20podr%C3%B3%C5%BCy")
+            },
+            () => test.tracked !== null && test.tracked.controller.selectedRow === 0,
+            () => {
+                const head = test.tracked.editor.listView.itemAtIndex(0)
+                const top = head ? head.mapToItem(test.list, 0, 0).y : -1
+                test.check(top >= 0 && top + head.height <= test.list.height,
+                           "following a same-day heading link scrolls the journal to the heading: " + top)
+                test.tracked.controller.selectedRow = -1
+                test.list.positionViewAtBeginning()
+            },
             // ---- Midnight while editing --------------------------------------------------------------
             () => test.dayAt(0) !== null && test.dayAt(0).controller.loaded,
             () => {

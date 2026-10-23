@@ -14,9 +14,11 @@ import Brulion
 // the buttons below the grid: always shown on touch screens; with a mouse while the table is
 // selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
 // While a cell is edited the editor knows (BlockEditor.editingTable): on touch UIs its toolbar,
-// docked on the keyboard, offers undo, redo, the next cell and "hide keyboard" (nextCell(),
-// undoInCell(), redoInCell(), closeCell(): the cell stays edited after undo and redo), and the
-// cell is kept above it.
+// docked on the keyboard, offers undo, redo, the next cell, "Więcej" (the table's block menu,
+// BlockEditor.openTableBlockMenu) and "hide keyboard" (nextCell(), undoInCell(), redoInCell(),
+// closeCell(): the cell stays edited after undo and redo), and the cell is kept above it. The
+// table is the current block meanwhile (Ctrl+Shift+C, the palette's link commands); a cell left
+// for the palette or the side panel leaves the table selected (stayCurrent()).
 Item {
     id: root
 
@@ -157,6 +159,24 @@ Item {
         // A changed table is a new delegate: the editor finds it again.
         if (controller.editingRow < 0)
             editor.editTableCell(blockRow, r, c)
+    }
+    /// A cell left because the keyboard focus went elsewhere (the command palette, the side
+    /// panel): the table stays the current block — selected, as Esc leaves it — for the palette's
+    /// "Kopiuj odwołanie do bloku" (BlockEditor.currentRow). Not when another block or cell took
+    /// over meanwhile.
+    function stayCurrent() {
+        const delegate = root.block
+        const editor = delegate ? delegate.editor : null
+        if (!editor)
+            return
+        const blockRow = delegate.index
+        editor.later(() => {
+            const controller = editor.controller
+            // Still this table (not a page loaded meanwhile), and nothing else current.
+            if (controller && controller.editingRow < 0 && controller.selectedRow < 0 && editor.editingTable === null
+                    && editor.listView.itemAtIndex(blockRow) === delegate)
+                controller.selectedRow = blockRow
+        })
     }
     /// End the cell's editing, keeping its text ("hide keyboard").
     function closeCell() {
@@ -376,7 +396,12 @@ Item {
                                             return
                                         root.block.controller.setTableCell(root.block.index, rowItem.r, cell.c, text, true)
                                     }
-                                    onActiveFocusChanged: if (!activeFocus) leave()
+                                    onActiveFocusChanged: {
+                                        if (activeFocus || done)
+                                            return
+                                        leave()
+                                        root.stayCurrent()
+                                    }
                                     Keys.onPressed: (event) => {
                                         const r = rowItem.r
                                         const c = cell.c

@@ -45,6 +45,13 @@
 //                  only the target changes, alias / heading / block id / '!' kept) and
 //                  retargetTags(content, {key: newName}) — what a move writes
 //                  (VaultIndex::planRelocation())
+//   linkformat.h   links to pages, headings and blocks (SYNTAX §2 "Copied links"):
+//                  headingFragment(text) -> "Plan praca" (markup, tag hashes and characters that
+//                  break wiki links removed), headingKey(text), headingMatches(fragment, text),
+//                  findHeading(headings, fragment) (the one matcher of [[Page#Heading]] and
+//                  Obsidian heading paths [[Page#A#B]]: navigation, embeds, copying),
+//                  uniqueHeadingFragment(headings, i) (the heading's name, else a path, else ""),
+//                  formatReference(kind, page, fragment, id) -> "[[Page#^id]]", "((id))", …
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}
@@ -64,8 +71,9 @@
 //                  EditResult{changes (Removed/Moved/Inserted/Changed rows),
 //                  focus, cursor}; subtreeRange, parent, hasChildren, indexAtLine. Frontmatter /
 //                  page-property blocks at the top are pinned (never moved, nothing goes above).
-//   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, inlineCalc, today,
-//                  locale, palette, taskCheckbox}).render(body) / renderBlock(body, kind) ->
+//   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
+//                  inlineCalc, today, locale, palette, taskCheckbox}).render(body) /
+//                  renderBlock(body, kind) ->
 //                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder: links and
 //                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO is the
 //                  token's UTF-16 range in the text given to render() / the body given to
@@ -78,6 +86,7 @@
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
+#include "markdown/linkformat.h"
 #include "markdown/notemode.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"

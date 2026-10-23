@@ -386,6 +386,14 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
 * Wymagany WebGL 2 (powłoka ostrzega, gdy go brak, i pozwala spróbować mimo to).
 * Pamięć: start 50 MB, wzrost do 4 GB (domyślne Qt).
 * Sieć tylko przez `QNetworkAccessManager` (fetch przeglądarki) i z zasadami CORS.
+* **Schowek.** „Kopiuj odnośnik” (menu bloku, paleta poleceń, Ctrl+Shift+C; docs/UI.md „The
+  block editor”) pisze przez `QClipboard`, który w Qt dla WebAssembly korzysta z asynchronicznego
+  Clipboard API przeglądarki: wymaga bezpiecznego kontekstu (https albo `localhost`) i gestu
+  użytkownika (kliknięcie pozycji menu nim jest). Odmowy przeglądarki Qt nie zgłasza — Brulion
+  mówi „Skopiowano …” tylko wtedy, gdy tekst wraca ze schowka Qt, więc odmowy samej przeglądarki
+  nie wykryje (nie sprawdzone jeszcze ręcznie w Firefoksie i Safari). Ctrl+Shift+C w Chromium i
+  Firefoksie otwiera narzędzia deweloperskie, zanim strona dostanie klawisze — wtedy zostaje
+  menu bloku albo paleta poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”).
 * **Żadnych powtarzanych timerów 0 ms.** Dyspozytor zdarzeń Qt 6.11.2 dla WebAssembly
   (`QEventDispatcherWasm::sendTimerEvents()`) ustawia kolejny `setTimeout` przeglądarki tylko
   wtedy, gdy `QTimerInfoList::activateTimers()` zwróci > 0, a ta funkcja nie liczy timerów o

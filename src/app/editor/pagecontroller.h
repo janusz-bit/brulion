@@ -131,6 +131,12 @@ class PageController : public QObject {
     Q_PROPERTY(QString modeSource READ modeSource NOTIFY modeChanged FINAL)
     /// mode === "document".
     Q_PROPERTY(bool documentMode READ documentMode NOTIFY modeChanged FINAL)
+    /// Copying a link may write a new block id (` ^abc123`) into the page (default). The
+    /// documentation notebook sets false: its guide pages stay as shipped, so they keep being
+    /// brought up to date (docs/UI.md "The documentation notebook"). Links to headings and pages,
+    /// and to blocks that already have an id, are copied either way.
+    Q_PROPERTY(
+            bool allowNewBlockIds READ allowNewBlockIds WRITE setAllowNewBlockIds NOTIFY allowNewBlockIdsChanged FINAL)
 
 public:
     explicit PageController(QObject *parent = nullptr);
@@ -178,6 +184,8 @@ public:
     QString modeSource() const;
     bool documentMode() const { return m_mode == NoteMode::Document; }
     NoteMode noteMode() const { return m_mode; }
+    bool allowNewBlockIds() const { return m_allowNewBlockIds; }
+    void setAllowNewBlockIds(bool allow);
     /// Colours the renderer uses (from `palette`).
     const markdown::Palette &rendererPalette() const { return m_model->palette(); }
     /// The status a checkbox click gives: todo/doing/deferred -> "done", done/cancelled -> "todo".
@@ -330,11 +338,43 @@ public:
     /// text after the caret goes to the end of the last one); a single multi-line block is
     /// inserted as is. One undo step. Returns { row, cursor } of the caret.
     Q_INVOKABLE QVariantMap pasteText(int row, int from, int to, const QString &text);
-    /// The block id of a row, adding ` ^id` when missing (ids used elsewhere in the vault are
-    /// avoided). "" when the block cannot carry an id.
+    /// The block id of a row, adding ` ^id` when missing as one undo step (ids any block of the
+    /// vault has — EditorHost::blockIdTaken() — are avoided). "" when the block cannot carry an id.
     Q_INVOKABLE QString ensureBlockRef(int row);
-    /// ensureBlockRef() and put "((id))" on the clipboard. Returns the id.
+    /// copyLink(row, "blockRef"). Returns the id ("" when nothing was copied).
     Q_INVOKABLE QString copyBlockRef(int row);
+
+    // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
+    /// The text of a link of `kind` to `row`:
+    ///   "blockRef"  ((id))           — Logseq style, resolved in the whole notebook;
+    ///   "blockLink" [[Page#^id]]     — Obsidian style;
+    ///   "heading"   [[Page#Heading]] — `row` is a heading; a name another heading has too: an
+    ///                                  Obsidian heading path [[Page#Parent#Heading]] when that is
+    ///                                  unique (markdown::uniqueHeadingFragment), else [[Page#^id]];
+    ///   "embed"     a heading's section ![[Page#Heading]] (the same fallbacks: ![[Page#^id]]),
+    ///               any other block !((id));
+    ///   "page"      [[Page]] (`row` is ignored).
+    /// "Page" is linkTarget(). The block id kinds add an id when the block has none (one undo
+    /// step, ensureBlockRef()); the heading and page kinds change nothing. Returns { ok, text,
+    /// reason }; reason when not ok: "noPage" (no path), "noRow", "notHeading", "sourceMode" (the
+    /// blocks are not being edited), "readOnly" (a new id is needed but allowNewBlockIds is
+    /// false), "noId" (the block cannot carry an id: frontmatter, an unclosed code fence).
+    Q_INVOKABLE QVariantMap linkText(int row, const QString &kind);
+    /// linkText() put on the clipboard. Not ok with reason "noClipboard" (and the text) when the
+    /// platform has no clipboard or it did not take the text — success is never claimed then.
+    Q_INVOKABLE QVariantMap copyLink(int row, const QString &kind);
+    /// The page as links name it: its title, or its vault path without ".md" when the title
+    /// would lead to another page (the title of a daily note always: its file name).
+    Q_INVOKABLE QString linkTarget() const;
+    /// The row of the heading `fragment` names ([[Page#Heading]], an Obsidian heading path
+    /// [[Page#A#B]], a fragment written by hand; markdown::findHeading — the matcher embeds use
+    /// too); -1 when none.
+    Q_INVOKABLE int rowOfHeading(const QString &fragment) const;
+    /// The row of the heading whose section holds `row`: the last heading at or above it (the
+    /// side panel's outline marks the same one, OutlineModel::entryForSourceRow); -1 when none.
+    Q_INVOKABLE int headingRowFor(int row) const;
+    /// `row` is a heading ("## …", also a Logseq "- ## …" item).
+    Q_INVOKABLE bool isHeading(int row) const;
     /// Add a reminder (`⏰`/`⏰!` at `at`, "YYYY-MM-DD HH:mm"), or replace the reminder token at
     /// body range [from, to) (a clicked chip). `recurrence` (canonical rule) sets the block's 🔁
     /// token; an empty rule removes it when editing an existing reminder.
@@ -379,7 +419,13 @@ public:
 
     // --- Links ----------------------------------------------------------------------------------
     /// A link of the rendered text was activated (page:, tag:, block:, ext:, task:, reminder:).
-    /// Returns "" when handled, or { action: "reminder", from, to } for the reminder dialog.
+    /// Returns {} when handled; { action: "reminder", from, to } for the reminder dialog;
+    /// { action: "scrollTo", row } for a block or heading of this page — `((id))`, `[[#^id]]`,
+    /// `[[#Heading]]` and links naming this page (`[[ThisPage#^id]]`, `[[ThisPage#A#B]]`), every
+    /// time, also when the route would not change; { action: "notFound", kind: "block" |
+    /// "heading" | "ref" (a `((id))`), name } when that block or heading is nowhere (a block moved
+    /// to another page is opened there: EditorHost::blockIdTaken once the index is complete, the
+    /// shell's route resolution).
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
     // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------
@@ -452,6 +498,7 @@ Q_SIGNALS:
     void foldStateChanged();
     void titleRowChanged();
     void modeChanged();
+    void allowNewBlockIdsChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
     /// The edit text of `row` changed by something other than typing in it.
@@ -563,6 +610,7 @@ private:
     /// the page has no key; the defaults follow refreshMode()); source -1: not resolved yet.
     NoteMode m_keylessMode = NoteMode::Outline;
     int m_keylessSource = -1;
+    bool m_allowNewBlockIds = true;
 
     // Command bookkeeping.
     int m_commandDepth = 0;

@@ -1,5 +1,6 @@
 // CommandModel — the commands of the command palette (Ctrl+K, QML singleton `CommandModel`):
-// navigation, journals, new page, quick capture, the page's source and note mode, theme,
+// navigation, journals, new page, quick capture, the page's source and note mode, copying links to
+// the page, the current block and its heading, theme,
 // language, sync, panels, settings, about. `commands` is the array BCommandPalette takes ({ id, title, subtitle, icon,
 // shortcut, enabled }); QML runs the chosen one with run(id). Commands that only move around or change state run here;
 // those that open shell popups (new page, quick switcher, capture, about, theme toggle — the effective theme is known

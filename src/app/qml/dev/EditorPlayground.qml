@@ -19,7 +19,12 @@ import Brulion
 // checks (outline and document mode) and exits; `clock` checks the round clock and its buttons
 // (clockTest()) and exits; `taskstatus` checks the task status menu and commands
 // (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
-// keyboard (keyboardTest(): KeyboardInsets.simulated) and exits. The in-memory vault runs
+// keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
+// to blocks and headings and following them (blockLinksTest()) and exits; `copylink` /
+// `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
+// `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
+// table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
+// copied block link followed (the block selected and flashing). The in-memory vault runs
 // ```query blocks on the real index (FakeEditorHost). Like the app's shell, the editor ends at
 // the on-screen keyboard (KeyboardInsets.overlap); a simulated one is drawn grey.
 ApplicationWindow {
@@ -83,7 +88,9 @@ ApplicationWindow {
         page.host = host
         page.path = DevTools.editorScript === "empty" ? "Nowa strona.md"
                   : DevTools.editorScript === "title" ? host.recipePath
-                  : DevTools.editorScript.startsWith("document") ? host.documentPath : host.samplePath
+                  : DevTools.editorScript.startsWith("document") || DevTools.editorScript === "copylink-document"
+                    || DevTools.editorScript === "link-flash"
+                    ? host.documentPath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
     }
@@ -1900,6 +1907,443 @@ ApplicationWindow {
         stepIndex = 0
         stepTimer.start()
     }
+    // ---- Links to blocks and headings (`--editor-script blocklinks`, tst_editor_qml_blocklinks*) --
+    // "Kopiuj odnośnik" with real input: the block menu from a right-click on a heading's text, a
+    // paragraph, a callout and a calc block (desktop) — a finger's long press on text opens none
+    // (--touch) —, from a bullet (right-click / long press) and from the touch toolbar's "Więcej"
+    // (the menu above the bar); the submenu's items put the link on the clipboard (read back by
+    // pasting) and say so; Ctrl+Shift+C while editing, on a selected block and with nothing
+    // selected, the palette's heading link; a copied link followed by a click or tap scrolls to its
+    // block or heading, selects and flashes it — again after scrolling away —, a missing heading is
+    // said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the palette after the
+    // cell lost the keyboard; (desktop) a right-click on a title drawn above the page's properties.
+    property string lastNotice: ""
+    property string copiedId: ""
+    property string expectedLink: ""
+    property Item focusProbe: null
+    property int linkRow: -1
+    property int targetRow: -1
+    Connections {
+        target: editor
+        function onNotice(text, kind) { window.lastNotice = text }
+    }
+    /// What the clipboard holds (pasted into a hidden text field).
+    function clipboardText() {
+        const edit = Qt.createQmlObject('import QtQuick; TextEdit { visible: false }', window, "clipboardProbe")
+        edit.paste()
+        const text = edit.text
+        edit.destroy()
+        return text
+    }
+    function delegateAt(row) {
+        editor.listView.forceLayout()
+        return editor.listView.itemAtIndex(row)
+    }
+    /// The rendered rich text under `item`, or null.
+    function renderedIn(item) {
+        if (!item || !item.visible)
+            return null
+        if (item.textFormat === Text.RichText && typeof item.linkAt === "function")
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = renderedIn(item.children[i])
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// A point of the rendered `text` on its link whose URL contains `url`, or null.
+    function linkPointIn(text, url) {
+        for (let y = 2; text && y < text.height; y += 3) {
+            for (let x = 2; x < text.width; x += 4) {
+                if (text.linkAt(x, y).indexOf(url) >= 0)
+                    return Qt.point(x + 2, y + 2)
+            }
+        }
+        return null
+    }
+    /// A tap with a finger on touch UIs, else a left click, at (x, y) of `item`.
+    function tapPoint(item, x, y) {
+        if (Theme.touchUi) {
+            taskEvents.touchEvent(item).press(0, item, x, y).commit()
+            taskEvents.touchEvent(item).release(0, item, x, y).commit()
+        } else {
+            taskEvents.mouseClick(item, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    function rightClick(item, x, y) {
+        if (item)
+            taskEvents.mouseClick(item, x, y, Qt.RightButton, Qt.NoModifier, -1)
+    }
+    function blockMenuOpen() {
+        return editor.blockMenu !== null && editor.blockMenu.opened
+    }
+    /// The block menu's entry of the "Kopiuj odnośnik" submenu, and the submenu.
+    function copyEntry() {
+        const menu = editor.blockMenu
+        for (let i = 0; menu && i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (item && item.subMenu && item.subMenu.objectName === "copyLinkMenu")
+                return item
+        }
+        return null
+    }
+    function copySubmenu() {
+        const entry = copyEntry()
+        return entry ? entry.subMenu : null
+    }
+    /// Steps: open "Kopiuj odnośnik", choose `name` there; the clipboard then holds `expected()`
+    /// and the toast says so.
+    function copySteps(name, what, expected) {
+        return [
+            () => {
+                check(copyEntry() !== null && copyEntry().text === copySubmenu().title, "the block menu has “Copy link”")
+                tapItem(copyEntry())
+            },
+            waitStep(() => copySubmenu() !== null && copySubmenu().opened, "“Copy link” opens its submenu"),
+            () => tapItem(menuItemNamed(copySubmenu(), name)),
+            waitStep(() => !blockMenuOpen() && clipboardText() === expected(),
+                     () => what + ": " + clipboardText() + " (" + expected() + ")"),
+            () => check(window.lastNotice.endsWith(" " + expected()) && window.lastNotice.length > expected().length + 3,
+                        "a toast says what was copied: " + window.lastNotice)
+        ]
+    }
+    /// Steps of the menu gesture on point (x, y) of `target()`: a right-click, or a finger held
+    /// down for a second (a bullet's long press).
+    function holdOrRightClick(target, x, y) {
+        if (!Theme.touchUi)
+            return [() => rightClick(target(), x(), y())]
+        const out = [() => taskEvents.touchEvent(target()).press(0, target(), x(), y()).commit()]
+        for (let i = 0; i < 9; ++i)
+            out.push(() => {})
+        out.push(() => taskEvents.touchEvent(target()).release(0, target(), x(), y()).commit())
+        return out
+    }
+
+    function blockLinksTest() {
+        taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "linkEvents")
+        const touch = Theme.touchUi
+        const gesture = touch ? "a long press" : "a right-click"
+        const doc = "Wyjazd w Tatry"
+        let s = [
+            () => { page.path = host.documentPath },
+            waitStep(() => page.loaded && page.documentMode && rowOf("Plan") > 0, "the document is open"),
+        ]
+        if (!touch) {
+            s = s.concat([
+                // ---- A heading's link from a right-click on its text --------------------------------
+                () => {
+                    window.targetRow = rowOf("Plan")
+                    window.textBefore = pageText()
+                    editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                },
+                () => {
+                    const text = renderedOf(window.targetRow)
+                    check(text !== null, "the heading shows its text")
+                    rightClick(text, text.width / 4, text.height / 2)
+                },
+                waitStep(() => blockMenuOpen() && editor.blockMenu.heading, "a right-click on a heading's text opens the block menu"),
+                () => check(menuItemNamed(editor.blockMenu, "blockMenuZoom").shown === false, "a document has no zoom in the menu"),
+                ...copySteps("copyHeadingLink", "“Link to heading” copies [[Page#Heading]]", () => "[[" + doc + "#Plan]]"),
+                () => check(pageText() === window.textBefore, "a heading's link changes nothing in the page"),
+                // ---- A paragraph: its block reference, the id written once -------------------------
+                () => {
+                    window.targetRow = rowOf("Pierwszego dnia")
+                    editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                },
+                () => {
+                    const text = renderedOf(window.targetRow)
+                    rightClick(text, text.width / 2, text.height / 2)
+                },
+                waitStep(() => blockMenuOpen() && !editor.blockMenu.heading, "a right-click on a paragraph opens the block menu"),
+                () => check(menuItemNamed(copySubmenu(), "copyHeadingLink").shown === false, "no heading link for a paragraph"),
+                ...copySteps("copyBlockRef", "“Block reference” copies ((id))", () => "((" + info(window.targetRow).blockId + "))"),
+                () => {
+                    const id = info(window.targetRow).blockId
+                    check(id.length === 6 && pageText().indexOf("tłoczno. ^" + id) > 0, "the paragraph got its id: " + id)
+                },
+                // ---- Frames: a callout and (later, in the outline) a calc block ---------------------
+                () => {
+                    window.targetRow = viewRow("callout")
+                    editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                },
+                () => {
+                    const item = delegateAt(window.targetRow)
+                    rightClick(item, item.width / 2, item.height / 2)
+                },
+                waitStep(() => blockMenuOpen(), "a right-click on a callout opens the block menu"),
+                () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
+                waitStep(() => !blockMenuOpen(), "Escape closes it"),
+            ])
+        } else {
+            s = s.concat([
+                // ---- A finger's long press on text opens no menu (left for selecting text) ---------
+                () => {
+                    window.targetRow = rowOf("Pierwszego dnia")
+                    editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                },
+                () => {
+                    const text = renderedOf(window.targetRow)
+                    taskEvents.touchEvent(text).press(0, text, text.width / 2, text.height / 2).commit()
+                },
+                () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+                () => {
+                    const text = renderedOf(window.targetRow)
+                    if (text)
+                        taskEvents.touchEvent(text).release(0, text, text.width / 2, text.height / 2).commit()
+                },
+                () => check(!blockMenuOpen(), "a finger's long press on text opens no block menu"),
+            ])
+        }
+        s = s.concat([
+            // ---- Ctrl+Shift+C: editing, selected, nothing; the palette's heading link -----------------
+            () => {
+                page.stopEditing()
+                window.targetRow = rowOf("Piątek")
+                editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                editor.startEditing(window.targetRow, -1)
+            },
+            waitStep(() => editor.activeEditor !== null && editor.activeEditor.activeFocus, "a list item is edited"),
+            () => realKey(Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier),
+            waitStep(() => info(window.targetRow).blockId !== "" && clipboardText() === "((" + info(window.targetRow).blockId + "))",
+                     () => "Ctrl+Shift+C copies the edited block's reference: " + clipboardText()),
+            () => {
+                window.copiedId = info(window.targetRow).blockId
+                check(window.lastNotice.endsWith(" ((" + window.copiedId + "))"), "and says so: " + window.lastNotice)
+                check(editor.activeEditor !== null && editor.activeEditor.activeFocus && page.editingRow === window.targetRow,
+                      "the block is still being edited")
+                editor.copyCurrentLink("heading") // the palette's "Kopiuj link do nagłówka"
+            },
+            waitStep(() => clipboardText() === "[[" + doc + "#Plan]]",
+                     () => "the palette's heading link names the heading of the caret's section: " + clipboardText()),
+            () => realKey(Qt.Key_Escape),
+            () => {
+                check(page.selectedRow === window.targetRow, "Esc selects the block")
+                EditorInput.sendKey(editor.listView, Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitStep(() => clipboardText() === "((" + window.copiedId + "))", "Ctrl+Shift+C on a selected block, the same id"),
+            () => {
+                page.selectedRow = -1
+                window.lastNotice = ""
+                window.textBefore = pageText()
+                EditorInput.sendKey(editor.listView, Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitStep(() => window.lastNotice === editor.copyFailure("noRow"),
+                     () => "with nothing selected it says what to do: " + window.lastNotice),
+            () => check(pageText() === window.textBefore, "and changes nothing"),
+            // ---- Following copied links: scroll, select, flash — twice; a missing heading ------------
+            () => {
+                window.linkRow = page.insertBlockAfter(page.lastVisibleRow(),
+                    "Zobacz [[" + doc + "#^" + window.copiedId + "]], [[" + doc + "#Plan]] i [[#Nieistniejący]]")
+                page.stopEditing()
+                editor.listView.positionViewAtEnd()
+            },
+            () => {
+                const text = renderedOf(window.linkRow)
+                check(text !== null && String(text.text).indexOf(doc + " › Piątek") >= 0,
+                      "[[Page#^id]] reads as the page and the block's text")
+                const p = linkPointIn(text, "#^" + window.copiedId)
+                check(p !== null, "the link to the block is there")
+                if (p)
+                    tapPoint(text, p.x, p.y)
+            },
+            waitStep(() => page.selectedRow === window.targetRow && findShown(delegateAt(window.targetRow), "blockFlash") !== null,
+                     "following [[Page#^id]] selects the block and flashes it"),
+            () => {
+                const item = delegateAt(window.targetRow)
+                const top = item.mapToItem(editor.listView, 0, 0).y
+                check(top >= 0 && top + item.height <= editor.listView.height, "the block is scrolled into view: " + top)
+                page.selectedRow = -1
+                editor.listView.positionViewAtEnd()
+            },
+            () => {
+                const text = renderedOf(window.linkRow)
+                const p = linkPointIn(text, "#^" + window.copiedId)
+                if (p)
+                    tapPoint(text, p.x, p.y)
+            },
+            waitStep(() => page.selectedRow === window.targetRow, "the same link a second time, after scrolling away, goes there again"),
+            waitStep(() => findShown(delegateAt(window.targetRow), "blockFlash") === null, "the flash fades away"),
+            () => {
+                check(delegateAt(window.targetRow).height > 0, "the flash changed no height")
+                editor.listView.positionViewAtEnd()
+            },
+            () => {
+                const text = renderedOf(window.linkRow)
+                const p = linkPointIn(text, "#Plan")
+                if (p)
+                    tapPoint(text, p.x, p.y)
+            },
+            waitStep(() => page.selectedRow === rowOf("Plan"), "following [[Page#Heading]] selects the heading"),
+            () => {
+                editor.listView.positionViewAtEnd()
+                window.lastNotice = ""
+            },
+            () => {
+                const text = renderedOf(window.linkRow)
+                const p = linkPointIn(text, "#Nieistniej")
+                if (p)
+                    tapPoint(text, p.x, p.y)
+            },
+            waitStep(() => window.lastNotice.indexOf("Nieistniejący") >= 0 && window.lastNotice !== "",
+                     () => "a missing heading is said: " + window.lastNotice),
+            // ---- The touch toolbar's "Więcej": the block menu above the bar ----------------------------
+            () => {
+                page.selectedRow = -1
+                Theme.forceTouch = true
+                window.targetRow = rowOf("Niedziela")
+                editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                editor.startEditing(window.targetRow, -1)
+            },
+            waitStep(() => editor.toolbarVisible && findItem(editor, "toolbarMore") !== null, "the touch toolbar has “More”"),
+            () => {
+                const flick = findItem(editor, "editToolbarFlick")
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+            },
+            () => tapItem(findItem(editor, "toolbarMore")),
+            waitStep(() => blockMenuOpen(), "“More” on the toolbar opens the block menu"),
+            () => {
+                const button = findItem(editor, "toolbarMore")
+                const menu = editor.blockMenu
+                const menuBottom = menu.contentItem.mapToItem(null, 0, menu.contentItem.height).y
+                const buttonTop = button.mapToItem(null, 0, 0).y
+                check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
+                check(editor.blockMenu.listItem && !editor.blockMenu.heading, "it is the edited block's menu")
+            },
+            ...copySteps("copyBlockLink", "“Link to block” copies [[Page#^id]]",
+                         () => "[[" + doc + "#^" + info(window.targetRow).blockId + "]]"),
+            () => {
+                check(info(window.targetRow).blockId !== "" && page.editingRow === window.targetRow,
+                      "the block got its id and is still being edited")
+                page.stopEditing()
+                Theme.forceTouch = DevTools.touch
+            },
+            // ---- An outline: the bullet's menu; a calc block's (desktop) ------------------------------
+            () => { page.path = host.samplePath },
+            waitStep(() => page.loaded && !page.documentMode && rowOf("Kolejność") > 0, "the outline is open"),
+            () => {
+                // A list item without a checkbox (a task's box sits over its bullet on touch screens).
+                window.targetRow = rowOf("Kolejność")
+                editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+            },
+            ...holdOrRightClick(() => delegateAt(window.targetRow), () => delegateAt(window.targetRow).bulletX,
+                                () => delegateAt(window.targetRow).firstLineCenter),
+            waitStep(() => blockMenuOpen(), gesture + " on a bullet opens the block menu"),
+            () => check(menuItemNamed(editor.blockMenu, "blockMenuZoom").shown, "with zoom in an outline"),
+            () => check(page.zoomBlock < 0, "and does not zoom"),
+            ...copySteps("copyEmbed", "“Embed” copies !((id))", () => "!((" + info(window.targetRow).blockId + "))"),
+            // ---- A table: "Więcej" on the cell toolbar; the edited cell's table is current -------------
+            () => {
+                page.selectedRow = -1
+                Theme.forceTouch = true
+                window.targetRow = viewRow("table")
+                editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+            },
+            () => {
+                const item = delegateAt(window.targetRow)
+                check(item !== null, "the table is on screen")
+                if (item)
+                    item.focusContent()
+            },
+            waitStep(() => editor.toolbarMode === "cell" && findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore") !== null,
+                     "a table cell's toolbar has “More”"),
+            () => {
+                const flick = findItem(editor, "editToolbarFlick")
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+            },
+            () => tapItem(findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore")),
+            waitStep(() => blockMenuOpen(), "“More” on the cell toolbar opens the block menu"),
+            () => {
+                check(editor.blockMenu.row() === window.targetRow && !editor.blockMenu.listItem, "it is the table's menu")
+                check(editor.editingTable === null && page.selectedRow === window.targetRow,
+                      "the cell's editing ended, the table is selected")
+            },
+            ...copySteps("copyBlockRef", "“Block reference” of a table copies ((id))",
+                         () => "((" + info(window.targetRow).blockId + "))"),
+            () => {
+                Theme.forceTouch = DevTools.touch
+                page.selectedRow = -1
+                const item = delegateAt(window.targetRow)
+                if (item)
+                    item.focusContent()
+            },
+            waitStep(() => editor.editingTable !== null && editor.editingTable.cellInput !== null
+                           && editor.editingTable.cellInput.activeFocus && page.selectedRow < 0,
+                     "a cell is edited (nothing selected)"),
+            () => {
+                window.lastNotice = ""
+                EditorInput.sendKey(editor.editingTable.cellInput, Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitStep(() => window.lastNotice.endsWith(" ((" + info(window.targetRow).blockId + "))"),
+                     () => "Ctrl+Shift+C in a cell copies its table's reference: " + window.lastNotice),
+            () => {
+                // The keyboard goes elsewhere (the palette's field): the cell's editing ends and the
+                // table stays the current block.
+                window.focusProbe = Qt.createQmlObject('import QtQuick; TextInput { width: 10; height: 10 }',
+                                                       window.contentItem, "focusProbe")
+                window.focusProbe.forceActiveFocus()
+            },
+            waitStep(() => editor.editingTable === null && page.selectedRow === window.targetRow,
+                     () => "a cell left for another field leaves its table selected: " + page.selectedRow),
+            () => {
+                window.expectedLink = page.linkText(window.targetRow, "blockLink").text
+                check(window.expectedLink.indexOf("#^" + info(window.targetRow).blockId + "]]") > 0, "the table's link: " + window.expectedLink)
+                editor.copyCurrentLink("blockLink") // the palette's "Kopiuj link do bloku"
+            },
+            waitStep(() => clipboardText() === window.expectedLink,
+                     () => "the palette then copies the table's link: " + clipboardText()),
+            () => {
+                window.focusProbe.destroy()
+                window.focusProbe = null
+                page.selectedRow = -1
+                editor.listView.forceActiveFocus()
+            },
+        ])
+        if (!touch) {
+            s = s.concat([
+                () => {
+                    window.targetRow = viewRow("calc")
+                    editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+                },
+                () => {
+                    const item = delegateAt(window.targetRow)
+                    rightClick(item, item.width / 2, item.height / 2)
+                },
+                waitStep(() => blockMenuOpen() && page.editingRow < 0, "a right-click on a calc block opens the block menu (no editing)"),
+                () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
+                waitStep(() => !blockMenuOpen(), "Escape closes it"),
+                // ---- The title drawn above the properties: the menu of the block drawn there ---------
+                () => { page.path = host.recipePath },
+                waitStep(() => page.loaded && page.titleRow > 0 && editor.titleFirst && renderedOf(page.titleRow) !== null,
+                         "the recipe (properties, then its title) is open"),
+                () => editor.listView.positionViewAtBeginning(),
+                () => {
+                    const text = renderedOf(page.titleRow)
+                    check(text !== null && text.mapToItem(null, 0, 0).y < delegateAt(page.titleRow - 1).mapToItem(null, 0, 0).y,
+                          "the title is drawn above the properties")
+                    if (text)
+                        rightClick(text, text.width / 4, text.height / 2)
+                },
+                waitStep(() => blockMenuOpen() && editor.blockMenu.heading && editor.blockMenu.row() === page.titleRow,
+                         "a right-click on that title opens the title's block menu"),
+                () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
+                waitStep(() => !blockMenuOpen(), "Escape closes it"),
+                () => {
+                    const properties = delegateAt(page.titleRow - 1)
+                    rightClick(properties, properties.width - 8, properties.height - 4)
+                },
+                () => {}, () => {},
+                () => check(!blockMenuOpen(), "a right-click on the properties drawn below it opens no block menu"),
+            ])
+        }
+        steps = s
+        stepIndex = 0
+        stepTimer.start()
+    }
+    function renderedOf(row) {
+        return renderedIn(delegateAt(row))
+    }
+
     // ---- The touch toolbar on a simulated keyboard (`--editor-script keyboard`) -----------------
     // Run with --touch --keyboard 0 (ctest tst_editor_qml_keyboard_touch): the toolbar is docked on
     // the keyboard's top for a block (outline and document), the source and a table cell, follows
@@ -2211,6 +2655,67 @@ ApplicationWindow {
         case "keyboard":
             keyboardTest()
             break
+        case "blocklinks":
+            blockLinksTest()
+            break
+        case "link-flash": {
+            // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
+            // selected and flashing (screenshots; --delay 1600 lands in the flash).
+            const target = rowOf("Piątek")
+            const id = page.ensureBlockRef(target)
+            const after = page.insertBlockAfter(rowOf("Niedziela"), "")
+            page.setBody(after, "Zobacz [[Wyjazd w Tatry#^" + id + "]] i [[Wyjazd w Tatry#Plan]].")
+            page.stopEditing()
+            scriptLater.run(() => editor.activateLink(after, "page:Wyjazd%20w%20Tatry#%5E" + id))
+            break
+        }
+        case "copylink-toolbar": {
+            // Touch: the editing toolbar's "Więcej" — the block menu above the bar (screenshots).
+            const row = rowOf("Kolejność")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            editor.startEditing(row, -1)
+            scriptLater.run(() => {
+                const flick = window.findItem(editor, "editToolbarFlick")
+                const more = window.findItem(editor, "toolbarMore")
+                if (!flick || !more)
+                    return
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                editor.openBlockMenuAbove(row, more)
+            })
+            break
+        }
+        case "copylink-table": {
+            // Touch: a table cell's toolbar "Więcej" — the cell left, the table's block menu at it
+            // (screenshots).
+            const row = viewRow("table")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            const item = editor.listView.itemAtIndex(row) as BlockDelegate
+            if (item)
+                item.focusContent()
+            scriptLater.run(() => {
+                if (editor.editingTable)
+                    editor.openTableBlockMenu(editor.editingTable)
+            })
+            break
+        }
+        case "copylink":
+        case "copylink-document": {
+            // The block menu with "Kopiuj odnośnik" open on a heading (screenshots).
+            const row = rowOf(name === "copylink" ? "Koszty" : "Plan")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            scriptLater.run(() => {
+                const item = editor.listView.itemAtIndex(row)
+                if (!item)
+                    return
+                editor.openBlockMenu(row, item, item.contentLeft + Theme.space8, item.firstLineCenter + editor.lineHeight / 2)
+                Qt.callLater(() => {
+                    const entry = window.copyEntry()
+                    if (entry)
+                        entry.triggered()
+                })
+            })
+            break
+        }
         case "task-menu": {
             // The status menu of a block's checkbox (screenshots).
             const row = rowOf("Kupić płytki")

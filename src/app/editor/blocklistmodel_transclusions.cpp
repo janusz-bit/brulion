@@ -9,6 +9,7 @@
 #include "blockrender_p.h"
 #include "editorhost.h"
 
+#include "markdown/linkformat.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -28,13 +29,6 @@ QString encoded(const QString &s)
     return QString::fromLatin1(QUrl::toPercentEncoding(s));
 }
 
-/// "Budżet#Październik" (Obsidian heading paths): the last part names the heading.
-QString headingKey(const QString &heading)
-{
-    const qsizetype hash = heading.lastIndexOf(u'#');
-    return text::foldKey((hash >= 0 ? heading.mid(hash + 1) : heading).trimmed());
-}
-
 QString withoutMd(const QString &path)
 {
     return path.endsWith(u".md"_s, Qt::CaseInsensitive) ? path.chopped(3) : path;
@@ -48,16 +42,18 @@ struct Range {
     bool isEmpty() const { return last < first; }
 };
 
-/// The section under the heading `heading`: the blocks after it up to the next heading of the
-/// same or a higher level outside lists; for a Logseq "- # Heading" item its children.
+/// The section under the heading `heading` names (markdown::findHeading: also an Obsidian heading
+/// path "Budżet#Październik", the matcher of links too): the blocks after it up to the next
+/// heading of the same or a higher level outside lists; for a Logseq "- # Heading" item its
+/// children.
 std::optional<Range> sectionRange(const markdown::BlockDocument &doc, const QString &heading)
 {
-    const QString key = headingKey(heading);
-    for (int i = 0; i < doc.count(); ++i) {
+    QList<int> rows;
+    const int found = markdown::findHeading(documentHeadings(doc, &rows), heading);
+    if (found >= 0) {
+        const int i = rows.at(found);
         const markdown::BlockEntry &e = doc.at(i);
         const BlockShape s = shapeOf(e);
-        if (s.view != BlockView::Heading || s.headingLevel <= 0 || text::foldKey(plainTextOf(e, 400)) != key)
-            continue;
         if (e.kind == BlockKind::ListItem) {
             const markdown::RowRange sub = doc.subtreeRange(i);
             return Range{i + 1, sub.last(), e.depth + 1};
@@ -304,8 +300,9 @@ private:
         r.src = *src;
         r.range = *range;
         r.path = path;
+        // A section by the row after its heading (heading paths and spellings that name it alike).
         r.key = path + u'\n' + kindName(t) + u'\n'
-                + (t.kind == Transclusion::Kind::Heading ? headingKey(t.heading) : t.blockId);
+                + (t.kind == Transclusion::Kind::Heading ? QString::number(range->first) : t.blockId);
         return r;
     }
 

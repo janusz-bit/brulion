@@ -139,8 +139,8 @@ public:
     /// Open the item's page at its block: { action: "scrollTo", row } when it is on this page
     /// (for BlockEditor.revealRow), else navigated through the host.
     Q_INVOKABLE QVariantMap open(int row, bool newPane = false);
-    /// A link in an item's text was clicked: page:/tag:/block:/ext: go through the controller;
-    /// task:/reminder: open the item.
+    /// A link in an item's text was clicked: page:/tag:/block:/ext: go through the controller (a
+    /// same-page link of another page's item to that page); task:/reminder: open the item.
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
 Q_SIGNALS:

@@ -6,7 +6,8 @@ import Brulion
 // BToast — one transient notification (normally created by BToastHost.show()).
 //
 // kind: "info" | "success" | "warning" | "error"; optional action button ("Cofnij") and a
-// close button. Inverse colours so it stands out over any content.
+// close button. Inverse colours so it stands out over any content. The message is plain text
+// (never markup: it often quotes note text).
 T.Control {
     id: control
 
@@ -63,6 +64,9 @@ T.Control {
             anchors.verticalCenter: parent.verticalCenter
             width: Math.max(0, parent.width - x - 8 - trailing.implicitWidth)
             text: control.text
+            // Plain text: messages carry note text (a copied link, a heading, a page title), which
+            // AutoText would render as markup — tags applied, images loaded from anywhere.
+            textFormat: Text.PlainText
             wrapMode: Text.Wrap
             maximumLineCount: 4
             elide: Text.ElideRight

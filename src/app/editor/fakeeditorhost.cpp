@@ -474,14 +474,36 @@ QString FakeEditorHost::blockText(const QString &blockId) const
     return {};
 }
 
+QString FakeEditorHost::linkedBlockText(const QString &path, const QString &blockId) const
+{
+    const auto it = m_files.constFind(path);
+    if (it == m_files.constEnd() || !paths::isMarkdown(path))
+        return {};
+    const ParsedNote note = markdown::parseNote(path, *it);
+    if (const auto found = note.blockIds.constFind(blockId); found != note.blockIds.constEnd())
+        return note.blocks.at(*found).text.simplified();
+    return blockText(blockId); // moved to another page
+}
+
+bool FakeEditorHost::blockIdTaken(const QString &blockId) const
+{
+    if (blockId.isEmpty())
+        return false;
+    for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it) {
+        if (paths::isMarkdown(it.key()) && it.value().contains(blockId)
+            && markdown::parseNote(it.key(), it.value()).blockIds.contains(blockId))
+            return true;
+    }
+    return false;
+}
+
 QString FakeEditorHost::ensureBlockId(const QString &path, int line)
 {
     const auto it = m_files.constFind(path);
     if (it == m_files.constEnd())
         return {};
-    const markdown::EnsuredBlockId res = markdown::ensureBlockId(*it, line, [this](const QString &id) {
-        return !blockText(id).isEmpty();
-    });
+    const markdown::EnsuredBlockId res =
+            markdown::ensureBlockId(*it, line, [this](const QString &id) { return blockIdTaken(id); });
     if (!res.id.isEmpty() && res.content != *it) {
         m_files.insert(path, res.content);
         m_indexDirty = true;

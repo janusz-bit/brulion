@@ -13,6 +13,7 @@
 #include "markdown/tokens_p.h"
 
 #include <QStringList>
+#include <QTextBoundaryFinder>
 #include <QUrl>
 
 #include <algorithm>
@@ -28,6 +29,21 @@ namespace {
 /// Labels of links are rendered with the inline renderer again (emphasis, code); deeper nesting
 /// is shown as text.
 constexpr int MaxDepth = 2;
+
+/// The block's text a `[[Page#^id]]` link shows after the page name, at most (… when cut).
+constexpr qsizetype MaxBlockLinkText = 60;
+
+/// `text` cut to at most `max` characters with "…" — never inside a character: not between a
+/// surrogate pair (📅), a letter and its combining mark, an emoji's ZWJ sequence.
+QString elided(const QString &text, qsizetype max)
+{
+    if (text.size() <= max)
+        return text;
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, text);
+    graphemes.setPosition(max - 1);
+    const qsizetype cut = graphemes.isAtBoundary() ? max - 1 : graphemes.toPreviousBoundary();
+    return text.first(std::max<qsizetype>(cut, 0)).trimmed() + u'…';
+}
 
 /// A rendered construct covering [from, to) of the text; an empty html hides the range.
 struct Atom {
@@ -556,9 +572,18 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 const WikiParts &w = item.wiki;
                 QString label = w.display;
                 if (label.isEmpty()) {
-                    const QString frag = !w.heading.isEmpty()   ? w.heading
-                                         : !w.blockId.isEmpty() ? u'^' + w.blockId
-                                                                : QString();
+                    QString frag = !w.heading.isEmpty()   ? w.heading
+                                   : !w.blockId.isEmpty() ? u'^' + w.blockId
+                                                          : QString();
+                    // [[Page#^id]] reads like ((id)): "Page › the block's text…" — the block of
+                    // that page (ids are per page in Obsidian).
+                    if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.linkedBlockText) {
+                        if (const auto blockText = m_ctx.linkedBlockText(w.target, w.blockId)) {
+                            const QString shown = blockText->simplified();
+                            if (!shown.isEmpty())
+                                frag = elided(shown, MaxBlockLinkText);
+                        }
+                    }
                     const QString page = shownTarget(w.target);
                     label = page.isEmpty() ? frag : frag.isEmpty() ? page : page + u" › "_s + frag;
                 }

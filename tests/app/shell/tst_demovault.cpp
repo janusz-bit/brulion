@@ -376,6 +376,34 @@ private Q_SLOTS:
         for (const MissingPage &m : index.missingPages())
             missing.append(m.name);
         QCOMPARE(missing, QStringList{ u"Notatka do utworzenia"_s });
+        // Every [[Page#Heading]] of the guide leads to a heading of its page (markdown::findHeading,
+        // the matcher of links and embeds), and every [[Page#^id]] to a block id there.
+        int headingLinks = 0;
+        for (const DemoFile &f : docs) {
+            for (const Link &link : markdown::parseNote(f.path, f.content).links) {
+                if (link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed)
+                    continue;
+                if (link.heading.isEmpty() && link.blockId.isEmpty())
+                    continue;
+                const QString path =
+                        link.target.isEmpty() ? f.path : index.resolveLink(link.target, f.path).value_or(QString());
+                const ParsedNote *target = index.note(path);
+                QVERIFY2(target, qPrintable(f.path + u": "_s + link.target));
+                if (!link.blockId.isEmpty()) {
+                    QVERIFY2(target->blockIds.contains(link.blockId), qPrintable(f.path + u": ^"_s + link.blockId));
+                    continue;
+                }
+                QList<Heading> headings;
+                for (const Block &b : target->blocks) {
+                    if (b.kind == BlockKind::Heading)
+                        headings.append(Heading{b.headingLevel, b.raw.section(u'\n', 0, 0), b.line});
+                }
+                QVERIFY2(markdown::findHeading(headings, link.heading) >= 0,
+                         qPrintable(f.path + u": "_s + link.target + u'#' + link.heading));
+                ++headingLinks;
+            }
+        }
+        QVERIFY(headingLinks >= 3);
 
         int queries = 0;
         for (const DemoFile &f : docs) {

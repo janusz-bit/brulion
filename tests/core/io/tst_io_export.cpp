@@ -460,6 +460,33 @@ private Q_SLOTS:
         QVERIFY(page.contains(u"<a class=\"block-ref\" href=\"Inna.html#block-b1\">Strona i #wewnątrz</a>"_s));
     }
 
+    void htmlHeadingLinksMatchLikeTheApp()
+    {
+        // Heading links and embeds as Brulion copies them (SYNTAX §2): markup and tag hashes left
+        // out, an Obsidian heading path for a repeated heading, a heading with a block id. The
+        // export finds the heading as the app does (markdown::findHeading).
+        ExportInput in;
+        in.files = {iotest::text(u"Plan.md"_s, u"# Plan\n\n## Plan: **wrzesień** #praca\n\n- zadanie wrześniowe\n\n"
+                                               u"## Budżet\n\n### Zadania\n\n- budżetowe zadanie\n\n## Remont\n\n"
+                                               u"### Zadania\n\n- remontowe zadanie\n\n## Z identyfikatorem ^nag1\n\n"
+                                               u"- pod nagłówkiem\n"_s),
+                    iotest::text(u"Linki.md"_s, u"![[Plan#Plan wrzesień praca]]\n\n![[Plan#Remont#Zadania]]\n\n"
+                                                u"- [[Plan#Remont#Zadania]] [[Plan#plan wrzesien praca]] "
+                                                u"[[Plan#Z identyfikatorem]]\n"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString page = textOf(entries, u"Brulion/Linki.html"_s);
+        QVERIFY2(page.contains(u"zadanie wrześniowe"_s), qPrintable(page));
+        QVERIFY(page.contains(u"remontowe zadanie"_s));
+        QVERIFY(!page.contains(u"budżetowe zadanie"_s));
+        QVERIFY(page.contains(u"href=\"Plan.html#zadania\""_s));
+        QVERIFY(!page.contains(u"#remont-zadania"_s));
+        QVERIFY(page.contains(u"href=\"Plan.html#plan-wrzesień-praca\""_s));
+        QVERIFY(page.contains(u"href=\"Plan.html#block-nag1\""_s));
+        const QString plan = textOf(entries, u"Brulion/Plan.html"_s);
+        QVERIFY(plan.contains(u"id=\"plan-wrzesień-praca\""_s));
+        QVERIFY(plan.contains(u"id=\"block-nag1\""_s));
+    }
+
     void htmlMath()
     {
         ExportInput in;

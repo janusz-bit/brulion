@@ -87,6 +87,7 @@ FocusScope {
         objectName: "journalDayController"
         host: Workspace
         path: day.path
+        allowNewBlockIds: !AppController.inDocsVault // the documentation's pages stay as shipped
         onLoadingChanged: if (page.loaded && !page.loading) day.restoreFolds()
         onFoldStateChanged: {
             if (day._foldsRestored && page.loaded && !page.loading)
@@ -95,7 +96,9 @@ FocusScope {
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
                 day.activated()
-                Qt.callLater(day.keepCaretVisible)
+                // Through the editor's later(): the day may be gone by then (the stream left right
+                // after a block started being edited — a palette command, a link).
+                editor.later(() => editor.ensureEditVisible())
             }
         }
         // The list is no place for a whole-file editor: the day opens as a page in source mode.

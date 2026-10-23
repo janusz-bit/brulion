@@ -526,7 +526,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="234"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="241"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -599,7 +599,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="417"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="419"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>

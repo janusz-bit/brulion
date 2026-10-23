@@ -116,6 +116,12 @@ QString bodyWithEditText(const markdown::BlockEntry &entry, const QString &editT
 /// Body without the leading task marker (and its spacing); unchanged when there is none.
 QString withoutTaskMarker(const markdown::BlockEntry &entry);
 
+/// The headings of `doc` in order, for markdown::findHeading / uniqueHeadingFragment: each
+/// block shown as a heading ("## …", also a Logseq "- ## …" item) with its level, its heading
+/// line as written (without a list item's marker or task checkbox) and its document line; `rows`
+/// gets their rows.
+QList<Heading> documentHeadings(const markdown::BlockDocument &doc, QList<int> *rows = nullptr);
+
 /// Plain one-line text of a body for breadcrumbs, dialog context and accessibility: markers,
 /// tokens, ids and Markdown punctuation of links removed, whitespace collapsed, at most
 /// `maxLength` characters (… appended when cut).

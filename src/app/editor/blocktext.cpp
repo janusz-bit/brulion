@@ -563,6 +563,20 @@ QString withoutTaskMarker(const markdown::BlockEntry &e)
     return e.body;
 }
 
+QList<Heading> documentHeadings(const markdown::BlockDocument &doc, QList<int> *rows)
+{
+    QList<Heading> out;
+    for (int i = 0; i < doc.count(); ++i) {
+        const BlockShape s = shapeOf(doc.at(i));
+        if (s.view != BlockView::Heading || s.headingLevel <= 0)
+            continue;
+        out.append(Heading{s.headingLevel, firstLineOf(s.editText).toString(), doc.at(i).line});
+        if (rows)
+            rows->append(i);
+    }
+    return out;
+}
+
 QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
 {
     const BlockShape s = shapeOf(e);

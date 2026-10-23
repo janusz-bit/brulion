@@ -82,6 +82,7 @@ to these defaults; unknown keys are kept when Brulion saves the file.
 | `[[Page]]` | link to page |
 | `[[Page\|Alias]]` | link with display text |
 | `[[Page#Heading]]` | link to heading |
+| `[[Page#Parent#Heading]]` | Obsidian heading path: the heading under that parent (below) |
 | `[[Page#^abc123]]` | link to block with id `abc123` in Page |
 | `[[#^abc123]]` / `[[#Heading]]` | same-page link |
 | `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]` | embed (transclusion) |
@@ -124,7 +125,67 @@ and AVIF are often missing): the picture view then names the format instead of a
 
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;
-with the year when it is not the current one). The file keeps `[[2026-10-13]]`.
+with the year when it is not the current one). The file keeps `[[2026-10-13]]`. A
+`[[Page#^id]]` without an alias shows "Page › " and the first 60 characters of the block's text,
+like `((id))` does: the block with that id on that page (Obsidian ids are the page's own: another
+page may have the same one), else, moved away, the block the link now leads to (below); the id
+itself while the block is unknown.
+
+### Headings and blocks in links / Linki do nagłówków i bloków
+
+**Heading fragments** (`markdown::headingFragment`, `src/core/markdown/linkformat.h`): what
+`[[Page#…]]` names a heading by — its line as shown: inline markup removed (`**`, `*`, `~~`,
+`==`, backticks; a wiki link by its alias, else its target; a Markdown link by its label; `#tag`
+and `#[[tag]]` by their name), a trailing ` ^id` dropped, the characters that split or end a wiki
+link or that Obsidian drops from heading links replaced by a space (`#`, `|`, `^`, `:`, `[`, `]`,
+`\`, `%%` — a comment's text stays), whitespace (tabs, no-break spaces) collapsed, NFC. Letters,
+Polish ones too, digits, emoji and other punctuation stay: "Plan: **wrzesień** #praca" →
+`Plan wrzesień praca`, "C# i C++" → `C i C++`, "Q&A: test" → `Q&A test`. Obsidian writes the same
+fragment for headings without inline markup or links; for those it keeps the markup in its own
+links, so a fragment Brulion copied from such a heading may not scroll in Obsidian (the page
+opens).
+
+**Matching** (`markdown::findHeading` — one matcher for following links, `![[Page#Heading]]`
+embeds and copying): the fragment and every heading are compared by key — headingFragment, then
+case and diacritics folded (`[[Page#zazolc gesla]]` finds "Zażółć **gęślą**"):
+1. the first heading whose key is the whole fragment's (a fragment written by hand with a `#` of
+   the heading's own text: `[[Page#C# i C++]]`);
+2. an Obsidian heading path `[[Page#A#B#C]]`: the first heading `C` whose enclosing headings
+   (earlier headings of a lower level, Logseq "- ## …" items included) contain `A` and `B` in that
+   order — levels may be skipped;
+3. else the first heading matching the last segment.
+
+**Following** a link to a block or heading scrolls to it, selects it and flashes it, also when it
+is on the page already shown (`[[#Heading]]`, `[[#^id]]`, a link naming the current page — again
+on every click; in the journal stream the stream scrolls to it). In a query result a same-page
+link names the result's own page. A `[[Page#^id]]` whose block is no longer on that page opens the
+page holding the id now (vault-wide block ids, like `((id))`). A heading or block that is nowhere:
+the page opens at its top and the editor says so. "Nowhere" is decided on the complete index
+(right after opening a notebook it is still being built: it is completed first). The HTML export
+finds headings by the same matcher (sections of `![[Page#Heading]]`, anchors of links).
+
+**Copied links** — the block menu's "Kopiuj odnośnik", the command palette, Ctrl+Shift+C,
+the side panel's outline (docs/UI.md "The block editor"; `PageController::copyLink`,
+`markdown::formatReference`):
+
+| Command | Writes |
+|---|---|
+| Odwołanie do bloku (Ctrl+Shift+C) | `((id))` |
+| Link do bloku | `[[Page#^id]]` |
+| Link do nagłówka | `[[Page#Heading]]`; a heading name the page has twice: the shortest unique heading path `[[Page#Parent#Heading]]`, else `[[Page#^id]]` |
+| Osadzenie | `!((id))`; on a heading its section `![[Page#Heading]]` (same fallbacks, `![[Page#^id]]`) |
+| Kopiuj link do strony | `[[Page]]` |
+
+* `Page` is the page's title, or its vault path without `.md` when the title leads to another page
+  (the same name in another folder); a daily note is named by its file name
+  (`[[2026-10-22#^abc123]]`).
+* The block kinds use the block's `^id` or its Logseq `id::` (a UUID, as it is); a block without
+  one gets a generated id (§4 "Block id": placement, 6 characters `[a-z0-9]`, never one any block
+  of the vault has, also a block without text) as one undoable edit. Heading and page links change
+  nothing. A heading link breaks when the heading's text changes (as in Obsidian); `((id))`
+  survives that and moving the block to another page.
+* The documentation notebook gets no new ids (its pages are brought up to date by new versions
+  only while unchanged); its heading and page links, and blocks with an id, are copied.
 
 ## 3. Tags
 

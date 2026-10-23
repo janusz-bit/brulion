@@ -11,6 +11,7 @@ qt_target_qml_sources(brulion
     QML_FILES
         qml/editor/BlockEditor.qml
         qml/editor/BlockDelegate.qml
+        qml/editor/BlockMenu.qml
         qml/editor/BlockText.qml
         qml/editor/InlineEditor.qml
         qml/editor/TaskBox.qml

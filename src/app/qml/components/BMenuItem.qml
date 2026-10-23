@@ -52,7 +52,10 @@ T.MenuItem {
             BIcon {
                 id: menuIcon
                 anchors.verticalCenter: parent.verticalCenter
-                name: control.checkable ? (control.checked ? "check" : "") : control.iconName
+                // A submenu's item: the submenu's icon (BMenu.iconName).
+                name: control.checkable ? (control.checked ? "check" : "")
+                    : control.iconName !== "" ? control.iconName
+                    : (control.subMenu as BMenu)?.iconName ?? ""
                 collapseWhenEmpty: !control.checkable
                 size: Theme.iconSize
                 color: control.danger ? Theme.dangerText : control.checkable ? Theme.link : Theme.fgMuted

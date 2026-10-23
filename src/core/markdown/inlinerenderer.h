@@ -62,8 +62,15 @@ struct RenderContext {
     /// Page link target (as written, e.g. "Projekty/Dom") -> resolved vault path, or nullopt
     /// when the page does not exist (the link gets Palette::unresolved). Unset: all resolved.
     std::function<std::optional<QString>(const QString &target)> resolvePage;
-    /// Block id -> the referenced block's text (shown escaped), nullopt when unknown.
+    /// Block id -> the referenced block's text (shown escaped), nullopt when unknown: `((id))`
+    /// shows it.
     std::function<std::optional<QString>(const QString &id)> blockText;
+    /// `[[target#^id]]` -> the text of the block that link leads to: block `id` of the page
+    /// `target` names ("": the page being rendered) — Obsidian ids are the page's own, another
+    /// page may have the same id — else, moved to another page, the notebook's block with that id;
+    /// nullopt when unknown. A link without an alias shows "Page › " and the first 60 characters
+    /// (escaped); unset or unknown: "Page › ^id".
+    std::function<std::optional<QString>(const QString &target, const QString &id)> linkedBlockText;
     /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;
     /// Text shown for a wiki link or page embed without an alias, from its target as written
