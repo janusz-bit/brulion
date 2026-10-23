@@ -281,7 +281,9 @@ public:
     /// Returns the new path ("" on failure; the path itself when it is in that folder already).
     Q_INVOKABLE QString movePath(const QString &path, const QString &targetFolder);
     /// What movePath(path, targetFolder) would do: { ok, error (translated, when not ok), path (the
-    /// new path), links, tags (rewritten), notes (rewritten files), specials (the settings of
+    /// new path), links, tags (rewritten; the ```query filters that name a moved page or folder
+    /// counted as links, their tag: filters as tags), queries (those filters), notes (rewritten
+    /// files), specials (the settings of
     /// .brulion/config.json that follow: "journals" | "templates" | "attachments" | "newPages" |
     /// "journalTemplate") }.
     Q_INVOKABLE QVariantMap moveImpact(const QString &path, const QString &targetFolder);

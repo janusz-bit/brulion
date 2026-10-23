@@ -147,8 +147,9 @@ struct RelocationImpact {
     bool same = false; ///< `to` is `from`: nothing to do
     VaultPath path;    ///< the new path (spelled as the vault spells its folders)
     PathProblem problem;
-    int links = 0;                  ///< links rewritten
-    int tags = 0;                   ///< tag occurrences rewritten
+    int links = 0;                  ///< links rewritten (with ```query filters naming a page or folder)
+    int tags = 0;                   ///< tag occurrences rewritten (with ```query tag: filters)
+    int queries = 0;                ///< ```query filter values among them (RelocationPlan::queries())
     int notes = 0;                  ///< notes rewritten
     QStringList specials;           ///< the settings that follow ("journals", …)
     QList<PlannedRewrite> rewrites; ///< the notes rewritten, with their texts (with an index)

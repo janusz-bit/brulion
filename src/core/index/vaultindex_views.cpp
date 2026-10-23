@@ -128,6 +128,19 @@ VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
     return entry(hit) ? hit : VaultPath();
 }
 
+const QList<VaultPath> &VaultIndex::Private::queryNotes()
+{
+    if (!cache.queryNotes) {
+        QList<VaultPath> out;
+        for (const Entry *e : sortedEntries()) {
+            if (hasQueryBlocks(e->content, e->note))
+                out.append(e->path);
+        }
+        cache.queryNotes = std::move(out);
+    }
+    return *cache.queryNotes;
+}
+
 const TagTargets &VaultIndex::Private::tagTargets()
 {
     if (!cache.tagTargets) {
@@ -196,6 +209,11 @@ QList<VaultPath> VaultIndex::attachments() const
         d->cache.attachments = std::move(out);
     }
     return *d->cache.attachments;
+}
+
+QList<VaultPath> VaultIndex::notesWithQueries() const
+{
+    return d->queryNotes();
 }
 
 bool VaultIndex::contains(const VaultPath &path) const

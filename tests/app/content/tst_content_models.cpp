@@ -974,6 +974,37 @@ private Q_SLOTS:
 
     // ---- Page tools ---------------------------------------------------------------------------------
 
+    // What a rename rewrites, said before a name is typed (PageTools) and for the name typed
+    // (Workspace::renameImpact): the ```query filters naming the page count as links and tags.
+    void renameImpactCountsQueries()
+    {
+        auto ws = open({
+                {u"Dom.md"_s, u"- strona\n"_s},
+                {u"Notatka.md"_s, u"- #dom [[Dom]]\n"_s},
+                {u"Zapytania.md"_s,
+                 u"- ```query\n  tag:dom ref:Dom [[Dom]] page:\"Dom\" path:Dom tag:dom/x ref:Inna\n  ```\n"_s},
+                {u"Inna.md"_s, u"- x\n"_s},
+        });
+        PageTools tools;
+        tools.setWorkspace(ws.get());
+        const QVariantMap any = tools.renameImpact(u"Dom.md"_s);
+        QCOMPARE(any.value(u"notes"_s).toInt(), 2);
+        QCOMPARE(any.value(u"links"_s).toInt(), 5); // [[Dom]] + ref:, [[…]], page:, path:
+        QCOMPARE(any.value(u"tags"_s).toInt(), 2);  // #dom + tag:dom (not tag:dom/x)
+        QCOMPARE(any.value(u"queries"_s).toInt(), 5);
+        const QVariantMap typed = ws->renameImpact(u"Dom.md"_s, u"Mieszkanie"_s, false);
+        QVERIFY(typed.value(u"ok"_s).toBool());
+        QCOMPARE(typed.value(u"links"_s).toInt(), 5);
+        QCOMPARE(typed.value(u"tags"_s).toInt(), 2);
+        QCOMPARE(typed.value(u"queries"_s).toInt(), 5);
+        QCOMPARE(typed.value(u"notes"_s).toInt(), 2);
+        // And the rename writes them.
+        QCOMPARE(ws->renamePage(u"Dom.md"_s, u"Mój dom"_s), u"Mój dom.md"_s);
+        QCOMPARE(ws->readFile(u"Zapytania.md"_s), u"- ```query\n  tag:[[Mój dom]] ref:[[Mój dom]] [[Mój dom]] "
+                                                  u"page:\"Mój dom\" path:[[Mój dom]] tag:dom/x "
+                                                  "ref:Inna\n  ```\n"_s);
+    }
+
     void pageTools()
     {
         auto ws = open({

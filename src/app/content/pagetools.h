@@ -4,7 +4,7 @@
 // self-contained HTML document) to the clipboard or a file.
 //
 //   PageTools { id: tools; workspace: Workspace }
-//   tools.renameImpact(page.path)   // { notes: 3, links: 5, tags: 2 }
+//   tools.renameImpact(page.path)   // { notes: 3, links: 5, tags: 2, queries: 1 }
 #pragma once
 
 #include <QObject>
@@ -35,8 +35,10 @@ public:
     void setWorkspace(shell::Workspace *workspace);
 
     /// What renaming `path` rewrites: { notes (other notes linking to it by name or path, or
-    /// carrying a tag that names it), links (those links), tags (those tags: `#old`, `#[[old]]`,
-    /// `tags::` and frontmatter items — docs/SYNTAX.md §3) }.
+    /// carrying a tag that names it, or a ```query naming it), links (those links, and the query
+    /// filters `ref:` / `[[…]]` / `page:` / `path:` naming the page), tags (those tags: `#old`,
+    /// `#[[old]]`, `tags::` and frontmatter items — docs/SYNTAX.md §3 —, and `tag:` filters),
+    /// queries (the query filters among them) }.
     Q_INVOKABLE QVariantMap renameImpact(const QString &path) const;
     /// The tag that names the page ("#praca", "#[[Jan Kowalski]]", "#Projekty/Dom" for a duplicate
     /// base name; markdown::tagSyntax()); "" when no tag can name it (an attachment).

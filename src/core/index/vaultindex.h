@@ -147,9 +147,11 @@ struct FileMove {
 /// link the move would turn to another file — a bare [[Dom]] that a shorter Dom.md now takes, a
 /// relative link of a moved note — gets the shortest target that still reaches its file
 /// (VaultIndex::linkTarget(): [[Projekty/Dom]]); tags the same way (VaultIndex::tagTarget():
-/// #Projekty/Dom). Links that could not be kept (no written form reaches the file) stay as they
-/// are. A plan stays valid after the index changed: it keeps the lookup tables of before and
-/// after the move.
+/// #Projekty/Dom). The filters of ```query blocks that name them follow too (findQueryNames()):
+/// `tag:` / `#tag` exactly that tag (not its sub-tags) as the tags, `ref:` / `[[…]]` and `page:` a
+/// moved page as links, `path:` a prefix whose every file moved by one folder change. Links that
+/// could not be kept (no written form reaches the file) stay as they are. A plan stays valid after
+/// the index changed: it keeps the lookup tables of before and after the move.
 class RelocationPlan {
 public:
     struct File {
@@ -159,6 +161,8 @@ public:
         QString after;     ///< ... and with the links and tags rewritten
         int links = 0;     ///< links rewritten
         int tags = 0;      ///< tag occurrences rewritten
+        int queries = 0;   ///< ```query filter values rewritten (tag:, ref:, page:, path:)
+        int queryTags = 0; ///< … of them tag: / #tag values
     };
 
     RelocationPlan();
@@ -170,9 +174,13 @@ public:
     QList<FileMove> moves() const;
     /// The notes to rewrite, by path.
     const QList<File> &files() const;
-    /// Links / tag occurrences rewritten in all notes.
+    /// Links / tag occurrences rewritten in all notes — the ```query filters that name a moved
+    /// page or folder (ref:, [[…]], page:, path:) counted as links, their tag: / #tag filters as
+    /// tags, as the rename and move dialogs say it.
     int links() const;
     int tags() const;
+    /// The ```query filter values among them.
+    int queries() const;
     /// The plan for note `path` (its path before the move) applied to `content` — the note as
     /// read after the move, when it no longer equals File::before (an edit saved meanwhile).
     /// Notes outside the plan get their links checked too. Returns `content` when nothing changes.
@@ -269,6 +277,8 @@ public:
     QList<VaultPath> paths() const;
     /// Known attachment paths (non-Markdown files), sorted.
     QList<VaultPath> attachments() const;
+    /// Notes with a ```query block (sorted by path; cached until the next change).
+    QList<VaultPath> notesWithQueries() const;
     /// Is `path` an indexed note or attachment?
     bool contains(const VaultPath &path) const;
     /// Raw content of a note as last indexed (null QString when unknown).

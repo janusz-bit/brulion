@@ -142,12 +142,12 @@ Never compute a hash yourself.
 | `page create <title>` | `[--folder F] [--mode outline\|document] [--content T \| --stdin]` | a new page; a name differing only in letter case is that page (`existing`) | yes |
 | `page append <ref> <text>` | `[--under "## Heading" \| ^id] [--stdin]` | a block at the end, of a section, or as a block's last child | yes |
 | `page write <ref>` | `--expect-hash H (--content T \| --stdin)` | replace the whole text (H from `page read`) | destructive |
-| `page rename <ref> <title>` | | rename in its folder; links and tags follow | destructive |
-| `page move <ref> <folder>` | `. = root` | move; links and tags follow | destructive |
+| `page rename <ref> <title>` | | rename in its folder; links, tags and the ```query filters naming it follow (`{links, tags, queries, notes}`) | destructive |
+| `page move <ref> <folder>` | `. = root` | move; links, tags and query filters follow | destructive |
 | `page delete <ref>` | | to `.trash/` | destructive |
 | `folder list [<folder>]` | | folders with page / attachment counts and special roles | |
 | `folder create <path>` | | a folder (names sanitised, hidden names refused) | yes |
-| `folder move <path> <target>` | | move; links, tags and the notebook's special folders follow | destructive |
+| `folder move <path> <target>` | | move; links, tags, query filters (`path:` too) and the notebook's special folders follow | destructive |
 | `folder rename <path> <name>` | | rename; the same | destructive |
 | `folder delete <path>` | | to `.trash/` | destructive |
 | `journal read [<date>]` | `[--blocks]`; also `journal [<date>]` | a daily note (today by default) | |

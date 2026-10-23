@@ -292,6 +292,101 @@ private Q_SLOTS:
         QCOMPARE(index.resolveTag(u"Długie/Dom"_s).value_or(QString()), u"Inne/Długie/Dom.md"_s);
     }
 
+    // The filters of ```query blocks that name a moved page or folder or a renamed tag follow them
+    // (SYNTAX §2, §10): exactly the tag (sub-tags stay), ref: / [[…]] / page: like links, path: a
+    // prefix whose every file moved; counted as links and tags.
+    void queriesFollow_data()
+    {
+        QTest::addColumn<QStringList>("files"); // "path=content"; the query note is Q.md
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("to");       // a folder move: "from/" -> "to/"
+        QTest::addColumn<QString>("query");    // Q.md's query line before
+        QTest::addColumn<QString>("expected"); // … and after ("" = Q.md is not rewritten)
+        QTest::addColumn<int>("links");        // the plan's counts (links, tags, queries)
+        QTest::addColumn<int>("tags");
+        QTest::addColumn<int>("queries");
+        const QStringList dom{u"Dom.md=- x"_s, u"Notatka.md=- #dom #dom/kuchnia"_s};
+        QTest::newRow("a page renamed: every key, negated, in lists")
+                << dom << u"Dom.md"_s << u"Mieszkanie.md"_s
+                << u"type:tasks tag:dom -tag:dom/kuchnia #dom tagi:praca,DOM ref:Dom [[Dom]] page:Dom ścieżka:Dom"_s
+                << u"type:tasks tag:Mieszkanie -tag:dom/kuchnia #Mieszkanie tagi:praca,Mieszkanie ref:Mieszkanie "
+                   "[[Mieszkanie]] page:Mieszkanie ścieżka:Mieszkanie"_s
+                << 4 << 4 << 7; // links: 4 filters; tags: Notatka's #dom + 3 filters
+        QTest::newRow("a name with spaces: in [[ ]] or quotes")
+                << dom << u"Dom.md"_s << u"Mój dom.md"_s << u"tag:dom #dom ref:Dom ref:[[Dom]] page:\"Dom\" path:Dom"_s
+                << u"tag:[[Mój dom]] #[[Mój dom]] ref:[[Mój dom]] ref:[[Mój dom]] page:\"Mój dom\" path:[[Mój dom]]"_s
+                << 4 << 3 << 6;
+        QTest::newRow("comments, phrases, wildcards and this stay")
+                << dom << u"Dom.md"_s << u"Mieszkanie.md"_s
+                << u"page:*Dom* path:D* ref:this page:ta \"tag:dom\" ref:Dom // tag:dom ref:Dom"_s
+                << u"page:*Dom* path:D* ref:this page:ta \"tag:dom\" ref:Mieszkanie // tag:dom ref:Dom"_s << 1 << 1
+                << 1;
+        QTest::newRow("a folder renamed: path prefixes and paths")
+                << QStringList{u"Projekty/Dom.md=- x"_s, u"Projekty/Plan.md=- y"_s} << u"Projekty/"_s << u"Prace/"_s
+                << u"path:Projekty/ -path:Projekty/Plan path:./Projekty/ ref:[[Projekty/Dom]] tag:Projekty/Dom "
+                   "page:Projekty/Dom ref:Dom"_s
+                << u"path:Prace/ -path:Prace/Plan path:./Prace/ ref:[[Prace/Dom]] tag:Prace/Dom page:Prace/Dom ref:Dom"_s
+                << 5 << 1 << 6;
+        QTest::newRow("a folder moved deeper: only path: changes (suffixes still resolve)")
+                << QStringList{u"Projekty/Dom.md=- x"_s} << u"Projekty/"_s << u"Archiwum/Projekty/"_s
+                << u"path:Projekty/ ref:[[Projekty/Dom]] tag:Projekty/Dom page:Projekty/Dom"_s
+                << u"path:Archiwum/Projekty/ ref:[[Projekty/Dom]] tag:Projekty/Dom page:Projekty/Dom"_s << 1 << 0 << 1;
+        QTest::newRow("a prefix that also names a file that stays")
+                << QStringList{u"Projekty/Dom.md=- x"_s, u"Projekty-stare/Dom.md=- y"_s} << u"Projekty/"_s
+                << u"Prace/"_s << u"path:Projekty path:Projekty/"_s << u"path:Projekty path:Prace/"_s << 1 << 0 << 1;
+        QTest::newRow("same names elsewhere: only what named this page")
+                << QStringList{u"Dom.md=- root"_s, u"Projekty/Dom.md=- x"_s, u"Notatka.md=- #dom #Projekty/Dom"_s}
+                << u"Projekty/Dom.md"_s << u"Projekty/Chata.md"_s
+                << u"ref:Dom tag:dom ref:Projekty/Dom tag:Projekty/Dom page:Projekty/Dom"_s
+                << u"ref:Dom tag:dom ref:Projekty/Chata tag:Projekty/Chata page:Projekty/Chata"_s << 2 << 2 << 3;
+        QTest::newRow("a missing page stays missing")
+                << dom << u"Dom.md"_s << u"Mieszkanie.md"_s << u"ref:Nieistniejąca tag:nieistniejący"_s << QString()
+                << 0 << 1 << 0; // (only Notatka's #dom)
+        QTest::newRow("Polish names and paths")
+                << QStringList{u"Zwierzęta/Żółw.md=- x"_s} << u"Zwierzęta/Żółw.md"_s << u"Gady/Żółw.md"_s
+                << u"ref:Zwierzęta/Żółw path:Zwierzęta/Żółw page:Żółw"_s << u"ref:Gady/Żółw path:Gady/Żółw page:Żółw"_s
+                << 2 << 0 << 2;
+    }
+    void queriesFollow()
+    {
+        QFETCH(QStringList, files);
+        QFETCH(QString, from);
+        QFETCH(QString, to);
+        QFETCH(QString, query);
+        QFETCH(QString, expected);
+        QFETCH(int, links);
+        QFETCH(int, tags);
+        QFETCH(int, queries);
+        VaultIndex index;
+        for (const QString &f : std::as_const(files))
+            index.update(f.section(u'=', 0, 0), f.section(u'=', 1));
+        const QString note = u"# Zapytanie\r\n\r\n```query\r\n"_s + query + u"\r\n```\r\n- [[Inna]] tag:dom\r\n"_s;
+        index.update(u"Q.md"_s, note);
+        QCOMPARE(index.notesWithQueries(), QList<VaultPath>{u"Q.md"_s});
+        QList<FileMove> moves;
+        if (from.endsWith(u'/')) {
+            for (const VaultPath &p : index.paths() + index.attachments()) {
+                if (p.startsWith(from))
+                    moves.append({p, to + p.mid(from.size())});
+            }
+        } else {
+            moves.append({from, to});
+        }
+        const RelocationPlan plan = index.planRelocation(moves);
+        const QString after = planned(plan, u"Q.md"_s);
+        if (expected.isEmpty())
+            QCOMPARE(after, QString());
+        else
+            QCOMPARE(after, QString(note).replace(query, expected)); // CRLF and the rest byte for byte
+        QCOMPARE(plan.links(), links);
+        QCOMPARE(plan.tags(), tags);
+        QCOMPARE(plan.queries(), queries);
+        // A note changed since the plan: its query is checked anew.
+        if (!expected.isEmpty())
+            QCOMPARE(plan.rewrite(u"Q.md"_s, u"```query\n"_s + query + u"\n```"_s),
+                     u"```query\n"_s + expected + u"\n```"_s);
+    }
+
     // A rename of a page with a duplicate name elsewhere: only what named this page changes.
     void sameNamedPagesInOtherFolders()
     {

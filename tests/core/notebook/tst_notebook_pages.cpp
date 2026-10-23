@@ -233,6 +233,19 @@ private Q_SLOTS:
                 << QStringList{u"Projekty/B.md=x"_s, u"Xy/B.md=x"_s, u"Projekty/A.md=[[B]] [[#Nagłówek]]"_s}
                 << u"move:Projekty/A.md:Archiwum"_s << u"Archiwum/A.md"_s
                 << QStringList{u"Archiwum/A.md=[[Projekty/B]] [[#Nagłówek]]"_s};
+        QTest::newRow("queries naming the page follow it")
+                << QStringList{u"Dom.md=x"_s, u"Notatka.md=- #dom"_s,
+                               u"Zapytania.md=```query\r\ntype:tasks tag:dom -tag:dom/kuchnia ref:[[Dom]] page:\"Dom\"\r\n```\r\n"_s}
+                << u"page:Dom.md:Mój dom"_s << u"Mój dom.md"_s
+                << QStringList{u"Notatka.md=- #[[Mój dom]]"_s,
+                               u"Zapytania.md=```query\r\ntype:tasks tag:[[Mój dom]] -tag:dom/kuchnia ref:[[Mój dom]] "
+                               "page:\"Mój dom\"\r\n```\r\n"_s};
+        QTest::newRow("folder rename rewrites path filters")
+                << QStringList{u"Projekty/Dom.md=x"_s, u"Projekty/Plan.md=y"_s,
+                               u"Zapytania.md=- ```query\n  path:Projekty/ -path:Projekty/Plan\n  ```\n"_s}
+                << u"folder:Projekty:Prace domowe"_s << u"Prace domowe"_s
+                << QStringList{
+                           u"Zapytania.md=- ```query\n  path:[[Prace domowe/]] -path:[[Prace domowe/Plan]]\n  ```\n"_s};
         QTest::newRow("Polish names, CRLF and a BOM kept")
                 << QStringList{u"Żółw.md=x"_s, u"Zwierzęta/Żółw.md=y"_s,
                                u"Łąka.md=﻿- [[Żółw]]\r\n- [[Zwierzęta/Żółw]] #żółw\r\n"_s}

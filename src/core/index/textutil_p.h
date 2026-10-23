@@ -84,6 +84,10 @@ qsizetype indexOfWordStart(QStringView hay, QStringView needle);
 /// (`*a*a*a*…` from a note must not freeze the app).
 bool globMatch(QStringView text, QStringView pattern, bool prefixOnly = false);
 
+/// A query's word for "the page containing the query" (`page:this`, `ref:ta`): this, current, ta,
+/// ten, bieżąca, bieżący, tutaj — case- and diacritic-insensitive.
+bool isThisPageValue(QStringView value);
+
 /// Collapse whitespace runs (tabs, newlines) into single spaces and trim.
 QString squash(QStringView s);
 

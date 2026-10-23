@@ -158,8 +158,13 @@ QVariantMap Workspace::relocationImpact(const QString &from, const QString &to)
         return {{u"ok"_s, false}, {u"path"_s, to}, {u"error"_s, tr("No notebook is open.")}};
     finishIndexing(); // every linking note must be known
     const notebook::RelocationImpact impact = notebook::relocationImpact(*m_vault, m_index.get(), from, to);
-    QVariantMap out{{u"ok"_s, impact.ok},     {u"path"_s, impact.path},   {u"links"_s, impact.links},
-                    {u"tags"_s, impact.tags}, {u"notes"_s, impact.notes}, {u"specials"_s, QVariant(impact.specials)}};
+    QVariantMap out{{u"ok"_s, impact.ok},
+                    {u"path"_s, impact.path},
+                    {u"links"_s, impact.links},
+                    {u"tags"_s, impact.tags},
+                    {u"queries"_s, impact.queries},
+                    {u"notes"_s, impact.notes},
+                    {u"specials"_s, QVariant(impact.specials)}};
     if (impact.same)
         out.insert(u"same"_s, true);
     if (!impact.ok)

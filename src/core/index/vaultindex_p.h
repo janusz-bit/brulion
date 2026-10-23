@@ -80,6 +80,10 @@ QStringList pageLevelTags(const ParsedNote &note);
 /// A tag key cleaned for resolution: '#', `[[ ]]`, trailing '/' and blanks stripped (NFC).
 QString tagName(const QString &tag);
 
+/// The note (`content` and its parseNote()) has a ```query block — also a fence in a list item
+/// (findQueryNames() looks into them).
+bool hasQueryBlocks(const QString &content, const ParsedNote &note);
+
 /// The tags that name notes (VaultIndex::resolveTag() of every tag in use), both ways.
 struct TagTargets {
     QHash<QString, VaultPath> byTag;      ///< tag key -> note it names (resolved tags only)
@@ -100,6 +104,7 @@ struct IndexCaches {
     std::optional<QList<JournalRef>> journals;
     std::optional<QList<MissingPage>> missing;
     std::optional<index_detail::TagTargets> tagTargets; ///< one resolve per tag in use, lazily
+    std::optional<QList<VaultPath>> queryNotes;         ///< notes with a ```query block, by path
 };
 
 struct VaultIndex::Private {
@@ -141,6 +146,8 @@ struct VaultIndex::Private {
     /// The note `tag` names (VaultIndex::resolveTag()); empty when none.
     VaultPath resolveTagPath(const QString &tag) const;
     const index_detail::TagTargets &tagTargets();
+    /// Notes with a ```query block (VaultIndex::notesWithQueries()).
+    const QList<VaultPath> &queryNotes();
     /// The tag keys naming `path`: resolved ones for a note, for a missing page the unresolved
     /// ones that would name it (see VaultIndex::tagReferences()).
     QStringList tagKeysFor(const VaultPath &path);

@@ -374,6 +374,7 @@ RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, c
     const RelocationPlan plan = index->planRelocation(fileMoves(vault, from, to));
     out.links = plan.links();
     out.tags = plan.tags();
+    out.queries = plan.queries();
     out.notes = int(plan.files().size());
     for (const RelocationPlan::File &f : plan.files())
         out.rewrites.append(PlannedRewrite{f.path, f.newPath, f.before, f.after});

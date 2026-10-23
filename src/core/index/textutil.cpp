@@ -3,6 +3,7 @@
 #include "text/text.h"
 
 #include <QChar>
+#include <QSet>
 
 #include <algorithm>
 #include <cmath>
@@ -292,6 +293,13 @@ QString excerptStart(QStringView text, qsizetype max)
     if (double(b) < double(max) * 0.6)
         b = max;
     return s.first(safeCut(s, b)) + u'…';
+}
+
+bool isThisPageValue(QStringView value)
+{
+    static const QSet<QString> words = {u"this"_s,    u"current"_s, u"ta"_s,   u"ten"_s,
+                                        u"biezaca"_s, u"biezacy"_s, u"tutaj"_s};
+    return words.contains(text::foldKey(value.trimmed()));
 }
 
 } // namespace brulion::index_detail

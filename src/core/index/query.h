@@ -1,5 +1,7 @@
 // The query language of ```query blocks (docs/SYNTAX.md §10): parseQuery() validates the text,
-// runQuery() evaluates it against a VaultIndex. Part of the index module — see index/index.h.
+// runQuery() evaluates it against a VaultIndex; findQueryNames() / retargetQueryNames() find and
+// rewrite the filter values that name pages, folders and tags (renames and moves). Part of the
+// index module — see index/index.h.
 //
 //   type:tasks status:todo,doing tag:praca -tag:prywatne due:<=+7d sort:due,-priority limit:20
 //   "dokładna fraza" słowo #tag [[Strona]] page:this path:Projekty/ ref:[[Jan]] group:page
@@ -149,5 +151,50 @@ QueryResult runQuery(const Query &query, const VaultIndex &index, QDate today, Q
 /// Translated group/status labels (also handy for UIs).
 QString queryStatusLabel(TaskStatus status);
 QString queryPriorityLabel(Priority priority);
+
+// ---- Names in query blocks (rename and move, docs/SYNTAX.md §2 "Rewriting on rename and move") ----
+
+/// A filter value of a ```query block that names a page, a folder or a tag: what renaming or
+/// moving them rewrites (VaultIndex::planRelocation()). `tag:` and `#tag` (Tag), `ref:` and
+/// `[[Page]]` (Ref), `page:` (Page), `path:` (Path) — any spelling of the key, negated or not,
+/// each value of a comma list.
+struct QueryNameRef {
+    QueryFilterKind kind = QueryFilterKind::Ref;
+    /// As written, without quotes, `[[ ]]`, a tag's '#' or the blanks inside them ("Dom",
+    /// "Projekty/", "praca", "Jan Kowalski"); not lower-cased.
+    QString value;
+    qsizetype from = 0; ///< `value`'s range in the note
+    qsizetype to = 0;
+    bool bracketed = false; ///< written in `[[ ]]` (`ref:[[Jan Kowalski]]`, `[[Dom]]`, `#[[Mój tag]]`)
+    QChar quote;            ///< the opening quote when written in quotes (`page:"Lista zakupów"`), else null
+
+    friend bool operator==(const QueryNameRef &, const QueryNameRef &) = default;
+};
+
+/// Every QueryNameRef of the ```query blocks of a note, in document order — read as parseQuery()
+/// reads the block (comments, quotes and `[[…]]` with spaces; a `//` value is text). Never outside
+/// a ```query fence (its own lines; the fence lines and other code are not looked at).
+QList<QueryNameRef> findQueryNames(const QString &content);
+
+/// How `value` is written in place of `name.value` (the text for [from, to)), in the name's own
+/// form: inside its `[[ ]]` or quotes, or bare — in `[[ ]]` when it holds a blank, a comma, a
+/// quote, `[[` / `]]` or starts with `//`, so the query keeps reading it as one value. "" when no
+/// form can hold it (empty, a line break, `[[` / `]]` in brackets, its closing quote in quotes).
+QString formatQueryName(const QueryNameRef &name, const QString &value);
+
+/// One value to replace (retargetQueryNames()).
+struct QueryNameEdit {
+    qsizetype from = 0; ///< a QueryNameRef's range (findQueryNames() of the same content)
+    qsizetype to = 0;
+    QString value; ///< the new value, unformatted ("Archiwum/Dom", "Nowa nazwa")
+
+    friend bool operator==(const QueryNameEdit &, const QueryNameEdit &) = default;
+};
+
+/// Replace filter values of ```query blocks (content in → content out): each edit names a value
+/// by its range and is written by formatQueryName(). Edits that match no value, overlap an
+/// earlier one or cannot be written are ignored (`applied`: how many were written); line endings
+/// and every other byte are preserved, and content without changes is returned as is.
+QString retargetQueryNames(const QString &content, const QList<QueryNameEdit> &edits, int *applied = nullptr);
 
 } // namespace brulion

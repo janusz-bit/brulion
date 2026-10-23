@@ -18,6 +18,7 @@ Wstaw zapytanie poleceniem `/Zapytanie` albo przyciskiem „Pokaż jako zapytani
 - `//` zaczyna komentarz do końca linii, a linia zaczynająca się od `# ` jest komentarzem (na przykład tytułem zapytania).
 - Skróty: samo słowo szuka tekstu, `#praca` to `tag:praca`, `[[Strona]]` to `ref:Strona`.
 - Klucze i wartości mają polskie odpowiedniki i nie zależą od wielkości liter ani polskich znaków: `stan:otwarte termin:jutro`.
+- Gdy zmieniasz nazwę strony albo przenosisz stronę lub folder, filtry `tag:`, `ref:`, `[[…]]`, `page:` i `path:`, które je nazywają, zmieniają się razem z nimi (nazwa ze spacją trafia w `[[…]]`: `tag:[[Mój dom]]`).
 
 ## Najważniejsze klucze
 | Klucz | Co robi |

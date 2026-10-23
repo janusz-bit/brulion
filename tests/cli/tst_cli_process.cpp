@@ -403,6 +403,16 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"path"_s).toString(), u"Projekty/Mieszkanie.md"_s);
         QCOMPARE(readFile(dir + u"/Notatka.md"_s), "- [[Mieszkanie]] i #Mieszkanie\n"_ba);
+        QCOMPARE(r.result().value(u"queries"_s).toInt(), 0);
+        // A query naming the page follows it too (counted as links and tags).
+        writeFile(dir + u"/Zapytanie.md"_s, "```query\ntag:mieszkanie ref:Mieszkanie path:Projekty/\n```\n");
+        r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"rename"_s, u"Mieszkanie"_s, u"Mieszkanie w bloku"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"queries"_s).toInt(), 2);
+        QCOMPARE(readFile(dir + u"/Zapytanie.md"_s),
+                 "```query\ntag:[[Mieszkanie w bloku]] ref:[[Mieszkanie w bloku]] path:Projekty/\n```\n"_ba);
+        r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"rename"_s, u"Mieszkanie w bloku"_s, u"Mieszkanie"_s});
+        QCOMPARE(r.code, 0);
         r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"move"_s, u"Mieszkanie"_s, u"Archiwum"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(QFile::exists(dir + u"/Archiwum/Mieszkanie.md"_s));
