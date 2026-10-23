@@ -63,6 +63,8 @@ QString HistoryModel::reasonLabel(const QString &reason)
         return tr("Replaced by an import");
     if (reason == u"restore")
         return tr("Replaced by a restored version");
+    if (reason == u"cli")
+        return tr("Replaced from the command line (agent)"); // brulion-cli, e.g. an AI agent
     return tr("Replaced by Brulion");
 }
 
@@ -78,6 +80,8 @@ QString HistoryModel::reasonIcon(const QString &reason)
         return u"import"_s;
     if (reason == u"restore")
         return u"history"_s;
+    if (reason == u"cli")
+        return u"terminal"_s;
     return u"settings"_s;
 }
 

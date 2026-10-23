@@ -1,17 +1,22 @@
 // SingleInstance: a second launch hands its message to the running instance; stale sockets of a
 // crashed instance do not block a new one; different app data folders do not see each other.
+// The messages (appmessage.h): "open {json}" from brulion-cli is delivered and parsed, malformed
+// lines are refused; probing for a running app sends nothing.
+#include "appmessage.h"
 #include "singleinstance.h"
+
+#include <QJsonArray>
 
 #include <QDir>
 #include <QFileInfo>
 #include <QLocalServer>
-#include <QStandardPaths>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTest>
 #include <QUuid>
 
 using namespace Qt::StringLiterals;
-using brulion::shell::SingleInstance;
+using brulion::ipc::SingleInstance;
 
 class TestSingleInstance : public QObject {
     Q_OBJECT
@@ -70,6 +75,56 @@ private Q_SLOTS:
         QCOMPARE(messages.last().first().toByteArray(), QByteArray("today"));
     }
 
+    void openMessageFromTheCommandLine()
+    {
+        const QString key = uniqueKey();
+        SingleInstance app(key);
+        SingleInstance cli(key);
+        QVERIFY(!cli.isPrimaryRunning(100));
+        QVERIFY(app.listen());
+        QSignalSpy messages(&app, &SingleInstance::messageReceived);
+        QVERIFY(cli.isPrimaryRunning()); // probing sends nothing
+        const QJsonObject route{{u"view"_s, u"page"_s}, {u"path"_s, u"Projekty/Żółw.md"_s}, {u"line"_s, 4}};
+        QVERIFY(cli.sendToPrimary(brulion::ipc::openMessage(route, u"/home/ala/Notatki"_s)));
+        QTRY_COMPARE(messages.size(), 1);
+        const auto message = brulion::ipc::parseMessage(messages.first().first().toByteArray());
+        QVERIFY(message);
+        QCOMPARE(message->verb, QByteArray("open"));
+        QCOMPARE(message->payload.value(u"route"_s).toObject(), route);
+        QCOMPARE(message->payload.value(u"vault"_s).toString(), u"/home/ala/Notatki"_s);
+    }
+
+    void parseMessages_data()
+    {
+        QTest::addColumn<QByteArray>("line");
+        QTest::addColumn<bool>("valid");
+        QTest::addColumn<QByteArray>("verb");
+        QTest::newRow("verb") << QByteArray("activate\n") << true << QByteArray("activate");
+        QTest::newRow("verb with json") << QByteArray(R"(open {"route":{"view":"journal"}})") << true
+                                        << QByteArray("open");
+        QTest::newRow("future verb") << QByteArray("state-get {}") << true << QByteArray("state-get");
+        QTest::newRow("empty") << QByteArray("  ") << false << QByteArray();
+        QTest::newRow("upper case") << QByteArray("OPEN") << false << QByteArray();
+        QTest::newRow("not an object") << QByteArray("open [1,2]") << false << QByteArray();
+        QTest::newRow("broken json") << QByteArray("open {\"route\":") << false << QByteArray();
+        QTest::newRow("binary") << QByteArray("op\xff"
+                                              "en")
+                                << false << QByteArray();
+    }
+    void parseMessages()
+    {
+        QFETCH(QByteArray, line);
+        QFETCH(bool, valid);
+        QFETCH(QByteArray, verb);
+        const auto message = brulion::ipc::parseMessage(line);
+        QCOMPARE(message.has_value(), valid);
+        if (message)
+            QCOMPARE(message->verb, verb);
+        QCOMPARE(brulion::ipc::encodeMessage("today"), QByteArray("today"));
+        QCOMPARE(brulion::ipc::parseMessage(brulion::ipc::encodeMessage("open", {{u"a"_s, u"ż"_s}}))->payload,
+                 (QJsonObject{{u"a"_s, u"ż"_s}}));
+    }
+
     void staleSocketIsReplaced()
     {
         const QString key = uniqueKey();
@@ -89,4 +144,4 @@ private Q_SLOTS:
 };
 
 QTEST_GUILESS_MAIN(TestSingleInstance)
-#include "tst_singleinstance.moc"
+#include "tst_ipc_singleinstance.moc"

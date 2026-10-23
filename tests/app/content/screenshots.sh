@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Screenshots of the content views in the real app with the sample notebook: journals, pages
 # (with the side panel, the rename and export dialogs, unlinked mentions, a tag's page with its
-# references — also a nested tag's), all pages, tags, a tag's overview, search, trash and history — × {desktop 1280×800, phone 412×915 --touch} × {light, dark}
+# references — also a nested tag's), all pages, tags, a tag's overview, search, trash and history
+# (also versions replaced by brulion-cli: history-cli) — × {desktop 1280×800, phone 412×915 --touch} × {light, dark}
 # — into tests/screenshots/content-<shot>-<size>-<theme>.png. QML warnings of the run are
 # printed. Fresh temporary XDG homes and the fixed clock --now keep the images reproducible.
 #
@@ -60,11 +61,13 @@ declare -A shot_route=(
   [empty-tags]='tags'
   [empty-search]='{"view":"search","query":"żółw"}'
   [history]='{"view":"history","path":"Witaj w Brulionie.md"}'
+  [history-cli]='{"view":"history","path":"Witaj w Brulionie.md"}'
 )
 # A first run in the same home before the shot (the history needs an edit to show versions:
 # PageScript "suggest" types into the guide page, which saves it).
 declare -A shot_prep=(
   [history]='--editor-script suggest'
+  [history-cli]='--route journals'
   [journals-missed]='--route journals'
   [journals-write]='--route journals'
 )
@@ -90,8 +93,21 @@ declare -A shot_empty=(
 )
 all_shots=(journals journals-day journals-missed journals-jump journals-write journal journal-new page page-refs page-rename page-export page-missing page-tag
   page-tag-nested side-links side-outline side-calendar
-  allpages allpages-modified tags tag search search-empty trash trash-full history
+  allpages allpages-modified tags tag search search-empty trash trash-full history history-cli
   empty-journals empty-allpages empty-tags empty-search)
+# The command line (brulion-cli) for the shots of its changes in the history: run after the prep,
+# on the sample notebook the prep seeded, with the same homes.
+cli="${BRULION_CLI:-$(dirname "$bin")/../cli/brulion-cli}"
+prep_cli() { # <shot> <home>
+  case "$1" in
+    history-cli)
+      local vault="$2/data/Brulion/Brulion/Przykładowy brulion"
+      local run=(env XDG_CONFIG_HOME="$2/config" XDG_DATA_HOME="$2/data" XDG_STATE_HOME="$2/state" "$cli"
+        --vault "$vault" --now "$now")
+      "${run[@]}" page append "Witaj w Brulionie" "Dopisane przez agenta: kupić mleko" >/dev/null
+      "${run[@]}" page append "Witaj w Brulionie" "I jeszcze: zadzwonić do Łukasza" >/dev/null ;;
+  esac
+}
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 [[ -x "$bin" ]] || { echo "screenshots: $bin not found — build first" >&2; exit 1; }
@@ -137,6 +153,7 @@ for shot in "${shots[@]}"; do
           "$bin" --demo --no-single-instance "${prep[@]}" --size "$geometry" --locale "$locale" --now "${prep_now[$shot]:-$now}" \
           --delay 2600 "${extra[@]}" --screenshot "$home/prep.png" >/dev/null 2>&1 || true
       fi
+      prep_cli "$shot" "$home"
       if XDG_CONFIG_HOME="$home/config" XDG_DATA_HOME="$home/data" XDG_CACHE_HOME="$home/cache" XDG_STATE_HOME="$home/state" \
         QML_DISABLE_DISK_CACHE=1 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
         "$bin" "${vault_args[@]}" --no-single-instance --route "$route" --size "$geometry" --theme "$theme" --locale "$locale" \

@@ -267,7 +267,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge) | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` | `tab?`, … |
-| `history` | `HistoryView` — versions of a page, diff, restore | `path` |
+| `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
@@ -948,7 +948,8 @@ docs/WEB.md). A new emoji in the UI or the syntax: add it to `brulionEmoji()`, r
 ## Dev tools, screenshots and UI tests
 
 Command-line options of `brulion` (`src/app/ui/devtools.h`, `src/app/shell/appcontroller.h`,
-`src/app/main.cpp`); unknown options are ignored. Headless runs:
+`src/app/main.cpp`); unknown options are ignored. Scripts and AI agents that read or change notes
+use the separate command line `brulion-cli` instead (docs/CLI.md: JSON output, an MCP server). Headless runs:
 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`. The developer QML behind `--gallery`,
 `--editor` and `--editor-script` (`qml/dev/`, `qml/content/ContentJournalsSelfTest.qml`) is built
 unless the CMake option `BRULION_DEV_QML` (`AUTO`, `ON`, `OFF`) turns it off. `AUTO`, the
@@ -975,6 +976,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
 | `--hidden`, `--capture`, `--today`, `--no-single-instance` | start in the tray / open quick capture / today's journal (a second launch asks the running instance) / allow a second instance |
+| `cli …` (the first argument) | the command line instead of the app (`brulion cli capture "…"`, also `Brulion.AppImage cli …`): `brulion-cli`, before anything of the app — no window, log file or single-instance claim; see docs/CLI.md. A running app also takes `brulion-cli app open <ref>` / `app today` / `app capture` (the `open {json}` message of `src/ipc/appmessage.h`, `AppController::openRoute`) |
 
 Scripts (inside `nix develop`; one GUI instance at a time via a lock; a fixed clock `NOW`;
 the app scripts give every run a fresh temporary XDG home, so the user's own Brulion is never

@@ -398,6 +398,98 @@ private Q_SLOTS:
         QCOMPARE(f.historyReasons(u"a.md"_s), (QStringList{u"user"_s, u"external"_s, u"user"_s}));
     }
 
+    // writeTextIfUnchanged(): the compare-and-swap of the editor's saves and brulion-cli's edits.
+    void writeIfUnchangedWritesOverTheExpectedText()
+    {
+        Fixture f;
+        f.write(u"a.md"_s, "- żółw\n");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"a.md"_s, u"- żółw\n- jeż\n"_s, u"- żółw\n"_s), WriteOutcome::Written);
+        QCOMPARE(f.read(u"a.md"_s), "- żółw\n- jeż\n"_ba);
+        QCOMPARE(f.changes(), QStringList{u"modify:a.md@user"_s});
+        QCOMPARE(f.historyContents(u"a.md"_s), QStringList{u"- żółw\n"_s});
+        // The same text again: nothing to write, still "Written" (the file holds it).
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"a.md"_s, u"- żółw\n- jeż\n"_s, u"- żółw\n- jeż\n"_s),
+                 WriteOutcome::Written);
+        QCOMPARE(f.spy->count(), 1);
+    }
+
+    void writeIfUnchangedKeepsAnExternalChange()
+    {
+        Fixture f;
+        f.write(u"a.md"_s, "v0\n");
+        QVERIFY(f.open());
+        QCOMPARE(f.text(u"a.md"_s), u"v0\n"_s);
+        // An agent appends a line; the watcher has not reported it yet.
+        f.write(u"a.md"_s, "v0\n- od agenta\n");
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"a.md"_s, u"v0 edytowane\n"_s, u"v0\n"_s), WriteOutcome::Changed);
+        QCOMPARE(f.read(u"a.md"_s), "v0\n- od agenta\n"_ba);           // nothing overwritten
+        QCOMPARE(f.changes(), QStringList{u"modify:a.md@external"_s}); // … and taken in at once
+        QCOMPARE(f.text(u"a.md"_s), u"v0\n- od agenta\n"_s);
+        QCOMPARE(f.historyContents(u"a.md"_s), QStringList{u"v0\n"_s});
+        // Same size, same timestamp (coarse file systems): found by the content.
+        const qint64 mtime = nextFakeMtime();
+        f.write(u"b.md"_s, "aaaa", mtime);
+        QVERIFY(f.vault->rescan().size() == 1);
+        QCOMPARE(f.text(u"b.md"_s), u"aaaa"_s);
+        f.write(u"b.md"_s, "bbbb", mtime);
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"b.md"_s, u"cccc"_s, u"aaaa"_s), WriteOutcome::Changed);
+        QCOMPARE(f.read(u"b.md"_s), "bbbb"_ba);
+        QCOMPARE(f.text(u"b.md"_s), u"bbbb"_s);
+    }
+
+    void writeIfUnchangedCreatesAMissingFile()
+    {
+        Fixture f;
+        QVERIFY(f.open());
+        // Missing: written whatever was expected (a page deleted behind an editor comes back).
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"Nowe/strona.md"_s, u"treść"_s, QString()), WriteOutcome::Written);
+        QCOMPARE(f.read(u"Nowe/strona.md"_s), "treść"_ba);
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"c.md"_s, u"x"_s, u"była treść"_s), WriteOutcome::Written);
+        // Another program created it meanwhile: not overwritten.
+        f.write(u"d.md"_s, "czyjeś");
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"d.md"_s, u"moje"_s, QString()), WriteOutcome::Changed);
+        QCOMPARE(f.read(u"d.md"_s), "czyjeś"_ba);
+        QVERIFY(f.vault->exists(u"d.md"_s));
+    }
+
+    void writeIfUnchangedKeepsTheBomAndLineEndings()
+    {
+        Fixture f;
+        f.write(u"bom.md"_s, "\xEF\xBB\xBF- a\r\n");
+        QVERIFY(f.open());
+        // The expected text is what readText() gives: without the BOM.
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"bom.md"_s, u"- a\r\n- ą\r\n"_s, u"- a\r\n"_s), WriteOutcome::Written);
+        QCOMPARE(f.read(u"bom.md"_s), "\xEF\xBB\xBF- a\r\n- ą\r\n"_ba);
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"bom.md"_s, u"x"_s, u"- a\n- ą\n"_s), WriteOutcome::Changed);
+    }
+
+    void writeIfUnchangedFailures()
+    {
+        Fixture f;
+        f.write(u"F/a.md"_s, "x");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->writeTextIfUnchanged(QString(), u"x"_s, QString()), WriteOutcome::Failed);
+        QCOMPARE(f.vault->writeTextIfUnchanged(u"F"_s, u"x"_s, QString()), WriteOutcome::Failed); // a folder
+        Vault closed(f.root());
+        QCOMPARE(closed.writeTextIfUnchanged(u"F/a.md"_s, u"y"_s, u"x"_s), WriteOutcome::Failed);
+    }
+
+    void historyReasonOfOwnWrites()
+    {
+        Fixture f;
+        f.write(u"a.md"_s, "v0");
+        QVERIFY(f.open());
+        f.vault->setHistoryReason(u"cli"_s);
+        QVERIFY(f.vault->writeText(u"a.md"_s, u"v1"_s));
+        f.clock.advanceMs(1000);
+        f.write(u"a.md"_s, "z innego programu");
+        QVERIFY(f.vault->writeText(u"a.md"_s, u"v2"_s));
+        // Its own writes say "cli"; what another program replaced stays "external".
+        QCOMPARE(f.historyReasons(u"a.md"_s), (QStringList{u"cli"_s, u"external"_s, u"cli"_s}));
+        QCOMPARE(f.historyContents(u"a.md"_s), (QStringList{u"z innego programu"_s, u"v1"_s, u"v0"_s}));
+    }
+
     void writeAfterAnUnseenDelete()
     {
         Fixture f;

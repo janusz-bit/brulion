@@ -117,6 +117,10 @@
   `[[Projekty/Dom]]`. Nowy folder zakładasz z „+” przy „Strony”, nowa strona trafia do folderu
   otwartej strony, drzewo samo pokazuje otwartą stronę i sortuje po polsku („Rozdział 2” przed
   „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze.
+* **Wiersz poleceń i agenci AI.** `brulion-cli` dopisuje do dziennika, dodaje zadania
+  i przypomnienia, szuka i przenosi strony z terminala albo skryptu — dokładnie tak jak
+  aplikacja — a `brulion-cli mcp` udostępnia to samo agentom AI (MCP). Więcej niżej
+  i w [docs/CLI.md](docs/CLI.md).
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
   wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
 * **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
@@ -186,6 +190,35 @@ synchronizacji**: kiedy i dlaczego się zaczęły, ile trwały, co przesłały, 
 „Szczegóły” pokazują, na co poszedł czas (łączenie, sprawdzanie plików na serwerze i na
 urządzeniu, przesyłanie, zapis), żądania do serwera i pliki, których nie udało się
 zsynchronizować.
+
+## Wiersz poleceń i agenci AI
+
+`brulion-cli` (w pakiecie Nix i po `cmake --install`; w AppImage: `Brulion.AppImage cli …`)
+czyta i zmienia notatki bez okna aplikacji, tym samym kodem co aplikacja:
+
+```sh
+brulion-cli capture "Kupić mleko jutro o 18"          # zadanie z przypomnieniem w dzisiejszym dzienniku
+brulion-cli task list --due '<=+7d'                    # otwarte zadania na najbliższy tydzień
+brulion-cli task add "Oddać książkę" --due "w piątek"
+brulion-cli search zolw                                # znajdzie „żółw”
+brulion-cli --format text journal wczoraj              # wczorajszy dziennik, czytelnie
+```
+
+Notatnik to `--vault <folder>`, zmienna `BRULION_VAULT` albo bieżący notatnik aplikacji. Wynik to
+JSON (dla ludzi: `--format text`), a kod wyjścia mówi, co się stało. Zmiany z wiersza poleceń
+trafiają do historii wersji urządzenia, na którym działa program (aplikacja na tym samym komputerze
+pokazuje je jako „Zastąpiona z wiersza poleceń (agent)”), i nigdy nie nadpisują tego, co właśnie
+zapisała aplikacja albo Syncthing. Polecenia, które coś usuwają, przenoszą lub nadpisują,
+wymagają `--allow-destructive`, a usunięte strony trafiają do kosza.
+
+**Agenci AI** (np. Hermes, Claude Code) dostają te same polecenia jako narzędzia MCP:
+`brulion-cli mcp --vault <folder>` (`--read-only` — tylko czytanie). Agent na innym komputerze,
+np. Raspberry Pi, pracuje na folderze notatek udostępnionym przez Syncthing albo klienta Nextcloud;
+na serwer wystarczy lekki pakiet `nix build github:janusz-bit/brulion#brulion-cli`. Treść notatek
+to dla agenta dane, nie polecenia. `brulion-cli app open <strona>` pokazuje stronę w działającej
+aplikacji. Szczegóły: [docs/CLI.md](docs/CLI.md), konfiguracja Hermesa:
+[docs/NIXOS.md](docs/NIXOS.md#agent-ai-hermes-i-wiersz-poleceń), poradnik dla agentów:
+[packaging/agent/brulion/SKILL.md](packaging/agent/brulion/SKILL.md).
 
 ## Gdy coś nie działa — rejestr zdarzeń
 
@@ -267,6 +300,8 @@ APK Androida z flake'a (na hoście x86_64-linux, niepodpisany): `nix build .#bru
 Zrzuty ekranu i testy interfejsu działają bez okna (`--screenshot`, `--journey`, skrypty
 `tests/app/*/screenshots.sh`) — patrz [docs/UI.md](docs/UI.md#dev-tools-screenshots-and-ui-tests).
 
+Wiersz poleceń (`./build/src/cli/brulion-cli`) i serwer MCP: [docs/CLI.md](docs/CLI.md).
+
 Dokumentacja: [architektura](docs/ARCHITECTURE.md) · [składnia](docs/SYNTAX.md) ·
 [interfejs](docs/UI.md) · [Android](docs/ANDROID.md) · [przeglądarka](docs/WEB.md) ·
 [NixOS](docs/NIXOS.md) · [wydania](docs/RELEASE.md). Poprzednia wersja (TypeScript +
@@ -318,6 +353,11 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.
+* A command line for scripts and AI agents: `brulion-cli` captures, appends to journals, adds
+  tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
+  stable exit codes, every change in the version history, destructive commands behind
+  `--allow-destructive`), and `brulion-cli mcp` serves the same commands as MCP tools; see
+  [docs/CLI.md](docs/CLI.md).
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it

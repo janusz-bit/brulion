@@ -60,6 +60,11 @@ Wskazówki do Syncthing:
 * Wersjonowanie plików w Syncthing („Proste” lub „Przedziałowe”) jest dobrym, dodatkowym
   zabezpieczeniem.
 
+Agent AI albo skrypt na komputerze (`brulion-cli`, [CLI.md](CLI.md)) pracuje na tym samym
+folderze po jego stronie synchronizacji — wiersza poleceń na Androidzie nie ma. Przypomnienia,
+które dopisze, telefon uzbroi, gdy Brulion zobaczy zmianę (przy uruchomieniu i po zmianach w
+notatkach).
+
 ## Przypomnienia i alarmy
 
 Przypomnienie (`⏰ 2026-10-14 09:00` w notatce) staje się powiadomieniem systemowym, które pojawi

@@ -794,6 +794,25 @@ private Q_SLOTS:
         QVERIFY(ws->exists(u"Notatka.md"_s));
     }
 
+    void historyOfCommandLineEdits()
+    {
+        // brulion-cli writes with the History reason "cli" (an AI agent's edits can be found and
+        // undone in the app's history).
+        auto ws = open({{u"Dziennik.md"_s, u"- rano\n"_s}});
+        ws->vault()->setHistoryReason(u"cli"_s);
+        QVERIFY(ws->writeFile(u"Dziennik.md"_s, u"- rano\n- od agenta: żółw\n"_s));
+        HistoryModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(u"Dziennik.md"_s);
+        model.refreshNow();
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(value(model, 0, "reason").toString(), u"cli"_s);
+        QCOMPARE(value(model, 0, "reasonLabel").toString(), u"Replaced from the command line (agent)"_s);
+        QCOMPARE(value(model, 0, "reasonIcon").toString(), u"terminal"_s);
+        QVERIFY(QFile::exists(QStringLiteral(BRULION_TEST_DATA "/../../assets/icons/terminal.svg"))); // Lucide, ISC
+        QCOMPARE(HistoryModel::reasonLabel(u"cli"_s) == HistoryModel::reasonLabel(u"user"_s), false);
+    }
+
     // ---- Outline ----------------------------------------------------------------------------------
 
     void outlineFollowsTheBlocks()

@@ -380,6 +380,8 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
 
 ## Ograniczenia techniczne
 
+* Wiersz poleceń (`brulion-cli`, docs/CLI.md) i odbieranie poleceń od niego (`app open`) są tylko
+  na komputerze z Linuksem; notatki z przeglądarki agent czyta przez Nextcloud.
 * Jednowątkowy Qt bez asyncify/JSPI: brak zagnieżdżonych pętli zdarzeń (`QDialog::exec()`,
   `QEventLoop::exec()`); dialogi i operacje muszą być asynchroniczne (sygnały, `open()`).
 * Pliki od/do użytkownika: `QFileDialog::getOpenFileContent()` / `saveFileContent()`.

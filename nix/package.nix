@@ -1,5 +1,6 @@
-# The Brulion desktop app (Qt 6 from nixpkgs): bin/brulion, desktop entry, AppStream metainfo
-# and icons. `nix build .#brulion` builds it without the unit tests (they run in CI's Linux job
+# The Brulion desktop app (Qt 6 from nixpkgs): bin/brulion, bin/brulion-cli (the command line for
+# scripts and AI agents, docs/CLI.md; nix/cli.nix builds it alone), desktop entry, AppStream
+# metainfo, icons and the agent skill (share/brulion/agent-skills). `nix build .#brulion` builds it without the unit tests (they run in CI's Linux job
 # and with scripts/dev-build.sh / scripts/remote-build.sh; `brulion.overrideAttrs { doCheck = true; }`
 # turns them on here).
 {
@@ -92,6 +93,15 @@ stdenv.mkDerivation (finalAttrs: {
     runHook preInstallCheck
     id=io.github.januszbit.brulion
     test -x $out/bin/brulion
+    test -x $out/bin/brulion-cli
+    test -f $out/share/brulion/agent-skills/brulion/SKILL.md
+    # The command line runs (on a notebook of its own; no display, no settings touched).
+    export HOME=$TMPDIR
+    $out/bin/brulion-cli version
+    $out/bin/brulion-cli init "$TMPDIR/Notatki"
+    $out/bin/brulion-cli --vault "$TMPDIR/Notatki" --now "2026-10-14 10:30" capture "Zadzwonić jutro o 9"
+    grep -q -- "- \[ \] Zadzwonić ⏰ 2026-10-15 09:00" "$TMPDIR/Notatki/journals/2026-10-14.md"
+    $out/bin/brulion-cli --vault "$TMPDIR/Notatki" info >/dev/null
     test -f $out/share/icons/hicolor/scalable/apps/$id.svg
     test -f $out/share/icons/hicolor/256x256/apps/$id.png
     desktop-file-validate $out/share/applications/$id.desktop

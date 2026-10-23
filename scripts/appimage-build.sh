@@ -266,6 +266,9 @@ info "Installing into $APPDIR"
 rm -rf -- "$APPDIR"
 DESTDIR=$(cd -- "$BUILD_DIR" && pwd)/AppDir cmake --install "$BUILD_DIR"
 [[ -x $APPDIR/usr/bin/brulion ]] || die "cmake --install did not install usr/bin/brulion"
+# The command line is reached through the app's binary (`Brulion.AppImage cli …`, docs/CLI.md):
+# the AppImage has one entry point, so the separate brulion-cli stays out.
+rm -f -- "$APPDIR/usr/bin/brulion-cli"
 
 # Desktop entry and icon: the installed ones when the build provides them, else generated here.
 desktop=$(find "$APPDIR/usr/share/applications" -name '*.desktop' -print -quit 2>/dev/null || true)

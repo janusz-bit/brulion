@@ -12,12 +12,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BRULION_WERROR "Treat compiler warnings in Brulion's own code as errors" OFF)
+# OFF: only the core libraries and the command line brulion-cli (src/cli), without Qt Quick, QML,
+# SVG or Wayland — for headless machines (nix: packages.<system>.brulion-cli). Desktop only.
+option(BRULION_BUILD_APP "Build the app (Qt Quick); OFF builds the core libraries and brulion-cli only" ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)
+if(BRULION_BUILD_APP)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)
+else()
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network)
+endif()
 qt_standard_project_setup(REQUIRES 6.8
     I18N_SOURCE_LANGUAGE en
     I18N_TRANSLATED_LANGUAGES pl)
-qt_policy(SET QTP0004 NEW)
+if(BRULION_BUILD_APP)
+    qt_policy(SET QTP0004 NEW)
+endif()
 
 include(cmake/BrulionWarnings.cmake)
 
@@ -29,9 +38,19 @@ else()
 endif()
 
 add_subdirectory(src/core)
-add_subdirectory(src/platform)
-add_subdirectory(src/app)
-include(cmake/BrulionInstall.cmake)
+# The desktop (Linux): the single-instance socket and the command line for scripts and AI agents
+# (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.
+if(NOT ANDROID AND NOT EMSCRIPTEN)
+    add_subdirectory(src/ipc)
+    add_subdirectory(src/cli)
+elseif(NOT BRULION_BUILD_APP)
+    message(FATAL_ERROR "BRULION_BUILD_APP=OFF builds brulion-cli, which is for the desktop only")
+endif()
+if(BRULION_BUILD_APP)
+    add_subdirectory(src/platform)
+    add_subdirectory(src/app)
+    include(cmake/BrulionInstall.cmake)
+endif()
 
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)

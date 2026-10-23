@@ -8,6 +8,7 @@
 #include "fakeeditorhost.h"
 #include "markdown/inline.h"
 #include "markdown/parse.h"
+#include "notebook/links.h"
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
@@ -977,6 +978,44 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(link, u"[[Strona#^"_s + id + u"]]"_s);
         QVERIFY(f.text().endsWith(u"# A\n## B ^"_s + id + u"\n"_s));
         QCOMPARE(copied(10, u"embed"_s), u"![[Strona#^"_s + id + u"]]"_s);
+    }
+
+    // `brulion-cli block link` (notebook::blockLinks) gives the links the editor copies, row by row.
+    void copiedLinksMatchTheCommandLine_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::newRow("blocks") << linkPage();
+        QTest::newRow("repeated headings") << u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n"
+                                              "## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
+    }
+    void copiedLinksMatchTheCommandLine()
+    {
+        QFETCH(QString, content);
+        Fixture f(content);
+        const QString page = f.page.linkTarget();
+        for (int row = 0; row < f.count(); ++row) {
+            const auto copied = [&](const QString &kind) {
+                const QVariantMap r = f.page.linkText(row, kind);
+                return r.value(u"ok"_s).toBool() ? r.value(u"text"_s).toString() : QString();
+            };
+            const QString ref = copied(u"blockRef"_s); // adds the id first, as `block link` does
+            const QString blockLink = copied(u"blockLink"_s);
+            const QString embed = copied(u"embed"_s);
+            const QString heading = copied(u"heading"_s);
+            const auto cli = notebook::blockLinks(f.text(), f.model()->document().at(row).line, page);
+            const QString what = u"row %1: %2"_s.arg(row).arg(f.model()->document().at(row).body);
+            QVERIFY2(cli.has_value() == !ref.isEmpty(), qPrintable(what));
+            if (!cli)
+                continue;
+            QVERIFY2(!cli->added, qPrintable(what)); // the editor wrote the same id
+            QCOMPARE(cli->ref, ref);
+            QCOMPARE(cli->wikiLink, blockLink);
+            QCOMPARE(cli->embed, embed);
+            if (f.page.isHeading(row))
+                QCOMPARE(cli->headingLink.isEmpty() ? cli->wikiLink : cli->headingLink, heading);
+            else
+                QVERIFY2(cli->headingLink.isEmpty(), qPrintable(what));
+        }
     }
 
     void headingSections()
@@ -2765,6 +2804,109 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QSKIP("sync::merge3 is not part of this build");
         QCOMPARE(f.text(), u"- a lokalnie\n- b\n- c zdalnie\n"_s);
 #endif
+    }
+
+    // An agent (brulion-cli) or Syncthing writes the page while an edit waits for its debounced
+    // save, and the host has not reported that write yet: the save never overwrites it.
+    void saveKeepsAnUnreportedExternalAppend()
+    {
+        Fixture f(u"- a\n- b\n"_s, 10000);
+        f.page.setMergeFunction([](const QString &base, const QString &local, const QString &remote) {
+            // Test merge: the remote appended a line, the local edited the first one.
+            if (remote == base + u"- od agenta: żółw\n"_s)
+                return MergeOutcome{local + u"- od agenta: żółw\n"_s, true};
+            return MergeOutcome{local, false};
+        });
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        QVERIFY(f.page.dirty());
+        f.host.setFile(Page, u"- a\n- b\n- od agenta: żółw\n"_s); // no signal: not reported yet
+        QSignalSpy merged(&f.page, &PageController::externallyChanged);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.casRefusals(), 1);
+        QCOMPARE(merged.size(), 1);
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b\n- od agenta: żółw\n"_s);
+        QCOMPARE(f.text(), f.host.file(Page));
+        QVERIFY(!f.page.dirty());
+        // The file reported afterwards changes nothing.
+        f.host.externalWrite(Page, f.host.file(Page));
+        QCOMPARE(merged.size(), 1);
+    }
+
+    void saveWithAnUnreportedConflictWritesNothing()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.page.setMergeFunction(
+                [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
+        f.page.setEditText(0, u"lokalnie"_s, 8);
+        f.host.setFile(Page, u"- zdalnie\n"_s);
+        QVERIFY(!f.page.save());
+        QVERIFY(f.page.conflict());
+        QCOMPARE(f.host.file(Page), u"- zdalnie\n"_s);
+        QCOMPARE(f.page.conflictText(), u"- zdalnie\n"_s);
+        // The user decides; then it is saved.
+        f.page.keepLocal();
+        QCOMPARE(f.host.file(Page), u"- lokalnie\n"_s);
+    }
+
+    // The page goes (another page, another host, the editor closing, the app sent to the
+    // background) and its last save finds another program's change nobody has reported yet, one
+    // that does not merge: the local text goes to a conflict copy — never lost, never written
+    // over the other version.
+    void flushWithAnUnreportedConflictKeepsTheLocalText_data()
+    {
+        QTest::addColumn<QString>("how");
+        QTest::newRow("another page") << u"setPath"_s;
+        QTest::newRow("destroyed") << u"destroy"_s;
+        QTest::newRow("another host") << u"setHost"_s;
+        QTest::newRow("background") << u"background"_s;
+    }
+    void flushWithAnUnreportedConflictKeepsTheLocalText()
+    {
+        QFETCH(QString, how);
+        FakeEditorHost host;
+        FakeEditorHost other;
+        host.setFile(Page, u"- a\n"_s);
+        host.setFile(u"Inna.md"_s, u"- inna\n"_s);
+        auto page = std::make_unique<PageController>();
+        page->setSaveDelay(10000);
+        page->setMergeFunction(
+                [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
+        page->setHost(&host);
+        page->setPath(Page);
+        page->setEditText(0, u"LOKALNIE ważny tekst"_s, 20);
+        QVERIFY(page->dirty());
+        host.setFile(Page, u"- zdalnie\n"_s); // brulion-cli or Syncthing, not reported yet
+        if (how == u"setPath")
+            page->setPath(u"Inna.md"_s);
+        else if (how == u"destroy")
+            page.reset();
+        else if (how == u"setHost")
+            page->setHost(&other);
+        else
+            Q_EMIT qGuiApp->applicationStateChanged(Qt::ApplicationSuspended);
+        QCOMPARE(host.file(Page), u"- zdalnie\n"_s);
+        QStringList copies;
+        for (const QString &p : host.files()) {
+            if (p.contains(u".conflict-"_s))
+                copies.append(p);
+        }
+        QCOMPARE(copies.size(), 1);
+        QCOMPARE(host.file(copies.first()), u"- LOKALNIE ważny tekst\n"_s);
+        QVERIFY(other.files().isEmpty());
+    }
+
+    void saveOfACleanPageAfterAnUnreportedChangeReloads()
+    {
+        // Typed back to the saved text while the file changed: nothing to save, nothing written
+        // (the other version arrives with the host's report, as for any clean page).
+        Fixture f(u"- a\n"_s, 10000);
+        f.page.setEditText(0, u"a2"_s, 2);
+        f.host.setFile(Page, u"- a\n- b z Syncthinga\n"_s);
+        f.page.setEditText(0, u"a"_s, 1); // as saved: clean again
+        QVERIFY(!f.page.dirty());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a\n- b z Syncthinga\n"_s);
+        QCOMPARE(f.host.casRefusals(), 0);
     }
 
     void conflictCopyOnDestruction()

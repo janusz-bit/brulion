@@ -11,6 +11,7 @@
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
 #include "markdown/tokens.h"
+#include "notebook/json.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -30,59 +31,15 @@ using namespace Qt::StringLiterals;
 
 namespace {
 
+// The names of the JSON export are the notebook module's (notebook/json.h): brulion-cli prints
+// the same words.
+using notebook::blockKindName;
+using notebook::linkKindName;
+using notebook::priorityName;
+
 QString statusName(TaskStatus s)
 {
-    switch (s) {
-    case TaskStatus::Todo: return u"todo"_s;
-    case TaskStatus::Doing: return u"doing"_s;
-    case TaskStatus::Done: return u"done"_s;
-    case TaskStatus::Cancelled: return u"cancelled"_s;
-    case TaskStatus::Deferred: return u"deferred"_s;
-    }
-    return u"todo"_s;
-}
-
-QString priorityName(Priority p)
-{
-    switch (p) {
-    case Priority::Highest: return u"highest"_s;
-    case Priority::High: return u"high"_s;
-    case Priority::Medium: return u"medium"_s;
-    case Priority::Low: return u"low"_s;
-    case Priority::Lowest: return u"lowest"_s;
-    case Priority::None: break;
-    }
-    return {};
-}
-
-QString linkKindName(LinkKind k)
-{
-    switch (k) {
-    case LinkKind::Wiki: return u"wiki"_s;
-    case LinkKind::Embed: return u"embed"_s;
-    case LinkKind::BlockRef: return u"blockRef"_s;
-    case LinkKind::BlockEmbed: return u"blockEmbed"_s;
-    case LinkKind::Markdown: return u"markdown"_s;
-    case LinkKind::Url: return u"url"_s;
-    }
-    return {};
-}
-
-QString blockKindName(BlockKind k)
-{
-    switch (k) {
-    case BlockKind::ListItem: return u"listItem"_s;
-    case BlockKind::Paragraph: return u"paragraph"_s;
-    case BlockKind::Heading: return u"heading"_s;
-    case BlockKind::Code: return u"code"_s;
-    case BlockKind::Table: return u"table"_s;
-    case BlockKind::Quote: return u"quote"_s;
-    case BlockKind::Callout: return u"callout"_s;
-    case BlockKind::Rule: return u"rule"_s;
-    case BlockKind::Html: return u"html"_s;
-    case BlockKind::Frontmatter: return u"frontmatter"_s;
-    }
-    return {};
+    return notebook::taskStatusName(s);
 }
 
 QString spec(const std::optional<DateSpec> &s)

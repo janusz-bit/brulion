@@ -1,13 +1,14 @@
 // HistoryModel — the device-local versions of one page for HistoryView (vault/history.h through
 // the Workspace), newest first. Each version is the text a change replaced; `reason` says what
-// replaced it (your edit, another program, sync, an import, Brulion itself).
+// replaced it (your edit, another program, sync, an import, the command line — brulion-cli, e.g.
+// an AI agent —, Brulion itself).
 //
 //   HistoryModel { workspace: Workspace; path: route.path }
 //
 // Roles: id, time ("YYYY-MM-DDTHH:mm:ss"), when ("dziś 09:12"), clock ("09:12"), day (section
 // label: "Dziś", "Wczoraj", "pt 17 paź", "17 paź 2025"), size (bytes), sizeLabel ("1,2 kB"),
-// reason ("user" | "external" | "sync" | "import" | "system" | other), reasonLabel (translated),
-// reasonIcon (Lucide name), newest (the first row).
+// reason ("user" | "external" | "sync" | "import" | "system" | "cli" | other), reasonLabel
+// (translated), reasonIcon (Lucide name), newest (the first row).
 // currentText / exists: the page as it is now (a deleted page has versions but no file).
 #pragma once
 

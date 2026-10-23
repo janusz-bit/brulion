@@ -1,5 +1,6 @@
 // The Workspace wired to the real core against a QTemporaryDir vault: background indexing with
-// progress and `ready`, quick capture (Polish phrases -> tasks with ⏰ / 📅), index queries for
+// progress and `ready`, quick capture into the journal (the phrases themselves:
+// tests/core/notebook tst_notebook_capture), index queries for
 // the views, the QueryHost (```query blocks, checking tasks), rename with link rewriting and the
 // device-local state that follows it (fold state, favourites), the trash, version history,
 // reminders through a fake notification sink (scheduling, firing late, missed reminders after a
@@ -8,15 +9,18 @@
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "workspace.h"
-#include "workspacecapture.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "index/query.h"
+#include "notebook/json.h"
 #include "reminders/reminders.h"
 #include "vault/vault.h"
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -24,7 +28,6 @@
 using namespace Qt::StringLiterals;
 using brulion::ScheduledNotification;
 using brulion::shell::AppController;
-using brulion::shell::CaptureLine;
 using brulion::shell::Workspace;
 
 namespace {
@@ -145,51 +148,6 @@ private Q_SLOTS:
 
     // ---- Quick capture ----------------------------------------------------------------------------
 
-    void captureLine_data()
-    {
-        QTest::addColumn<QString>("input");
-        QTest::addColumn<QString>("block");
-        QTest::addColumn<QString>("kind");
-
-        QTest::newRow("reminder") << u"Kupić mleko jutro o 18"_s << u"- [ ] Kupić mleko ⏰ 2026-10-15 18:00"_s
-                                  << u"reminder"_s;
-        QTest::newRow("weekday due") << u"Oddać książkę w piątek"_s << u"- [ ] Oddać książkę 📅 2026-10-16"_s
-                                     << u"due"_s;
-        QTest::newRow("in two hours") << u"Zadzwonić do Łukasza za 2 godziny"_s
-                                      << u"- [ ] Zadzwonić do Łukasza ⏰ 2026-10-14 12:30"_s << u"reminder"_s;
-        QTest::newRow("explicit date and time") << u"Odebrać garnitur 20.10 o 17:30"_s
-                                                << u"- [ ] Odebrać garnitur ⏰ 2026-10-20 17:30"_s << u"reminder"_s;
-        QTest::newRow("existing checkbox") << u"- [ ] Spotkanie z zespołem w poniedziałek o 9:30"_s
-                                           << u"- [ ] Spotkanie z zespołem ⏰ 2026-10-19 09:30"_s << u"reminder"_s;
-        QTest::newRow("logseq keyword") << u"TODO Wysłać fakturę 15 października"_s
-                                        << u"- TODO Wysłać fakturę 📅 2026-10-15"_s << u"due"_s;
-        QTest::newRow("numbered") << u"1. Przeczytać rozdział jutro"_s << u"1. [ ] Przeczytać rozdział 📅 2026-10-15"_s
-                                  << u"due"_s;
-        QTest::newRow("english") << u"Call mom tomorrow at 6pm"_s << u"- [ ] Call mom ⏰ 2026-10-15 18:00"_s
-                                 << u"reminder"_s;
-        QTest::newRow("only a date") << u"jutro o 9"_s << u"- [ ] jutro o 9 ⏰ 2026-10-15 09:00"_s << u"reminder"_s;
-        QTest::newRow("past is a note") << u"Wczoraj byłem u dentysty"_s << u"- Wczoraj byłem u dentysty"_s
-                                        << u"note"_s;
-        QTest::newRow("plain note") << u"Pomysł: żółta ściana w salonie"_s << u"- Pomysł: żółta ściana w salonie"_s
-                                    << u"note"_s;
-        QTest::newRow("amount is no time") << u"Podwyżka o 5 zł"_s << u"- Podwyżka o 5 zł"_s << u"note"_s;
-        QTest::newRow("token kept") << u"Kupić mleko ⏰ 2026-10-20 10:00"_s << u"- Kupić mleko ⏰ 2026-10-20 10:00"_s
-                                    << u"note"_s;
-        QTest::newRow("more lines") << u"\nLista zakupów jutro\r\nmleko\n\n  chleb  \n\n"_s
-                                    << u"- [ ] Lista zakupów 📅 2026-10-15\n  mleko\n\n  chleb"_s << u"due"_s;
-        QTest::newRow("empty") << u"  \n \n"_s << QString() << QString();
-    }
-
-    void captureLine()
-    {
-        QFETCH(QString, input);
-        QFETCH(QString, block);
-        QFETCH(QString, kind);
-        const CaptureLine line = brulion::shell::buildCaptureLine(input, m_now);
-        QCOMPARE(line.block, block);
-        QCOMPARE(brulion::shell::captureKindName(line.kind), kind);
-    }
-
     void quickCaptureWritesTheJournal()
     {
         auto ws = open({ { u"templates/journal.md"_s, u"## Plan dnia\n- \n"_s } });
@@ -255,6 +213,33 @@ private Q_SLOTS:
                          + v.toMap().value(u"time"_s).toString());
         QCOMPARE(kinds, (QStringList{ u"2026-10-14 reminder 17:00"_s, u"2026-10-14 journal "_s, u"2026-10-16 due "_s }));
         QVERIFY(ws->calendarItems(u"2026-01-01"_s, u"2028-01-01"_s).isEmpty()); // too long a range
+    }
+
+    // brulion-cli prints query results with notebook::queryResultJson(): the same keys and values
+    // as the app's Workspace::runQuery maps (plus the CLI's `ref`, added outside).
+    void queryJsonMatchesTheApp()
+    {
+        auto ws = open({{u"Praca.md"_s, u"- [ ] Raport #praca ⏫ 📅 2026-10-15 ⏳ 2026-10-14 🔁 co tydzień\n"
+                                        u"  - notatka ⏰ 2026-10-15 09:00\n- [x] Oferta ✅ 2026-10-13\n"_s},
+                        {u"journals/2026-10-14.md"_s, u"- Żółw #praca ^b1\n"_s}});
+        for (const QString &source : {u"type:tasks status:all"_s, u"type:reminders"_s, u"type:blocks tag:praca"_s,
+                                      u"type:pages"_s, u"type:tasks status:all group:status"_s}) {
+            const QVariantMap app = ws->runQuery(source);
+            QVERIFY2(app.value(u"ok"_s).toBool(), qPrintable(source));
+            const auto parsed = brulion::parseQuery(source);
+            QVERIFY(std::holds_alternative<brulion::Query>(parsed));
+            brulion::QueryOptions options;
+            options.now = QTime(10, 30);
+            const QJsonObject cli = brulion::notebook::queryResultJson(
+                    *ws->index(), brulion::runQuery(std::get<brulion::Query>(parsed), *ws->index(), m_now.date(),
+                                                    Qt::Monday, options));
+            QVariantMap expected = app;
+            for (const char *key : {"ok", "error", "complete"})
+                expected.remove(QString::fromLatin1(key));
+            // QML gets ints, JSON doubles: compare as JSON.
+            QCOMPARE(QJsonDocument(cli).toJson(QJsonDocument::Compact),
+                     QJsonDocument(QJsonObject::fromVariantMap(expected)).toJson(QJsonDocument::Compact));
+        }
     }
 
     void queryHost()
@@ -647,6 +632,18 @@ private Q_SLOTS:
         QVERIFY(app.capture(u"Kupić mleko jutro o 18"_s));
         QCOMPARE(ws->readFile(u"journals/2026-10-14.md"_s), u"- [ ] Kupić mleko ⏰ 2026-10-15 18:00\n"_s);
 
+        // brulion-cli `app open` (ipc/appmessage.h): a route of the notebook that is open is shown,
+        // one of another notebook is refused with a notice.
+        QSignalSpy toasts(&app, &AppController::toastRequested);
+        app.openRoute({{u"view"_s, u"page"_s}, {u"path"_s, u"Start.md"_s}, {u"line"_s, 0}}, root);
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+        app.openRoute({{u"view"_s, u"journal"_s}, {u"date"_s, u"2026-10-14"_s}}, newRoot());
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+        QCOMPARE(toasts.size(), 1);
+        app.openRoute({{u"view"_s, u"nonsense"_s}});
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Start.md"_s);
+
         // The sync seam: off until Nextcloud is set up completely.
         QVERIFY(!app.syncAvailable());
         QCOMPARE(app.syncStatus().value(u"state"_s).toString(), u"disabled"_s);
@@ -666,6 +663,71 @@ private Q_SLOTS:
         app.closeVault();
         QTRY_VERIFY(!ws->isOpen());
         QVERIFY(!ws->reminders()->isRunning());
+    }
+
+    // brulion-cli `app open` and a second launch (ipc/appmessage.h) as main() hands them over: the
+    // payload as it comes off the socket (the line a JSON number), a route asked for while the
+    // notebook is still opening (shown once it is ready — or, for another notebook, a notice), and
+    // verbs of newer senders that change nothing.
+    void instanceMessages()
+    {
+        AppController::Options options;
+        options.settingsFile = m_tmp.filePath(u"app-messages/settings.ini"_s);
+        options.dataDir = m_tmp.filePath(u"app-messages/data"_s);
+        AppController app(options);
+        app.setClock([this] { return m_now; });
+        app.workspace()->sync()->setSyncthingDiscovery(false);
+        QSignalSpy shown(&app, &AppController::showWindowRequested);
+        QSignalSpy toasts(&app, &AppController::toastRequested);
+        // The payload as main() gets it: written by brulion-cli, parsed from the socket's line.
+        const auto payload = [](const QJsonObject &sent) {
+            return QJsonDocument::fromJson(QJsonDocument(sent).toJson(QJsonDocument::Compact)).object();
+        };
+        const QString root = newRoot();
+        writeRaw(root + u"/Projekty/Dom.md"_s, "- a\n- b\n- c\n");
+
+        // While it opens: the route waits for the notebook.
+        app.openVault(root);
+        QCOMPARE(app.status(), u"loading"_s);
+        const QJsonObject open{
+                {u"route"_s, QJsonObject{{u"view"_s, u"page"_s}, {u"path"_s, u"Projekty/Dom.md"_s}, {u"line"_s, 2}}},
+                {u"vault"_s, root}};
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QCOMPARE(shown.size(), 1);
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
+        QCOMPARE(app.currentRoute().value(u"line"_s).toInt(), 2);
+        QCOMPARE(toasts.size(), 0);
+
+        // Ready: today's journal, then a page by the same payload shape.
+        QVERIFY(app.handleInstanceMessage("today", {}));
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"journal"_s);
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QCOMPARE(app.currentRoute().value(u"line"_s).toInt(), 2);
+        QVERIFY(app.handleInstanceMessage("activate", {}));
+        QCOMPARE(shown.size(), 4);
+
+        // Unknown verbs (wave 4's remote control on an older app): not even the window.
+        QVERIFY(!app.handleInstanceMessage("screenshot", payload({{u"path"_s, u"/tmp/x.png"_s}})));
+        QVERIFY(!app.handleInstanceMessage("navigate", payload(open)));
+        QCOMPARE(shown.size(), 4);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
+
+        // A route of another notebook asked for while this one opens: a notice, no navigation.
+        app.openPage(u"Projekty/Dom.md"_s);
+        const QString other = newRoot();
+        writeRaw(other + u"/Start.md"_s, "- start\n");
+        app.openVault(other);
+        QCOMPARE(app.status(), u"loading"_s);
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(toasts.first().first().toString().contains(QDir::toNativeSeparators(root)));
+        QVERIFY(app.currentRoute().value(u"path"_s).toString() != u"Projekty/Dom.md"_s);
+
+        app.closeVault();
+        QTRY_VERIFY(!app.workspace()->isOpen());
     }
 };
 

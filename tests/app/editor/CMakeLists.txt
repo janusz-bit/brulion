@@ -3,9 +3,10 @@
 brulion_add_test(tst_editor_blocktext
     SOURCES tst_editor_blocktext.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
+# (brulion_core_notebook: the links `brulion-cli block link` gives, compared with the copied ones.)
 brulion_add_test(tst_editor_controller
     SOURCES tst_editor_controller.cpp
-    LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
+    LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text brulion_core_notebook)
 # Its 3000- and 5000-block cases take minutes under the sanitizers on CI runners (279 s of
 # ctest's default 300 s before 0.2.0, then over it): scale the limit like the tests' own ones.
 # (QtTest's own per-function limit scales in brulion_add_test: the 3000-block undo case alone

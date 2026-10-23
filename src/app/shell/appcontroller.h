@@ -41,6 +41,7 @@
 #include "workspace.h"
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QStringList>
@@ -183,6 +184,11 @@ public:
     Q_INVOKABLE void openJournal(const QString &date);
     /// Today's journal; while the notebook is still opening, once it is ready.
     Q_INVOKABLE void openToday();
+    /// A route asked for from outside (brulion-cli `app open`, ipc/appmessage.h): navigate to it
+    /// once the notebook is ready (resolved like the editor's routes: Workspace::resolveRoute).
+    /// `vault`, when given, must be the notebook that is open (or opening): a route of another
+    /// notebook is refused with a notice.
+    void openRoute(const QVariantMap &route, const QString &vault = QString());
     /// "YYYY-MM-DD" of today (+ `offsetDays`) by the app clock.
     Q_INVOKABLE QString today(int offsetDays = 0) const;
     /// The page the tag names (docs/SYNTAX.md §3; created by its first content when it does not
@@ -274,6 +280,11 @@ public:
     Q_INVOKABLE bool capture(const QString &text);
     /// Bring the main window to the front (tray, second launch, notification tap).
     Q_INVOKABLE void showWindow();
+    /// A message of a second launch or brulion-cli over the single-instance socket
+    /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today` and `open {"route",
+    /// "vault"}` show the window and do their part; false for any other verb, which changes
+    /// nothing (not even the window) — newer senders stay harmless.
+    bool handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload);
     /// Quit for real (also when closing to the tray is on).
     Q_INVOKABLE void quit();
     /// Android: send the app to the background (the back key at home), as Android 12+ does for
@@ -348,6 +359,8 @@ private:
     QVariantMap initialRoute() const;
     /// `path` is the documentation notebook's folder.
     bool isDocsPath(const QString &path) const;
+    /// The notice for openRoute()'s route of another notebook than the open one.
+    void refuseOtherNotebookRoute(const QString &vault);
 
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;
@@ -385,6 +398,7 @@ private:
     bool m_startCapture = false;
     bool m_startToday = false;
     QVariantMap m_routeAfterOpen; ///< openVaultAt()
+    QString m_routeAfterOpenVault; ///< openRoute() while opening: the notebook the route belongs to
 #ifdef Q_OS_WASM
     platform::WasmNotifier *m_wasmNotifier = nullptr;
 #endif

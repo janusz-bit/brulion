@@ -3,14 +3,14 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
-#include <QLockFile>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QLockFile>
 #include <QStandardPaths>
 
 using namespace Qt::StringLiterals;
 
-namespace brulion::shell {
+namespace brulion::ipc {
 
 SingleInstance::SingleInstance(const QString &key, QObject *parent) : QObject(parent), m_key(key) { }
 
@@ -35,6 +35,18 @@ bool SingleInstance::sendToPrimary(const QByteArray &message, int timeoutMs)
         return false;
     socket.write(message + '\n');
     socket.waitForBytesWritten(timeoutMs);
+    socket.disconnectFromServer();
+    if (socket.state() != QLocalSocket::UnconnectedState)
+        socket.waitForDisconnected(timeoutMs);
+    return true;
+}
+
+bool SingleInstance::isPrimaryRunning(int timeoutMs) const
+{
+    QLocalSocket socket;
+    socket.connectToServer(m_key);
+    if (!socket.waitForConnected(timeoutMs))
+        return false;
     socket.disconnectFromServer();
     if (socket.state() != QLocalSocket::UnconnectedState)
         socket.waitForDisconnected(timeoutMs);
@@ -88,4 +100,4 @@ bool SingleInstance::isListening() const
     return m_server && m_server->isListening();
 }
 
-} // namespace brulion::shell
+} // namespace brulion::ipc

@@ -219,11 +219,14 @@ PageController::~PageController()
 void PageController::flush()
 {
     // An unresolved conflict keeps the local text in memory only: it goes to a conflict copy
-    // (never over the other version in the file).
+    // (never over the other version in the file). The save itself may find one: its write only
+    // replaces the text last read here, and another program's change nobody reported yet can
+    // turn out not to merge — the page is about to go (another page, the editor closing, the app
+    // quitting or sent to the background), so that local text needs its copy now too.
+    if (!m_conflict)
+        save();
     if (m_conflict)
         writeConflictCopy();
-    else
-        save();
 }
 
 // --- Properties ---------------------------------------------------------------------------------
@@ -232,7 +235,7 @@ void PageController::setHost(EditorHost *host)
 {
     if (m_host == host)
         return;
-    save();
+    flush(); // load() below replaces the text: unsaved edits are written (or copied) first
     if (m_host)
         disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
@@ -509,24 +512,47 @@ void PageController::load()
 bool PageController::save()
 {
     m_saveTimer.stop();
-    if (!m_host || m_path.isEmpty() || !m_loaded)
+    if (!m_host || m_path.isEmpty() || !m_loaded || m_saving)
         return false;
     if (m_conflict)
         return false; // never overwrite the other version before the conflict is resolved
     if (!m_dirty)
         return true;
-    const QString content = m_sourceMode ? m_sourceText : textToSave();
-    if (!m_exists) {
-        // A new page: an empty page or a lone empty bullet is no reason to create a file.
-        static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
-        if (blank.match(content).hasMatch()) {
-            setDirty(false);
-            return true;
+    QString content;
+    // Another program (an agent's brulion-cli, Syncthing) may have changed the file a moment ago,
+    // before its change reached this editor: the host writes only over the text last read or
+    // written here. Otherwise the other version is taken in first — a clean page reloads, a dirty
+    // one is merged three-way, a real conflict waits for the user — and the result is saved, so
+    // neither side's text is lost.
+    for (int attempt = 0;; ++attempt) {
+        content = m_sourceMode ? m_sourceText : textToSave();
+        if (!m_exists) {
+            // A new page: an empty page or a lone empty bullet is no reason to create a file.
+            static const QRegularExpression blank(u"^[\\s\\-*+]*$"_s);
+            if (blank.match(content).hasMatch()) {
+                setDirty(false);
+                return true;
+            }
         }
-    }
-    if (!m_host->write(m_path, content)) {
-        Q_EMIT saveFailed();
-        return false;
+        m_saving = true;
+        const EditorHost::WriteResult result = m_host->writeIfUnchanged(m_path, content, m_savedText);
+        m_saving = false;
+        if (result == EditorHost::WriteResult::Written)
+            break;
+        if (result == EditorHost::WriteResult::Failed || !m_host) {
+            Q_EMIT saveFailed();
+            return false;
+        }
+        onFileChanged(m_path); // reload / merge / conflict (a no-op when the host reported it already)
+        m_saveTimer.stop();
+        if (m_conflict)
+            return false;
+        if (!m_dirty)
+            return true; // the other version is ours
+        if (attempt >= 2) {
+            m_saveTimer.start(); // the file keeps changing: try again a little later
+            return false;
+        }
     }
     m_savedText = content;
     if (!m_exists) {
@@ -621,7 +647,7 @@ void PageController::markDirty()
     const QString current = m_sourceMode ? m_sourceText : textToSave();
     setDirty(current != m_savedText);
     if (m_dirty && !m_conflict) {
-        if (m_saveTimer.interval() == 0)
+        if (m_saveTimer.interval() == 0 && !m_saving)
             save();
         else
             m_saveTimer.start();

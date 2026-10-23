@@ -15,6 +15,7 @@
 //                             — answered from the cache, no disk access
 //     readText(p, &ok) (UTF-8, BOM stripped), readBinary(p, &ok)
 //     writeText(p, text, source) / writeBinary(p, bytes, source)
+//     writeTextIfUnchanged(p, text, expected, source) -> WriteOutcome (compare-and-swap)
 //     create(p, text) -> unique path ("Nowa notatka 2.md"), createFolder(p)
 //     rename(from, to, source)  files and folders (one Renamed change per file)
 //     remove(p, source) -> moves to .trash/, removePermanently(p, source)
@@ -25,7 +26,7 @@
 //     scanStatus() -> VaultScanStatus{state Ok|RootMissing|StorageChanged|Unreadable,
 //     unreadableFolders, message} + signal scanStatusChanged(); isStorageAvailable() (live
 //     check), setStorageProbe(fn) (storage identity; default QStorageInfo device + mount root)
-//     history(), store(), setClock(fn)
+//     history(), store(), setClock(fn), setHistoryReason(reason)
 //     signal changed(QList<VaultChange>) — once per operation / batch of external changes
 //
 //   History (vault/history.h), LocalStore (vault/localstore.h),
@@ -50,6 +51,11 @@
 //    with writeText to a file that has a UTF-8 BOM keeps it. Line endings and every other byte
 //    are written exactly as given. A path that is a symlink leading nowhere is refused
 //    (QSaveFile would create the link's target, wherever it points).
+//  * writeTextIfUnchanged() writes only when the file still holds the text the caller last saw
+//    (read from the disk, not the cache; a missing file always qualifies): an editor's debounced
+//    save or an agent's edit never overwrites what another program wrote a moment ago. A file
+//    holding other text is taken in instead (reported as External, kept in History) and Changed
+//    is returned, so the caller merges and tries again.
 //  * remove() moves to ".trash/<path>"; when taken, " (yyyyMMdd-HHmmss)" (then " … 2", …) is
 //    inserted before the extension. The original location is remembered in the LocalStore,
 //    otherwise derived from the trash path. restore() picks a free path ("Name 2.md") when the
@@ -123,6 +129,13 @@ QString changeSourceName(ChangeSource source);
 
 /// ".trash" — the folder that receives deleted files.
 QString vaultTrashFolder();
+
+/// Result of Vault::writeTextIfUnchanged().
+enum class WriteOutcome {
+    Written, ///< written (or nothing to write: the file already held the new text)
+    Changed, ///< the file holds other text than expected: nothing written, the change taken in
+    Failed,  ///< I/O error or no usable vault (errorString())
+};
 
 /// Whether the last scan could see the whole vault (see Vault::scanStatus()).
 struct VaultScanStatus {
@@ -204,6 +217,13 @@ public:
     /// Atomic write; see the semantics above. Emits Created or Modified with `source`.
     bool writeText(const VaultPath &path, const QString &content, ChangeSource source = ChangeSource::User);
     bool writeBinary(const VaultPath &path, const QByteArray &data, ChangeSource source = ChangeSource::User);
+    /// Compare-and-swap: write `content` like writeText() only when the file's text on disk (UTF-8,
+    /// a BOM dropped, as readText() gives it) equals `expected` — or when the file does not exist.
+    /// Otherwise nothing is written, the other program's change is reported (changed(), External,
+    /// kept in History) and Changed is returned: the caller merges with what is there now (an
+    /// editor's three-way merge, an agent's edit applied again) and writes again.
+    WriteOutcome writeTextIfUnchanged(const VaultPath &path, const QString &content, const QString &expected,
+                                      ChangeSource source = ChangeSource::User);
     /// Write a new file at `path`, or at "Name 2.ext", "Name 3.ext", … when `path` is taken
     /// (case-insensitively, by files or folders, known or on disk). Folders that exist in another
     /// letter case are used as they are spelled ("projekty/Dom.md" goes into "Projekty/"), never
@@ -284,6 +304,11 @@ public:
     LocalStore *store() const;
     /// Clock for trash stamps and History (default QDateTime::currentDateTime).
     void setClock(std::function<QDateTime()> clock);
+    /// History reason of the snapshots taken before this vault's own writes ("" = the name of
+    /// the write's ChangeSource, the default). brulion-cli writes with "cli": the app's history
+    /// then says the text was replaced from the command line. Changes found on disk keep
+    /// "external".
+    void setHistoryReason(const QString &reason);
 
 Q_SIGNALS:
     /// Tracked files changed (by this vault or by other programs).

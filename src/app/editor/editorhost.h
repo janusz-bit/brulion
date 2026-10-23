@@ -29,6 +29,21 @@ public:
     virtual QString read(const QString &path, bool *ok = nullptr) = 0;
     /// Save content (the host makes it atomic, records history, updates the index).
     virtual bool write(const QString &path, const QString &content) = 0;
+    /// Result of writeIfUnchanged().
+    enum class WriteResult { Written, Changed, Failed };
+    /// Save `content` only when the file still holds `expected` — the text the editor last read
+    /// or wrote — or does not exist: compare-and-swap against other programs (an agent's
+    /// brulion-cli, Syncthing) whose change has not reached the editor yet. Changed: nothing was
+    /// written; the editor takes the other version in (reload, three-way merge) and saves again.
+    /// Default: read(), compare, write() (hosts with a vault compare on the disk itself).
+    virtual WriteResult writeIfUnchanged(const QString &path, const QString &content, const QString &expected)
+    {
+        bool ok = false;
+        const QString current = read(path, &ok);
+        if (ok && current != expected)
+            return WriteResult::Changed;
+        return write(path, content) ? WriteResult::Written : WriteResult::Failed;
+    }
     /// An editor shows `path` now / no longer shows it (PageController: loading, following a
     /// rename, another path or host, destruction). The host may watch the files editors show
     /// for programs that rewrite them in place; several editors can show one file. Default:

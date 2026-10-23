@@ -25,12 +25,21 @@ function(brulion_add_test name)
 endfunction()
 
 add_subdirectory(core)
-# Design system helpers of the app (src/app/ui): fuzzy matching, diffs, dates for QML.
-add_subdirectory(app)
+# The app's areas (src/app): design system helpers, the editor, the shell, the views, the QML.
+if(BRULION_BUILD_APP)
+    add_subdirectory(app)
+endif()
+# The desktop's single-instance socket (src/ipc) and the command line brulion-cli (src/cli).
+if(TARGET brulion_ipc)
+    add_subdirectory(ipc)
+endif()
+if(TARGET brulion-cli)
+    add_subdirectory(cli)
+endif()
 # Shell scripts from scripts/ (release.sh, appimage-update-check.sh).
 add_subdirectory(scripts)
 # QBENCHMARK suites (tests/bench, run with scripts/bench.sh); off by default so CI and Nix stay fast.
 option(BRULION_BUILD_BENCHMARKS "Build the benchmark suites in tests/bench (scripts/bench.sh)" OFF)
-if(BRULION_BUILD_BENCHMARKS)
+if(BRULION_BUILD_BENCHMARKS AND BRULION_BUILD_APP)
     add_subdirectory(bench)
 endif()

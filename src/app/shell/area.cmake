@@ -5,11 +5,11 @@
 # C++: the static library brulion_shell (QtCore, QtGui, QtNetwork + core modules; unit-tested by
 # tests/app/shell without the app): AppController, AppSettings, Workspace (implements the
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
-# moves, quick
-# capture, reminders — WorkspaceReminders over the notifiers of src/app/notify —, sync —
+# moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
+# reminders — WorkspaceReminders over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
-# workspaceintegration), CommandModel, FolderTreeModel, the sample vault, SingleInstance
-# (desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
+# workspaceintegration), CommandModel, FolderTreeModel, the sample vault. SingleInstance is in
+# src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
 # qmlcachegen their full API).
 # Desktop Linux only: the system tray (QSystemTrayIcon needs Qt Widgets, so main.cpp creates a
@@ -45,16 +45,11 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacequery.cpp
     ${_brulion_shell_dir}/workspacehistory.cpp
     ${_brulion_shell_dir}/workspacefolders.cpp
-    ${_brulion_shell_dir}/workspacecapture.h ${_brulion_shell_dir}/workspacecapture.cpp
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
     ${_brulion_shell_dir}/workspaceintegration.h ${_brulion_shell_dir}/workspaceintegration.cpp
 )
-if(NOT ANDROID AND NOT EMSCRIPTEN)
-    target_sources(brulion_shell PRIVATE
-        ${_brulion_shell_dir}/singleinstance.h ${_brulion_shell_dir}/singleinstance.cpp)
-endif()
 # The documentation (guide/*.md, Brulion notes about Brulion) as :/guide/<name>.md;
 # demovault.cpp (updateDocsVault) writes them at the root of the separate notebook
 # "Dokumentacja Brulionu" and keeps them up to date.
@@ -69,7 +64,7 @@ set_property(TARGET brulion_shell APPEND PROPERTY QT_EXCLUDE_SOURCES_FROM_TRANSL
 target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
-           brulion_core_reminders brulion_core_dates brulion_core_log
+           brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook
     PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_notify)
 if(ANDROID OR EMSCRIPTEN)
     # AndroidBridge (permissions, test notification) / WasmStorage + WasmNotifier.
@@ -89,7 +84,9 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
         shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp)
-    target_link_libraries(brulion PRIVATE Qt6::Widgets)
+    # One Brulion per session and the messages of brulion-cli (src/ipc); `brulion cli …` runs the
+    # command line (src/cli) inside the app's binary (the AppImage's one entry point).
+    target_link_libraries(brulion PRIVATE Qt6::Widgets brulion_ipc brulion_cli)
     target_compile_definitions(brulion PRIVATE BRULION_DESKTOP_INTEGRATION=1)
 endif()
 

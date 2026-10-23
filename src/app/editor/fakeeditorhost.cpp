@@ -293,6 +293,17 @@ bool FakeEditorHost::write(const QString &path, const QString &content)
     return true;
 }
 
+EditorHost::WriteResult FakeEditorHost::writeIfUnchanged(const QString &path, const QString &content,
+                                                         const QString &expected)
+{
+    const auto it = m_files.constFind(path);
+    if (it != m_files.constEnd() && *it != expected) {
+        ++m_casRefusals;
+        return WriteResult::Changed;
+    }
+    return write(path, content) ? WriteResult::Written : WriteResult::Failed;
+}
+
 QVariantList FakeEditorHost::suggestPages(const QString &prefix, int limit) const
 {
     const QString key = text::foldKey(prefix.trimmed());
