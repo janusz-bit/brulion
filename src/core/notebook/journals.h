@@ -42,6 +42,10 @@ VaultPath journalFileFor(const Vault &vault, QDate date);
 QString templateText(Vault &vault, const VaultPath &templatePath, const QDateTime &when, const QString &title,
                      dates::UiLocale locale);
 
+/// The text a new daily note of `date` starts with (ensureJournal()): the journal template filled
+/// in for `date` at `now`'s time, else "". Never writes.
+QString newJournalText(Vault &vault, QDate date, const QDateTime &now, dates::UiLocale locale);
+
 struct EnsuredJournal {
     VaultPath path;       ///< the daily note ("" on failure)
     bool created = false; ///< written now (from the journal template, or empty)

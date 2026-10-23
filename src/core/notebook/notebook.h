@@ -8,13 +8,15 @@
 //                due, block, text, when} ("Kupić mleko jutro o 18" -> "- [ ] Kupić mleko ⏰ …")
 //   journals.h   journalFileFor(vault, date) (also under another accepted name), existingJournal,
 //                ensureJournal(vault, date, now, locale) (from the journal template, never over a
-//                note another program just created), templateText, pure appendBlock(content,
-//                block) (fills a template's empty last bullet, the note's own line ending) and
-//                blockFromText(text), contentLocale("pl" | "en")
-//   pages.h      newPagePath, createPage (letter-case twins are one page), createFolder,
-//                folderPaths, folderInfo, specialsWithin; renames and moves through relocate()
-//                (VaultIndex::planRelocation(): every link and tag keeps its target, special
-//                folders rebase .brulion/config.json), relocationImpact, renamePage, renameFolder,
+//                note another program just created), newJournalText (what it starts with),
+//                templateText, pure appendBlock(content, block) (fills a template's empty last
+//                bullet, the note's own line ending) and blockFromText(text), contentLocale("pl" |
+//                "en"), appLanguage(saved ui/language) (else the system's)
+//   pages.h      newPagePath, newPageText, createPage (letter-case twins are one page),
+//                createFolder, folderPaths, folderInfo, specialsWithin; renames and moves through
+//                relocate() (VaultIndex::planRelocation(): every link and tag keeps its target,
+//                special folders rebase .brulion/config.json), relocationImpact (counts and the
+//                notes' rewritten texts, for a dry run), renamePage, renameFolder,
 //                movePath; deletePath (to .trash/); problems as PathProblem kinds
 //   links.h      pageLinkTarget(path, config, resolveTitle) and blockLinks(content, line, page,
 //                isTaken) -> {id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink} — the
@@ -26,7 +28,7 @@
 //                the JSON export); status / priority / kind names and their Polish words
 //   session.h    Notebook: open(root, {stateDir, watch, historyReason}) without creating a missing
 //                folder, a lazily built VaultIndex kept up to date, lock() (the device's writers),
-//                edit(path, intent, {expectHash, dryRun, mayCreate}) — compare-and-swap writes
+//                edit(path, intent, {expectHash, dryRun, mayCreate, initialText}) — compare-and-swap writes
 //                with retries and History; deviceStatePath(appData, root), contentHash()
 #pragma once
 

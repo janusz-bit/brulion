@@ -39,29 +39,14 @@ std::optional<Day> day(Call &call, const QString &phrase)
 }
 
 /// Append `block` to the daily note of `date` (created from the journal template), with the
-/// write JSON plus {date, line, ref}.
+/// write JSON plus {date, line, ref}; a dry run shows the template too.
 std::optional<QJsonObject> appendToJournal(Call &call, QDate date, const QString &block)
 {
     Vault *v = call.vault();
     if (!v)
         return std::nullopt;
-    VaultPath path = notebook::journalFileFor(*v, date);
-    const bool exists = QFileInfo(v->absolutePath(path)).isFile();
-    bool created = false;
-    if (!exists && !call.dryRun()) {
-        if (!call.lock())
-            return std::nullopt;
-        const notebook::EnsuredJournal j = notebook::ensureJournal(*v, date, call.ctx.now(), call.ctx.locale());
-        if (j.path.isEmpty()) {
-            call.setError(ExitInternal, u"io_error"_s, tr("Could not create the daily note: %1").arg(j.error));
-            return std::nullopt;
-        }
-        path = j.path;
-        created = j.created;
-    }
+    const VaultPath path = notebook::journalFileFor(*v, date);
     int line = -1;
-    notebook::Notebook::WriteOptions options;
-    options.mayCreate = call.dryRun();
     const auto written = call.edit(
             path,
             [&](const QString &current, bool, QString *next) {
@@ -69,12 +54,10 @@ std::optional<QJsonObject> appendToJournal(Call &call, QDate date, const QString
                 line = appendedLine(*next, block);
                 return true;
             },
-            options);
+            creatingJournal(call, path));
     if (!written)
         return std::nullopt;
     QJsonObject o = call.writeJson(*written);
-    if (created)
-        o.insert(u"created"_s, true); // from the journal template, just now
     o.insert(u"date"_s, date.toString(Qt::ISODate));
     o.insert(u"line"_s, line);
     o.insert(u"ref"_s, Call::lineRef(path, written->after, line));

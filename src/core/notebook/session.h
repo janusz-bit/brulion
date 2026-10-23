@@ -96,7 +96,10 @@ public:
         QString expectHash;     ///< refuse unless the file's hash is this (HashMismatch)
         bool dryRun = false;    ///< compute, write nothing
         bool mayCreate = false; ///< a missing file is created (else NotFound)
-        int attempts = 3;       ///< tries when other programs keep changing the file
+        /// What a missing file starts from (mayCreate): the edit is applied to it (a daily note's
+        /// template, newJournalText()), so a dry run shows the file as it would be created.
+        QString initialText;
+        int attempts = 3; ///< tries when other programs keep changing the file
     };
     struct WriteResult {
         enum Status {
@@ -115,12 +118,13 @@ public:
         bool created = false;
         QString hashBefore; ///< "" for a missing file
         QString hashAfter;
-        QString before; ///< the text the edit was applied to
+        QString before; ///< the file's text the edit was applied to ("" for a new file)
         QString after;  ///< what the edit made of it
         QString error;
         bool ok() const { return status == Written || status == Unchanged || status == DryRun; }
     };
-    /// Edit: the current text (and whether the file exists) -> the new text in `next`; false refuses.
+    /// Edit: the current text (initialText for a missing file) and whether the file exists -> the
+    /// new text in `next`; false refuses.
     using Edit = std::function<bool(const QString &current, bool exists, QString *next)>;
     /// Apply `edit` to `path` as described in the file comment.
     WriteResult edit(const VaultPath &path, const Edit &edit, const WriteOptions &options);

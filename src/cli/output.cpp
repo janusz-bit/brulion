@@ -126,7 +126,7 @@ QString renderText(const Command *command, const Result &result)
     return out;
 }
 
-QString unifiedDiff(const QString &before, const QString &after, const QString &path)
+QString unifiedDiff(const QString &before, const QString &after, const QString &path, const QString &newPath)
 {
     const auto lines = [](const QString &text) {
         QStringList out;
@@ -146,7 +146,8 @@ QString unifiedDiff(const QString &before, const QString &after, const QString &
     if (hunks.isEmpty())
         return {};
     constexpr qsizetype context = 3;
-    QString out = u"--- a/"_s + path + u"\n+++ b/"_s + path + u'\n';
+    const QString to = newPath.isEmpty() ? u"b/"_s + path : newPath == u"/dev/null" ? newPath : u"b/"_s + newPath;
+    QString out = u"--- a/"_s + path + u"\n+++ "_s + to + u'\n';
     // Hunks closer than 2 × context lines share one block.
     qsizetype i = 0;
     while (i < hunks.size()) {

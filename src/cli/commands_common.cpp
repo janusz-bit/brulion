@@ -4,10 +4,12 @@
 #include "markdown/blockdocument.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
+#include "notebook/journals.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
+#include <QFileInfo>
 #include <QRegularExpression>
 
 using namespace Qt::StringLiterals;
@@ -154,6 +156,19 @@ std::optional<QString> insertUnder(Call &call, const QString &content, const QSt
     if (insertedLine)
         *insertedLine = edit.focus >= 0 ? doc.at(edit.focus).line : -1;
     return doc.toString();
+}
+
+notebook::Notebook::WriteOptions creatingJournal(Call &call, const VaultPath &path)
+{
+    notebook::Notebook::WriteOptions options;
+    Vault *v = call.vault();
+    const std::optional<QDate> day = v ? markdown::journalDateFromPath(path, v->config()) : std::nullopt;
+    if (!day)
+        return options;
+    options.mayCreate = true;
+    if (!QFileInfo(v->absolutePath(path)).isFile())
+        options.initialText = notebook::newJournalText(*v, *day, call.ctx.now(), call.ctx.locale());
+    return options;
 }
 
 int appendedLine(const QString &after, const QString &block)

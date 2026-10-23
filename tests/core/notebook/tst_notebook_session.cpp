@@ -2,8 +2,8 @@
 // index is built on first use and follows the vault; edits are intents applied to the current
 // text — retried when another writer changes the file between reading and writing, a conflict
 // after the last attempt —, recorded in History with the reason "cli", refused on a wrong
-// expected hash or invalid UTF-8, and a dry run writes nothing; the write lock keeps a second
-// writer out.
+// expected hash or invalid UTF-8, and a dry run writes nothing (a new file starts from its initial
+// text in both); the write lock keeps a second writer out.
 #include "notebook/session.h"
 
 #include "index/vaultindex.h"
@@ -144,6 +144,33 @@ private Q_SLOTS:
                 opts());
         QCOMPARE(same.status, Notebook::WriteResult::Unchanged);
         QCOMPARE(nb.vault().history()->list(u"journals/2026-10-14.md"_s).size(), 2);
+    }
+
+    // A missing file created by an edit starts from initialText (a daily note's template): the
+    // dry run shows what the real run writes; an existing file never gets it.
+    void initialTextOfANewFile()
+    {
+        const QString dir = vaultDir({});
+        Notebook nb;
+        QVERIFY(nb.open(dir, options()));
+        const QString path = u"journals/2026-10-14.md"_s;
+        Notebook::WriteOptions o = opts({}, true, true);
+        o.initialText = u"## środa\n- \n"_s;
+        const auto dry = nb.edit(path, append(u"- żółw"_s), o);
+        QCOMPARE(dry.status, Notebook::WriteResult::DryRun);
+        QVERIFY(dry.created);
+        QCOMPARE(dry.before, QString());
+        QCOMPARE(dry.after, u"## środa\n- żółw\n"_s);
+        QVERIFY(!QFile::exists(dir + u'/' + path));
+        o.dryRun = false;
+        const auto real = nb.edit(path, append(u"- żółw"_s), o);
+        QCOMPARE(real.status, Notebook::WriteResult::Written);
+        QVERIFY(real.created);
+        QCOMPARE(real.after, dry.after);
+        QCOMPARE(readRaw(dir + u'/' + path), "## środa\n- żółw\n"_ba);
+        const auto again = nb.edit(path, append(u"- kot"_s), o);
+        QVERIFY(!again.created);
+        QCOMPARE(readRaw(dir + u'/' + path), "## środa\n- żółw\n- kot\n"_ba);
     }
 
     void retriesWhenAnotherWriterChangesTheFile()

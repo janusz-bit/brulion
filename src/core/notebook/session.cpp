@@ -235,7 +235,7 @@ Notebook::WriteResult Notebook::edit(const VaultPath &rawPath, const Edit &edit,
             return out;
         }
         QString next;
-        if (!edit(current.text, current.exists, &next)) {
+        if (!edit(current.exists ? current.text : options.initialText, current.exists, &next)) {
             out.status = WriteResult::Refused;
             return out;
         }

@@ -135,6 +135,9 @@ private Q_SLOTS:
         const CreatedPage plan = createPage(*env->vault, u"Ważne: plan?"_s, u""_s, NoteMode::Outline, u"- a\n"_s);
         QCOMPARE(plan.path, u"Ważne plan.md"_s);
         QCOMPARE(env->vault->readText(plan.path), u"---\nbrulion: outline\n---\n- a\n"_s);
+        QCOMPARE(newPageText(*env->vault, u"Nowa.md"_s, NoteMode::Outline, u"- a\n"_s),
+                 env->vault->readText(plan.path));
+        QCOMPARE(newPageText(*env->vault, u"Nowa.md"_s, std::nullopt, u"- a\n"_s), u"- a\n"_s);
         // An empty name.
         const CreatedPage none = createPage(*env->vault, u" / "_s, QString());
         QVERIFY(none.path.isEmpty());
@@ -270,6 +273,13 @@ private Q_SLOTS:
         }
         QCOMPARE(impact.notes, int(expected.size()));
         QCOMPARE(moved.rewritten.size(), expected.size());
+        // The planned texts (a dry run's diffs) are what the move wrote.
+        QCOMPARE(impact.rewrites.size(), expected.size());
+        for (const PlannedRewrite &r : impact.rewrites) {
+            QVERIFY(moved.rewritten.contains(r.newPath));
+            QCOMPARE(env->vault->readText(r.newPath), r.after);
+            QVERIFY(r.before != r.after);
+        }
     }
 
     void moveProblems_data()

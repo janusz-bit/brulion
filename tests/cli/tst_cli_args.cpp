@@ -277,6 +277,11 @@ private Q_SLOTS:
                  u"--- a/Dziennik.md\n+++ b/Dziennik.md\n@@ -1,2 +1,3 @@\n - a\n - b\n+- ż\n"_s);
         QCOMPARE(unifiedDiff(QString(), u"- nowy\n"_s, u"n.md"_s),
                  u"--- a/n.md\n+++ b/n.md\n@@ -0,0 +1,1 @@\n+- nowy\n"_s);
+        // A note that moves, one that goes.
+        QCOMPARE(unifiedDiff(u"- [[Dom]]\n"_s, u"- [[Projekty/Dom]]\n"_s, u"Dom.md"_s, u"Archiwum/Dom.md"_s),
+                 u"--- a/Dom.md\n+++ b/Archiwum/Dom.md\n@@ -1,1 +1,1 @@\n-- [[Dom]]\n+- [[Projekty/Dom]]\n"_s);
+        QCOMPARE(unifiedDiff(u"- żółw\n"_s, QString(), u"Żółw.md"_s, u"/dev/null"_s),
+                 u"--- a/Żółw.md\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-- żółw\n"_s);
         // CRLF: lines without their terminators.
         QCOMPARE(unifiedDiff(u"a\r\nb\r\n"_s, u"a\r\nc\r\n"_s, u"c.md"_s),
                  u"--- a/c.md\n+++ b/c.md\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n"_s);

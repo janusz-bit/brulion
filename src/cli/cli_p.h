@@ -277,8 +277,10 @@ private:
 QJsonObject envelope(const Context &context, const Command *command, const Result &result);
 /// The text of --format text.
 QString renderText(const Command *command, const Result &result);
-/// A unified diff of two texts ("--- a/path", "+++ b/path", "@@ …"), 3 lines of context.
-QString unifiedDiff(const QString &before, const QString &after, const QString &path);
+/// A unified diff of two texts ("--- a/path", "+++ b/path", "@@ …"), 3 lines of context; "" when
+/// equal. `newPath`: the file's path after the change when it moves ("/dev/null": deleted).
+QString unifiedDiff(const QString &before, const QString &after, const QString &path,
+                    const QString &newPath = QString());
 
 /// Run one command (policy checks, the handler, warnings): the result for the envelope.
 Result execute(Context &context, const Command &command, const QJsonObject &args);

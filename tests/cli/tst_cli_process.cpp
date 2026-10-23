@@ -706,6 +706,65 @@ private Q_SLOTS:
         QDir(docs).removeRecursively();
     }
 
+    // A dry run shows what the real run writes: a daily note that does not exist yet comes from
+    // the journal template; page create, rename, move and delete show their changes.
+    void dryRunsShowTheRealChange()
+    {
+        const QString dir = vault({{u"templates/journal.md"_s, "## {{weekday}}\n### Plan\n- \n"},
+                                   {u"Projekty/Dom.md"_s, "- farba\n"},
+                                   {u"Notatka.md"_s, "- [[Dom]] i #Dom\n"}});
+        Run dry = run(dir, {u"--dry-run"_s, u"capture"_s, u"Kupić mleko jutro o 18"_s});
+        QCOMPARE(dry.code, 0);
+        QVERIFY(dry.result().value(u"dryRun"_s).toBool());
+        QVERIFY(dry.result().value(u"created"_s).toBool());
+        QCOMPARE(dry.result().value(u"diff"_s).toString(),
+                 u"--- a/journals/2026-10-14.md\n+++ b/journals/2026-10-14.md\n@@ -0,0 +1,3 @@\n+## środa\n+### "
+                 u"Plan\n+- [ ] Kupić mleko ⏰ 2026-10-15 18:00\n"_s);
+        QVERIFY(!QFileInfo::exists(dir + u"/journals"_s));
+        Run real = run(dir, {u"capture"_s, u"Kupić mleko jutro o 18"_s});
+        QCOMPARE(real.code, 0);
+        QVERIFY(real.result().value(u"created"_s).toBool());
+        QCOMPARE(real.result().value(u"ref"_s).toString(), dry.result().value(u"ref"_s).toString());
+        QCOMPARE(real.result().value(u"line"_s).toInt(), 2);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-14.md"_s),
+                 "## środa\n### Plan\n- [ ] Kupić mleko ⏰ 2026-10-15 18:00\n"_ba);
+        // The same for task add and page append into a day without a note.
+        dry = run(dir, {u"--dry-run"_s, u"task"_s, u"add"_s, u"Pompki"_s, u"--date"_s, u"jutro"_s});
+        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## czwartek\n+### Plan\n+- [ ] Pompki\n"_s));
+        dry = run(dir, {u"--dry-run"_s, u"page"_s, u"append"_s, u"2026-10-16"_s, u"x"_s, u"--under"_s, u"### Plan"_s});
+        QCOMPARE(dry.code, 0);
+        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## piątek\n"_s));
+        QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-15.md"_s));
+        QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-16.md"_s));
+
+        // page create: the new page's text.
+        dry = run(dir, {u"--dry-run"_s, u"page"_s, u"create"_s, u"Lista"_s, u"--content"_s, u"- chleb\n"_s});
+        QCOMPARE(dry.result().value(u"diff"_s).toString(),
+                 u"--- a/Lista.md\n+++ b/Lista.md\n@@ -0,0 +1,1 @@\n+- chleb\n"_s);
+        QVERIFY(!QFileInfo::exists(dir + u"/Lista.md"_s));
+        // page rename / move: every note whose links or tags follow.
+        dry = run(dir, {u"--dry-run"_s, u"--allow-destructive"_s, u"page"_s, u"rename"_s, u"Dom"_s, u"Mieszkanie"_s});
+        QCOMPARE(dry.code, 0);
+        const QJsonArray changes = dry.result().value(u"changes"_s).toArray();
+        QCOMPARE(changes.size(), 1);
+        QCOMPARE(changes.first().toObject().value(u"path"_s).toString(), u"Notatka.md"_s);
+        QCOMPARE(changes.first().toObject().value(u"diff"_s).toString(),
+                 u"--- a/Notatka.md\n+++ b/Notatka.md\n@@ -1,1 +1,1 @@\n-- [[Dom]] i #Dom\n+- [[Mieszkanie]] i "
+                 u"#Mieszkanie\n"_s);
+        QCOMPARE(dry.result().value(u"diff"_s).toString(), changes.first().toObject().value(u"diff"_s).toString());
+        QCOMPARE(readFile(dir + u"/Notatka.md"_s), "- [[Dom]] i #Dom\n"_ba);
+        QVERIFY(QFileInfo::exists(dir + u"/Projekty/Dom.md"_s));
+        // page / folder delete: what would go to the trash.
+        dry = run(dir, {u"--dry-run"_s, u"--allow-destructive"_s, u"page"_s, u"delete"_s, u"Dom"_s});
+        QCOMPARE(dry.result().value(u"files"_s).toArray(), QJsonArray{u"Projekty/Dom.md"_s});
+        QCOMPARE(dry.result().value(u"diff"_s).toString(),
+                 u"--- a/Projekty/Dom.md\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-- farba\n"_s);
+        dry = run(dir, {u"--dry-run"_s, u"--allow-destructive"_s, u"folder"_s, u"delete"_s, u"Projekty"_s});
+        QCOMPARE(dry.result().value(u"files"_s).toArray(), QJsonArray{u"Projekty/Dom.md"_s});
+        QVERIFY(dry.result().value(u"folder"_s).toBool());
+        QVERIFY(QFileInfo::exists(dir + u"/Projekty/Dom.md"_s));
+    }
+
     void polishArgvAndStdin()
     {
         const QString dir = vault();

@@ -72,6 +72,14 @@ QString templateText(Vault &vault, const VaultPath &templatePath, const QDateTim
     return markdown::applyTemplate(tpl, vars).text;
 }
 
+QString newJournalText(Vault &vault, QDate date, const QDateTime &now, dates::UiLocale locale)
+{
+    const QString tpl = paths::normalize(vault.config().journalTemplate);
+    if (!date.isValid() || tpl.isEmpty() || !vault.exists(tpl))
+        return {};
+    return templateText(vault, tpl, QDateTime(date, now.time()), paths::pageTitle(journalFileFor(vault, date)), locale);
+}
+
 EnsuredJournal ensureJournal(Vault &vault, QDate date, const QDateTime &now, dates::UiLocale locale,
                              ChangeSource source)
 {
@@ -83,10 +91,7 @@ EnsuredJournal ensureJournal(Vault &vault, QDate date, const QDateTime &now, dat
         out.path = path;
         return out;
     }
-    QString content;
-    const QString tpl = paths::normalize(vault.config().journalTemplate);
-    if (!tpl.isEmpty() && vault.exists(tpl))
-        content = templateText(vault, tpl, QDateTime(date, now.time()), paths::pageTitle(path), locale);
+    const QString content = newJournalText(vault, date, now, locale);
     // A note created by another program in the meantime stays as it is.
     switch (vault.writeTextIfUnchanged(path, content, QString(), source)) {
     case WriteOutcome::Written:

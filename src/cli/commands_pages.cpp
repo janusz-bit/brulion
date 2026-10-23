@@ -34,7 +34,20 @@ QJsonObject relocationJson(const VaultPath &from, const notebook::RelocationImpa
                   {u"links"_s, impact.links}, {u"tags"_s, impact.tags},
                   {u"notes"_s, impact.notes}, {u"settings"_s, QJsonArray::fromStringList(impact.specials)}};
     if (!moved) {
+        // The dry run: every note that would be rewritten, as a diff (a moved one from its old
+        // path to its new one).
+        QJsonArray changes;
+        QString diff;
+        for (const notebook::PlannedRewrite &r : impact.rewrites) {
+            const QString d = unifiedDiff(r.before, r.after, r.path, r.newPath == r.path ? QString() : r.newPath);
+            if (d.isEmpty())
+                continue;
+            changes.append(QJsonObject{{u"path"_s, r.path}, {u"newPath"_s, r.newPath}, {u"diff"_s, d}});
+            diff += d;
+        }
         o.insert(u"dryRun"_s, true);
+        o.insert(u"changes"_s, changes);
+        o.insert(u"diff"_s, diff);
         return o;
     }
     o.insert(u"rewritten"_s, QJsonArray::fromStringList(moved->rewritten));
@@ -239,7 +252,12 @@ Result pageCreate(Call &call)
         return call.ok(QJsonObject{{u"path"_s, planned.path}, {u"created"_s, false}, {u"existing"_s, true}});
     }
     if (call.dryRun())
-        return call.ok(QJsonObject{{u"path"_s, planned.path}, {u"created"_s, false}, {u"dryRun"_s, true}});
+        return call.ok(
+                QJsonObject{{u"path"_s, planned.path},
+                            {u"created"_s, false},
+                            {u"dryRun"_s, true},
+                            {u"diff"_s, unifiedDiff(QString(), notebook::newPageText(*v, planned.path, mode, content),
+                                                    planned.path)}});
     if (!call.lock())
         return call.failed();
     const notebook::CreatedPage page = notebook::createPage(*v, title, folder, mode, content, ChangeSource::User);
@@ -261,24 +279,12 @@ Result pageAppend(Call &call)
     const auto ref = call.page(call.str(u"ref"_s), false);
     if (!ref)
         return call.failed();
-    Vault &v = *call.vault();
-    if (!ref->exists) {
-        if (!ref->journal)
-            return call.fail(ExitNotFound, u"page_not_found"_s, tr("No page %1 (page create makes one)").arg(ref->path),
-                             {{u"path"_s, ref->path}});
-        if (!call.dryRun()) {
-            if (!call.lock())
-                return call.failed();
-            const notebook::EnsuredJournal j =
-                    notebook::ensureJournal(v, *ref->journal, call.ctx.now(), call.ctx.locale());
-            if (j.path.isEmpty())
-                return call.fail(ExitInternal, u"io_error"_s, j.error);
-        }
-    }
+    if (!ref->exists && !ref->journal)
+        return call.fail(ExitNotFound, u"page_not_found"_s, tr("No page %1 (page create makes one)").arg(ref->path),
+                         {{u"path"_s, ref->path}});
     const QString under = call.str(u"under"_s);
     int inserted = -1;
-    notebook::Notebook::WriteOptions options;
-    options.mayCreate = call.dryRun() && ref->journal.has_value();
+    const notebook::Notebook::WriteOptions options = creatingJournal(call, ref->path);
     const auto written = call.edit(
             ref->path,
             [&](const QString &current, bool, QString *next) {
@@ -363,8 +369,24 @@ Result pageMove(Call &call)
 
 Result deletePath(Call &call, const VaultPath &path)
 {
-    if (call.dryRun())
-        return call.ok(QJsonObject{{u"path"_s, path}, {u"dryRun"_s, true}});
+    if (call.dryRun()) {
+        // What would go to the trash: the files (a folder: everything in it), a page as a diff.
+        Vault &v = *call.vault();
+        const auto st = v.stat(path);
+        const bool folder = st && st->isDir;
+        QStringList files;
+        for (const FileStat &f : v.files()) {
+            if (f.path == path || (folder && f.path.startsWith(path + u'/')))
+                files.append(f.path);
+        }
+        QJsonObject o{{u"path"_s, path},
+                      {u"folder"_s, folder},
+                      {u"files"_s, QJsonArray::fromStringList(files)},
+                      {u"dryRun"_s, true}};
+        if (!folder && paths::isMarkdown(path))
+            o.insert(u"diff"_s, unifiedDiff(call.nb()->read(path).text, QString(), path, u"/dev/null"_s));
+        return call.ok(o);
+    }
     if (!call.lock())
         return call.failed();
     const notebook::DeletedPath deleted = notebook::deletePath(*call.vault(), path, ChangeSource::User);

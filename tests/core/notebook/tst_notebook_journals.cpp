@@ -1,8 +1,9 @@
 // Daily notes (notebook/journals.h): appending a block keeps every other byte (line endings, a
 // BOM, no final newline) and fills a template's empty last bullet; free text becomes one block;
 // the note of a day is found under any name the journal folder accepts and created from the
-// journal template (in Polish or English, with the configured file name format), never over a
-// note another program created a moment ago.
+// journal template (in Polish or English, with the configured file name format; newJournalText()
+// without writing), never over a note another program created a moment ago; the app's language
+// for its saved setting.
 #include "notebook/journals.h"
 
 #include "vault/vault.h"
@@ -130,6 +131,23 @@ private Q_SLOTS:
         QLocale::setDefault(QLocale(u"de_DE"_s));
         QCOMPARE(notebook::appLanguage(QString()), u"pl"_s);
         QLocale::setDefault(system);
+    }
+
+    // What a new daily note starts with (a dry run shows it): the template filled for its day.
+    void newJournalText()
+    {
+        QString root;
+        auto vault = open({{u"templates/journal.md"_s, "# {{weekday}} {{date}}\n- \n"}}, &root);
+        QVERIFY(vault);
+        QCOMPARE(notebook::newJournalText(*vault, QDate(2026, 10, 15), m_now, dates::UiLocale::Polish),
+                 u"# czwartek 2026-10-15\n- \n"_s);
+        QCOMPARE(notebook::newJournalText(*vault, QDate(2026, 10, 15), m_now, dates::UiLocale::English),
+                 u"# Thursday 2026-10-15\n- \n"_s);
+        QVERIFY(!QFileInfo::exists(root + u"/journals"_s)); // never writes
+        auto plain = open({});
+        QVERIFY(plain);
+        QCOMPARE(notebook::newJournalText(*plain, QDate(2026, 10, 15), m_now, dates::UiLocale::Polish), QString());
+        QCOMPARE(notebook::newJournalText(*vault, QDate(), m_now, dates::UiLocale::Polish), QString());
     }
 
     void ensureJournalFromTheTemplate_data()

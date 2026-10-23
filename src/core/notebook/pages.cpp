@@ -114,21 +114,24 @@ CreatedPage plannedPage(const Vault &vault, const QString &title, const QString 
     return out;
 }
 
+QString newPageText(const Vault &vault, const VaultPath &path, std::optional<NoteMode> mode, const QString &content)
+{
+    if (!mode)
+        return content;
+    // The mode chosen for the page is written only when the new page would not get it anyway
+    // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
+    const VaultConfig config = vault.config();
+    return markdown::withNoteModeChoice(content, *mode, markdown::journalDateFromPath(path, config).has_value(),
+                                        config);
+}
+
 CreatedPage createPage(Vault &vault, const QString &title, const QString &folder, std::optional<NoteMode> mode,
                        const QString &content, ChangeSource source)
 {
     CreatedPage out = plannedPage(vault, title, folder);
     if (out.path.isEmpty() || out.existing)
         return out;
-    // The mode chosen for the page is written only when the new page would not get it anyway
-    // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
-    QString text = content;
-    if (mode) {
-        const VaultConfig config = vault.config();
-        text = markdown::withNoteModeChoice(text, *mode, markdown::journalDateFromPath(out.wanted, config).has_value(),
-                                            config);
-    }
-    out.path = vault.create(out.wanted, text, source);
+    out.path = vault.create(out.wanted, newPageText(vault, out.wanted, mode, content), source);
     if (out.path.isEmpty())
         out.problem = problem(PathProblem::Failed, QString(), vault.errorString());
     return out;
@@ -372,6 +375,8 @@ RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, c
     out.links = plan.links();
     out.tags = plan.tags();
     out.notes = int(plan.files().size());
+    for (const RelocationPlan::File &f : plan.files())
+        out.rewrites.append(PlannedRewrite{f.path, f.newPath, f.before, f.after});
     return out;
 }
 

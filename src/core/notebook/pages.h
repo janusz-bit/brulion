@@ -73,6 +73,10 @@ struct CreatedPage {
 /// or the path asked for (createPage() picks "Dom 2.md" when that is taken).
 CreatedPage plannedPage(const Vault &vault, const QString &title, const QString &folder = QString());
 
+/// The text a new page at `path` gets from createPage(): `content`, with `mode` as the
+/// frontmatter key `brulion:` when the page would not get that mode anyway. Never writes.
+QString newPageText(const Vault &vault, const VaultPath &path, std::optional<NoteMode> mode, const QString &content);
+
 /// Create a page `title` ("Projekty/Dom" creates folders) in `folder` (a null string: the vault's
 /// newPagesFolder; "" the root) with `content`. `mode`, when given, is written as the frontmatter
 /// key `brulion:` only when the page would not get that mode anyway (markdown::
@@ -129,16 +133,25 @@ PathProblem relocationProblem(const Vault &vault, const VaultIndex *index, const
 /// The file moves of moving `from` (a file, or a folder with everything in it) to `to`.
 QList<FileMove> fileMoves(const Vault &vault, const VaultPath &from, const VaultPath &to);
 
+/// A note relocate() would rewrite (its links or tags name a moved file).
+struct PlannedRewrite {
+    VaultPath path;    ///< where it is now
+    VaultPath newPath; ///< where it is after the move (path, unless it moves itself)
+    QString before;    ///< its text now
+    QString after;     ///< its text with the links and tags rewritten
+};
+
 /// What relocate(from, to) would do.
 struct RelocationImpact {
     bool ok = false;
     bool same = false; ///< `to` is `from`: nothing to do
     VaultPath path;    ///< the new path (spelled as the vault spells its folders)
     PathProblem problem;
-    int links = 0;        ///< links rewritten
-    int tags = 0;         ///< tag occurrences rewritten
-    int notes = 0;        ///< notes rewritten
-    QStringList specials; ///< the settings that follow ("journals", …)
+    int links = 0;                  ///< links rewritten
+    int tags = 0;                   ///< tag occurrences rewritten
+    int notes = 0;                  ///< notes rewritten
+    QStringList specials;           ///< the settings that follow ("journals", …)
+    QList<PlannedRewrite> rewrites; ///< the notes rewritten, with their texts (with an index)
 };
 /// `index` must hold every note (the CLI builds it whole, the app finishes indexing first).
 RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, const VaultPath &from,

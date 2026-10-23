@@ -62,7 +62,7 @@ one computer the app's history shows the command line's changes; `--state-dir` c
 | `--no-history` | no version history, no device state |
 | `--format json\|text` | output; JSON by default |
 | `--compact` | JSON on one line |
-| `--dry-run` | compute changes, write nothing; the result has a unified `diff` |
+| `--dry-run` | compute changes, write nothing; the result has a unified `diff` (a daily note that does not exist yet: with its template). `page create`: the new page's text; `page rename`/`move`, `folder rename`/`move`: `changes` — `{path, newPath, diff}` of every note whose links or tags would be rewritten; `page`/`folder delete`: the `files` that would go to the trash (a page: its text as a diff) |
 | `--diff` | also give the diff of written changes |
 | `--read-only` | refuse every command that writes (exit 7) |
 | `--allow-destructive` | allow the destructive commands (see the table) |

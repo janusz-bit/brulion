@@ -49,25 +49,14 @@ std::optional<VaultPath> placeFor(Call &call)
         if (!day)
             return std::nullopt;
     }
-    const VaultPath path = notebook::journalFileFor(*v, *day);
-    if (QFileInfo(v->absolutePath(path)).isFile() || call.dryRun())
-        return path;
-    if (!call.lock())
-        return std::nullopt;
-    const notebook::EnsuredJournal j = notebook::ensureJournal(*v, *day, call.ctx.now(), call.ctx.locale());
-    if (j.path.isEmpty()) {
-        call.setError(ExitInternal, u"io_error"_s, tr("Could not create the daily note: %1").arg(j.error));
-        return std::nullopt;
-    }
-    return j.path;
+    return notebook::journalFileFor(*v, *day);
 }
 
-/// Append one line to `path`: the write JSON with {line, ref, written}.
+/// Append one line to `path` (a missing daily note is created from its template): the write JSON
+/// with {line, ref, written}.
 Result appendLine(Call &call, const VaultPath &path, const QString &line)
 {
     int at = -1;
-    notebook::Notebook::WriteOptions options;
-    options.mayCreate = call.dryRun();
     const auto written = call.edit(
             path,
             [&](const QString &current, bool, QString *next) {
@@ -75,7 +64,7 @@ Result appendLine(Call &call, const VaultPath &path, const QString &line)
                 at = appendedLine(*next, line);
                 return true;
             },
-            options);
+            creatingJournal(call, path));
     if (!written)
         return call.failed();
     QJsonObject o = call.writeJson(*written);
