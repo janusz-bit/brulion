@@ -122,13 +122,15 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
     return out;
 }
 
-void Workspace::notifyFolderChange(const QStringList &changed)
+void Workspace::notifyFolderChange(const QStringList &changed, bool byUser)
 {
     ++m_revision;
     Q_EMIT revisionChanged();
     m_trashCount = -1;
     Q_EMIT trashChanged();
     Q_EMIT filesChanged(changed);
+    if (byUser)
+        m_sync->notifyLocalChange();
 }
 
 // ---- Renames and moves ----------------------------------------------------------------------

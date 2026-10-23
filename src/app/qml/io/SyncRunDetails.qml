@@ -190,6 +190,17 @@ BDialog {
                 .arg(dialog.counts.fileErrors)
               : ""
     }
+    BText {
+        readonly property string folders: dialog.known && Workspace.sync
+            ? Workspace.sync.folderCountsText(dialog.counts.foldersCreated || 0, dialog.counts.foldersDeleted || 0,
+                                              dialog.counts.foldersMoved || 0)
+            : ""
+        Layout.fillWidth: true
+        visible: folders !== ""
+        wrapMode: Text.Wrap
+        variant: "small"
+        text: folders
+    }
 
     // ---- Requests ------------------------------------------------------------------------------
     BText {

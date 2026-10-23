@@ -93,6 +93,25 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
 /// synced — and reports SyncReport::needsConfirmation with the pendingDeletions; a run with
 /// SyncRunOptions::confirmDeletions (or allowEmptySide) applies them. The vault config does not
 /// count. Held-back paths keep their sync state, so later runs plan the same deletions.
+/// Moves are not deletions: a run transfers the paths without a deletion first; a file deleted
+/// on one side whose content arrived under a new path in that pass (one to one by content hash,
+/// or by the version a server-side move kept, or the same name in another letter case) counts
+/// neither for this guard nor for the empty-side one (which also lets a side pass whose files
+/// are, more than half of them, found under new paths: a notebook kept in one renamed folder; on
+/// such a side every deletion not proven to be a move waits for confirmation, however few, and a
+/// folder rename is moved only when none of its files changed — an older copy put back after the
+/// storage was lost never overwrites or deletes the newer notes on its own).
+/// Folders (syncfolders.cpp): an empty folder is created on the other side (MKCOL / a vault
+/// folder; not when that side has the name in another letter case); a folder deleted on one side
+/// is deleted on the other only when it holds nothing there (locally: empty on disk, rmdir();
+/// on the server: nothing in the run's view nor in a fresh listing right before the DELETE, where
+/// an entry the client cannot name counts as content) and
+/// no deletion is held back; folders that existed on both sides are remembered ("sync/folder/",
+/// knowsFolder()), and so are the folders of synced files. A folder renamed in the vault (gone
+/// here, still on the server, at least half of its synced files unchanged below a new folder
+/// nothing of which was synced) is moved on the server with one MOVE ("Overwrite: F"); its sync
+/// states, merge bases and folder states follow, and its files are then compared at the new
+/// paths as usual. A refused MOVE falls back to uploading and deleting file by file.
 /// When the vault, client or store is destroyed during a run, the run ends with
 /// SyncErrorCode::NotReady. Everything runs on the owner's thread; the vault is accessed
 /// synchronously, network I/O is asynchronous.
@@ -102,6 +121,8 @@ public:
     /// Store key prefixes / key (device-local bookkeeping).
     static QString stateKey(const VaultPath &path);
     static QString baseKey(const VaultPath &path);
+    /// A folder that existed on both sides after a run ("sync/folder/<path>").
+    static QString folderKey(const VaultPath &path);
     static QString metaKey();
 
     /// Mass-deletion guard: a side loses more than this share of its files ...
@@ -157,6 +178,9 @@ public:
     std::optional<SyncFileState> stateOf(const VaultPath &path) const;
     /// Stored merge base (last synced text) of one path.
     std::optional<QString> mergeBaseOf(const VaultPath &path) const;
+    /// The folder existed on both sides after a run (so its absence on one side later is a
+    /// deletion there).
+    bool knowsFolder(const VaultPath &path) const;
 
 Q_SIGNALS:
     void started();

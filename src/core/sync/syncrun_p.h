@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QMetaObject>
 #include <QPointer>
+#include <QSet>
 
 #include <functional>
 #include <memory>
@@ -27,6 +28,12 @@ class JobPool;
 /// One SyncEngine run. Owned (shared) by the engine while it runs; every asynchronous step
 /// keeps it alive (see guarded()) and does nothing once the run finished or the engine called
 /// abandon(). Per-path work runs through a JobPool (one job per group of case-variant paths).
+///
+/// Order: list both sides, load the states, recognise local folder renames, the empty-side
+/// guard; then (Transfer) the folder renames are moved on the server (MOVE), the groups without
+/// a deletion run first (new, changed and moved files), the mass-deletion guard looks at what
+/// they transferred (content that arrived under a new path is moved, not deleted), the groups
+/// with a deletion follow, and last the folders (syncfolders.cpp).
 class SyncRun : public std::enable_shared_from_this<SyncRun> {
 public:
     SyncRun(SyncEngine *engine, SyncRunOptions options, int number);
@@ -102,6 +109,19 @@ private:
         QString error;
     };
 
+    /// A folder renamed or moved in the vault, recognised by its synced content (MOVE).
+    struct FolderMove {
+        VaultPath from;
+        VaultPath to;
+    };
+
+    /// One step of the folder pass.
+    struct FolderOp {
+        enum class Kind { DeleteLocal, DeleteRemote, CreateLocal, CreateRemote };
+        Kind kind = Kind::CreateLocal;
+        VaultPath path;
+    };
+
     bool abandoned() const;
     Vault *vault() const;
     WebDavClient *client() const;
@@ -120,8 +140,19 @@ private:
     QString summary() const;
 
     /// Wrap a continuation: runs only while the engine lives (keeps this run alive meanwhile).
-    template <typename F>
-    auto guarded(F &&fn);
+    template<typename F>
+    auto guarded(F &&fn)
+    {
+        return [self = shared_from_this(), fn = std::forward<F>(fn)](auto &&...args) mutable {
+            if (self->m_finished || !self->m_engine)
+                return; // abandoned: the engine is gone
+            if (!self->vault() || !self->client() || !self->store()) {
+                self->dependencyLost();
+                return;
+            }
+            fn(std::forward<decltype(args)>(args)...);
+        };
+    }
 
     // Phases
     void listRemote();
@@ -130,10 +161,51 @@ private:
     void listLocal();
     void loadStates();
     bool guardEmptySides();
+    /// After the first pass: a server that looked empty only had moved files? (guardEmptySides())
+    bool recheckRemoteEmpty();
     void guardMassDeletion();
+    void startTransfer();
     void processAll();
+    /// Run `groups` through a new JobPool, then `next` (also when cancelled or failed).
+    void runPass(const QList<QStringList> &groups, std::function<void()> next);
+    void afterFirstPass();
+    void afterSecondPass();
     void runGroup(const QStringList &group, qsizetype index, std::function<void()> groupDone);
     void finish();
+
+    // Moves and folders (syncfolders.cpp)
+    /// A path synced before that exists on one side only (deleted on the other, or restored).
+    bool isDeletionCandidate(const VaultPath &path) const;
+    /// Folders known from earlier runs: folder states and the folders of the synced files.
+    QSet<VaultPath> knownFolders() const;
+    /// Local files never synced, by content hash (one-to-one matching of moved content). Only
+    /// files whose size one of `wanted` (sync states) has are read.
+    QHash<QString, int> newLocalHashes(const QList<SyncFileState> &wanted);
+    /// How many of `paths` (synced before) exist under a new path on the other side, matched
+    /// one-to-one by content (`arrived`, consumed), by version (a server move keeps the ETag) or
+    /// as the same name in another letter case. `here`: the paths vanished locally.
+    int countMoved(const QList<VaultPath> &paths, bool here, QHash<QString, int> &arrived) const;
+    /// Folder renames in the vault: a folder of synced files missing here (still on the server)
+    /// whose synced files are, at least half of them unchanged, at their places below a new local
+    /// folder the server does not have.
+    QList<FolderMove> findFolderMoves();
+    std::optional<VaultPath> renameTarget(const VaultPath &from, const QSet<VaultPath> &known,
+                                          const QSet<VaultPath> &localFolders,
+                                          const QHash<QString, QList<VaultPath>> &newByName,
+                                          const QSet<VaultPath> &taken);
+    bool sameContent(const VaultPath &localPath, const SyncFileState &state);
+    void moveFolders(qsizetype index, std::function<void()> next);
+    /// The server moved `move.from` to `move.to`: states, merge bases and the listing follow.
+    void applyFolderMove(const FolderMove &move);
+    /// Files and folders written or deleted on the server in this run (m_remoteAll follows).
+    void noteRemoteWritten(const VaultPath &path, bool isDir = false);
+    void noteRemoteDeleted(const VaultPath &path);
+    QSet<VaultPath> localFolders() const;
+    QSet<VaultPath> remoteFolders() const;
+    void syncFolders(std::function<void()> done);
+    void runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype index, std::function<void()> done);
+    void folderFailed(const VaultPath &path, const QString &code, const QString &message, int status = 0);
+    void recordFolders();
 
     // One path
     void syncPath(const VaultPath &path, Done done);
@@ -173,6 +245,25 @@ private:
     QHash<VaultPath, FileStat> m_local;
     QHash<VaultPath, RemoteEntry> m_remote;
     QHash<VaultPath, SyncFileState> m_states;
+    /// Every entry of the server as this run knows it: the listing (folders and names that are
+    /// not synced included), then what the run wrote, deleted and moved there.
+    QHash<VaultPath, RemoteEntry> m_remoteAll;
+    QSet<VaultPath> m_folderStates; ///< folders that existed on both sides after a run
+    QList<FolderMove> m_moves;      ///< folder renames recognised in this run
+    /// Content hashes (with counts) of files uploaded / downloaded to paths never synced before
+    /// in this run's first pass: moved content, not deleted content.
+    QHash<QString, int> m_uploadedNew;
+    QHash<QString, int> m_downloadedNew;
+    QList<QStringList> m_laterGroups;  ///< groups with a deletion: after the mass-deletion guard
+    bool m_recheckRemoteEmpty = false; ///< guardEmptySides() waits for the first pass's downloads
+    /// The side had none of the files synced before under their names and passed guardEmptySides()
+    /// only because most of them were found under new paths (a renamed folder holding every note,
+    /// or an older copy put back after the storage was lost): on that side nothing but proven
+    /// moves passes without the user — every other deletion waits for confirmation, and a folder
+    /// rename is moved on the server only when none of its files changed (an older copy must not
+    /// overwrite newer notes as if they had been edited).
+    bool m_localLookedEmpty = false;
+    bool m_remoteLookedEmpty = false;
     std::shared_ptr<detail::JobPool> m_pool;
     int m_done = 0;
     int m_total = 0;

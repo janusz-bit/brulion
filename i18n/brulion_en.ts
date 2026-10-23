@@ -864,7 +864,7 @@
 <context>
     <name>SyncRunDetails</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncRunDetails.qml" line="212"/>
+        <location filename="../src/app/qml/io/SyncRunDetails.qml" line="223"/>
         <source>%n timeout(s)</source>
         <translation>
             <numerusform>%n timeout</numerusform>
@@ -872,7 +872,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncRunDetails.qml" line="269"/>
+        <location filename="../src/app/qml/io/SyncRunDetails.qml" line="280"/>
         <source>…and %n more</source>
         <translation>
             <numerusform>…and %n more</numerusform>
@@ -918,7 +918,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="303"/>
+        <location filename="../src/app/qml/io/SyncStatusPanel.qml" line="316"/>
         <source>%n file(s) could not be synced</source>
         <translation>
             <numerusform>%n file could not be synced</numerusform>
@@ -1206,7 +1206,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="796"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="799"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>
@@ -1214,7 +1214,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="247"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="254"/>
         <source>Conflict in %n note(s) — merge the versions</source>
         <translation>
             <numerusform>Conflict in %n note — merge the versions</numerusform>
@@ -1222,7 +1222,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="248"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="255"/>
         <source>Synced with errors: %n file(s)</source>
         <translation>
             <numerusform>Synced with errors: %n file</numerusform>
@@ -1230,7 +1230,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="250"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="257"/>
         <source>Waiting for your decision: %n file(s) to delete</source>
         <translation>
             <numerusform>Waiting for your decision: %n file to delete</numerusform>
@@ -1238,7 +1238,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="278"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="285"/>
         <source>%n merged</source>
         <translation>
             <numerusform>%n merged</numerusform>
@@ -1246,7 +1246,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="280"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="287"/>
         <source>%n deleted</source>
         <translation>
             <numerusform>%n deleted</numerusform>
@@ -1254,7 +1254,31 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="295"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="289"/>
+        <source>%n folder(s) moved</source>
+        <translation>
+            <numerusform>%n folder moved</numerusform>
+            <numerusform>%n folders moved</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="291"/>
+        <source>%n new folder(s)</source>
+        <translation>
+            <numerusform>%n new folder</numerusform>
+            <numerusform>%n new folders</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="293"/>
+        <source>%n folder(s) deleted</source>
+        <translation>
+            <numerusform>%n folder deleted</numerusform>
+            <numerusform>%n folders deleted</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="308"/>
         <source>%n file(s) would be deleted. Check the list and confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Check the list and confirm in the sync center.</numerusform>
@@ -1262,7 +1286,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="337"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="350"/>
         <source>%n folder(s)</source>
         <translation>
             <numerusform>%n folder</numerusform>
@@ -1270,7 +1294,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="341"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="354"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
@@ -1278,7 +1302,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="342"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="355"/>
         <source>%n tracked file(s)</source>
         <translation>
             <numerusform>%n tracked file</numerusform>
@@ -1286,11 +1310,38 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncruns.cpp" line="344"/>
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="357"/>
         <source>%n file(s) checked</source>
         <translation>
             <numerusform>%n file checked</numerusform>
             <numerusform>%n files checked</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="447"/>
+        <source>%n new</source>
+        <comment>folders</comment>
+        <translation>
+            <numerusform>%n new</numerusform>
+            <numerusform>%n new</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="449"/>
+        <source>%n deleted</source>
+        <comment>folders</comment>
+        <translation>
+            <numerusform>%n deleted</numerusform>
+            <numerusform>%n deleted</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncruns.cpp" line="451"/>
+        <source>%n moved on the server</source>
+        <comment>folders</comment>
+        <translation>
+            <numerusform>%n moved on the server</numerusform>
+            <numerusform>%n moved on the server</numerusform>
         </translation>
     </message>
 </context>

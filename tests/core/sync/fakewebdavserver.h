@@ -1,7 +1,8 @@
 // In-memory WebDAV server (Nextcloud flavour) implementing HttpTransport, for tests.
 // Supports PROPFIND (Depth 0/1; "infinity" is refused like Nextcloud does), GET, PUT
 // (If-Match / If-None-Match, 409 when the parent is missing), DELETE (If-Match), MKCOL
-// (405 if it exists, 409 if the parent is missing) and Basic auth. Responses arrive from the
+// (405 if it exists, 409 if the parent is missing), MOVE (Destination, Overwrite; moved files
+// keep their ETags like on Nextcloud) and Basic auth. Responses arrive from the
 // event loop (optionally after a per-method latency). Hooks inject failures, stalls and
 // concurrent changes; every request is logged.
 #pragma once
@@ -36,6 +37,8 @@ public:
         bool fullUrlHrefs = false;            ///< hrefs as full URLs instead of absolute paths
         bool putEtag = true;                  ///< send ETag headers on PUT responses
         bool noEtags = false;                 ///< no ETags at all (getetag, ETag headers)
+        bool supportsMove = true;             ///< false: MOVE answers 405 (a server without it)
+        bool moveKeepsEtags = true;           ///< false: moved files get new ETags
         std::function<qint64()> now;          ///< clock (ms); default 2026-10-14 08:00:00 UTC
     };
 
@@ -78,6 +81,9 @@ public:
     void mkdir(const QString &rel);
     /// Remove a file or folder directly on the server.
     void remove(const QString &rel);
+    /// Move a file or folder directly on the server (as another client's MOVE would; ETags kept
+    /// unless Options::moveKeepsEtags is off). False when the source is missing or the target taken.
+    bool moveNode(const QString &fromRel, const QString &toRel);
     std::optional<QString> text(const QString &rel) const;
     std::optional<QByteArray> bytes(const QString &rel) const;
     QString etag(const QString &rel) const;
@@ -105,6 +111,8 @@ private:
     HttpResponse put(const HttpRequest &request, const QString &path);
     HttpResponse del(const HttpRequest &request, const QString &path);
     HttpResponse mkcol(const QString &path);
+    HttpResponse move(const HttpRequest &request, const QString &path);
+    void moveNodes(const QString &fromAbs, const QString &toAbs);
     QString nextEtag();
     void mkdirs(const QString &absPath);
     qint64 now() const;

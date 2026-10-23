@@ -157,7 +157,8 @@ void SyncRun::onExchange(const HttpExchange &exchange)
     if (exchange.timedOut)
         ++st.timeouts;
     const bool expected = exchange.status == 404 || exchange.status == 412
-                          || (exchange.method == "MKCOL" && (exchange.status == 405 || exchange.status == 409));
+                          || (exchange.method == "MKCOL" && (exchange.status == 405 || exchange.status == 409))
+                          || (exchange.method == "MOVE" && (exchange.status == 405 || exchange.status == 501));
     if (exchange.status == 0 || (exchange.status >= 400 && !expected))
         ++st.failedRequests;
     if (!exchange.protocol.isEmpty())
@@ -230,6 +231,10 @@ QString SyncRun::summary() const
                          .arg(r.deletedRemote)
                          .arg(r.conflicts.size())
                          .arg(r.errors.size());
+        if (r.foldersCreated + r.foldersDeleted + r.foldersMoved > 0)
+            counts += u", folders: %1 created, %2 deleted, %3 moved"_s.arg(r.foldersCreated)
+                              .arg(r.foldersDeleted)
+                              .arg(r.foldersMoved);
         if (!r.skipped.isEmpty())
             counts += u", skipped %1"_s.arg(r.skipped.size());
         if (r.needsConfirmation)
@@ -289,20 +294,6 @@ QString SyncRun::summary() const
         line += requests;
     }
     return line;
-}
-
-template <typename F>
-auto SyncRun::guarded(F &&fn)
-{
-    return [self = shared_from_this(), fn = std::forward<F>(fn)](auto &&...args) mutable {
-        if (self->m_finished || !self->m_engine)
-            return; // abandoned: the engine is gone
-        if (!self->vault() || !self->client() || !self->store()) {
-            self->dependencyLost();
-            return;
-        }
-        fn(std::forward<decltype(args)>(args)...);
-    };
 }
 
 void SyncRun::dependencyLost()
@@ -463,6 +454,7 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
     for (const RemoteEntry &entry : entries) {
         if (entry.isDir)
             ++folders;
+        m_remoteAll.insert(entry.path, entry);
         if (!entry.isDir && isSyncablePath(entry.path))
             m_remote.insert(entry.path, entry);
     }
@@ -482,13 +474,14 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         finish();
         return;
     }
+    // The guard first: a side that looked empty makes the folder renames stricter.
     if (!m_options.allowEmptySide && !guardEmptySides()) {
         finish();
         return;
     }
-    guardMassDeletion();
+    m_moves = findFolderMoves();
     endPhase(int(m_states.size()));
-    processAll();
+    startTransfer();
 }
 
 void SyncRun::listLocal()
@@ -518,32 +511,86 @@ void SyncRun::loadStates()
         if (state && isSyncablePath(path))
             m_states.insert(path, *state);
     }
+    const QString folderPrefix = SyncEngine::folderKey(QString());
+    for (const QString &key : store()->keys(folderPrefix)) {
+        const VaultPath path = key.mid(folderPrefix.size());
+        if (isSyncablePath(path))
+            m_folderStates.insert(path);
+    }
 }
 
 bool SyncRun::guardEmptySides()
 {
     // Refuse to mirror a side that suddenly lost every file synced before (wrong folder, wiped
     // server, vault storage lost): that would delete everything on the other side. Files created
-    // since (today's journal, a default config) do not count.
+    // since (today's journal, a default config) do not count — unless they hold the content of
+    // most of the missing files: then they were moved (a renamed folder holding every note).
     int tracked = 0;
+    QList<VaultPath> onlyRemote; // synced before, missing here, still on the server
+    QList<VaultPath> onlyLocal;  // synced before, missing on the server, still here
     bool localHas = false;
     bool remoteHas = false;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
         if (it.key() == vaultConfigPath())
             continue;
         ++tracked;
-        localHas = localHas || m_local.contains(it.key());
-        remoteHas = remoteHas || m_remote.contains(it.key());
+        const bool hasLocal = m_local.contains(it.key());
+        const bool hasRemote = m_remote.contains(it.key());
+        localHas = localHas || hasLocal;
+        remoteHas = remoteHas || hasRemote;
+        if (hasRemote && !hasLocal)
+            onlyRemote.append(it.key());
+        else if (hasLocal && !hasRemote)
+            onlyLocal.append(it.key());
     }
     if (tracked < kEmptySideGuardMin)
         return true;
     if (!localHas && remoteHas) {
+        QList<SyncFileState> wanted;
+        for (const VaultPath &path : std::as_const(onlyRemote))
+            wanted.append(m_states.value(path));
+        QHash<QString, int> here = newLocalHashes(wanted);
+        const int moved = countMoved(onlyRemote, true, here);
+        if (moved * 2 > onlyRemote.size()) {
+            qCInfo(lcSync).noquote() << u"%1 none of the %2 files synced before exist here under their names, but %3 "
+                                        u"of them under new ones: moved, not lost"_s.arg(tag())
+                                                .arg(tracked)
+                                                .arg(moved);
+            m_localLookedEmpty = true;
+            return true;
+        }
         m_report.syncError = SyncError{
             SyncErrorCode::LocalEmpty,
             u"None of the %1 files synced before exist locally; refusing to delete them on the server"_s.arg(tracked)};
         return false;
     }
     if (!remoteHas && localHas) {
+        QHash<QString, int> none;
+        const int moved = countMoved(onlyLocal, false, none);
+        if (moved * 2 > onlyLocal.size()) {
+            m_remoteLookedEmpty = true;
+            return true;
+        }
+        // New files of the same sizes on the server may be the moved ones: decided by their
+        // content after the first pass (which downloads new files and deletes nothing).
+        QHash<qint64, int> sizes;
+        for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {
+            if (!m_states.contains(it.key()))
+                ++sizes[it->size];
+        }
+        int plausible = 0;
+        for (const VaultPath &path : std::as_const(onlyLocal)) {
+            int &left = sizes[m_states.value(path).size];
+            if (left > 0) {
+                --left;
+                ++plausible;
+            }
+        }
+        if (plausible * 2 > onlyLocal.size()) {
+            m_recheckRemoteEmpty = true;
+            m_remoteLookedEmpty = true;
+            return true;
+        }
         m_report.syncError = SyncError{
             SyncErrorCode::RemoteEmpty,
             u"None of the %1 files synced before exist on the server; refusing to delete them locally"_s.arg(tracked)};
@@ -552,15 +599,39 @@ bool SyncRun::guardEmptySides()
     return true;
 }
 
+bool SyncRun::recheckRemoteEmpty()
+{
+    QList<VaultPath> onlyLocal;
+    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
+        if (it.key() != vaultConfigPath() && m_local.contains(it.key()) && !m_remote.contains(it.key()))
+            onlyLocal.append(it.key());
+    }
+    QHash<QString, int> arrived = m_downloadedNew;
+    const int moved = countMoved(onlyLocal, false, arrived);
+    if (moved * 2 > onlyLocal.size()) {
+        qCInfo(lcSync).noquote() << u"%1 none of the files synced before exist on the server under their names, but "
+                                    u"%2 of %3 under new ones: moved, not lost"_s.arg(tag())
+                                            .arg(moved)
+                                            .arg(onlyLocal.size());
+        return true;
+    }
+    m_report.syncError = SyncError{SyncErrorCode::RemoteEmpty,
+                                   u"None of the %1 files synced before exist on the server; refusing to delete them "
+                                   u"locally"_s.arg(onlyLocal.size())};
+    return false;
+}
+
 void SyncRun::guardMassDeletion()
 {
     if (m_options.confirmDeletions || m_options.allowEmptySide)
         return;
     // Count what planSync() will decide for the paths synced before that are gone on one side:
-    // deleted there unless the other side changed (then the file is restored instead).
+    // deleted there unless the other side changed (then the file is restored instead). A file
+    // whose content the first pass transferred to a new path (or that exists in another letter
+    // case) was moved or renamed: not a deletion.
     const qint64 maxSize = m_engine->maxFileSize();
-    int localDeletions = 0;  // gone remotely, unchanged locally -> DeleteLocal
-    int remoteDeletions = 0; // gone locally, unchanged remotely -> DeleteRemote
+    QList<VaultPath> localDeletions;  // gone remotely, unchanged locally -> DeleteLocal
+    QList<VaultPath> remoteDeletions; // gone locally, unchanged remotely -> DeleteRemote
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
         const VaultPath &path = it.key();
         if (path == vaultConfigPath())
@@ -573,28 +644,60 @@ void SyncRun::guardMassDeletion()
             continue;
         if (hasRemote) {
             if (remote->size <= maxSize && remoteVersion(*remote) == it->remoteEtag)
-                ++remoteDeletions;
+                remoteDeletions.append(path);
             continue;
         }
         if (local->size > maxSize)
             continue; // skipped by syncPath()
         const ReadResult read = readLocal(path, *local, *it);
         if (read.snap && read.snap->hash == it->localHash)
-            ++localDeletions;
+            localDeletions.append(path);
     }
-    m_holdDeletions = tripsMassDeletionGuard(localDeletions, countWithoutConfig(m_local))
-                      || tripsMassDeletionGuard(remoteDeletions, countWithoutConfig(m_remote));
-    if (m_holdDeletions) {
+    QHash<QString, int> uploaded = m_uploadedNew;
+    QHash<QString, int> downloaded = m_downloadedNew;
+    const int movedHere = countMoved(remoteDeletions, true, uploaded);
+    const int movedThere = countMoved(localDeletions, false, downloaded);
+    const int local = int(localDeletions.size()) - movedThere;
+    const int remote = int(remoteDeletions.size()) - movedHere;
+    // A side that looked empty passed guardEmptySides() thanks to moved content only: whatever is
+    // not proven moved there (a note missing, or found only in an older version) waits for the
+    // user, however few.
+    const bool unprovenOnEmptySide = (m_localLookedEmpty && remote > 0) || (m_remoteLookedEmpty && local > 0);
+    m_holdDeletions = tripsMassDeletionGuard(local, countWithoutConfig(m_local))
+                      || tripsMassDeletionGuard(remote, countWithoutConfig(m_remote)) || unprovenOnEmptySide;
+    if (unprovenOnEmptySide) {
+        qCInfo(lcSync).noquote() << u"%1 %2 had none of the files synced before under their names: %3 deletion(s) "
+                                    u"not proven to be moves held back for confirmation"_s.arg(tag())
+                                            .arg(m_localLookedEmpty ? u"this device"_s : u"the server"_s)
+                                            .arg(m_localLookedEmpty ? remote : local);
+    } else if (m_holdDeletions) {
         qCInfo(lcSync).noquote()
                 << u"%1 mass deletion held back for confirmation: %2 local and %3 remote file(s) would be deleted"_s
                            .arg(tag())
-                           .arg(localDeletions)
-                           .arg(remoteDeletions);
+                           .arg(local)
+                           .arg(remote);
+    } else if (movedHere + movedThere > 0) {
+        qCInfo(lcSync).noquote() << u"%1 %2 file(s) moved or renamed (here %3, on the server %4): not counted as "
+                                    u"deletions"_s.arg(tag())
+                                            .arg(movedHere + movedThere)
+                                            .arg(movedHere)
+                                            .arg(movedThere);
     }
+}
+
+void SyncRun::startTransfer()
+{
+    beginPhase(SyncPhase::Transfer);
+    // Folder renames first: what the server moved needs no deletion and no upload.
+    moveFolders(0, [this] { processAll(); });
 }
 
 void SyncRun::processAll()
 {
+    if (m_cancelled) {
+        finish();
+        return;
+    }
     QSet<VaultPath> all;
     for (auto it = m_local.cbegin(); it != m_local.cend(); ++it)
         all.insert(it.key());
@@ -606,16 +709,27 @@ void SyncRun::processAll()
     std::sort(paths.begin(), paths.end());
     m_total = static_cast<int>(paths.size());
     m_report.stats.pathsChecked = m_total;
-    beginPhase(SyncPhase::Transfer);
     progress(SyncProgress::Phase::Syncing, 0, m_total);
 
+    // Names differing only in letter case are one file on case-insensitive storage: handled one
+    // after another (see groupByCase), never in parallel. Groups with a deletion wait for the
+    // mass-deletion guard, which counts what the others transferred.
     const QList<QStringList> groups = groupByCase(
         paths, [this](const VaultPath &p) { return m_local.contains(p); },
         [this](const VaultPath &p) { return m_remote.contains(p); });
+    QList<QStringList> first;
+    for (const QStringList &group : groups) {
+        const bool deletes = std::any_of(group.cbegin(), group.cend(),
+                                         [this](const VaultPath &p) { return isDeletionCandidate(p); });
+        (deletes ? m_laterGroups : first).append(group);
+    }
+    runPass(first, [this] { afterFirstPass(); });
+}
+
+void SyncRun::runPass(const QList<QStringList> &groups, std::function<void()> next)
+{
     m_pool = std::make_shared<detail::JobPool>(m_engine->concurrency(), m_engine);
     for (const QStringList &group : groups) {
-        // Names differing only in letter case are one file on case-insensitive storage: handle
-        // them one after another (see groupByCase), never in parallel.
         m_pool->add([weak = weak_from_this(), group](detail::JobPool::Done done) {
             if (const std::shared_ptr<SyncRun> self = weak.lock())
                 self->runGroup(group, 0, std::move(done));
@@ -623,7 +737,30 @@ void SyncRun::processAll()
                 done();
         });
     }
-    m_pool->start(guarded([this] { finish(); }));
+    m_pool->start(guarded([next = std::move(next)] { next(); }));
+}
+
+void SyncRun::afterFirstPass()
+{
+    if (m_cancelled || m_report.remoteError.isError()) {
+        finish();
+        return;
+    }
+    if (m_recheckRemoteEmpty && !recheckRemoteEmpty()) {
+        finish();
+        return;
+    }
+    guardMassDeletion();
+    runPass(std::exchange(m_laterGroups, {}), [this] { afterSecondPass(); });
+}
+
+void SyncRun::afterSecondPass()
+{
+    if (m_cancelled || m_report.remoteError.isError()) {
+        finish();
+        return;
+    }
+    syncFolders([this] { finish(); });
 }
 
 void SyncRun::runGroup(const QStringList &group, qsizetype index, std::function<void()> groupDone)
@@ -955,6 +1092,11 @@ void SyncRun::record(const VaultPath &path, SyncAction action)
     case SyncAction::Conflict: m_report.conflicts.append(path); break;
     case SyncAction::DeleteLocal: ++m_report.deletedLocal; break;
     case SyncAction::DeleteRemote: ++m_report.deletedRemote; break;
+    case SyncAction::CreateFolderLocal:
+    case SyncAction::CreateFolderRemote: ++m_report.foldersCreated; break;
+    case SyncAction::DeleteFolderLocal:
+    case SyncAction::DeleteFolderRemote: ++m_report.foldersDeleted; break;
+    case SyncAction::MoveRemote: ++m_report.foldersMoved; break;
     }
 }
 
@@ -999,11 +1141,14 @@ void SyncRun::upload(const PathCtx &ctx, Done done)
             done(Outcome::fromError(result.error));
             return;
         }
+        noteRemoteWritten(ctx.path);
         versionAfterPut(ctx.path, result.etag, [this, ctx, done](const QString &version) {
             const LocalSnap &snap = *ctx.snap;
             saveState(ctx.path, snap.hash, version, snap.isText ? std::optional<QString>(snap.text) : std::nullopt,
                       snap.stat);
             record(ctx.path, SyncAction::Upload);
+            if (!ctx.state)
+                ++m_uploadedNew[snap.hash]; // maybe moved here from a path deleted in this run
             done(Outcome::done());
         });
     }));
@@ -1038,6 +1183,8 @@ void SyncRun::download(const PathCtx &ctx, Done done)
         }
         saveState(ctx.path, content.hash, remote.version, content.text, std::nullopt);
         record(ctx.path, SyncAction::Download);
+        if (!ctx.state)
+            ++m_downloadedNew[content.hash]; // maybe moved there from a path deleted in this run
         done(Outcome::done());
     });
 }
@@ -1154,6 +1301,7 @@ void SyncRun::publishMerge(const PathCtx &ctx, const RemoteContent &remote, cons
                           done(Outcome::fromError(result.error));
                           return;
                       }
+                      noteRemoteWritten(path);
                       versionAfterPut(path, result.etag, finishMerge);
                   }));
 }
@@ -1219,6 +1367,7 @@ void SyncRun::conflict(const PathCtx &ctx, const RemoteContent &remote, const Re
                           done(Outcome::fromError(result.error));
                           return;
                       }
+                      noteRemoteWritten(ctx.path);
                       versionAfterPut(ctx.path, result.etag, [this, ctx, copy, created, data, done](const QString &version) {
                           const LocalSnap &snap = *ctx.snap;
                           saveState(ctx.path, snap.hash, version,
@@ -1251,6 +1400,7 @@ void SyncRun::uploadConflictCopy(const VaultPath &copy, const QByteArray &data, 
             done(Outcome::done());
             return;
         }
+        noteRemoteWritten(copy);
         versionAfterPut(copy, result.etag, [this, copy, data, done](const QString &version) {
             const Content content = classify(copy, data);
             saveState(copy, content.hash, version, content.text, std::nullopt);
@@ -1278,6 +1428,7 @@ void SyncRun::deleteRemote(const PathCtx &ctx, Done done)
             done(Outcome::fromError(error));
             return;
         }
+        noteRemoteDeleted(ctx.path);
         forget(ctx.path);
         record(ctx.path, SyncAction::DeleteRemote);
         done(Outcome::done());

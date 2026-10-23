@@ -59,6 +59,9 @@ struct SyncRunRecord {
     int fileErrors = 0;
     int skipped = 0;
     int pendingDeletions = 0;
+    int foldersCreated = 0; ///< SyncReport::foldersCreated
+    int foldersDeleted = 0;
+    int foldersMoved = 0;
     QList<SyncPhaseTime> phases;
     SyncStats stats;
     QList<SyncFileError> errors;    ///< at most MaxErrors, redacted
@@ -69,6 +72,7 @@ struct SyncRunRecord {
     static SyncRunRecord fromReport(const SyncReport &report, bool stalled = false);
     /// Ok and nothing changed, skipped or failed.
     bool isQuiet() const;
+    /// Files and folders changed.
     int changeCount() const;
     QJsonObject toJson() const;
     /// std::nullopt for malformed records (they are skipped when loading).

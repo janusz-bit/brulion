@@ -72,6 +72,14 @@ void WorkspaceSync::onRunFinished(const sync::SyncReport &report, bool stalled)
 {
     if (m_history)
         m_history->add(report, stalled);
+    QStringList folders;
+    for (const sync::SyncChange &change : report.changes) {
+        if (change.action == sync::SyncAction::CreateFolderLocal
+            || change.action == sync::SyncAction::DeleteFolderLocal)
+            folders.append(change.path);
+    }
+    if (!folders.isEmpty())
+        Q_EMIT foldersChanged(folders);
     scheduleLive();
 }
 
@@ -278,6 +286,12 @@ QVariantMap WorkspaceSync::historyRow(const sync::SyncRunRecord &r) const
         parts.append(tr("%n merged", "", r.merged));
     if (r.deletedLocal + r.deletedRemote > 0)
         parts.append(tr("%n deleted", "", r.deletedLocal + r.deletedRemote));
+    if (r.foldersMoved > 0)
+        parts.append(tr("%n folder(s) moved", "", r.foldersMoved));
+    if (r.foldersCreated > 0)
+        parts.append(tr("%n new folder(s)", "", r.foldersCreated));
+    if (r.foldersDeleted > 0)
+        parts.append(tr("%n folder(s) deleted", "", r.foldersDeleted));
     if (r.isQuiet() && r.repeats > 1 && r.firstStarted.isValid())
         parts.append(u"%1–%2"_s.arg(r.firstStarted.toLocalTime().toString(u"HH:mm"_s),
                                     r.finished.toLocalTime().toString(u"HH:mm"_s)));
@@ -413,6 +427,9 @@ QVariantMap WorkspaceSync::runDetails(int number) const
                                     {u"merged"_s, r.merged},
                                     {u"deletedLocal"_s, r.deletedLocal},
                                     {u"deletedRemote"_s, r.deletedRemote},
+                                    {u"foldersCreated"_s, r.foldersCreated},
+                                    {u"foldersDeleted"_s, r.foldersDeleted},
+                                    {u"foldersMoved"_s, r.foldersMoved},
                                     {u"conflicts"_s, r.conflicts},
                                     {u"fileErrors"_s, r.fileErrors},
                                     {u"skipped"_s, r.skipped},
@@ -422,6 +439,18 @@ QVariantMap WorkspaceSync::runDetails(int number) const
     out.insert(u"fromMs"_s, from.isValid() ? from.toMSecsSinceEpoch() - 2000 : qint64(0));
     out.insert(u"toMs"_s, r.finished.isValid() ? r.finished.toMSecsSinceEpoch() + 2000 : qint64(0));
     return out;
+}
+
+QString WorkspaceSync::folderCountsText(int created, int deleted, int moved) const
+{
+    QStringList parts;
+    if (created > 0)
+        parts.append(tr("%n new", "folders", created));
+    if (deleted > 0)
+        parts.append(tr("%n deleted", "folders", deleted));
+    if (moved > 0)
+        parts.append(tr("%n moved on the server", "folders", moved));
+    return parts.isEmpty() ? QString() : tr("Folders: %1").arg(parts.join(u", "_s));
 }
 
 QString WorkspaceSync::runDetailsText(int number) const
@@ -451,6 +480,11 @@ QString WorkspaceSync::runDetailsText(int number) const
                          .arg(c.value(u"deletedRemote"_s).toInt())
                          .arg(c.value(u"conflicts"_s).toInt())
                          .arg(c.value(u"fileErrors"_s).toInt()));
+    const int foldersCreated = c.value(u"foldersCreated"_s).toInt();
+    const int foldersDeleted = c.value(u"foldersDeleted"_s).toInt();
+    const int foldersMoved = c.value(u"foldersMoved"_s).toInt();
+    if (foldersCreated + foldersDeleted + foldersMoved > 0)
+        lines.append(folderCountsText(foldersCreated, foldersDeleted, foldersMoved));
     for (const QVariant &v : d.value(u"phases"_s).toList()) {
         const QVariantMap p = v.toMap();
         QString line = u"  %1: %2"_s.arg(p.value(u"text"_s).toString(), p.value(u"durationText"_s).toString());

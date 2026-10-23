@@ -133,6 +133,11 @@ QString SyncEngine::baseKey(const VaultPath &path)
     return u"sync/base/"_s + path;
 }
 
+QString SyncEngine::folderKey(const VaultPath &path)
+{
+    return u"sync/folder/"_s + path;
+}
+
 QString SyncEngine::metaKey()
 {
     return u"sync/meta"_s;
@@ -271,6 +276,7 @@ void SyncEngine::resetState()
         return;
     m_store->removePrefix(stateKey(QString()));
     m_store->removePrefix(baseKey(QString()));
+    m_store->removePrefix(folderKey(QString()));
     m_store->remove(metaKey());
 }
 
@@ -287,6 +293,11 @@ std::optional<QString> SyncEngine::mergeBaseOf(const VaultPath &path) const
         return std::nullopt;
     const QJsonValue base = m_store->get(baseKey(paths::normalize(path)));
     return base.isString() ? std::optional<QString>(base.toString()) : std::nullopt;
+}
+
+bool SyncEngine::knowsFolder(const VaultPath &path) const
+{
+    return m_store && m_store->contains(folderKey(paths::normalize(path)));
 }
 
 void SyncEngine::runFinished(const SyncReport &report)

@@ -165,6 +165,8 @@ HttpResponse FakeWebDavServer::handle(const HttpRequest &request, const QString 
         return del(request, path);
     if (request.method == "MKCOL")
         return mkcol(path);
+    if (request.method == "MOVE")
+        return move(request, path);
     return response(405);
 }
 
@@ -271,6 +273,64 @@ HttpResponse FakeWebDavServer::mkcol(const QString &path)
         return response(409, "Parent missing");
     m_nodes.insert(path, Node{true, {}, now(), nextEtag()});
     return response(201);
+}
+
+HttpResponse FakeWebDavServer::move(const HttpRequest &request, const QString &path)
+{
+    if (!m_options.supportsMove)
+        return response(405, "MOVE not allowed");
+    const QByteArray destinationHeader = request.header("destination");
+    if (destinationHeader.isEmpty())
+        return response(400, "Destination missing");
+    const QString target = decodePath(QUrl(QString::fromUtf8(destinationHeader), QUrl::TolerantMode));
+    if (!target.startsWith(m_options.root + u'/'))
+        return response(502, "Destination on another server");
+    const auto source = m_nodes.constFind(path);
+    if (source == m_nodes.cend() || path == m_options.root)
+        return response(404);
+    if (target == path || target.startsWith(path + u'/'))
+        return response(403, "Cannot move into itself");
+    const auto parent = m_nodes.constFind(parentOf(target));
+    if (parent == m_nodes.cend() || !parent->isDir)
+        return response(409, "Parent missing");
+    const bool overwrite = request.header("overwrite") != "F";
+    const bool exists = m_nodes.contains(target);
+    if (exists && !overwrite)
+        return response(412, "Destination exists");
+    if (exists)
+        m_nodes.removeIf([&](QMap<QString, Node>::iterator it) {
+            return it.key() == target || it.key().startsWith(target + u'/');
+        });
+    moveNodes(path, target);
+    return response(exists ? 204 : 201);
+}
+
+void FakeWebDavServer::moveNodes(const QString &fromAbs, const QString &toAbs)
+{
+    const QString prefix = fromAbs + u'/';
+    QList<std::pair<QString, Node>> moved;
+    for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
+        if (it.key() == fromAbs || it.key().startsWith(prefix))
+            moved.append({toAbs + it.key().mid(fromAbs.size()), it.value()});
+    }
+    m_nodes.removeIf(
+            [&](QMap<QString, Node>::iterator it) { return it.key() == fromAbs || it.key().startsWith(prefix); });
+    for (auto &[key, node] : moved) {
+        if (!m_options.moveKeepsEtags)
+            node.etag = nextEtag();
+        m_nodes.insert(key, node);
+    }
+}
+
+bool FakeWebDavServer::moveNode(const QString &fromRel, const QString &toRel)
+{
+    const QString from = abs(fromRel);
+    const QString to = abs(toRel);
+    if (!m_nodes.contains(from) || m_nodes.contains(to))
+        return false;
+    mkdirs(parentOf(to));
+    moveNodes(from, to);
+    return true;
 }
 
 QString FakeWebDavServer::nextEtag()

@@ -72,6 +72,11 @@ struct RemoveOptions {
     QString ifMatch; ///< delete only this version (412 Precondition otherwise)
 };
 
+struct MoveOptions {
+    bool folder = false;    ///< the source is a folder (URLs with a trailing slash)
+    bool overwrite = false; ///< replace an existing destination; otherwise it fails (412)
+};
+
 /// WebDAV client with HTTP Basic auth. Every operation is asynchronous: its callback runs
 /// exactly once, from the event loop (never inside the call), and only while the client lives.
 /// Failures are reported as WebDavError values, never thrown.
@@ -146,9 +151,22 @@ public:
     /// deleted behind the client's back (409) is recreated and the upload retried once.
     void put(const VaultPath &path, const QByteArray &data, const PutOptions &options, PutCallback done);
     /// Delete a file or folder; a missing path is not an error. Refuses the base folder.
+    /// Deleting a folder deletes everything in it (WebDAV has no other DELETE).
     void remove(const VaultPath &path, const RemoveOptions &options, DoneCallback done);
+    /// Rename or move a file or folder on the server (WebDAV MOVE, "Overwrite: F" unless
+    /// `options.overwrite`), creating the missing parent folders of `to` first. An existing
+    /// destination fails with Precondition (412), a missing source with NotFound; servers that
+    /// do not move answer 405 / 501 (NotAllowed / Server). Refuses the base folder and moves
+    /// into itself. The server's spelling of names inside a moved folder (NFD) is kept.
+    void move(const VaultPath &from, const VaultPath &to, const MoveOptions &options, DoneCallback done);
+    /// The direct children of a folder (PROPFIND Depth 1), sorted by path; NotFound when the
+    /// folder does not exist. An entry that cannot be named as a child of the folder fails the
+    /// listing (Parse) instead of being left out: an empty answer means an empty folder.
+    void listFolder(const VaultPath &path, ListCallback done);
     /// Create a folder ("" = the base folder); an existing one (405) is fine.
     void mkcol(const VaultPath &path, DoneCallback done);
+    /// Create a folder and its missing parent folders; existing ones are fine.
+    void mkdirs(const VaultPath &path, DoneCallback done);
     /// Make sure the base folder exists, creating missing ancestors of the base URL as needed.
     void ensureBase(DoneCallback done);
 
@@ -172,6 +190,10 @@ private:
     void propfind(const VaultPath &path, int depth, PropfindCallback done);
     void sendPut(const VaultPath &path, const QByteArray &data, const PutOptions &options, ResponseCallback done);
     void ensureParents(const VaultPath &path, bool force, DoneCallback done);
+    /// After a MOVE: the known folders and the server's spellings follow the moved path.
+    void rebaseKnown(const VaultPath &from, const VaultPath &to, const QString &spelledTo);
+    /// After a DELETE: forget the known folders at and below `path`.
+    void forgetKnown(const VaultPath &path);
     void ensureParentsFrom(const QStringList &segments, int index, QString dir, bool force, const VaultPath &path,
                            DoneCallback done);
     void mkcolUrl(const QString &url, int depth, DoneCallback done);

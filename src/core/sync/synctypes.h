@@ -49,16 +49,39 @@ struct SyncFileState {
     friend bool operator==(const SyncFileState &, const SyncFileState &) = default;
 };
 
-/// What the engine did with one path.
-enum class SyncAction { Upload, Download, Merge, Conflict, DeleteLocal, DeleteRemote };
+/// What the engine did with one path (a file, or a folder for the folder actions).
+enum class SyncAction {
+    Upload,
+    Download,
+    Merge,
+    Conflict,
+    DeleteLocal,
+    DeleteRemote,
+    CreateFolderLocal,  ///< a folder of the server (empty there) created in the vault
+    CreateFolderRemote, ///< a folder of the vault (empty here) created on the server (MKCOL)
+    DeleteFolderLocal,  ///< a folder deleted on the server and empty here: removed here
+    DeleteFolderRemote, ///< a folder deleted here and empty on the server: deleted there
+    MoveRemote,         ///< a folder renamed or moved here, moved on the server (WebDAV MOVE)
+};
 
-/// "upload", "download", "merge", "conflict", "delete-local", "delete-remote".
+/// "upload", "download", "merge", "conflict", "delete-local", "delete-remote",
+/// "folder-create-local", "folder-create-remote", "folder-delete-local", "folder-delete-remote",
+/// "move-remote".
 QString syncActionName(SyncAction action);
+/// The folder actions (CreateFolderLocal … MoveRemote).
+bool isFolderAction(SyncAction action);
 
 struct SyncChange {
-    VaultPath path;
+    VaultPath path; ///< MoveRemote: the folder's new path (SyncReport::folderMoves has both)
     SyncAction action = SyncAction::Upload;
     friend bool operator==(const SyncChange &, const SyncChange &) = default;
+};
+
+/// A folder renamed or moved in the vault and moved on the server (WebDAV MOVE).
+struct SyncFolderMove {
+    VaultPath from;
+    VaultPath to;
+    friend bool operator==(const SyncFolderMove &, const SyncFolderMove &) = default;
 };
 
 /// Why a run started (SyncScheduler; SyncRunOptions::trigger).
@@ -80,7 +103,9 @@ std::optional<SyncTrigger> syncTriggerFromName(QStringView name);
 
 /// Steps of one run, in order. Without a compare-then-transfer split the per-path reading,
 /// comparing and transferring happen together in Transfer; Compare covers loading the sync
-/// states and the guards (empty side, mass deletion).
+/// states, recognising folder renames and the empty-side guard. Transfer: folder moves on the
+/// server, the paths without deletions, the mass-deletion guard, the paths with deletions,
+/// then the folders.
 enum class SyncPhase { Connect, ListRemote, ListLocal, Compare, Transfer, SaveState };
 /// "connect" "list-remote" "list-local" "compare" "transfer" "save-state"
 QString syncPhaseName(SyncPhase phase);
@@ -150,11 +175,15 @@ struct SyncReport {
     int deletedLocal = 0;          ///< deleted on the server -> moved to the local trash
     int deletedRemote = 0;         ///< deleted locally -> deleted on the server
     int merged = 0;                ///< changed on both sides and merged automatically
+    int foldersCreated = 0;        ///< empty folders created here or on the server
+    int foldersDeleted = 0;        ///< emptied folders deleted here or on the server
+    int foldersMoved = 0;          ///< folders renamed here and moved on the server (MOVE)
+    QList<SyncFolderMove> folderMoves; ///< those moves, in order
     QList<VaultPath> conflicts;    ///< real conflicts: local kept, remote saved as a copy
     QList<VaultPath> conflictCopies; ///< conflict copies created in this run
     QList<SyncFileError> errors;   ///< per-file failures
     QList<VaultPath> skipped;      ///< skipped on purpose (larger than the size limit)
-    QList<SyncChange> changes;     ///< every change made, in completion order
+    QList<SyncChange> changes;     ///< every change made (files and folders), in completion order
     QDateTime started;
     QDateTime finished;
 
@@ -181,7 +210,7 @@ struct SyncReport {
     QString failureMessage() const;
     /// errorCodeName() of remoteError or syncError ("" when the run did not fail).
     QString failureCode() const;
-    /// Number of changes made (uploads, downloads, deletions, merges, conflicts).
+    /// Number of changes made (uploads, downloads, deletions, merges, conflicts, folders).
     int changeCount() const;
 };
 
@@ -203,7 +232,7 @@ struct SyncProgress {
     QList<VaultPath> active; ///< Syncing: paths being processed now (≤ concurrency), oldest first
     int remoteEntries = 0;   ///< Listing: files and folders found so far
     qint64 bytesDone = 0;    ///< payload bytes sent + received so far
-    int changes = 0;         ///< uploads, downloads, merges, deletions, conflicts so far
+    int changes = 0;         ///< uploads, downloads, merges, deletions, conflicts, folders so far
     int errors = 0;          ///< per-file errors so far
     qint64 elapsedMs = 0;    ///< since the run started
 

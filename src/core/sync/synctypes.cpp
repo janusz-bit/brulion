@@ -52,8 +52,31 @@ QString syncActionName(SyncAction action)
     case SyncAction::Conflict: return u"conflict"_s;
     case SyncAction::DeleteLocal: return u"delete-local"_s;
     case SyncAction::DeleteRemote: return u"delete-remote"_s;
+    case SyncAction::CreateFolderLocal: return u"folder-create-local"_s;
+    case SyncAction::CreateFolderRemote: return u"folder-create-remote"_s;
+    case SyncAction::DeleteFolderLocal: return u"folder-delete-local"_s;
+    case SyncAction::DeleteFolderRemote: return u"folder-delete-remote"_s;
+    case SyncAction::MoveRemote: return u"move-remote"_s;
     }
     return {};
+}
+
+bool isFolderAction(SyncAction action)
+{
+    switch (action) {
+    case SyncAction::CreateFolderLocal:
+    case SyncAction::CreateFolderRemote:
+    case SyncAction::DeleteFolderLocal:
+    case SyncAction::DeleteFolderRemote:
+    case SyncAction::MoveRemote: return true;
+    case SyncAction::Upload:
+    case SyncAction::Download:
+    case SyncAction::Merge:
+    case SyncAction::Conflict:
+    case SyncAction::DeleteLocal:
+    case SyncAction::DeleteRemote: return false;
+    }
+    return false;
 }
 
 QString syncTriggerName(SyncTrigger trigger)
