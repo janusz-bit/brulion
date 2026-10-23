@@ -162,6 +162,14 @@ Pozostałe opcje:
   (`brulionShell.indexed()`, czas w `brulionShell.indexedAt`) **bez żadnego wejścia** (myszy,
   klawiatury) — test regresji zatrzymanych timerów (niżej, „Ograniczenia techniczne”). CI
   uruchamia go z 3000 notatek.
+* `--copy` — kopiowanie bloków prawdziwym wejściem: przed wczytaniem zapisuje do IndexedDB (jak
+  `--index-notes`) notatnik z dzisiejszym dziennikiem (trzy bloki, drugi z dzieckiem, polskie
+  znaki, pogrubienie, link), potem klika tekst pierwszego bloku, wciska Escape (blok zaznaczony),
+  Shift+↓ (następny z dzieckiem) i Ctrl+C, a strona (z nadaną zgodą na schowek) czyta schowek
+  przeglądarki: `navigator.clipboard.readText()` musi dać dokładnie Markdown tych bloków,
+  a `navigator.clipboard.read()` — HTML Brulionu (`text/html` ze znacznikiem `generator`). Ze
+  `--screenshot` dochodzi zrzut `…-copy.png`. Wynik i miejsce kliknięcia zależą od układu strony
+  1280×800 (pierwszy wiersz dnia ok. 153 px od góry; skrypt próbuje kilku wysokości).
 
 Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
 docs/CLI.md „Remote control”) w przeglądarce nie ma: stronę prowadzi się przez Chrome DevTools
@@ -411,8 +419,10 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
   nieprawdziwy. Schowka „primary selection” (X11) w przeglądarce nie ma.
   Wklejanie: Ctrl+V przychodzi do strony jako zdarzenie `paste`, z którego Qt bierze tekst i HTML
   schowka (HTML z innych aplikacji Brulion zamienia na Markdown); menu edytowanego tekstu nie ma w
-  przeglądarce „Wklej” — strona nie może sama odczytać schowka bez zgody. Sprawdzone tylko w
-  testach desktopowych (offscreen) i na emulatorze Androida, nie ręcznie w przeglądarkach.
+  przeglądarce „Wklej” — strona nie może sama odczytać schowka bez zgody. Kopiowanie zaznaczonych
+  bloków (Ctrl+C) sprawdza w Chromium bez okna `scripts/wasm-smoke.mjs --copy` (2026-10-23,
+  Chromium 155: Markdown jako text/plain i HTML Brulionu jako text/html w schowku przeglądarki);
+  wklejanie i inne przeglądarki (Firefox, Safari) nie były sprawdzane ręcznie.
 * **Żadnych powtarzanych timerów 0 ms.** Dyspozytor zdarzeń Qt 6.11.2 dla WebAssembly
   (`QEventDispatcherWasm::sendTimerEvents()`) ustawia kolejny `setTimeout` przeglądarki tylko
   wtedy, gdy `QTimerInfoList::activateTimers()` zwróci > 0, a ta funkcja nie liczy timerów o
