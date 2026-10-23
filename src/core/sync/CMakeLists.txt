@@ -21,7 +21,7 @@ brulion_add_core_module(sync
         webdavclient.h webdavclient.cpp
         pool_p.h pool.cpp
         request_p.h request.cpp
-        syncrun_p.h syncrun.cpp
+        syncrun_p.h syncrun.cpp syncfolders.cpp
         util_p.h util.cpp
     DEPS util text vault log
     QT Network)

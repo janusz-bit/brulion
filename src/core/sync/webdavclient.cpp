@@ -324,8 +324,71 @@ void WebDavClient::remove(const VaultPath &path, const RemoveOptions &options, D
             done(error);
             return;
         }
-        m_remoteNames.remove(p);
+        forgetKnown(p);
         done({});
+    });
+}
+
+void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOptions &options, DoneCallback done)
+{
+    const VaultPath p = paths::normalize(from);
+    const VaultPath q = paths::normalize(to);
+    if (p.isEmpty() || q.isEmpty()) {
+        fail(WebDavError::make(WebDavErrorCode::Http, u"Refusing to MOVE the base folder"_s, m_baseUrl), std::move(done));
+        return;
+    }
+    if (p == q || q.startsWith(p + u'/')) {
+        fail(WebDavError::make(WebDavErrorCode::Http, u"Refusing to MOVE %1 into itself"_s.arg(p), m_baseUrl),
+             std::move(done));
+        return;
+    }
+    ensureParents(q, false, [this, p, q, options, done = std::move(done)](const WebDavError &parentError) {
+        if (parentError.isError()) {
+            done(parentError);
+            return;
+        }
+        const QString url = urlFor(p, options.folder);
+        const QString spelledTo = serverName(q);
+        const QString destination = joinUrl(m_baseUrl, spelledTo, options.folder);
+        const QList<QPair<QByteArray, QByteArray>> headers = {
+            {"Destination", destination.toUtf8()},
+            {"Overwrite", options.overwrite ? "T" : "F"},
+        };
+        request("MOVE", url, headers, {}, m_timeoutMs,
+                [this, p, q, spelledTo, url, done](const HttpResponse &response) {
+                    if (const WebDavError error = check(response, "MOVE", url, {201, 204}); error.isError()) {
+                        done(error);
+                        return;
+                    }
+                    rebaseKnown(p, q, spelledTo);
+                    done({});
+                });
+    });
+}
+
+void WebDavClient::listFolder(const VaultPath &path, ListCallback done)
+{
+    const VaultPath folder = paths::normalize(path);
+    const QString raw = serverName(folder);
+    propfindRaw(raw, 1, [this, folder, raw, done = std::move(done)](const WebDavError &error,
+                                                                    const QList<DavResource> &resources) {
+        ListResult result;
+        result.error = error;
+        if (!error.isError()) {
+            const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+            for (const DavResource &res : resources) {
+                const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
+                if (!rawRel)
+                    continue;
+                const VaultPath child = paths::normalize(*rawRel);
+                if (child.isEmpty() || child == folder)
+                    continue;
+                result.entries.append(entryFor(child, res));
+            }
+            std::sort(result.entries.begin(), result.entries.end(),
+                      [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
+        }
+        done(result);
     });
 }
 
@@ -343,6 +406,17 @@ void WebDavClient::mkcol(const VaultPath &path, DoneCallback done)
         m_knownDirs.insert(p);
         done({});
     });
+}
+
+void WebDavClient::mkdirs(const VaultPath &path, DoneCallback done)
+{
+    const VaultPath p = paths::normalize(path);
+    if (p.isEmpty()) {
+        ensureBase(std::move(done));
+        return;
+    }
+    // ensureParents() creates the folders of a file path: "<p>/" names a file inside <p>.
+    ensureParents(p + u'/', false, std::move(done));
 }
 
 void WebDavClient::ensureBase(DoneCallback done)
@@ -578,6 +652,39 @@ void WebDavClient::mkcolUrl(const QString &url, int depth, DoneCallback done)
                 done(retry.status == 405 ? WebDavError() : check(retry, "MKCOL", url, {200, 201}));
             });
         });
+    });
+}
+
+void WebDavClient::rebaseKnown(const VaultPath &from, const VaultPath &to, const QString &spelledTo)
+{
+    const QString spelledFrom = serverName(from);
+    const auto within = [&from](const QString &path) { return path == from || path.startsWith(from + u'/'); };
+    QSet<QString> dirs;
+    for (const QString &dir : std::as_const(m_knownDirs))
+        dirs.insert(within(dir) ? to + dir.mid(from.size()) : dir);
+    m_knownDirs = dirs;
+    QHash<VaultPath, QString> names;
+    for (auto it = m_remoteNames.cbegin(); it != m_remoteNames.cend(); ++it) {
+        if (!within(it.key())) {
+            names.insert(it.key(), it.value());
+            continue;
+        }
+        const VaultPath key = to + it.key().mid(from.size());
+        const QString spelled = spelledTo + it.value().mid(spelledFrom.size());
+        if (spelled != key)
+            names.insert(key, spelled);
+    }
+    if (spelledTo != to)
+        names.insert(to, spelledTo);
+    m_remoteNames = names;
+}
+
+void WebDavClient::forgetKnown(const VaultPath &path)
+{
+    const QString prefix = path + u'/';
+    m_knownDirs.removeIf([&](const QString &dir) { return dir == path || dir.startsWith(prefix); });
+    m_remoteNames.removeIf([&](const QHash<VaultPath, QString>::iterator it) {
+        return it.key() == path || it.key().startsWith(prefix);
     });
 }
 

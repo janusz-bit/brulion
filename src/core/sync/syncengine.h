@@ -102,6 +102,8 @@ public:
     /// Store key prefixes / key (device-local bookkeeping).
     static QString stateKey(const VaultPath &path);
     static QString baseKey(const VaultPath &path);
+    /// A folder that existed on both sides after a run ("sync/folder/<path>").
+    static QString folderKey(const VaultPath &path);
     static QString metaKey();
 
     /// Mass-deletion guard: a side loses more than this share of its files ...
@@ -157,6 +159,9 @@ public:
     std::optional<SyncFileState> stateOf(const VaultPath &path) const;
     /// Stored merge base (last synced text) of one path.
     std::optional<QString> mergeBaseOf(const VaultPath &path) const;
+    /// The folder existed on both sides after a run (so its absence on one side later is a
+    /// deletion there).
+    bool knowsFolder(const VaultPath &path) const;
 
 Q_SIGNALS:
     void started();
