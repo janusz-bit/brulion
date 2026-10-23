@@ -109,7 +109,7 @@ class Workspace : public EditorHost, public QueryHost {
     /// Number of Markdown pages.
     Q_PROPERTY(int pageCount READ pageCount NOTIFY revisionChanged FINAL)
     /// Pages without the daily notes and conflict copies (the sidebar's "Strony" count).
-    Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY revisionChanged FINAL)
+    Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY indexChanged FINAL)
     /// Vault configuration (see vaultConfig()).
     Q_PROPERTY(QVariantMap config READ vaultConfig NOTIFY configChanged FINAL)
     /// [{ path, title }] pinned pages, in the user's order.

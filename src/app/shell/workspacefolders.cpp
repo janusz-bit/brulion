@@ -77,15 +77,11 @@ int Workspace::pageCount() const
 
 int Workspace::pagesWithoutJournals() const
 {
-    if (!m_vault)
+    // The index's notes are the pages without conflict copies; its lists are cached until the
+    // next change (this is read on every revision).
+    if (!m_index)
         return 0;
-    const VaultConfig config = m_vault->config();
-    int n = 0;
-    for (const FileStat &f : m_vault->markdownFiles()) {
-        if (!paths::isConflictCopy(f.path) && !markdown::journalDateFromPath(f.path, config))
-            ++n;
-    }
-    return n;
+    return int(m_index->paths().size() - m_index->journals().size());
 }
 
 QString Workspace::linkTarget(const QString &path, const QString &fromPath) const
@@ -195,7 +191,6 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
         return out;
     const QString folder = paths::normalize(rawFolder);
     const QString prefix = folder.isEmpty() ? QString() : folder + u'/';
-    const VaultConfig config = m_vault->config();
     QHash<QString, int> pages;     // direct subfolder -> pages at any depth
     QSet<QString> withAttachments; // direct subfolders holding attachments
     const auto childOf = [&](const QString &path) -> QString {
@@ -208,9 +203,13 @@ QVariantList Workspace::subfolders(const QString &rawFolder) const
         const QString child = childOf(f.path);
         if (child.isEmpty())
             continue;
-        if (!paths::isMarkdown(f.path))
+        if (!paths::isMarkdown(f.path)) {
             withAttachments.insert(child);
-        else if (!paths::isConflictCopy(f.path) && !markdown::journalDateFromPath(f.path, config))
+            continue;
+        }
+        // The index's notes: no conflict copies; daily notes left out (cheap lookups, no parsing).
+        const ParsedNote *note = m_index ? m_index->note(f.path) : nullptr;
+        if (note && !note->journalDate)
             pages[child] += 1;
     }
     QStringList children;
@@ -413,8 +412,9 @@ QString Workspace::relocate(const QString &rawFrom, const QString &rawTo)
     const RelocationPlan plan = m_index ? m_index->planRelocation(fileMoves(from, to)) : RelocationPlan();
     if (!m_vault->rename(from, to, ChangeSource::User)) {
         const bool moving = paths::dirname(from) != paths::dirname(to);
-        const QString message = folder ? (moving ? tr("Could not move the folder: %1") : tr("Could not rename the folder: %1"))
-                                       : (moving ? tr("Could not move the page: %1") : tr("Could not rename the page: %1"));
+        const QString message =
+                folder ? (moving ? tr("Could not move the folder: %1") : tr("Could not rename the folder: %1"))
+                       : (moving ? tr("Could not move the page: %1") : tr("Could not rename the page: %1"));
         Q_EMIT errorOccurred(message.arg(m_vault->errorString()));
         return {};
     }

@@ -151,7 +151,8 @@ void FolderTreeModel::rebuildChildren()
         if (paths::isConflictCopy(f.path))
             continue; // surfaced in the sync center, not as pages
         Entry e{paths::basename(f.path), f.path, false, {}};
-        if (paths::isMarkdown(f.path)) {
+        // Daily notes only in the journals folder (no date parsing for other pages).
+        if (!m_journalsFolder.isEmpty() && f.path.startsWith(m_journalsFolder + u'/') && paths::isMarkdown(f.path)) {
             if (const auto date = markdown::journalDateFromPath(f.path, config))
                 e.journalDate = date->toString(Qt::ISODate);
         }

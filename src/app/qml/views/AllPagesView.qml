@@ -25,7 +25,7 @@ FocusScope {
     property var route: ({})
     readonly property string folder: route && route.path ? route.path : ""
     /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders).
-    readonly property var subfolders: Workspace.revision >= 0 && filterField.text.trim() === ""
+    readonly property var subfolders: Workspace.revision >= 0 && Workspace.journalCount >= 0 && filterField.text.trim() === ""
                                       ? Workspace.subfolders(root.folder) : []
     readonly property bool wide: width >= 760
     readonly property int maximumWidth: 1100
