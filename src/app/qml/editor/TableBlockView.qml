@@ -306,10 +306,18 @@ Item {
                                 cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
                                              ? Qt.PointingHandCursor : Qt.IBeamCursor
                             }
+                            // A finger held on a cell selects the table (touch UIs).
+                            TapHandler {
+                                enabled: !cell.editingCell && Theme.touchUi
+                                acceptedDevices: PointerDevice.TouchScreen
+                                onLongPressed: root.block.editor.longPressText(root.block.index)
+                            }
                             TapHandler {
                                 enabled: !cell.editingCell
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 onTapped: (eventPoint) => {
+                                    if (root.block.editor.blockTapped(root.block.index))
+                                        return // Shift+click, the touch selection mode
                                     const p = eventPoint.position
                                     // Reminder chips name ranges of the cell's text, not of the
                                     // block: those cells are edited like any other.

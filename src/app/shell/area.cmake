@@ -6,7 +6,8 @@
 # tests/app/shell without the app): AppController, AppSettings, Workspace (implements the
 # editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
 # moves, quick capture — the last three through the core module notebook, shared with brulion-cli —,
-# reminders — WorkspaceReminders over the notifiers of src/app/notify —, sync —
+# the clipboard's HTML of copied blocks and pasted HTML (core io), reminders — WorkspaceReminders
+# over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
 # workspaceintegration), CommandModel, FolderTreeModel, the sample vault. SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
@@ -45,6 +46,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacequery.cpp
     ${_brulion_shell_dir}/workspacehistory.cpp
     ${_brulion_shell_dir}/workspacefolders.cpp
+    ${_brulion_shell_dir}/workspaceclipboard.cpp
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
@@ -65,7 +67,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook
-    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_notify)
+    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_notify)
 if(ANDROID OR EMSCRIPTEN)
     # AndroidBridge (permissions, test notification) / WasmStorage + WasmNotifier.
     target_link_libraries(brulion_shell PRIVATE brulion_platform)

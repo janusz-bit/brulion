@@ -280,6 +280,16 @@ private Q_SLOTS:
         QFETCH(QString, expected);
         QCOMPARE(render(input).replace(QChar(0x00A0), u'~'), expected);
     }
+    void oneLetterWordsCanStayApart()
+    {
+        // Text selected and copied as the note says it ("Zaznacz tekst"): only its own no-break
+        // spaces.
+        RenderContext c = context();
+        c.joinShortWords = false;
+        const InlineRenderer r(c);
+        QCOMPARE(r.render(u"Spotkanie w domu i z Łucją, **o** tak"_s), u"Spotkanie w domu i z Łucją, <b>o</b> tak"_s);
+        QCOMPARE(r.render(u"Jadę w góry z Anią"_s), u"Jadę w góry z Anią"_s);
+    }
 
     void formulas_data()
     {

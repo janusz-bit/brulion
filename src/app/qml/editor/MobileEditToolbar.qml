@@ -16,18 +16,21 @@ import Brulion
 //             paragraph;
 //   "cell"    a table cell: undo, redo, next cell, "Więcej" (the table's block menu: the cell's
 //             editing ends, the table is selected), hide keyboard;
-//   "source"  source mode: [[, #, /, undo, redo (the source's own), hide keyboard.
+//   "source"  source mode: [[, #, /, undo, redo (the source's own), hide keyboard;
+//   "selection" the touch selection mode (docs/UI.md "Selecting and copying"): SelectionToolbar —
+//             "Zaznaczono %n", copy, cut, delete, select all, "Więcej", "Gotowe".
+// The block tools have "Zaznacz": the edited block becomes the selection (the keyboard goes).
 // "Hide keyboard" ends the editing (the toolbar goes with it). Buttons never take focus, so the
 // caret stays where it is; a tap beside them stays on the bar. Scrolls sideways when the window is
 // narrower than the buttons. Each tool set is made the first time its mode is used and kept (the
 // bar is hidden, not rebuilt, between two edits: the scroll position stays).
-// Extending it: a new button goes into its mode's row; another tool set (a selection's) is a new
-// mode of BlockEditor.toolbarMode with its own row here, docked in the same slot.
+// Extending it: a new button goes into its mode's row; another tool set is a new mode of
+// BlockEditor.toolbarMode with its own row here, docked in the same slot (as the selection's).
 Rectangle {
     id: bar
 
     property BlockEditor editor
-    /// "block" | "cell" | "source" (see above).
+    /// "block" | "cell" | "source" | "selection" (see above).
     readonly property string mode: editor ? editor.toolbarMode : ""
     /// The tools shown: `mode`, kept while the bar is hidden between two edits.
     property string shownMode: ""
@@ -67,6 +70,8 @@ Rectangle {
             cellLoader.active = true
         else if (mode === "source")
             sourceLoader.active = true
+        else if (mode === "selection")
+            selectionLoader.active = true
     }
 
     /// Commit the word the keyboard is composing before a button acts on the block: otherwise
@@ -232,6 +237,18 @@ Rectangle {
                 visible: bar.shownMode === "source"
                 sourceComponent: sourceTools
             }
+            Loader {
+                id: selectionLoader
+                height: parent.height
+                active: false
+                visible: bar.shownMode === "selection"
+                sourceComponent: SelectionToolbar {
+                    objectName: "toolbarSelectionTools"
+                    height: parent ? parent.height : 0
+                    editor: bar.editor
+                    docked: true
+                }
+            }
         }
     }
 
@@ -279,13 +296,20 @@ Rectangle {
                 iconName: "undo-2"
                 label: qsTr("Undo")
                 enabled: bar.controller !== null && bar.controller.canUndo
-                onClicked: { bar.commitComposition(); bar.controller.undo() }
+                onClicked: { bar.commitComposition(); bar.editor.undoStep(false) }
             }
             ToolButton {
                 iconName: "redo-2"
                 label: qsTr("Redo")
                 enabled: bar.controller !== null && bar.controller.canRedo
-                onClicked: { bar.commitComposition(); bar.controller.redo() }
+                onClicked: { bar.commitComposition(); bar.editor.undoStep(true) }
+            }
+            ToolButton {
+                objectName: "toolbarSelect"
+                iconName: "square-dashed"
+                // The edited block becomes the block selection (the touch selection mode).
+                label: qsTr("Select")
+                onClicked: { bar.commitComposition(); bar.editor.selectBlock(bar.row) }
             }
             ToolButton {
                 id: moreButton

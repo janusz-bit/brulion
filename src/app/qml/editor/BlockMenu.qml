@@ -2,7 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Przybliż,
+// BlockMenu — the menu of one block of the editor (docs/UI.md "The block editor"): Kopiuj, Wytnij,
+// Kopiuj jako tekst, Zaznacz (docs/UI.md "Selecting and copying" — a block that is part of the
+// block selection: the whole selection; else the block with its children), Przybliż,
 // Zwiń / Rozwiń (outline), Kopiuj odnośnik ▸ (Odwołanie do bloku ((…)), Link do bloku [[…#^…]],
 // on headings Link do nagłówka [[…#…]], Osadzenie — what `BlockEditor.copyLink` puts on the
 // clipboard, docs/SYNTAX.md §2 "Copied links"), Wstaw obraz…, Zwiększ / Zmniejsz wcięcie,
@@ -26,6 +28,10 @@ BMenu {
     property bool heading: false
     property bool hasChildren: false
     property bool collapsed: false
+    /// The block is part of a selection of several blocks: copying, cutting, indenting, moving and
+    /// deleting act on all of them.
+    property bool inSelection: false
+    property int selectionCount: 0
     readonly property bool documentMode: editor !== null && editor.documentMode
 
     /// Follow the block at `row` (until the next openFor) and take its shape.
@@ -40,6 +46,18 @@ BMenu {
         heading = controller.isHeading(row)
         hasChildren = info.hasChildren
         collapsed = info.collapsed
+        inSelection = controller.multiSelection && controller.selectedRows().indexOf(row) >= 0
+        selectionCount = inSelection ? controller.selectionCount : 1
+    }
+    /// Copying and cutting act on the selection the block is part of, else on the block (with its
+    /// children), which becomes the selection.
+    function selectFor(r: int) {
+        if (menu.inSelection)
+            return
+        if (Theme.touchUi)
+            menu.editor.selectBlock(r) // the selection mode: what was copied stays shown
+        else
+            menu.controller.selectRange(r, r)
     }
     /// The block's row now; -1 when it is gone.
     function row(): int {
@@ -71,6 +89,34 @@ BMenu {
         height: shown ? implicitHeight : 0
     }
 
+    BMenuItem {
+        objectName: "blockMenuCopy"
+        text: menu.inSelection ? qsTr("Copy %n block(s)", "", menu.selectionCount) : qsTr("Copy")
+        iconName: "copy"
+        shortcut: "Ctrl+C"
+        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.copySelection(false) })
+    }
+    BMenuItem {
+        objectName: "blockMenuCut"
+        text: menu.inSelection ? qsTr("Cut %n block(s)", "", menu.selectionCount) : qsTr("Cut")
+        iconName: "scissors"
+        shortcut: "Ctrl+X"
+        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.cutSelection() })
+    }
+    BMenuItem {
+        objectName: "blockMenuCopyText"
+        text: qsTr("Copy as plain text")
+        iconName: "copy"
+        onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.copySelection(true) })
+    }
+    OptionalItem {
+        objectName: "blockMenuSelect"
+        shown: !menu.inSelection
+        text: qsTr("Select")
+        iconName: "square-dashed"
+        onTriggered: menu.act((r) => menu.editor.selectBlock(r))
+    }
+    BMenuSeparator {}
     OptionalItem {
         objectName: "blockMenuZoom"
         shown: !menu.documentMode
@@ -129,32 +175,33 @@ BMenu {
         text: qsTr("Indent")
         iconName: "list-indent-increase"
         shortcut: "Tab"
-        onTriggered: menu.act((r) => menu.controller.indent(r))
+        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.indentSelection() : menu.controller.indent(r))
     }
     OptionalItem {
         shown: !menu.documentMode || menu.listItem
         text: qsTr("Outdent")
         iconName: "list-indent-decrease"
         shortcut: "Shift+Tab"
-        onTriggered: menu.act((r) => menu.controller.outdent(r))
+        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.outdentSelection() : menu.controller.outdent(r))
     }
     BMenuItem {
         text: qsTr("Move up")
         iconName: "move-up"
         shortcut: "Alt+Up"
-        onTriggered: menu.act((r) => menu.controller.moveUp(r))
+        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.moveSelectionUp() : menu.controller.moveUp(r))
     }
     BMenuItem {
         text: qsTr("Move down")
         iconName: "move-down"
         shortcut: "Alt+Down"
-        onTriggered: menu.act((r) => menu.controller.moveDown(r))
+        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.moveSelectionDown() : menu.controller.moveDown(r))
     }
     BMenuSeparator {}
     BMenuItem {
-        text: qsTr("Delete block")
+        objectName: "blockMenuDelete"
+        text: menu.inSelection ? qsTr("Delete %n block(s)", "", menu.selectionCount) : qsTr("Delete block")
         iconName: "trash-2"
         danger: true
-        onTriggered: menu.act((r) => menu.controller.deleteBlock(r))
+        onTriggered: menu.act((r) => menu.inSelection ? menu.editor.deleteSelection() : menu.controller.deleteBlock(r))
     }
 }

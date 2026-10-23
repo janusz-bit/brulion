@@ -2933,6 +2933,32 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the \"Toggle note mode\" command switches back");
             }
 
+            // "Zaznacz tekst" (the Więcej menu, the palette): the page as one read-only text over the
+            // editor, any part of it selectable; Esc closes it (docs/UI.md "Selecting and copying").
+            {
+                app->requestUiAction(u"selectText"_s);
+                QQuickItem *text = nullptr;
+                check(waitFor([&] {
+                          text = shownNamed(editor, u"selectTextEdit"_s);
+                          return text && text->hasActiveFocus();
+                      }),
+                      "the \"Select text\" command shows the page as one text");
+                if (text) {
+                    QString shownText;
+                    QMetaObject::invokeMethod(text, "getText", qReturnArg(shownText), 0,
+                                              text->property("length").toInt());
+                    std::fprintf(stderr, "selftest: \"Select text\" shows %lld characters: %s…\n",
+                                 qlonglong(shownText.size()), qPrintable(shownText.left(160)));
+                    // The page's title heading first (its frontmatter is not text to read).
+                    check(shownText.startsWith(u"Witaj w"_s) && shownText.contains(u"rozwija dzieci bloku"_s),
+                          "with the page's text, its frontmatter left out");
+                    QMetaObject::invokeMethod(text, "selectAll");
+                    check(!text->property("selectedText").toString().isEmpty(), "Ctrl+A's select all selects it");
+                    sendKey(window, Qt::Key_Escape);
+                    check(waitFor([&] { return !shownNamed(editor, u"selectTextEdit"_s); }), "Esc closes it");
+                }
+            }
+
             // Phones: a block at the bottom of the screen that starts editing is scrolled above
             // the editing toolbar (which sits on the keyboard) instead of staying under it.
             if (window->width() < 900) {

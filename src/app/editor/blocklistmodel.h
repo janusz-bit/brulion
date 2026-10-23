@@ -20,6 +20,10 @@
 //   view         text | heading | code | calc | query | table | quote | callout | rule | frontmatter | html
 //   headingLevel, lang, hasChildren, collapsed, visible (zoom + folds), taskStatus ("" | todo |
 //   doing | done | cancelled | deferred), blockId, isEditing, isSelected, isZoomRoot,
+//   selectionEdge  where a selected row sits in the band of selected visible rows: "single" |
+//                "first" | "middle" | "last" ("" when not selected or hidden) — the band's rounded
+//                ends; a selection is a set of rows (setSelectedUids: the editor's block selection
+//                with the subtrees of its blocks, folded children too)
 //   calcResults  calc views: [{ line, value, error, assigned }] per line of editText
 //   tableData    table views: { header: [..], headerHtml: [..], aligns: ["left"|"center"|"right"|""],
 //                rows: [[{ text, display, html, plain, error, formula }]] } with table formulas
@@ -117,6 +121,7 @@ public:
         ListMarkerRole,
         PrevKindRole,
         NoteModeOnlyRole,
+        SelectionEdgeRole,
     };
 
     /// Nested embeds rendered inside a transclusion (deeper ones become a "depth" note).
@@ -171,7 +176,11 @@ public:
     bool foldingEnabled() const { return m_foldingEnabled; }
     void setFoldingEnabled(bool enabled);
     void setEditingUid(quint64 uid);
-    void setSelectedUid(quint64 uid);
+    /// The selected blocks (the editor's block selection: rows with their subtrees).
+    void setSelectedUids(const QSet<quint64> &uids);
+    void setSelectedUid(quint64 uid) { setSelectedUids(uid ? QSet<quint64>{uid} : QSet<quint64>()); }
+    const QSet<quint64> &selectedUids() const { return m_selectedUids; }
+    bool isRowSelected(int row) const;
     bool isRowVisible(int row) const;
     /// Next / previous visible row, -1 when none.
     int nextVisibleRow(int row) const;
@@ -199,6 +208,12 @@ public:
     QDate today() const { return m_today; }
     /// Everything rendered may look different (index changed, links resolve differently).
     void invalidateRendering();
+    /// The `html` of `row` and the `tableData` of a table as text to select and copy (the
+    /// "Zaznacz tekst" view): rendered like the roles but with the note's own spaces — no
+    /// no-break space joins a one-letter word to the next one (RenderContext::joinShortWords).
+    /// Not cached.
+    QString readingHtmlAt(int row) const;
+    QVariantMap readingTableAt(int row) const;
 
 Q_SIGNALS:
     void countChanged();
@@ -213,6 +228,7 @@ private:
         bool visible = true;
         bool editing = false;
         bool selected = false;
+        quint8 selectionEdge = 0; ///< SelectionEdge
         bool zoomRoot = false;
         QString prevKind;
         // Content caches.
@@ -269,7 +285,8 @@ private:
     /// differ. `contentChanged` recomputes calc/table results and page-dependent html.
     void refresh(bool contentChanged);
     QVariantList computeCalcResults(int docIndex) const;
-    QVariantMap computeTableData(int docIndex) const;
+    /// `forReading`: readingTableAt() (no cache, no state changed).
+    QVariantMap computeTableData(int docIndex, bool forReading = false) const;
     void emitRowsChanged(const QList<int> &rows, const QList<int> &roles);
 
     // --- Calculations (docs/SYNTAX.md §9) ---------------------------------------------------------
@@ -306,7 +323,7 @@ private:
     bool m_foldingEnabled = true;
     int m_visibleCount = 0;
     quint64 m_editingUid = 0;
-    quint64 m_selectedUid = 0;
+    QSet<quint64> m_selectedUids;
 
     QPointer<EditorHost> m_host;
     QString m_path;

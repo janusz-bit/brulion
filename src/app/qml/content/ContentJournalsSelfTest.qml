@@ -21,7 +21,12 @@ import Brulion
 //   * the touch toolbar on a simulated keyboard (KeyboardInsets): docked on the keyboard, not at
 //     the day's bottom, the day does not grow for it, it stays put while the list scrolls (also
 //     by a finger), the caret of a day typed into near the keyboard stays above it without
-//     runaway scrolling, one toolbar when another day is edited.
+//     runaway scrolling, one toolbar when another day is edited;
+//   * selecting blocks in a day (docs/UI.md "Selecting and copying"): a finger's long press (the
+//     selection mode; the stream holds still while the finger extends it, scrolls at the frame's
+//     edge, the selection tools dock on the frame, Kopiuj), another day's selection ending it,
+//     Back; a mouse drag from a block into the next ones, the stream scrolled at its edge;
+//     "Zaznacz tekst" of a day over the stream's frame (wheel turns over it never scroll the stream).
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 Item {
     id: test
@@ -73,6 +78,42 @@ Item {
     }
     function fileHas(path, text) {
         return Workspace.readFile(path).indexOf(text) >= 0
+    }
+    /// The rendered text of `row` in `day` (null when its block is not shown).
+    function blockText(day, row) {
+        const item = day ? day.editor.listView.itemAtIndex(row) : null
+        return item ? richTextIn(item) : null
+    }
+    function richTextIn(item) {
+        if (!item || !item.visible)
+            return null
+        if (item.textFormat === Text.RichText && typeof item.linkAt === "function")
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = richTextIn(item.children[i])
+            if (found)
+                return found
+        }
+        return null
+    }
+    function findShown(item, name) {
+        if (!item || !item.visible)
+            return null
+        if (item.objectName === name)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findShown(item.children[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
+    /// Steps that do nothing (a finger held down meanwhile).
+    function idle(n) {
+        const out = []
+        for (let i = 0; i < n; ++i)
+            out.push(() => {})
+        return out
     }
     // ---- The touch toolbar, docked on the journal stream's frame (the list's parent) -----------
     function visibleSlots() {
@@ -341,6 +382,142 @@ Item {
                 test.check(top >= 0 && top + head.height <= test.list.height,
                            "following a same-day heading link scrolls the journal to the heading: " + top)
                 test.tracked.controller.selectedRow = -1
+                test.list.positionViewAtBeginning()
+            },
+            // ---- Selecting blocks in a day with a finger: the selection mode --------------------------
+            () => {
+                if (!test.events)
+                    test.events = Qt.createQmlObject('import QtTest; TestEvent {}', test, "journalEvents")
+                // The long day (taller than the frame).
+                test.list.positionViewAtIndex(test.linkRow, ListView.Beginning)
+            },
+            () => test.dayAt(test.linkRow) !== null && test.dayAt(test.linkRow).controller.loaded
+                  && test.blockText(test.dayAt(test.linkRow), 1) !== null,
+            () => {
+                test.tracked = test.dayAt(test.linkRow)
+                test.contentBefore = test.list.contentY
+                const text = test.blockText(test.tracked, 1)
+                test.events.touchEvent(text).press(0, text, text.width / 2, text.height / 2).commit()
+            },
+            ...test.idle(9),
+            () => {
+                const c = test.tracked.controller
+                test.check(test.tracked.editor.selectionMode && c.selectedRow === 1 && c.editingRow < 0,
+                           "a long press in a day selects its block (the selection mode)")
+                test.check(!test.list.interactive, "the stream holds still while the finger selects")
+                const text = test.blockText(test.tracked, 3)
+                test.events.touchEvent(text).move(0, text, text.width / 2, text.height / 2).commit()
+            },
+            () => test.check(test.tracked.controller.selectionAnchorRow === 1 && test.tracked.controller.selectedRow === 3,
+                             "moving the finger extends the selection: " + test.tracked.controller.selectedRow),
+            () => test.events.touchEvent(test.list).move(0, test.list, test.list.width / 2, test.list.height - 8).commit(),
+            ...test.idle(8),
+            () => {
+                const c = test.tracked.controller
+                test.check(test.list.contentY > test.contentBefore + 50,
+                           "at the frame's bottom edge the stream scrolls: " + test.list.contentY + " > " + test.contentBefore)
+                test.check(c.selectionAnchorRow === 1 && c.selectedRow === c.lastVisibleRow(),
+                           "the selection reaches the day's last block (it stays in its day): " + c.selectedRow)
+                test.events.touchEvent(test.list).release(0, test.list, test.list.width / 2, test.list.height - 8).commit()
+            },
+            () => {
+                test.check(test.list.interactive && test.tracked.editor.selectionMode, "lifted: the stream scrolls again, the selection stays")
+                const slots = test.visibleSlots()
+                test.check(slots.length === 1 && test.findShown(slots[0], "toolbarSelectionTools") !== null,
+                           "the selection tools are docked on the stream's frame")
+                const copy = slots.length === 1 ? test.findShown(slots[0], "selectionCopy") : null
+                if (copy) {
+                    test.events.touchEvent(copy).press(0, copy, copy.width / 2, copy.height / 2).commit()
+                    test.events.touchEvent(copy).release(0, copy, copy.width / 2, copy.height / 2).commit()
+                }
+            },
+            () => {
+                const text = test.tracked.controller.clipboardText()
+                test.check(text.indexOf("- Dzień 45, punkt 0\n- Dzień 45, punkt 1\n") === 0 && text.endsWith("- Zobacz [[#Cel podróży]]"),
+                           "Kopiuj copies the day's selected blocks: " + text.slice(0, 50))
+                // Another day's selection ends this one's (one selection in the stream).
+                const other = test.dayAt(test.linkRow - 1)
+                test.check(other !== null, "the next day is there")
+                if (other)
+                    other.controller.selectRange(0, 1)
+            },
+            () => {
+                test.check(test.tracked.controller.selectionCount === 0 && !test.tracked.editor.selectionMode,
+                           "selecting in another day ends this day's selection")
+                const other = test.dayAt(test.linkRow - 1)
+                if (other) {
+                    other.controller.clearSelection()
+                    test.tracked.editor.selectBlock(2)
+                }
+            },
+            () => {
+                test.check(test.tracked.editor.selectionMode, "the selection mode again")
+                EditorInput.sendKey(test.tracked.editor.listView, Qt.Key_Back, 0, "")
+            },
+            () => test.check(!test.tracked.editor.selectionMode && test.tracked.controller.selectionCount === 0,
+                             "Back leaves the selection mode"),
+            // ---- A mouse drag in a day selects its blocks; at the frame's edge the stream scrolls ------
+            // (This run is a phone's: the mouse's own scrolling of the stream is off on desktop UIs —
+            // `acceptedButtons`, as the page's list, checked by tst_editor_qml_selection.)
+            () => test.list.positionViewAtIndex(test.linkRow, ListView.Beginning),
+            () => test.dayAt(test.linkRow) !== null && test.blockText(test.dayAt(test.linkRow), 1) !== null,
+            () => {
+                test.tracked = test.dayAt(test.linkRow)
+                test.contentBefore = test.list.contentY
+                const text = test.blockText(test.tracked, 0)
+                test.events.mousePress(text, 30, text.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+                test.events.mouseMove(text, 50, text.height / 2 + 2, -1, Qt.LeftButton, Qt.NoModifier)
+            },
+            () => {
+                const text = test.blockText(test.tracked, 2)
+                test.events.mouseMove(text, 50, text.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
+            },
+            () => {
+                const c = test.tracked.controller
+                test.check(c.selectionAnchorRow === 0 && c.selectedRow === 2 && Math.abs(test.list.contentY - test.contentBefore) < 1,
+                           "a mouse drag over a day's blocks selects them, the stream stays")
+                test.events.mouseMove(test.list, test.list.width / 2, test.list.height - 6, -1, Qt.LeftButton, Qt.NoModifier)
+            },
+            ...test.idle(8),
+            () => {
+                test.check(test.list.contentY > test.contentBefore + 50, "at the edge the stream scrolls: " + test.list.contentY)
+                test.events.mouseRelease(test.list, test.list.width / 2, test.list.height - 6, Qt.LeftButton, Qt.NoModifier, -1)
+            },
+            () => {
+                const c = test.tracked.controller
+                test.check(c.selectionAnchorRow === 0 && c.selectedRow === c.lastVisibleRow() && c.editingRow < 0,
+                           "the drag ends with the day's blocks selected, nothing edited")
+                c.clearSelection()
+            },
+            // ---- "Zaznacz tekst" of a day: over the stream's frame; wheel turns stay in the view ------
+            // (Passed on, they scrolled the stream underneath — far enough, the day and its view went.)
+            () => test.list.positionViewAtIndex(test.linkRow, ListView.Beginning),
+            () => test.dayAt(test.linkRow) !== null && test.dayAt(test.linkRow).controller.loaded,
+            () => {
+                test.tracked = test.dayAt(test.linkRow)
+                test.tracked.editor.openSelectText()
+            },
+            () => test.findShown(test.list.parent, "selectTextEdit") !== null,
+            () => {
+                const text = test.findShown(test.list.parent, "selectTextEdit")
+                test.check(text.getText(0, text.length).indexOf("Dzień 45, punkt 0") >= 0,
+                           "“Zaznacz tekst” shows the day over the stream's frame")
+                test.contentBefore = test.list.contentY
+                const flick = test.findShown(test.list.parent, "selectTextFlick")
+                flick.contentY = Math.max(0, flick.contentHeight - flick.height) // at the text's end
+                for (let i = 0; i < 5; ++i)
+                    test.events.mouseWheel(flick, flick.width / 2, flick.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+                const close = test.findShown(test.list.parent, "selectTextClose")
+                for (let i = 0; i < 3; ++i)
+                    test.events.mouseWheel(close, close.width / 2, close.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+            },
+            () => {
+                test.check(Math.abs(test.list.contentY - test.contentBefore) < 1 && test.tracked.editor.selectTextOpen,
+                           "wheel turns over the view leave the stream under it: " + test.list.contentY + " vs " + test.contentBefore)
+                EditorInput.sendKey(test.findShown(test.list.parent, "selectTextEdit"), Qt.Key_Back, 0, "")
+            },
+            () => {
+                test.check(!test.tracked.editor.selectTextOpen, "Back closes it")
                 test.list.positionViewAtBeginning()
             },
             // ---- Midnight while editing --------------------------------------------------------------

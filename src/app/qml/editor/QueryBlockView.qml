@@ -181,7 +181,13 @@ Rectangle {
             HoverHandler { id: headerHover; enabled: !Theme.touchUi }
             TapHandler {
                 enabled: !root.block.editing
-                onTapped: root.editor.startEditing(root.block.index, -1)
+                onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
+            }
+            // A finger held on it selects the block (touch UIs).
+            TapHandler {
+                enabled: !root.block.editing && Theme.touchUi
+                acceptedDevices: PointerDevice.TouchScreen
+                onLongPressed: root.editor.longPressText(root.block.index)
             }
         }
 
@@ -246,7 +252,13 @@ Rectangle {
             }
             TapHandler {
                 enabled: !root.block.editing
-                onTapped: root.editor.startEditing(root.block.index, -1)
+                onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
+            }
+            // A finger held on it selects the block (touch UIs).
+            TapHandler {
+                enabled: !root.block.editing && Theme.touchUi
+                acceptedDevices: PointerDevice.TouchScreen
+                onLongPressed: root.editor.longPressText(root.block.index)
             }
         }
 

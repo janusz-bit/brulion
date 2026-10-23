@@ -121,6 +121,27 @@ public:
     /// "outline" | "document" — the note modes, docs/SYNTAX.md §4).
     virtual QVariantMap vaultConfig() const = 0;
 
+    // --- Clipboard (the block selection, docs/UI.md "Selecting and copying") -------------------
+    /// The text/html flavour of copied blocks: `markdown` (blocks of the note at `fromPath`) as
+    /// escaped, semantic HTML — lists, headings, checkboxes, tables, links — for mail and office
+    /// apps; pictures as links, never data: URLs; links to notes as their text. "" when the host
+    /// cannot render it (the clipboard then has the Markdown only). It should contain
+    /// `<meta name="generator" content="Brulion">` (io::ClipboardHtmlMarker): a paste recognises
+    /// its own copy by it and takes the Markdown text, not the HTML — also after a restart.
+    virtual QString renderHtml(const QString &markdown, const QString &fromPath) const
+    {
+        Q_UNUSED(markdown);
+        Q_UNUSED(fromPath);
+        return {};
+    }
+    /// Pasted HTML (a browser, an office app) as Markdown; "" when the host cannot convert it (the
+    /// clipboard's plain text is pasted then).
+    virtual QString htmlToMarkdown(const QString &html) const
+    {
+        Q_UNUSED(html);
+        return {};
+    }
+
     // --- Navigation --------------------------------------------------------------------------
     /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} — the page the
     /// tag names / {view: "journal", date: "YYYY-MM-DD"}, see docs/UI.md); newPane = side

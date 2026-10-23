@@ -739,6 +739,20 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   (zimny start i działająca aplikacja, ścieżka z polskimi znakami) dochodzące do C++.
   APK testowy ma ten sam pakiet co aplikacja (zastępuje ją) — tylko na emulatorze/telefonie
   testowym.
+* Zaznaczanie i kopiowanie prawdziwym palcem (`adb shell input`, APK debugowalny jak niżej):
+  ```sh
+  scripts/android-emulator-test.sh --selection
+  ```
+  Przytrzymanie tekstu bloku w dzienniku — tryb zaznaczania (klawiatura się nie pokazuje, pasek z
+  bloku, uchwyty, narzędzia zaznaczenia na dole), stuknięcie w kolejny blok rozszerza zaznaczenie,
+  „Kopiuj” (komunikat „Skopiowano 2 bloki”, a Android 13+ pokazuje własny podgląd schowka z
+  Markdownem), Wstecz kończy zaznaczanie; potem „Zaznacz tekst” na stronie (`route.open`
+  `selectText`): przytrzymanie zaznacza słowo, a **Android sam pokazuje swoje uchwyty i menu
+  „Copy / Select all” także dla tekstu tylko do odczytu** (Qt 6.11; własne uchwyty widoku są więc
+  tylko w przeglądarce i w dotykowym interfejsie na komputerze) — „Copy” z menu systemu przychodzi
+  do aplikacji jako Ctrl+C (dokładny tekst, komunikat „Skopiowano zaznaczony tekst”), uchwyt
+  systemu przeciągnięty rozszerza zaznaczenie, „Kopiuj” w pasku widoku, Wstecz zamyka widok.
+  Zrzuty `sel-*.png` w `dist-android/emulator-test/`; sprawdzone 2026-10-23 (Android 16, Pixel 6).
 * Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
   i zmienne środowiska z intencji):
 

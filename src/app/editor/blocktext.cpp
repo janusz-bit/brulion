@@ -1,6 +1,7 @@
 #include "blocktext.h"
 
 #include "calc/table.h"
+#include "markdown/blockclipboard.h"
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
 #include "markdown/notemode.h"
@@ -589,18 +590,14 @@ QString plainTextOf(const markdown::BlockEntry &e, int maxLength)
     case BlockView::Rule: return u"―"_s;
     default: t = markdown::stripTokens(s.editText); break;
     }
-    // Heading markers, quote markers, link brackets.
+    // Heading markers, quote markers; links, emphasis and code marks (markdown::stripInlineMarkup,
+    // shared with "Kopiuj jako tekst"); property lines.
     static const QRegularExpression heading(u"^\\s{0,3}#{1,6}\\s+"_s);
     static const QRegularExpression quote(u"(^|\\n)\\s*>\\s?(\\[![^\\]]*\\][+-]?\\s*)?"_s);
-    static const QRegularExpression wikiAlias(u"!?\\[\\[(?:[^\\]|]*\\|)?([^\\]]*)\\]\\]"_s);
-    static const QRegularExpression mdLink(u"!?\\[([^\\]]*)\\]\\([^)]*\\)"_s);
-    static const QRegularExpression emphasis(u"(\\*\\*|__|~~|==|`)"_s);
     static const QRegularExpression props(u"(^|\\n)[A-Za-z0-9_-]+::[^\\n]*"_s);
     t.replace(heading, QString());
     t.replace(quote, u"\\1"_s);
-    t.replace(wikiAlias, u"\\1"_s);
-    t.replace(mdLink, u"\\1"_s);
-    t.replace(emphasis, QString());
+    t = markdown::stripInlineMarkup(t);
     t.replace(props, u"\\1"_s);
     t = t.simplified();
     if (maxLength > 0 && t.size() > maxLength)

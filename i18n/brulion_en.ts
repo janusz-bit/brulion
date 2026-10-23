@@ -121,6 +121,60 @@
     </message>
 </context>
 <context>
+    <name>BlockEditor</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="534"/>
+        <source>Copied %n block(s)</source>
+        <translation>
+            <numerusform>Copied %n block</numerusform>
+            <numerusform>Copied %n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="544"/>
+        <source>Cut %n block(s)</source>
+        <translation>
+            <numerusform>Cut %n block</numerusform>
+            <numerusform>Cut %n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="559"/>
+        <source>Deleted %n block(s)</source>
+        <translation>
+            <numerusform>Deleted %n block</numerusform>
+            <numerusform>Deleted %n blocks</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>BlockMenu</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="94"/>
+        <source>Copy %n block(s)</source>
+        <translation>
+            <numerusform>Copy %n block</numerusform>
+            <numerusform>Copy %n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="101"/>
+        <source>Cut %n block(s)</source>
+        <translation>
+            <numerusform>Cut %n block</numerusform>
+            <numerusform>Cut %n blocks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="202"/>
+        <source>Delete %n block(s)</source>
+        <translation>
+            <numerusform>Delete %n block</numerusform>
+            <numerusform>Delete %n blocks</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CalendarDayPanel</name>
     <message numerus="yes">
         <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="158"/>
@@ -526,7 +580,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="241"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="254"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -631,6 +685,17 @@
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
             <numerusform>The filters hide %n results.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>SelectionToolbar</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="45"/>
+        <source>%n block(s) selected</source>
+        <translation>
+            <numerusform>%n block selected</numerusform>
+            <numerusform>%n blocks selected</numerusform>
         </translation>
     </message>
 </context>
@@ -988,7 +1053,7 @@
 <context>
     <name>TransclusionView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TransclusionView.qml" line="325"/>
+        <location filename="../src/app/qml/editor/TransclusionView.qml" line="327"/>
         <source>%n more block(s) — open the page</source>
         <translation>
             <numerusform>%n more block — open the page</numerusform>

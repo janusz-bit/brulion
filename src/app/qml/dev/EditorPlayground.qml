@@ -89,7 +89,8 @@ ApplicationWindow {
         page.path = DevTools.editorScript === "empty" ? "Nowa strona.md"
                   : DevTools.editorScript === "title" ? host.recipePath
                   : DevTools.editorScript.startsWith("document") || DevTools.editorScript === "copylink-document"
-                    || DevTools.editorScript === "link-flash"
+                    || DevTools.editorScript === "link-flash" || DevTools.editorScript === "selection-document"
+                    || (DevTools.editorScript.startsWith("select-text") && DevTools.editorScript !== "select-text-results")
                     ? host.documentPath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
@@ -275,6 +276,25 @@ ApplicationWindow {
         anchors.bottom: parent ? parent.bottom : undefined
         height: KeyboardInsets.overlap
         sourceComponent: BKeyboardPlaceholder {}
+    }
+
+    // ---- Selecting and copying blocks (`--editor-script selectiontest`) -----------------------------
+    // The self-test lives in SelectionSelfTest.qml (qml/dev): it uses the step runner below.
+    Loader {
+        id: selectionTestLoader
+        active: false
+        sourceComponent: SelectionSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    /// Run `s` (functions) one after another on the step timer, then exit with the failures.
+    function runSteps(s) {
+        steps = s
+        stepIndex = 0
+        stepTimer.start()
     }
 
     // ---- Scripted states for screenshots -----------------------------------------------------
@@ -2658,6 +2678,9 @@ ApplicationWindow {
         case "blocklinks":
             blockLinksTest()
             break
+        case "selectiontest":
+            selectionTestLoader.active = true
+            break
         case "link-flash": {
             // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
             // selected and flashing (screenshots; --delay 1600 lands in the flash).
@@ -2782,6 +2805,78 @@ ApplicationWindow {
         case "selected":
             page.selectedRow = rowOf("Położyć hydroizolację")
             break
+        case "selection": {
+            // A block selection rising through levels (desktop: the floating tools; --touch: the
+            // selection mode with its docked tools and grips) — screenshots.
+            const from = rowOf("Zadzwonić do hydraulika")
+            editor.listView.positionViewAtIndex(from, ListView.Center)
+            if (Theme.touchUi)
+                editor.selectBlock(from)
+            page.selectRange(from, rowOf("Położyć hydroizolację"))
+            editor.listView.forceActiveFocus()
+            break
+        }
+        case "selection-document": {
+            // Paragraphs, a heading and list items of a document selected (screenshots).
+            const from = rowOf("Pierwszego dnia")
+            if (Theme.touchUi)
+                editor.selectBlock(from)
+            page.selectRange(from, rowOf("Sobota"))
+            editor.listView.forceActiveFocus()
+            break
+        }
+        case "selection-menu": {
+            // The block menu of a block in a selection: Kopiuj 3 bloki… (screenshots).
+            const from = rowOf("Zadzwonić do hydraulika")
+            const to = rowOf("Prace")
+            page.selectRange(from, to)
+            scriptLater.run(() => {
+                const item = editor.listView.itemAtIndex(from)
+                if (item)
+                    editor.openBlockMenu(from, item, item.contentLeft + Theme.space8, item.firstLineCenter + editor.lineHeight / 2)
+            })
+            break
+        }
+        case "text-menu": {
+            // The edited text's menu (desktop right-click): Wytnij, Kopiuj, Wklej, Zaznacz wszystko.
+            const row = rowOf("Kupić płytki")
+            editor.startEditing(row, -1)
+            scriptLater.run(() => {
+                const edit = editor.activeEditor
+                if (!edit)
+                    return
+                edit.select(0, 11)
+                editor.openTextMenu(edit, edit.cursorRectangle.x, edit.cursorRectangle.y + edit.cursorRectangle.height / 2)
+            })
+            break
+        }
+        case "select-text":
+        case "select-text-selected":
+        case "select-text-results": {
+            // "Zaznacz tekst": the page as one text (with part of it selected; the sample page's
+            // calculation, table and query with their results) — screenshots.
+            editor.openSelectText()
+            if (name === "select-text-results") {
+                scriptLater.run(() => {
+                    const text = window.findItem(editor.dockHost, "selectTextEdit")
+                    const flick = window.findItem(editor.dockHost, "selectTextFlick")
+                    if (!text || !flick)
+                        return
+                    const at = text.positionToRectangle(String(text.getText(0, text.length)).indexOf("Koszty"))
+                    flick.contentY = Math.max(0, Math.min(text.y + at.y - Theme.space4, flick.contentHeight - flick.height))
+                })
+            }
+            if (name === "select-text-selected") {
+                scriptLater.run(() => {
+                    const text = window.findItem(editor.dockHost, "selectTextEdit")
+                    if (!text)
+                        return
+                    const start = String(text.getText(0, text.length)).indexOf("Pierwszego")
+                    text.select(start > 0 ? start - 40 : 10, start > 0 ? start + 60 : 120)
+                })
+            }
+            break
+        }
         case "source":
             editor.toggleSourceMode()
             break

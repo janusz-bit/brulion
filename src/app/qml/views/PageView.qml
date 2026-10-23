@@ -39,7 +39,8 @@ import Brulion
 // through the editor (BlockEditor.copyCurrentLink); the documentation notebook writes no block ids
 // (PageController.allowNewBlockIds).
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
-// dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
+// dialog), "menu" (the page menu), "selectText" (the "Zaznacz tekst" view), "unlinked" (the
+// unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
@@ -227,6 +228,9 @@ FocusScope {
             break
         case "menu":
             menuTimer.restart()
+            break
+        case "selectText":
+            editor.later(() => editor.openSelectText())
             break
         case "unlinked":
             refsSection.unlinkedOpen = true
@@ -471,6 +475,15 @@ FocusScope {
             onTriggered: root.toggleNoteMode()
         }
         BMenuItem {
+            objectName: "pageMenuSelectText"
+            visible: !page.sourceMode
+            height: visible ? implicitHeight : 0
+            text: qsTr("Select text")
+            iconName: "text-select"
+            enabled: page.loaded
+            onTriggered: editor.openSelectText()
+        }
+        BMenuItem {
             text: page.sourceMode ? qsTr("Edit as blocks") : qsTr("Markdown source")
             iconName: "code"
             shortcut: root.inSidePanel ? "" : "Ctrl+E"
@@ -545,6 +558,10 @@ FocusScope {
                 root.toggleNoteMode()
             } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute) {
                 editor.copyCurrentLink(action.slice(9))
+            } else if (action === "selectText" && root.visible && !root.inSidePanel && !root.pictureRoute) {
+                if (page.sourceMode)
+                    editor.toggleSourceMode()
+                editor.openSelectText()
             }
         }
     }

@@ -396,6 +396,19 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
   nie wykryje (nie sprawdzone jeszcze ręcznie w Firefoksie i Safari). Ctrl+Shift+C w Chromium i
   Firefoksie otwiera narzędzia deweloperskie, zanim strona dostanie klawisze — wtedy zostaje
   menu bloku albo paleta poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”).
+  Tak samo kopiowanie zaznaczonych bloków (docs/UI.md „Selecting and copying”: Ctrl+C / Ctrl+X,
+  „Kopiuj” w pasku zaznaczenia i w menu bloku, „Zaznacz tekst”): `QClipboard` dostaje Markdown
+  jako text/plain i — gdy przeglądarka przyjmie (Clipboard API z `ClipboardItem`; Firefox i Safari
+  różnie) — HTML jako text/html; kopiowanie odbywa się w obsłudze klawisza albo kliknięcia, więc
+  liczy się jako gest użytkownika. Odczyt kontrolny po kopiowaniu (na pulpicie i Androidzie
+  chroni przed „Skopiowano” bez kopii) w przeglądarce niczego nie gwarantuje: Qt zapisuje do
+  schowka przeglądarki asynchronicznie i zwraca własną kopię danych, a odmowę (brak gestu, http,
+  Safari, Firefox bez `ClipboardItem` z HTML) tylko loguje — toast „Skopiowano” może wtedy być
+  nieprawdziwy. Schowka „primary selection” (X11) w przeglądarce nie ma.
+  Wklejanie: Ctrl+V przychodzi do strony jako zdarzenie `paste`, z którego Qt bierze tekst i HTML
+  schowka (HTML z innych aplikacji Brulion zamienia na Markdown); menu edytowanego tekstu nie ma w
+  przeglądarce „Wklej” — strona nie może sama odczytać schowka bez zgody. Sprawdzone tylko w
+  testach desktopowych (offscreen) i na emulatorze Androida, nie ręcznie w przeglądarkach.
 * **Żadnych powtarzanych timerów 0 ms.** Dyspozytor zdarzeń Qt 6.11.2 dla WebAssembly
   (`QEventDispatcherWasm::sendTimerEvents()`) ustawia kolejny `setTimeout` przeglądarki tylko
   wtedy, gdy `QTimerInfoList::activateTimers()` zwróci > 0, a ta funkcja nie liczy timerów o

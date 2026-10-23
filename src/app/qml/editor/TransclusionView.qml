@@ -290,6 +290,8 @@ Column {
                             TapHandler {
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 onTapped: (eventPoint) => {
+                                    if (root.editor.blockTapped(root.block.index))
+                                        return // the touch selection mode
                                     const link = body.linkAt(eventPoint.position.x, eventPoint.position.y)
                                     if (link !== "")
                                         root.activate(link, entry.modelData.path || "", entry.modelData.line)
@@ -314,7 +316,7 @@ Column {
                     font.italic: true
                     color: Theme.fgFaint
                     wrapMode: Text.Wrap
-                    TapHandler { onTapped: root.editor.startEditing(root.block.index, -1) }
+                    TapHandler { onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1) }
                 }
                 Text {
                     id: moreText

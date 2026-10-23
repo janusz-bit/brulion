@@ -194,6 +194,11 @@ public:
     QSize assetPixelSize(const QString &path) const override;
     Q_INVOKABLE QString saveAttachment(const QString &fileName, const QByteArray &data) override;
     QVariantMap vaultConfig() const override;
+    /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
+    /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
+    QString renderHtml(const QString &markdown, const QString &fromPath) const override;
+    /// Pasted HTML as Markdown (io::htmlToMarkdown); workspaceclipboard.cpp.
+    QString htmlToMarkdown(const QString &html) const override;
     /// Forwards the route to the shell (navigationRequested) after resolveRoute().
     Q_INVOKABLE void navigate(const QVariantMap &route, bool newPane = false) override;
     Q_INVOKABLE void openUrl(const QUrl &url) override;

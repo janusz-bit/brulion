@@ -80,6 +80,13 @@
   bloku i nagłówka skopiujesz z menu bloku (prawy przycisk myszy, na telefonie „Więcej” nad
   klawiaturą) albo `Ctrl+Shift+C`: `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]`; kliknięty
   przewija do celu i go podświetla.
+* **Zaznaczanie i kopiowanie grup bloków.** Kilka punktów listy albo akapitów dokumentu
+  zaznaczysz `Shift+↑/↓`, `Ctrl+A`, `Shift`+kliknięciem, przeciągnięciem myszą albo — na
+  telefonie — przytrzymaniem palca na tekście (potem stuknięcia i uchwyty). Zaznaczone bloki
+  (z dziećmi) kopiujesz, wycinasz, usuwasz, wcinasz i przenosisz razem: w schowku są jako
+  Markdown, a w poczcie czy edytorze dokumentów wklejają się sformatowane; „Kopiuj jako tekst”
+  daje zwykły tekst z punktorami. Dowolny fragment strony — także kawałki kilku akapitów —
+  zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej*, paleta poleceń).
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -260,6 +267,9 @@ usuwa go w całości.
 | `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
 | `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
+| `Shift+↑` / `Shift+↓` | zaznacz bloki (z edytowanego bloku: gdy zaznaczenie tekstu dojdzie do jego brzegu) |
+| `Ctrl+A` (dwa razy) | zaznacz tekst bloku, potem wszystkie bloki |
+| `Ctrl+C` / `Ctrl+X` / `Ctrl+V` | kopiuj / wytnij / wklej — zaznaczone bloki albo tekst w bloku |
 | `Ctrl+Shift+C` | skopiuj odwołanie do bloku `((…))` |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
@@ -350,6 +360,11 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
 * Copy a link to any block or heading from the block menu (a right-click, or "More" on the
   phone's editing toolbar) or with `Ctrl+Shift+C`: `((id))`, `[[Page#^id]]`, `[[Page#Heading]]`
   or an embed; following one scrolls to it and highlights it.
+* Select groups of blocks — bullets or a document's paragraphs, with their children — with
+  `Shift+↑/↓`, `Ctrl+A`, Shift+click, a mouse drag or, on phones, a long press (then taps and
+  grips), and copy, cut, delete, indent or move them together: the clipboard gets Markdown plus
+  formatted HTML for mail and office apps ("Copy as plain text" too). Any part of a page, across
+  paragraphs, is selected in the read-only "Select text" view.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.

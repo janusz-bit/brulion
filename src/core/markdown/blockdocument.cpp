@@ -1289,6 +1289,147 @@ EditResult BlockDocument::setTaskStatus(int i, TaskStatus status, QDate today, i
     return applyTaskEdit(i, lineInBlock, out);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Ranges
+// ---------------------------------------------------------------------------------------------
+
+QList<int> BlockDocument::rangeTops(int first, int last) const
+{
+    QList<int> tops;
+    if (first < 0 || last >= count() || first > last)
+        return tops;
+    for (int i = first; i <= last; ++i) {
+        if (at(i).kind != BlockKind::Frontmatter && at(i).parent < first)
+            tops.append(i);
+    }
+    return tops;
+}
+
+EditResult BlockDocument::removeRange(int first, int last)
+{
+    if (first < 0 || last >= count() || first > last)
+        return {};
+    const Snapshot before = snapshot();
+    // The rows to go: [first, end) — the range with the subtrees of its blocks.
+    int end = first;
+    QList<quint64> parents; // lists that lose items (renumbered afterwards); 0: the top level
+    for (int i = first; i <= last; ++i) {
+        end = std::max(end, subtreeEnd(i));
+        const int p = at(i).parent;
+        const quint64 parentUid = p >= 0 ? at(p).uid : 0;
+        if (p < first && !parents.contains(parentUid))
+            parents.append(parentUid);
+    }
+    const bool wasLast = end == count();
+    const bool noFinalBreak = wasLast && m_items[end - 1].eol.isEmpty();
+    removeItems(first, end);
+    if (wasLast && first > 0 && noFinalBreak && m_items[first - 1].entry.trailing.isEmpty())
+        m_items[first - 1].eol.clear();
+    recompute();
+    for (const quint64 uid : std::as_const(parents)) {
+        const int p = uid ? indexOfUid(uid) : -1;
+        if (!uid || p >= 0)
+            renumberChildren(p);
+    }
+    ensureSeparated(first - 1);
+    fixEnds();
+    const int focus = first > 0 ? first - 1 : (first < count() ? first : -1);
+    return finish(before, focus, focus >= 0 && isTextBlock(focus) ? int(at(focus).body.size()) : -1);
+}
+
+EditResult BlockDocument::indentRange(int first, int last)
+{
+    QList<quint64> tops;
+    for (const int i : rangeTops(first, last))
+        tops.append(at(i).uid);
+    if (tops.isEmpty())
+        return {};
+    const Snapshot before = snapshot();
+    const QList<Item> savedItems = m_items;
+    const QString savedLeading = m_leading;
+    for (const quint64 uid : std::as_const(tops)) {
+        const int i = indexOfUid(uid);
+        const int depth = at(i).depth;
+        indent(i);
+        const int ni = indexOfUid(uid);
+        if (ni < 0 || !isListItem(ni) || at(ni).depth != depth + 1) {
+            // All or nothing: one block that cannot go deeper keeps the whole range as it was.
+            m_items = savedItems;
+            m_leading = savedLeading;
+            return {};
+        }
+    }
+    return finish(before, indexOfUid(tops.first()), -1);
+}
+
+EditResult BlockDocument::outdentRange(int first, int last)
+{
+    QList<quint64> tops;
+    for (const int i : rangeTops(first, last))
+        tops.append(at(i).uid);
+    if (tops.isEmpty())
+        return {};
+    const Snapshot before = snapshot();
+    bool any = false;
+    for (qsizetype k = tops.size() - 1; k >= 0; --k)
+        any = outdent(indexOfUid(tops[k])).changed() || any;
+    if (!any)
+        return {};
+    return finish(before, indexOfUid(tops.first()), -1);
+}
+
+EditResult BlockDocument::moveRangeUp(int first, int last)
+{
+    const QList<int> tops = rangeTops(first, last);
+    if (tops.isEmpty())
+        return {};
+    for (qsizetype k = 1; k < tops.size(); ++k) {
+        if (nextSibling(tops[k - 1]) != tops[k])
+            return {};
+    }
+    const int a = tops.first();
+    const int end = subtreeEnd(tops.last());
+    const int s = prevSibling(a);
+    if (s < 0 || s < pinnedCount())
+        return {};
+    const Snapshot before = snapshot();
+    const quint64 uid = at(a).uid;
+    swapRanges(s, a, end);
+    recompute();
+    renumberAround(uid);
+    ensureSeparated(s - 1);
+    ensureSeparated(s + (end - a) - 1);
+    ensureSeparated(end - 1);
+    fixEnds();
+    return finish(before, indexOfUid(uid), -1);
+}
+
+EditResult BlockDocument::moveRangeDown(int first, int last)
+{
+    const QList<int> tops = rangeTops(first, last);
+    if (tops.isEmpty())
+        return {};
+    for (qsizetype k = 1; k < tops.size(); ++k) {
+        if (nextSibling(tops[k - 1]) != tops[k])
+            return {};
+    }
+    const int a = tops.first();
+    const int t = nextSibling(tops.last());
+    if (t < 0 || a < pinnedCount())
+        return {};
+    const Snapshot before = snapshot();
+    const quint64 uid = at(a).uid;
+    const int end = subtreeEnd(t);
+    swapRanges(a, t, end);
+    recompute();
+    renumberAround(uid);
+    ensureSeparated(a - 1);
+    ensureSeparated(a + (end - t) - 1);
+    ensureSeparated(end - 1);
+    fixEnds();
+    return finish(before, indexOfUid(uid), -1);
+}
+
 BlockIdResult BlockDocument::ensureBlockId(int i, const std::function<bool(const QString &)> &isTaken)
 {
     if (i < 0 || i >= count())

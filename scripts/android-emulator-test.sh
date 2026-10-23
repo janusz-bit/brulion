@@ -18,9 +18,17 @@
 # a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
 # app arguments and environment only to those):
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
+# With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
+# and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
+# stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
+# Kopiuj, Back; then "Zaznacz tekst" on a page: a long press selects a word with the system's
+# handles and popup (Qt gives them to read-only text on Android), the popup's Copy, a handle
+# dragged, Kopiuj, Back.
+# Screenshots of each step (sel-*.png); the same debuggable APK.
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -57,14 +65,18 @@ fi
 
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
 KEYBOARD=0
+SELECTION=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
+  shift
+elif [[ ${1:-} == --selection ]]; then
+  SELECTION=1
   shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -297,6 +309,79 @@ if ((KEYBOARD)); then
   grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true
   info "Result"
   cat "$OUT/keyboard-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- selecting and copying with a finger (--selection) -------------------------------------------
+
+dp() { echo $(($1 * DENSITY / 160)); } # logical px -> physical px
+long_press() { adb shell input swipe "$1" "$2" "$1" "$2" 1400; } # <x> <y>
+
+if ((SELECTION)); then
+  info "Selection: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  app_shot sel-1-journal
+  # Today's first block (the sample notebook on a Pixel 6: a quarter down the screen).
+  long_press $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  sleep 2
+  app_shot sel-2-long-press
+  check "a long press on a block's text brings up no keyboard (the selection mode)" ime_hidden
+  # The next block a few lines down: a tap extends the selection.
+  adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * 31 / 100))
+  sleep 2
+  app_shot sel-3-extended
+  check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
+  # Kopiuj: the docked tools' first button after "Zaznaczono …", right above the navigation bar
+  # (its top from `dumpsys window displays`: "type=navigationBars frame=[l,t][r,b]").
+  nav_top=$(adb shell dumpsys window displays | grep -E 'InsetsSource .*type=navigationBars' | head -n 1 |
+    sed -nE 's/.* frame=\[[0-9]+,([0-9]+)\].*/\1/p')
+  nav_top=${nav_top:-$((SCREEN_H - $(dp 24)))}
+  echo "    the navigation bar starts at $nav_top px"
+  adb shell input tap "$(dp 160)" $((nav_top - $(dp 27)))
+  sleep 2
+  app_shot sel-4-copied
+  adb shell input keyevent 4
+  sleep 2
+  app_shot sel-5-back
+  check "the app is still running" running
+  # "Zaznacz tekst" on a page of the sample notebook (route.open). Qt splits the arguments like
+  # QProcess::splitCommand: at spaces (a path without them), a quote written as three of them.
+  start_app '--demo --locale pl --route {"""view""":"""page""","""path""":"""Przepisy.md""","""open""":"""selectText"""}'
+  app_shot sel-6-select-text
+  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  sleep 2
+  app_shot sel-7-word
+  # The system's popup over the selection (Android shows its handles and Copy / Select all for
+  # read-only text too): its Copy goes through the app's Ctrl+C (the exact text, a toast).
+  adb shell input tap $((SCREEN_W * 10 / 100)) $((SCREEN_H * 163 / 1000))
+  sleep 2
+  app_shot sel-7b-system-copy
+  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  sleep 2
+  # The system's end handle (under the word's end) dragged down two lines.
+  adb shell input swipe $((SCREEN_W * 36 / 100)) $((SCREEN_H * 25 / 100)) \
+    $((SCREEN_W * 60 / 100)) $((SCREEN_H * 25 / 100 + $(dp 70))) 900
+  sleep 2
+  app_shot sel-8-handle
+  # Kopiuj: the view's button at the right of its bar, under the app's top bar.
+  adb shell input tap $((SCREEN_W * 887 / 1000)) $((SCREEN_H * 143 / 1000))
+  sleep 2
+  app_shot sel-9-copied
+  adb shell input keyevent 4
+  sleep 2
+  app_shot sel-10-closed
+  adb logcat -d >"$OUT/selection-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selection-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/selection-logcat.txt'"
+  grep -E 'qml|Skopiowano|brulion' "$OUT/selection-logcat.txt" | tail -n 40 >"$OUT/selection-summary.txt" || true
+  info "Result"
+  cat "$OUT/selection-summary.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

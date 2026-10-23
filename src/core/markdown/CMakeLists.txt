@@ -1,11 +1,13 @@
 # markdown — the Brulion Markdown dialect (docs/SYNTAX.md): parseNote, inline links/tags, tokens,
 # YAML frontmatter, pure content edits, journals, templates, note modes (outline / document), the
 # links Brulion copies (heading fragments, the heading matcher),
-# BlockDocument (block editor model) and InlineRenderer (Qt rich text). Public headers:
+# BlockDocument (block editor model) with what a block selection copies (blockclipboard.h) and
+# InlineRenderer (Qt rich text). Public headers:
 # markdown.h (overview) and the headers it includes; internal headers end in _p.h.
 brulion_add_core_module(markdown
     SOURCES
         markdown.h
+        blockclipboard.h blockclipboard.cpp
         blockdocument.h blockdocument.cpp
         edit.h edit.cpp
         frontmatter.h frontmatter.cpp

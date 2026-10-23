@@ -41,6 +41,17 @@ import Brulion
 // A leading "# Title" repeating the page title is shown above the page properties
 // (PageController.titleRow, see BlockDelegate); Up/Down follow that on-screen order.
 // `notice(text, kind)` tells about problems the host should show as a toast.
+// Block selection (docs/UI.md "Selecting and copying"; PageController keeps it as two uids):
+// Shift+↑/↓ (also from the first / last line of an edited block), Ctrl+A twice, Shift+click, a
+// mouse drag from one block into another (the list no longer scrolls with a left drag on non-touch
+// UIs; it scrolls near its edges while selecting), the block menu's "Zaznacz"; on touch UIs a long
+// press on a block's text — the selection mode: taps extend or shrink, two grips adjust the ends,
+// the selection tools are docked where the editing toolbar is ("Gotowe" and Back leave). Ctrl+C /
+// Ctrl+X / Ctrl+V / Delete / Tab / Alt+↑/↓ / Ctrl+Enter act on the whole selection; desktops show a
+// compact SelectionToolbar at the top when two or more blocks are selected. In an edited block
+// Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Wytnij / Kopiuj / Wklej / Zaznacz
+// wszystko. openSelectText() shows the whole page in the read-only "Zaznacz tekst" view
+// (SelectTextView) for a selection of any characters across blocks.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
@@ -108,7 +119,8 @@ FocusScope {
     readonly property string toolbarMode: !touch || controller === null ? ""
                                           : controller.sourceMode ? (sourceEditing ? "source" : "")
                                           : controller.editingRow >= 0 ? "block"
-                                          : editingTable !== null ? "cell" : ""
+                                          : editingTable !== null ? "cell"
+                                          : selectionMode && selectionCount > 0 ? "selection" : ""
     readonly property bool toolbarVisible: toolbarMode !== ""
     readonly property real toolbarHeight: Theme.editToolbarHeight
     /// Where the toolbar docks: an item that does not scroll with the blocks and whose bottom
@@ -140,6 +152,16 @@ FocusScope {
 
     /// Something to tell the user (a toast): kind "error" | "info" | "success".
     signal notice(string text, string kind)
+
+    // ---- Block selection (docs/UI.md "Selecting and copying") -----------------------------------
+    /// Touch UIs: the selection mode (a long press on a block's text, "Zaznacz" in the block menu or
+    /// the editing toolbar): taps extend or shrink the selection instead of editing, grips at the
+    /// band's ends adjust it, the selection tools are docked like the editing toolbar ("selection"
+    /// toolbarMode); "Gotowe" and Back leave it. Ends with the selection or when editing starts.
+    property bool selectionMode: false
+    readonly property int selectionCount: controller !== null ? controller.selectionCount : 0
+    /// The "Zaznacz tekst" view is open (SelectTextView).
+    readonly property bool selectTextOpen: selectTextLoader.active
 
     // The title above the properties panel (BlockDelegate trades their places on screen): set by
     // those two delegates.
@@ -435,6 +457,155 @@ FocusScope {
         return copyLink(heading, "heading")
     }
 
+    // ---- Selecting and copying blocks (docs/UI.md "Selecting and copying") ------------------------
+
+    /// Stop editing (the word being composed kept, the keyboard's suggestions closed) before a
+    /// block selection takes over; the list gets the keyboard.
+    function leaveEditingForSelection() {
+        if (activeEditor)
+            EditorInput.commitPreedit(activeEditor)
+        closeSuggestions()
+        if (controller && controller.editingRow >= 0)
+            controller.stopEditing()
+        list.forceActiveFocus()
+    }
+    /// Select `row` (with its subtree) and, on touch UIs, enter the selection mode (the keyboard
+    /// goes away, the selection tools dock where the editing toolbar was).
+    function selectBlock(row) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        leaveEditingForSelection()
+        if (touch)
+            Qt.inputMethod.hide()
+        controller.selectedRow = row
+        selectionMode = touch && controller.selectionCount > 0
+        ensureRowVisible(row)
+    }
+    function leaveSelectionMode() {
+        selectionMode = false
+        if (controller)
+            controller.clearSelection()
+    }
+    /// A tap or click that would start editing `row` (its text, a code or table frame, a query, an
+    /// embed, a rule, a bullet or number): Shift+click (`modifiers`, else the event's own:
+    /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it; in the
+    /// touch selection mode a tap moves the selection's end there. True when it was taken.
+    function blockTapped(row, modifiers) {
+        // The press that ended a drag selection is no tap (its release may be on a block).
+        if (drag.selected)
+            return true
+        if (!controller || row < 0)
+            return false
+        const mods = modifiers !== undefined ? modifiers : EditorInput.keyboardModifiers()
+        if (!touch && (mods & Qt.ShiftModifier)) {
+            extendSelectionTo(row)
+            return true
+        }
+        if (!selectionMode)
+            return false
+        if (controller.blocks.get(row).view !== "frontmatter")
+            controller.extendSelectionTo(row)
+        return true
+    }
+    /// Shift+click on `row`: the selection from the block being edited or the selection's anchor
+    /// to it (a block alone when there is neither).
+    function extendSelectionTo(row) {
+        if (!controller || row < 0)
+            return
+        const anchor = controller.selectionAnchorRow >= 0 ? controller.selectionAnchorRow : controller.editingRow
+        leaveEditingForSelection()
+        controller.selectRange(anchor >= 0 ? anchor : row, row)
+        ensureRowVisible(row)
+    }
+    /// Ctrl+A with blocks: every block of the page (in a zoom the zoomed subtree).
+    function selectAllBlocks() {
+        if (!controller)
+            return
+        leaveEditingForSelection()
+        controller.selectAll()
+        if (touch && controller.selectionCount > 0)
+            selectionMode = true
+    }
+    /// Why a copy copied nothing (PageController.copySelection's reason).
+    function selectionCopyFailure(reason) {
+        switch (reason) {
+        case "tooLarge": return qsTr("The selection is too large to copy. Select fewer blocks.")
+        case "empty": return qsTr("Nothing to copy")
+        default: return copyFailure(reason)
+        }
+    }
+    /// Copy the selection (Markdown with HTML, or `plainText`) and say so. True when copied.
+    function copySelection(plainText) {
+        if (!controller)
+            return false
+        const r = controller.copySelection(plainText === true)
+        if (r.ok)
+            notice(qsTr("Copied %n block(s)", "", r.count), "success")
+        else
+            notice(selectionCopyFailure(r.reason), r.reason === "empty" ? "info" : "error")
+        return r.ok
+    }
+    function cutSelection() {
+        if (!controller)
+            return false
+        const r = controller.cutSelection()
+        if (r.ok) {
+            notice(qsTr("Cut %n block(s)", "", r.count), "success")
+            if (controller.selectedRow >= 0)
+                ensureRowVisible(controller.selectedRow)
+        } else {
+            notice(selectionCopyFailure(r.reason), r.reason === "empty" ? "info" : "error")
+        }
+        return r.ok
+    }
+    function deleteSelection() {
+        if (!controller)
+            return
+        const count = Math.max(1, controller.selectionCount)
+        const multiple = controller.multiSelection
+        const focus = controller.deleteSelection()
+        if (multiple)
+            notice(qsTr("Deleted %n block(s)", "", count), "info")
+        if (focus >= 0)
+            ensureRowVisible(focus)
+    }
+    /// Ctrl+V with blocks selected: the clipboard's text replaces them.
+    function pasteOverSelection() {
+        if (!controller)
+            return
+        const r = controller.pasteOverSelection()
+        if (r.row < 0)
+            notice(qsTr("Nothing to paste"), "info")
+        else
+            ensureRowVisible(r.row)
+    }
+    /// Copy the exact characters [from, to) of the edited block `edit` (Ctrl+C, Ctrl+X, the text
+    /// menu: TextEdit's own copy turns no-break spaces into spaces); `cut` removes them.
+    function copyEditSelection(edit, cut) {
+        if (!controller || !edit || edit.selectionStart === edit.selectionEnd)
+            return false
+        const from = edit.selectionStart
+        const to = edit.selectionEnd
+        const r = controller.copyEditText(edit.row, from, to, cut === true)
+        if (!r.ok) {
+            notice(selectionCopyFailure(r.reason), "error")
+            return false
+        }
+        if (cut)
+            edit.remove(from, to)
+        return true
+    }
+    /// Paste into the edited block `edit` at its selection: Markdown splits into blocks, HTML from
+    /// other apps comes as Markdown (PageController.pasteClipboard). False when the clipboard has
+    /// no text (then nothing happens).
+    function pasteIntoEdit(edit) {
+        if (!controller || !edit)
+            return false
+        if (edit.preeditText !== "")
+            EditorInput.commitPreedit(edit)
+        return controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd).row >= 0
+    }
+
     /// The row drawn at (x, y) of the list's content item; -1 when none (the header, the footer, a
     /// gap). Not ListView.indexAt(): it goes by the rows' layout and ignores the Translate that
     /// draws the page's title above its properties (titleFirst); mapping into each delegate goes
@@ -449,8 +620,11 @@ FocusScope {
         return -1
     }
 
-    /// A click on the rendered text of `row` at (x, y) in that text's coordinates.
-    function editAt(row, x, y) {
+    /// A click on the rendered text of `row` at (x, y) in that text's coordinates (`modifiers`: the
+    /// click's, see blockTapped()).
+    function editAt(row, x, y, modifiers) {
+        if (blockTapped(row, modifiers))
+            return
         pendingClickRow = row
         pendingClick = Qt.point(x, y)
         startEditing(row, -1)
@@ -465,6 +639,27 @@ FocusScope {
         if (select && row >= 0)
             controller.selectedRow = row
         list.forceActiveFocus()
+    }
+
+    /// Undo (`redo` false) or redo a step from the editor (keys, the toolbar). A step that brings a
+    /// block selection back ends the editing of another block (PageController.restore): the keys
+    /// go to the selection, and on touch UIs its tools replace the keyboard.
+    function undoStep(redo) {
+        if (!controller)
+            return
+        if (redo)
+            controller.redo()
+        else
+            controller.undo()
+        if (controller.editingRow >= 0 || controller.selectionCount === 0)
+            return
+        closeSuggestions()
+        if (touch) {
+            Qt.inputMethod.hide()
+            selectionMode = true
+        }
+        if (!list.activeFocus)
+            list.forceActiveFocus()
     }
 
     function toggleSourceMode() {
@@ -700,18 +895,27 @@ FocusScope {
         }
 
         // A copied picture (or copied files) goes in as an attachment, not as text.
-        if (((ctrl && !alt && !shift && event.key === Qt.Key_V) || (shift && !ctrl && event.key === Qt.Key_Insert))
-                && !multiline && controller.clipboardHasImage()) {
+        const pasteKey = (ctrl && !alt && !shift && event.key === Qt.Key_V) || (shift && !ctrl && event.key === Qt.Key_Insert)
+        if (pasteKey && !multiline && controller.clipboardHasImage()) {
             const pasted = controller.pasteImage(row, edit.selectionStart, edit.selectionEnd)
             if (pasted.row >= 0)
                 return true
         }
+        // Text: Markdown splits into blocks, HTML from other apps comes as Markdown, ids that
+        // resolve elsewhere are dropped (PageController.pasteClipboard). Code and other multi-line
+        // blocks take the text as it is (TextEdit's own paste).
+        if (pasteKey && !multiline && pasteIntoEdit(edit))
+            return true
+        // Ctrl+Insert / Shift+Delete: copy / cut, exactly (like Ctrl+C / Ctrl+X).
+        if (!alt && edit.selectionStart !== edit.selectionEnd
+                && ((ctrl && !shift && event.key === Qt.Key_Insert) || (shift && !ctrl && event.key === Qt.Key_Delete))) {
+            copyEditSelection(edit, event.key === Qt.Key_Delete)
+            return true
+        }
         if (ctrl && !alt) {
             switch (event.key) {
-            case Qt.Key_Z:
-                if (shift) controller.redo(); else controller.undo()
-                return true
-            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_Z: undoStep(shift); return true
+            case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E: toggleSourceMode(); return true
             case Qt.Key_Period: controller.toggleFold(row); return true
             case Qt.Key_Return:
@@ -723,10 +927,30 @@ FocusScope {
                     controller.cycleTask(row)
                 return true
             case Qt.Key_C:
-                // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text.
-                if (!shift)
+                // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text
+                // exactly (TextEdit's own copy turns no-break spaces into spaces).
+                if (shift) {
+                    copyCurrentLink("blockRef")
+                    return true
+                }
+                if (edit.selectionStart === edit.selectionEnd)
                     return false
-                copyCurrentLink("blockRef")
+                copyEditSelection(edit, false)
+                return true
+            case Qt.Key_X:
+                if (shift || edit.selectionStart === edit.selectionEnd)
+                    return false
+                copyEditSelection(edit, true)
+                return true
+            case Qt.Key_A:
+                // Notion's second Ctrl+A: the whole block's text is selected already (or there is
+                // none): every block of the page.
+                if (shift)
+                    return false
+                if (edit.length === 0 || (edit.selectionStart === 0 && edit.selectionEnd === edit.length))
+                    selectAllBlocks()
+                else
+                    edit.selectAll()
                 return true
             }
             return false
@@ -801,18 +1025,50 @@ FocusScope {
                 goToRow(visualPrevious(row), "bottom", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
                 return true
             }
+            // Shift+↑ on the first line: the text selection to the block's start, then the blocks.
+            if (shift && isFirstLine(edit))
+                return extendFromEdit(edit, -1)
             return false
         case Qt.Key_Down:
             if (!shift && isLastLine(edit)) {
                 goToRow(visualNext(row), "top", edit.mapToItem(editor, edit.cursorRectangle.x, 0).x)
                 return true
             }
+            if (shift && isLastLine(edit))
+                return extendFromEdit(edit, 1)
             return false
         case Qt.Key_Escape:
             stopEditing(true)
+            // A touch UI with a keyboard: the selected block has the selection's tools.
+            if (touch && controller.selectionCount > 0)
+                selectionMode = true
             return true
         }
         return false
+    }
+
+    /// Shift+↑ on the first line (`step` -1) / Shift+↓ on the last one (1) of the edited block: the
+    /// text selection first goes to the block's start / end; once it is there, editing stops and
+    /// the block and the previous / next one are selected (the block alone at the page's edge).
+    function extendFromEdit(edit, step) {
+        if (step < 0 && edit.cursorPosition > 0) {
+            edit.moveCursorSelection(0, TextEdit.SelectCharacters)
+            return true
+        }
+        if (step > 0 && edit.cursorPosition < edit.length) {
+            edit.moveCursorSelection(edit.length, TextEdit.SelectCharacters)
+            return true
+        }
+        const row = edit.row
+        closeSuggestions()
+        // From the edited block (the controller stops editing).
+        if (!controller.extendSelection(step))
+            controller.selectRange(row, row)
+        list.forceActiveFocus()
+        if (touch && controller.selectionCount > 0)
+            selectionMode = true
+        ensureRowVisible(controller.selectedRow)
+        return true
     }
 
     /// A key reached the list while a block is being edited: its delegate was destroyed (scrolled
@@ -847,7 +1103,9 @@ FocusScope {
         return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
     }
 
-    /// Keys while a block is selected (not editing).
+    /// Keys while blocks are selected (not editing): one block (Esc) or a range — Shift+↑/↓ extend
+    /// or shrink it, Ctrl+A selects every block, Ctrl+C / Ctrl+X / Ctrl+V copy, cut and paste over
+    /// it, Delete removes it, Tab / Shift+Tab, Alt+↑/↓ and Ctrl+Enter act on all of it.
     function handleSelectionKey(event) {
         if (!controller)
             return false
@@ -855,23 +1113,52 @@ FocusScope {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0
         const alt = (event.modifiers & Qt.AltModifier) !== 0
+        // Blocks from one end to another (a block selected alone — with the children it brings
+        // along — keeps the block's own keys: Ctrl+Enter changes it, not its children).
+        const range = row >= 0 && controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row
         if (ctrl) {
             switch (event.key) {
-            case Qt.Key_Z: if (shift) controller.redo(); else controller.undo(); return true
-            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_Z: undoStep(shift); return true
+            case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E: toggleSourceMode(); return true
             case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
                 if (row >= 0 && shift)
-                    openTaskStatusMenuFor(row)
+                    openTaskStatusMenuFor(row, range)
+                else if (row >= 0 && range)
+                    controller.cycleSelectionTasks()
                 else if (row >= 0)
                     controller.cycleTask(row)
                 return true
             case Qt.Key_C:
-                if (!shift)
+                if (shift) {
+                    copyCurrentLink("blockRef") // nothing selected: says what to do
+                    return true
+                }
+                if (row < 0)
                     return false
-                copyCurrentLink("blockRef") // nothing selected: says what to do
+                copySelection(false)
+                return true
+            case Qt.Key_Insert:
+                if (row < 0 || shift)
+                    return false
+                copySelection(false)
+                return true
+            case Qt.Key_X:
+                if (row < 0 || shift)
+                    return false
+                cutSelection()
+                return true
+            case Qt.Key_V:
+                if (row < 0 || shift)
+                    return false
+                pasteOverSelection()
+                return true
+            case Qt.Key_A:
+                if (shift)
+                    return false
+                selectAllBlocks()
                 return true
             }
             return false
@@ -885,9 +1172,31 @@ FocusScope {
             }
             return false
         }
+        if (shift && !alt) {
+            switch (event.key) {
+            case Qt.Key_Up:
+            case Qt.Key_Down:
+                controller.extendSelection(event.key === Qt.Key_Down ? 1 : -1)
+                // A touch UI with a keyboard: the range has the selection's tools and grips.
+                if (touch && controller.selectionCount > 0)
+                    selectionMode = true
+                ensureRowVisible(controller.selectedRow)
+                return true
+            case Qt.Key_Insert: pasteOverSelection(); return true
+            case Qt.Key_Delete: cutSelection(); return true
+            }
+        }
         if (alt) {
-            if (event.key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.selectedRow); return true }
-            if (event.key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.selectedRow); return true }
+            if (event.key === Qt.Key_Up) {
+                if (range) controller.moveSelectionUp(); else controller.moveUp(row)
+                ensureRowVisible(controller.selectedRow)
+                return true
+            }
+            if (event.key === Qt.Key_Down) {
+                if (range) controller.moveSelectionDown(); else controller.moveDown(row)
+                ensureRowVisible(controller.selectedRow)
+                return true
+            }
             return false
         }
         switch (event.key) {
@@ -903,6 +1212,7 @@ FocusScope {
         }
         case Qt.Key_Return:
         case Qt.Key_Enter:
+            selectionMode = false
             if (controller.blocks.get(row).view === "table") {
                 const item = list.itemAtIndex(row) as BlockDelegate
                 if (item)
@@ -912,14 +1222,18 @@ FocusScope {
             startEditing(row, -1)
             return true
         case Qt.Key_Delete:
-        case Qt.Key_Backspace: {
-            const focus = controller.deleteBlock(row)
-            controller.selectedRow = focus
+        case Qt.Key_Backspace:
+            deleteSelection()
             return true
-        }
-        case Qt.Key_Tab: controller.indent(row); return true
-        case Qt.Key_Backtab: controller.outdent(row); return true
-        case Qt.Key_Escape: controller.selectedRow = -1; return true
+        case Qt.Key_Tab:
+            if (range) controller.indentSelection(); else controller.indent(row)
+            return true
+        case Qt.Key_Backtab:
+            if (range) controller.outdentSelection(); else controller.outdent(row)
+            return true
+        case Qt.Key_Escape:
+            leaveSelectionMode()
+            return true
         }
         return false
     }
@@ -952,10 +1266,16 @@ FocusScope {
     Connections {
         target: editor.controller
         function onEditingRowChanged() {
-            if (editor.controller.editingRow < 0)
+            if (editor.controller.editingRow < 0) {
                 editor.closeSuggestions()
-            else
+            } else {
+                editor.selectionMode = false
                 editor.ensureRowVisible(editor.controller.editingRow)
+            }
+        }
+        function onSelectionChanged() {
+            if (editor.controller.selectionCount === 0)
+                editor.selectionMode = false
         }
         function onLoadingChanged() {
             if (!editor.controller.loading) {
@@ -1105,6 +1425,9 @@ FocusScope {
         // touch screens. Taps act on release anyway, and TextEdit moves the caret on release for
         // touch, so scrolling still never edits.
         pressDelay: 0
+        // A mouse's left drag selects blocks (the drag tracker below), it does not scroll: the
+        // wheel and the touchpad do. Touch UIs: a finger flicks (and a mouse there too).
+        acceptedButtons: editor.touch ? Qt.LeftButton : Qt.NoButton
         Accessible.role: Accessible.List
         Accessible.name: editor.controller ? editor.controller.title : ""
 
@@ -1143,7 +1466,7 @@ FocusScope {
             height: editor.bottomSpace
             TapHandler {
                 onTapped: {
-                    if (!editor.controller)
+                    if (!editor.controller || editor.selectionMode)
                         return
                     const row = editor.controller.appendEmptyBlock()
                     editor.startEditing(row, -1)
@@ -1153,7 +1476,24 @@ FocusScope {
         }
 
         Keys.onPressed: (event) => {
+            // Android's Back leaves the selection mode (before the shell goes back).
+            if (event.key === Qt.Key_Back) {
+                event.accepted = editor.selectionMode
+                return
+            }
             if (editor.forwardToEditingRow(event) || editor.handleSelectionKey(event))
+                event.accepted = true
+        }
+        Keys.onReleased: (event) => {
+            if (event.key === Qt.Key_Back && editor.selectionMode) {
+                editor.leaveSelectionMode()
+                event.accepted = true
+            }
+        }
+        // The selection's keys win over application-wide shortcuts while the list has the keyboard.
+        Keys.onShortcutOverride: (event) => {
+            if (editor.controller && editor.controller.selectedRow >= 0 && (event.modifiers & Qt.ControlModifier)
+                    && [Qt.Key_A, Qt.Key_C, Qt.Key_X, Qt.Key_V, Qt.Key_Z, Qt.Key_Y, Qt.Key_Return, Qt.Key_Enter].indexOf(event.key) >= 0)
                 event.accepted = true
         }
 
@@ -1182,13 +1522,221 @@ FocusScope {
         // The header (page title) gets its height after the first layout: start at the top.
         // (autoHeight: no scroll bar, the list never scrolls.)
         Component.onCompleted: {
-            if (!editor.autoHeight)
-                T.ScrollBar.vertical = scrollBarComponent.createObject(list)
+            if (!editor.autoHeight) {
+                editor.scrollBar = scrollBarComponent.createObject(list) as T.ScrollBar
+                T.ScrollBar.vertical = editor.scrollBar
+            }
             editor.later(() => list.positionViewAtBeginning())
         }
         Component {
             id: scrollBarComponent
             BScrollBar {}
+        }
+    }
+
+    // ---- Selecting blocks by dragging -------------------------------------------------------------
+    /// The list's scroll bar (a press on it selects nothing).
+    property T.ScrollBar scrollBar: null
+    /// A press that started on block `startRow` and moved into another block selects the range
+    /// (a mouse, a touchpad, a stylus; a finger only after a long press entered the selection mode,
+    /// or on a grip). The state lives here, not in the delegates: a delegate may be destroyed while
+    /// the list scrolls under the pointer. Near the view's top or bottom edge the list scrolls (the
+    /// journal stream for a day: `scroller`).
+    QtObject {
+        id: drag
+        property int startRow: -1
+        /// Blocks are being selected by this press.
+        property bool active: false
+        /// A finger may select: the long press entered the selection mode, or a grip is held.
+        property bool armed: false
+        /// This press selected blocks: its release is no tap (blockTapped()).
+        property bool selected: false
+        property bool mouse: true
+        /// The end that stays where it is (the anchor).
+        property int fixedRow: -1
+        property point scene: Qt.point(0, 0)
+        /// Autoscroll, px per frame (negative: up).
+        property real speed: 0
+        /// The list's scrolling was held for this press (setScrollingHeld()).
+        property bool holding: false
+    }
+    /// Blocks are being selected by dragging (tests read it).
+    readonly property bool dragSelecting: drag.active
+
+    function dragPressed(point) {
+        drag.selected = false
+        drag.active = false
+        drag.armed = false
+        drag.speed = 0
+        drag.fixedRow = -1
+        drag.scene = point.scenePosition
+        drag.mouse = point.device === null || point.device.type !== PointerDevice.TouchScreen
+        drag.startRow = -1
+        if (!controller || controller.sourceMode)
+            return
+        if (scrollBar && scrollBar.visible && scrollBar.contains(scrollBar.mapFromItem(null, drag.scene.x, drag.scene.y)))
+            return
+        const p = list.contentItem.mapFromItem(null, drag.scene.x, drag.scene.y)
+        drag.startRow = rowAt(p.x, p.y)
+    }
+    function dragMoved(point) {
+        drag.scene = point.scenePosition
+        if (!controller)
+            return
+        if (!drag.active) {
+            if (drag.startRow < 0 || (!drag.mouse && !drag.armed))
+                return
+            const row = rowNear(drag.scene)
+            if (row < 0 || row === drag.startRow || controller.blocks.get(drag.startRow).view === "frontmatter")
+                return
+            drag.active = true
+            drag.selected = true
+            if (drag.fixedRow < 0)
+                drag.fixedRow = drag.startRow
+            leaveEditingForSelection()
+            setScrollingHeld(true)
+        }
+        updateDragSelection()
+        updateAutoScroll()
+    }
+    function dragReleased() {
+        const selecting = drag.active || drag.armed
+        drag.active = false
+        drag.armed = false
+        drag.speed = 0
+        drag.fixedRow = -1
+        drag.startRow = -1
+        setScrollingHeld(false)
+        if (selecting && controller && controller.selectionCount > 0) {
+            list.forceActiveFocus()
+            if (touch)
+                selectionMode = true
+        }
+    }
+    /// The selection from the fixed end to the block under the pointer.
+    function updateDragSelection() {
+        if (!drag.active || !controller || drag.fixedRow < 0)
+            return
+        const row = rowNear(drag.scene)
+        if (row >= 0 && controller.blocks.get(row).view !== "frontmatter")
+            controller.selectRange(drag.fixedRow, row)
+    }
+    /// The block at a scene point, the nearest one when the point is above or below the blocks (the
+    /// header, the footer, outside a day of the journal stream) or outside the view.
+    function rowNear(scene) {
+        if (!controller)
+            return -1
+        const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
+        const y = Math.max(list.contentY + 1, Math.min(list.contentY + list.height - 1, p.y))
+        let row = rowAt(contentX + 1, y)
+        if (row >= 0)
+            return row
+        const headerBottom = list.headerItem ? list.headerItem.y + list.headerItem.height : list.originY
+        if (y <= headerBottom) {
+            row = visualNext(-1)
+            while (row >= 0 && controller.blocks.get(row).view === "frontmatter")
+                row = controller.nextVisibleRow(row)
+            return row
+        }
+        return controller.lastVisibleRow()
+    }
+    /// Scroll near the view's top and bottom edges while selecting (the toolbar's top for the bottom).
+    function updateAutoScroll() {
+        if (!drag.active) {
+            drag.speed = 0
+            return
+        }
+        const host = dockHost
+        const y = host.mapFromItem(null, drag.scene.x, drag.scene.y).y
+        const top = host === editor ? list.y : 0
+        const bottom = host.height - (toolbarVisible ? toolbarHeight : 0)
+        const zone = Math.max(16, Math.min(56, (bottom - top) / 5))
+        if (y < top + zone)
+            drag.speed = -Math.min(40, (top + zone - y) / 2 + 2)
+        else if (y > bottom - zone)
+            drag.speed = Math.min(40, (y - (bottom - zone)) / 2 + 2)
+        else
+            drag.speed = 0
+        // A day of the journal stream: the selection stays in it, so the stream scrolls only while
+        // the day goes on beyond the edge (scrolled further, the day would be destroyed).
+        if (scroller && host !== editor) {
+            const dayTop = editor.mapToItem(host, 0, 0).y
+            if ((drag.speed > 0 && dayTop + editor.height <= bottom) || (drag.speed < 0 && dayTop >= top))
+                drag.speed = 0
+        }
+    }
+    /// Scroll the editor (or the journal stream it is part of) by `dy`, within its content.
+    function scrollBy(dy) {
+        if (scroller) {
+            scroller.scrollBy(dy)
+            return
+        }
+        const min = list.originY - list.topMargin
+        const max = Math.max(min, list.contentHeight + list.originY - list.height + list.bottomMargin)
+        list.contentY = Math.max(min, Math.min(max, list.contentY + dy))
+    }
+    /// A finger selecting must not flick the list (or the journal stream) meanwhile.
+    function setScrollingHeld(held) {
+        if (drag.holding === held || (held && drag.mouse))
+            return
+        drag.holding = held
+        if (scroller && scroller.holdScrolling)
+            scroller.holdScrolling(held)
+        else if (!autoHeight)
+            list.interactive = !held
+    }
+    /// A long press on the text of `row` (touch UIs; not the block being edited): the selection
+    /// mode with that block selected — or, already in it, the selection extended there; moving the
+    /// finger without lifting it extends it further.
+    function longPressText(row) {
+        if (!touch || !controller || row < 0 || controller.blocks.get(row).view === "frontmatter")
+            return
+        if (selectionMode && controller.selectionCount > 0) {
+            controller.extendSelectionTo(row)
+        } else {
+            selectBlock(row)
+        }
+        drag.armed = true
+        drag.selected = true
+        drag.mouse = false
+        drag.startRow = row
+        drag.fixedRow = controller.selectionAnchorRow >= 0 ? controller.selectionAnchorRow : row
+        setScrollingHeld(true)
+    }
+    /// A grip at the band's start (`atStart`) or end is pressed: the other end stays, the finger
+    /// moves this one (the drag goes on when the grip's block scrolls away and is destroyed).
+    function beginGripDrag(atStart) {
+        if (!controller || controller.selectionCount === 0)
+            return
+        drag.fixedRow = atStart ? controller.selectionLastRow : controller.selectionFirstRow
+        drag.armed = true
+        drag.active = true
+        drag.selected = true
+        drag.mouse = false
+        setScrollingHeld(true)
+    }
+
+    Item {
+        id: dragLayer
+        anchors.fill: list
+        z: 2
+        PointHandler {
+            id: dragPointer
+            target: null
+            enabled: editor.controller !== null && !editor.controller.sourceMode && !editor.selectTextOpen
+            onActiveChanged: active ? editor.dragPressed(point) : editor.dragReleased()
+            onPointChanged: if (active) editor.dragMoved(point)
+        }
+    }
+    Timer {
+        id: autoScroll
+        interval: 16
+        repeat: true
+        running: drag.active && drag.speed !== 0
+        onTriggered: {
+            editor.scrollBy(drag.speed)
+            editor.updateDragSelection()
+            editor.updateAutoScroll()
         }
     }
 
@@ -1358,9 +1906,13 @@ FocusScope {
     /// Where the keyboard goes when the menu closes: "edit" (the block being edited), "list" (the
     /// selected block, Ctrl+Shift+Enter) or "" (opened with the pointer: wherever it was).
     property string taskMenuReturn: ""
+    /// The menu sets the status of every block from one end of the selection to the other
+    /// (Ctrl+Shift+Enter on a range: PageController.setSelectionTaskStatus), not of one block.
+    property bool taskMenuForSelection: false
     function openTaskStatusMenu(row, item, x, y) {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
+        taskMenuForSelection = false
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
@@ -1391,9 +1943,10 @@ FocusScope {
         return kind === "listItem" || kind === "paragraph"
     }
     /// Ctrl+Shift+Enter: the menu under the caret of the block being edited, else under the
-    /// selected block's first line.
-    function openTaskStatusMenuFor(row) {
-        if (!canHaveTaskStatus(row))
+    /// selected block's first line; `selection`: for every block of the selected range (`row` is
+    /// its focus end).
+    function openTaskStatusMenuFor(row, selection) {
+        if (!canHaveTaskStatus(row) && selection !== true)
             return
         const edit = activeEditor
         const item = list.itemAtIndex(row) as BlockDelegate
@@ -1405,6 +1958,7 @@ FocusScope {
         } else {
             openTaskStatusMenu(row, null, 0, 0)
         }
+        taskMenuForSelection = selection === true
         if (taskMenu)
             taskMenu.highlightStatus()
     }
@@ -1428,8 +1982,12 @@ FocusScope {
         const row = controller.trackedRow(taskMenuBlock)
         controller.untrack(taskMenuBlock)
         taskMenuBlock = -1
-        if (row >= 0 && status !== taskStatusOf(row))
+        if (taskMenuForSelection) {
+            taskMenuForSelection = false
+            controller.setSelectionTaskStatus(status) // one undo step; what already has it stays
+        } else if (row >= 0 && status !== taskStatusOf(row)) {
             controller.setTaskStatus(row, status)
+        }
     }
     Component {
         id: taskMenuComponent
@@ -1475,6 +2033,156 @@ FocusScope {
         z: 10
         sourceComponent: MobileEditToolbar {
             editor: editor
+        }
+    }
+
+    // ---- The selection's tools on desktops ---------------------------------------------------------
+    // A compact bar at the top of the view while two or more blocks are selected (touch UIs dock
+    // the tools on the keyboard's place instead: the "selection" toolbarMode).
+    Loader {
+        id: floatingSelectionBar
+        objectName: "floatingSelectionBar"
+        parent: editor.dockHost
+        active: !editor.touch && editor.controller !== null && editor.controller.multiSelection
+                && !editor.controller.sourceMode && !editor.selectTextOpen
+        visible: active
+        z: 11
+        anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
+        y: Theme.space2
+        sourceComponent: Item {
+            implicitWidth: card.width
+            implicitHeight: card.height
+            BShadow { target: card; level: 2 }
+            Rectangle {
+                id: card
+                width: tools.implicitWidth + 2 * Theme.space1
+                height: Theme.controlHeight + 2 * Theme.space1
+                radius: Theme.radiusLg
+                color: Theme.bgElevated
+                border.width: 1
+                border.color: Theme.border
+                SelectionToolbar {
+                    id: tools
+                    objectName: "floatingSelectionTools"
+                    x: Theme.space1
+                    y: Theme.space1
+                    height: Theme.controlHeight
+                    editor: editor
+                }
+            }
+        }
+    }
+
+    // ---- "Zaznacz tekst": the whole page in one read-only text --------------------------------------
+    /// Show the page as one read-only rich text (SelectTextView) for selecting any characters across
+    /// blocks — the page menu's, the top bar's and the palette's "Zaznacz tekst", the selection
+    /// toolbar's "Więcej". Over the editor (a day of the journal stream: over the stream's frame).
+    function openSelectText() {
+        if (!controller)
+            return
+        if (activeEditor)
+            EditorInput.commitPreedit(activeEditor)
+        closeSuggestions()
+        if (controller.editingRow >= 0)
+            controller.stopEditing()
+        if (touch)
+            Qt.inputMethod.hide()
+        selectionMode = false
+        selectTextLoader.active = true
+    }
+    function closeSelectText() {
+        selectTextLoader.active = false
+        list.forceActiveFocus()
+    }
+    Loader {
+        id: selectTextLoader
+        objectName: "selectTextView"
+        parent: editor.dockHost
+        anchors.fill: parent
+        active: false
+        z: 30
+        sourceComponent: SelectTextView {
+            editor: editor
+            onClosed: editor.closeSelectText()
+        }
+    }
+
+    // ---- The edited text's menu (desktop right-click) -------------------------------------------------
+    /// Wytnij, Kopiuj, Wklej, Zaznacz wszystko for the text of the block being edited: a right-click
+    /// in it with a mouse, touchpad or stylus (a bare TextEdit has no menu of its own; touch UIs have
+    /// the system's selection handles and popup). Made when first opened.
+    property BMenu textMenu: null
+    property InlineEditor textMenuEdit: null
+    function openTextMenu(edit, x, y) {
+        if (!edit || !controller)
+            return
+        if (!textMenu)
+            textMenu = textMenuComponent.createObject(editor) as BMenu
+        textMenuEdit = edit
+        // A click outside the selected text moves the caret there first.
+        const pos = edit.positionAt(x, y)
+        if (pos < edit.selectionStart || pos > edit.selectionEnd || edit.selectionStart === edit.selectionEnd)
+            edit.cursorPosition = pos
+        textMenu.bottomMargin = menuBottomMargin()
+        textMenu.popup(edit, x, y)
+    }
+    Component {
+        id: textMenuComponent
+        BMenu {
+            id: menu
+            objectName: "editTextMenu"
+            readonly property InlineEditor edit: editor.textMenuEdit
+            readonly property bool hasSelection: edit !== null && edit.selectionStart !== edit.selectionEnd
+            BMenuItem {
+                objectName: "editTextCut"
+                text: qsTr("Cut")
+                iconName: "scissors"
+                shortcut: "Ctrl+X"
+                enabled: menu.hasSelection
+                onTriggered: editor.copyEditSelection(menu.edit, true)
+            }
+            BMenuItem {
+                objectName: "editTextCopy"
+                text: qsTr("Copy")
+                iconName: "copy"
+                shortcut: "Ctrl+C"
+                enabled: menu.hasSelection
+                onTriggered: editor.copyEditSelection(menu.edit, false)
+            }
+            BMenuItem {
+                objectName: "editTextPaste"
+                // Not in the browser: a page reads the clipboard only from a paste event (Ctrl+V).
+                visible: DeviceInfo.platform !== "wasm"
+                height: visible ? implicitHeight : 0
+                text: qsTr("Paste")
+                iconName: "clipboard-paste"
+                shortcut: "Ctrl+V"
+                onTriggered: {
+                    if (menu.edit && !menu.edit.multiline && editor.controller.clipboardHasImage())
+                        editor.controller.pasteImage(menu.edit.row, menu.edit.selectionStart, menu.edit.selectionEnd)
+                    else if (menu.edit && (menu.edit.multiline || !editor.pasteIntoEdit(menu.edit)))
+                        menu.edit.paste()
+                }
+            }
+            BMenuSeparator {}
+            BMenuItem {
+                objectName: "editTextSelectAll"
+                text: qsTr("Select all")
+                shortcut: "Ctrl+A"
+                onTriggered: if (menu.edit) menu.edit.selectAll()
+            }
+            BMenuItem {
+                objectName: "editTextBlockMenu"
+                text: qsTr("Block…")
+                iconName: "ellipsis"
+                onTriggered: {
+                    const edit = menu.edit
+                    if (edit)
+                        editor.later(() => editor.openBlockMenu(edit.row, edit, 0, edit.cursorRectangle.y + edit.cursorRectangle.height))
+                }
+            }
+            // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
+            onClosed: if (edit && edit.active) edit.ensureFocus()
         }
     }
 

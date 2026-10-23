@@ -8,7 +8,10 @@
 #include <QQuickItem>
 #include <QQuickTextDocument>
 #include <QQuickWindow>
+#include <QTextCursor>
 #include <QTextDocument>
+
+#include <algorithm>
 
 namespace brulion::editor {
 
@@ -22,6 +25,29 @@ QString EditorInput::plainText(QQuickTextDocument *document) const
     for (QChar &c : text) {
         // Block separators and frame markers of QTextDocument (what toPlainText() maps too).
         if (c == QChar::ParagraphSeparator || c.unicode() == 0xfdd0 || c.unicode() == 0xfdd1)
+            c = u'\n';
+    }
+    return text;
+}
+
+QString EditorInput::textRange(QQuickTextDocument *document, int from, int to) const
+{
+    if (!document || !document->textDocument())
+        return {};
+    QTextDocument *doc = document->textDocument();
+    const int end = std::max(0, doc->characterCount() - 1);
+    from = std::clamp(from, 0, end);
+    to = std::clamp(to, 0, end);
+    if (to < from)
+        std::swap(from, to);
+    QTextCursor cursor(doc);
+    cursor.setPosition(from);
+    cursor.setPosition(to, QTextCursor::KeepAnchor);
+    QString text = cursor.selectedText();
+    for (QChar &c : text) {
+        // Paragraph and line separators, frame markers (a table's cells).
+        if (c == QChar::ParagraphSeparator || c == QChar::LineSeparator || c.unicode() == 0xfdd0
+            || c.unicode() == 0xfdd1)
             c = u'\n';
     }
     return text;
@@ -57,6 +83,11 @@ void EditorInput::sendKey(QQuickItem *item, int key, int modifiers, const QStrin
     QCoreApplication::sendEvent(window, &press);
     QKeyEvent release(QEvent::KeyRelease, key, mods, text);
     QCoreApplication::sendEvent(window, &release);
+}
+
+int EditorInput::keyboardModifiers() const
+{
+    return int(QGuiApplication::keyboardModifiers());
 }
 
 void EditorInput::sendInputMethod(QQuickItem *item, const QString &preedit, const QString &commit) const

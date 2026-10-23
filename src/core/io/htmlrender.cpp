@@ -566,7 +566,7 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (isAttachmentTarget(l.target)) {
                 const auto url = m_links.attachment ? m_links.attachment(l.target) : std::nullopt;
                 const QString label = l.display.isEmpty() ? paths::basename(l.target) : l.display;
-                html = url ? mediaHtml(*url, label, l.target)
+                html = url ? mediaHtml(*url, label, m_links.mediaAsLinks ? QString() : l.target)
                            : QString(u"<span class=\"missing\">"_s + esc(label) + u"</span>"_s);
             } else {
                 const auto href = m_links.page ? m_links.page(l.target, l.heading, l.blockId) : std::nullopt;
@@ -581,6 +581,8 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (hasScheme(l.target)) {
                 if (!safeExternal(l.target)) {
                     html = esc(source);
+                } else if (image && m_links.mediaAsLinks) {
+                    html = mediaHtml(l.target, l.display.isEmpty() ? l.target : l.display, QString());
                 } else if (image) {
                     html = u"<img src="_s + attr(l.target) + u" alt="_s + attr(l.display) + u" loading=\"lazy\">"_s;
                 } else {
@@ -602,7 +604,9 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (!url) {
                 html = u"<span class=\"missing\">"_s + esc(l.display.isEmpty() ? l.target : l.display) + u"</span>"_s;
             } else if (image) {
-                html = mediaHtml(*url, l.display, l.target);
+                html = m_links.mediaAsLinks
+                               ? mediaHtml(*url, l.display.isEmpty() ? paths::basename(l.target) : l.display, QString())
+                               : mediaHtml(*url, l.display, l.target);
             } else {
                 QString shown = renderInline(l.display, true);
                 if (shown.isEmpty())
@@ -615,6 +619,10 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
         case LinkKind::BlockEmbed: {
             const auto ref = m_links.block ? m_links.block(l.target) : std::nullopt;
             const QString cls = l.kind == LinkKind::BlockRef ? u"block-ref"_s : u"block-embed"_s;
+            if (ref && ref->first.isEmpty()) {
+                html = u"<span class=\""_s + cls + u"\">"_s + renderInline(ref->second, true) + u"</span>"_s;
+                break;
+            }
             html = ref ? QString(u"<a class=\""_s + cls + u"\" href="_s + attr(ref->first) + u'>'
                                  + renderInline(ref->second, true) + u"</a>"_s)
                        : QString(u"<span class=\"missing\">(("_s + esc(l.target) + u"))</span>"_s);
@@ -715,6 +723,31 @@ QString HtmlRenderer::metaChips(const Block &block) const
             chips.append(chip(u"done"_s, u"✅ "_s + t.doneDate->toString(u"yyyy-MM-dd"_s)));
         if (t.cancelledDate)
             chips.append(chip(u"done"_s, u"❌ "_s + t.cancelledDate->toString(u"yyyy-MM-dd"_s)));
+    } else {
+        // A block that is no task keeps the dates, recurrence and priority written in it (the
+        // parsed note has them for tasks only; its text lost them with the other tokens).
+        using markdown::TokenKind;
+        for (const markdown::Token &tok : markdown::findTokens(markdown::maskInlineCode(block.raw))) {
+            const QString when =
+                    tok.date.toString(u"yyyy-MM-dd"_s) + (tok.time ? u' ' + tok.time->toString(u"HH:mm"_s) : QString());
+            switch (tok.kind) {
+            case TokenKind::Priority:
+                if (tok.priority != Priority::None)
+                    chips.append(u"<span class=\"chip priority priority-"_s + priorityName(tok.priority) + u"\">"_s
+                                 + esc(markdown::tokens::priorityEmoji(tok.priority)) + u"</span>"_s);
+                break;
+            case TokenKind::Start: chips.append(chip(u"scheduled"_s, u"🛫 "_s + when)); break;
+            case TokenKind::Scheduled: chips.append(chip(u"scheduled"_s, u"⏳ "_s + when)); break;
+            case TokenKind::Due: chips.append(chip(u"due"_s, u"📅 "_s + when)); break;
+            case TokenKind::Done: chips.append(chip(u"done"_s, u"✅ "_s + when)); break;
+            case TokenKind::Cancelled: chips.append(chip(u"done"_s, u"❌ "_s + when)); break;
+            case TokenKind::Recurrence:
+                if (block.reminders.isEmpty()) // else the reminder's chip has it
+                    chips.append(chip(u"recurrence"_s, u"🔁 "_s + markdown::recurrenceOf(tok)));
+                break;
+            default: break;
+            }
+        }
     }
     for (const Reminder &r : block.reminders) {
         QString text = (r.alarm ? u"⏰! "_s : u"⏰ "_s) + r.at.toString();

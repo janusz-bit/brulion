@@ -225,6 +225,14 @@ static QList<Command> allCommands(const AppController *app)
     qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
     for (const Command &c : linkCommands(inEditor))
         out.insert(at++, c);
+    // "Zaznacz tekst": the page (the journal's day) as one read-only text to select any part of it
+    // (docs/UI.md "Selecting and copying"; uiAction "selectText", the editor of the view opens it).
+    out.insert(at, {u"page.selectText"_s,
+                    CommandModel::tr("Select text"),
+                    CommandModel::tr("The whole page as text: select and copy any part"),
+                    u"text-select"_s,
+                    {},
+                    inEditor});
     // The event log ("Rejestr zdarzeń") right after the sync center; also found as logs, diagnostics.
     const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
     out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
@@ -291,6 +299,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"toggleNoteMode"_s);
     else if (const QString action = linkAction(id); !action.isEmpty())
         m_app->requestUiAction(action);
+    else if (id == u"page.selectText")
+        m_app->requestUiAction(u"selectText"_s);
     else if (id == u"nav.back")
         m_app->back();
     else if (id == u"nav.forward")

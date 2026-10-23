@@ -22,6 +22,18 @@
 // Folding is device-local: kept in memory and reported by foldStateChanged() as the lines of
 // folded blocks (`foldState`) for the shell to persist; restore with setFoldState().
 //
+// Block selection (docs/UI.md "Selecting and copying"): `selectionAnchorRow` and `selectedRow` (the
+// focus end) are the two ends of a range of visible rows; the selection is that range with the
+// whole subtree of every block in it (folded children too) — a set of uids in the model
+// (BlockListModel::setSelectedUids), so a future toggling of single blocks fits. Both ends are
+// uids: the selection survives edits, undo / redo (the undo steps restore it) and external
+// merges. It is copied (Markdown text/plain plus the host's text/html, or plain text), cut,
+// deleted, indented, moved and its tasks' statuses set as one undo step each; a paste replaces
+// it. Copies never claim success the clipboard did not take, and refuse more than
+// ClipboardLimit bytes (never cut short). A paste drops block ids (`^id`, `id::`) that already
+// resolve elsewhere — `((id))` is vault-wide —, except right after a cut (a move).
+// `readingHtml()` is the whole page as one rich text for the read-only "Zaznacz tekst" view.
+//
 // Beyond the page itself: tasks shown in ```query results and embeds are checked through
 // setTaskStatusAt() (this page: an undoable edit; other files: the host's QueryHost), pictures
 // and files are pasted / dropped / picked as attachments (EditorHost::saveAttachment, embedded
@@ -96,8 +108,17 @@ class PageController : public QObject {
     Q_PROPERTY(QString sourceText READ sourceText WRITE setSourceText NOTIFY sourceTextChanged FINAL)
     Q_PROPERTY(int editingRow READ editingRow WRITE setEditingRow NOTIFY editingRowChanged FINAL)
     Q_PROPERTY(int cursorPosition READ cursorPosition WRITE setCursorPosition NOTIFY cursorPositionChanged FINAL)
-    /// Block selected with Esc (not editing), -1 when none.
+    /// Block selected with Esc (not editing), -1 when none — the focus end of a block selection
+    /// (Shift+↑/↓ move it); setting it selects that one block.
     Q_PROPERTY(int selectedRow READ selectedRow WRITE setSelectedRow NOTIFY selectedRowChanged FINAL)
+    /// The other end of the block selection (-1: nothing selected).
+    Q_PROPERTY(int selectionAnchorRow READ selectionAnchorRow NOTIFY selectionChanged FINAL)
+    /// Visible rows selected (0: none) and the first / last of them (-1: none).
+    Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectionChanged FINAL)
+    Q_PROPERTY(int selectionFirstRow READ selectionFirstRow NOTIFY selectionChanged FINAL)
+    Q_PROPERTY(int selectionLastRow READ selectionLastRow NOTIFY selectionChanged FINAL)
+    /// More than one visible row is selected.
+    Q_PROPERTY(bool multiSelection READ multiSelection NOTIFY selectionChanged FINAL)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged FINAL)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged FINAL)
     /// External changes could not be merged: the local text is kept (not saved until resolved);
@@ -166,6 +187,14 @@ public:
     void setCursorPosition(int cursor);
     int selectedRow() const;
     void setSelectedRow(int row);
+    int selectionAnchorRow() const;
+    int selectionCount() const { return m_selectionCount; }
+    int selectionFirstRow() const { return m_selectionFirst; }
+    int selectionLastRow() const { return m_selectionLast; }
+    bool multiSelection() const { return m_selectionCount > 1; }
+    /// The most a copy puts on the clipboard (UTF-8 bytes): Android's clipboard takes about 1 MB
+    /// per transaction. A larger copy is refused ("tooLarge"), never cut short.
+    static constexpr qsizetype ClipboardLimit = 800 * 1024;
     bool canUndo() const;
     bool canRedo() const;
     bool conflict() const { return m_conflict; }
@@ -349,6 +378,88 @@ public:
     /// copyLink(row, "blockRef"). Returns the id ("" when nothing was copied).
     Q_INVOKABLE QString copyBlockRef(int row);
 
+    // --- Block selection (docs/UI.md "Selecting and copying") --------------------------------------
+    /// Select the visible rows from `anchor` to `focus` (in either order) with their subtrees;
+    /// editing stops. The frontmatter / page properties are never part of a range (a lone one can
+    /// be selected). Invalid rows clear the selection.
+    Q_INVOKABLE void selectRange(int anchor, int focus);
+    /// Move the focus end to `row` (Shift+click, a drag, a tap in the touch selection mode): from
+    /// the anchor, or from the block being edited, else `row` alone.
+    Q_INVOKABLE void extendSelectionTo(int row);
+    /// Shift+↓ (`step` 1) / Shift+↑ (-1): the focus end goes to the next / previous visible row
+    /// that changes the selection (it jumps over rows already inside the selected subtrees); with
+    /// nothing selected the block being edited is the anchor. False when nothing changed.
+    Q_INVOKABLE bool extendSelection(int step);
+    /// Ctrl+A: every visible block (no frontmatter, no hidden note-mode row), in a zoom the zoomed
+    /// block's subtree. Editing stops.
+    Q_INVOKABLE void selectAll();
+    Q_INVOKABLE void clearSelection();
+    /// The selected rows (subtrees included, ascending).
+    Q_INVOKABLE QVariantList selectedRows() const;
+    /// The selection as Markdown (markdown::blocksMarkdown) / plain text (blocksPlainText).
+    Q_INVOKABLE QString selectionMarkdown() const;
+    Q_INVOKABLE QString selectionPlainText() const;
+    /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml),
+    /// or `plainText`; on Linux also the primary selection. Returns { ok, count (visible blocks),
+    /// reason: "empty" | "tooLarge" | "noClipboard" }.
+    Q_INVOKABLE QVariantMap copySelection(bool plainText = false);
+    /// Copy, then delete the selection (one undo step). The cut blocks' ids are kept by the next
+    /// paste of this text (a move). copySelection()'s result plus { row } (selected afterwards).
+    Q_INVOKABLE QVariantMap cutSelection();
+    /// Delete the selection with its subtrees (one undo step, which restores the selection); the
+    /// block before it is selected. Returns its row (-1: none).
+    Q_INVOKABLE int deleteSelection();
+    /// Tab / Shift+Tab on the selection (BlockDocument::indentRange — all or nothing — /
+    /// outdentRange). The document mode indents only when every top block is a list item.
+    Q_INVOKABLE bool indentSelection();
+    /// The selection could be indented / outdented at all: not the zoomed block, and in the
+    /// document mode only list items (its paragraphs and headings have no outline). The
+    /// selection tools offer "Zwiększ / Zmniejsz wcięcie" only then.
+    Q_INVOKABLE bool canIndentSelection() const;
+    Q_INVOKABLE bool outdentSelection();
+    /// Alt+↑ / Alt+↓: the selected sibling blocks move together (BlockDocument::moveRangeUp/Down).
+    Q_INVOKABLE bool moveSelectionUp();
+    Q_INVOKABLE bool moveSelectionDown();
+    /// Ctrl+Enter: every visible list item and paragraph the selection spans gets the status that
+    /// follows the first one's (none → todo → doing → done → none). One undo step. The rows from
+    /// one end to the other: a parent selected alone changes, not the children it brings along
+    /// (they are copied, moved and deleted with it).
+    Q_INVOKABLE void cycleSelectionTasks();
+    /// Set the task status of those blocks ("" removes it).
+    Q_INVOKABLE void setSelectionTaskStatus(const QString &status);
+    /// Ctrl+V with blocks selected: the selection is replaced by `text` (Markdown, split into
+    /// blocks like pasteText(); the selection's own ids are kept; a pasted note's YAML
+    /// frontmatter is left out, Logseq page properties become a block). The page's own properties
+    /// are never replaced: selected, the paste goes in below them. One undo step; the pasted
+    /// blocks are selected. Returns { row, count } (row -1: nothing pasted, nothing changed).
+    Q_INVOKABLE QVariantMap replaceSelection(const QString &text);
+    /// replaceSelection() with the clipboard's text (clipboardText()).
+    Q_INVOKABLE QVariantMap pasteOverSelection();
+    /// Copy [from, to) of a row's edit text exactly (no-break spaces kept — a TextEdit's own copy
+    /// turns them into spaces): in-block Ctrl+C / Ctrl+X. { ok, reason } like copySelection().
+    /// `cut`: the caller removes the text next (Ctrl+X) — its block ids go with it (a move, like
+    /// cutSelection()).
+    Q_INVOKABLE QVariantMap copyEditText(int row, int from, int to, bool cut = false);
+    /// Copy `text` as it is (the "Zaznacz tekst" view): the same limit, primary selection and read
+    /// back as copySelection(). { ok, reason }.
+    Q_INVOKABLE QVariantMap copyText(const QString &text);
+    /// What a paste inserts: the clipboard's text, or — when the clipboard has HTML (a browser,
+    /// an office app) and its text does not look like Markdown — that HTML as Markdown
+    /// (EditorHost::htmlToMarkdown). This app's own copies (its last one, or HTML marked as made
+    /// by Brulion — EditorHost::renderHtml — also after a restart) are their text: the Markdown.
+    /// "" when there is no text.
+    Q_INVOKABLE QString clipboardText() const;
+    /// In-block Ctrl+V: pasteText() of clipboardText() into [from, to). { row, cursor }, row -1
+    /// when the clipboard has no text.
+    Q_INVOKABLE QVariantMap pasteClipboard(int row, int from, int to);
+    /// The whole page (every block, folds and zoom ignored; no frontmatter) as one escaped rich
+    /// text for a read-only TextEdit — the "Zaznacz tekst" view: rendered text (InlineRenderer,
+    /// the note's own spaces: BlockListModel::readingHtmlAt), bullets, numbers and checkboxes as
+    /// characters (so a copy keeps them), headings, code, calculations with their results, tables
+    /// with their formulas' values, a query's results (the host's QueryHost; else the query),
+    /// quotes; embedded pictures and pages by name. Colours of the current palette.
+    Q_INVOKABLE QString readingHtml() const;
+
     // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
     /// The text of a link of `kind` to `row`:
     ///   "blockRef"  ((id))           — Logseq style, resolved in the whole notebook;
@@ -492,6 +603,8 @@ Q_SIGNALS:
     void editingRowChanged();
     void cursorPositionChanged();
     void selectedRowChanged();
+    /// The block selection changed (its ends, its rows, how many are shown).
+    void selectionChanged();
     void undoStateChanged();
     void conflictChanged();
     void paletteChanged();
@@ -520,6 +633,9 @@ private:
     struct Focus {
         int row = -1;
         int cursor = -1;
+        /// The block selection (anchor, focus rows), restored when no row is being edited.
+        int selectionAnchor = -1;
+        int selectionFocus = -1;
     };
 
     void onFileChanged(const QString &path);
@@ -555,6 +671,36 @@ private:
     void writeConflictCopy();
     /// Follow kept blocks after BlockListModel::replaceContent (editing, selection, tracked).
     void remapBlocks(const QHash<quint64, quint64> &mapping);
+    /// The selected rows [first, first + count): the rows from the anchor to the focus with their
+    /// subtrees; empty when nothing is selected.
+    markdown::RowRange selectionRange() const;
+    markdown::RowRange rangeOf(int anchor, int focus) const;
+    /// Recompute the selection after the document, folds or ends changed: the model's uid set,
+    /// the counts; signals when something changed.
+    void updateSelection();
+    /// Drop the selection's state (no signals: updateSelection() follows).
+    void resetSelection() { m_selectedUid = m_anchorUid = 0; }
+    /// Put `text` (and `html`) on the clipboard (ClipboardLimit, primary selection, read back).
+    QVariantMap writeClipboard(const QString &text, const QString &html);
+    /// `text` (pasted Markdown) without the block ids that already resolve elsewhere; ids in
+    /// `freed` (blocks cut or replaced) are kept unless this page still has them. Completes the
+    /// host's index first unless `indexed` (it signals: not inside a command).
+    QString withoutTakenIds(const QString &text, const QSet<QString> &freed, bool indexed = false);
+    /// The ids freed by the last cut when `text` is what it copied (a move), else none — and not
+    /// those the cut page has again (the cut undone: a paste would duplicate them).
+    QSet<QString> cutIdsFor(const QString &text) const;
+    /// `text` is what this app put on the clipboard last (line breaks aside).
+    bool isOwnCopy(const QString &text) const;
+    /// Remember a cut of `text` from this page that took `ids` with it (cutIdsFor()).
+    void recordCut(const QString &text, const QSet<QString> &ids);
+    /// A block of this page has `id`.
+    bool hasBlockId(const QString &id) const;
+    /// The results of the query `source` as readingHtml() lists them (indented by `indent` px);
+    /// "" without a QueryHost, on an error or with nothing found.
+    QString queryReadingHtml(const QString &source, int indent) const;
+    /// The visible rows from one end of the selection to the other that can have a task status
+    /// (list items, paragraphs).
+    QList<quint64> selectedTaskUids() const;
     /// Save now; while a conflict is unresolved (also one this save found) write the conflict
     /// copy instead — before the page's text goes (another page, another host, destruction).
     void flush();
@@ -598,7 +744,13 @@ private:
     bool m_sourceEdited = false;
     quint64 m_editingUid = 0;
     int m_cursor = -1;
-    quint64 m_selectedUid = 0;
+    quint64 m_selectedUid = 0; ///< focus end of the block selection
+    quint64 m_anchorUid = 0;   ///< anchor end
+    int m_selectionCount = 0;
+    int m_selectionFirst = -1;
+    int m_selectionLast = -1;
+    int m_selectionAnchorRow = -1; ///< at the last updateSelection() (signals when rows shift)
+    int m_selectionFocusRow = -1;
     QHash<int, quint64> m_tracked; ///< trackBlock() handles
     int m_nextTrackHandle = 1;
     bool m_conflict = false;
@@ -628,6 +780,9 @@ private:
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
     bool m_restoring = false;
     bool m_undoing = false; ///< restore() runs (undo/redo): moving the caret changes no text
+    /// > 0: a selection command runs — updateSelection() waits for its end (no empty selection in
+    /// between: the touch selection mode would end).
+    int m_selectionHold = 0;
     /// The block that got the caret last and its body then (closeLoneFence()).
     quint64 m_focusedUid = 0;
     QString m_focusedBody;

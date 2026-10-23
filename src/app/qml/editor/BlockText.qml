@@ -9,7 +9,9 @@ import Brulion
 // gives its last line the font's own height, the editor the fixed one). `centered` centres both
 // (a formula block: the rendered formula and, while it is edited, its LaTeX source).
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
-// reminder:); a click elsewhere starts editing with the caret at the clicked position.
+// reminder:); a click elsewhere starts editing with the caret at the clicked position. Shift+click
+// selects the blocks from the edited or selected one to this one; on touch UIs a long press selects
+// the block (the editor's selection mode, where a tap moves the selection's end instead).
 Item {
     id: root
 
@@ -72,8 +74,12 @@ Item {
         anchors.fill: rendered
         visible: !root.editing
         TapHandler {
+            id: tap
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint, button) => {
+                // Shift+click, the touch selection mode (BlockEditor.blockTapped).
+                if (root.editor.blockTapped(root.block.index, tap.point.modifiers))
+                    return
                 const p = eventPoint.position
                 const link = rendered.linkAt(p.x, p.y)
                 if (link !== "")
@@ -81,6 +87,12 @@ Item {
                 else
                     root.editor.editAt(root.block.index, p.x, p.y)
             }
+        }
+        // A finger held on the text: the block selection (never a menu: that is the bullet's).
+        TapHandler {
+            acceptedDevices: PointerDevice.TouchScreen
+            enabled: Theme.touchUi
+            onLongPressed: root.editor.longPressText(root.block.index)
         }
     }
 

@@ -93,6 +93,8 @@ FocusScope {
             if (day._foldsRestored && page.loaded && !page.loading)
                 Workspace.setFoldState(page.path, page.foldState)
         }
+        // A block selection in this day: the other days' selections end (one at a time).
+        onSelectionChanged: if (page.selectionCount > 0) day.activated()
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
                 day.activated()

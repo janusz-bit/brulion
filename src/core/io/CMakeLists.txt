@@ -2,7 +2,7 @@
 # (Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear,
 # Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
 # HTML, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
-# HTML <-> Markdown.
+# HTML <-> Markdown, the clipboard's HTML of copied blocks.
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
 # QtGui is used for QTextDocument (HTML parsing).
 if(NOT TARGET brulion_miniz)
@@ -37,6 +37,7 @@ brulion_add_core_module(io
         exporter.h exporter.cpp exporters_p.h
         exportutil_p.h exportutil.cpp
         htmlrender_p.h htmlrender.cpp
+        clipboardhtml.h clipboardhtml.cpp
         export_markdown.cpp
         export_logseq.cpp
         export_html.cpp

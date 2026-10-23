@@ -16,6 +16,9 @@ import Brulion
 // one column in per level. Spacing follows the previous block (`prevKind`): paragraph gaps,
 // tight list items, air above headings.
 //
+// A selected block is drawn on a band (`selectionEdge`: one band over a range of blocks, rounded
+// at its ends, from the editor's left edge; a block alone from its own level); in the touch
+// selection mode the band's first and last blocks carry its grips (BlockEditor.beginGripDrag()).
 // Hidden rows (zoom, folds) stay in the model with `visible` false: the delegate collapses to
 // zero height. flash() highlights the block for a moment (a link to it was followed: Theme.mark
 // fading out in about 1.2 s, drawn over the selection and under the text, no height change).
@@ -150,17 +153,45 @@ Item {
     HoverHandler { id: hover; enabled: !Theme.touchUi }
 
     // ---- Selection ---------------------------------------------------------------------------
-    Rectangle {
-        visible: block.model.isSelected && block.shown
-        x: block.doc ? (block.listItem ? block.levelX - block.editor.listIndent : block.levelX) - Theme.space2
-                     : block.bulletX - block.editor.bulletColumn / 2 - 2
-        width: block.contentRight - x + Theme.space2
-        y: 1
-        height: block.height - 2
-        radius: Theme.radiusSm
-        color: Theme.bgSelected
-        border.width: 1
-        border.color: Theme.alpha(Theme.focusRing, 0.35)
+    /// Where the block sits in the band of selected blocks: "" | "single" | "first" | "middle" |
+    /// "last" (BlockListModel's selectionEdge: visible rows only).
+    readonly property string selectionEdge: shown ? (model.selectionEdge || "") : ""
+    readonly property bool bandStart: selectionEdge === "single" || selectionEdge === "first"
+    readonly property bool bandEnd: selectionEdge === "single" || selectionEdge === "last"
+    /// The band's left edge: a block alone from its own level, a range from the editor's (one
+    /// straight band over every level).
+    readonly property real bandX: selectionEdge === "single"
+                                  ? (doc ? (listItem ? levelX - editor.listIndent : levelX) - Theme.space2
+                                         : bulletX - editor.bulletColumn / 2 - 2)
+                                  : (doc ? editor.contentX + editor.gutter - Theme.space2
+                                         : editor.contentX + editor.gutter - editor.bulletColumn - 2)
+    readonly property real bandRight: contentRight + Theme.space2
+    readonly property real bandTop: bandStart ? 1 : 0
+    readonly property real bandBottom: bandEnd ? height - 1 : height
+    // Made only for selected blocks (most blocks never are).
+    Loader {
+        active: block.selectionEdge !== ""
+        x: block.bandX
+        y: block.bandTop
+        width: block.bandRight - x
+        height: Math.max(0, block.bandBottom - block.bandTop)
+        sourceComponent: Rectangle {
+            objectName: "selectionBand"
+            topLeftRadius: block.bandStart ? Theme.radiusSm : 0
+            topRightRadius: block.bandStart ? Theme.radiusSm : 0
+            bottomLeftRadius: block.bandEnd ? Theme.radiusSm : 0
+            bottomRightRadius: block.bandEnd ? Theme.radiusSm : 0
+            color: Theme.bgSelected
+            border.width: block.selectionEdge === "single" ? 1 : 0
+            border.color: Theme.alpha(Theme.focusRing, 0.35)
+            // A range: a line down its left edge marks the band as one.
+            Rectangle {
+                visible: block.selectionEdge !== "single"
+                width: 2
+                height: parent.height
+                color: Theme.alpha(Theme.focusRing, 0.6)
+            }
+        }
     }
 
     // ---- Flash (a link to the block was followed) ------------------------------------------------
@@ -296,7 +327,15 @@ Item {
             TapHandler {
                 acceptedButtons: Qt.LeftButton
                 // A document has no zoom: the bullet is part of the text, a click edits the item.
-                onTapped: block.doc ? block.editor.startEditing(block.index, 0) : block.controller.zoomInto(block.index)
+                // (The touch selection mode: a tap moves the selection's end here.)
+                onTapped: {
+                    if (block.editor.blockTapped(block.index))
+                        return
+                    if (block.doc)
+                        block.editor.startEditing(block.index, 0)
+                    else
+                        block.controller.zoomInto(block.index)
+                }
                 onLongPressed: block.openMenu(bullet, bullet.width / 2, bullet.height)
             }
             TapHandler {
@@ -332,7 +371,7 @@ Item {
             Accessible.ignored: true
             TapHandler {
                 acceptedButtons: Qt.LeftButton
-                onTapped: block.editor.startEditing(block.index, 0)
+                onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, 0)
                 onLongPressed: block.openMenu(number, 0, number.height)
             }
             TapHandler {
@@ -404,7 +443,8 @@ Item {
         width: Math.max(40, block.contentRight - x)
         embeds: block.hasEmbeds ? block.embeds : []
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
-        onBackgroundClicked: block.editor.startEditing(block.index, -1)
+        onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
+        onBackgroundLongPressed: block.editor.longPressText(block.index)
     }
 
     TransclusionView {
@@ -499,7 +539,7 @@ Item {
             }
             TapHandler {
                 enabled: !block.editing
-                onTapped: block.editor.startEditing(block.index, -1)
+                onTapped: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
             }
             BlockText {
                 id: ruleText
@@ -508,6 +548,49 @@ Item {
                 block: block
             }
         }
+    }
+
+    // ---- The selection's grips (touch selection mode) -----------------------------------------------
+    // A round grip at the band's start (top left) and end (bottom right), 44 px to hold: the finger
+    // moves that end of the selection (the editor follows it, also when this block scrolls away).
+    component Grip: Item {
+        id: grip
+        property bool atStart: true
+        objectName: atStart ? "selectionGripStart" : "selectionGripEnd"
+        width: Theme.touchTarget
+        height: Theme.touchTarget
+        Rectangle {
+            anchors.centerIn: parent
+            width: 18
+            height: 18
+            radius: 9
+            color: Theme.link
+            border.width: 2
+            border.color: Theme.bg
+        }
+        MouseArea {
+            anchors.fill: parent
+            preventStealing: true
+            onPressed: block.editor.beginGripDrag(grip.atStart)
+        }
+        Accessible.role: Accessible.Button
+        Accessible.name: atStart ? qsTr("Start of the selection") : qsTr("End of the selection")
+    }
+    Loader {
+        active: block.bandStart && block.editor.selectionMode && block.editor.touch
+        z: 5
+        // (Inside the window: a document's band starts near the screen's edge on a phone.)
+        x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
+        y: block.bandTop + 9 - Theme.touchTarget / 2
+        sourceComponent: Grip { atStart: true }
+    }
+    Loader {
+        active: block.bandEnd && block.editor.selectionMode && block.editor.touch
+        z: 5
+        // (Inside the window: the band reaches the screen's edge on a phone.)
+        x: Math.min(block.bandRight, block.width - 12) - Theme.touchTarget / 2
+        y: block.bandBottom - 9 - Theme.touchTarget / 2
+        sourceComponent: Grip { atStart: false }
     }
 
     // ---- Block menu ----------------------------------------------------------------------------
