@@ -21,10 +21,11 @@ import java.lang.ref.WeakReference
  * the keyboard's top edge with it (docs/ANDROID.md, "Klawiatura ekranowa").
  *
  * [BrulionActivity] runs with `adjustResize` (AndroidManifest.xml: Qt never pans the window).
- * Whether the system then resizes the window (Android 9–14 without edge-to-edge) or only hands the
- * keyboard's insets to an edge-to-edge window (always on Android 15+), the overlap is measured on
- * screen — the bottom of Qt's view minus the keyboard's top —, so it is 0 in the first case and the
- * keyboard's height in the second.
+ * Whether the system then resizes the window (Android 9–10, a window inside the system bars) or
+ * only hands the keyboard's insets to a window drawn behind the bars (Android 11+: Qt's expanded
+ * client area, set by src/app/ui/keyboardsources.cpp on 11–14, always so on 15+), the overlap is
+ * measured on screen — the bottom of Qt's view minus the keyboard's top —, so it is 0 in the first
+ * case and the keyboard's height in the second.
  *
  * An invisible 0×0 view of its own, a child of the window's decor view, observes; Qt's own inset
  * listeners (SafeArea) stay untouched and nothing is consumed:

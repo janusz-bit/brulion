@@ -3,20 +3,27 @@
 package io.github.januszbit.brulion.android
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import org.qtproject.qt.android.bindings.QtActivity
 
 /**
  * Brulion's main activity: Qt's activity plus the hooks [BrulionAndroid] needs — the note a
  * tapped notification points at (launch intent or `onNewIntent`, launch mode singleTop), the
- * answers of runtime permission dialogs and of the ringtone pickers — and the on-screen
- * keyboard's observer ([ImeInsets]).
+ * answers of runtime permission dialogs and of the ringtone pickers —, the on-screen keyboard's
+ * observer ([ImeInsets]) and the system bars' icons after the app's theme.
  */
 class BrulionActivity : QtActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     BrulionAndroid.onActivityCreated(this)
     ImeInsets.install(this)
+  }
+
+  // Qt sets the system bars' icons after the system's day/night mode here: the app's theme wins.
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    BrulionAndroid.applySystemBars()
   }
 
   override fun onNewIntent(intent: Intent) {

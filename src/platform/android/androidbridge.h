@@ -155,6 +155,10 @@ public:
     /// arrives as imeChanged().
     void requestImeState();
 
+    /// The system bars' icons over a window drawn behind them (Android 11+): dark over a light
+    /// window (`light`), light over a dark one.
+    void setSystemBarsLight(bool light);
+
 Q_SIGNALS:
     /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.
     void activated(const QString &path, int line);

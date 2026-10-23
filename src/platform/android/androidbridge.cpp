@@ -588,6 +588,12 @@ void AndroidBridge::requestImeState()
     failed("requestImeState");
 }
 
+void AndroidBridge::setSystemBarsLight(bool light)
+{
+    QJniObject::callStaticMethod<void>(kClass, "setSystemBarsLight", "(Z)V", jboolean(light));
+    failed("setSystemBarsLight");
+}
+
 void AndroidBridge::deliverPendingActivation()
 {
     const Activation activation = takeActivation();

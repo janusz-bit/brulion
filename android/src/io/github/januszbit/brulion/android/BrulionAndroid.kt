@@ -16,6 +16,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -61,6 +62,8 @@ object BrulionAndroid {
   private var nativeAttached = false
 
   @Volatile private var activityRef: WeakReference<Activity>? = null
+  /** [setSystemBarsLight]'s value, null before C++ asked. */
+  @Volatile private var systemBarsLight: Boolean? = null
 
   // -----------------------------------------------------------------------------------------
   // Native methods, registered from C++ (QJniEnvironment::registerNativeMethods)
@@ -101,6 +104,17 @@ object BrulionAndroid {
   @JvmStatic
   fun requestImeState() {
     onMain { ImeInsets.reportAgain() }
+  }
+
+  /**
+   * The window is drawn behind the system bars (Android 11+, src/app/ui/keyboardsources.cpp): their
+   * icons are dark over a [light] window, light over a dark one — the app's theme, not the
+   * system's day/night mode, which a theme chosen in the settings may differ from.
+   */
+  @JvmStatic
+  fun setSystemBarsLight(light: Boolean) {
+    systemBarsLight = light
+    onMain { applySystemBars() }
   }
 
   /** C++ is going away (application shutdown): keep activations for [takeActivation]. */
@@ -369,8 +383,23 @@ object BrulionAndroid {
 
   internal fun onActivityCreated(activity: Activity) {
     activityRef = WeakReference(activity)
+    applySystemBars()
     ReminderNotifier.ensureChannels(activity)
     onActivityIntent(activity, activity.intent)
+  }
+
+  /**
+   * The system bars' icons as C++ asked ([setSystemBarsLight]) — again after a configuration
+   * change, where Qt sets them after the system's day/night mode.
+   */
+  internal fun applySystemBars() {
+    val light = systemBarsLight ?: return
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+    val window = currentActivity()?.window ?: return
+    WindowCompat.getInsetsController(window, window.decorView).run {
+      isAppearanceLightStatusBars = light
+      isAppearanceLightNavigationBars = light
+    }
   }
 
   internal fun onActivityDestroyed(activity: Activity) {

@@ -12,8 +12,10 @@
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
 # "Klawiatura ekranowa") — the sample notebook's journal stream and a page, a block edited with a
 # finger, the system's keyboard up: the toolbar sits right on its top edge (the IME window's frame
-# from dumpsys against the app's KeyboardInsets log and the screenshot), stays there while the
-# journal scrolls, stays docked when Back hides the keyboard. Needs a DEBUGGABLE APK (Qt passes
+# from dumpsys against the app's KeyboardInsets log and the screenshot), follows its slide frame
+# by frame on Android 11+ (the window keeps its size), stays there while the journal scrolls, stays
+# docked right above the system's navigation bar when Back hides the keyboard (the shell's log);
+# a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
 # app arguments and environment only to those):
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
 #
@@ -208,6 +210,20 @@ keyboard_matches() {
     exit !(gap <= 3 && dp <= 1) }'
 }
 keyboard_reported_hidden() { adb logcat -d | grep 'On-screen keyboard' | tail -n 1 | grep -q 'hidden, overlap 0'; }
+# The shell's last settled layout while typing (AppShell.qml, logical px): "Typing: the content
+# ends <room> px above the window's bottom (keyboard <k> px, navigation bar <s> px), editing
+# toolbar docked". With the keyboard hidden by the system the toolbar stays docked right above the
+# navigation bar: the content ends exactly that far above the bottom.
+typing_report() {
+  adb logcat -d | grep -oE "Typing: the content ends [0-9]+ px above the window's bottom \(keyboard [0-9]+ px, navigation bar [0-9]+ px\), editing toolbar (docked|not docked)" |
+    tail -n 1
+}
+toolbar_above_navigation_bar() {
+  local report
+  report=$(typing_report)
+  [[ $report =~ ends\ ([0-9]+)\ px.*keyboard\ 0\ px,\ navigation\ bar\ ([0-9]+)\ px.*toolbar\ docked$ ]] &&
+    ((BASH_REMATCH[1] == BASH_REMATCH[2]))
+}
 app_shot() { adb exec-out screencap -p >"$OUT/$1.png" || true; }
 start_app() { # <app arguments> [more am start arguments]
   adb shell am force-stop "$PKG"
@@ -238,8 +254,10 @@ if ((KEYBOARD)); then
   check "the app's view ends at the keyboard's top" keyboard_matches
   frames=$(ime_frames)
   report=$(observer_report)
-  if ((android_api >= 30)) && [[ ${report#* } != 0 ]]; then
-    # (A window the system resizes gets no frames of the slide: nothing of it is covered.)
+  if ((android_api >= 30)); then
+    # (Android 11+: the window is drawn behind the system bars and keeps its size, the keyboard
+    # covers its bottom; keyboardsources.cpp.)
+    check "the window keeps its size: the keyboard covers its bottom (Android 11+)" test "${report#* }" -gt 0
     check "the keyboard's slide is followed frame by frame (Android 11+, $frames frames)" test "$frames" -ge 3
   else
     echo "    the system resized the window above the keyboard ($frames frame(s) of a slide reported)"
@@ -255,6 +273,9 @@ if ((KEYBOARD)); then
   sleep 2
   app_shot keyboard-journal-hidden
   check "the app reports it hidden" wait_for 10 keyboard_reported_hidden
+  check "the toolbar stays docked right above the system's navigation bar, editing goes on" \
+    wait_for 10 toolbar_above_navigation_bar
+  echo "    $(typing_report)"
   # A page: the guide (opened as by a tapped notification), its first paragraph tapped.
   start_app '--demo --locale pl' --es "$EXTRA.PATH" "'Witaj w Brulionie.md'" --ei "$EXTRA.LINE" 0
   app_shot keyboard-page-start
@@ -267,6 +288,10 @@ if ((KEYBOARD)); then
   sleep 3
   app_shot keyboard-page
   check "the page's view ends at the keyboard's top" keyboard_matches
+  # The window is drawn behind the system bars (Android 11+): their icons follow the app's theme
+  # (the screenshots: dark icons over the light theme above, light ones over the dark theme here).
+  start_app '--demo --locale pl --theme dark --route journals'
+  app_shot keyboard-dark-theme
   adb logcat -d >"$OUT/keyboard-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/keyboard-logcat.txt'"
   grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true

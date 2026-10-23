@@ -63,6 +63,31 @@ FocusScope {
         return value === true || value === "true"
     }
 
+    // The detailed event log notes where the content ends while typing, once the keyboard has
+    // settled (scripts/android-emulator-test.sh --keyboard checks a docked toolbar above the
+    // system's navigation bar with it).
+    LoggingCategory {
+        id: platformLog
+        name: "brulion.platform"
+        defaultLogLevel: LoggingCategory.Info
+    }
+    readonly property string typingReport: !typing ? ""
+        : "Typing: the content ends %1 px above the window's bottom (keyboard %2 px, navigation bar %3 px), editing toolbar %4"
+          .arg(Math.round(keyboardRoom)).arg(Math.round(keyboardOverlap)).arg(Math.round(safe.bottom))
+          .arg(toolbarDocked ? "docked" : "not docked")
+    property string _loggedTyping: ""
+    function logTyping() {
+        if (KeyboardInsets.animating || typingReport === _loggedTyping)
+            return
+        console.debug(platformLog, typingReport !== "" ? typingReport : "Typing ended")
+        _loggedTyping = typingReport
+    }
+    onTypingReportChanged: Qt.callLater(shell.logTyping)
+    Connections {
+        target: KeyboardInsets
+        function onAnimatingChanged() { Qt.callLater(shell.logTyping) }
+    }
+
     /// A page's title as people read it: daily notes by their date ("środa, 14 października
     /// 2026"), not by their file name ("2026-10-14").
     function pageLabel(path) {
