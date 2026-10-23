@@ -1143,6 +1143,29 @@ private Q_SLOTS:
         QCOMPARE(counts(p.a.sync(confirm)), Counts{.delR = 1});
         QCOMPARE(p.server.files(kFolder), p.a.files());
     }
+
+    // ---- Folder deletions on the server ----------------------------------------------------
+
+    void serverFolderWithAnEntryTheClientCannotNameIsKept()
+    {
+        // A name the client cannot map to a path of its own ("\" becomes a separator and the
+        // entry collapses onto the folder): the folder is not empty, whatever the listing makes of
+        // it, and WebDAV would delete it with everything in it.
+        Pair p(notesIn(u""_s, 3));
+        QVERIFY(p.a.vault->createFolder(u"Pusty"_s));
+        p.settle();
+        QVERIFY(p.a.engine->knowsFolder(u"Pusty"_s));
+        p.server.putText(u"Notatki/Pusty/\\"_s, u"nie usuwaj\n"_s);
+        QVERIFY(p.a.vault->remove(u"Pusty"_s));
+        const SyncReport r = p.a.sync();
+        QCOMPARE(r.foldersDeleted, 0);
+        QCOMPARE(p.server.text(u"Notatki/Pusty/\\"_s), std::optional<QString>(u"nie usuwaj\n"_s));
+        QVERIFY(p.server.requests("DELETE").isEmpty());
+        // The client says so instead of calling the folder empty.
+        const ListResult listed = await<ListResult>([&](auto done) { p.a.client->listFolder(u"Pusty"_s, done); });
+        QVERIFY(listed.error.is(WebDavErrorCode::Parse));
+        QVERIFY(listed.entries.isEmpty());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncFolders)

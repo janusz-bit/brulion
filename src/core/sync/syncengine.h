@@ -104,7 +104,8 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
 /// Folders (syncfolders.cpp): an empty folder is created on the other side (MKCOL / a vault
 /// folder; not when that side has the name in another letter case); a folder deleted on one side
 /// is deleted on the other only when it holds nothing there (locally: empty on disk, rmdir();
-/// on the server: nothing in the run's view nor in a fresh listing right before the DELETE) and
+/// on the server: nothing in the run's view nor in a fresh listing right before the DELETE, where
+/// an entry the client cannot name counts as content) and
 /// no deletion is held back; folders that existed on both sides are remembered ("sync/folder/",
 /// knowsFolder()), and so are the folders of synced files. A folder renamed in the vault (gone
 /// here, still on the server, at least half of its synced files unchanged below a new folder

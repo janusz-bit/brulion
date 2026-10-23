@@ -377,14 +377,26 @@ void WebDavClient::listFolder(const VaultPath &path, ListCallback done)
                 ListResult result;
                 result.error = error;
                 if (!error.isError()) {
+                    // Callers decide from this answer that a folder is empty (and DELETE it with
+                    // everything in it): an entry that cannot be named as a child of the folder
+                    // (an href elsewhere, a name such as "\" that collapses onto the folder) is not
+                    // skipped but fails the listing, and so does a second entry for the folder.
                     const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+                    bool self = false;
                     for (const DavResource &res : resources) {
                         const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
-                        if (!rawRel)
-                            continue;
-                        const VaultPath child = paths::normalize(*rawRel);
-                        if (child.isEmpty() || child == folder)
-                            continue;
+                        const VaultPath child = rawRel ? paths::normalize(*rawRel) : QString();
+                        if (rawRel && child == folder && !std::exchange(self, true))
+                            continue; // the folder itself
+                        const bool isChild =
+                                rawRel && child != folder && (folder.isEmpty() || child.startsWith(folder + u'/'));
+                        if (!isChild) {
+                            const QString message = u"PROPFIND %1: an entry that is not a child of the folder (%2)"_s;
+                            result.error = WebDavError::make(WebDavErrorCode::Parse, message.arg(folder, res.href),
+                                                             requestUrl);
+                            result.entries.clear();
+                            break;
+                        }
                         result.entries.append(entryFor(child, res));
                     }
                     std::sort(result.entries.begin(), result.entries.end(),

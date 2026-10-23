@@ -160,7 +160,8 @@ public:
     /// into itself. The server's spelling of names inside a moved folder (NFD) is kept.
     void move(const VaultPath &from, const VaultPath &to, const MoveOptions &options, DoneCallback done);
     /// The direct children of a folder (PROPFIND Depth 1), sorted by path; NotFound when the
-    /// folder does not exist.
+    /// folder does not exist. An entry that cannot be named as a child of the folder fails the
+    /// listing (Parse) instead of being left out: an empty answer means an empty folder.
     void listFolder(const VaultPath &path, ListCallback done);
     /// Create a folder ("" = the base folder); an existing one (405) is fine.
     void mkcol(const VaultPath &path, DoneCallback done);

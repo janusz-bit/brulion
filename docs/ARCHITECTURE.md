@@ -237,7 +237,8 @@ app; these guards keep data from being lost:
   server's folder of another letter case is the same folder on disk — `std::filesystem::equivalent`,
   case-insensitive storage), a server one
   (WebDAV deletes recursively) only when the run's listing and a fresh Depth-1 listing right
-  before the DELETE show nothing in it; while deletions are held back, no folder is deleted
+  before the DELETE show nothing in it (an entry the client cannot name as a child fails that
+  listing: the folder stays); while deletions are held back, no folder is deleted
   either. A folder renamed in the vault is moved with `MOVE` and `Overwrite: F` (never over an
   existing name; any refusal falls back to per-file upload and deletion), only when it is a
   rename (the old folder missing here, still on the server; at least half of its synced files
