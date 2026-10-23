@@ -139,6 +139,60 @@ Folder notatek dodajesz w panelu Syncthing (<http://127.0.0.1:8384>). Alternatyw
 (WebDAV) w ustawieniach synchronizacji Brulionu — aplikacja na komputer nie potrzebuje do tego
 żadnej konfiguracji systemu.
 
+### Agent AI (Hermes) i wiersz poleceń
+
+Pakiet ma też `brulion-cli` — wiersz poleceń dla skryptów i agentów AI ([CLI.md](CLI.md)): czyta
+i zmienia notatki tym samym kodem co aplikacja, a `brulion-cli mcp` udostępnia polecenia jako
+narzędzia MCP. Na komputer bez pulpitu (np. Raspberry Pi z agentem) wystarczy lekki pakiet
+**`brulion-cli`** z tego flake'a — sam Qt Core, bez Qt Quick, QML, SVG i Waylanda, więc buduje się
+szybko i zajmuje mało miejsca:
+
+```nix
+environment.systemPackages = [ brulion.packages.${pkgs.stdenv.hostPlatform.system}.brulion-cli ];
+```
+
+albo bez instalowania: `nix run github:janusz-bit/brulion#brulion-cli -- --vault ~/Notatki task list`.
+
+Agent na innym komputerze niż aplikacja dostaje notatki jako **folder synchronizowany** —
+Syncthingiem (polecane) albo klientem Nextcloud — i pracuje na jego lokalnej kopii. Przykład:
+Hermes jako użytkownik `hermes` na Raspberry Pi, folder `/var/lib/hermes/Brulion` udostępniony
+z komputera Syncthingiem, który na Pi działa jako ten sam użytkownik:
+
+```nix
+{ pkgs, lib, brulion, ... }:
+let
+  brulionCli = brulion.packages.${pkgs.stdenv.hostPlatform.system}.brulion-cli;
+in
+{
+  services.syncthing = {
+    enable = true;
+    user = "hermes";                       # pliki należą do agenta
+    dataDir = "/var/lib/hermes";
+    configDir = "/var/lib/hermes/.config/syncthing";
+  };
+
+  services.hermes-agent.mcpServers.brulion = {
+    command = lib.getExe brulionCli;
+    args = [ "mcp" "--vault" "/var/lib/hermes/Brulion" ];   # + "--read-only": tylko czytanie
+    connect_timeout = 60;                  # pierwsze uruchomienie indeksuje notatnik
+    timeout = 120;
+  };
+}
+```
+
+Folder `Brulion` dodajesz w panelu Syncthinga na obu komputerach (na Pi np. przez
+`ssh -L 8384:127.0.0.1:8384 pi`). Agent dostaje narzędzia `brulion_capture`, `brulion_task_add`,
+`brulion_task_list`, `brulion_search`, `brulion_query`, `brulion_journal_append` i inne; polecenia
+niszczące (zmiana całej strony, przenoszenie, usuwanie) pojawiają się dopiero z
+`--allow-destructive`. Każda zmiana agenta trafia do historii wersji z opisem „Zastąpiona z
+wiersza poleceń (agent)” — na urządzeniu, na którym działa `brulion-cli` (stan urządzenia w
+`~/.local/share/Brulion/Brulion/vaults/<id>` użytkownika agenta). Poradnik dla agenta (format
+agentskills) leży w pakiecie: `share/brulion/agent-skills/brulion/SKILL.md`.
+
+**Przypomnienia** dodane przez agenta dzwonią tam, gdzie działa aplikacja: na komputerze (w
+zasobniku, `autostart = true`) i na telefonie, gdy aplikacja zobaczy zmianę. Sam `brulion-cli`
+nigdy nie uruchamia przypomnień ani synchronizacji i nie zmienia ustawień aplikacji.
+
 ## Wersja przeglądarkowa na własnym serwerze (`services.brulion-web`)
 
 Moduł serwuje wersję WebAssembly (PWA, działa offline) przez nginx: poprawny typ MIME
@@ -265,6 +319,7 @@ Polecenia Nixa:
 
 ```sh
 nix build .#brulion -L         # pakiet -> ./result (bez testów; walidacja .desktop/AppStream)
+nix build .#brulion-cli -L     # sam wiersz poleceń (BRULION_BUILD_APP=OFF, bez Qt Quick)
 nix flake check -L             # pakiet, moduł NixOS, formatowanie, test VM (x86_64)
 nix fmt                        # formatowanie plików .nix (nixfmt)
 ```
@@ -273,7 +328,8 @@ Co sprawdza `nix flake check`:
 
 | Check | Co robi |
 |---|---|
-| `brulion` | build pakietu, testy jednostkowe (`ctest`), `desktop-file-validate` i `appstreamcli validate-tree` na zainstalowanych plikach |
+| `brulion` | build pakietu, testy jednostkowe (`ctest`), `desktop-file-validate` i `appstreamcli validate-tree` na zainstalowanych plikach, `brulion-cli version` i zapis szybkiej notatki w próbnym notatniku |
+| `brulion-cli` | sam wiersz poleceń (bez Qt Quick): ten sam test zapisu |
 | `nixos-module` | minimalny system NixOS z `programs.brulion` (+ autostart) i `services.brulion-web` (+ pośrednik Nextcloud) się ewaluuje (`toplevel.drvPath`, bez budowania systemu); konfiguracja nginx przechodzi `gixy`, wpis autostartu `desktop-file-validate`; wariant z `release` i `basePath`; asercja przy braku pakietu |
 | `nixfmt` | wszystkie pliki `.nix` są sformatowane (`nix fmt`) |
 | `web-vm` (tylko x86_64, wymaga KVM) | maszyna wirtualna z modułem: typy MIME, gzip/brotli, nagłówki cache i ETag, przekierowanie `basePath`, pośrednik WebDAV (fałszywy Nextcloud: ścieżki z polskimi znakami, ciasteczka, duży `PUT`), wpis autostartu i start aplikacji bez ekranu |
@@ -293,12 +349,13 @@ flock <lock> laptop-run bash -c 'nix flake check -L && nix build .#brulion -L'
 |---|---|
 | `flake.nix`, `flake.lock` | wyjścia flake'a, przypięty nixpkgs |
 | `nix/package.nix` | pakiet (`version` zmienia `scripts/release.sh` razem z `CMakeLists.txt`) |
+| `nix/cli.nix` | sam `brulion-cli` (`packages.<system>.brulion-cli`, `apps.brulion-cli`) |
 | `nix/module.nix` | moduł NixOS (`programs.brulion`, `services.brulion-web`) |
 | `nix/web-release.nix` | pobieranie `brulion-web-<wersja>.zip` z wydania |
 | `nix/web-site.nix` | kopia wersji przeglądarkowej z plikami `.gz`/`.br` |
 | `nix/tests/` | `module-eval.nix`, `web-vm.nix`, `fake-web-build.nix` (zastępcza „wersja przeglądarkowa” do testów) |
 | `cmake/BrulionInstall.cmake` | reguły `cmake --install` dla plików pulpitu (Linux) |
-| `packaging/` | `io.github.januszbit.brulion.desktop`, `.metainfo.xml`, ikona PNG 256 px |
+| `packaging/` | `io.github.januszbit.brulion.desktop`, `.metainfo.xml`, ikona PNG 256 px, `agent/brulion/SKILL.md` (poradnik dla agentów AI) |
 
 Ikona PNG jest wygenerowana z `assets/logo.svg`; po zmianie logo:
 

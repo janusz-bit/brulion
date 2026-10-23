@@ -5,7 +5,7 @@ do dziennika, dodaje zadania i przypomnienia, szuka, uruchamia zapytania, przeno
 aplikacja (linki i tagi idą za stroną). Wynik to JSON (albo tekst z `--format text`), a kod wyjścia
 mówi, co poszło nie tak. Ten sam zestaw poleceń działa jako serwer MCP (`brulion-cli mcp`) dla
 agentów AI, np. Hermesa albo Claude Code. Agent dostaje notatki jako zwykły folder (Syncthing,
-klient Nextcloud). Zmiany agenta trafiają do historii wersji z opisem „Zastąpione z wiersza poleceń
+klient Nextcloud). Zmiany agenta trafiają do historii wersji z opisem „Zastąpiona z wiersza poleceń
 (agent)”, polecenia, które coś usuwają lub nadpisują, wymagają `--allow-destructive`, a usunięte
 strony idą do kosza. Przewodnik dla użytkownika: strona „Wiersz poleceń i agenci AI” w dokumentacji
 w aplikacji. Poniżej — dokumentacja techniczna (po angielsku).
@@ -209,7 +209,7 @@ The command line is meant to run next to the app, Syncthing and Nextcloud:
   line the edit does not touch keep their bytes. A file that is not UTF-8 is refused rather than
   rewritten.
 * **History.** The text a write replaces is kept in the device's version history with the reason
-  `cli` — the app shows it as „Zastąpione z wiersza poleceń (agent)” and can restore it; so does
+  `cli` — the app shows it as „Zastąpiona z wiersza poleceń (agent)” and can restore it; so does
   `history restore`.
 * **Additive by default.** Destructive commands (page write, rename, move, delete; folder move,
   rename, delete; history restore) need `--allow-destructive`; deleting moves to `.trash/`
