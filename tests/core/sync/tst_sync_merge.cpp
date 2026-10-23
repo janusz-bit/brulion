@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRandomGenerator>
 #include <QTest>
 
 using namespace brulion;
@@ -112,6 +113,48 @@ private Q_SLOTS:
                 << u"- a\n- b\n"_s << u"- a\n- b!\n- c\n"_s << u"- a\n- b\n- c\n"_s << u"- a\n- b!\n- c\n"_s;
         QTest::newRow("no final newline, last line edited, remote appended")
                 << u"- a\n- b"_s << u"- a\n- b!"_s << u"- a\n- b\n- c"_s << u"- a\n- b!\n- c"_s;
+        // Additions on both sides of the edited lines, and the other way round.
+        QTest::newRow("remote added before and after the edited line")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- B\n- c\n"_s << u"- a\n- x\n- b\n- y\n- c\n"_s
+                << u"- a\n- x\n- B\n- y\n- c\n"_s;
+        QTest::newRow("local added before and after the line remote edited")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- x\n- b\n- y\n- c\n"_s << u"- a\n- B\n- c\n"_s
+                << u"- a\n- x\n- B\n- y\n- c\n"_s;
+        QTest::newRow("remote added around two edited lines")
+                << u"- a\n- b\n- c\n- d\n"_s << u"- a\n- B\n- C\n- d\n"_s << u"- a\n- x\n- b\n- c\n- y\n- d\n"_s
+                << u"- a\n- x\n- B\n- C\n- y\n- d\n"_s;
+        // Both sides added at the same place next to the change: as concurrent insertions, the
+        // lines both added once — never twice.
+        QTest::newRow("both appended after the edited line, partly the same")
+                << u"- a\n- b\n"_s << u"- a\n- b!\n- c\n"_s << u"- a\n- b\n- c\n- d\n"_s << u"- a\n- b!\n- c\n- d\n"_s;
+        QTest::newRow("edited and appended two, remote appended the first of them")
+                << u"- a\n- b\n"_s << u"- a\n- b!\n- c\n- e\n"_s << u"- a\n- b\n- c\n"_s << u"- a\n- b!\n- c\n- e\n"_s;
+        QTest::newRow("remote edited and appended, local appended the same line")
+                << u"- a\n- b\n"_s << u"- a\n- b\n- c\n"_s << u"- a\n- b!\n- c\n- e\n"_s << u"- a\n- b!\n- c\n- e\n"_s;
+        QTest::newRow("both prepended before the edited first line")
+                << u"- a\n- b\n"_s << u"- x\n- A\n- b\n"_s << u"- y\n- a\n- b\n"_s << u"- y\n- x\n- A\n- b\n"_s;
+        QTest::newRow("both prepended the same line before the edited one")
+                << u"- a\n"_s << u"- z\n- A\n"_s << u"- z\n- a\n"_s << u"- z\n- A\n"_s;
+        // A line inserted locally between two edited lines; the remote's line before them stays
+        // before both.
+        QTest::newRow("remote prepended before two lines edited with a line between them")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- B\n- nowy\n- C\n"_s << u"- a\n- x\n- b\n- c\n"_s
+                << u"- a\n- x\n- B\n- nowy\n- C\n"_s;
+        QTest::newRow("remote appended after two lines edited with a line between them")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- B\n- nowy\n- C\n"_s << u"- a\n- b\n- c\n- y\n"_s
+                << u"- a\n- B\n- nowy\n- C\n- y\n"_s;
+        // A line deleted with the edit (not the whole region): the addition stays.
+        QTest::newRow("edited one line and deleted the next, remote appended")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- B\n"_s << u"- a\n- b\n- c\n- d\n"_s << u"- a\n- B\n- d\n"_s;
+        // Line endings and the final newline.
+        QTest::newRow("CRLF without final newline, last line edited, remote appended")
+                << u"- a\r\n- b"_s << u"- a\r\n- b!"_s << u"- a\r\n- b\r\n- c"_s << u"- a\r\n- b!\r\n- c"_s;
+        QTest::newRow("CRLF edited, remote appended with LF")
+                << u"- a\r\n- b\r\n"_s << u"- a\r\n- b!\r\n"_s << u"- a\n- b\n- c\n"_s << u"- a\r\n- b!\r\n- c\r\n"_s;
+        QTest::newRow("remote appended a line with its newline to a file without one")
+                << u"- a\n- b"_s << u"- a\n- b!"_s << u"- a\n- b\n- c\n"_s << u"- a\n- b!\n- c\n"_s;
+        QTest::newRow("local appended without a final newline, remote edited")
+                << u"- a\n- b"_s << u"- a\n- b\n- c"_s << u"- a\n- B"_s << u"- a\n- B\n- c"_s;
     }
     void merge3Clean()
     {
@@ -170,6 +213,120 @@ private Q_SLOTS:
         const MergeResult r = merge3(u"- a\n- b\n"_s, u"- a\n- b1\n"_s, u"- a\n- b2\n- c\n"_s);
         QVERIFY(!r.clean);
         QCOMPARE(r.text, u"- a\n- b1\n"_s);
+    }
+
+    void additionsThatCannotBePlacedConflict_data()
+    {
+        QTest::addColumn<QString>("base");
+        QTest::addColumn<QString>("local");
+        QTest::addColumn<QString>("remote");
+        QTest::newRow("remote added between two edited lines")
+                << u"- a\n- b\n- c\n"_s << u"- A\n- B\n- c\n"_s << u"- a\n- x\n- b\n- c\n"_s;
+        QTest::newRow("local added between two lines remote edited")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- x\n- b\n- c\n"_s << u"- A\n- B\n- c\n"_s;
+        QTest::newRow("remote added around, local edited and appended")
+                << u"- a\n- b\n- c\n"_s << u"- a\n- B\n- y\n- c\n"_s << u"- a\n- x\n- b\n- z\n- c\n"_s;
+        QTest::newRow("deleted line next to a prepended one") << u"- a\n- b\n"_s << u"- b\n"_s << u"- x\n- a\n- b\n"_s;
+        QTest::newRow("emptied file, remote appended") << u"- a\n"_s << QString() << u"- a\n- b\n"_s;
+        QTest::newRow("remote emptied, local appended") << u"- a\n"_s << u"- a\n- b\n"_s << QString();
+    }
+    void additionsThatCannotBePlacedConflict()
+    {
+        QFETCH(QString, base);
+        QFETCH(QString, local);
+        QFETCH(QString, remote);
+        const MergeResult r = merge3(base, local, remote);
+        QVERIFY(!r.clean);
+        // A conflict keeps the local side there; nothing of it is lost.
+        for (const QString &line : splitText(local).lines)
+            QVERIFY2(splitText(r.text).lines.contains(line), qPrintable(line));
+    }
+
+    // Random notes: one side edits lines in place (and maybe adds lines), the other only adds
+    // lines; the merge applies both — never a line dropped, doubled or moved past another — or
+    // reports a conflict where an addition cannot be placed for sure. LF and CRLF, with and
+    // without a final newline, local and remote either way round.
+    void editsAndAdditionsMergeExactly_data()
+    {
+        QTest::addColumn<QString>("eol");
+        QTest::addColumn<bool>("finalNewline");
+        QTest::newRow("LF") << u"\n"_s << true;
+        QTest::newRow("LF, no final newline") << u"\n"_s << false;
+        QTest::newRow("CRLF") << u"\r\n"_s << true;
+        QTest::newRow("CRLF, no final newline") << u"\r\n"_s << false;
+    }
+    void editsAndAdditionsMergeExactly()
+    {
+        QFETCH(QString, eol);
+        QFETCH(bool, finalNewline);
+        QRandomGenerator rng(20261023);
+        const auto text = [&](const QStringList &lines) { return joinLines(lines, eol, finalNewline); };
+        int clean = 0;
+        int rounds = 0;
+        for (int round = 0; round < 600; ++round) {
+            const int n = 1 + int(rng.bounded(7));
+            const bool editorAdds = round % 2 == 1; // the editing side adds lines too
+            QStringList base;
+            QList<bool> edited;
+            for (int i = 0; i < n; ++i) {
+                base.append(u"- wiersz %1 żółw"_s.arg(i));
+                edited.append(rng.bounded(100) < 40);
+            }
+            // Lines added at point p (before base line p; p == n: at the end).
+            QList<QStringList> editorAdded(n + 1), adderAdded(n + 1);
+            int serial = 0;
+            for (int p = 0; p <= n; ++p) {
+                if (editorAdds && rng.bounded(100) < 20) {
+                    for (int k = 0, c = 1 + int(rng.bounded(2)); k < c; ++k)
+                        editorAdded[p].append(u"- dopisany przy edycji %1"_s.arg(++serial));
+                }
+                if (rng.bounded(100) < 35) {
+                    for (int k = 0, c = 1 + int(rng.bounded(2)); k < c; ++k)
+                        adderAdded[p].append(u"- dopisany gdzie indziej %1 ąę"_s.arg(++serial));
+                }
+            }
+            QStringList editor, adder;
+            bool mustBeClean = !editorAdds;
+            for (int p = 0; p <= n; ++p) {
+                editor += editorAdded[p];
+                adder += adderAdded[p];
+                if (p < n) {
+                    editor.append(edited[p] ? base[p] + u" (zmiana)"_s : base[p]);
+                    adder.append(base[p]);
+                }
+                // Lines added between two edited lines cannot be placed.
+                if (p > 0 && p < n && edited[p - 1] && edited[p] && !adderAdded[p].isEmpty())
+                    mustBeClean = false;
+            }
+            for (const bool editorIsLocal : {true, false}) {
+                ++rounds;
+                // Where both sides added at one point: next to an edited line before the point,
+                // the edited side's lines first; before an edited line, the adding side's;
+                // between unchanged lines (a plain union) the local side's.
+                QStringList expected;
+                for (int p = 0; p <= n; ++p) {
+                    const bool afterEdit = p > 0 && edited[p - 1];
+                    const bool beforeEdit = p < n && edited[p];
+                    const bool editorFirst = afterEdit ? true : beforeEdit ? false : editorIsLocal;
+                    expected += editorFirst ? editorAdded[p] + adderAdded[p] : adderAdded[p] + editorAdded[p];
+                    if (p < n)
+                        expected.append(edited[p] ? base[p] + u" (zmiana)"_s : base[p]);
+                }
+                const QString local = text(editorIsLocal ? editor : adder);
+                const QString remote = text(editorIsLocal ? adder : editor);
+                const MergeResult r = merge3(text(base), local, remote);
+                const QString what =
+                        u"base %1 | local %2 | remote %3 | merged %4"_s.arg(text(base), local, remote, r.text);
+                if (r.clean) {
+                    ++clean;
+                    QVERIFY2(r.text == text(expected), qPrintable(what));
+                } else {
+                    QVERIFY2(!mustBeClean, qPrintable(what));
+                }
+            }
+        }
+        // Most of them merge.
+        QVERIFY2(clean * 10 > rounds * 7, qPrintable(u"%1 of %2"_s.arg(clean).arg(rounds)));
     }
 
     void conflictingInsertionsInsideTextAreUnioned()

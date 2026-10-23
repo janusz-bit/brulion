@@ -7,18 +7,22 @@
 #include <QJsonObject>
 #include <QJsonParseError>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::sync {
 
 namespace {
 
-/// Lines one side only added right before or right after the region.
+/// Lines one side only added around the region: `side` is `before` + base + `after`.
 struct AddedLines {
     QStringList before, after;
 };
 
-/// `side` is `base` (not empty) with lines added only before it or only after it: those lines.
+/// `side` is `base` (not empty) with lines added only right before it and / or right after it:
+/// those lines. Where base occurs in `side` more than once with lines on both sides, the
+/// placement is ambiguous: std::nullopt.
 std::optional<AddedLines> addedAround(const QStringList &base, const QStringList &side)
 {
     if (base.isEmpty() || side.size() <= base.size())
@@ -28,21 +32,52 @@ std::optional<AddedLines> addedAround(const QStringList &base, const QStringList
         return AddedLines{{}, side.last(extra)};
     if (side.last(base.size()) == base)
         return AddedLines{side.first(extra), {}};
-    return std::nullopt;
+    std::optional<AddedLines> found;
+    for (qsizetype at = 1; at < extra; ++at) {
+        if (side.mid(at, base.size()) != base)
+            continue;
+        if (found)
+            return std::nullopt;
+        found = AddedLines{side.first(at), side.mid(at + base.size())};
+    }
+    return found;
 }
 
-/// `changed` with the other side's added lines around it (those it has already there once).
-QStringList withAdded(const QStringList &changed, const AddedLines &added)
+/// `changed` (the lines one side made of the region `base`) with the lines the other side only
+/// added around the region, or std::nullopt when they cannot be placed for sure. Nothing of
+/// either side is dropped and nothing added twice:
+///  * lines added after the region come after the changed lines; when the changed side added
+///    lines at the end too (its lines beyond the region's length), the two additions are
+///    unioned as concurrent insertions at one place (unionLines(): common lines once) — the
+///    changed side's first;
+///  * lines added before it come first, unioned the same way with the changed side's lines
+///    before its last `base.size()` lines — the added side's first, so they never move behind a
+///    line that was there before them;
+///  * an addition the changed side already ends (starts) with is taken once;
+///  * lines added on both sides only around lines changed in place (as many lines as before).
+/// A region the changed side emptied stays a conflict: everything around it would go with it.
+std::optional<QStringList> besideChange(const QStringList &base, const QStringList &changed, const AddedLines &added)
 {
-    QStringList out;
-    const qsizetype nb = added.before.size();
-    const qsizetype na = added.after.size();
-    if (nb > 0 && !(changed.size() >= nb && changed.first(nb) == added.before))
-        out += added.before;
-    out += changed;
-    if (na > 0 && !(changed.size() >= na && changed.last(na) == added.after))
-        out += added.after;
-    return out;
+    if (changed.isEmpty())
+        return std::nullopt;
+    const qsizetype n = base.size();
+    if (added.before.isEmpty()) {
+        const qsizetype na = added.after.size();
+        if (changed.size() >= na && changed.last(na) == added.after)
+            return changed;
+        const qsizetype core = std::min(n, changed.size());
+        return changed.first(core) + unionLines(changed.mid(core), added.after);
+    }
+    if (added.after.isEmpty()) {
+        const qsizetype nb = added.before.size();
+        if (changed.size() >= nb && changed.first(nb) == added.before)
+            return changed;
+        const qsizetype head = std::max<qsizetype>(0, changed.size() - n);
+        return unionLines(added.before, changed.first(head)) + changed.mid(head);
+    }
+    if (changed.size() != n)
+        return std::nullopt; // where the changed side's own additions belong is not known
+    return added.before + changed + added.after;
 }
 
 /// Resolve one diff3 conflict region, or std::nullopt when it is a real conflict.
@@ -58,12 +93,15 @@ std::optional<QStringList> resolveRegion(const QStringList &base, const QStringL
         return unionLines(local, remote);
     // One side only added lines next to lines the other side changed — diff3 calls adjacent
     // changes a conflict, but both apply: the last block of a journal edited in the app while an
-    // agent (or another device) appended to the journal. The changed side, then the added lines.
-    // Lines the other side deleted (an emptied file too) stay a conflict.
-    if (const std::optional<AddedLines> added = addedAround(base, remote); added && !local.isEmpty())
-        return withAdded(local, *added);
-    if (const std::optional<AddedLines> added = addedAround(base, local); added && !remote.isEmpty())
-        return withAdded(remote, *added);
+    // agent (or another device) appended to the journal.
+    if (const std::optional<AddedLines> added = addedAround(base, remote)) {
+        if (const std::optional<QStringList> merged = besideChange(base, local, *added))
+            return merged;
+    }
+    if (const std::optional<AddedLines> added = addedAround(base, local)) {
+        if (const std::optional<QStringList> merged = besideChange(base, remote, *added))
+            return merged;
+    }
     return std::nullopt;
 }
 
