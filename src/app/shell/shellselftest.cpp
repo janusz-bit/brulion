@@ -678,7 +678,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
 ///     among its references and the tag strip in its header — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
-///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview.
+///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
+///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
+///     the links and tags it rewrites.
 void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -777,7 +779,35 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                       return view() == u"tag" && app->currentRoute().value(u"tag"_s).toString() == u"pomysł";
                   }),
                   "the row's tag overview button opens the tag overview");
+            QQuickItem *pageButton = nullptr;
+            check(waitFor([&] {
+                      pageButton = findShown(window->contentItem(),
+                                             [](QQuickItem *item) { return item->objectName() == u"tagPageButton"; });
+                      return pageButton != nullptr;
+                  }) && !pageButton->property("pageExists").toBool()
+                          && pageButton->property("iconName").toString() == u"plus",
+                  "the tag overview offers to create the tag's page, not written yet");
+            if (pageButton) {
+                tapOrClick(window, pointIn(pageButton), touch);
+                check(waitFor([&] { return view() == u"page" && routePath() == tagPage; })
+                              && !app->workspace()->exists(tagPage),
+                      "the tag overview's page button opens the tag's page (still not created)");
+            }
         }
+    }
+
+    // ---- Renaming from the sidebar says how many links and tags change.
+    QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
+    check(rename != nullptr, "the shell has its rename dialog");
+    if (rename) {
+        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(u"Witaj w Brulionie.md"_s)),
+                                  Q_ARG(QVariant, QVariant(false)));
+        const int changes = rename->property("changes").toInt();
+        check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
+                      && rename->property("subtitle").toString().contains(QString::number(changes)),
+              "the sidebar's rename dialog counts the links and tags naming the page");
+        QMetaObject::invokeMethod(rename, "close");
+        waitFor([&] { return !rename->property("opened").toBool(); });
     }
     app->goHome();
     settle(200);
