@@ -75,6 +75,16 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     endforeach()
 endif()
 
+# The UI driver (src/app/shell/uidriver.h, shared by the self-test, the journey and the remote
+# control) on a small Qt Quick scene, offscreen: key sequences, typing Polish text, shortcuts, mouse
+# and touch gestures, scrolling, gestures played from timers, finding items.
+if(TARGET brulion_uidriver AND EXISTS "${_brulion_qt_qml_root}/QtQuick")
+    brulion_add_test(tst_uidriver SOURCES tst_uidriver.cpp LIBS brulion_uidriver Qt6::Qml Qt6::Quick)
+    set_tests_properties(tst_uidriver PROPERTIES
+        ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+        TIMEOUT 120)
+endif()
+
 # The Workspace wired to the real core (workspace*.cpp): indexing progress, quick capture,
 # index queries and the QueryHost, trash, history, fold state, reminders through a fake sink,
 # conflict copies and the AppController integration; and Workspace.sync against the core's

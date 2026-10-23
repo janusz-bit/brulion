@@ -84,11 +84,17 @@ target_link_libraries(brulion PRIVATE brulion_shell)
 
 if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
+    # The UI driver (uidriver.h): real input and item finding for the self-test and the journey
+    # (tests/app/shell: tst_uidriver).
+    qt_add_library(brulion_uidriver STATIC ${_brulion_shell_dir}/uidriver.h ${_brulion_shell_dir}/uidriver.cpp)
+    target_include_directories(brulion_uidriver PUBLIC ${_brulion_shell_dir})
+    target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
+    brulion_set_warnings(brulion_uidriver)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
         shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp)
     # One Brulion per session and the messages of brulion-cli (src/ipc); `brulion cli …` runs the
     # command line (src/cli) inside the app's binary (the AppImage's one entry point).
-    target_link_libraries(brulion PRIVATE Qt6::Widgets brulion_ipc brulion_cli)
+    target_link_libraries(brulion PRIVATE Qt6::Widgets brulion_ipc brulion_cli brulion_uidriver)
     target_compile_definitions(brulion PRIVATE BRULION_DESKTOP_INTEGRATION=1)
 endif()
 
