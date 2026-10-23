@@ -48,7 +48,8 @@ components — no Material/Fusion look, so all targets look identical.
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
-  ulubionych, Zmień nazwę… (F2, pages only), Przenieś do… (pages only), Pokaż w drzewie (the
+  ulubionych, Zmień nazwę… (F2) and Przenieś do… (on a page route — a daily note opened as a page
+  too —, not in the journal views by date: "Folders" below), Pokaż w drzewie (the
   sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Zaznacz tekst (the
   page or day as one text, "Selecting and copying"), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment

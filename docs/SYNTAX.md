@@ -33,7 +33,8 @@ This file is the single source of truth for parsers, renderers, importers and ex
   the vault would hide — a leading `.` or one of the ignored folders below (`logseq`,
   `node_modules`, …), also once sanitised (`logseq?`) — is refused ("Folder o nazwie „…” byłby
   ukryty"). Nothing is ever moved into an ignored folder.
-* **Moving and renaming** (pages, attachments, folders — "Przenieś do…", drag and drop, a `/` in
+* **Moving and renaming** (pages — daily notes too: they are files —, attachments, folders —
+  "Przenieś do…", drag and drop, a `/` in
   a name typed in the Rename dialog is a path from the vault root; in a page title edited in place
   it is sanitised like the other characters a file name cannot have, `TCP/IP` → `TCP IP.md`):
   refused onto a name that exists (also in another letter case) and into the item itself, and a
