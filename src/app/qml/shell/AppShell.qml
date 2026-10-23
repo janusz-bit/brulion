@@ -180,11 +180,8 @@ FocusScope {
         const moved = Workspace.movePath(path, target)
         if (moved === "" || moved === path)
             return false
-        const n = (impact.links || 0) + (impact.tags || 0)
-        const place = target !== "" ? target.split("/").pop() : qsTr("Notebook root")
-        const text = n === 0 ? qsTr("Moved to “%1”").arg(place)
-                   : (impact.tags || 0) > 0 ? qsTr("Moved to “%1”, %n link(s) and tag(s) updated", "", n).arg(place)
-                   : qsTr("Moved to “%1”, %n link(s) updated", "", n).arg(place)
+        const text = moveWords.movedText(Workspace.folderOf(moved), (impact.links || 0) + (impact.tags || 0),
+                                         (impact.tags || 0) > 0)
         const back = Workspace.folderOf(path)
         if (shell.toasts)
             shell.toasts.show(text, { kind: "success", actionText: qsTr("Undo"), onAction: () => Workspace.movePath(moved, back) })
@@ -439,6 +436,7 @@ FocusScope {
         id: moveDialog
         onMoveRequested: (path, folder, create) => shell.performMove(path, folder, create)
     }
+    ShellMoveWords { id: moveWords }
     ShellAboutDialog { id: about }
 
     BConfirmDialog {
@@ -451,24 +449,29 @@ FocusScope {
         readonly property bool folder: info.exists === true
         readonly property string name: path.endsWith(".md") ? Workspace.pageTitle(path) : path.split("/").pop()
 
-        /// A special folder (or one holding it): what deleting it does to the notebook.
-        function specialWarning() {
-            if (!info.special)
-                return ""
-            const self = info.specialPath === path
-            switch (info.special) {
+        /// What deleting a special folder, a folder holding some, or the journal template does to
+        /// the notebook: a sentence for each.
+        function specialWarnings() {
+            return (info.specials || []).map(s => specialWarning(s.special, s.path)).filter(w => w !== "")
+        }
+        function specialWarning(special, specialPath) {
+            const self = specialPath === path
+            switch (special) {
             case "journals":
                 return self ? qsTr("This is the journals folder: new daily notes will create it again.")
-                            : qsTr("It holds the journals folder “%1”: new daily notes will create it again.").arg(info.specialPath)
+                            : qsTr("It holds the journals folder “%1”: new daily notes will create it again.").arg(specialPath)
             case "templates":
                 return self ? qsTr("This is the templates folder: its templates will no longer be offered.")
-                            : qsTr("It holds the templates folder “%1”: its templates will no longer be offered.").arg(info.specialPath)
+                            : qsTr("It holds the templates folder “%1”: its templates will no longer be offered.").arg(specialPath)
             case "attachments":
                 return self ? qsTr("This is the attachments folder: the pictures and files in it go too.")
-                            : qsTr("It holds the attachments folder “%1”: the pictures and files in it go too.").arg(info.specialPath)
+                            : qsTr("It holds the attachments folder “%1”: the pictures and files in it go too.").arg(specialPath)
             case "newPages":
                 return self ? qsTr("This is the folder for new pages: new pages will create it again.")
-                            : qsTr("It holds the folder for new pages “%1”: new pages will create it again.").arg(info.specialPath)
+                            : qsTr("It holds the folder for new pages “%1”: new pages will create it again.").arg(specialPath)
+            case "journalTemplate":
+                return self ? qsTr("This is the journal template: new daily notes will start empty.")
+                            : qsTr("It holds the journal template “%1”: new daily notes will start empty.").arg(specialPath)
             }
             return ""
         }
@@ -483,10 +486,7 @@ FocusScope {
                            qsTr("You can restore them from there."))
             else
                 parts.push(qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
-            const warning = specialWarning()
-            if (warning !== "")
-                parts.push(warning)
-            return parts.join(" ")
+            return parts.concat(specialWarnings()).join(" ")
         }
         confirmText: qsTr("Move to trash")
         destructive: true
@@ -554,8 +554,15 @@ FocusScope {
             case "capture": shell.openCapture(); break
             case "newPage": shell.openNewPage(""); break
             case "newFolder": shell.openNewFolder(""); break
-            // move:<path> (else the page shown): the move dialog, a folder chosen by its name.
-            case "move": shell.openMove(query || shell.route.path, Workspace.folderInfo(query).exists === true); break
+            // move:<path>[><folder>] (else the page shown): the move dialog for a page or a folder,
+            // and with ">" the folder chosen in it (what the move changes shows).
+            case "move": {
+                const item = query.split(">")[0] || shell.route.path
+                shell.openMove(item, Workspace.folderInfo(item).exists === true)
+                if (query.indexOf(">") >= 0)
+                    Qt.callLater(() => moveDialog.choose({ folder: query.slice(query.indexOf(">") + 1), create: false }))
+                break
+            }
             case "about": shell.openAbout(); break
             case "drawer": drawer.open(); break
             }

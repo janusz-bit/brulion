@@ -268,7 +268,9 @@ public:
     /// Returns the new path ("" on failure; the path itself when it is in that folder already).
     Q_INVOKABLE QString movePath(const QString &path, const QString &targetFolder);
     /// What movePath(path, targetFolder) would do: { ok, error (translated, when not ok), path (the
-    /// new path), links, tags (rewritten), notes (rewritten files), special (see folderInfo) }.
+    /// new path), links, tags (rewritten), notes (rewritten files), specials (the settings of
+    /// .brulion/config.json that follow: "journals" | "templates" | "attachments" | "newPages" |
+    /// "journalTemplate") }.
     Q_INVOKABLE QVariantMap moveImpact(const QString &path, const QString &targetFolder);
     /// The same for a rename (renamePage() / renameFolder() with `newName` and `slashMoves`):
     /// { path } is "" when the name is not usable.
@@ -277,9 +279,9 @@ public:
     /// Tracked folders (not hidden or ignored ones) in Polish alphabetical order of their paths.
     Q_INVOKABLE QStringList folderPaths() const;
     /// { exists, pages (Markdown files inside, at any depth, without conflict copies),
-    ///   attachments, folders (subfolders at any depth), special: "journals" | "templates" |
-    ///   "attachments" | "newPages" when the folder is or holds one of the notebook's special
-    ///   folders, else "", specialPath: that special folder's path }.
+    ///   attachments, folders (subfolders at any depth), specials: [{ special, path }] — the
+    ///   notebook's special folders the folder is or holds (special: "journals" | "templates" |
+    ///   "attachments" | "newPages") and the journal template ("journalTemplate") }.
     Q_INVOKABLE QVariantMap folderInfo(const QString &path) const;
     /// The direct subfolders of `folder` ("" = the root) for All pages' folder rows, in Polish
     /// order: [{ path, name, pages (at any depth, without journals) }]; attachment-only folders
@@ -439,7 +441,7 @@ private:
     QString spelledFolders(const QString &path) const;
     /// The file moves of moving `from` (a file or a folder with everything in it) to `to`.
     QList<brulion::FileMove> fileMoves(const QString &from, const QString &to) const;
-    /// What relocate(from, to) rewrites: { ok, error, path, links, tags, notes, special }.
+    /// What relocate(from, to) rewrites: { ok, error, path, links, tags, notes, specials }.
     QVariantMap relocationImpact(const QString &from, const QString &to);
     /// Move or rename `from` to `to` keeping every link and tag (renamePage, renameFolder,
     /// movePath); returns `to` or "" (an error was emitted).

@@ -44,18 +44,15 @@ BDialog {
         result.typed = typed
         live = result
     }
-    /// "Zaktualizowane linki: 3 (w 2 notatkach)".
+    /// "Zaktualizowane linki: 3 (w 2 notatkach)", with the notebook settings that follow.
     function liveText() {
         if (!live.ok)
             return live.error || ""
-        const n = (live.links || 0) + (live.tags || 0)
-        if (n === 0)
-            return qsTr("No link needs to change.")
-        return ((live.tags || 0) > 0 ? qsTr("Updated links and tags: %n", "", n) : qsTr("Updated links: %n", "", n))
-               + " " + qsTr("(in %n note(s))", "", live.notes || 0)
+        return words.impactText(live)
     }
 
     PageTools { id: tools; workspace: Workspace }
+    ShellMoveWords { id: words }
     Timer {
         id: liveTimer
         interval: 250
@@ -89,11 +86,7 @@ BDialog {
         const n = (result.links || 0) + (result.tags || 0)
         const tags = (result.tags || 0) > 0
         if (moves) {
-            const folder = Workspace.folderOf(renamed)
-            const place = folder !== "" ? folder.split("/").pop() : qsTr("Notebook root")
-            AppController.toast(n === 0 ? qsTr("Moved to “%1”").arg(place)
-                                : tags ? qsTr("Moved to “%1”, %n link(s) and tag(s) updated", "", n).arg(place)
-                                : qsTr("Moved to “%1”, %n link(s) updated", "", n).arg(place), "success")
+            AppController.toast(words.movedText(Workspace.folderOf(renamed), n, tags), "success")
             return
         }
         const title = dialog.isDir ? renamed.split("/").pop() : Workspace.pageTitle(renamed)

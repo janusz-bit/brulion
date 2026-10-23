@@ -59,16 +59,17 @@ QString hiddenTypedSegment(const QString &newName, bool isDir, bool slashMoves)
     return {};
 }
 
-/// The settings of the notebook that name folders, with their keys.
+/// The settings of the notebook that name folders (and the journal template), with their keys.
 struct SpecialFolder {
     const char *key;
     const char *special; ///< folderInfo()'s name
 };
 constexpr SpecialFolder kSpecialFolders[] = {
-        {"journalsFolder", "journals"},
-        {"templatesFolder", "templates"},
-        {"attachmentsFolder", "attachments"},
-        {"newPagesFolder", "newPages"},
+        {"journalsFolder", "journals"},         // the daily notes
+        {"templatesFolder", "templates"},       // the templates offered
+        {"attachmentsFolder", "attachments"},   // where pasted pictures go
+        {"newPagesFolder", "newPages"},         // where new pages go
+        {"journalTemplate", "journalTemplate"}, // a file: a new daily note's text
 };
 
 } // namespace
@@ -156,8 +157,7 @@ QVariantMap Workspace::folderInfo(const QString &rawPath) const
     int pages = 0;
     int attachments = 0;
     int folders = 0;
-    QString special;
-    QString specialPath;
+    QVariantList specials;
     bool exists = false;
     if (m_vault && !path.isEmpty()) {
         const auto stat = m_vault->stat(path);
@@ -174,17 +174,27 @@ QVariantMap Workspace::folderInfo(const QString &rawPath) const
             if (f.path.startsWith(path + u'/'))
                 ++folders;
         }
-        const QVariantMap config = vaultConfig();
-        for (const SpecialFolder &s : kSpecialFolders) {
-            const QString value = paths::normalize(config.value(QString::fromLatin1(s.key)).toString());
-            if (special.isEmpty() && isWithin(value, path)) {
-                special = QString::fromLatin1(s.special);
-                specialPath = value;
-            }
-        }
+        specials = specialsWithin(path);
     }
-    return {{u"exists"_s, exists},   {u"pages"_s, pages},     {u"attachments"_s, attachments},
-            {u"folders"_s, folders}, {u"special"_s, special}, {u"specialPath"_s, specialPath}};
+    return {{u"exists"_s, exists},
+            {u"pages"_s, pages},
+            {u"attachments"_s, attachments},
+            {u"folders"_s, folders},
+            {u"specials"_s, specials}};
+}
+
+QVariantList Workspace::specialsWithin(const QString &path) const
+{
+    QVariantList out;
+    if (path.isEmpty())
+        return out;
+    const QVariantMap config = vaultConfig();
+    for (const SpecialFolder &s : kSpecialFolders) {
+        const QString value = paths::normalize(config.value(QString::fromLatin1(s.key)).toString());
+        if (isWithin(value, path))
+            out.append(QVariantMap{{u"special"_s, QString::fromLatin1(s.special)}, {u"path"_s, value}});
+    }
+    return out;
 }
 
 QVariantList Workspace::subfolders(const QString &rawFolder) const
@@ -356,7 +366,7 @@ QVariantMap Workspace::relocationImpact(const QString &rawFrom, const QString &r
     const QString from = paths::normalize(rawFrom);
     const QString to = spelledFolders(paths::normalize(rawTo));
     QVariantMap out{{u"ok"_s, false}, {u"path"_s, to}, {u"links"_s, 0},
-                    {u"tags"_s, 0},   {u"notes"_s, 0}, {u"special"_s, QString()}};
+                    {u"tags"_s, 0},   {u"notes"_s, 0}, {u"specials"_s, QVariantList()}};
     if (from == to && !from.isEmpty() && m_vault && m_vault->exists(from)) {
         out.insert(u"ok"_s, true);
         out.insert(u"same"_s, true);
@@ -368,8 +378,11 @@ QVariantMap Workspace::relocationImpact(const QString &rawFrom, const QString &r
         return out;
     }
     out.insert(u"ok"_s, true);
-    if (const auto stat = m_vault->stat(from); stat && stat->isDir)
-        out.insert(u"special"_s, folderInfo(from).value(u"special"_s));
+    // The settings rebaseConfig() changes (special folders, the journal template file).
+    QVariantList specials;
+    for (const QVariant &s : specialsWithin(from))
+        specials.append(s.toMap().value(u"special"_s));
+    out.insert(u"specials"_s, specials);
     if (!m_index)
         return out;
     finishIndexing(); // every linking note must be known

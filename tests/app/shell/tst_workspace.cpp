@@ -75,6 +75,15 @@ class TestWorkspace : public QObject {
         return ws;
     }
 
+    /// folderInfo()'s specials as "special:path".
+    static QStringList specials(const QVariantMap &info)
+    {
+        QStringList out;
+        for (const QVariant &v : info.value(u"specials"_s).toList())
+            out.append(v.toMap().value(u"special"_s).toString() + u':' + v.toMap().value(u"path"_s).toString());
+        return out;
+    }
+
 private Q_SLOTS:
     void initTestCase() { QVERIFY(m_tmp.isValid()); }
 
@@ -1231,7 +1240,9 @@ private Q_SLOTS:
                         {u"assets/plan.png"_s, u"png"_s},
                         {u"Dom.md"_s, u"![[plan.png]]\n"_s}});
         QSignalSpy notices(ws.get(), &Workspace::noticeOccurred);
-        QCOMPARE(ws->folderInfo(u"journals"_s).value(u"special"_s).toString(), u"journals"_s);
+        QCOMPARE(specials(ws->folderInfo(u"journals"_s)), (QStringList{u"journals:journals"_s}));
+        QCOMPARE(ws->renameImpact(u"journals"_s, u"Dziennik"_s, true).value(u"specials"_s).toStringList(),
+                 (QStringList{u"journals"_s}));
         QCOMPARE(ws->renameFolder(u"journals"_s, u"Dziennik"_s), u"Dziennik"_s);
         QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
         QCOMPARE(notices.size(), 1);
@@ -1248,8 +1259,12 @@ private Q_SLOTS:
         QCOMPARE(ws->movePath(u"assets"_s, u"Pliki"_s), u"Pliki/assets"_s);
         QCOMPARE(ws->vaultConfig().value(u"attachmentsFolder"_s).toString(), u"Pliki/assets"_s);
         QCOMPARE(ws->resolveLink(u"plan.png"_s, u"Dom.md"_s), u"Pliki/assets/plan.png"_s);
-        QCOMPARE(ws->folderInfo(u"Pliki"_s).value(u"special"_s).toString(), u"attachments"_s);
-        // The template moved on its own.
+        QCOMPARE(specials(ws->folderInfo(u"Pliki"_s)), (QStringList{u"attachments:Pliki/assets"_s}));
+        // The template moved on its own: the settings say so before.
+        QCOMPARE(ws->moveImpact(u"Szablony/journal.md"_s, QString()).value(u"specials"_s).toStringList(),
+                 (QStringList{u"journalTemplate"_s}));
+        QCOMPARE(specials(ws->folderInfo(u"Szablony/journal.md"_s)),
+                 (QStringList{u"journalTemplate:Szablony/journal.md"_s}));
         QCOMPARE(ws->movePath(u"Szablony/journal.md"_s, QString()), u"journal.md"_s);
         QCOMPARE(ws->vaultConfig().value(u"journalTemplate"_s).toString(), u"journal.md"_s);
         // The new pages' folder, moved with its parent.
@@ -1258,6 +1273,17 @@ private Q_SLOTS:
         QCOMPARE(ws->renameFolder(u"Strony"_s, u"Notatki"_s), u"Notatki"_s);
         QCOMPARE(ws->vaultConfig().value(u"newPagesFolder"_s).toString(), u"Notatki/Nowe"_s);
         QCOMPARE(ws->createPage(u"Gdzie"_s), u"Notatki/Nowe/Gdzie.md"_s);
+        // A folder holding several: all of them are named, and all follow.
+        QCOMPARE(ws->movePath(u"Dziennik"_s, u"Notatki"_s), u"Notatki/Dziennik"_s);
+        QCOMPARE(specials(ws->folderInfo(u"Notatki"_s)),
+                 (QStringList{u"journals:Notatki/Dziennik"_s, u"newPages:Notatki/Nowe"_s}));
+        QCOMPARE(ws->moveImpact(u"Notatki"_s, u"Archiwum"_s).value(u"specials"_s).toStringList(),
+                 (QStringList{u"journals"_s, u"newPages"_s}));
+        notices.clear();
+        QCOMPARE(ws->movePath(u"Notatki"_s, u"Archiwum"_s), u"Archiwum/Notatki"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Archiwum/Notatki/Dziennik"_s);
+        QCOMPARE(ws->vaultConfig().value(u"newPagesFolder"_s).toString(), u"Archiwum/Notatki/Nowe"_s);
+        QCOMPARE(notices.size(), 1);
         // Other folders leave the settings alone.
         notices.clear();
         QVERIFY(!ws->createFolder(u"Inny"_s).isEmpty());
@@ -1287,7 +1313,7 @@ private Q_SLOTS:
         QCOMPARE(info.value(u"pages"_s).toInt(), 2);
         QCOMPARE(info.value(u"attachments"_s).toInt(), 1);
         QCOMPARE(info.value(u"folders"_s).toInt(), 1);
-        QCOMPARE(info.value(u"special"_s).toString(), QString());
+        QCOMPARE(specials(info), QStringList());
         QCOMPARE(ws->folderInfo(u"Brak"_s).value(u"exists"_s).toBool(), false);
         QStringList names;
         for (const QVariant &v : ws->subfolders(QString()))

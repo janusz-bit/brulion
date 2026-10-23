@@ -77,7 +77,8 @@ BDialog {
         hasTarget = true
         impact = Workspace.moveImpact(path, row.folder)
     }
-    /// "Zaktualizowane linki: 3 (w 2 notatkach)" — what the move rewrites.
+    /// "Zaktualizowane linki: 3 (w 2 notatkach)" — what the move rewrites, with every notebook
+    /// setting that follows.
     function impactText() {
         if (!hasTarget)
             return qsTr("Choose where to move it.")
@@ -85,23 +86,10 @@ BDialog {
             return impact.error || ""
         if (impact.same)
             return qsTr("It is in this folder already.")
-        const n = (impact.links || 0) + (impact.tags || 0)
-        let text = n === 0 ? qsTr("No link needs to change.")
-                 : ((impact.tags || 0) > 0 ? qsTr("Updated links and tags: %n", "", n) : qsTr("Updated links: %n", "", n))
-                   + " " + qsTr("(in %n note(s))", "", impact.notes || 0)
-        if (impact.special)
-            text += " " + qsTr("Notebook settings will be updated: %1.").arg(specialName(impact.special))
-        return text
+        return words.impactText(impact)
     }
-    function specialName(special) {
-        switch (special) {
-        case "journals": return qsTr("journals folder")
-        case "templates": return qsTr("templates folder")
-        case "attachments": return qsTr("attachments folder")
-        case "newPages": return qsTr("folder for new pages")
-        }
-        return special
-    }
+
+    ShellMoveWords { id: words }
 
     /// The rows: the root, the folders matching the query, a new folder of the typed name.
     readonly property var rows: {
