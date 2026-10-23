@@ -74,7 +74,8 @@ void WorkspaceSync::onRunFinished(const sync::SyncReport &report, bool stalled)
         m_history->add(report, stalled);
     QStringList folders;
     for (const sync::SyncChange &change : report.changes) {
-        if (change.action == sync::SyncAction::CreateFolderLocal || change.action == sync::SyncAction::DeleteFolderLocal)
+        if (change.action == sync::SyncAction::CreateFolderLocal
+            || change.action == sync::SyncAction::DeleteFolderLocal)
             folders.append(change.path);
     }
     if (!folders.isEmpty())

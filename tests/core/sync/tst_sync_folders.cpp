@@ -22,7 +22,8 @@ QMap<QString, QByteArray> notesIn(const QString &folder, int count, int first = 
     QMap<QString, QByteArray> out;
     for (int i = first; i < first + count; ++i) {
         const QString path = folder.isEmpty() ? noteName(i) : folder + u'/' + noteName(i);
-        out.insert(path, u8(u"Notatka %1 w „%2” — zażółć gęślą jaźń\nDruga linia\nTrzecia linia\n"_s.arg(i).arg(folder)));
+        out.insert(path,
+                   u8(u"Notatka %1 w „%2” — zażółć gęślą jaźń\nDruga linia\nTrzecia linia\n"_s.arg(i).arg(folder)));
     }
     return out;
 }
@@ -68,8 +69,7 @@ struct Pair {
         : server(serverOptions(clock, std::move(options)))
         , a(server, u"laptop"_s, aFiles, withClock())
         , b(server, u"telefon"_s, {}, withClock())
-    {
-    }
+    { }
     DeviceOptions withClock()
     {
         DeviceOptions o;
@@ -89,7 +89,7 @@ struct Pair {
     Device b;
 };
 
-template <typename Result>
+template<typename Result>
 Result await(const std::function<void(std::function<void(const Result &)>)> &start)
 {
     auto result = std::make_shared<std::optional<Result>>();
@@ -120,9 +120,9 @@ private Q_SLOTS:
         folder.folder = true;
         // Missing parents of the destination are created; the content and its ETags travel along.
         QVERIFY(!move(u"Projekty"_s, u"Archiwum/2026/Projekty żółć"_s, folder).isError());
-        QCOMPARE(server.files(kFolder).keys(), (QStringList{u"Archiwum/2026/Projekty żółć/Dom.md"_s,
-                                                            u"Archiwum/2026/Projekty żółć/Pod/Ogród.md"_s,
-                                                            u"Zajęty/x.md"_s}));
+        QCOMPARE(server.files(kFolder).keys(),
+                 (QStringList{u"Archiwum/2026/Projekty żółć/Dom.md"_s, u"Archiwum/2026/Projekty żółć/Pod/Ogród.md"_s,
+                              u"Zajęty/x.md"_s}));
         QCOMPARE(server.etag(u"Notatki/Archiwum/2026/Projekty żółć/Dom.md"_s), etag);
         const auto request = server.requests("MOVE").constFirst();
         QCOMPARE(request.header("overwrite"), QByteArray("F"));
@@ -142,7 +142,8 @@ private Q_SLOTS:
         FakeWebDavServer old(options);
         old.putText(u"Notatki/A/a.md"_s, u"a"_s);
         WebDavClient oldClient(old.url(kFolder), u"jan"_s, old.options().password, &old);
-        const WebDavError refused = await<WebDavError>([&](auto done) { oldClient.move(u"A"_s, u"B"_s, folder, done); });
+        const WebDavError refused =
+                await<WebDavError>([&](auto done) { oldClient.move(u"A"_s, u"B"_s, folder, done); });
         QVERIFY(refused.is(WebDavErrorCode::NotAllowed));
         QVERIFY(old.text(u"Notatki/A/a.md"_s));
     }
@@ -181,7 +182,8 @@ private Q_SLOTS:
         p.server.mkdir(u"Notatki/Z chmury/Żółw"_s);
         const SyncReport r = p.a.sync();
         QVERIFY(!r.failed());
-        QCOMPARE(folderChanges(r, SyncAction::CreateFolderRemote), (QStringList{u"Projekty"_s, u"Projekty/Puste ąę"_s}));
+        QCOMPARE(folderChanges(r, SyncAction::CreateFolderRemote),
+                 (QStringList{u"Projekty"_s, u"Projekty/Puste ąę"_s}));
         QCOMPARE(folderChanges(r, SyncAction::CreateFolderLocal), (QStringList{u"Z chmury"_s, u"Z chmury/Żółw"_s}));
         QCOMPARE(r.foldersCreated, 4);
         QVERIFY(p.server.isDir(u"Notatki/Projekty/Puste ąę"_s));
@@ -304,7 +306,8 @@ private Q_SLOTS:
         QVERIFY(!r.needsConfirmation);
         QCOMPARE(counts(r), (Counts{.up = 1, .delL = 4}));
         // The new note went up (the server has the folder again); nothing was lost.
-        QCOMPARE(p.server.text(u"Notatki/Projekty/Nowa — niezsynchronizowana.md"_s), std::optional<QString>(u"nowa\n"_s));
+        QCOMPARE(p.server.text(u"Notatki/Projekty/Nowa — niezsynchronizowana.md"_s),
+                 std::optional<QString>(u"nowa\n"_s));
         QVERIFY(isLocalDir(p.a, u"Projekty"_s));
         // The folder holding only an ignored file stays here and does not come back on the server.
         QVERIFY(QFileInfo::exists(p.a.root + u"/Inne/.git/config"_s));
@@ -913,11 +916,11 @@ private Q_SLOTS:
         QVERIFY(p.a.vault->createFolder(u"Pusty"_s));
         static QStringList lines;
         lines.clear();
-        const QtMessageHandler previous = qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context,
-                                                                    const QString &message) {
-            if (type != QtDebugMsg && context.category && QByteArrayView(context.category) == "brulion.sync")
-                lines.append(message);
-        });
+        const QtMessageHandler previous =
+                qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &message) {
+                    if (type != QtDebugMsg && context.category && QByteArrayView(context.category) == "brulion.sync")
+                        lines.append(message);
+                });
         const SyncReport r = p.a.sync();
         qInstallMessageHandler(previous);
         QCOMPARE(r.foldersMoved, 1);

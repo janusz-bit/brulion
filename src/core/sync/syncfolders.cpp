@@ -203,7 +203,8 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
         }
         // A folder never synced: nothing known at or below it (its files are all new).
         if (std::any_of(known.cbegin(), known.cend(), [&to](const VaultPath &k) { return isWithin(k, to); })
-            || std::any_of(m_states.keyBegin(), m_states.keyEnd(), [&to](const VaultPath &k) { return isWithin(k, to); })) {
+            || std::any_of(m_states.keyBegin(), m_states.keyEnd(),
+                           [&to](const VaultPath &k) { return isWithin(k, to); })) {
             return false;
         }
         // Nothing on the server at or below the new name, in any letter case, but the old folder
@@ -272,9 +273,8 @@ void SyncRun::moveFolders(qsizetype index, std::function<void()> next)
                    guarded([this, index, move, next = std::move(next)](const WebDavError &error) mutable {
                        if (!error.isError()) {
                            applyFolderMove(move);
-                           qCInfo(lcSync).noquote()
-                                   << u"%1 folder %2 renamed here: moved to %3 on the server"_s.arg(tag(), move.from,
-                                                                                                    move.to);
+                           qCInfo(lcSync).noquote() << u"%1 folder %2 renamed here: moved to %3 on the server"_s.arg(
+                                   tag(), move.from, move.to);
                        } else if (error.isFatal()) {
                            m_report.remoteError = error;
                            finish();
@@ -363,7 +363,8 @@ void SyncRun::noteRemoteWritten(const VaultPath &path, bool isDir)
 
 void SyncRun::noteRemoteDeleted(const VaultPath &path)
 {
-    m_remoteAll.removeIf([&path](const QHash<VaultPath, RemoteEntry>::iterator it) { return isWithin(it.key(), path); });
+    m_remoteAll.removeIf(
+            [&path](const QHash<VaultPath, RemoteEntry>::iterator it) { return isWithin(it.key(), path); });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -478,8 +479,8 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
                 continue;
             if (!QDir(absolute).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot)
                 || !QDir().rmdir(absolute)) {
-                qCInfo(lcSync).noquote()
-                        << u"%1 folder %2 deleted on the server is kept here: it is not empty"_s.arg(tag(), op.path);
+                qCInfo(lcSync).noquote() << u"%1 folder %2 deleted on the server is kept here: it is not empty"_s.arg(
+                        tag(), op.path);
                 continue;
             }
             vault()->remove(op.path, ChangeSource::Sync); // gone on disk: the vault forgets it
@@ -494,16 +495,16 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
             continue;
         case FolderOp::Kind::CreateRemote:
             client()->mkdirs(op.path, guarded([this, op, next, fatal](const WebDavError &error) {
-                if (fatal(error))
-                    return;
-                if (error.isError()) {
-                    folderFailed(op.path, errorCodeName(error.code), error.message, error.status);
-                } else {
-                    noteRemoteWritten(op.path, true);
-                    record(op.path, SyncAction::CreateFolderRemote);
-                }
-                next();
-            }));
+                                 if (fatal(error))
+                                     return;
+                                 if (error.isError()) {
+                                     folderFailed(op.path, errorCodeName(error.code), error.message, error.status);
+                                 } else {
+                                     noteRemoteWritten(op.path, true);
+                                     record(op.path, SyncAction::CreateFolderRemote);
+                                 }
+                                 next();
+                             }));
             return;
         case FolderOp::Kind::DeleteRemote: {
             // Deleted here. The server deletes a folder with everything in it, so only one that
@@ -513,45 +514,47 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
                 return path != op.path && isWithin(path, op.path);
             });
             if (holds) {
-                qCInfo(lcSync).noquote()
-                        << u"%1 folder %2 deleted here is kept on the server: it is not empty"_s.arg(tag(), op.path);
+                qCInfo(lcSync).noquote() << u"%1 folder %2 deleted here is kept on the server: it is not empty"_s.arg(
+                        tag(), op.path);
                 continue;
             }
-            client()->listFolder(op.path, guarded([this, op, next, fatal](const ListResult &listed) {
-                if (listed.error.is(WebDavErrorCode::NotFound)) {
-                    noteRemoteDeleted(op.path); // gone already
-                    next();
-                    return;
-                }
-                if (fatal(listed.error))
-                    return;
-                if (listed.error.isError()) {
-                    folderFailed(op.path, errorCodeName(listed.error.code), listed.error.message,
-                                 listed.error.status);
-                    next();
-                    return;
-                }
-                if (!listed.entries.isEmpty()) {
-                    for (const RemoteEntry &entry : listed.entries)
-                        m_remoteAll.insert(entry.path, entry);
-                    qCInfo(lcSync).noquote()
-                            << u"%1 folder %2 deleted here is kept on the server: it holds %3 new item(s)"_s.arg(
-                                       tag(), op.path, QString::number(listed.entries.size()));
-                    next();
-                    return;
-                }
-                client()->remove(op.path, {}, guarded([this, op, next, fatal](const WebDavError &error) {
-                    if (fatal(error))
-                        return;
-                    if (error.isError()) {
-                        folderFailed(op.path, errorCodeName(error.code), error.message, error.status);
-                    } else {
-                        noteRemoteDeleted(op.path);
-                        record(op.path, SyncAction::DeleteFolderRemote);
-                    }
-                    next();
-                }));
-            }));
+            client()->listFolder(
+                    op.path, guarded([this, op, next, fatal](const ListResult &listed) {
+                        if (listed.error.is(WebDavErrorCode::NotFound)) {
+                            noteRemoteDeleted(op.path); // gone already
+                            next();
+                            return;
+                        }
+                        if (fatal(listed.error))
+                            return;
+                        if (listed.error.isError()) {
+                            folderFailed(op.path, errorCodeName(listed.error.code), listed.error.message,
+                                         listed.error.status);
+                            next();
+                            return;
+                        }
+                        if (!listed.entries.isEmpty()) {
+                            for (const RemoteEntry &entry : listed.entries)
+                                m_remoteAll.insert(entry.path, entry);
+                            qCInfo(lcSync).noquote()
+                                    << u"%1 folder %2 deleted here is kept on the server: it holds %3 new item(s)"_s
+                                               .arg(tag(), op.path, QString::number(listed.entries.size()));
+                            next();
+                            return;
+                        }
+                        client()->remove(op.path, {}, guarded([this, op, next, fatal](const WebDavError &error) {
+                                             if (fatal(error))
+                                                 return;
+                                             if (error.isError()) {
+                                                 folderFailed(op.path, errorCodeName(error.code), error.message,
+                                                              error.status);
+                                             } else {
+                                                 noteRemoteDeleted(op.path);
+                                                 record(op.path, SyncAction::DeleteFolderRemote);
+                                             }
+                                             next();
+                                         }));
+                    }));
             return;
         }
         }

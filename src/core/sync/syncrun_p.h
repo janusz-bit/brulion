@@ -140,7 +140,7 @@ private:
     QString summary() const;
 
     /// Wrap a continuation: runs only while the engine lives (keeps this run alive meanwhile).
-    template <typename F>
+    template<typename F>
     auto guarded(F &&fn)
     {
         return [self = shared_from_this(), fn = std::forward<F>(fn)](auto &&...args) mutable {
@@ -254,7 +254,7 @@ private:
     /// in this run's first pass: moved content, not deleted content.
     QHash<QString, int> m_uploadedNew;
     QHash<QString, int> m_downloadedNew;
-    QList<QStringList> m_laterGroups; ///< groups with a deletion: after the mass-deletion guard
+    QList<QStringList> m_laterGroups;  ///< groups with a deletion: after the mass-deletion guard
     bool m_recheckRemoteEmpty = false; ///< guardEmptySides() waits for the first pass's downloads
     std::shared_ptr<detail::JobPool> m_pool;
     int m_done = 0;

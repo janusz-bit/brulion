@@ -313,7 +313,8 @@ void FakeWebDavServer::moveNodes(const QString &fromAbs, const QString &toAbs)
         if (it.key() == fromAbs || it.key().startsWith(prefix))
             moved.append({toAbs + it.key().mid(fromAbs.size()), it.value()});
     }
-    m_nodes.removeIf([&](QMap<QString, Node>::iterator it) { return it.key() == fromAbs || it.key().startsWith(prefix); });
+    m_nodes.removeIf(
+            [&](QMap<QString, Node>::iterator it) { return it.key() == fromAbs || it.key().startsWith(prefix); });
     for (auto &[key, node] : moved) {
         if (!m_options.moveKeepsEtags)
             node.etag = nextEtag();

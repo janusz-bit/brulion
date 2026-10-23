@@ -334,7 +334,8 @@ void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOp
     const VaultPath p = paths::normalize(from);
     const VaultPath q = paths::normalize(to);
     if (p.isEmpty() || q.isEmpty()) {
-        fail(WebDavError::make(WebDavErrorCode::Http, u"Refusing to MOVE the base folder"_s, m_baseUrl), std::move(done));
+        fail(WebDavError::make(WebDavErrorCode::Http, u"Refusing to MOVE the base folder"_s, m_baseUrl),
+             std::move(done));
         return;
     }
     if (p == q || q.startsWith(p + u'/')) {
@@ -351,8 +352,8 @@ void WebDavClient::move(const VaultPath &from, const VaultPath &to, const MoveOp
         const QString spelledTo = serverName(q);
         const QString destination = joinUrl(m_baseUrl, spelledTo, options.folder);
         const QList<QPair<QByteArray, QByteArray>> headers = {
-            {"Destination", destination.toUtf8()},
-            {"Overwrite", options.overwrite ? "T" : "F"},
+                {"Destination", destination.toUtf8()},
+                {"Overwrite", options.overwrite ? "T" : "F"},
         };
         request("MOVE", url, headers, {}, m_timeoutMs,
                 [this, p, q, spelledTo, url, done](const HttpResponse &response) {
@@ -370,26 +371,27 @@ void WebDavClient::listFolder(const VaultPath &path, ListCallback done)
 {
     const VaultPath folder = paths::normalize(path);
     const QString raw = serverName(folder);
-    propfindRaw(raw, 1, [this, folder, raw, done = std::move(done)](const WebDavError &error,
-                                                                    const QList<DavResource> &resources) {
-        ListResult result;
-        result.error = error;
-        if (!error.isError()) {
-            const QString requestUrl = joinUrl(m_baseUrl, raw, true);
-            for (const DavResource &res : resources) {
-                const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
-                if (!rawRel)
-                    continue;
-                const VaultPath child = paths::normalize(*rawRel);
-                if (child.isEmpty() || child == folder)
-                    continue;
-                result.entries.append(entryFor(child, res));
-            }
-            std::sort(result.entries.begin(), result.entries.end(),
-                      [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
-        }
-        done(result);
-    });
+    propfindRaw(
+            raw, 1,
+            [this, folder, raw, done = std::move(done)](const WebDavError &error, const QList<DavResource> &resources) {
+                ListResult result;
+                result.error = error;
+                if (!error.isError()) {
+                    const QString requestUrl = joinUrl(m_baseUrl, raw, true);
+                    for (const DavResource &res : resources) {
+                        const std::optional<QString> rawRel = relativeRaw(res.href, requestUrl);
+                        if (!rawRel)
+                            continue;
+                        const VaultPath child = paths::normalize(*rawRel);
+                        if (child.isEmpty() || child == folder)
+                            continue;
+                        result.entries.append(entryFor(child, res));
+                    }
+                    std::sort(result.entries.begin(), result.entries.end(),
+                              [](const RemoteEntry &a, const RemoteEntry &b) { return a.path < b.path; });
+                }
+                done(result);
+            });
 }
 
 void WebDavClient::mkcol(const VaultPath &path, DoneCallback done)
