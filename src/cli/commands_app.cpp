@@ -33,7 +33,7 @@ int exitFor(const QString &code)
         if (code == QLatin1String(usage))
             return ExitUsage;
     }
-    if (code == QLatin1String(E::NotFound) || code == QLatin1String(E::Timeout))
+    if (code == QLatin1String(E::NotFound) || code == QLatin1String(E::Timeout) || code == QLatin1String(E::OffScreen))
         return ExitNotFound;
     if (code == QLatin1String(E::StaleHandle) || code == QLatin1String(E::Ambiguous))
         return ExitConflict;

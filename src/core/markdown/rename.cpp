@@ -93,15 +93,59 @@ QString newWikiTarget(QStringView target, const RenameSpec &spec)
     return {};
 }
 
+/// How a written Markdown link destination spells its path, beyond what it must escape.
+struct DestStyle {
+    bool angle = false;    ///< `<dest>`
+    bool spaces = false;   ///< spaces as %20 (always in a plain `(dest)`)
+    bool nonAscii = false; ///< letters beyond ASCII as UTF-8 %XX ("%C5%BC": GitHub, some editors)
+    bool lowerHex = false; ///< "%c5%bc"
+};
+
+/// The style of `written` (a destination's path part as written).
+DestStyle destStyle(QStringView written, bool angle)
+{
+    DestStyle style;
+    style.angle = angle;
+    style.spaces = !angle || written.contains(u"%20"_s);
+    static const QRegularExpression highByte(u"%[89a-fA-F][0-9a-fA-F]"_s);
+    const QRegularExpressionMatch m = highByte.matchView(written);
+    style.nonAscii = m.hasMatch();
+    style.lowerHex = style.nonAscii && m.captured() != m.captured().toUpper();
+    return style;
+}
+
 /// Percent-encode what a Markdown link destination would read differently: '%' (escapes are
 /// decoded) and '#' (fragment) always; spaces and parentheses in a plain `(dest)`; '<' / '>' in
-/// an angle-bracket `<dest>`.
-QString encodeDest(QString path, bool angle)
+/// an angle-bracket `<dest>`; spaces and letters beyond ASCII also where `style` says the
+/// destination was written so.
+QString encodeDest(QString path, const DestStyle &style)
 {
     path.replace(u'%', u"%25"_s).replace(u'#', u"%23"_s);
-    if (angle)
-        return path.replace(u'<', u"%3C"_s).replace(u'>', u"%3E"_s);
-    return path.replace(u' ', u"%20"_s).replace(u'(', u"%28"_s).replace(u')', u"%29"_s);
+    if (style.angle)
+        path.replace(u'<', u"%3C"_s).replace(u'>', u"%3E"_s);
+    else
+        path.replace(u'(', u"%28"_s).replace(u')', u"%29"_s);
+    if (style.spaces)
+        path.replace(u' ', u"%20"_s);
+    if (!style.nonAscii)
+        return path;
+    QString out;
+    out.reserve(path.size());
+    for (qsizetype i = 0; i < path.size(); ++i) {
+        const QChar c = path.at(i);
+        if (c.unicode() < 0x80) {
+            out += c;
+            continue;
+        }
+        const qsizetype length = c.isHighSurrogate() && i + 1 < path.size() ? 2 : 1;
+        const QByteArray bytes = path.sliced(i, length).toUtf8();
+        i += length - 1;
+        for (const char byte : bytes) {
+            const QString hex = QString::number(uchar(byte), 16).rightJustified(2, u'0');
+            out += u'%' + (style.lowerHex ? hex : hex.toUpper());
+        }
+    }
+    return out;
 }
 
 /// New Markdown link path for a decoded relative `target`, or a null QString.
@@ -170,7 +214,8 @@ QString rewriteMarkdown(QStringView src, const Link &link, const RenameSpec &spe
     const qsizetype hash = dest.indexOf(u'#');
     const QStringView pathPart = hash < 0 ? dest : dest.first(hash);
     const QStringView fragment = hash < 0 ? QStringView() : dest.sliced(hash);
-    const auto encode = [&](const QString &p) { return encodeDest(p, parts->angle); };
+    const DestStyle style = destStyle(pathPart, parts->angle);
+    const auto encode = [&](const QString &p) { return encodeDest(p, style); };
     // A plain rename (or a bare-name link) keeps the written folder prefix, e.g. "../x/".
     const bool keepPrefix = spec.sameDir || afterLastSlash(pathPart) == 0;
     const QString newPath = keepPrefix ? pathPart.first(afterLastSlash(pathPart)).toString() + encode(baseName(target))
@@ -458,7 +503,8 @@ QString retargetLinks(const QString &content, const QList<LinkEdit> &edits, cons
             const QStringView dest = src.sliced(parts->destFrom, parts->destTo - parts->destFrom);
             const qsizetype hash = dest.indexOf(u'#');
             const QStringView fragment = hash < 0 ? QStringView() : dest.sliced(hash);
-            rewritten = src.first(parts->destFrom).toString() + encodeDest(target, parts->angle) + fragment
+            const DestStyle style = destStyle(hash < 0 ? dest : dest.first(hash), parts->angle);
+            rewritten = src.first(parts->destFrom).toString() + encodeDest(target, style) + fragment
                         + src.sliced(parts->destTo);
         } else {
             continue;

@@ -92,6 +92,21 @@ qsizetype afterLastSlash(const QString &s)
     return std::max(s.lastIndexOf(u'/'), s.lastIndexOf(u'\\')) + 1;
 }
 
+/// `file` written relative to the folder `fromDir` ("" for the vault root): "../Archiwum/Dom.md".
+QString relativePath(const QString &fromDir, const VaultPath &file)
+{
+    const QStringList from = fromDir.isEmpty() ? QStringList() : fromDir.split(u'/');
+    const QStringList to = file.split(u'/');
+    qsizetype common = 0;
+    while (common < from.size() && common + 1 < to.size() && from.at(common) == to.at(common))
+        ++common;
+    QStringList parts;
+    for (qsizetype i = common; i < from.size(); ++i)
+        parts.append(u".."_s);
+    parts += to.mid(common);
+    return parts.join(u'/');
+}
+
 bool sameFolder(const VaultPath &a, const VaultPath &b)
 {
     return pathKey(paths::dirname(a)) == pathKey(paths::dirname(b));
@@ -452,6 +467,81 @@ struct RelocationPlan::Private {
         return value.left(skip) + newPrefix;
     }
 
+    /// A Markdown link or picture whose written path names its file exactly — relative to its
+    /// note's folder or from the vault root, as written (`named`, written in the note at `path`):
+    /// the path naming `wanted` exactly the same way from the note's new path `newFrom` — so other
+    /// Markdown readers (Obsidian, GitHub) find it too, where Brulion would still reach it through
+    /// a path suffix or a base name. A relative path stays relative (also when the note itself
+    /// moves: `../../Dom.md`), a vault path stays a vault path (with its leading '/'), `./` and the
+    /// extension as written stay. "" when the written path still names it so; std::nullopt when
+    /// the link named its file otherwise (a path suffix, a base name, an alias) or no such path
+    /// reaches `wanted` in Brulion too (newTarget() then decides).
+    std::optional<QString> exactMarkdownTarget(const Link &link, const VaultPath &path, const VaultPath &named,
+                                               const VaultPath &wanted, const VaultPath &newFrom) const
+    {
+        QString written = link.target.trimmed();
+        written.replace(u'\\', u'/');
+        if (written.isEmpty())
+            return std::nullopt;
+        const bool note = isNotePath(named);
+        const QString namedKey = pathKey(named);
+        const auto names = [&](const VaultPath &candidate) {
+            if (candidate.isEmpty())
+                return false;
+            const QString key = pathKey(candidate);
+            return key == namedKey || (note && (key + u".md"_s == namedKey || key + u".markdown"_s == namedKey));
+        };
+        const bool dotSlash = written.startsWith(u"./"_s);
+        const bool rooted = written.startsWith(u'/');
+        const QString fromDir = paths::dirname(path);
+        // How the link names its file, in the order links resolve (SYNTAX §2).
+        bool relative = false;
+        if (dotSlash || written.startsWith(u"../"_s)) {
+            if (!names(paths::join(fromDir, written)))
+                return std::nullopt;
+            relative = true;
+        } else if (rooted) {
+            if (!names(paths::normalize(written)))
+                return std::nullopt;
+        } else if (names(paths::normalize(written))) {
+            relative = fromDir.isEmpty(); // at the vault root both readings are one: as Markdown reads it
+        } else if (!fromDir.isEmpty() && names(paths::join(fromDir, written))) {
+            relative = true;
+        } else {
+            return std::nullopt;
+        }
+        // The extension as written ("Dom", "Dom.md", "Dom.MD").
+        QString file = wanted;
+        if (note && isNotePath(wanted)) {
+            QString ext;
+            for (const QString &e : {u".md"_s, u".markdown"_s}) {
+                if (written.endsWith(e, Qt::CaseInsensitive))
+                    ext = written.right(e.size());
+            }
+            file = paths::stripMarkdownExtension(wanted) + ext;
+        }
+        QStringList candidates;
+        if (relative) {
+            const QString rel = relativePath(paths::dirname(newFrom), file);
+            if (dotSlash && !rel.startsWith(u"../"_s))
+                candidates.append(u"./"_s + rel);
+            else
+                candidates.append(rel);
+            // Brulion reads a path without "./" from the vault root first: "./" when another file
+            // is there.
+            if (!rel.startsWith(u"../"_s) && !dotSlash)
+                candidates.append(u"./"_s + rel);
+        } else {
+            candidates.append((rooted ? u"/"_s : QString()) + file);
+        }
+        for (const QString &candidate : std::as_const(candidates)) {
+            if (after.resolve(candidate, newFrom, TargetForm::Parsed) != wanted)
+                continue;
+            return pathKey(candidate) == pathKey(written) ? QString() : candidate;
+        }
+        return std::nullopt;
+    }
+
     /// The new target of `link` (written in the note now at `from`) that reaches `wanted`; it
     /// named `named` before the move. Empty when no written form reaches it.
     QString newTarget(const Link &link, const VaultPath &named, const VaultPath &wanted, const VaultPath &from) const
@@ -517,6 +607,14 @@ struct RelocationPlan::Private {
             if (named.isEmpty())
                 return; // a missing page stays missing
             const VaultPath wanted = moved.value(named, named);
+            if (link.kind == LinkKind::Markdown) {
+                // A path that names the file exactly keeps naming it so (SYNTAX §2).
+                if (const std::optional<QString> exact = exactMarkdownTarget(link, path, named, wanted, file.newPath)) {
+                    if (!exact->isEmpty())
+                        edits.append({link.from, link.to, *exact});
+                    return;
+                }
+            }
             if (after.resolve(link.target, file.newPath, TargetForm::Parsed) == wanted)
                 return;
             const QString target = newTarget(link, named, wanted, file.newPath);

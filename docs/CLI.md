@@ -188,7 +188,7 @@ Never compute a hash yourself.
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
-| `app state` | | what the app shows: status, notebook, routes, focused item, the edited block, open popups, last toasts, window, theme, language (remote control, below) | |
+| `app state` | | what the app shows: status, notebook, routes, focused item, the edited block, pages with a conflict waiting for the user, open popups, last toasts, window, theme, language (remote control, below) | |
 | `app navigate <route>` | a view or `{"view": …}`; `[--side]` | show a view | |
 | `app commands` | | the command palette's commands `{id, title, subtitle, shortcut, enabled}` | |
 | `app command <id>` | | run one (`go.calendar`, `page.source`, `theme.toggle` …) | yes |
@@ -198,8 +198,8 @@ Never compute a hash yourself.
 | `app long-press [<target>]` | the target options, `[--ms 800] [--device]` | press and hold | yes |
 | `app double-click [<target>]` | the target options, `[--button] [--modifiers] [--device]` | a double click / double tap | yes |
 | `app drag <from> <to>` | `[--hold-ms N] [--button] [--modifiers] [--device]` | drag between two targets | yes |
-| `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle | |
-| `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters, `\n` = Return) | yes |
+| `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle; says how far the content moved (`scrolled`) | |
+| `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters; a real line break in the text is Return and a tab Tab — the two characters `\n` are typed as they are: pass a line break itself, e.g. `$'a\nb'` in bash or with `--stdin`) | yes |
 | `app key <keys>` | `[--count N]` | press keys: `Ctrl+K`, `Escape`, `"Down, Down, Return"` | yes |
 | `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
 | `app quit` | | quit the running app | yes |
@@ -352,14 +352,28 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   a point in window coordinates (`120,340`), or the topmost shown item with a text (part of it,
   any letter case; `--exact` for all of it), an `objectName` or a QML type (`BButton`,
   `TasksRow`, `TextEdit` — Qt Quick types also by their QML names). An item off screen inside a
-  list is scrolled into view first.
+  list is scrolled into view first (down / up; sideways in a row that scrolls sideways). An item
+  that scrolling cannot bring into the window — its middle still outside the window or outside
+  the view of a list around it (beyond the width of a list that only scrolls up and down, in a
+  clipped part nothing scrolls) — is **not touched**: `off_screen` (exit 3) with the item and its
+  geometry, never a click at a point that belongs to another item. A point target is used as
+  given.
 * **Real input.** Mouse and touch events go through Qt like a device's (pointer handlers see
   whole clicks and long presses), keys like a keyboard's (shortcuts first, so `Ctrl+K` opens the
   palette as it does for a user — and a text field keeps the keys it handles). `--device touch`
   taps, holds and drags with a finger (default: a finger when the app runs with `--touch`, except
-  for `scroll`, which turns the wheel unless asked for a finger: like a real one, a finger where
-  nothing can scroll that way presses what it is on). Input needs a shown, active window: it is
-  shown and asked to be active first.
+  for `scroll`, which turns the wheel unless asked for a finger). Input needs a shown, active
+  window: it is shown and asked to be active first.
+* **Scrolling** answers `scrolled: {dx, dy}`, how far the content under the point moved (0 at the
+  end of a list). The wheel scrolls whatever is under it. A finger (`--device touch`) first
+  travels the drag threshold and then the distance asked, so the content moves by it (within its
+  bounds); it is put down only where a list or page under it — the item the press would reach
+  and the lists around that item — can move that way: not at its end (a list that stops at its
+  ends), not where the content fits its view, not on an open popup's dimmed area. Elsewhere a real
+  finger would press what it is on (a switch, a button, the area that closes a popup): nothing is
+  touched then, and the answer says `"touched": false` with `scrolled` 0 (else `"touched": true`).
+  A finger over an item that keeps the drag itself (a slider, text being selected) drags that
+  item, as a real one does.
 * **One at a time, settled.** Gestures are played on the app's event loop, one after another
   (nothing nested: the app stays in real use), started and answered once the window has stopped
   changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next
@@ -367,7 +381,14 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   for by a client that has gone (an interrupted command) is dropped, and its typing stops.
 * `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
   new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
-  saved.
+  saved. A page with a **conflict** waiting for the user — changed in the app and by another
+  program or device at once in a way that could not be merged; the banner „Ta strona zmieniła się
+  też w innym miejscu…” — is not saved until the user decides, so it is not idle:
+  `wait --idle` times out (exit 3) with `details.conflicts: [{page}]`, and `app state` lists
+  such pages in `conflicts` (and `editing.conflict` for the edited one). Agents should report it
+  to the user rather than click the banner's choices themselves. `syncConflicts` counts the
+  conflict copies sync left to merge (Synchronizacja → Konflikty); they do not keep the app from
+  being idle.
 * `app open` with remote control on: the app resolves the ref in the notebook it shows, as this
   command line resolves refs (paths, names as `[[links]]` read them, aliases, `today`, dates,
   `Dom.md#L12@hash`, `^id`), and answers with the route it opened (`not_found` with
@@ -377,9 +398,9 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   commands that can change notes (click, type, key, command, capture, quit …) and a screenshot
   path (it could replace a picture of the notebook; without one the screenshot goes to the
   runtime folder).
-* Exit codes of the app's errors: `bad_params` 2, `not_found` and `timeout` 3, `stale_handle`
-  and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a disabled command, the
-  documentation notebook for capture) 7, `failed` 1.
+* Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3,
+  `stale_handle` and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a
+  disabled command, the documentation notebook for capture) 7, `failed` 1.
 
 ### Protocol
 
@@ -393,20 +414,20 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | Method | Parameters | Result |
 |---|---|---|
 | `hello` | | `{protocol, app, version, platform, methods}` |
-| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source}, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
+| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source, conflict}, conflicts: [{page}], syncConflicts, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
 | `navigate` | `route` (a view name or a route object, docs/UI.md "Navigation"), `side` | `{route, sidePanelRoute}` |
 | `open` | `ref`, `line` (0-based), `blockId`, `heading`, `side` | `{route, currentRoute}` |
 | `commands` / `command` | — / `id` | `{commands}` / `{id, route}` |
 | `capture` | `text` | quick capture's `{kind, text, date, time, when, line, path}` |
 | `screenshot` | `path` | `{path, width, height, devicePixelRatio}` |
 | `find` | `text`, `objectName`, `type`, `exact`, `visibleOnly` (true), `within` (a handle), `limit` (50) | `{items, total}` |
-| `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}` |
+| `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}`; `off_screen` |
 | `longPress` | a target, `ms` (800), `device` | the same |
-| `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}` |
-| `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click |
+| `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}`; `off_screen` with `param` |
+| `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click and `scrolled: {dx, dy}`; with a finger `touched` |
 | `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
 | `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
-| `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` |
+| `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` with `{route, idle, conflicts?}` |
 | `quit` | | `{quitting: true}`, then the app quits |
 
 ### Android and the browser

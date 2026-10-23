@@ -93,6 +93,20 @@ QList<QObject *> openPopups(QQuickWindow *window);
 /// a flickable is wider than its view); `afterEach` runs after each flickable moved (the journey
 /// lets it settle). True when it is on screen afterwards.
 bool scrollIntoView(QQuickWindow *window, QQuickItem *item, const std::function<void()> &afterEach = {});
+/// The item a press at `scenePos` reaches first, as Qt Quick delivers it: the topmost visible,
+/// enabled item there that takes touch or mouse presses (or has a pointer handler that does —
+/// TapHandler, DragHandler …), a Flickable included; an open popup's overlay too. nullptr when
+/// none does.
+QQuickItem *pressTargetAt(QQuickWindow *window, QPointF scenePos);
+/// The Flickables a finger put down at `scenePos` can drag: pressTargetAt() and its ancestors that
+/// are Flickables, innermost first (an outer one takes the drag an inner one cannot).
+QList<QQuickItem *> flickablesAt(QQuickWindow *window, QPointF scenePos);
+/// Would a finger dragging the content of `flickable` by `delta` (positive y: further down the
+/// content, as wheel()) move it? Only an interactive flickable that may flick that way (its
+/// flickableDirection, its content larger than its view) and is not at its edge that way —
+/// unless it may be dragged beyond its bounds. Where nothing moves, a Flickable lets the press
+/// go on to the item under the finger: a drag there becomes a tap of a button or a switch.
+bool canScroll(const QQuickItem *flickable, QPointF delta);
 
 // ---- Input ------------------------------------------------------------------------------------
 
@@ -151,6 +165,15 @@ Gesture touchDoubleTap(QQuickWindow *window, QPointF scenePos);
 /// held there `holdMs`, then lifted.
 Gesture touchDrag(QQuickWindow *window, QPointF from, QPointF delta, int steps = 12, int stepMs = 16, int holdMs = 0,
                   int afterMs = 300);
+/// A finger scrolling content by `delta` pixels (positive y: further down the content, as
+/// wheel()): put down at `scenePos`, its first move crosses the drag threshold and the next goes
+/// one pixel further (a Flickable takes the grab with the first move past the threshold and
+/// starts its drag at the next), then it moves `delta` — a Flickable there moves by `delta`
+/// exactly, within its bounds — and is held still before lifting, so the content does not fling
+/// on. Without `crossThreshold` the finger moves `delta` only: for a Flickable still `moving`
+/// (a drag that ended at its bounds can leave it so), which follows a finger from its first move.
+/// Where nothing can move that way the finger presses what it is on (canScroll()).
+Gesture touchScroll(QQuickWindow *window, QPointF scenePos, QPointF delta, bool crossThreshold = true);
 /// Touchpad scrolling at `scenePos` by `delta` pixels (positive y: further down the content), in
 /// steps of at most 40 px with scroll phases; a Flickable there moves by `delta` exactly.
 Gesture wheel(QQuickWindow *window, QPointF scenePos, QPointF delta, Qt::KeyboardModifiers modifiers = Qt::NoModifier);

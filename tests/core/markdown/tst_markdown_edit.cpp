@@ -906,6 +906,16 @@ private Q_SLOTS:
         QTest::newRow("markdown angle dest") << u"[a](<Mój dom.md>) [b](<x.md#H>)"_s
                                              << QStringList{u"0=Projekty/Mój dom.md"_s, u"1=a<b>/C# 100%.md"_s}
                                              << u"[a](<Projekty/Mój dom.md>) [b](<a%3Cb%3E/C%23 100%25.md#H>)"_s;
+        // The percent-encoding as written: letters beyond ASCII (upper or lower case hex), %20
+        // in angle brackets.
+        QTest::newRow("markdown encoded letters kept encoded")
+                << u"[a](Projekty/%C5%BB%C3%B3%C5%82w.md) [b](%c5%bc.md) [c](<M%C3%B3j%20dom.md>)"_s
+                << QStringList{u"0=Archiwum/Żółw nowy.md"_s, u"1=Nowe/żółć.md"_s, u"2=Projekty/Mój dom.md"_s}
+                << u"[a](Archiwum/%C5%BB%C3%B3%C5%82w%20nowy.md) [b](Nowe/%c5%bc%c3%b3%c5%82%c4%87.md) "
+                   u"[c](<Projekty/M%C3%B3j%20dom.md>)"_s;
+        QTest::newRow("markdown letters as they are, emoji")
+                << u"[a](Ł%C4%85ka.md) [b](Łąka.md)"_s << QStringList{u"0=Łąki/Łąka 🌼.md"_s, u"1=Łąki/Łąka 🌼.md"_s}
+                << u"[a](%C5%81%C4%85ki/%C5%81%C4%85ka%20%F0%9F%8C%BC.md) [b](Łąki/Łąka%20🌼.md)"_s;
         QTest::newRow("markdown relative") << u"[a](../Dom.md) [b](./Dom.md \"tytuł\")"_s
                                            << QStringList{u"0=Archiwum/Dom.md"_s, u"1=Archiwum/Dom.md"_s}
                                            << u"[a](Archiwum/Dom.md) [b](Archiwum/Dom.md \"tytuł\")"_s;

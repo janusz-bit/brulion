@@ -150,7 +150,9 @@ private:
                     u"handles and window coordinates for brulion_app_click, brulion_app_type types into the focused "
                     u"item, brulion_app_key presses keys (\"Ctrl+K\", \"Escape\"), brulion_app_wait waits for a route, "
                     u"an item or idle, brulion_app_screenshot returns the window as a picture. Prefer the note tools "
-                    u"for reading and changing notes; use the app tools to see and test the UI."_s;
+                    u"for reading and changing notes; use the app tools to see and test the UI. Pages in "
+                    u"brulion_app_state's conflicts were changed elsewhere too and wait for the user's decision (never "
+                    u"idle until then): tell the user rather than resolving them."_s;
         if (m_readOnly)
             text += u" This server is read-only."_s;
         return text;
