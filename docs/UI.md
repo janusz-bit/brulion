@@ -1051,7 +1051,8 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   replaced by as many taller rows overlapped what follows, a date picker kept yesterday's today
   marker, the reminder dialog its weekday names after a language change, a calculation's results
   and the text selection's handles stayed put when a narrower window wrapped the text again).
-  The playground's `refreshtest` checks the views (`tst_editor_qml_refresh`, `_touch`).
+  `scripts/check-qml-reads.sh` finds such statements (ctest `tst_scripts_check_qml_reads`, CI's
+  lint job); the playground's `refreshtest` checks the views (`tst_editor_qml_refresh`, `_touch`).
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers
