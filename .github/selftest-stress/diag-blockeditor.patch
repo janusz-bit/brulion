@@ -1,0 +1,36 @@
+diff --git a/src/app/qml/editor/BlockEditor.qml b/src/app/qml/editor/BlockEditor.qml
+index 845e403..0531c49 100644
+--- a/src/app/qml/editor/BlockEditor.qml
++++ b/src/app/qml/editor/BlockEditor.qml
+@@ -1668,6 +1668,7 @@ FocusScope {
+     readonly property bool dragSelecting: drag.active
+ 
+     function dragPressed(point) {
++        console.log("DIAG dragPressed " + point.scenePosition)
+         drag.selected = false
+         drag.active = false
+         drag.armed = false
+@@ -1684,6 +1685,7 @@ FocusScope {
+         drag.startRow = rowAt(p.x, p.y)
+     }
+     function dragMoved(point) {
++        console.log("DIAG dragMoved " + point.scenePosition + " active=" + drag.active + " armed=" + drag.armed + " start=" + drag.startRow)
+         drag.scene = point.scenePosition
+         if (!controller)
+             return
+@@ -1722,6 +1724,7 @@ FocusScope {
+         if (!drag.active || !controller || drag.fixedRow < 0)
+             return
+         const row = rowNear(drag.scene)
++        console.log("DIAG updateDragSelection scene=" + drag.scene + " row=" + row + " fixed=" + drag.fixedRow + " contentY=" + list.contentY + " speed=" + drag.speed)
+         if (row >= 0 && controller.blocks.get(row).view !== "frontmatter")
+             controller.selectRange(drag.fixedRow, row)
+     }
+@@ -1816,6 +1819,7 @@ FocusScope {
+     /// A grip at the band's start (`atStart`) or end is pressed: the other end stays, the finger
+     /// moves this one (the drag goes on when the grip's block scrolls away and is destroyed).
+     function beginGripDrag(atStart) {
++        console.log("DIAG beginGripDrag " + atStart)
+         if (!controller || controller.selectionCount === 0)
+             return
+         drag.fixedRow = atStart ? controller.selectionLastRow : controller.selectionFirstRow

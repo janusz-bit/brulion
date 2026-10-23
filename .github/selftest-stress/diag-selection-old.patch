@@ -1,0 +1,40 @@
+diff --git a/src/app/qml/dev/SelectionSelfTest.qml b/src/app/qml/dev/SelectionSelfTest.qml
+index beb43d9..7a02aca 100644
+--- a/src/app/qml/dev/SelectionSelfTest.qml
++++ b/src/app/qml/dev/SelectionSelfTest.qml
+@@ -735,21 +735,35 @@ QtObject {
+             () => {
+                 page.selectRange(rowOf("Zadzwonić"), rowOf("Położyć")) // as before, for the grip
+                 center(rowOf("Zadzwonić"))
++                console.log("DIAG centered contentY=" + list.contentY + " sel=" + page.selectionAnchorRow + "-" + page.selectedRow + " last=" + page.selectionLastRow)
+             },
+             // ---- The end grip -------------------------------------------------------------------------------
+             () => {
+                 const grip = window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd")
+                 check(grip !== null, "the band's end has a grip")
++                console.log("DIAG grip at " + grip.mapToItem(null, grip.width / 2, grip.height / 2) + " last=" + page.selectionLastRow + " sel=" + page.selectedRow + " contentY=" + list.contentY)
+                 events.touchEvent(grip).press(0, grip, grip.width / 2, grip.height / 2).commit()
++                console.log("DIAG pressed sel=" + page.selectedRow + " drag=" + editor.dragSelecting + " contentY=" + list.contentY)
+                 events.touchEvent(grip).move(0, grip, grip.width / 2, grip.height / 2 + 12).commit()
++                console.log("DIAG moved12 sel=" + page.selectedRow + " drag=" + editor.dragSelecting + " contentY=" + list.contentY)
+             },
+             () => {
+                 const text = textOf(rowOf("Kolejność"))
++                const host = editor.dockHost
++                const y = text.mapToItem(host, 30, text.height / 2).y
++                const bottom = host.height - (editor.toolbarVisible ? editor.toolbarHeight : 0)
++                const zone = Math.max(16, Math.min(56, (bottom - list.y) / 5))
++                console.log("DIAG grip target y=" + y + " zoneStart=" + (bottom - zone) + " bottom=" + bottom + " contentY=" + list.contentY
++                            + " rowH=" + delegateAt(rowOf("Kolejność")).height + " textY=" + text.mapToItem(host, 0, 0).y + " textH=" + text.height + " sel=" + page.selectedRow)
++                test.contentBefore = list.contentY
+                 events.touchEvent(text).move(0, text, 30, text.height / 2).commit()
++                console.log("DIAG after move contentY=" + list.contentY + " sel=" + page.selectedRow)
+             },
+             () => {
++                console.log("DIAG before release contentY=" + list.contentY + " sel=" + page.selectedRow + " moved=" + (list.contentY - test.contentBefore))
+                 const text = textOf(rowOf("Kolejność"))
+                 events.touchEvent(text).release(0, text, 30, text.height / 2).commit()
++                console.log("DIAG after release contentY=" + list.contentY + " sel=" + page.selectedRow)
+             },
+             () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić"),
+                         "dragging the end grip moves the selection's end: " + page.selectedRow),
