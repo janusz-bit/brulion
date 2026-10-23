@@ -372,8 +372,13 @@ namespace {
 /// Plays a gesture from timers: each step, then back to the event loop for its pause.
 class Player : public QObject {
 public:
-    Player(QObject *owner, QQuickWindow *window, Gesture gesture, std::function<void(bool)> done)
-        : QObject(owner), m_window(window), m_steps(std::move(gesture)), m_done(std::move(done))
+    Player(QObject *owner, QQuickWindow *window, Gesture gesture, std::function<void(bool)> done,
+           std::function<bool()> keepGoing)
+        : QObject(owner)
+        , m_window(window)
+        , m_steps(std::move(gesture))
+        , m_done(std::move(done))
+        , m_keepGoing(std::move(keepGoing))
     { }
 
     void start()
@@ -385,7 +390,7 @@ private:
     void next()
     {
         while (m_index < m_steps.size()) {
-            if (!m_window) {
+            if (!m_window || (m_keepGoing && !m_keepGoing())) {
                 finish(false);
                 return;
             }
@@ -411,6 +416,7 @@ private:
     Gesture m_steps;
     qsizetype m_index = 0;
     std::function<void(bool)> m_done;
+    std::function<bool()> m_keepGoing;
 };
 
 /// QTouchEventSequence's constructor is protected (QtTest's touchEvent() subclasses it too).
@@ -438,9 +444,10 @@ Step mouseEvent(QQuickWindow *window, QPointF pos, Qt::MouseButtons state, Qt::M
 
 } // namespace
 
-void play(QObject *owner, QQuickWindow *window, const Gesture &gesture, std::function<void(bool)> done)
+void play(QObject *owner, QQuickWindow *window, const Gesture &gesture, std::function<void(bool)> done,
+          std::function<bool()> keepGoing)
 {
-    auto *player = new Player(owner, window, gesture, std::move(done));
+    auto *player = new Player(owner, window, gesture, std::move(done), std::move(keepGoing));
     player->start();
 }
 

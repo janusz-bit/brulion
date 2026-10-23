@@ -572,7 +572,7 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
             return reply.fail(code(E::BadParams), u"The folder %1 does not exist"_s.arg(QFileInfo(path).absolutePath()),
                               {{u"param"_s, u"path"_s}});
     }
-    enqueueInput([this, path, reply](const std::function<void()> &finished) {
+    enqueueInput(reply, [this, path, reply](const std::function<void()> &finished) {
         QString file = path;
         if (file.isEmpty()) {
             // The user's private runtime folder (else the temp folder), a folder of its own.
@@ -795,21 +795,27 @@ void RemoteControl::reachTarget(QQuickWindow *window, const Target &target, std:
 
 // ---- Input ------------------------------------------------------------------------------------
 
-void RemoteControl::enqueueInput(std::function<void(std::function<void()>)> job)
+void RemoteControl::enqueueInput(const ipc::ControlReply &reply, std::function<void(std::function<void()>)> job)
 {
-    m_inputQueue.append(std::move(job));
+    m_inputQueue.append({reply, std::move(job)});
     if (!m_inputRunning)
         nextInput();
 }
 
 void RemoteControl::nextInput()
 {
+    // Requests whose client has gone (a command line that gave up waiting) are dropped: nobody
+    // wants that input any more.
+    while (!m_inputQueue.isEmpty() && !m_inputQueue.first().reply.connected()) {
+        qCDebug(lcApp) << "Remote control: dropped the input of a client that left";
+        m_inputQueue.removeFirst();
+    }
     if (m_inputQueue.isEmpty()) {
         m_inputRunning = false;
         return;
     }
     m_inputRunning = true;
-    const auto job = m_inputQueue.takeFirst();
+    const auto job = m_inputQueue.takeFirst().job;
     auto once = std::make_shared<bool>(false);
     job([this, once] {
         if (*once)
@@ -858,7 +864,7 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
     const Qt::KeyboardModifiers modifiers = ipc::parseModifiers(params.value(u"modifiers"_s)).value_or(Qt::NoModifier);
     const int holdMs = params.value(u"ms"_s).toInt(800);
     const QPointF delta(params.value(u"dx"_s).toDouble(), params.value(u"dy"_s).toDouble());
-    enqueueInput([=, this](const std::function<void()> &finished) {
+    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
         QQuickWindow *w = window();
         if (!w) {
             reply.fail(code(E::NotReady), u"The window is gone"_s);
@@ -949,7 +955,7 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
     const Qt::MouseButton button = ipc::parseMouseButton(params.value(u"button"_s).toString()).value_or(Qt::LeftButton);
     const Qt::KeyboardModifiers modifiers = ipc::parseModifiers(params.value(u"modifiers"_s)).value_or(Qt::NoModifier);
     const int holdMs = params.value(u"holdMs"_s).toInt(0);
-    enqueueInput([=, this](const std::function<void()> &finished) {
+    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
         QQuickWindow *w = window();
         if (!w) {
             reply.fail(code(E::NotReady), u"The window is gone"_s);
@@ -996,7 +1002,7 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
 void RemoteControl::typeText(const QJsonObject &params, const ipc::ControlReply &reply)
 {
     const QString text = params.value(u"text"_s).toString();
-    enqueueInput([=, this](const std::function<void()> &finished) {
+    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
         QQuickWindow *w = window();
         if (!w) {
             reply.fail(code(E::NotReady), u"The window is not there yet"_s);
@@ -1014,20 +1020,25 @@ void RemoteControl::typeText(const QJsonObject &params, const ipc::ControlReply 
             }
             const QList<uidriver::KeyStroke> strokes = uidriver::strokesFor(text);
             uidriver::Gesture gesture = uidriver::keyStrokes(settled, strokes, uidriver::KeyDelivery::System, 8);
-            uidriver::play(this, settled, gesture, [=, this](bool completed) {
-                if (!completed) {
-                    reply.fail(code(E::Failed), u"The window went away"_s);
-                    finished();
-                    return;
-                }
-                afterSettled(100, 2000, [=, this] {
-                    QQuickWindow *after = window();
-                    QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
-                    reply.ok(QJsonObject{{u"keys"_s, strokes.size()},
-                                         {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
-                    finished();
-                });
-            });
+            // Typing stops when the client leaves (a command line interrupted).
+            uidriver::play(
+                    this, settled, gesture,
+                    [=, this](bool completed) {
+                        if (!completed) {
+                            reply.fail(code(E::Failed), u"The window went away"_s);
+                            finished();
+                            return;
+                        }
+                        afterSettled(100, 2000, [=, this] {
+                            QQuickWindow *after = window();
+                            QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
+                            reply.ok(QJsonObject{
+                                    {u"keys"_s, strokes.size()},
+                                    {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
+                            finished();
+                        });
+                    },
+                    [reply] { return reply.connected(); });
         });
     });
 }
@@ -1044,7 +1055,7 @@ void RemoteControl::pressKeys(const QJsonObject &params, const ipc::ControlReply
     QList<uidriver::KeyStroke> strokes;
     for (int i = 0; i < count; ++i)
         strokes += *parsed;
-    enqueueInput([=, this](const std::function<void()> &finished) {
+    enqueueInput(reply, [=, this](const std::function<void()> &finished) {
         QQuickWindow *w = window();
         if (!w) {
             reply.fail(code(E::NotReady), u"The window is not there yet"_s);
@@ -1068,24 +1079,28 @@ void RemoteControl::pressKeys(const QJsonObject &params, const ipc::ControlReply
                                               },
                                               30, true});
             }
-            uidriver::play(this, settled, gesture, [=, this](bool completed) {
-                if (!completed) {
-                    reply.fail(code(E::Failed), u"The window went away"_s);
-                    finished();
-                    return;
-                }
-                afterSettled(100, 2000, [=, this] {
-                    QJsonArray list;
-                    for (const bool h : std::as_const(*handled))
-                        list.append(h);
-                    QQuickWindow *after = window();
-                    QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
-                    reply.ok(QJsonObject{{u"keys"_s, strokes.size()},
-                                         {u"handled"_s, list},
-                                         {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
-                    finished();
-                });
-            });
+            uidriver::play(
+                    this, settled, gesture,
+                    [=, this](bool completed) {
+                        if (!completed) {
+                            reply.fail(code(E::Failed), u"The window went away"_s);
+                            finished();
+                            return;
+                        }
+                        afterSettled(100, 2000, [=, this] {
+                            QJsonArray list;
+                            for (const bool h : std::as_const(*handled))
+                                list.append(h);
+                            QQuickWindow *after = window();
+                            QQuickItem *focus = after ? after->activeFocusItem() : nullptr;
+                            reply.ok(QJsonObject{
+                                    {u"keys"_s, strokes.size()},
+                                    {u"handled"_s, list},
+                                    {u"focusedItem"_s, focus ? QJsonValue(describe(focus)) : QJsonValue()}});
+                            finished();
+                        });
+                    },
+                    [reply] { return reply.connected(); });
         });
     });
 }

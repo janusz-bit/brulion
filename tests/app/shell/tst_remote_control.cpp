@@ -534,6 +534,32 @@ private Q_SLOTS:
                                   u"- Pierwszy blok — zażółć gęślą jaźń ĄĆĘŁŃÓŚŹŻ\n- Drugi blok\n"_s, 5000 * kSlowdown);
     }
 
+    // Typing stops when the command line that asked for it is interrupted.
+    void interruptedTypingStops()
+    {
+        QCOMPARE(app({u"open"_s, u"Test"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--text"_s, u"Drugi blok"_s, u"--exact"_s}).code, 0);
+        QCOMPARE(app({u"click"_s, u"--text"_s, u"Drugi blok"_s, u"--exact"_s}).code, 0);
+        QCOMPARE(app({u"key"_s, u"End"_s}).code, 0);
+        const auto edited = [this] {
+            return app({u"state"_s}).result().value(u"editing"_s).toObject().value(u"text"_s).toString();
+        };
+        QProcess typing;
+        typing.setProcessEnvironment(environment());
+        typing.start(QStringLiteral(BRULION_CLI), {u"app"_s, u"type"_s, QString(3000, u'ż')});
+        QVERIFY(typing.waitForStarted(kCallMs));
+        QTRY_VERIFY_WITH_TIMEOUT(edited().count(u'ż') >= 5, 20000 * kSlowdown);
+        typing.kill();
+        typing.waitForFinished();
+        QTest::qWait(500);
+        const qsizetype stopped = edited().count(u'ż');
+        QTest::qWait(1000);
+        QCOMPARE(edited().count(u'ż'), stopped);
+        QVERIFY2(stopped < 3000, qPrintable(QString::number(stopped)));
+        QCOMPARE(app({u"key"_s, u"Escape, Escape"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--idle"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)}).code, 0);
+    }
+
     // A password field's text never leaves the app: not in find, not in state, not matched.
     void secretFields()
     {

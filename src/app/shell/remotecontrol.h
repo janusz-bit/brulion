@@ -104,7 +104,7 @@ private:
     void reachTarget(QQuickWindow *window, const Target &target, std::function<void(QPointF)> then);
 
     // ---- Input queue: one gesture at a time
-    void enqueueInput(std::function<void(std::function<void()> finished)> job);
+    void enqueueInput(const ipc::ControlReply &reply, std::function<void(std::function<void()> finished)> job);
     void nextInput();
     /// Call `then` once the window has shown no new frame for `quietMs` (transitions and
     /// animations are over: a popup that opened has given its field the keyboard), at most after
@@ -134,7 +134,11 @@ private:
     };
     QList<Toast> m_toasts;
 
-    QList<std::function<void(std::function<void()>)>> m_inputQueue;
+    struct QueuedInput {
+        ipc::ControlReply reply; ///< not connected any more: dropped
+        std::function<void(std::function<void()>)> job;
+    };
+    QList<QueuedInput> m_inputQueue;
     bool m_inputRunning = false;
 
     QList<std::shared_ptr<Wait>> m_waits;

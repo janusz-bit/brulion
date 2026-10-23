@@ -107,9 +107,12 @@ using Gesture = QList<Step>;
 /// Play a gesture at once (nested event processing in its pauses).
 void run(const Gesture &gesture);
 /// Play a gesture from timers on the event loop; `done(true)` after its last step and pause,
-/// `done(false)` when `window` went away first. The player lives as a child of `owner` (gone
-/// with it: then nothing more happens, `done` included).
-void play(QObject *owner, QQuickWindow *window, const Gesture &gesture, std::function<void(bool)> done = {});
+/// `done(false)` when `window` went away first or `keepGoing` (asked before each step) said no —
+/// only for gestures whose every step is whole (key strokes; a pointer gesture stopped half way
+/// leaves a button or a finger down). The player lives as a child of `owner` (gone with it: then
+/// nothing more happens, `done` included).
+void play(QObject *owner, QQuickWindow *window, const Gesture &gesture, std::function<void(bool)> done = {},
+          std::function<bool()> keepGoing = {});
 
 /// Timestamps of synthetic mouse events: increasing, `advance` ms after the previous one.
 int mouseTimestamp(int advance);
