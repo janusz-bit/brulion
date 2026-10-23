@@ -2,6 +2,7 @@
 
 #include "dates/format.h"
 #include "dates/recurrence.h"
+#include "markdown/blockclipboard.h"
 #include "markdown/inline_p.h"
 #include "markdown/journal.h"
 #include "markdown/lines_p.h"
@@ -579,7 +580,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     // that page (ids are per page in Obsidian).
                     if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.linkedBlockText) {
                         if (const auto blockText = m_ctx.linkedBlockText(w.target, w.blockId)) {
-                            const QString shown = blockText->simplified();
+                            const QString shown = stripInlineMarkup(*blockText).simplified();
                             if (!shown.isEmpty())
                                 frag = elided(shown, MaxBlockLinkText);
                         }
@@ -637,7 +638,9 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case InlineKind::BlockEmbed: {
                 if (item.kind == InlineKind::BlockEmbed && m_ctx.hideTransclusions)
                     break; // shown next to the text by the caller
-                const auto blockText = m_ctx.blockText ? m_ctx.blockText(item.target) : std::nullopt;
+                auto blockText = m_ctx.blockText ? m_ctx.blockText(item.target) : std::nullopt;
+                if (blockText) // the block as the text it shows (a link by its label, no emphasis marks)
+                    blockText = stripInlineMarkup(*blockText);
                 const QString prefix = item.kind == InlineKind::BlockEmbed ? u"⧉ "_s : QString();
                 html = link(u"block:"_s + item.target, blockText ? pal.link : pal.unresolved,
                             esc(QString(prefix + (blockText ? *blockText : u"(("_s + item.target + u"))"_s))));

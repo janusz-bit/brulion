@@ -34,6 +34,10 @@ struct MergeResult {
 ///  * Changes of one side only are taken; regions both sides changed identically, once.
 ///  * Regions where both sides only inserted lines at the same place are unioned: local lines,
 ///    then the remote lines not already among the local ones (journal appends on two devices).
+///  * Regions where one side only added lines right before or after lines the other side changed
+///    (adjacent changes, which diff3 alone reports as a conflict) take both: the changed lines
+///    with the added ones around them — the last line of a journal edited while another program
+///    appended to it.
 ///  * Anything else is a conflict: `clean` is false and `text` holds the local side there.
 /// CRLF/LF differences never conflict; the result uses local's line ending style (else
 /// remote's, else base's, else LF). The final newline is merged three-way. An empty base

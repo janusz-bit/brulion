@@ -93,6 +93,25 @@ private Q_SLOTS:
                                       << u"Zażółć\ngęślą\njaźń\nŹdźbło\n"_s << u"Zażółć!\ngęślą\njaźń\nŹdźbło\n"_s;
         QTest::newRow("prepend and append") << u"środek\n"_s << u"początek\nśrodek\n"_s << u"środek\nkoniec\n"_s
                                             << u"początek\nśrodek\nkoniec\n"_s;
+        // Adjacent changes where one side only added lines: the journal's last block edited in
+        // the app while an agent (brulion-cli) appended to the journal, and the other way round.
+        QTest::newRow("last line edited, remote appended after it")
+                << u"- kawa\n- zadzwonić do hydraulika\n"_s << u"- kawa\n- zadzwonić do hydraulika — pilne\n"_s
+                << u"- kawa\n- zadzwonić do hydraulika\n- Agent: kupić uszczelki 15 mm\n"_s
+                << u"- kawa\n- zadzwonić do hydraulika — pilne\n- Agent: kupić uszczelki 15 mm\n"_s;
+        QTest::newRow("local appended, remote edited the last line")
+                << u"- kawa\n- żółw\n"_s << u"- kawa\n- żółw\n- jeż\n"_s << u"- kawa\n- żółw błotny\n"_s
+                << u"- kawa\n- żółw błotny\n- jeż\n"_s;
+        QTest::newRow("only line edited, remote appended")
+                << u"- a\n"_s << u"- a, b\n"_s << u"- a\n- c\n- d\n"_s << u"- a, b\n- c\n- d\n"_s;
+        QTest::newRow("first line edited, remote prepended")
+                << u"- a\n- b\n"_s << u"- A\n- b\n"_s << u"- z\n- a\n- b\n"_s << u"- z\n- A\n- b\n"_s;
+        QTest::newRow("edited and appended, remote appended")
+                << u"- a\n- b\n"_s << u"- a\n- b!\n- c\n"_s << u"- a\n- b\n- d\n"_s << u"- a\n- b!\n- c\n- d\n"_s;
+        QTest::newRow("appended line already there once")
+                << u"- a\n- b\n"_s << u"- a\n- b!\n- c\n"_s << u"- a\n- b\n- c\n"_s << u"- a\n- b!\n- c\n"_s;
+        QTest::newRow("no final newline, last line edited, remote appended")
+                << u"- a\n- b"_s << u"- a\n- b!"_s << u"- a\n- b\n- c"_s << u"- a\n- b!\n- c"_s;
     }
     void merge3Clean()
     {
@@ -141,6 +160,16 @@ private Q_SLOTS:
     void emptiedLocalVersusRemoteEditConflicts()
     {
         QVERIFY(!merge3(u"a\n"_s, QString(), u"a\nb\n"_s).clean);
+    }
+
+    void adjacentChangesThatAreNotOnlyAdditionsConflict()
+    {
+        // A line deleted next to the other side's appended line, both sides changing the line
+        // and one appending: still conflicts (only pure additions next to a change merge).
+        QVERIFY(!merge3(u"- a\n- b\n"_s, u"- a\n"_s, u"- a\n- b\n- c\n"_s).clean);
+        const MergeResult r = merge3(u"- a\n- b\n"_s, u"- a\n- b1\n"_s, u"- a\n- b2\n- c\n"_s);
+        QVERIFY(!r.clean);
+        QCOMPARE(r.text, u"- a\n- b1\n"_s);
     }
 
     void conflictingInsertionsInsideTextAreUnioned()

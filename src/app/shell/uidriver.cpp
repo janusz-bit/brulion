@@ -347,6 +347,14 @@ bool scrollIntoView(QQuickWindow *window, QQuickItem *item, const std::function<
         const qreal maxY = originY + std::max<qreal>(0, p->property("contentHeight").toReal() - h);
         const qreal y = std::clamp<qreal>(r.center().y() - h / 2, originY, maxY);
         p->setProperty("contentY", y);
+        // Sideways too: a row of tools wider than the screen (the phone's editing toolbar) — not a
+        // flickable that only flicks up and down (wider content there is not to be scrolled to).
+        constexpr int verticalFlickOnly = 0x2; // Flickable.VerticalFlick
+        const qreal w = p->width();
+        const qreal originX = p->property("originX").toReal();
+        const qreal maxX = originX + std::max<qreal>(0, p->property("contentWidth").toReal() - w);
+        if (maxX > originX && p->property("flickableDirection").toInt() != verticalFlickOnly)
+            p->setProperty("contentX", std::clamp<qreal>(r.center().x() - w / 2, originX, maxX));
         if (afterEach)
             afterEach();
     }
