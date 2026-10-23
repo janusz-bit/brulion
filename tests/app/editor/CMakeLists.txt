@@ -94,9 +94,11 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
-        # odnośnik" from right-clicks on text and frames (desktop), a bullet's right-click / long
-        # press and the touch toolbar's "Więcej", the clipboard read back, Ctrl+Shift+C, following
-        # the copied links (scroll, select, flash, again after scrolling away), a missing heading.
+        # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
+        # page's properties), a bullet's right-click / long press and the touch toolbar's "Więcej"
+        # (a block's, a table cell's), the clipboard read back, Ctrl+Shift+C (also in a cell),
+        # following the copied links (scroll, select, flash, again after scrolling away), a missing
+        # heading.
         foreach(_links "tst_editor_qml_blocklinks;1280x800;" "tst_editor_qml_blocklinks_touch;412x915;--touch")
             list(GET _links 0 _links_test)
             list(GET _links 1 _links_size)

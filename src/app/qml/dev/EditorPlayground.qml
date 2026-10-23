@@ -22,7 +22,8 @@ import Brulion
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
-// `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `link-flash` a
+// `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
+// table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
 // copied block link followed (the block selected and flashing). The in-memory vault runs
 // ```query blocks on the real index (FakeEditorHost). Like the app's shell, the editor ends at
 // the on-screen keyboard (KeyboardInsets.overlap); a simulated one is drawn grey.
@@ -1914,9 +1915,12 @@ ApplicationWindow {
     // pasting) and say so; Ctrl+Shift+C while editing, on a selected block and with nothing
     // selected, the palette's heading link; a copied link followed by a click or tap scrolls to its
     // block or heading, selects and flashes it — again after scrolling away —, a missing heading is
-    // said.
+    // said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the palette after the
+    // cell lost the keyboard; (desktop) a right-click on a title drawn above the page's properties.
     property string lastNotice: ""
     property string copiedId: ""
+    property string expectedLink: ""
+    property Item focusProbe: null
     property int linkRow: -1
     property int targetRow: -1
     Connections {
@@ -2228,6 +2232,72 @@ ApplicationWindow {
             () => check(menuItemNamed(editor.blockMenu, "blockMenuZoom").shown, "with zoom in an outline"),
             () => check(page.zoomBlock < 0, "and does not zoom"),
             ...copySteps("copyEmbed", "“Embed” copies !((id))", () => "!((" + info(window.targetRow).blockId + "))"),
+            // ---- A table: "Więcej" on the cell toolbar; the edited cell's table is current -------------
+            () => {
+                page.selectedRow = -1
+                Theme.forceTouch = true
+                window.targetRow = viewRow("table")
+                editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
+            },
+            () => {
+                const item = delegateAt(window.targetRow)
+                check(item !== null, "the table is on screen")
+                if (item)
+                    item.focusContent()
+            },
+            waitStep(() => editor.toolbarMode === "cell" && findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore") !== null,
+                     "a table cell's toolbar has “More”"),
+            () => {
+                const flick = findItem(editor, "editToolbarFlick")
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+            },
+            () => tapItem(findShown(findItem(editor, "editToolbarSlot"), "toolbarCellMore")),
+            waitStep(() => blockMenuOpen(), "“More” on the cell toolbar opens the block menu"),
+            () => {
+                check(editor.blockMenu.row() === window.targetRow && !editor.blockMenu.listItem, "it is the table's menu")
+                check(editor.editingTable === null && page.selectedRow === window.targetRow,
+                      "the cell's editing ended, the table is selected")
+            },
+            ...copySteps("copyBlockRef", "“Block reference” of a table copies ((id))",
+                         () => "((" + info(window.targetRow).blockId + "))"),
+            () => {
+                Theme.forceTouch = DevTools.touch
+                page.selectedRow = -1
+                const item = delegateAt(window.targetRow)
+                if (item)
+                    item.focusContent()
+            },
+            waitStep(() => editor.editingTable !== null && editor.editingTable.cellInput !== null
+                           && editor.editingTable.cellInput.activeFocus && page.selectedRow < 0,
+                     "a cell is edited (nothing selected)"),
+            () => {
+                window.lastNotice = ""
+                EditorInput.sendKey(editor.editingTable.cellInput, Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier, "")
+            },
+            waitStep(() => window.lastNotice.endsWith(" ((" + info(window.targetRow).blockId + "))"),
+                     () => "Ctrl+Shift+C in a cell copies its table's reference: " + window.lastNotice),
+            () => {
+                // The keyboard goes elsewhere (the palette's field): the cell's editing ends and the
+                // table stays the current block.
+                window.focusProbe = Qt.createQmlObject('import QtQuick; TextInput { width: 10; height: 10 }',
+                                                       window.contentItem, "focusProbe")
+                window.focusProbe.forceActiveFocus()
+            },
+            waitStep(() => editor.editingTable === null && page.selectedRow === window.targetRow,
+                     () => "a cell left for another field leaves its table selected: " + page.selectedRow),
+            () => {
+                window.expectedLink = page.linkText(window.targetRow, "blockLink").text
+                check(window.expectedLink.indexOf("#^" + info(window.targetRow).blockId + "]]") > 0, "the table's link: " + window.expectedLink)
+                editor.copyCurrentLink("blockLink") // the palette's "Kopiuj link do bloku"
+            },
+            waitStep(() => clipboardText() === window.expectedLink,
+                     () => "the palette then copies the table's link: " + clipboardText()),
+            () => {
+                window.focusProbe.destroy()
+                window.focusProbe = null
+                page.selectedRow = -1
+                editor.listView.forceActiveFocus()
+            },
         ])
         if (!touch) {
             s = s.concat([
@@ -2611,6 +2681,20 @@ ApplicationWindow {
                     return
                 flick.contentX = Math.max(0, flick.contentWidth - flick.width)
                 editor.openBlockMenuAbove(row, more)
+            })
+            break
+        }
+        case "copylink-table": {
+            // Touch: a table cell's toolbar "Więcej" — the cell left, the table's block menu at it
+            // (screenshots).
+            const row = viewRow("table")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            const item = editor.listView.itemAtIndex(row) as BlockDelegate
+            if (item)
+                item.focusContent()
+            scriptLater.run(() => {
+                if (editor.editingTable)
+                    editor.openTableBlockMenu(editor.editingTable)
             })
             break
         }

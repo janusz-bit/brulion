@@ -358,6 +358,8 @@ FocusScope {
         // A word the keyboard is still composing becomes text first (an id resets the text).
         if (activeEditor && activeEditor.row === row)
             EditorInput.commitPreedit(activeEditor)
+        else if (editingTable && editingTable.block && editingTable.block.index === row && editingTable.cellInput)
+            EditorInput.commitPreedit(editingTable.cellInput)
         const r = controller.copyLink(row, kind)
         if (r.ok)
             notice(qsTr("Copied %1").arg(r.text), "success")
@@ -384,9 +386,20 @@ FocusScope {
             return qsTr("First select a block or put the caret in it")
         }
     }
-    /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block —
-    /// the one being edited, else the selected one — ("blockRef", "blockLink") or to the heading of
-    /// its section ("heading": the last heading at or above it, as the side panel's outline marks).
+    /// The current block: the one being edited — a block, or the table whose cell is being edited
+    /// —, else the selected one; -1 when none.
+    function currentRow() {
+        if (!controller)
+            return -1
+        if (controller.editingRow >= 0)
+            return controller.editingRow
+        if (editingTable && editingTable.block)
+            return editingTable.block.index
+        return controller.selectedRow
+    }
+    /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block
+    /// (currentRow()) ("blockRef", "blockLink") or to the heading of its section ("heading": the
+    /// last heading at or above it, as the side panel's outline marks).
     function copyCurrentLink(kind) {
         if (!controller)
             return false
@@ -396,7 +409,7 @@ FocusScope {
             notice(copyFailure("sourceMode"), "info")
             return false
         }
-        const current = controller.editingRow >= 0 ? controller.editingRow : controller.selectedRow
+        const current = currentRow()
         if (current < 0) {
             notice(copyFailure("noRow"), "info")
             return false
@@ -1298,6 +1311,24 @@ FocusScope {
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
         blockMenu.openFor(row)
         openBlockMenu(row, item, 0, -blockMenu.openHeight() - Theme.space1)
+    }
+    /// The cell toolbar's "Więcej": the block menu of the table whose cell is being edited. A cell
+    /// is no block editor that could go on under the menu: its editing ends (its text kept, the
+    /// keyboard hidden), the table is selected — the block the menu acts on, the current block of
+    /// the palette's commands afterwards — and the menu opens at the table.
+    function openTableBlockMenu(table) {
+        if (!controller || !table || !table.block)
+            return
+        const row = table.block.index
+        if (table.cellInput)
+            EditorInput.commitPreedit(table.cellInput)
+        Qt.inputMethod.hide()
+        table.closeCell()
+        controller.selectedRow = row
+        list.forceActiveFocus()
+        list.forceLayout()
+        const item = list.itemAtIndex(row) as BlockDelegate
+        openBlockMenu(row, item, item ? item.contentLeft : 0, 0)
     }
     Component {
         id: blockMenuComponent
