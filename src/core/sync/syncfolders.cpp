@@ -527,9 +527,8 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
                 folderFailed(op.path, u"write-failed"_s, vault()->errorString());
             continue;
         case FolderOp::Kind::CreateRemote:
-            if (std::any_of(m_remoteAll.keyBegin(), m_remoteAll.keyEnd(), [&op](const VaultPath &path) {
-                    return path.compare(op.path, Qt::CaseInsensitive) == 0;
-                })) {
+            if (std::any_of(m_remoteAll.keyBegin(), m_remoteAll.keyEnd(),
+                            [&op](const VaultPath &path) { return path.compare(op.path, Qt::CaseInsensitive) == 0; })) {
                 continue; // the server has it in another letter case
             }
             client()->mkdirs(op.path, guarded([this, op, next, fatal](const WebDavError &error) {
