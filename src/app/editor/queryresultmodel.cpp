@@ -10,8 +10,10 @@
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
+#include "util/paths.h"
 
 #include <QDate>
+#include <QUrl>
 
 using namespace Qt::StringLiterals;
 
@@ -414,6 +416,14 @@ QVariantMap QueryResultModel::activateLink(int row, const QString &url, bool new
         return {};
     if (url.startsWith(u"task:"_s) || url.startsWith(u"reminder:"_s))
         return open(row, newPane);
+    // `[[#Heading]]`, `[[#^id]]` in an item of another page name that page, not the query's.
+    if (url.startsWith(u"page:#"_s) && row >= 0 && row < m_rows.size()) {
+        const QString path = m_rows[row].item.value(u"path"_s).toString();
+        if (!path.isEmpty() && path != m_controller->path()) {
+            const QString page = QString::fromLatin1(QUrl::toPercentEncoding(paths::stripMarkdownExtension(path)));
+            return m_controller->activateLink(-1, u"page:"_s + page + url.mid(5), newPane);
+        }
+    }
     return m_controller->activateLink(-1, url, newPane);
 }
 

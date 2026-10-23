@@ -110,6 +110,8 @@ Rectangle {
         const r = results.activateLink(index, link, false)
         if (r && r.action === "scrollTo")
             root.editor.revealRow(r.row)
+        else if (r && r.action === "notFound")
+            root.editor.noticeNotFound(r)
     }
 
     // A column laid out with bindings, not a ColumnLayout: the block has its final height when the

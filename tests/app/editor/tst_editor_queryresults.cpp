@@ -324,6 +324,32 @@ private Q_SLOTS:
         QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"journals/2026-10-15.md"_s);
     }
 
+    void sameItemPageLinks()
+    {
+        // [[#^id]] / [[#Heading]] in an item of another page name that page: its block is shown
+        // and opened there, not looked for on the query's page.
+        Fixture f(u"type:tasks tag:remont"_s);
+        f.host.setFile(u"Inna.md"_s,
+                       u"## Cele\n\n- [ ] Zadanie z [[#^cel1]] i [[#Cele]] #remont\n- Cel główny ^cel1\n"_s);
+        f.results.refresh();
+        const int row = f.rowOf(u"Zadanie z"_s);
+        QVERIFY(row >= 0);
+        QVERIFY2(f.row(row).value(u"html"_s).toString().contains(u">Cel główny<"_s),
+                 qPrintable(f.row(row).value(u"html"_s).toString()));
+        QSignalSpy nav(&f.host, &FakeEditorHost::navigated);
+        QVERIFY(f.results.activateLink(row, u"page:#%5Ecel1"_s).isEmpty());
+        QCOMPARE(nav.size(), 1);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Inna.md"_s);
+        QCOMPARE(f.host.lastRoute().value(u"blockId"_s).toString(), u"cel1"_s);
+        QVERIFY(f.results.activateLink(row, u"page:#Cele"_s).isEmpty());
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Inna.md"_s);
+        QCOMPARE(f.host.lastRoute().value(u"heading"_s).toString(), u"Cele"_s);
+        // An item of the query's own page: its headings and blocks are here.
+        const QVariantMap here = f.results.activateLink(f.rowOf(u"Pomalować"_s), u"page:#%5Ebrak"_s);
+        QCOMPARE(here.value(u"action"_s).toString(), u"notFound"_s);
+        QCOMPARE(nav.size(), 2);
+    }
+
     void rendersWithTheThemeAndLanguage()
     {
         Fixture f(u"type:tasks tag:zakupy status:open"_s);
