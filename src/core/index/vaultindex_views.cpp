@@ -493,7 +493,6 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
         QString tag;
     };
     QList<Found> found;
-    QHash<const Private::Entry *, QStringList> pageLevel;
     for (const QString &key : d->tagKeysFor(path)) {
         const auto notes = d->tagIndex.constFind(key);
         if (notes == d->tagIndex.constEnd())
@@ -502,10 +501,7 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
             const Private::Entry *e = it.key() == path ? nullptr : d->entry(it.key());
             if (!e)
                 continue;
-            auto level = pageLevel.find(e);
-            if (level == pageLevel.end())
-                level = pageLevel.insert(e, pageLevelTags(e->note));
-            if (level->contains(key))
+            if (e->pageTags().contains(key))
                 found.append(Found{e, -1, key});
             const QList<Block> &blocks = e->note.blocks;
             for (qsizetype i = 0; i < blocks.size(); ++i) {

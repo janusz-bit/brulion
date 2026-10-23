@@ -467,7 +467,7 @@ NoteMeta &Runner::meta(const Entry *entry)
         return *it;
     const ParsedNote &note = entry->note;
     NoteMeta m;
-    m.pageTags = pageLevelTags(note);
+    m.pageTags = entry->pageTags();
     m.effective.resize(note.blocks.size());
     return *m_meta.insert(entry, std::move(m));
 }

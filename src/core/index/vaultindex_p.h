@@ -57,12 +57,15 @@ struct Entry {
     const QString &foldedTitleAndContent() const;
     /// Tag key -> spelling as first written in this note.
     const QHash<QString, QString> &tagSpellings() const;
+    /// pageLevelTags() of the note (the tags carried by the page as a whole).
+    const QStringList &pageTags() const;
 
 private:
     mutable std::optional<QString> m_lowerContent;
     mutable std::optional<QStringList> m_foldedBlocks;
     mutable std::optional<QString> m_foldedContent;
     mutable std::optional<QHash<QString, QString>> m_tagSpellings;
+    mutable std::optional<QStringList> m_pageTags;
 };
 
 /// Access to VaultIndex internals for the module's own free functions (runQuery).
