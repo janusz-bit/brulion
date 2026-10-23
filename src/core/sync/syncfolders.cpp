@@ -106,7 +106,10 @@ int SyncRun::countMoved(const QList<VaultPath> &paths, bool here, QHash<QString,
             if (m_states.contains(it.key()))
                 continue;
             renamedCase.insert(it.key().toLower());
-            ++versions[remoteVersion(*it)]; // a move on the server keeps the version (Nextcloud)
+            // A move on the server keeps the file's ETag (Nextcloud); the listing-based version of
+            // servers without ETags (mtime and size) proves nothing.
+            if (!it->etag.isEmpty())
+                ++versions[it->etag];
         }
     }
     int moved = 0;
@@ -220,13 +223,17 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
             return false;
         // At least half of the synced files of the old folder are at their places in the new one,
         // unchanged; the others may have been edited (compared as usual at the new path) or
-        // deleted (deleted on the server as usual) since the rename.
+        // deleted (deleted on the server as usual) since the rename. A file the server no longer
+        // has stays out of it: moved, it would be taken for deleted there, while the rename of a
+        // file wins over its deletion on the other side (it is uploaded again).
         int unchanged = 0;
         for (const VaultPath &file : std::as_const(files)) {
             const VaultPath target = to + file.mid(from.size());
-            if (m_states.contains(target) || m_remote.contains(target))
+            if (!m_local.contains(target))
+                continue;
+            if (!m_remote.contains(file))
                 return false;
-            if (m_local.contains(target) && sameContent(target, m_states.value(file)))
+            if (sameContent(target, m_states.value(file)))
                 ++unchanged;
         }
         return unchanged > 0 && unchanged * 2 >= files.size();

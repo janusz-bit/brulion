@@ -639,6 +639,26 @@ private Q_SLOTS:
         QCOMPARE(p.b.files(), p.a.files());
     }
 
+    void localRenameWhileTheServerDeletedANote()
+    {
+        // As for a single file, renaming wins over a deletion on the other side: the note is
+        // uploaded again under the new name (no MOVE, which would take it for deleted there).
+        Pair p(notesIn(u"Projekty"_s, 4) + notesIn(u""_s, 2, 10));
+        p.settle();
+        QVERIFY(p.b.remove(u"Projekty/"_s + noteName(0)));
+        QCOMPARE(counts(p.b.sync()), Counts{.delR = 1});
+        QVERIFY(p.a.vault->rename(u"Projekty"_s, u"Projekty 2"_s));
+        const SyncReport r = p.a.sync();
+        QVERIFY(!r.needsConfirmation);
+        QCOMPARE(r.foldersMoved, 0);
+        QCOMPARE(counts(r), (Counts{.up = 4, .delR = 3}));
+        QVERIFY(p.a.vault->exists(u"Projekty 2/"_s + noteName(0)));
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+        QVERIFY(!p.server.isDir(u"Notatki/Projekty"_s));
+        p.b.sync();
+        QCOMPARE(p.b.files(), p.a.files());
+    }
+
     void remoteRenameWhileTheLocalCopyWasEdited()
     {
         Pair p(notesIn(u"Projekty"_s, 3) + notesIn(u""_s, 2, 10));
@@ -658,6 +678,35 @@ private Q_SLOTS:
         QCOMPARE(p.server.files(kFolder), p.a.files());
         p.b.sync();
         QCOMPARE(p.b.files(), p.a.files());
+    }
+
+    void remoteRenameKeepsAnOldFolderHoldingUnsyncedFiles()
+    {
+        Pair p(notesIn(u"Projekty"_s, 3) + notesIn(u"Dom"_s, 3, 10) + notesIn(u""_s, 2, 20));
+        p.settle();
+        QVERIFY(p.b.vault->rename(u"Projekty"_s, u"Projekty 2"_s));
+        QVERIFY(p.b.vault->rename(u"Dom"_s, u"Dom 2"_s));
+        QCOMPARE(p.b.sync().foldersMoved, 2);
+        // Meanwhile on the laptop: a new note in one old folder, a file Brulion does not sync in
+        // the other.
+        QVERIFY(p.a.write(u"Projekty/Nowa z laptopa.md"_s, u"nowa\n"_s));
+        QVERIFY(writeFileBehind(p.a.root, u"Dom/.DS_Store"_s, "Bud1"));
+        const SyncReport r = p.a.sync();
+        QVERIFY(!r.needsConfirmation);
+        QCOMPARE(counts(r), (Counts{.up = 1, .down = 6, .delL = 6}));
+        // Both old folders stay: one holds the new note (now on the server too), the other the
+        // Finder's .DS_Store (never synced).
+        QCOMPARE(p.server.text(u"Notatki/Projekty/Nowa z laptopa.md"_s), std::optional<QString>(u"nowa\n"_s));
+        QVERIFY(QFileInfo::exists(p.a.root + u"/Dom/.DS_Store"_s));
+        QVERIFY(!p.server.isDir(u"Notatki/Dom"_s));
+        QCOMPARE(r.foldersDeleted, 0);
+        QMap<QString, QString> synced = p.a.files();
+        QVERIFY(synced.remove(u"Dom/.DS_Store"_s));
+        QCOMPARE(p.server.files(kFolder), synced);
+        for (int i = 0; i < 3; ++i) {
+            QVERIFY(p.a.vault->exists(u"Projekty 2/"_s + noteName(i)));
+            QVERIFY(p.a.vault->exists(u"Dom 2/"_s + noteName(10 + i)));
+        }
     }
 
     void bothDevicesRenameTheSameFolder()
