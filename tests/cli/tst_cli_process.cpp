@@ -616,6 +616,45 @@ private Q_SLOTS:
         QVERIFY(r.result().value(u"ref"_s).toString().startsWith(u"Lista.md#L3@"_s));
     }
 
+    // A page whose name reads as a date ("Poniedziałek", "Weekend", "Jutro") is that page, as
+    // [[Poniedziałek]] opens it in the app; `today` and ISO dates stay the daily notes, and a date
+    // phrase no page is called is the daily note too.
+    void pageNamesWinOverDatePhrases()
+    {
+        const QString dir = vault({{u"Plan/Poniedziałek.md"_s, "- bieganie\n"},
+                                   {u"Projekty/Weekend.md"_s, "- działka\n"},
+                                   {u"Notatka.md"_s, "- [[Poniedziałek]] i [[Weekend]]\n"}});
+        Run r = run(dir, {u"page"_s, u"read"_s, u"Poniedziałek"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Plan/Poniedziałek.md"_s);
+        QVERIFY(r.warnings().contains(u"ref_also_a_date"_s));
+        r = run(dir, {u"page"_s, u"append"_s, u"Poniedziałek"_s, u"rozciąganie"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Plan/Poniedziałek.md"_s);
+        QCOMPARE(readFile(dir + u"/Plan/Poniedziałek.md"_s), "- bieganie\n- rozciąganie\n"_ba);
+        r = run(dir, {u"task"_s, u"add"_s, u"Pompki"_s, u"--page"_s, u"poniedziałek"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Plan/Poniedziałek.md"_s);
+        r = run(dir, {u"backlinks"_s, u"Weekend"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Projekty/Weekend.md"_s);
+        QCOMPARE(r.result().value(u"items"_s).toArray().size(), 1);
+        QVERIFY(!QFileInfo::exists(dir + u"/journals"_s)); // no daily note written by mistake
+        // The daily notes: `today`, a date, a phrase no page has.
+        r = run(dir, {u"page"_s, u"append"_s, u"today"_s, u"dziś"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-10-14.md"_s);
+        r = run(dir, {u"page"_s, u"read"_s, u"2026-10-19"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-10-19.md"_s);
+        r = run(dir, {u"page"_s, u"read"_s, u"wtorek"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-10-20.md"_s);
+        QVERIFY(!r.warnings().contains(u"ref_also_a_date"_s));
+        // Two pages of that name: ambiguous, never the daily note.
+        writeFile(dir + u"/Archiwum/Weekend.md"_s, "- stary\n");
+        r = run(dir, {u"page"_s, u"read"_s, u"Weekend"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"ambiguous_ref"_s);
+    }
+
     void polishArgvAndStdin()
     {
         const QString dir = vault();

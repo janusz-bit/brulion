@@ -63,7 +63,9 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 ## Refs and dates
 
 - A page: a path (`Projekty/Dom.md`), a name as `[[links]]` read it (`Dom`), or a day (`today`,
-  `wczoraj`, `2026-10-15`). Several pages with one name → exit 4 with `candidates`: use the path.
+  `2026-10-15`, `wczoraj`). Several pages with one name → exit 4 with `candidates`: use the path.
+  A page named like a date (`Poniedziałek`, `Weekend`) wins over the day (warning
+  `ref_also_a_date`): for daily notes prefer `today` or `YYYY-MM-DD`.
 - A line: use the `ref` values commands return (`Dom.md#L12@3f9a01bc`) — never build hashes
   yourself. If the line changed since, the command is refused (`stale_ref`): read again.
 - Dates: Polish or English phrases (`jutro o 9`, `w piątek`, `za 2 godziny`, `next monday 6pm`)

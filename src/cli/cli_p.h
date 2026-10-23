@@ -243,9 +243,10 @@ public:
         std::optional<QDate> journal;          ///< the day, for a daily note
         std::optional<notebook::ItemRef> item; ///< the ref had a line or block part
     };
-    /// Resolve a page ref: a vault path, a page name (like [[links]]; several pages of that name
-    /// are a conflict), "today" or a date phrase (the daily note), or an item ref. With
-    /// `mustExist` a missing page is not found; else the path it would get.
+    /// Resolve a page ref: a vault path, "today" or an ISO date (the daily note), a page name
+    /// (like [[links]]: a title, a path suffix, an alias; several pages of that name are a
+    /// conflict), another date phrase when no page has that name ("wczoraj", "w piątek"), or an
+    /// item ref. With `mustExist` a missing page is not found; else the path it would get.
     std::optional<PageRef> page(const QString &ref, bool mustExist);
     /// A vault path given by the user: refused when outside the notebook, in .brulion/ or .trash/.
     std::optional<VaultPath> vaultPath(const QString &raw);

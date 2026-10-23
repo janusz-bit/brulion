@@ -428,14 +428,31 @@ std::optional<Call::PageRef> Call::page(const QString &raw, bool mustExist)
     }
     if (paths::isMarkdown(*path) && QFileInfo(v.absolutePath(*path)).isFile())
         return finish(*path); // just arrived on disk
-    // 2. A day: "today", "wczoraj", "2026-10-15", "w piątek".
+    // 2. A day named unmistakably: "today" or "2026-10-15".
     if (!name.contains(u'/')) {
         if (const auto iso = dates::parseIsoDate(name.trimmed()))
             return finish(notebook::journalFileFor(v, *iso));
+        if (name.trimmed().compare(u"today", Qt::CaseInsensitive) == 0)
+            return finish(notebook::journalFileFor(v, ctx.today()));
+    }
+    // Another date phrase ("wczoraj", "w piątek", "Weekend") is a day only when no page has that
+    // name: [[Poniedziałek]] opens the page Plan/Poniedziałek.md, so does the ref.
+    std::optional<QDate> day;
+    if (!name.contains(u'/')) {
         const auto found = dates::parseNaturalDate(name, ctx.now(), ctx.weekStart(), ctx.locale());
         if (found && name.left(found->start).trimmed().isEmpty() && name.mid(found->end()).trimmed().isEmpty())
-            return finish(notebook::journalFileFor(v, found->spec.date));
+            day = found->spec.date;
     }
+    const auto named = [&](const VaultPath &found) {
+        if (day) {
+            const VaultPath journal = notebook::journalFileFor(v, *day);
+            warn(u"ref_also_a_date"_s,
+                 tr("%1 is the page %2; for the daily note of %3 give the date")
+                         .arg(name, found, day->toString(Qt::ISODate)),
+                 {{u"page"_s, found}, {u"date"_s, day->toString(Qt::ISODate)}, {u"journal"_s, journal}});
+        }
+        return finish(found);
+    };
     // 3. A page name as [[links]] read it: a title, or a path suffix ("Projekty/Dom").
     const QString key = foldName(notebook::withoutMdExtension(name).trimmed());
     QStringList matches;
@@ -447,7 +464,7 @@ std::optional<Call::PageRef> Call::page(const QString &raw, bool mustExist)
             matches.append(f.path);
     }
     if (matches.size() == 1)
-        return finish(matches.first());
+        return named(matches.first());
     if (matches.size() > 1) {
         setError(ExitConflict, u"ambiguous_ref"_s, tr("Several pages are called %1: give the path").arg(name),
                  {{u"candidates"_s, QJsonArray::fromStringList(matches)}});
@@ -456,7 +473,10 @@ std::optional<Call::PageRef> Call::page(const QString &raw, bool mustExist)
     // 4. An alias (frontmatter `aliases:`), as links resolve it.
     VaultIndex &index = n->index();
     if (const auto resolved = index.resolveLink(name); resolved && paths::isMarkdown(*resolved))
-        return finish(*resolved);
+        return named(*resolved);
+    // 5. The day of a date phrase.
+    if (day)
+        return finish(notebook::journalFileFor(v, *day));
     if (!mustExist) {
         const VaultPath future = notebook::newPagePath(v, name);
         if (!future.isEmpty())

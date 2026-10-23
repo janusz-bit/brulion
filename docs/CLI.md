@@ -87,7 +87,7 @@ A failure: `{"ok": false, "command": …, "vault": …, "error": {"code": "stale
 `page_not_found`, `ambiguous_ref`, `stale_ref`, `hash_mismatch`, `date_not_understood`,
 `query_error`, `read_only`, `destructive_refused`, `outside_vault`, `no_vault`, `app_not_running`,
 …); messages are for people. Warnings (`date_in_past`, `ignored_words`, `moved`,
-`stdin_invalid_utf8`, …) never fail a command.
+`stdin_invalid_utf8`, `ref_also_a_date`, …) never fail a command.
 
 * Paths are relative to the notebook, NFC, with `/`.
 * Dates are local wall-clock `YYYY-MM-DD` and `YYYY-MM-DD HH:mm` — never UTC.
@@ -118,8 +118,9 @@ A `<ref>` names a page or a line in it:
 | Form | Meaning |
 |---|---|
 | `Projekty/Dom.md`, `Projekty/Dom` | a path (with or without `.md`; any letter case) |
+| `today`, `2026-10-15` | the daily note of that day |
 | `Dom` | a page name, as `[[Dom]]` reads it (title, path suffix, alias); several pages of that name → exit 4 with the candidates |
-| `today`, `dziś`, `wczoraj`, `w piątek`, `2026-10-15` | the daily note of that day |
+| `dziś`, `wczoraj`, `w piątek`, `jutro` | the daily note of that day — unless a page has that name: as `[[Poniedziałek]]`, the page `Plan/Poniedziałek.md` wins (warning `ref_also_a_date` naming the day); use `today` or the date for the daily note |
 | `Dom.md#L12@3f9a01bc` | line 12 whose text hashes to `3f9a01bc` — what `task list`, `search`, `page read --blocks` return |
 | `Dom.md#L12` | line 12, whatever it holds |
 | `Dom.md#^abc123`, `^abc123`, `((abc123))` | the block with that id (in the page / anywhere) |
