@@ -207,6 +207,31 @@ private Q_SLOTS:
         QVERIFY(produced > 0);
     }
 
+    // ---- clipboard ------------------------------------------------------------------------------
+
+    // The HTML flavour of copied blocks (io::clipboardHtml, Workspace::renderHtml): every block of
+    // an outline selected and copied (bench_markdown selectAllCopy is the Markdown of it).
+    void clipboardHtml_data()
+    {
+        QTest::addColumn<int>("blocks");
+        for (int n : {500, 5000, 20000})
+            QTest::newRow(qPrintable(u"%1 blocks"_s.arg(n))) << n;
+    }
+    void clipboardHtml()
+    {
+        QFETCH(int, blocks);
+        bench::Rng r{quint64(blocks)};
+        const QString markdown = bench::outlineNote(r, blocks, 500);
+        bench::reportInput(u"clipboardHtml %1 blocks"_s.arg(blocks), markdown);
+        ClipboardHtmlOptions options;
+        options.blockText = [](const QString &id) { return u"Tekst bloku "_s + id; };
+        qsizetype size = 0;
+        QBENCHMARK {
+            size = io::clipboardHtml(markdown, options).size();
+        }
+        QVERIFY(size > markdown.size());
+    }
+
     // ---- exporters ------------------------------------------------------------------------------
 
     // The tag names the vault size (1000 notes; 300 in the small profile) so that runs of the two
