@@ -113,6 +113,8 @@ private:
 
     // ---- waitFor
     bool satisfied(const Wait &wait);
+    /// waitFor's answer: {waitedMs, route, item?}.
+    QJsonObject waitAnswer(const Wait &wait);
     bool idle();
     void pollWaits();
 

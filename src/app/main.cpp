@@ -24,6 +24,7 @@
 #include <QStandardPaths>
 #include <QTranslator>
 
+#include <cstdio>
 #include <memory>
 
 #ifdef BRULION_DESKTOP_INTEGRATION
@@ -118,8 +119,14 @@ int main(int argc, char *argv[])
         const QByteArray message = args.contains(u"--capture"_s) ? "capture"
                                    : args.contains(u"--today"_s)  ? "today"
                                                                   : "activate";
-        if (singleInstance->sendToPrimary(message))
+        if (singleInstance->sendToPrimary(message)) {
+            // The running app keeps its own setting: a second launch cannot switch it on.
+            if (args.contains(u"--remote-control"_s))
+                std::fprintf(stderr, "Brulion is already running: --remote-control applies to a new run only. Turn "
+                                     "remote control on in its settings (Settings → Application → For developers) or "
+                                     "quit it first.\n");
             return 0;
+        }
         if (!singleInstance->listen()) {
             // Another launch started at the same moment and is the primary: hand it the message
             // once it listens. Should it not answer, run anyway rather than not at all.

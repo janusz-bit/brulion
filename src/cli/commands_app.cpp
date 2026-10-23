@@ -51,8 +51,10 @@ QString singleInstanceKey(const Call &call)
 
 QString remoteControlHint()
 {
-    return tr("Allow it in the app: Settings → Application → For developers → “Allow agents to control the app”, or "
-              "start Brulion with --remote-control");
+    // The Polish labels too: the app's interface is Polish unless chosen otherwise.
+    return tr("Allow it in the app: Settings → Application → For developers → “Allow agents to control the app” (in "
+              "Polish: Ustawienia → Aplikacja → Dla programistów → „Pozwól agentom sterować aplikacją”), or start "
+              "Brulion with --remote-control");
 }
 
 /// The answer of the app's remote control to `method`; nullopt and the call's error set when no
@@ -409,7 +411,8 @@ Result appType(Call &call)
     const QString text = call.text(u"text"_s);
     if (text.isEmpty())
         return call.fail(ExitUsage, u"missing_argument"_s, tr("Nothing to type"));
-    return appResult(call, u"type"_s, {{u"text"_s, text}}, 120000);
+    // The app types about one key in 10 ms (and waits for the window to settle).
+    return appResult(call, u"type"_s, {{u"text"_s, text}}, int(qMin<qsizetype>(30000 + text.size() * 30, 900000)));
 }
 
 Result appKey(Call &call)

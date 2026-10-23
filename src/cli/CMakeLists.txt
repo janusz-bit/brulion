@@ -1,9 +1,10 @@
 # brulion-cli — the command line for scripts and AI agents (docs/CLI.md): headless commands over a
 # notebook folder with JSON output, an MCP server (`brulion-cli mcp`), and the `app …` commands for
-# the running app (`app open`; with its remote control on, state, input and screenshots). Desktop only (added by the top-level CMakeLists.txt outside Android and the
-# browser). One command registry (registry.cpp) gives the argument parser, the help, the JSON
-# Schema and the MCP tools. Built on the core module notebook (the app's own logic), never on the
-# app's shell: no reminders, no sync, no settings written.
+# the running app (`app open`; with its remote control on, state, input and screenshots). Desktop
+# only (added by the top-level CMakeLists.txt outside Android and the browser). One command
+# registry (registry.cpp) gives the argument parser, the help, the JSON Schema and the MCP tools.
+# Built on the core module notebook (the app's own logic), never on the app's shell: no reminders,
+# no sync, no settings written.
 #
 # brulion_cli: the static library (the app links it for `brulion cli …`, tests/cli for in-process
 # checks); brulion-cli: the executable.

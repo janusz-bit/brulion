@@ -193,7 +193,7 @@ Never compute a hash yourself.
 | `app commands` | | the command palette's commands `{id, title, subtitle, shortcut, enabled}` | |
 | `app command <id>` | | run one (`go.calendar`, `page.source`, `theme.toggle` …) | yes |
 | `app screenshot [<path>]` | a `.png` file | the window as a PNG; default: `$XDG_RUNTIME_DIR/brulion-screenshots/` | |
-| `app find [<text>]` | `[--object-name N] [--type T] [--exact] [--include-hidden] [--within H] [--limit N]` | items, topmost first: `{handle, type, objectName, text, geometry, visible, onScreen, enabled, focus, checked?}` | |
+| `app find [<text>]` | `[--object-name N] [--type T] [--exact] [--include-hidden] [--within H] [--limit N]` | items, topmost first: `{handle, type, objectName, text, geometry, visible, onScreen, enabled, focus, checked?, secret?}` | |
 | `app click [<target>]` | `[--handle H \| --x X --y Y \| --text T --object-name N --type T --exact] [--button left\|right\|middle] [--modifiers ctrl+shift] [--device mouse\|touch]` | a click (a tap with `--device touch`) | yes |
 | `app long-press [<target>]` | the target options, `[--ms 800] [--device]` | press and hold | yes |
 | `app double-click [<target>]` | the target options, `[--button] [--modifiers] [--device]` | a double click / double tap | yes |
@@ -299,8 +299,10 @@ user in the app, or to test the UI. Desktop (Linux) only.
 
 **Off by default.** The app listens only while it runs with `--remote-control` or the device
 setting is on: Settings → Application → For developers → „Pozwól agentom sterować aplikacją
-(gniazdo lokalne)” (`devtools/remoteControl` in `Brulion.ini`; switching it takes effect at once;
-the settings show the socket while it listens). Without it every command below exits 5:
+(gniazdo lokalne)” (`devtools/remoteControl` in `Brulion.ini`; switching it takes effect at once — switched off,
+the socket and its connections close; the settings show the socket while it listens).
+`--remote-control` applies to a new run: a second launch while Brulion runs only brings it to
+the front (and says so on stderr). Without it every command below exits 5:
 `app_not_running` when no app runs, `remote_control_off` when it runs without remote control,
 both with a `hint`.
 
@@ -309,7 +311,9 @@ both with a `hint`.
 owner-only (0600), and connections of other users are refused (their credentials are checked).
 But while it is on, **any program of this user can drive the UI and read the notes it shows** (and
 type into them): turn it on only while an agent needs it. `state` holds nothing secret (no
-passwords, no tokens); a screenshot is written only to the path asked for (an absolute `.png` in a
+passwords, no tokens), and the text of a password field never leaves the app (`find`, `state` and
+the input commands describe it as `"secret": true` with no text, a text selector never matches
+it); a screenshot is written only to the path asked for (an absolute `.png` in a
 folder that exists) or, by default, into `$XDG_RUNTIME_DIR/brulion-screenshots/`; every request is
 in the event log ("Rejestr zdarzeń", detailed mode: the method and its parameters — typed and
 captured text only by its length).
@@ -339,10 +343,11 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   needs a shown, active window: it is shown and asked to be active first.
 * **One at a time, settled.** Gestures are played on the app's event loop, one after another
   (nothing nested: the app stays in real use), started and answered once the window has stopped
-  changing (no new frame for 100 ms, at most 2 s) — so the next command sees a settled UI (a
-  palette that opened has given its field the keyboard).
+  changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next
+  command sees a settled UI (a palette that opened has given its field the keyboard).
 * `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
-  new frame for 300 ms, no indexing, no input queued and every page saved.
+  new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
+  saved.
 * `app open` with remote control on: the app resolves the ref in the notebook it shows, as this
   command line resolves refs (paths, names as `[[links]]` read them, aliases, `today`, dates,
   `Dom.md#L12@hash`, `^id`), and answers with the route it opened (`not_found` with
@@ -377,8 +382,8 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `longPress` | a target, `ms` (800), `device` | the same |
 | `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}` |
 | `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click |
-| `type` | `text` | `{keys, focusedItem}` |
-| `key` | `sequence`, `count` | `{keys, handled: [bool…], focusedItem}` |
+| `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
+| `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
 | `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` |
 | `quit` | | `{quitting: true}`, then the app quits |
 

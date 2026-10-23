@@ -26,6 +26,7 @@
 #include <QLocalSocket>
 #include <QProcess>
 #include <QSaveFile>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QtEndian>
@@ -533,6 +534,41 @@ private Q_SLOTS:
                                   u"- Pierwszy blok — zażółć gęślą jaźń ĄĆĘŁŃÓŚŹŻ\n- Drugi blok\n"_s, 5000 * kSlowdown);
     }
 
+    // A password field's text never leaves the app: not in find, not in state, not matched.
+    void secretFields()
+    {
+        QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"sync"})"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--type"_s, u"BTextField"_s}).code, 0);
+        Run r = app({u"find"_s, u"--type"_s, u"BTextField"_s, u"--include-hidden"_s, u"--limit"_s, u"200"_s});
+        QCOMPARE(r.code, 0);
+        QString handle;
+        for (const QJsonValue &item : r.result().value(u"items"_s).toArray()) {
+            if (item.toObject().value(u"secret"_s).toBool())
+                handle = item.toObject().value(u"handle"_s).toString();
+        }
+        QVERIFY2(!handle.isEmpty(), qPrintable(r.describe()));
+        r = app({u"click"_s, handle});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        const QString password = u"tajneHasłoŻółwia-123"_s;
+        r = app({u"type"_s, password});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"focusedItem"_s).toObject().value(u"secret"_s).toBool());
+        QCOMPARE(r.result().value(u"focusedItem"_s).toObject().value(u"text"_s).toString(), QString());
+        QVERIFY(!r.out.contains("tajne"));
+        r = app({u"state"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"focusedItem"_s).toObject().value(u"secret"_s).toBool());
+        QVERIFY(!r.out.contains("tajne"));
+        r = app({u"find"_s, u"tajneHasło"_s, u"--include-hidden"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 0);
+        r = app({u"find"_s, u"--type"_s, u"BTextField"_s, u"--include-hidden"_s, u"--limit"_s, u"200"_s});
+        QVERIFY(!r.out.contains("tajne"));
+        // Nothing of it in the app's log either.
+        QVERIFY(!readFile(m_log).contains("tajne"));
+        QCOMPARE(app({u"navigate"_s, u"journals"_s}).code, 0);
+    }
+
     void mcpAppTools()
     {
         QProcess p;
@@ -591,6 +627,52 @@ private Q_SLOTS:
         const Run after = app({u"state"_s});
         QCOMPARE(after.code, 5);
         QCOMPARE(after.errorCode(), u"app_not_running"_s);
+    }
+
+    // The device setting alone turns it on (no --remote-control), the switch in Settings →
+    // Application turns it off at once (the connections too), and a second launch with
+    // --remote-control cannot turn it on in the running app.
+    void settingTurnsItOnAndOff()
+    {
+        {
+            QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
+            settings.setValue(u"devtools/remoteControl"_s, true);
+        }
+        startApp(false);
+        Run r;
+        QVERIFY2(until(
+                         {u"state"_s},
+                         [](const Run &x) { return x.code == 0 && x.result().value(u"ready"_s).toBool(); }, kStartMs,
+                         &r),
+                 qPrintable(r.describe()));
+        // A second launch only brings the running app to the front.
+        QProcess second;
+        second.setProcessEnvironment(environment());
+        second.start(QStringLiteral(BRULION_APP), {u"--remote-control"_s});
+        QVERIFY(second.waitForFinished(kCallMs));
+        QCOMPARE(second.exitCode(), 0);
+        QVERIFY2(second.readAllStandardError().contains("already running"), "no notice for --remote-control");
+
+        QCOMPARE(app({u"navigate"_s, uR"({"view":"settings","section":"app"})"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--object-name"_s, u"settingsRemoteControl"_s}).code, 0);
+        r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool());
+        // Switched off by its own click: the connection that asked is closed with the socket.
+        r = app({u"click"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
+        QCOMPARE(r.code, 5);
+        QVERIFY(until(
+                {u"state"_s}, [](const Run &x) { return x.errorCode() == u"remote_control_off"; }, 10000 * kSlowdown,
+                &r));
+        QVERIFY(!QFileInfo::exists(controlKey()));
+        // Saved (QSettings writes from the app's event loop).
+        const auto stored = [this] {
+            return QSettings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat)
+                    .value(u"devtools/remoteControl"_s)
+                    .toString();
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(stored(), u"false"_s, 10000 * kSlowdown);
+        stopApp();
     }
 };
 

@@ -81,6 +81,33 @@ QString plainText(const QString &label)
     return out.trimmed();
 }
 
+/// A field that hides what is typed into it (a password: echoMode other than TextInput.Normal).
+/// Its text is never shown, matched or logged.
+bool secretField(const QQuickItem *item)
+{
+    const QVariant echoMode = item->property("echoMode");
+    return echoMode.isValid() && echoMode.toInt() != 0;
+}
+
+/// The text an item shows as people read it; "" for a secret field.
+QString shownText(const QQuickItem *item)
+{
+    return secretField(item) ? QString() : plainText(uidriver::labelOf(item));
+}
+
+/// Every popup shown in the window is fully open (no enter or exit transition running): a popup
+/// gives its field the keyboard once it is (Popup.onOpened).
+bool popupsSettled(QQuickWindow *window)
+{
+    const QList<QObject *> popups = uidriver::openPopups(window);
+    for (QObject *popup : popups) {
+        const QVariant opened = popup->property("opened");
+        if (opened.isValid() && !opened.toBool())
+            return false;
+    }
+    return true;
+}
+
 /// The item's QML type (or one it is based on) is `name`: "BButton", "TasksRow", "QQuickText" —
 /// or a Qt Quick type by its QML name ("Text", "TextEdit", "Flickable").
 bool typeMatches(const QQuickItem *item, const QString &name)
@@ -624,7 +651,7 @@ QJsonObject RemoteControl::describe(QQuickItem *item)
     QJsonObject o{{u"handle"_s, handleFor(item)},
                   {u"type"_s, uidriver::typeName(item)},
                   {u"objectName"_s, item->objectName()},
-                  {u"text"_s, plainText(uidriver::labelOf(item)).left(2000)},
+                  {u"text"_s, shownText(item).left(2000)},
                   {u"geometry"_s, rect(item->mapRectToScene(QRectF(0, 0, item->width(), item->height())))},
                   {u"visible"_s, uidriver::shown(item)},
                   {u"enabled"_s, item->isEnabled()},
@@ -634,6 +661,8 @@ QJsonObject RemoteControl::describe(QQuickItem *item)
     const QVariant checked = item->property("checked");
     if (checked.metaType() == QMetaType::fromType<bool>())
         o.insert(u"checked"_s, checked.toBool());
+    if (secretField(item))
+        o.insert(u"secret"_s, true); // a password field: its text stays in the app
     return o;
 }
 
@@ -655,7 +684,7 @@ QList<QQuickItem *> RemoteControl::select(QQuickWindow *window, const QJsonObjec
                 if (!type.isEmpty() && !typeMatches(item, type))
                     return false;
                 if (!text.isEmpty()) {
-                    const QString label = plainText(uidriver::labelOf(item));
+                    const QString label = shownText(item);
                     if (exact ? label != text : !label.toCaseFolded().contains(folded))
                         return false;
                 }
@@ -795,7 +824,11 @@ void RemoteControl::afterSettled(int quietMs, int maxMs, std::function<void()> t
     QElapsedTimer waited;
     waited.start();
     connect(timer, &QTimer::timeout, this, [this, timer, waited, quietMs, maxMs, then = std::move(then)] {
-        const bool quiet = !m_frameWindow || !m_frameWindow->isExposed() || m_sinceFrame.elapsed() >= quietMs;
+        // No new frame for a while, and no popup in its enter or exit transition (on a slow
+        // machine frames of a transition can be further apart than `quietMs`).
+        const bool quiet =
+                !m_frameWindow
+                || ((!m_frameWindow->isExposed() || m_sinceFrame.elapsed() >= quietMs) && popupsSettled(m_frameWindow));
         if (!quiet && waited.elapsed() < maxMs)
             return;
         timer->stop();
@@ -997,8 +1030,11 @@ void RemoteControl::pressKeys(const QJsonObject &params, const ipc::ControlReply
     const auto parsed = uidriver::parseKeySequence(params.value(u"sequence"_s).toString(), &error);
     if (!parsed)
         return reply.fail(code(E::BadParams), error, {{u"param"_s, u"sequence"_s}});
+    const int count = params.value(u"count"_s).toInt(1);
+    if (parsed->size() * count > 1000)
+        return reply.fail(code(E::BadParams), u"At most 1000 keys at once"_s, {{u"param"_s, u"sequence"_s}});
     QList<uidriver::KeyStroke> strokes;
-    for (int i = 0; i < params.value(u"count"_s).toInt(1); ++i)
+    for (int i = 0; i < count; ++i)
         strokes += *parsed;
     enqueueInput([=, this](const std::function<void()> &finished) {
         QQuickWindow *w = window();
@@ -1070,13 +1106,31 @@ void RemoteControl::waitFor(const QJsonObject &params, const ipc::ControlReply &
             return reply.fail(errorCode, message, {{u"param"_s, u"handle"_s}});
     }
     if (satisfied(*wait)) {
-        QJsonObject out{{u"waitedMs"_s, 0}, {u"route"_s, toJson(m_app->currentRoute())}};
-        reply.ok(out);
+        reply.ok(waitAnswer(*wait));
         return;
     }
     m_waits.append(wait);
     if (!m_waitTimer.isActive())
         m_waitTimer.start();
+}
+
+QJsonObject RemoteControl::waitAnswer(const Wait &wait)
+{
+    QJsonObject out{{u"waitedMs"_s, wait.since.elapsed()}, {u"route"_s, toJson(m_app->currentRoute())}};
+    // The item that showed up (not for `gone`).
+    if (!wait.gone) {
+        QQuickItem *item = nullptr;
+        if (!wait.selector.isEmpty()) {
+            if (QQuickWindow *w = window())
+                item = select(w, wait.selector, true).value(0);
+        } else if (!wait.handle.isEmpty()) {
+            QString errorCode, message;
+            item = itemFor(wait.handle, &errorCode, &message);
+        }
+        if (item)
+            out.insert(u"item"_s, describe(item));
+    }
+    return out;
 }
 
 bool RemoteControl::satisfied(const Wait &wait)
@@ -1114,6 +1168,8 @@ bool RemoteControl::idle()
     // every 500 ms).
     if (m_frameWindow && m_frameWindow->isExposed() && m_sinceFrame.elapsed() < 300)
         return false;
+    if (m_frameWindow && !popupsSettled(m_frameWindow))
+        return false;
     // Unsaved edits: every block editor's page saved.
     if (QQuickWindow *w = window()) {
         const QList<QQuickItem *> items = uidriver::allItems(w->contentItem());
@@ -1136,14 +1192,7 @@ void RemoteControl::pollWaits()
         if (!wait->reply.connected()) {
             done = true; // the client left
         } else if (satisfied(*wait)) {
-            QJsonObject out{{u"waitedMs"_s, wait->since.elapsed()}, {u"route"_s, toJson(m_app->currentRoute())}};
-            if (!wait->selector.isEmpty() && !wait->gone) {
-                if (QQuickWindow *w = window()) {
-                    if (QQuickItem *item = select(w, wait->selector, true).value(0))
-                        out.insert(u"item"_s, describe(item));
-                }
-            }
-            wait->reply.ok(out);
+            wait->reply.ok(waitAnswer(*wait));
             done = true;
         } else if (wait->since.elapsed() > wait->ms) {
             wait->reply.fail(code(E::Timeout), u"The condition did not hold within %1 ms"_s.arg(wait->ms),
