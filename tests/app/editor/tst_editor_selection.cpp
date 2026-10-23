@@ -66,6 +66,8 @@ struct Fixture {
 };
 
 const QString Outline = u"- a\n\t- a1\n\t- a2\n- b\n\t- b1\n- c\n- d\n"_s;
+/// Rows: 0 Zażółć, 1 gęślą (its child), 2 jaźń, 3 łódź, 4 żółw (its child), 5 źdźbło.
+const QString Picks = u"- Zażółć\n\t- gęślą\n- jaźń\n- łódź\n\t- żółw\n- źdźbło\n"_s;
 
 QString clipboardText()
 {
@@ -477,6 +479,165 @@ private Q_SLOTS:
         f.page.selectAll();
         f.page.setSelectionTaskStatus(u"doing"_s);
         QCOMPARE(f.text().count(u"[/]"_s), 5);
+    }
+
+    // Ctrl+click / the touch tools' "Pojedynczo": single blocks picked into or out of the
+    // selection, gaps allowed (bullets 1, 3 and 5).
+    void blocksPickedOneByOne()
+    {
+        Fixture f(Picks);
+        QCOMPARE(f.page.toggleSelected(0), u"added"_s); // Zażółć with gęślą
+        QCOMPARE(f.selected(), QList<int>({0, 1}));
+        QVERIFY(!f.page.selectionPicked()); // one block: a range of one
+        QCOMPARE(f.page.toggleSelected(2), u"added"_s);
+        QCOMPARE(f.selected(), QList<int>({0, 1, 2}));
+        QVERIFY(f.page.selectionPicked());
+        QVERIFY(f.page.selectionContiguous()); // no gap between them
+        QCOMPARE(f.page.toggleSelected(5), u"added"_s);
+        QCOMPARE(f.selected(), QList<int>({0, 1, 2, 5}));
+        QVERIFY(!f.page.selectionContiguous());
+        QCOMPARE(f.page.selectionCount(), 4);
+        QCOMPARE(f.page.selectionFirstRow(), 0);
+        QCOMPARE(f.page.selectionLastRow(), 5);
+        QCOMPARE(f.page.selectedRow(), 5); // both ends on the block picked last
+        QCOMPARE(f.page.selectionAnchorRow(), 5);
+        QVERIFY(f.page.multiSelection());
+        // A band for each run.
+        QCOMPARE(f.edges(), QStringList({u"first"_s, u"middle"_s, u"last"_s, u""_s, u""_s, u"single"_s}));
+        // A child of a picked block goes with it.
+        QCOMPARE(f.page.toggleSelected(1), u"inParent"_s);
+        QCOMPARE(f.selected(), QList<int>({0, 1, 2, 5}));
+        // Copied in document order, each with its subtree.
+        QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
+        QCOMPARE(clipboardText(), u"- Zażółć\n\t- gęślą\n- jaźń\n- źdźbło"_s);
+        QCOMPARE(f.page.copySelection().value(u"count"_s).toInt(), 4);
+        QVERIFY(f.page.copySelection(true).value(u"ok"_s).toBool());
+        QCOMPARE(clipboardText(), u"• Zażółć\n  • gęślą\n• jaźń\n• źdźbło"_s);
+        // Out again: the ends go to the block picked last before it.
+        QCOMPARE(f.page.toggleSelected(2), u"removed"_s);
+        QCOMPARE(f.selected(), QList<int>({0, 1, 5}));
+        QCOMPARE(f.page.selectedRow(), 5);
+        // Gaps: neither indented nor moved, nothing changes.
+        QVERIFY(!f.page.indentSelection());
+        QVERIFY(!f.page.outdentSelection());
+        QVERIFY(!f.page.moveSelectionUp());
+        QVERIFY(!f.page.moveSelectionDown());
+        QCOMPARE(f.text(), Picks);
+        QVERIFY(!f.page.canUndo());
+        // A range (Shift+click) replaces the picked blocks, from the one picked last.
+        f.page.extendSelectionTo(3);
+        QCOMPARE(f.selected(), QList<int>({3, 4, 5}));
+        QVERIFY(!f.page.selectionPicked());
+        QCOMPARE(f.page.selectionAnchorRow(), 5);
+        // A block of a range picked out: the range's other blocks stay.
+        QCOMPARE(f.page.toggleSelected(5), u"removed"_s);
+        QCOMPARE(f.selected(), QList<int>({3, 4}));
+        QCOMPARE(f.page.toggleSelected(3), u"removed"_s);
+        QCOMPARE(f.page.selectionCount(), 0);
+        QCOMPARE(f.page.selectedRow(), -1);
+        // Esc / one block selected again, Shift+↓: ranges as before.
+        f.page.toggleSelected(0);
+        f.page.toggleSelected(5);
+        f.page.setSelectedRow(2);
+        QCOMPARE(f.selected(), QList<int>({2}));
+        QVERIFY(!f.page.selectionPicked());
+        QCOMPARE(f.page.toggleSelected(-1), QString());
+    }
+
+    void pickedBlocksAreCopiedCutDeletedAndPastedOver()
+    {
+        Fixture f(Picks);
+        f.page.setSelectedRow(0);
+        f.page.toggleSelected(3); // Zażółć and łódź with their children
+        QCOMPARE(f.selected(), QList<int>({0, 1, 3, 4}));
+        // Delete: one undo step, which brings them back picked.
+        QCOMPARE(f.page.deleteSelection(), 0);
+        QCOMPARE(f.text(), u"- jaźń\n- źdźbło\n"_s);
+        QCOMPARE(f.page.selectedRow(), 0);
+        QVERIFY(!f.page.selectionPicked());
+        f.page.undo();
+        QCOMPARE(f.text(), Picks);
+        QCOMPARE(f.selected(), QList<int>({0, 1, 3, 4}));
+        QVERIFY(f.page.selectionPicked());
+        QVERIFY(!f.page.selectionContiguous());
+        f.page.redo();
+        QCOMPARE(f.text(), u"- jaźń\n- źdźbło\n"_s);
+        f.page.undo();
+        // Cut.
+        QVariantMap r = f.page.cutSelection();
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QCOMPARE(r.value(u"count"_s).toInt(), 4);
+        QCOMPARE(clipboardText(), u"- Zażółć\n\t- gęślą\n- łódź\n\t- żółw"_s);
+        QCOMPARE(f.text(), u"- jaźń\n- źdźbło\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), Picks);
+        // A paste over them goes where the first one was.
+        r = f.page.replaceSelection(u"- nowy"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.text(), u"- nowy\n- jaźń\n- źdźbło\n"_s);
+        QCOMPARE(f.selected(), QList<int>({0}));
+        f.page.undo();
+        QCOMPARE(f.text(), Picks);
+        // Task statuses: the picked blocks, not the children they bring along.
+        f.page.cycleSelectionTasks();
+        QCOMPARE(f.text(), u"- [ ] Zażółć\n\t- gęślą\n- jaźń\n- [ ] łódź\n\t- żółw\n- źdźbło\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), Picks);
+    }
+
+    void pickedBlocksWithoutGapsMove()
+    {
+        Fixture f(Outline);
+        f.page.toggleSelected(5); // c
+        f.page.toggleSelected(6); // d
+        QVERIFY(f.page.selectionPicked());
+        QVERIFY(f.page.selectionContiguous());
+        QVERIFY(f.page.indentSelection());
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t- a2\n- b\n\t- b1\n\t- c\n\t- d\n"_s);
+        QCOMPARE(f.selected(), QList<int>({5, 6}));
+        f.page.undo();
+        QCOMPARE(f.text(), Outline);
+        QVERIFY(f.page.moveSelectionUp());
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t- a2\n- c\n- d\n- b\n\t- b1\n"_s);
+        QCOMPARE(f.selected(), QList<int>({3, 4}));
+        // Picking a parent takes in its picked children.
+        Fixture g(Outline);
+        g.page.toggleSelected(1); // a1
+        g.page.toggleSelected(4); // b1
+        QVERIFY(!g.page.selectionContiguous());
+        QCOMPARE(g.page.toggleSelected(0), u"added"_s); // a, with a1
+        QCOMPARE(g.selected(), QList<int>({0, 1, 2, 4}));
+        QCOMPARE(g.page.toggleSelected(0), u"removed"_s); // a1 is not picked on its own any more
+        QCOMPARE(g.selected(), QList<int>({4}));
+    }
+
+    void theEditedBlockJoinsPickedBlocks()
+    {
+        Fixture f(Picks);
+        f.page.startEditing(2, 1);
+        QCOMPARE(f.page.toggleSelected(5), u"added"_s);
+        QCOMPARE(f.page.editingRow(), -1);
+        QCOMPARE(f.selected(), QList<int>({2, 5}));
+        QVERIFY(f.page.selectionPicked());
+        // A picked block deleted on another device: the other one stays, alone.
+        f.host.externalWrite(Page, u"- Zażółć\n\t- gęślą\n- jaźń\n- łódź\n\t- żółw\n"_s);
+        QCOMPARE(f.selected(), QList<int>({2}));
+        QVERIFY(!f.page.selectionPicked());
+        // A child of the block being edited: that block is selected (with the child).
+        f.page.startEditing(0, 0);
+        QCOMPARE(f.page.toggleSelected(1), u"inParent"_s);
+        QCOMPARE(f.page.editingRow(), -1);
+        QCOMPARE(f.selected(), QList<int>({0, 1}));
+        // Editing ends the picked selection.
+        f.page.toggleSelected(3);
+        QVERIFY(f.page.selectionPicked());
+        f.page.startEditing(2, 0);
+        QCOMPARE(f.page.selectionCount(), 0);
+        QVERIFY(!f.page.selectionPicked());
+        // The page's properties are never picked.
+        Fixture props(u"---\ntytuł: Lista\n---\n- mleko\n- chleb\n"_s);
+        QCOMPARE(props.page.toggleSelected(0), QString());
+        QCOMPARE(props.page.selectionCount(), 0);
     }
 
     void pasteOverASelectionNeedsSomethingToPaste()

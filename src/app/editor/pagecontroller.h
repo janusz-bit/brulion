@@ -25,10 +25,12 @@
 // Block selection (docs/UI.md "Selecting and copying"): `selectionAnchorRow` and `selectedRow` (the
 // focus end) are the two ends of a range of visible rows; the selection is that range with the
 // whole subtree of every block in it (folded children too) — a set of uids in the model
-// (BlockListModel::setSelectedUids), so a future toggling of single blocks fits. Both ends are
-// uids: the selection survives edits, undo / redo (the undo steps restore it) and external
-// merges. It is copied (Markdown text/plain plus the host's text/html, or plain text), cut,
-// deleted, indented, moved and its tasks' statuses set as one undo step each; a paste replaces
+// (BlockListModel::setSelectedUids). Blocks picked one by one (toggleSelected(): Ctrl+click, the
+// touch tools' "Pojedynczo") make a selection with gaps: the picked blocks with their subtrees,
+// both ends on the last one picked; a range (Shift) replaces it. All of it is uids: the
+// selection survives edits, undo / redo (the undo steps restore it) and external merges. It is
+// copied (Markdown text/plain plus the host's text/html, or plain text), cut, deleted, indented,
+// moved (without gaps only) and its tasks' statuses set as one undo step each; a paste replaces
 // it. Copies never claim success the clipboard did not take, and refuse more than
 // ClipboardLimit bytes (never cut short). A paste drops block ids (`^id`, `id::`) that already
 // resolve elsewhere — `((id))` is vault-wide —, except right after a cut (a move).
@@ -119,6 +121,12 @@ class PageController : public QObject {
     Q_PROPERTY(int selectionLastRow READ selectionLastRow NOTIFY selectionChanged FINAL)
     /// More than one visible row is selected.
     Q_PROPERTY(bool multiSelection READ multiSelection NOTIFY selectionChanged FINAL)
+    /// Two or more blocks were picked one by one (toggleSelected()): Ctrl+Enter, Tab, Alt+↑/↓ act
+    /// on the selection, not on its focus end alone.
+    Q_PROPERTY(bool selectionPicked READ selectionPicked NOTIFY selectionChanged FINAL)
+    /// The selected rows are one run (no gaps between picked blocks): only such a selection is
+    /// indented, outdented or moved. True with nothing selected.
+    Q_PROPERTY(bool selectionContiguous READ selectionContiguous NOTIFY selectionChanged FINAL)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY undoStateChanged FINAL)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY undoStateChanged FINAL)
     /// External changes could not be merged: the local text is kept (not saved until resolved);
@@ -192,6 +200,8 @@ public:
     int selectionFirstRow() const { return m_selectionFirst; }
     int selectionLastRow() const { return m_selectionLast; }
     bool multiSelection() const { return m_selectionCount > 1; }
+    bool selectionPicked() const { return !m_pickedUids.isEmpty(); }
+    bool selectionContiguous() const { return m_selectionContiguous; }
     /// The most a copy puts on the clipboard (UTF-8 bytes): Android's clipboard takes about 1 MB
     /// per transaction. A larger copy is refused ("tooLarge"), never cut short.
     static constexpr qsizetype ClipboardLimit = 800 * 1024;
@@ -386,6 +396,13 @@ public:
     /// Move the focus end to `row` (Shift+click, a drag, a tap in the touch selection mode): from
     /// the anchor, or from the block being edited, else `row` alone.
     Q_INVOKABLE void extendSelectionTo(int row);
+    /// Ctrl+click (a tap with the touch tools' "Pojedynczo"): `row` with its subtree into the
+    /// selection or out of it, the rest stays — the selection may get gaps. A range becomes its
+    /// top blocks first; the block being edited joins (editing stops). A row selected only as part
+    /// of a selected block's subtree stays (it goes with that block). Both ends move to `row` when
+    /// it was added, else to the block picked last before it. The page properties are never
+    /// picked. Returns "added", "removed", "inParent" (nothing changed) or "" (not a row).
+    Q_INVOKABLE QString toggleSelected(int row);
     /// Shift+↓ (`step` 1) / Shift+↑ (-1): the focus end goes to the next / previous visible row
     /// that changes the selection (it jumps over rows already inside the selected subtrees); with
     /// nothing selected the block being edited is the anchor. False when nothing changed.
@@ -396,7 +413,8 @@ public:
     Q_INVOKABLE void clearSelection();
     /// The selected rows (subtrees included, ascending).
     Q_INVOKABLE QVariantList selectedRows() const;
-    /// The selection as Markdown (markdown::blocksMarkdown) / plain text (blocksPlainText).
+    /// The selection as Markdown (markdown::blocksMarkdown) / plain text (blocksPlainText): its
+    /// top blocks in document order, each with its subtree (a selection with gaps too).
     Q_INVOKABLE QString selectionMarkdown() const;
     Q_INVOKABLE QString selectionPlainText() const;
     /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml),
@@ -410,11 +428,13 @@ public:
     /// block before it is selected. Returns its row (-1: none).
     Q_INVOKABLE int deleteSelection();
     /// Tab / Shift+Tab on the selection (BlockDocument::indentRange — all or nothing — /
-    /// outdentRange). The document mode indents only when every top block is a list item.
+    /// outdentRange). The document mode indents only when every top block is a list item. A
+    /// selection with gaps is neither indented nor moved (selectionContiguous).
     Q_INVOKABLE bool indentSelection();
     /// The selection could be indented / outdented at all: not the zoomed block, and in the
     /// document mode only list items (its paragraphs and headings have no outline). The
-    /// selection tools offer "Zwiększ / Zmniejsz wcięcie" only then.
+    /// selection tools offer "Zwiększ / Zmniejsz wcięcie" only then. (Gaps are not asked about
+    /// here: the tools say why such a selection does not move.)
     Q_INVOKABLE bool canIndentSelection() const;
     Q_INVOKABLE bool outdentSelection();
     /// Alt+↑ / Alt+↓: the selected sibling blocks move together (BlockDocument::moveRangeUp/Down).
@@ -422,8 +442,8 @@ public:
     Q_INVOKABLE bool moveSelectionDown();
     /// Ctrl+Enter: every visible list item and paragraph the selection spans gets the status that
     /// follows the first one's (none → todo → doing → done → none). One undo step. The rows from
-    /// one end to the other: a parent selected alone changes, not the children it brings along
-    /// (they are copied, moved and deleted with it).
+    /// one end to the other — the picked blocks of a selection with gaps: a parent selected alone
+    /// changes, not the children it brings along (they are copied, moved and deleted with it).
     Q_INVOKABLE void cycleSelectionTasks();
     /// Set the task status of those blocks ("" removes it).
     Q_INVOKABLE void setSelectionTaskStatus(const QString &status);
@@ -642,9 +662,11 @@ private:
     struct Focus {
         int row = -1;
         int cursor = -1;
-        /// The block selection (anchor, focus rows), restored when no row is being edited.
+        /// The block selection (anchor, focus rows; the picked rows of one with gaps), restored
+        /// when no row is being edited.
         int selectionAnchor = -1;
         int selectionFocus = -1;
+        QList<int> selectionPicks = {};
     };
 
     void onFileChanged(const QString &path);
@@ -680,15 +702,24 @@ private:
     void writeConflictCopy();
     /// Follow kept blocks after BlockListModel::replaceContent (editing, selection, tracked).
     void remapBlocks(const QHash<quint64, quint64> &mapping);
-    /// The selected rows [first, first + count): the rows from the anchor to the focus with their
-    /// subtrees; empty when nothing is selected.
+    /// The selected rows [first, first + count) as one run: the rows from the anchor to the focus
+    /// with their subtrees, or the picked blocks when they leave no gap; empty when nothing is
+    /// selected or the picked blocks have gaps between them.
     markdown::RowRange selectionRange() const;
     markdown::RowRange rangeOf(int anchor, int focus) const;
+    /// The top blocks of the selection (each stands for its subtree), ascending.
+    QList<int> selectionTops() const;
+    /// Every selected row (subtrees included), ascending.
+    QList<int> selectionRowList() const;
     /// Recompute the selection after the document, folds or ends changed: the model's uid set,
     /// the counts; signals when something changed.
     void updateSelection();
     /// Drop the selection's state (no signals: updateSelection() follows).
-    void resetSelection() { m_selectedUid = m_anchorUid = 0; }
+    void resetSelection()
+    {
+        m_selectedUid = m_anchorUid = 0;
+        m_pickedUids.clear();
+    }
     /// Put `text` (and `html`) on the clipboard (ClipboardLimit, primary selection, read back).
     QVariantMap writeClipboard(const QString &text, const QString &html);
     /// `text` (pasted Markdown) without the block ids that already resolve elsewhere; ids in
@@ -761,6 +792,11 @@ private:
     int m_selectionLast = -1;
     int m_selectionAnchorRow = -1; ///< at the last updateSelection() (signals when rows shift)
     int m_selectionFocusRow = -1;
+    /// Blocks picked one by one (toggleSelected()), in the order picked, none inside another's
+    /// subtree; empty: the selection is the range from the anchor to the focus. Never just one
+    /// (that is a range of one block).
+    QList<quint64> m_pickedUids;
+    bool m_selectionContiguous = true;
     QHash<int, quint64> m_tracked; ///< trackBlock() handles
     int m_nextTrackHandle = 1;
     bool m_conflict = false;

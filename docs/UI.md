@@ -361,7 +361,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   tracked while it is open): **Kopiuj**, **Wytnij**, **Kopiuj jako tekst** (the block with its
   children, which becomes the selection — or, for a block that is part of a selection of several,
   "Kopiuj 3 bloki", "Wytnij 3 bloki": the whole selection; indenting, moving and "Usuń 3 bloki"
-  then act on all of it too), **Zaznacz** (the block becomes the selection; on touch UIs the
+  then act on all of it too — a selection with gaps is not indented or moved: those items are
+  shown disabled, a tap says why), **Zaznacz** (the block becomes the selection; on touch UIs the
   selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
   Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
   nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
@@ -471,22 +472,32 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 One block is edited at a time (its `InlineEditor` selects characters inside it); a selection that
 crosses blocks is a **block selection** (Logseq / Notion): whole blocks, each with its subtree —
 folded children too —, the same in both note modes (a document's paragraphs, headings and list
-items). Any characters across blocks are selected in the read-only **"Zaznacz tekst"** view.
+items), one run of blocks or blocks picked one by one with gaps between them (bullets 1, 3 and
+5). Any characters across blocks are selected in the read-only **"Zaznacz tekst"** view.
 
 * **Model** (`PageController`, docs/ARCHITECTURE.md): two uids, the anchor (`selectionAnchorRow`)
   and the focus end (`selectedRow`); the selection is the visible rows between them with every
   subtree — a set of uids in `BlockListModel` (`isSelected`, `selectionEdge`: `single` | `first` |
-  `middle` | `last` over the visible rows), so picking single blocks could come later. The ends
+  `middle` | `last` over the visible rows, so a selection with gaps is a band for each run). Blocks
+  picked one by one (`toggleSelected(row)`: Ctrl+click, "Pojedynczo") are a list of uids instead,
+  none inside another's subtree (a picked parent takes in its picked children; a child of a picked
+  block cannot leave alone: "Ten blok jest zaznaczony razem z blokiem, do którego należy"), both
+  ends on the one picked last; a range picked into becomes its top blocks first, the block being
+  edited joins (as Shift+click starts from it), one left is a range of one again, and a range
+  (Shift+click, Shift+↑/↓, a drag, Ctrl+A, ↑/↓) replaces them, from the one picked last.
+  `selectionPicked`: two or more picked; `selectionContiguous`: no gaps (picked blocks next to each
+  other are a run like a range). The ends and the picked blocks
   follow edits, undo / redo (each step restores the selection it had: an undone deletion selects
   its blocks again — and stops the editing of another block meanwhile: the keys go to the
   selection) and changes from other devices; a zoom ends it; editing ends it; the page's
-  properties are never part of a range. `selectionCount` counts the visible rows (folded children
-  come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
+  properties are never part of a range nor picked. `selectionCount` counts the visible rows
+  (folded children come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
   the next one without an empty selection between (the touch selection mode stays).
 * **Ways in**: Esc in an edited block; Shift+↑ / Shift+↓ (from an edited block once its text
   selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on any block — its text,
   a code or calculation frame, a table, a query, an embed, a rule, a bullet or number
-  (`BlockEditor.blockTapped`, the click's modifiers); a drag
+  (`BlockEditor.blockTapped`, the click's modifiers) —, and Ctrl+click on any of them to pick that
+  block into the selection or out of it (`BlockEditor.toggleBlock`, desktops); a drag
   with a mouse, touchpad or stylus from one block into another (`BlockEditor`'s tracker — a
   passive `PointHandler` over the list, the state in the editor because delegates may be destroyed
   meanwhile — scrolls near the view's edges; a left drag no longer scrolls the list on non-touch
@@ -497,22 +508,30 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   tools dock where the editing toolbar is; moving the finger without lifting it extends the
   selection (the list holds still, scrolls at its edges); taps on blocks move the selection's end
   there instead of editing; two round **grips** (44 px) at the band's start and end move its
-  ends; "Gotowe" and Back leave it. The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
+  ends (a selection without gaps); the tools' **"Pojedynczo"** (a toggle, `BlockEditor.pickMode`)
+  makes taps — and long presses — pick single blocks into the selection or out of it instead (no
+  grips meanwhile; off again, a tap moves the end from the block picked last); "Gotowe" and Back
+  leave it (and "Pojedynczo" with it). The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
   enter it too, and so does a hardware keyboard's Esc or Shift+↑/↓ on a touch UI (the same tools
   whichever way the selection was made). The journal stream: one selection per day (selecting in another day ends it); while
   a finger or the mouse selects, the stream scrolls only as long as the day goes on beyond the edge.
 * **The band**: one band over the range from the editor's left edge (a block alone keeps its
-  outline: from its own level, framed), rounded at its ends, a line down its left edge; made only
-  for selected blocks (a `Loader`: "Scrolling performance").
-* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej
-  (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę /
-  w dół, Status zadania, Zaznacz tekst…; the indents only where they can happen —
-  `canIndentSelection()`: a document's paragraphs and headings have none), Gotowe. Docked in the editing toolbar's slot on touch
+  outline: from its own level, framed), rounded at its ends, a line down its left edge — blocks
+  picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
+  "Scrolling performance").
+* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko,
+  Pojedynczo (docked only), Więcej (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ /
+  Zmniejsz wcięcie, Przenieś w górę / w dół, Status zadania, Zaznacz tekst…; the indents only where
+  they can happen — `canIndentSelection()`: a document's paragraphs and headings have none; with
+  gaps the indents and moves are shown disabled — `BMenuItem.unavailable`, the reason in a tooltip
+  — and a tap says why in a toast: "Wcięcia i przenoszenie działają tylko dla bloków zaznaczonych
+  bez przerw"), Gotowe. Docked in the editing toolbar's slot on touch
   UIs (the `selection` mode of `BlockEditor.toolbarMode`; the bottom navigation makes way), a
   compact bar floating at the top of the view on desktops while two or more blocks are selected
   (its × clears the selection).
-* **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — as
-  written, each top block re-based to column 0 (visual columns: tabs and spaces keep their
+* **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — the
+  top blocks in document order, also with gaps between them —, as written, each top block re-based
+  to column 0 (visual columns: tabs and spaces keep their
   nesting), LF line breaks, no BOM, no page properties (`markdown::blocksMarkdown`) — and, from the
   host, escaped semantic **HTML** as text/html (`io::clipboardHtml`: lists, headings, checkboxes,
   tables, dates, recurrence and priorities of any block; links to notes as their text, pictures as
@@ -533,9 +552,12 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   czasu".
   A toast's button takes no focus when pressed: the editor keeps the keys.
 * **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
-  the toolbar's Status zadania act on the range from one end to the other; a block selected alone
-  keeps the block's own keys — Ctrl+Enter changes it, not the children it brings along (they are
-  copied, cut, moved and deleted with it).
+  the toolbar's Status zadania act on the range from one end to the other — on the picked blocks
+  of a selection with gaps (Ctrl+Enter and the statuses; Tab and Alt+↑/↓ only without gaps, else a
+  toast says why); a block selected alone keeps the block's own keys — Ctrl+Enter changes it, not
+  the children it brings along (they are copied, cut, moved and deleted with it). Delete, Wytnij
+  and a paste over the selection take all of it, gaps too (one undo step; a paste goes where the
+  first selected block was).
 * **Pasting**: Ctrl+V in an edited block splits Markdown into blocks (`pasteText`, relative nesting
   kept); one copied list item brings its text, not a second marker (into an empty bullet a task
   keeps its checkbox, a code item its fence; over a whole paragraph the paragraph becomes the

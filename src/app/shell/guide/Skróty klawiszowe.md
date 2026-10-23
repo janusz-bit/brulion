@@ -43,7 +43,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | / | menu poleceń |
 
 ## Zaznaczone bloki
-Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu myszą z bloku na blok zaznaczone są całe bloki razem z dziećmi (także zwiniętymi). Zaznaczenie widać jako jeden pasek.
+Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu myszą z bloku na blok zaznaczone są całe bloki razem z dziećmi (także zwiniętymi). Zaznaczenie widać jako jeden pasek. Ctrl+kliknięcie dobiera pojedynczy blok albo go wyjmuje — także z przerwami między zaznaczonymi blokami.
 
 | Skrót | Działanie |
 |---|---|
@@ -53,8 +53,8 @@ Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu mysz�
 | Ctrl+X | wytnij (kopiuj i usuń jednym krokiem cofania) |
 | Ctrl+V | zastąp zaznaczone bloki tym, co jest w schowku |
 | Delete / Backspace | usuń zaznaczone bloki (Ctrl+Z albo „Cofnij” w powiadomieniu przywraca je zaznaczone) |
-| Tab / Shift+Tab | wcięcie / wysunięcie wszystkich (wcięcie tylko, gdy da się wciąć każdy) |
-| Alt+↑ / Alt+↓ | przeniesienie wszystkich razem |
+| Tab / Shift+Tab | wcięcie / wysunięcie wszystkich (wcięcie tylko, gdy da się wciąć każdy; bez przerw w zaznaczeniu) |
+| Alt+↑ / Alt+↓ | przeniesienie wszystkich razem (bez przerw w zaznaczeniu) |
 | Ctrl+Enter | następny status zadania dla wszystkich (jeden zaznaczony blok: tylko on, bez dzieci) |
 | Ctrl+Shift+Enter | menu statusu zadania — wybrany status dostają wszystkie |
 | Ctrl+. | zwiń / rozwiń blok na końcu zaznaczenia |

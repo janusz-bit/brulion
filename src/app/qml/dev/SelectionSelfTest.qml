@@ -9,7 +9,9 @@ import Brulion
 // touch through the window like a real device; the clipboard is read back.
 //   desktop: Esc (Ctrl+Enter then changes the parent alone, not its children) then Shift+↓ twice and
 //     Ctrl+C (three blocks with their children), Shift+↑ from an edited block's first line, Shift+↓
-//     from inside one, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (also one whose
+//     from inside one, Ctrl+A twice, Ctrl+clicks picking blocks with gaps between them (a band each,
+//     the count, Ctrl+C, Tab, Alt+↑ and Więcej's Przenieś w górę refused with the reason, one left out
+//     again, Shift+click after them), Shift+click, Delete and Ctrl+Z, the toast's Cofnij (also one whose
 //     deletion was undone already: nothing else is undone), Alt+↓ and Tab on a range (undone
 //     from another edited block: the range selected again), Ctrl+V over a selection, one copied block
 //     pasted into an empty bullet (no second marker), Shift+click on a calculation and a table,
@@ -20,7 +22,9 @@ import Brulion
 //     turns stay in it, a mouse selection across paragraphs, Ctrl+C, a theme change keeping the
 //     selection, "Kopiuj wszystko", Esc);
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
-//     it, Kopiuj, the end grip dragged, Usuń (still in the selection mode), a tap on the toast's Cofnij,
+//     it, Kopiuj, "Pojedynczo" (no grips; taps leave a block out and pick another one with a gap,
+//     Kopiuj; off again: a tap moves the end), the end grip dragged, Usuń (still in the selection
+//     mode), a tap on the toast's Cofnij,
 //     Usuń and Ctrl+Z, a long press
 //     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Zaznacz", Esc and
 //     Shift+↓ from a keyboard, the bullet menu's "Zaznacz", and "Zaznacz tekst" (a long press on a
@@ -122,6 +126,13 @@ QtObject {
         else
             events.mouseClick(item, item.width / 2, item.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
     }
+    /// A Ctrl+click on the text of `row` (picks it into or out of the selection).
+    function ctrlClick(row) {
+        const text = textOf(row)
+        check(text !== null, "the text of row " + row)
+        if (text)
+            events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ControlModifier, -1)
+    }
     function rightClick(item, x, y) {
         if (item)
             events.mouseClick(item, x, y, Qt.RightButton, Qt.NoModifier, -1)
@@ -220,6 +231,74 @@ QtObject {
             },
             () => check(page.editingRow < 0 && page.selectionCount === selectableCount(),
                         "the second Ctrl+A selects every block: " + page.selectionCount + " of " + selectableCount()),
+            () => key(Qt.Key_Escape),
+            // ---- Ctrl+click picks single blocks: gaps, copying, no moving, Shift+click after it ------------
+            () => {
+                center(rowOf("Zadzwonić"))
+                ctrlClick(rowOf("Zmierzyć"))
+            },
+            () => {
+                check(page.selectedRow === rowOf("Zmierzyć") && page.editingRow < 0, "Ctrl+click selects a block, nothing edited")
+                ctrlClick(rowOf("Zadzwonić"))
+            },
+            () => ctrlClick(rowOf("Skuć")),
+            () => {
+                check(page.selectionCount === 3 && page.selectionPicked && !page.selectionContiguous
+                      && JSON.stringify(selected()) === JSON.stringify([rowOf("Zmierzyć"), rowOf("Zadzwonić"), rowOf("Skuć")]),
+                      "Ctrl+clicks pick three blocks with gaps between them: " + JSON.stringify(selected()))
+                check(edgeOf(rowOf("Zmierzyć")) === "single" && edgeOf(rowOf("Kupić płytki")) === ""
+                      && edgeOf(rowOf("Zadzwonić")) === "single" && edgeOf(rowOf("Prace")) === ""
+                      && edgeOf(rowOf("Skuć")) === "single", "each has its own band, the gaps none")
+                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
+                const count = tools ? window.findShown(tools, "selectionCount") : null
+                check(count !== null && count.text.indexOf("3") >= 0, "the floating tools count them: " + (count ? count.text : ""))
+                window.lastNotice = ""
+                key(Qt.Key_C, Qt.ControlModifier)
+            },
+            wait(() => clip() === "- [x] Zmierzyć ściany i podłogę ✅ 2026-10-12\n- [/] Zadzwonić do hydraulika ⏰ 2026-10-15 18:00 #telefon\n- [ ] Skuć stare płytki 📅 2026-10-13",
+                 () => "Ctrl+C copies the picked blocks in their order: " + JSON.stringify(clip())),
+            () => {
+                test.textBefore = window.pageText()
+                window.lastNotice = ""
+                key(Qt.Key_Tab)
+            },
+            () => {
+                check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
+                      "Tab does not indent blocks with gaps between them, and says why: " + window.lastNotice)
+                window.lastNotice = ""
+                key(Qt.Key_Up, Qt.AltModifier)
+            },
+            () => {
+                check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason, "nor does Alt+↑ move them")
+                tap(window.findShown(window.findShown(editor.dockHost, "floatingSelectionTools"), "selectionMore"))
+            },
+            wait(() => {
+                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
+                return tools !== null && tools.menu !== null && tools.menu.opened
+            }, "the floating tools' Więcej opens"),
+            () => {
+                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
+                const up = window.menuItemNamed(tools.menu, "selectionMoveUp")
+                check(up !== null && up.unavailable === editor.gapReason && up.opacity < 1,
+                      "its Przenieś w górę is shown disabled, with the reason")
+                window.lastNotice = ""
+                tap(up)
+            },
+            () => check(window.pageText() === test.textBefore && window.lastNotice === editor.gapReason,
+                        "a click on it moves nothing and says why"),
+            () => ctrlClick(rowOf("Zadzwonić")),
+            () => {
+                check(JSON.stringify(selected()) === JSON.stringify([rowOf("Zmierzyć"), rowOf("Skuć")]),
+                      "a second Ctrl+click leaves a picked block out: " + JSON.stringify(selected()))
+                ctrlClick(rowOf("Ekipa może"))
+            },
+            () => {
+                check(page.selectedRow === rowOf("Ekipa może") && page.selectionCount === 3, "another one picked")
+                const text = textOf(rowOf("Położyć"))
+                events.mouseClick(text, 30, text.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+            },
+            () => check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć"),
+                        "Shift+click then selects a range from the block picked last: " + page.selectionAnchorRow + "–" + page.selectedRow),
             () => key(Qt.Key_Escape),
             // ---- Shift+click; Delete and Ctrl+Z ---------------------------------------------------------
             () => {
@@ -607,6 +686,55 @@ QtObject {
             () => tap(shown(toolbar(), "selectionCopy")),
             wait(() => clip().indexOf("- [/] Zadzwonić do hydraulika") === 0 && clip().indexOf("- [ ] Położyć hydroizolację") > 0,
                  "Kopiuj copies it"),
+            // ---- "Pojedynczo": taps pick single blocks ----------------------------------------------------
+            () => {
+                const pick = shown(toolbar(), "selectionPickMode")
+                check(pick !== null && !pick.checked, "the docked tools have Pojedynczo")
+                revealTool(pick)
+            },
+            () => tap(shown(toolbar(), "selectionPickMode")),
+            () => {
+                check(editor.pickMode && shown(toolbar(), "selectionPickMode").checked, "a tap turns it on")
+                check(window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") === null, "no grips while picking")
+                const text = textOf(rowOf("Zadzwonić"))
+                fingerTap(text, text.width / 3, text.height / 2)
+            },
+            () => {
+                check(page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
+                      && selected().indexOf(rowOf("Wywieźć")) >= 0,
+                      "a tap on a selected block leaves it out, the rest stays: " + JSON.stringify(selected()))
+                center(rowOf("Ekipa może"))
+            },
+            () => {
+                const text = textOf(rowOf("Ekipa może"))
+                fingerTap(text, text.width / 3, text.height / 2)
+            },
+            () => {
+                check(!page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
+                      && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0,
+                      "a tap on another block picks it, with a gap: " + JSON.stringify(selected()))
+                tap(shown(toolbar(), "selectionCopy"))
+            },
+            wait(() => clip().indexOf("- [ ] Wywieźć gruz") === 0 && clip().indexOf("\n- Prace\n\t- [ ] Skuć") > 0
+                       && clip().endsWith("\n- Ekipa może zacząć 20 października, cena ==do negocjacji=="),
+                 () => "Kopiuj copies the picked blocks: " + JSON.stringify(clip())),
+            () => tap(shown(toolbar(), "selectionPickMode")),
+            () => {
+                check(!editor.pickMode, "a second tap turns Pojedynczo off")
+                center(rowOf("Położyć"))
+            },
+            () => {
+                const text = textOf(rowOf("Położyć"))
+                fingerTap(text, text.width / 3, text.height / 2)
+            },
+            () => check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
+                        && window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") !== null,
+                        "then a tap moves the selection's end again, from the block picked last (the grips are back): "
+                        + page.selectionAnchorRow + "–" + page.selectedRow),
+            () => {
+                page.selectRange(rowOf("Zadzwonić"), rowOf("Położyć")) // as before, for the grip
+                center(rowOf("Zadzwonić"))
+            },
             // ---- The end grip -------------------------------------------------------------------------------
             () => {
                 const grip = window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd")

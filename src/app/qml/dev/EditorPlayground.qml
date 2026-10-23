@@ -2840,6 +2840,22 @@ ApplicationWindow {
             editor.listView.forceActiveFocus()
             break
         }
+        case "selection-picked": {
+            // Blocks picked one by one with gaps between them (desktop: Ctrl+clicks and the
+            // floating tools; --touch: the selection mode with "Pojedynczo" on) — screenshots.
+            const first = rowOf("Zmierzyć ściany")
+            editor.listView.positionViewAtIndex(rowOf("Zadzwonić do hydraulika"), ListView.Center)
+            if (Theme.touchUi) {
+                editor.selectBlock(first)
+                editor.pickMode = true
+            } else {
+                page.selectedRow = first
+            }
+            page.toggleSelected(rowOf("Zadzwonić do hydraulika"))
+            page.toggleSelected(rowOf("Skuć stare płytki"))
+            editor.listView.forceActiveFocus()
+            break
+        }
         case "selection-document": {
             // Paragraphs, a heading and list items of a document selected (screenshots).
             const from = rowOf("Pierwszego dnia")
