@@ -58,6 +58,11 @@ if(EXISTS "${_brulion_qt_qml_root}/QtQuick")
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
 endif()
 if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
+    # The playground's waits for something asynchronous last BRULION_TEST_SLOWDOWN times longer
+    # (DevTools.testSlowdown; 25 in sanitizer builds), and so may a run whose waits fail.
+    set(_playground_env "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}")
+    math(EXPR _playground_timeout "90 + 10 * ${BRULION_TEST_SLOWDOWN}")
+    math(EXPR _playground_timeout_long "120 + 10 * ${BRULION_TEST_SLOWDOWN}")
     add_test(NAME tst_editor_qml
         COMMAND brulion --editor --editor-script selftest --no-single-instance
             --size 1280x800 --now "2026-10-15 10:00" --locale pl)
@@ -65,8 +70,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
     # editor): a failure even when every step passed; so is a binding loop (the touch toolbar's
     # Loader had one).
     set_tests_properties(tst_editor_qml PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-        TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
+        ENVIRONMENT "${_playground_env}"
+        TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
     # The round clock (BTimePicker, BTimePickerDialog) and the clock buttons of the reminder's date
     # picker and the calendar's add dialog (`--editor-script clock`), with real mouse or touch input
     # (QtTest's TestEvent): on a desktop, a phone, and a phone held sideways (the dial has to fit).
@@ -80,8 +85,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script clock --no-single-instance
                     --size ${_clock_size} ${_clock_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_clock_test} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected")
         endforeach()
     endif()
     # The task status menu and commands (`--editor-script taskstatus`): right-clicks with the mouse
@@ -96,8 +101,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script taskstatus --no-single-instance
                     --size ${_status_size} ${_status_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_status_test} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
         # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
@@ -114,8 +119,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script blocklinks --no-single-instance
                     --size ${_links_size} ${_links_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_links_test} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # Selecting and copying blocks (`--editor-script selectiontest`, qml/dev/SelectionSelfTest.qml):
         # keys (Esc, Shift+arrows also from an edited block, Ctrl+A twice, Ctrl+C / X / V, Delete,
@@ -132,8 +137,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script selectiontest --no-single-instance
                     --size ${_sel_size} ${_sel_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_sel_test} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-                TIMEOUT 120 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout_long} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # Views following what they depend on (`--editor-script refreshtest`,
         # qml/dev/RefreshSelfTest.qml): a query's results replaced by as many rows of another
@@ -149,8 +154,8 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 COMMAND brulion --editor --editor-script refreshtest --no-single-instance
                     --size ${_refresh_size} ${_refresh_touch} --now "2026-10-15 10:00" --locale pl)
             set_tests_properties(${_refresh_test} PROPERTIES
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-                TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
         # The touch toolbar docked on a simulated on-screen keyboard (`--editor-script keyboard`,
         # KeyboardInsets): a block in an outline and a document, a keyboard sliding in frame by
@@ -160,7 +165,7 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
             COMMAND brulion --editor --editor-script keyboard --no-single-instance
                 --size 412x915 --touch --keyboard 0 --now "2026-10-15 10:00" --locale pl)
         set_tests_properties(tst_editor_qml_keyboard_touch PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-            TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+            ENVIRONMENT "${_playground_env}"
+            TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
     endif()
 endif()

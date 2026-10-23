@@ -22,6 +22,8 @@
 //   --scroll-probe <target> scroll a view with synthetic input and record every frame, then quit
 //                          (--scroll-script, --probe-out, …: scrollprobe.h)
 //
+// Environment: BRULION_TEST_SLOWDOWN (testSlowdown) — ctest's factor for slow builds.
+//
 // Headless use: QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ./brulion --gallery
 // --section buttons --size 412x915 --screenshot out.png. scripts/screenshots.sh produces the
 // standard set. Unknown arguments are ignored (other subsystems have their own).
@@ -60,6 +62,10 @@ class DevTools : public QObject {
     Q_PROPERTY(bool reducedMotion READ reducedMotion CONSTANT FINAL)
     /// True when the run ends with a screenshot (QML may skip intro animations).
     Q_PROPERTY(bool screenshotMode READ screenshotMode CONSTANT FINAL)
+    /// BRULION_TEST_SLOWDOWN from the environment, at least 1: ctest sets it, 25 in sanitizer builds
+    /// (tests/CMakeLists.txt). The playground's self-tests wait that many times longer for
+    /// something asynchronous.
+    Q_PROPERTY(int testSlowdown READ testSlowdown CONSTANT FINAL)
 
 public:
     /// Options that must be applied before QGuiApplication exists (--scale).
@@ -82,6 +88,7 @@ public:
     int keyboard() const { return m_keyboard; }
     bool reducedMotion() const { return m_reducedMotion; }
     bool screenshotMode() const { return !m_screenshot.isEmpty(); }
+    int testSlowdown() const { return m_testSlowdown; }
 
     /// QML type to load from module Brulion: "Gallery" with --gallery, "EditorPlayground" with
     /// --editor, else "Main".
@@ -115,6 +122,7 @@ private:
     bool m_touch = false;
     int m_keyboard = -1;
     bool m_reducedMotion = false;
+    int m_testSlowdown = 1;
     QPointer<QQmlApplicationEngine> m_engine;
     /// The arguments, kept when they ask for the scroll probe (scrollprobe.h).
     QStringList m_probeArguments;

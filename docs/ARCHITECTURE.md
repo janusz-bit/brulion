@@ -285,7 +285,8 @@ app; these guards keep data from being lost:
   `scripts/remote-build.sh` (x86_64 laptop) or
   `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
   `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
-  and worker-thread stack sizes by it (1 otherwise).
+  and worker-thread stack sizes by it (1 otherwise), the editor playground's self-tests their
+  waits for something asynchronous (`DevTools.testSlowdown`).
 * Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
