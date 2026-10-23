@@ -85,6 +85,11 @@ void EditorInput::sendKey(QQuickItem *item, int key, int modifiers, const QStrin
     QCoreApplication::sendEvent(window, &release);
 }
 
+int EditorInput::keyboardModifiers() const
+{
+    return int(QGuiApplication::keyboardModifiers());
+}
+
 void EditorInput::sendInputMethod(QQuickItem *item, const QString &preedit, const QString &commit) const
 {
     if (!item)

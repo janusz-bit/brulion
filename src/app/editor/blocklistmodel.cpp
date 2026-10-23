@@ -799,12 +799,13 @@ QVariantList BlockListModel::computeCalcResults(int i) const
     return out;
 }
 
-QVariantMap BlockListModel::computeTableData(int i) const
+QVariantMap BlockListModel::computeTableData(int i, bool forReading) const
 {
     const markdown::BlockEntry &e = m_doc.at(i);
     const auto model = calc::parseTable(e.body);
     if (!model) {
-        stateFor(e.uid).resultsUseScope = false;
+        if (!forReading)
+            stateFor(e.uid).resultsUseScope = false;
         return {};
     }
     // Only formula cells read the variables above the table: no page scope for a table without.
@@ -817,21 +818,24 @@ QVariantMap BlockListModel::computeTableData(int i) const
     // Cells are inline Markdown (bold, links, tags, chips): rendered like paragraphs, cached by
     // their text until the rendering changes (theme, index, language, today).
     RowState &st = stateFor(e.uid);
-    st.resultsUseScope = formulas;
+    if (!forReading)
+        st.resultsUseScope = formulas;
     std::optional<markdown::InlineRenderer> renderer;
     const auto cellHtml = [&](const QString &cell) -> QString {
         if (cell.trimmed().isEmpty())
             return {};
         const auto cached = st.cellHtml.constFind(cell);
-        if (cached != st.cellHtml.constEnd())
+        if (!forReading && cached != st.cellHtml.constEnd())
             return *cached;
         if (!renderer) {
             markdown::RenderContext ctx = renderContext(i);
             ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
+            ctx.joinShortWords = !forReading;
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
-        st.cellHtml.insert(cell, html);
+        if (!forReading)
+            st.cellHtml.insert(cell, html);
         return html;
     };
     QVariantList aligns;
@@ -1006,6 +1010,25 @@ QString BlockListModel::renderHtml(int i) const
     if (st.dependsOnCalc)
         m_hasCalcConsumers = true;
     return html;
+}
+
+QString BlockListModel::readingHtmlAt(int row) const
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0)
+        return {};
+    const markdown::BlockEntry &e = m_doc.at(i);
+    markdown::RenderContext ctx = renderContext(i);
+    ctx.joinShortWords = false;
+    const markdown::InlineRenderer renderer(ctx);
+    int offset = 0;
+    return detail::renderBodyHtml(e, shapeOf(e), renderer, &offset);
+}
+
+QVariantMap BlockListModel::readingTableAt(int row) const
+{
+    const int i = docIndexOfRow(row);
+    return i < 0 ? QVariantMap() : computeTableData(i, true);
 }
 
 // --- Calculations ------------------------------------------------------------------------------

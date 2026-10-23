@@ -110,7 +110,9 @@ public:
     /// The text/html flavour of copied blocks: `markdown` (blocks of the note at `fromPath`) as
     /// escaped, semantic HTML — lists, headings, checkboxes, tables, links — for mail and office
     /// apps; pictures as links, never data: URLs; links to notes as their text. "" when the host
-    /// cannot render it (the clipboard then has the Markdown only).
+    /// cannot render it (the clipboard then has the Markdown only). It should contain
+    /// `<meta name="generator" content="Brulion">` (io::ClipboardHtmlMarker): a paste recognises
+    /// its own copy by it and takes the Markdown text, not the HTML — also after a restart.
     virtual QString renderHtml(const QString &markdown, const QString &fromPath) const
     {
         Q_UNUSED(markdown);

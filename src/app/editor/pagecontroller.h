@@ -407,38 +407,52 @@ public:
     /// Tab / Shift+Tab on the selection (BlockDocument::indentRange — all or nothing — /
     /// outdentRange). The document mode indents only when every top block is a list item.
     Q_INVOKABLE bool indentSelection();
+    /// The selection could be indented / outdented at all: not the zoomed block, and in the
+    /// document mode only list items (its paragraphs and headings have no outline). The
+    /// selection tools offer "Zwiększ / Zmniejsz wcięcie" only then.
+    Q_INVOKABLE bool canIndentSelection() const;
     Q_INVOKABLE bool outdentSelection();
     /// Alt+↑ / Alt+↓: the selected sibling blocks move together (BlockDocument::moveRangeUp/Down).
     Q_INVOKABLE bool moveSelectionUp();
     Q_INVOKABLE bool moveSelectionDown();
-    /// Ctrl+Enter: every selected visible list item and paragraph gets the status that follows the
-    /// first one's (none → todo → doing → done → none). One undo step.
+    /// Ctrl+Enter: every visible list item and paragraph the selection spans gets the status that
+    /// follows the first one's (none → todo → doing → done → none). One undo step. The rows from
+    /// one end to the other: a parent selected alone changes, not the children it brings along
+    /// (they are copied, moved and deleted with it).
     Q_INVOKABLE void cycleSelectionTasks();
-    /// Set the task status of every selected visible list item and paragraph ("" removes it).
+    /// Set the task status of those blocks ("" removes it).
     Q_INVOKABLE void setSelectionTaskStatus(const QString &status);
     /// Ctrl+V with blocks selected: the selection is replaced by `text` (Markdown, split into
-    /// blocks like pasteText(); the selection's own ids are kept). One undo step; the pasted
-    /// blocks are selected. Returns { row, count } (row -1: nothing pasted).
+    /// blocks like pasteText(); the selection's own ids are kept; a pasted note's YAML
+    /// frontmatter is left out, Logseq page properties become a block). The page's own properties
+    /// are never replaced: selected, the paste goes in below them. One undo step; the pasted
+    /// blocks are selected. Returns { row, count } (row -1: nothing pasted, nothing changed).
     Q_INVOKABLE QVariantMap replaceSelection(const QString &text);
     /// replaceSelection() with the clipboard's text (clipboardText()).
     Q_INVOKABLE QVariantMap pasteOverSelection();
     /// Copy [from, to) of a row's edit text exactly (no-break spaces kept — a TextEdit's own copy
     /// turns them into spaces): in-block Ctrl+C / Ctrl+X. { ok, reason } like copySelection().
-    Q_INVOKABLE QVariantMap copyEditText(int row, int from, int to);
+    /// `cut`: the caller removes the text next (Ctrl+X) — its block ids go with it (a move, like
+    /// cutSelection()).
+    Q_INVOKABLE QVariantMap copyEditText(int row, int from, int to, bool cut = false);
     /// Copy `text` as it is (the "Zaznacz tekst" view): the same limit, primary selection and read
     /// back as copySelection(). { ok, reason }.
     Q_INVOKABLE QVariantMap copyText(const QString &text);
     /// What a paste inserts: the clipboard's text, or — when the clipboard has HTML (a browser,
-    /// an office app; not this app's own copy) and its text does not look like Markdown — that
-    /// HTML as Markdown (EditorHost::htmlToMarkdown). "" when there is no text.
+    /// an office app) and its text does not look like Markdown — that HTML as Markdown
+    /// (EditorHost::htmlToMarkdown). This app's own copies (its last one, or HTML marked as made
+    /// by Brulion — EditorHost::renderHtml — also after a restart) are their text: the Markdown.
+    /// "" when there is no text.
     Q_INVOKABLE QString clipboardText() const;
     /// In-block Ctrl+V: pasteText() of clipboardText() into [from, to). { row, cursor }, row -1
     /// when the clipboard has no text.
     Q_INVOKABLE QVariantMap pasteClipboard(int row, int from, int to);
     /// The whole page (every block, folds and zoom ignored; no frontmatter) as one escaped rich
-    /// text for a read-only TextEdit — the "Zaznacz tekst" view: rendered text (InlineRenderer),
-    /// bullets, numbers and checkboxes as characters (so a copy keeps them), headings, code,
-    /// tables, quotes; embedded pictures and pages by name.
+    /// text for a read-only TextEdit — the "Zaznacz tekst" view: rendered text (InlineRenderer,
+    /// the note's own spaces: BlockListModel::readingHtmlAt), bullets, numbers and checkboxes as
+    /// characters (so a copy keeps them), headings, code, calculations with their results, tables
+    /// with their formulas' values, a query's results (the host's QueryHost; else the query),
+    /// quotes; embedded pictures and pages by name. Colours of the current palette.
     Q_INVOKABLE QString readingHtml() const;
 
     // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
@@ -667,9 +681,20 @@ private:
     /// `freed` (blocks cut or replaced) are kept unless this page still has them. Completes the
     /// host's index first unless `indexed` (it signals: not inside a command).
     QString withoutTakenIds(const QString &text, const QSet<QString> &freed, bool indexed = false);
-    /// The ids freed by the last cut when `text` is what it copied (a move), else none.
+    /// The ids freed by the last cut when `text` is what it copied (a move), else none — and not
+    /// those the cut page has again (the cut undone: a paste would duplicate them).
     QSet<QString> cutIdsFor(const QString &text) const;
-    /// The selected visible rows that can have a task status (list items, paragraphs).
+    /// `text` is what this app put on the clipboard last (line breaks aside).
+    bool isOwnCopy(const QString &text) const;
+    /// Remember a cut of `text` from this page that took `ids` with it (cutIdsFor()).
+    void recordCut(const QString &text, const QSet<QString> &ids);
+    /// A block of this page has `id`.
+    bool hasBlockId(const QString &id) const;
+    /// The results of the query `source` as readingHtml() lists them (indented by `indent` px);
+    /// "" without a QueryHost, on an error or with nothing found.
+    QString queryReadingHtml(const QString &source, int indent) const;
+    /// The visible rows from one end of the selection to the other that can have a task status
+    /// (list items, paragraphs).
     QList<quint64> selectedTaskUids() const;
     /// Save now, or write the conflict copy while a conflict is unresolved.
     void flush();
@@ -748,6 +773,9 @@ private:
     QPoint m_typingCell{-1, -2}; ///< table cell (column, table row) of a table typing session
     bool m_restoring = false;
     bool m_undoing = false; ///< restore() runs (undo/redo): moving the caret changes no text
+    /// > 0: a selection command runs — updateSelection() waits for its end (no empty selection in
+    /// between: the touch selection mode would end).
+    int m_selectionHold = 0;
     /// The block that got the caret last and its body then (closeLoneFence()).
     quint64 m_focusedUid = 0;
     QString m_focusedBody;

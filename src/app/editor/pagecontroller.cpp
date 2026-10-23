@@ -863,9 +863,11 @@ void PageController::restore(const QString &snapshot, const Focus &focus)
     m_restoring = false;
     remapBlocks(mapping);
     if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
-        // The block selection of that version (an undone deletion selects its blocks again).
+        // The block selection of that version (an undone deletion selects its blocks again) —
+        // with no block edited: the two never go together (another block edited meanwhile stops).
         m_anchorUid = m_model->uidAt(focus.selectionAnchor);
         m_selectedUid = m_model->uidAt(focus.selectionFocus);
+        m_editingUid = 0;
     }
     updateSelection();
     if (focus.row >= 0 && validRow(focus.row)) {
@@ -1943,6 +1945,38 @@ QVariantMap PageController::pasteText(int row, int from, int to, const QString &
     QString markdown = text;
     while (markdown.endsWith(u'\n'))
         markdown.chop(1);
+    // One list item ("- jeden", "- [ ] Skuć 📅 …": a copied block) pasted into a text block brings
+    // its text, not its marker ("- - jeden"). Pasted over the whole text of a list item, a task or
+    // a code, table… item becomes that block (its checkbox, its fence); over the whole text of a
+    // paragraph, the paragraph becomes that list item. A numbered item only when it is this app's
+    // own copy: elsewhere "2025. rok" is more often text than a list.
+    if (textBlock) {
+        const BlockDocument probe(markdown);
+        const auto numbered = [](const markdown::BlockEntry &e) {
+            const QString written = e.prefix.trimmed();
+            return !written.isEmpty() && written.front().isDigit();
+        };
+        if (probe.count() == 1 && probe.at(0).kind == BlockKind::ListItem
+            && (!numbered(probe.at(0)) || isOwnCopy(pasted))) {
+            const markdown::BlockEntry &item = probe.at(0);
+            const markdown::BlockEntry &target = m_model->document().at(row);
+            const bool whole = from == 0 && to == edit.size();
+            const bool itemText = shapeOf(item).view == BlockView::Text;
+            if (whole && target.kind == BlockKind::ListItem && (item.taskStatus || !itemText)) {
+                QString body = item.body;
+                if (const QString closing = missingClosingFence(body); !closing.isEmpty())
+                    body += u'\n' + closing;
+                editBody(row, body, -1);
+                const int cursor = int(m_model->editTextAt(row).size());
+                if (editingRow() == row)
+                    setFocus({row, cursor}, true);
+                return result(row, cursor);
+            }
+            const bool becomesItem = whole && target.kind == BlockKind::Paragraph && shape.view == BlockView::Text;
+            if (!becomesItem && (itemText || !markdown.contains(u'\n')))
+                text = markdown = withoutTaskMarker(item);
+        }
+    }
     const BlockDocument pasteDoc(markdown);
     // One block goes in as text — unless it is a code block, table… pasted between other text.
     const bool oneTextBlock = pasteDoc.count() < 2

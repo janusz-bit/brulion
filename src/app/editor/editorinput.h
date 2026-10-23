@@ -43,6 +43,10 @@ public:
     /// was a composition.
     Q_INVOKABLE bool commitPreedit(QQuickItem *item) const;
 
+    /// The keyboard modifiers (Qt.KeyboardModifiers) of the input event being handled — a click's
+    /// Shift for handlers whose signal does not carry it (a frame's, a bullet's tap).
+    Q_INVOKABLE int keyboardModifiers() const;
+
     // --- Drivers for tests -------------------------------------------------------------------
     /// Press and release `key` (Qt::Key) with `modifiers` (Qt::KeyboardModifiers) and `text` in
     /// the window of `item`, delivered like a real key to the window's focus item.

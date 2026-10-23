@@ -208,6 +208,12 @@ public:
     QDate today() const { return m_today; }
     /// Everything rendered may look different (index changed, links resolve differently).
     void invalidateRendering();
+    /// The `html` of `row` and the `tableData` of a table as text to select and copy (the
+    /// "Zaznacz tekst" view): rendered like the roles but with the note's own spaces — no
+    /// no-break space joins a one-letter word to the next one (RenderContext::joinShortWords).
+    /// Not cached.
+    QString readingHtmlAt(int row) const;
+    QVariantMap readingTableAt(int row) const;
 
 Q_SIGNALS:
     void countChanged();
@@ -279,7 +285,8 @@ private:
     /// differ. `contentChanged` recomputes calc/table results and page-dependent html.
     void refresh(bool contentChanged);
     QVariantList computeCalcResults(int docIndex) const;
-    QVariantMap computeTableData(int docIndex) const;
+    /// `forReading`: readingTableAt() (no cache, no state changed).
+    QVariantMap computeTableData(int docIndex, bool forReading = false) const;
     void emitRowsChanged(const QList<int> &rows, const QList<int> &roles);
 
     // --- Calculations (docs/SYNTAX.md §9) ---------------------------------------------------------

@@ -347,6 +347,17 @@ private Q_SLOTS:
         f.page.selectRange(1, 2);
         QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
         QCOMPARE(clipboardText(), u"# Plan\n\nAkapit"_s);
+        // The selection tools offer indenting only where it can happen.
+        QVERIFY(!f.page.canIndentSelection());
+        f.page.selectRange(4, 5);
+        QVERIFY(f.page.canIndentSelection());
+        f.page.selectRange(2, 3); // a paragraph and a list item
+        QVERIFY(!f.page.canIndentSelection());
+        f.page.clearSelection();
+        QVERIFY(!f.page.canIndentSelection());
+        Fixture outline(Outline);
+        outline.page.selectRange(0, 3);
+        QVERIFY(outline.page.canIndentSelection());
     }
 
     void taskStatusesOfASelection()
@@ -362,6 +373,122 @@ private Q_SLOTS:
         QCOMPARE(f.text(), u"- mleko\n- chleb\n\n- Akapit\n\n# Nagłówek\n"_s);
         f.page.undo();
         QCOMPARE(f.text(), u"- [/] mleko\n- [/] chleb\n\n- [/] Akapit\n\n# Nagłówek\n"_s);
+    }
+
+    void taskStatusesTakeTheRowsBetweenTheEnds()
+    {
+        // A parent selected alone (Esc) brings its children along, but Ctrl+Enter changes only it:
+        // their statuses and completion dates stay.
+        const QString content =
+                u"- [ ] Rodzic\n\t- [x] dziecko ✅ 2026-10-01\n\t- [ ] drugie\n- [ ] inny\n\t- [ ] jego\n"_s;
+        Fixture f(content);
+        f.page.setSelectedRow(0);
+        QCOMPARE(f.page.selectionCount(), 3);
+        f.page.cycleSelectionTasks();
+        QCOMPARE(f.text(),
+                 u"- [/] Rodzic\n\t- [x] dziecko ✅ 2026-10-01\n\t- [ ] drugie\n- [ ] inny\n\t- [ ] jego\n"_s);
+        f.page.setSelectionTaskStatus(u"todo"_s);
+        QCOMPARE(f.text(), content);
+        // A range: the rows from one end to the other (children between them too), not the
+        // children the last block brings along; in either direction.
+        f.page.selectRange(3, 2);
+        QCOMPARE(f.selected(), QList<int>({2, 3, 4}));
+        f.page.cycleSelectionTasks();
+        QCOMPARE(f.text(),
+                 u"- [ ] Rodzic\n\t- [x] dziecko ✅ 2026-10-01\n\t- [/] drugie\n- [/] inny\n\t- [ ] jego\n"_s);
+        f.page.undo();
+        f.page.selectAll();
+        f.page.setSelectionTaskStatus(u"doing"_s);
+        QCOMPARE(f.text().count(u"[/]"_s), 5);
+    }
+
+    void pasteOverASelectionNeedsSomethingToPaste()
+    {
+        // A pasted note's YAML frontmatter alone: nothing to paste, nothing deleted.
+        Fixture f(u"- a\n- b\n- c\n"_s);
+        f.page.selectRange(1, 1);
+        QVariantMap r = f.page.replaceSelection(u"---\ntytuł: x\n---"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.text(), u"- a\n- b\n- c\n"_s);
+        QVERIFY(!f.page.canUndo());
+        QCOMPARE(f.selected(), QList<int>({1}));
+        // With blocks after it: only the frontmatter is left out.
+        r = f.page.replaceSelection(u"---\ntytuł: x\n---\n- nowy\n"_s);
+        QCOMPARE(f.text(), u"- a\n- nowy\n- c\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        // Logseq page properties are text: a block of their own (as pasted into a block).
+        f.page.selectRange(1, 1);
+        r = f.page.replaceSelection(u"status:: done"_s);
+        QVERIFY2(r.value(u"row"_s).toInt() == 1 && f.text().contains(u"status:: done"_s)
+                         && !f.text().contains(u"nowy"_s),
+                 qPrintable(f.text()));
+    }
+
+    void thePagePropertiesAreNeverReplaced()
+    {
+        // Selected alone (↑ from the first block), they stay: the paste goes in below them.
+        Fixture f(u"---\ntytuł: Zakupy\n---\n- mleko\n"_s);
+        f.page.setSelectedRow(0);
+        QCOMPARE(f.selected(), QList<int>({0}));
+        const QVariantMap r = f.page.replaceSelection(u"- chleb\n- masło"_s);
+        QCOMPARE(f.text(), u"---\ntytuł: Zakupy\n---\n- chleb\n- masło\n- mleko\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(f.selected(), QList<int>({1, 2}));
+        f.page.undo();
+        QCOMPARE(f.text(), u"---\ntytuł: Zakupy\n---\n- mleko\n"_s);
+        // Logseq page properties too.
+        Fixture logseq(u"typ:: lista\n\n- mleko\n"_s);
+        logseq.page.setSelectedRow(0);
+        logseq.page.replaceSelection(u"- chleb"_s);
+        QVERIFY2(logseq.text().startsWith(u"typ:: lista\n"_s) && logseq.text().indexOf(u"- chleb\n"_s) > 0
+                         && logseq.text().indexOf(u"- chleb\n"_s) < logseq.text().indexOf(u"- mleko\n"_s),
+                 qPrintable(logseq.text()));
+    }
+
+    void noEmptySelectionInBetween()
+    {
+        // Deleting, cutting or pasting over a selection goes from it to the next one at once: an
+        // empty one in between would end the touch selection mode.
+        Fixture f(Outline);
+        QList<int> counts;
+        connect(&f.page, &PageController::selectionChanged, &f.page, [&] { counts.append(f.page.selectionCount()); });
+        f.page.selectRange(3, 5);
+        counts.clear();
+        f.page.deleteSelection();
+        QCOMPARE(counts, QList<int>({1}));
+        f.page.selectRange(1, 2);
+        counts.clear();
+        QVERIFY(f.page.cutSelection().value(u"ok"_s).toBool());
+        QCOMPARE(counts, QList<int>({1})); // a: the block before the cut
+        f.page.selectRange(1, 1);
+        counts.clear();
+        f.page.replaceSelection(u"- x\n- y"_s);
+        QCOMPARE(counts, QList<int>({2}));
+    }
+
+    void undoBringingASelectionBackStopsEditing()
+    {
+        Fixture f(Outline);
+        f.page.selectRange(5, 6);
+        QVERIFY(f.page.indentSelection());
+        f.page.startEditing(0, 1); // another block edited meanwhile
+        QCOMPARE(f.page.selectionCount(), 0);
+        QSignalSpy editing(&f.page, &PageController::editingRowChanged);
+        f.page.undo();
+        QCOMPARE(f.text(), Outline);
+        QCOMPARE(f.page.editingRow(), -1);
+        QVERIFY(editing.count() >= 1);
+        QCOMPARE(f.selected(), QList<int>({5, 6}));
+        f.page.startEditing(0, 1);
+        f.page.redo();
+        QCOMPARE(f.page.editingRow(), -1);
+        QCOMPARE(f.selected(), QList<int>({5, 6}));
+        // Typing is undone into its block, as before.
+        f.page.startEditing(0, -1);
+        f.page.setEditText(0, u"a!"_s, 2);
+        f.page.undo();
+        QCOMPARE(f.page.editingRow(), 0);
+        QCOMPARE(f.page.selectionCount(), 0);
     }
 
     void pasteReplacesTheSelection()
@@ -435,6 +562,129 @@ private Q_SLOTS:
         QCOMPARE(self.text(), u"- a ^aa1\n- b\n"_s);
     }
 
+    void anInBlockCutMovesItsId()
+    {
+        // Ctrl+X of a block's text with its id, Ctrl+V right away: the id goes with it (the saved
+        // page and the index still have it).
+        Fixture f(u"- Zadanie ^abc\n- \n"_s, 100000);
+        QVERIFY(f.host.blockIdTaken(u"abc"_s));
+        f.page.startEditing(0, 0);
+        const int length = int(f.role(0, "editText").toString().size());
+        QVERIFY(f.page.copyEditText(0, 0, length, true).value(u"ok"_s).toBool());
+        f.page.setEditText(0, QString(), 0); // the editor removes the cut text
+        f.page.startEditing(1, 0);
+        f.page.pasteClipboard(1, 0, 0);
+        QCOMPARE(f.text(), u"- \n- Zadanie ^abc\n"_s);
+        // A copy (no cut) of it is a copy: the id is not duplicated.
+        QVERIFY(f.page.copyEditText(1, 0, 12).value(u"ok"_s).toBool());
+        f.page.startEditing(0, 0);
+        f.page.pasteClipboard(0, 0, 0);
+        QCOMPARE(f.text(), u"- Zadanie\n- Zadanie ^abc\n"_s);
+    }
+
+    void anUndoneCutIsACopy()
+    {
+        FakeEditorHost host;
+        host.setFile(Page, u"- jeden ^id1\n- dwa\n"_s);
+        host.setFile(u"Nowa.md"_s, u"- \n- \n- \n"_s);
+        auto a = std::make_unique<PageController>();
+        a->setSaveDelay(100000);
+        a->setHost(&host);
+        a->setPath(Page);
+        PageController b;
+        b.setSaveDelay(100000);
+        b.setHost(&host);
+        b.setPath(u"Nowa.md"_s);
+        a->selectRange(0, 0);
+        QVERIFY(a->cutSelection().value(u"ok"_s).toBool());
+        a->undo(); // ^id1 is on page A again
+        b.startEditing(0, 0);
+        b.pasteClipboard(0, 0, 0);
+        QCOMPARE(b.text(), u"- jeden\n- \n- \n"_s);
+        // Redone, the cut is a move again.
+        a->redo();
+        b.startEditing(1, 0);
+        b.pasteClipboard(1, 0, 0);
+        QCOMPARE(b.text(), u"- jeden\n- jeden ^id1\n- \n"_s);
+        // The cut page closed (saved) after the cut was undone: its file has the id again.
+        host.setFile(u"Trzeci.md"_s, u"- trzy ^id3\n"_s);
+        auto c = std::make_unique<PageController>();
+        c->setSaveDelay(100000);
+        c->setHost(&host);
+        c->setPath(u"Trzeci.md"_s);
+        c->selectRange(0, 0);
+        QVERIFY(c->cutSelection().value(u"ok"_s).toBool());
+        c->undo();
+        c->save();
+        c.reset();
+        QVERIFY(host.file(u"Trzeci.md"_s).contains(u"^id3"_s));
+        b.startEditing(2, 0);
+        b.pasteClipboard(2, 0, 0);
+        QCOMPARE(b.text(), u"- jeden\n- jeden ^id1\n- trzy\n"_s);
+    }
+
+    void pastingOneListItem_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("from");
+        QTest::addColumn<int>("to");
+        QTest::addColumn<QString>("pasted");
+        QTest::addColumn<QString>("expected");
+        // A copied block is its line of Markdown: its marker is not pasted again ("- - jeden").
+        QTest::newRow("a bullet into an empty one") << u"- \n"_s << 0 << 0 << u"- jeden"_s << u"- jeden\n"_s;
+        QTest::newRow("a task into an empty bullet")
+                << u"- \n"_s << 0 << 0 << u"- [ ] Skuć stare płytki 📅 2026-10-13"_s
+                << u"- [ ] Skuć stare płytki 📅 2026-10-13\n"_s;
+        QTest::newRow("a done task replaces an empty task")
+                << u"- [ ] \n"_s << 0 << 0 << u"- [x] mleko ✅ 2026-10-15"_s << u"- [x] mleko ✅ 2026-10-15\n"_s;
+        QTest::newRow("a bullet into an empty task keeps its checkbox")
+                << u"- [ ] \n"_s << 0 << 0 << u"- mleko"_s << u"- [ ] mleko\n"_s;
+        // A numbered line from elsewhere may be text ("2025. rok"): as it is (a copy of this app's: below).
+        QTest::newRow("a numbered line") << u"- \n"_s << 0 << 0 << u"2025. rok"_s << u"- 2025. rok\n"_s;
+        QTest::newRow("CRLF and a line break at the end") << u"- \n"_s << 0 << 0 << u"- żółć\r\n"_s << u"- żółć\n"_s;
+        QTest::newRow("into the middle of text") << u"- ab\n"_s << 1 << 1 << u"- [ ] Skuć"_s << u"- aSkućb\n"_s;
+        QTest::newRow("over selected text") << u"- abc\n"_s << 1 << 2 << u"* dwa"_s << u"- adwac\n"_s;
+        QTest::newRow("into a nested item") << u"- x\n\t- \n"_s << 0 << 0 << u"- a1"_s << u"- x\n\t- a1\n"_s;
+        QTest::newRow("a continuation line") << u"- \n"_s << 0 << 0 << u"- jeden\n  dalej"_s << u"- jeden\n  dalej\n"_s;
+        QTest::newRow("a paragraph becomes the item")
+                << u"Akapit\n"_s << 0 << 6 << u"- [ ] zadanie"_s << u"- [ ] zadanie\n"_s;
+    }
+    void pastingOneListItem()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, from);
+        QFETCH(int, to);
+        QFETCH(QString, pasted);
+        QFETCH(QString, expected);
+        Fixture f(content);
+        const int row = f.page.blocks()->rowCount() - 1;
+        f.page.startEditing(row, from);
+        f.page.pasteText(row, from, to, pasted);
+        QCOMPARE(f.text(), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
+    void pastingOneCopiedNumberedItem()
+    {
+        Fixture f(u"1. pierwszy\n2. drugi\n\n- \n"_s);
+        f.page.selectRange(1, 1);
+        QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
+        QCOMPARE(clipboardText(), u"2. drugi"_s);
+        f.page.startEditing(2, 0);
+        f.page.pasteClipboard(2, 0, 0);
+        QCOMPARE(f.text(), u"1. pierwszy\n2. drugi\n\n- drugi\n"_s);
+    }
+
+    void pastingOneCodeItemIntoAnEmptyBullet()
+    {
+        Fixture f(u"- \n"_s);
+        f.page.startEditing(0, 0);
+        f.page.pasteText(0, 0, 0, u"- ```js\n  let a = 1;\n  ```"_s);
+        QCOMPARE(f.role(0, "view").toString(), u"code"_s);
+        QVERIFY2(!f.text().contains(u"- -"_s) && f.text().contains(u"let a = 1;"_s), qPrintable(f.text()));
+    }
+
     void htmlFromOtherAppsBecomesMarkdown()
     {
         Fixture f(u"- \n"_s);
@@ -460,6 +710,46 @@ private Q_SLOTS:
         QGuiApplication::clipboard()->clear();
         QCOMPARE(f.page.clipboardText(), QString());
         QCOMPARE(f.page.pasteClipboard(0, 0, 0).value(u"row"_s).toInt(), -1);
+    }
+
+    void ownCopiesAreTheirMarkdown_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("html");
+        // This app's HTML (io::clipboardHtml marks it): also after a restart.
+        QTest::newRow("marked as this app's")
+                << u"Zwykły akapit po restarcie"_s
+                << u"<meta charset=\"utf-8\"><meta name=\"generator\" content=\"Brulion\"><p>Inny tekst</p>"_s;
+        // What only Markdown says (an HTML rendering loses it): the text is pasted.
+        QTest::newRow("a block id") << u"Akapit ^abc123"_s << u"<p>Akapit</p>"_s;
+        QTest::newRow("a property") << u"Akapit\ntyp:: plan"_s << u"<p>Akapit typ plan</p>"_s;
+        QTest::newRow("a due date") << u"Zadanie 📅 2026-10-20"_s << u"<p>Zadanie</p>"_s;
+        QTest::newRow("a reminder") << u"Lekarz ⏰ 2026-10-20 09:00"_s << u"<p>Lekarz</p>"_s;
+        QTest::newRow("a formula and a footnote")
+                << u"Wzór $$x^2$$ i przypis[^1]"_s << u"<p>Wzór <i>x</i>2 i przypis1</p>"_s;
+    }
+    void ownCopiesAreTheirMarkdown()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, html);
+        Fixture f(u"- \n"_s);
+        auto *mime = new QMimeData;
+        mime->setText(text);
+        mime->setHtml(html);
+        QGuiApplication::clipboard()->setMimeData(mime);
+        QCOMPARE(f.page.clipboardText(), text);
+    }
+
+    void theLastCopyIsRecognisedWithOtherLineBreaks()
+    {
+        Fixture f(u"Pierwszy akapit\n\nDrugi akapit\n"_s);
+        f.page.selectAll();
+        QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
+        auto *mime = new QMimeData;
+        mime->setText(u"Pierwszy akapit\r\n\r\nDrugi akapit\r\n"_s); // through a Windows clipboard
+        mime->setHtml(u"<p>Pierwszy</p>"_s);
+        QGuiApplication::clipboard()->setMimeData(mime);
+        QCOMPARE(f.page.clipboardText(), u"Pierwszy akapit\r\n\r\nDrugi akapit\r\n"_s);
     }
 
     void copyEditTextKeepsEveryCharacter()
@@ -491,6 +781,32 @@ private Q_SLOTS:
         QVERIFY(html.contains(u"cytat"_s) && html.contains(u"<hr/>"_s));
         QVERIFY(html.contains(u"Koniec w\u00a0domu"_s) || html.contains(u"Koniec w&nbsp;domu"_s));
         QCOMPARE(PageController().readingHtml(), u"<html><body></body></html>"_s);
+    }
+
+    void readingHtmlHasTheNotesOwnSpaces()
+    {
+        // The editor joins one-letter words to the next one with no-break spaces (Polish
+        // typography); text selected and copied in "Zaznacz tekst" has the note's own spaces.
+        Fixture f(u"- Jadę w góry z Anią i\u00a0psem\n\n| a | b |\n|---|---|\n| w domu | 1 |\n"_s);
+        const QString html = f.page.readingHtml();
+        QVERIFY2(html.contains(u"Jadę w góry z Anią i\u00a0psem"_s)
+                         || html.contains(u"Jadę w góry z Anią i&nbsp;psem"_s),
+                 qPrintable(html));
+        QVERIFY2(html.contains(u">w domu<"_s), qPrintable(html));
+        // The editor itself still joins them.
+        QVERIFY(f.role(0, "html").toString().contains(u"w\u00a0góry"_s));
+    }
+
+    void readingHtmlHasResults()
+    {
+        Fixture f(u"```calc\nbilety = 3 * 120\nsum\n```\n\n```query\ntype:tasks tag:zakupy\n```\n"_s);
+        f.host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko #zakupy\n- [x] Chleb #zakupy\n"_s);
+        const QString html = f.page.readingHtml();
+        QVERIFY2(html.contains(u"bilety = 3 * 120 = 360"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"☐ Mleko"_s) && !html.contains(u"type:tasks"_s), qPrintable(html));
+        // A query without results (or a host without queries) shows the query.
+        f.host.setQueriesFail(true);
+        QVERIFY(f.page.readingHtml().contains(u"type:tasks tag:zakupy"_s));
     }
 };
 
