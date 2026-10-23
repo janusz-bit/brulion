@@ -163,8 +163,17 @@ jobs:
         run: |
           if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ] ||
             ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            # release is main's commit of the last release (docs/RELEASE.md).
             BASE=$(git merge-base HEAD origin/release 2>/dev/null || true)
             if [ -z "$BASE" ] || [ "$BASE" = "$(git rev-parse HEAD)" ]; then
+              # HEAD is a release: the one before is the newest tag that does not contain HEAD
+              # (v0.3.6 and v0.3.7 sit on merges of main: their merge base is main's commit).
+              prev=$(git -c versionsort.suffix=- for-each-ref --count=1 --sort=-v:refname \
+                --no-contains HEAD --format='%(refname)' 'refs/tags/v[0-9]*')
+              BASE=''
+              if [ -n "$prev" ]; then BASE=$(git merge-base HEAD "$prev" || true); fi
+            fi
+            if [ -z "$BASE" ]; then
               BASE=$(git rev-parse -q --verify HEAD~1 || true)
             fi
           fi

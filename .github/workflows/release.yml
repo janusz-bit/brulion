@@ -1,5 +1,5 @@
-# Release: push a tag v<version> (scripts/release.sh commits the version on main, merges main into
-# the release branch and tags that merge), or run this workflow by hand. It checks the tag
+# Release: push a tag v<version> (scripts/release.sh commits the version on main, fast-forwards
+# the release branch to that commit and tags it), or run this workflow by hand. It checks the tag
 # against the version in CMakeLists.txt and nix/package.nix, creates a draft GitHub release
 # (notes: .github/release-notes.md), runs the tests (ci.yml — a push to main runs them only with
 # "[ci]" in a commit message, a release always; the builds below test themselves too), builds
