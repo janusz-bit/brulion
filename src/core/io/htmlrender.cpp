@@ -723,6 +723,31 @@ QString HtmlRenderer::metaChips(const Block &block) const
             chips.append(chip(u"done"_s, u"✅ "_s + t.doneDate->toString(u"yyyy-MM-dd"_s)));
         if (t.cancelledDate)
             chips.append(chip(u"done"_s, u"❌ "_s + t.cancelledDate->toString(u"yyyy-MM-dd"_s)));
+    } else {
+        // A block that is no task keeps the dates, recurrence and priority written in it (the
+        // parsed note has them for tasks only; its text lost them with the other tokens).
+        using markdown::TokenKind;
+        for (const markdown::Token &tok : markdown::findTokens(markdown::maskInlineCode(block.raw))) {
+            const QString when =
+                    tok.date.toString(u"yyyy-MM-dd"_s) + (tok.time ? u' ' + tok.time->toString(u"HH:mm"_s) : QString());
+            switch (tok.kind) {
+            case TokenKind::Priority:
+                if (tok.priority != Priority::None)
+                    chips.append(u"<span class=\"chip priority priority-"_s + priorityName(tok.priority) + u"\">"_s
+                                 + esc(markdown::tokens::priorityEmoji(tok.priority)) + u"</span>"_s);
+                break;
+            case TokenKind::Start: chips.append(chip(u"scheduled"_s, u"🛫 "_s + when)); break;
+            case TokenKind::Scheduled: chips.append(chip(u"scheduled"_s, u"⏳ "_s + when)); break;
+            case TokenKind::Due: chips.append(chip(u"due"_s, u"📅 "_s + when)); break;
+            case TokenKind::Done: chips.append(chip(u"done"_s, u"✅ "_s + when)); break;
+            case TokenKind::Cancelled: chips.append(chip(u"done"_s, u"❌ "_s + when)); break;
+            case TokenKind::Recurrence:
+                if (block.reminders.isEmpty()) // else the reminder's chip has it
+                    chips.append(chip(u"recurrence"_s, u"🔁 "_s + markdown::recurrenceOf(tok)));
+                break;
+            default: break;
+            }
+        }
     }
     for (const Reminder &r : block.reminders) {
         QString text = (r.alarm ? u"⏰! "_s : u"⏰ "_s) + r.at.toString();

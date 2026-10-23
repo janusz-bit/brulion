@@ -4,6 +4,7 @@
 
 #include "types.h"
 
+#include <QLatin1StringView>
 #include <QString>
 
 #include <functional>
@@ -20,12 +21,17 @@ struct ClipboardHtmlOptions {
     std::function<QString(const QString &id)> blockText;
 };
 
+/// Marks HTML that clipboardHtml() made: a paste of it is this app's own copy, whose text flavour
+/// is the Markdown (the HTML would lose block ids, properties, formulas) — also after a restart.
+inline constexpr QLatin1StringView ClipboardHtmlMarker{"<meta name=\"generator\" content=\"Brulion\">"};
+
 /// `markdown` (blocks copied from a note) as an HTML fragment for mail and office apps: the HTML
 /// exporters' semantic HTML (headings, nested lists, task checkboxes, code, tables, quotes,
-/// callouts, emphasis, external links, date chips) with everything escaped — raw HTML in a note
-/// is text —; links to notes and tags as their text, block references as their block's text,
-/// pictures and other files as links to them (never data: URLs). Starts with
-/// `<meta charset="utf-8">`; "" for empty Markdown.
+/// callouts, emphasis, external links, date, recurrence and priority chips — of any block, a
+/// task or not) with everything escaped — raw HTML in a note is text —; links to notes and tags
+/// as their text, block references as their block's text, pictures and other files as links to
+/// them (never data: URLs). Starts with `<meta charset="utf-8">` and ClipboardHtmlMarker; "" for
+/// empty Markdown.
 QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &options = {});
 
 } // namespace brulion::io

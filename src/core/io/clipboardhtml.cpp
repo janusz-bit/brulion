@@ -28,7 +28,7 @@ QString clipboardHtml(const QString &markdown, const ClipboardHtmlOptions &optio
         return std::make_pair(QString(), text);
     };
     const detail::HtmlRenderer renderer(links);
-    return u"<meta charset=\"utf-8\">"_s + renderer.renderNote(note);
+    return u"<meta charset=\"utf-8\">"_s + QString(ClipboardHtmlMarker) + renderer.renderNote(note);
 }
 
 } // namespace brulion::io

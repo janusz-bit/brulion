@@ -339,7 +339,7 @@ private Q_SLOTS:
                 u"((brak))\n\n"
                 "![[zdjęcie.png]] ![[inline.png]] ![x](https://example.com/a.png)\n\n<script>alert(1)</script>\n"_s,
                 options);
-        QVERIFY(html.startsWith(u"<meta charset=\"utf-8\">"_s));
+        QVERIFY(html.startsWith(u"<meta charset=\"utf-8\">"_s + QString(io::ClipboardHtmlMarker)));
         QVERIFY2(html.contains(u"<h1"_s) && html.contains(u"Zakupy"_s), qPrintable(html));
         QVERIFY2(html.contains(u"<ul"_s) && html.contains(u"type=\"checkbox\""_s), qPrintable(html));
         QVERIFY2(html.contains(u"Kupić żółć i\u00a0źdźbło"_s) || html.contains(u"Kupić żółć i&nbsp;źdźbło"_s),
@@ -352,6 +352,38 @@ private Q_SLOTS:
         QVERIFY2(html.contains(u"href=\"https://example.com/a.png\""_s), qPrintable(html));
         QVERIFY2(!html.contains(u"<script"_s) && html.contains(u"&lt;script&gt;"_s), qPrintable(html));
         QCOMPARE(io::clipboardHtml(u"  \n"_s), QString());
+    }
+
+    // Dates, recurrence and priority stay in the HTML of blocks that are no tasks (a mail or an
+    // office app pastes it: the Markdown flavour has them).
+    void clipboardHtmlKeepsTokens_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::addColumn<QStringList>("expected");
+        QTest::newRow("a list item's due date")
+                << u"- Punkt 📅 2026-10-20"_s << QStringList{u"Punkt"_s, u"📅 2026-10-20"_s};
+        QTest::newRow("scheduled and recurrence")
+                << u"- Punkt ⏳ 2026-10-21 🔁 every week"_s << QStringList{u"⏳ 2026-10-21"_s, u"🔁 every week"_s};
+        QTest::newRow("a paragraph") << u"Zadanie 📅 2026-10-20 🛫 2026-10-18"_s
+                                     << QStringList{u"<p>Zadanie"_s, u"📅 2026-10-20"_s, u"🛫 2026-10-18"_s};
+        QTest::newRow("a priority") << u"Akapit ⏫ ważny"_s << QStringList{u"Akapit"_s, u"ważny"_s, u"⏫"_s};
+        QTest::newRow("a heading") << u"## Termin 📅 2026-11-01"_s << QStringList{u"Termin"_s, u"📅 2026-11-01"_s};
+        QTest::newRow("a reminder's recurrence once")
+                << u"- Leki ⏰ 2026-10-20 08:00 🔁 every day"_s << QStringList{u"⏰ 2026-10-20 08:00 🔁 every day"_s};
+        QTest::newRow("a task as before")
+                << u"- [ ] Zrobić ⏫ 📅 2026-10-20"_s << QStringList{u"Zrobić"_s, u"📅 2026-10-20"_s, u"⏫"_s};
+        QTest::newRow("code is not a date")
+                << u"- `📅 2026-10-20` w kodzie"_s << QStringList{u"<code>📅 2026-10-20</code>"_s};
+    }
+    void clipboardHtmlKeepsTokens()
+    {
+        QFETCH(QString, markdown);
+        QFETCH(QStringList, expected);
+        const QString html = io::clipboardHtml(markdown);
+        for (const QString &part : expected)
+            QVERIFY2(html.contains(part), qPrintable(part + u" not in "_s + html));
+        QCOMPARE(html.count(u"📅"_s), markdown.count(u"📅"_s));
+        QCOMPARE(html.count(u"🔁"_s), markdown.count(u"🔁"_s));
     }
 
     void title()
