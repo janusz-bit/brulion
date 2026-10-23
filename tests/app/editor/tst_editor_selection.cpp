@@ -483,9 +483,9 @@ private Q_SLOTS:
         QVERIFY(!html.contains(u"tytuł"_s));                                        // no frontmatter
         QVERIFY2(html.contains(u"&lt;b&gt;wyjazdu&lt;/b&gt;"_s), qPrintable(html)); // never raw HTML
         QVERIFY(html.contains(u"<h1"_s));
-        QVERIFY(html.contains(u"☐&nbsp;Kupić bilety"_s));
-        QVERIFY(html.contains(u"☑&nbsp;mapa"_s));
-        QVERIFY(html.contains(u"1.&nbsp;pierwszy"_s));
+        QVERIFY(html.contains(u"☐ Kupić bilety"_s));
+        QVERIFY(html.contains(u"☑ mapa"_s));
+        QVERIFY(html.contains(u"1. pierwszy"_s));
         QVERIFY(html.contains(u"if (a &lt; b) {}"_s));
         QVERIFY(html.contains(u"<table"_s) && html.contains(u"<td>1</td>"_s));
         QVERIFY(html.contains(u"cytat"_s) && html.contains(u"<hr/>"_s));

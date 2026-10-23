@@ -12,7 +12,10 @@ import Brulion
 // Android keyboards may commit a line break as text instead of a key press: in single-line
 // blocks it splits the block like Enter.
 // The text is read with EditorInput.plainText(), not `text`: TextEdit.text turns no-break spaces
-// and U+2028 into spaces / line feeds, and the block must keep every character it had.
+// and U+2028 into spaces / line feeds, and the block must keep every character it had (so do
+// Ctrl+C / Ctrl+X: BlockEditor.copyEditSelection). The selection stays shown while a menu or a
+// dialog has the keyboard; a right-click (mouse, touchpad, stylus) opens Wytnij / Kopiuj / Wklej /
+// Zaznacz wszystko (BlockEditor.openTextMenu).
 TextEdit {
     id: edit
 
@@ -46,7 +49,9 @@ TextEdit {
     readOnly: !active
     selectByMouse: active
     activeFocusOnPress: active
-    persistentSelection: false
+    // The selected text stays while a menu or dialog has the keyboard (the block is still edited;
+    // editing ends deselect it, onActiveChanged).
+    persistentSelection: active
     color: Theme.fg
     selectionColor: Theme.selection
     selectedTextColor: Theme.selectionFg
@@ -250,6 +255,15 @@ TextEdit {
             event.accepted = true
     }
 
+    // The text menu: a right-click in the edited text (its press is the text's: the editor's
+    // right-click on the block opens no block menu as well).
+    TapHandler {
+        enabled: edit.active && !Theme.touchUi
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.WithinBounds
+        onTapped: (eventPoint) => edit.editor.openTextMenu(edit, eventPoint.position.x, eventPoint.position.y)
+    }
     // Read-only (not editing) persistent editors: a click starts editing there.
     TapHandler {
         enabled: !edit.active && edit.persistent

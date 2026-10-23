@@ -115,6 +115,24 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
                 TIMEOUT 90 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # Selecting and copying blocks (`--editor-script selectiontest`, qml/dev/SelectionSelfTest.qml):
+        # keys (Esc, Shift+arrows also from an edited block, Ctrl+A twice, Ctrl+C / X / V, Delete,
+        # Ctrl+Z, Alt+arrows, Tab), Shift+click, mouse drags (a document's paragraphs, the view's
+        # edge scrolling), the block and text menus, the floating tools, in-block copies keeping
+        # no-break spaces, "Zaznacz tekst"; with a finger (--touch): a long press, taps, the grips,
+        # a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz", and
+        # "Zaznacz tekst" with its handles. The clipboard is read back.
+        foreach(_sel "tst_editor_qml_selection;1280x800;" "tst_editor_qml_selection_touch;412x915;--touch")
+            list(GET _sel 0 _sel_test)
+            list(GET _sel 1 _sel_size)
+            list(GET _sel 2 _sel_touch)
+            add_test(NAME ${_sel_test}
+                COMMAND brulion --editor --editor-script selectiontest --no-single-instance
+                    --size ${_sel_size} ${_sel_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_sel_test} PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
+                TIMEOUT 120 FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # The touch toolbar docked on a simulated on-screen keyboard (`--editor-script keyboard`,
         # KeyboardInsets): a block in an outline and a document, a keyboard sliding in frame by
         # frame, the system hiding it while editing goes on, the caret, autocomplete, source mode

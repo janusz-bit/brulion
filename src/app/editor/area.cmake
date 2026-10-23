@@ -29,10 +29,13 @@ qt_target_qml_sources(brulion
         qml/editor/MobileEditToolbar.qml
         qml/editor/SourceEditor.qml
         qml/editor/ZoomBreadcrumb.qml
+        qml/editor/SelectionToolbar.qml
+        qml/editor/SelectTextView.qml
 )
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
 if(BRULION_DEV_QML_ENABLED)
-    qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml)
+    qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
+        qml/dev/SelectionSelfTest.qml)
 else()
     qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

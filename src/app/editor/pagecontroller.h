@@ -425,6 +425,9 @@ public:
     /// Copy [from, to) of a row's edit text exactly (no-break spaces kept — a TextEdit's own copy
     /// turns them into spaces): in-block Ctrl+C / Ctrl+X. { ok, reason } like copySelection().
     Q_INVOKABLE QVariantMap copyEditText(int row, int from, int to);
+    /// Copy `text` as it is (the "Zaznacz tekst" view): the same limit, primary selection and read
+    /// back as copySelection(). { ok, reason }.
+    Q_INVOKABLE QVariantMap copyText(const QString &text);
     /// What a paste inserts: the clipboard's text, or — when the clipboard has HTML (a browser,
     /// an office app; not this app's own copy) and its text does not look like Markdown — that
     /// HTML as Markdown (EditorHost::htmlToMarkdown). "" when there is no text.

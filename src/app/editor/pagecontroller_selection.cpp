@@ -355,6 +355,13 @@ QVariantMap PageController::copyEditText(int row, int from, int to)
     return writeClipboard(edit.mid(from, to - from), QString());
 }
 
+QVariantMap PageController::copyText(const QString &text)
+{
+    if (text.isEmpty())
+        return failure(u"empty"_s);
+    return writeClipboard(text, QString());
+}
+
 // --- Editing the selection ---------------------------------------------------------------------------
 
 int PageController::deleteSelection()
@@ -621,6 +628,29 @@ QVariantMap PageController::pasteOverSelection()
 
 // --- The "Zaznacz tekst" view ------------------------------------------------------------------------
 
+namespace {
+
+/// The renderer's chips (dates, reminders…) are padded with no-break spaces and keep their words
+/// together with more of them: in a text that is selected and copied, their words are separated
+/// by plain spaces and the padding goes (the user's own no-break spaces stay).
+QString unpaddedChips(const QString &html)
+{
+    static const QRegularExpression chip(
+            u"(<span style=\"[^\"]*background-color[^\"]*\">)&nbsp;([^<]*)&nbsp;</span>"_s);
+    QString out;
+    qsizetype at = 0;
+    auto it = chip.globalMatch(html);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        out += QStringView(html).sliced(at, m.capturedStart() - at);
+        out += m.captured(1) + m.captured(2).replace(u"&nbsp;"_s, u" "_s) + u"</span>"_s;
+        at = m.capturedEnd();
+    }
+    return at == 0 ? html : out + QStringView(html).sliced(at);
+}
+
+} // namespace
+
 QString PageController::readingHtml() const
 {
     const BlockDocument &doc = m_model->document();
@@ -655,14 +685,15 @@ QString PageController::readingHtml() const
                 marker = esc(written) + (marker.isEmpty() ? QString() : u' ' + marker);
             else if (marker.isEmpty())
                 marker = bullets.at(e.depth % 3);
-            marker += u"&nbsp;"_s;
+            marker += u' '; // a space (not a no-break one): a copy reads "• text"
         }
         const int gap = listItem ? 2 : 8;
         switch (shape.view) {
         case BlockView::Heading: {
             const int level = std::clamp(shape.headingLevel, 1, 6);
             out += u"<h%1 style=\"%2\">%3%4</h%1>"_s.arg(level).arg(
-                    block(indent, 14, 6), marker, m_model->data(index, BlockListModel::HtmlRole).toString());
+                    block(indent, 14, 6), marker,
+                    unpaddedChips(m_model->data(index, BlockListModel::HtmlRole).toString()));
             break;
         }
         case BlockView::Code:
@@ -687,7 +718,7 @@ QString PageController::readingHtml() const
             for (const QVariant &rowData : table.value(u"rows"_s).toList()) {
                 out += u"<tr>"_s;
                 for (const QVariant &cell : rowData.toList())
-                    out += u"<td>"_s + cell.toMap().value(u"html"_s).toString() + u"</td>"_s;
+                    out += u"<td>"_s + unpaddedChips(cell.toMap().value(u"html"_s).toString()) + u"</td>"_s;
                 out += u"</tr>"_s;
             }
             out += u"</table>"_s;
@@ -697,12 +728,12 @@ QString PageController::readingHtml() const
         case BlockView::Callout:
             out += u"<p style=\"%1 color:%2; font-style:italic;\">%3%4</p>"_s.arg(
                     block(indent + 24, gap, gap), muted, marker,
-                    m_model->data(index, BlockListModel::HtmlRole).toString());
+                    unpaddedChips(m_model->data(index, BlockListModel::HtmlRole).toString()));
             break;
         case BlockView::Rule: out += u"<hr/>"_s; break;
         case BlockView::Frontmatter: break;
         case BlockView::Text: {
-            const QString html = m_model->data(index, BlockListModel::HtmlRole).toString();
+            const QString html = unpaddedChips(m_model->data(index, BlockListModel::HtmlRole).toString());
             if (!html.isEmpty() || !marker.isEmpty())
                 out += u"<p style=\"%1\">%2%3</p>"_s.arg(block(indent, gap, gap), marker, html);
             break;

@@ -55,6 +55,10 @@ FocusScope {
                 root.activeDay.editor.copyCurrentLink(action.slice(9))
                 return
             }
+            if (action === "selectText") {
+                root.activeDay.editor.openSelectText()
+                return
+            }
             if (action !== "toggleNoteMode")
                 return
             if (!root.activeDay.controller.toggleMode())
@@ -122,7 +126,13 @@ FocusScope {
                     root.activeDay.keepCaretVisible()
             }
             function scrollBy(dy) {
-                list.contentY = Math.max(list.originY, list.contentY + dy)
+                const end = Math.max(list.originY, list.originY + list.contentHeight - list.height + list.bottomMargin)
+                list.contentY = Math.max(list.originY, Math.min(end, list.contentY + dy))
+            }
+            /// A day's editor selects blocks with a finger (BlockEditor.setScrollingHeld): the stream
+            /// does not flick meanwhile.
+            function holdScrolling(held) {
+                list.interactive = !held
             }
             function scrollToDate(date) {
                 const row = days.rowOfDate(date)
@@ -207,6 +217,9 @@ FocusScope {
                 // touch screens. Taps act on release anyway, and TextEdit moves the caret on release for
                 // touch, so scrolling still never edits.
                 pressDelay: 0
+                // A mouse's left drag selects blocks in a day (BlockEditor), it does not scroll: the
+                // wheel and the touchpad do; a finger flicks.
+                acceptedButtons: Theme.touchUi ? Qt.LeftButton : Qt.NoButton
                 T.ScrollBar.vertical: BScrollBar {}
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Journals")

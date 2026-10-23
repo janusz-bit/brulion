@@ -310,6 +310,8 @@ Item {
                                 enabled: !cell.editingCell
                                 gesturePolicy: TapHandler.ReleaseWithinBounds
                                 onTapped: (eventPoint) => {
+                                    if (root.block.editor.blockTapped(root.block.index))
+                                        return // the touch selection mode
                                     const p = eventPoint.position
                                     // Reminder chips name ranges of the cell's text, not of the
                                     // block: those cells are edited like any other.

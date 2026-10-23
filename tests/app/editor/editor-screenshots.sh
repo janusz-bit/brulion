@@ -27,6 +27,7 @@ read -r -a sizes <<< "${SIZES:-desktop phone}"
 read -r -a themes <<< "${THEMES:-light dark}"
 all_states=(page editing suggest tags tag-pages slash date zoom folded selected source reminder recurrence table calc query embeds title empty conflict markup
   task-menu task-menu-query task-slash copylink copylink-document link-flash
+  selection selection-document selection-menu text-menu select-text select-text-selected
   document document-paragraph document-list document-heading document-task document-outline)
 if [[ $# -gt 0 ]]; then states=("$@"); else states=("${all_states[@]}"); fi
 

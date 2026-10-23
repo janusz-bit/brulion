@@ -181,7 +181,7 @@ Rectangle {
             HoverHandler { id: headerHover; enabled: !Theme.touchUi }
             TapHandler {
                 enabled: !root.block.editing
-                onTapped: root.editor.startEditing(root.block.index, -1)
+                onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
             }
         }
 
@@ -246,7 +246,7 @@ Rectangle {
             }
             TapHandler {
                 enabled: !root.block.editing
-                onTapped: root.editor.startEditing(root.block.index, -1)
+                onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
             }
         }
 
