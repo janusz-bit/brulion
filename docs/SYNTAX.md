@@ -118,7 +118,14 @@ naming the same file; only its target changes (`|alias`, `#Heading`, `#^id`, `!`
   note (`findQueryNames()` / `retargetQueryNames()`: any spelling of the key, negated, each value
   of a comma list, never in comments, phrases or outside the fence): `tag:` / `#tag` exactly that
   tag as tags are (sub-tags stay); `ref:` / `[[…]]` like a link written in the query's note;
-  `page:` (no `*`, not `this`) when it named the moved page and no longer matches it; `path:` (no
+  `page:` (no `*`, not `this`) when it would no longer match exactly the page it matched (it
+  matches a title, alias, path or link target): a value naming the moved page is written as a
+  link to it would be or, when another page answers to that name too, as the shortest form naming
+  only the moved page (the title, longer path suffixes, the path without, then with `.md`:
+  `page:Dom` → `page:Mieszkanie.md` when Dom.md becomes Mieszkanie.md next to
+  Archiwum/Mieszkanie.md), and a value naming a page that stays is qualified the same way when a
+  moved page would answer to it too (`page:Mieszkanie` → `page:Archiwum/Mieszkanie`); a value that
+  matched several pages (two pages titled Dom) or none stays as written; `path:` (no
   `*`) when every file it matched moved by one folder change (`path:Projekty/` →
   `path:Archiwum/Projekty/`; a prefix that also matches a file that stays is left, and so is one
   whose new prefix would match other files too — a page moved into a folder with other pages
@@ -509,7 +516,8 @@ sort:due,-priority limit:20
   names a page (§3), `ref:` matches the page's tags too, while `tag:` stays tags-only (with
   sub-tags).
 * Renaming or moving a page, a folder or a tag's page rewrites the `tag:`, `#tag`, `ref:`,
-  `[[…]]`, `page:` and `path:` values that name it (§2 "Rewriting on rename and move").
+  `[[…]]`, `page:` and `path:` values that name it, so that they keep matching what they matched
+  (§2 "Rewriting on rename and move").
 * Keys and keyword values are case- and diacritic-insensitive (`ścieżka:` = `sciezka:`,
   `STATUS:Zrobione`) and have Polish spellings. An unknown key or value shows a helpful error
   (in the UI language) instead of results.

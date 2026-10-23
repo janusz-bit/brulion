@@ -97,6 +97,18 @@ bool sameFolder(const VaultPath &a, const VaultPath &b)
     return pathKey(paths::dirname(a)) == pathKey(paths::dirname(b));
 }
 
+/// Where the page's name ends in a `ref:` / `page:` value: before a `#Heading` or `|alias`.
+qsizetype nameEnd(const QString &value)
+{
+    qsizetype end = value.size();
+    for (const QChar c : {u'#', u'|'}) {
+        const qsizetype at = value.indexOf(c);
+        if (at >= 0)
+            end = std::min(end, at);
+    }
+    return end;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -130,6 +142,25 @@ struct RelocationPlan::Private {
     /// the first `path:` filter that changes).
     mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedTargets;
 
+    /// A note's names as `page:` matches them (runQuery's pageMatches), folded.
+    struct PageNames {
+        VaultPath path;
+        QString foldedPath;         ///< the path without `.md`
+        QList<NameCandidate> names; ///< the title, then the aliases
+    };
+    /// Every note's names before the move, and those of the moved notes (copies: the plan outlives
+    /// the index's entries). Only filled when some note has a ```query block.
+    QList<PageNames> pageNames;
+    QList<PageNames> movedPageNames;
+    /// pageNames by folded name (built on the first `page:` filter the move concerns).
+    mutable std::optional<QMultiHash<QString, VaultPath>> pagesByName;
+    struct MovedNames {
+        QMultiHash<QString, VaultPath> after; ///< a moved note's folded name -> its new path
+        QSet<QString> any;                    ///< every folded name of a moved note, before or after
+    };
+    /// Built on the first `page:` filter.
+    mutable std::optional<MovedNames> movedNames;
+
     const QList<std::pair<QString, VaultPath>> &pathsByFoldedKey() const
     {
         if (!foldedPaths) {
@@ -154,6 +185,131 @@ struct RelocationPlan::Private {
             foldedTargets = std::move(list);
         }
         return *foldedTargets;
+    }
+
+    const QMultiHash<QString, VaultPath> &pagesByFoldedName() const
+    {
+        if (!pagesByName) {
+            QMultiHash<QString, VaultPath> map;
+            map.reserve(pageNames.size() * 2);
+            for (const PageNames &n : pageNames) {
+                map.insert(n.foldedPath, n.path);
+                for (const NameCandidate &c : n.names)
+                    map.insert(c.folded, n.path);
+            }
+            pagesByName = std::move(map);
+        }
+        return *pagesByName;
+    }
+
+    const MovedNames &namesOfMovedPages() const
+    {
+        if (!movedNames) {
+            MovedNames names;
+            for (const PageNames &n : movedPageNames) {
+                const VaultPath to = moved.value(n.path);
+                names.any.insert(n.foldedPath);
+                // At the new path: its path and title; the aliases stay.
+                names.after.insert(text::foldKey(stemOf(to)), to);
+                names.after.insert(text::foldKey(paths::pageTitle(to)), to);
+                for (const NameCandidate &c : n.names) {
+                    names.any.insert(c.folded);
+                    if (!c.alias.isEmpty())
+                        names.after.insert(c.folded, to);
+                }
+            }
+            for (auto it = names.after.cbegin(); it != names.after.cend(); ++it)
+                names.any.insert(it.key());
+            movedNames = std::move(names);
+        }
+        return *movedNames;
+    }
+
+    /// The notes `page:value` matches in a query of the note at `from` (runQuery's pageMatches: a
+    /// title, alias or path without `.md` equal to the value, folded, or the note the value
+    /// reaches as a link): before the move, or after it (`afterMove`: the moved notes at their
+    /// new paths, `from` there too). The value has no `*` and is no `this`.
+    QSet<VaultPath> pagesMatching(const QString &value, const VaultPath &from, bool afterMove) const
+    {
+        const QString v = value.trimmed();
+        const QString folded = text::foldKey(v);
+        QSet<VaultPath> out;
+        const QMultiHash<QString, VaultPath> &byName = pagesByFoldedName();
+        for (auto [it, end] = byName.equal_range(folded); it != end; ++it) {
+            if (!afterMove || !moved.contains(*it))
+                out.insert(*it);
+        }
+        if (afterMove) {
+            const QMultiHash<QString, VaultPath> &movedByName = namesOfMovedPages().after;
+            for (auto [it, end] = movedByName.equal_range(folded); it != end; ++it)
+                out.insert(*it);
+        }
+        const VaultPath hit = (afterMove ? after : before).resolve(v, from, TargetForm::Raw);
+        if (isNotePath(hit))
+            out.insert(hit);
+        return out;
+    }
+
+    /// The new value of a `page:` filter (`q`, in the note at `path`, at `newPath` after the move;
+    /// `movedSource`: it moves itself) that matches exactly the page it matched, at its new path:
+    /// a value naming the moved page as renameLinks() would write it, else — and for a value naming
+    /// another page that the move would widen (a page renamed to its title) — the shortest form
+    /// that names only that page (its title, longer path suffixes, its path without and with
+    /// `.md`). "" when the value keeps its pages, has `*` or is `this`, matched no page (a missing
+    /// page stays missing, as links do) or several (one value cannot name them all), or no form
+    /// names exactly its page.
+    QString newPageValue(const QueryNameRef &q, const VaultPath &path, const VaultPath &newPath, bool movedSource) const
+    {
+        const QString &value = q.value;
+        // (No names kept: no note had a query when the plan was made — a block added since.)
+        if (isThisPageValue(value) || value.contains(u'*') || pageNames.isEmpty())
+            return {};
+        // A `#Heading` / `|alias` after the name stays (runQuery resolves the value as a link).
+        const qsizetype cut = nameEnd(value);
+        const QString target = value.left(cut).trimmed();
+        if (target.isEmpty())
+            return {};
+        // Only a value the move concerns: a name a moved note has before or after, a link key of
+        // the move, any value of a note that moves (relative targets).
+        if (!movedSource && !keys.contains(linkKey(target, TargetForm::Raw))
+            && !namesOfMovedPages().any.contains(text::foldKey(value.trimmed())))
+            return {};
+        const QSet<VaultPath> matched = pagesMatching(value, path, false);
+        if (matched.size() != 1)
+            return {};
+        const VaultPath named = *matched.cbegin();
+        const VaultPath wanted = moved.value(named, named);
+        const QSet<VaultPath> exactly{wanted};
+        if (pagesMatching(value, newPath, true) == exactly)
+            return {};
+        QStringList candidates;
+        if (named != wanted) {
+            // The value's own page moved: as renameLinks() writes a link to it, the extension as
+            // written.
+            QString ext;
+            for (const QString &e : {u".md"_s, u".markdown"_s}) {
+                if (target.endsWith(e, Qt::CaseInsensitive))
+                    ext = target.right(e.size());
+            }
+            const qsizetype slash = afterLastSlash(target);
+            if (slash == 0)
+                candidates.append(paths::pageTitle(wanted) + ext);
+            else if (sameFolder(named, wanted))
+                candidates.append(target.left(slash) + paths::pageTitle(wanted) + ext); // a rename in place
+            else
+                candidates.append(stemOf(wanted) + ext);
+        }
+        candidates += suffixes(wanted);
+        candidates.append(wanted); // `Mieszkanie.md`: a page at the root whose title another page has
+        const QString rest = value.mid(cut);
+        for (const QString &candidate : std::as_const(candidates)) {
+            const QString written = candidate + rest;
+            // (A page named "Ten" or "A*" is not written so: runQuery reads `this` and wildcards.)
+            if (written != value && !isThisPageValue(written) && !written.contains(u'*')
+                && pagesMatching(written, newPath, true) == exactly && !formatQueryName(q, written).isEmpty())
+                return written;
+        }
+        return {};
     }
 
     /// The entries of `byKey` (sorted by folded key) whose key starts with `folded`: what a
@@ -215,19 +371,14 @@ struct RelocationPlan::Private {
                 return *it;
             return newTagName(tagName(key)); // a tag no note carries yet
         }
-        case QueryFilterKind::Ref:
-        case QueryFilterKind::Page: {
+        case QueryFilterKind::Page: return newPageValue(q, path, newPath, movedSource);
+        case QueryFilterKind::Ref: {
             const QString value = q.value;
-            if (isThisPageValue(value) || (q.kind == QueryFilterKind::Page && value.contains(u'*')))
+            if (isThisPageValue(value))
                 return {};
             // Resolved like a link written in the note (runQuery: resolveLink from the query's
             // page); a `#Heading` / `|alias` after the name stays.
-            qsizetype cut = value.size();
-            for (const QChar c : {u'#', u'|'}) {
-                const qsizetype at = value.indexOf(c);
-                if (at >= 0)
-                    cut = std::min(cut, at);
-            }
+            const qsizetype cut = nameEnd(value);
             const QString target = value.left(cut).trimmed();
             if (target.isEmpty() || (!movedSource && !keys.contains(linkKey(target, TargetForm::Raw))))
                 return {};
@@ -237,14 +388,6 @@ struct RelocationPlan::Private {
             const VaultPath wanted = moved.value(named, named);
             if (after.resolve(target, newPath, TargetForm::Raw) == wanted)
                 return {};
-            if (q.kind == QueryFilterKind::Page) {
-                // `page:` names the moved page itself, also by its title or path (folded).
-                if (named == wanted)
-                    return {};
-                const QString folded = text::foldKey(target);
-                if (folded == text::foldKey(paths::pageTitle(wanted)) || folded == text::foldKey(stemOf(wanted)))
-                    return {};
-            }
             Link link;
             link.kind = LinkKind::Wiki;
             link.target = target;
@@ -623,6 +766,14 @@ RelocationPlanner::RelocationPlanner(const VaultIndex &index, const QList<FileMo
     if (!queryNotes.isEmpty()) {
         p->allPaths = index.paths();
         p->allPaths.append(index.attachments());
+        // The names `page:` matches (implicitly shared copies: no folding here).
+        p->pageNames.reserve(qsizetype(d->entries.size()));
+        for (const auto &[path, e] : d->entries)
+            p->pageNames.append({path, e->foldedPath, e->names});
+        for (const Known &k : std::as_const(known)) {
+            if (const VaultIndex::Private::Entry *e = k.note ? d->entry(k.move.from) : nullptr)
+                p->movedPageNames.append({k.move.from, e->foldedPath, e->names});
+        }
         for (const VaultPath &q : queryNotes) {
             sources.insert(q);
             p->queryNotes.insert(q);

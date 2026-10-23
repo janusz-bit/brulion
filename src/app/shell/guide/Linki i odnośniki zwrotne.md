@@ -58,7 +58,7 @@ Zmiana nazwy strony (F2) aktualizuje linki do niej i tagi, które ją nazywają,
 - Link po samej nazwie zostaje, dopóki wskazuje tę stronę: `[[Dom]]` po przeniesieniu jedynej strony „Dom” się nie zmienia.
 - Gdy po przeniesieniu nazwa wskazywałaby inną stronę (np. w notatniku jest drugi „Dom” o krótszej ścieżce), link dostaje najkrótszą jednoznaczną ścieżkę: `[[Projekty/Dom]]`. Tak samo tagi: `#dom` → `#Projekty/Dom`.
 - Linki ze ścieżką idą za stroną: `[[Projekty/Dom]]` → `[[Archiwum/Dom]]`; także obrazy i pliki z przenoszonego folderu: `![[Projekty/plan.png]]`.
-- [[Zapytania|Zapytania]] też idą za stroną i folderem: `ref:Dom`, `[[Dom]]`, `page:Dom`, `tag:dom` i `path:Projekty/` dostają nową nazwę albo ścieżkę (`path:Archiwum/Projekty/`). Okno zmiany nazwy liczy je razem z linkami i tagami.
+- [[Zapytania|Zapytania]] też idą za stroną i folderem: `ref:Dom`, `[[Dom]]`, `page:Dom`, `tag:dom` i `path:Projekty/` dostają nową nazwę albo ścieżkę (`path:Archiwum/Projekty/`) i dalej znajdują to samo. Gdy nowa nazwa należy też do innej strony, `page:` dostaje zapis, który wskazuje tylko jedną z nich: po zmianie nazwy „Dom” na „Mieszkanie”, gdy jest już strona `Archiwum/Mieszkanie`, `page:Dom` zmienia się w `page:Mieszkanie.md`, a `page:Mieszkanie` w `page:Archiwum/Mieszkanie`. `page:` z gwiazdką, `page:ta` i nazwa kilku stron naraz (dwie strony „Dom”) zostają bez zmian. Okno zmiany nazwy liczy je razem z linkami i tagami.
 - Nagłówek, blok i alias zostają: `[[Dom#Kuchnia|kuchnia]]` → `[[Projekty/Dom#Kuchnia|kuchnia]]`.
 
 Podpowiedź `[[` też wstawia ścieżkę, gdy wybrana strona ma imienniczkę w innym folderze. Historia strony i kosz pozwalają cofnąć pomyłki, a komunikat po przeniesieniu ma „Cofnij”.
