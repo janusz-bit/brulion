@@ -22,6 +22,8 @@ Column {
     property var embeds: []
     signal clicked(string target)
     signal backgroundClicked()
+    /// A finger held beside the picture / chip (touch UIs).
+    signal backgroundLongPressed()
 
     /// See BlockEditor.autoTextSafe (BChip shows its text with Text.AutoText).
     function autoTextSafe(s) {
@@ -76,6 +78,11 @@ Column {
                 height: embed.height
                 HoverHandler { cursorShape: Qt.IBeamCursor; enabled: !Theme.touchUi }
                 TapHandler { onTapped: root.backgroundClicked() }
+                TapHandler {
+                    enabled: Theme.touchUi
+                    acceptedDevices: PointerDevice.TouchScreen
+                    onLongPressed: root.backgroundLongPressed()
+                }
             }
 
             Rectangle {

@@ -7,18 +7,22 @@ import Brulion
 // (`brulion --editor --editor-script selectiontest`; ctest tst_editor_qml_selection, desktop, and
 // tst_editor_qml_selection_touch, a phone with --touch). QtTest's TestEvent sends keys, mouse and
 // touch through the window like a real device; the clipboard is read back.
-//   desktop: Esc then Shift+↓ twice and Ctrl+C (three blocks with their children), Shift+↑ from an
-//     edited block's first line, Shift+↓ from inside one, Ctrl+A twice, Shift+click, Delete and
-//     Ctrl+Z, Alt+↓ on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break
-//     spaces, the edited text's right-click menu, the block menu of a selected and of another
-//     block, the floating tools, a mouse drag over three paragraphs of a document (the list does
-//     not scroll), a drag to the view's edge (the list scrolls, the selection follows), the band
-//     after scrolling far away and back, and "Zaznacz tekst" (a mouse selection across paragraphs,
-//     Ctrl+C, "Kopiuj wszystko", Esc);
+//   desktop: Esc (Ctrl+Enter then changes the parent alone, not its children) then Shift+↓ twice and
+//     Ctrl+C (three blocks with their children), Shift+↑ from an edited block's first line, Shift+↓
+//     from inside one, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, Alt+↓ and Tab on a range (undone
+//     from another edited block: the range selected again), Ctrl+V over a selection, one copied block
+//     pasted into an empty bullet (no second marker), Shift+click on a calculation and a table,
+//     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block
+//     menu of a selected and of another block, the floating tools, a mouse drag over three paragraphs
+//     of a document (the list does not scroll), a drag to the view's edge (the list scrolls, the
+//     selection follows), the band after scrolling far away and back, and "Zaznacz tekst" (wheel
+//     turns stay in it, a mouse selection across paragraphs, Ctrl+C, a theme change keeping the
+//     selection, "Kopiuj wszystko", Esc);
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
-//     it, Kopiuj, the end grip dragged, a long press dragged to the view's edge (autoscroll), Back,
-//     the editing toolbar's "Zaznacz", the bullet menu's "Zaznacz", and "Zaznacz tekst" (a long
-//     press on a word, its handle dragged, Kopiuj, Back).
+//     it, Kopiuj, the end grip dragged, Usuń (still in the selection mode) and Ctrl+Z, a long press
+//     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Zaznacz", Esc and
+//     Shift+↓ from a keyboard, the bullet menu's "Zaznacz", and "Zaznacz tekst" (a long press on a
+//     word, its handles dragged — the start one past the end —, Kopiuj, Back).
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -35,6 +39,7 @@ QtObject {
     property real contentBefore: 0
     property string textBefore: ""
     property int countBefore: 0
+    property string themeBefore: ""
 
     // ---- Helpers ------------------------------------------------------------------------------------
     readonly property ListView list: editor.listView
@@ -52,9 +57,6 @@ QtObject {
     }
     /// The clipboard's text exactly (no-break spaces kept): this app's copies are read as written.
     function clip() { return page.clipboardText() }
-    /// The same with no-break spaces as spaces (the renderer joins one-letter Polish words to the
-    /// next one with them: "w\u00a0domu" — the text shown, and copied, as it is shown).
-    function clipSpaces() { return clip().replace(/\u00a0/g, " ") }
     /// `s` with every character outside printable ASCII as \uXXXX (failure messages).
     function codes(s) {
         let out = ""
@@ -149,6 +151,17 @@ QtObject {
             () => {
                 check(page.selectedRow === test.rowA && page.editingRow < 0, "Esc selects the block")
                 check(selected().length === 7, "with its children (folded or not): " + selected().length)
+                key(Qt.Key_Return, Qt.ControlModifier)
+            },
+            () => {
+                check(info(test.rowA).taskStatus === "todo" && info(rowOf("Zmierzyć")).taskStatus === "done"
+                      && info(rowOf("Zadzwonić")).taskStatus === "doing" && info(rowOf("Wywieźć")).taskStatus === "todo",
+                      "Ctrl+Enter on a parent selected alone changes it, not the children it brings along")
+                key(Qt.Key_Z, Qt.ControlModifier)
+            },
+            () => {
+                check(info(test.rowA).taskStatus === "" && page.selectedRow === test.rowA && selected().length === 7,
+                      "undone, still selected")
                 key(Qt.Key_Down, Qt.ShiftModifier)
             },
             () => {
@@ -241,7 +254,15 @@ QtObject {
             },
             () => {
                 check(info(rowOf("Skuć")).depth === 2 && info(rowOf("Położyć")).depth === 2, "Tab indents the range")
-                key(Qt.Key_Z, Qt.ControlModifier)
+                editor.startEditing(rowOf("Ekipa może"), -1) // another block edited meanwhile
+            },
+            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === rowOf("Ekipa może"),
+                 "another block is edited"),
+            () => editKey(Qt.Key_Z, Qt.ControlModifier),
+            () => {
+                check(page.editingRow < 0 && page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
+                      && list.activeFocus && info(rowOf("Skuć")).depth === 1,
+                      "Ctrl+Z in it undoes Tab: the range selected again, nothing edited, the keys with the selection")
                 key(Qt.Key_Z, Qt.ControlModifier)
             },
             wait(() => window.pageText() === test.textBefore, "undone"),
@@ -262,6 +283,49 @@ QtObject {
                 key(Qt.Key_Z, Qt.ControlModifier)
             },
             wait(() => window.pageText() === test.textBefore, "undone"),
+            // ---- One copied block pasted into an edited empty bullet: its text, no second marker --------
+            () => { test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "") },
+            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === test.rowA,
+                 "a new empty bullet is edited"),
+            () => editKey(Qt.Key_V, Qt.ControlModifier),
+            wait(() => info(test.rowA).taskStatus === "todo" && info(test.rowA).plainText.indexOf("Skuć stare płytki") === 0
+                       && window.pageText().split("\t- [ ] Skuć stare płytki 📅 2026-10-13\n").length === 3,
+                 () => "Ctrl+V pastes the copied task into it, its checkbox and no second marker: "
+                       + JSON.stringify(info(test.rowA).plainText) + " " + info(test.rowA).taskStatus),
+            () => check(page.editingRow === test.rowA && window.pageText().indexOf("- - ") < 0, "the block is still edited"),
+            () => {
+                page.undo()
+                page.undo()
+                page.stopEditing()
+            },
+            wait(() => window.pageText() === test.textBefore, "undone"),
+            // ---- Shift+click on a calculation and on a table (frames, not text) ---------------------------
+            () => {
+                test.rowA = rowOf("Koszty")
+                center(window.viewRow("calc"))
+                editor.startEditing(test.rowA, -1)
+            },
+            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === test.rowA,
+                 "the heading Koszty is edited"),
+            () => {
+                const calc = window.findItem(delegateAt(window.viewRow("calc")), "calcInput")
+                check(calc !== null, "the calculation's lines")
+                if (calc)
+                    events.mouseClick(calc, 20, 8, Qt.LeftButton, Qt.ShiftModifier, -1)
+            },
+            () => check(page.editingRow < 0 && page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("calc"),
+                        "Shift+click on a calculation selects from the edited heading to it, nothing edited: "
+                        + page.selectionAnchorRow + "–" + page.selectedRow),
+            () => {
+                center(window.viewRow("table"))
+                const table = delegateAt(window.viewRow("table"))
+                if (table)
+                    events.mouseClick(table, table.width / 3, table.height / 2, Qt.LeftButton, Qt.ShiftModifier, -1)
+            },
+            () => check(page.selectionAnchorRow === test.rowA && page.selectedRow === window.viewRow("table")
+                        && editor.editingTable === null && page.editingRow < 0,
+                        "Shift+click on a table moves the selection's end there, no cell edited: " + page.selectedRow),
+            () => key(Qt.Key_Escape),
             // ---- In-block Ctrl+C / Ctrl+X keep no-break spaces ------------------------------------------
             () => {
                 test.rowA = page.insertBlockAfter(rowOf("Ekipa może"), "Jadę w\u00a0góry z\u00a0Anią")
@@ -394,9 +458,39 @@ QtObject {
             },
             wait(() => clip().indexOf("Trzy dni w Zakopanem") === 0 && clip().indexOf("\n\n## Plan\n\nPierwszego dnia") > 0,
                  "copied as Markdown with its blank lines"),
+            // A document's paragraphs have no outline: Więcej offers no indents for them.
+            () => tap(window.findShown(window.findShown(editor.dockHost, "floatingSelectionTools"), "selectionMore")),
+            wait(() => {
+                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
+                return tools !== null && tools.menu !== null && tools.menu.opened
+            }, "the floating tools' Więcej opens"),
+            () => {
+                const tools = window.findShown(editor.dockHost, "floatingSelectionTools")
+                const indent = window.menuItemNamed(tools.menu, "selectionIndent")
+                const outdent = window.menuItemNamed(tools.menu, "selectionOutdent")
+                check(indent !== null && !indent.visible && outdent !== null && !outdent.visible,
+                      "paragraphs of a document: no Zwiększ / Zmniejsz wcięcie")
+                tools.menu.close()
+            },
             // ---- "Zaznacz tekst" -------------------------------------------------------------------------
             () => editor.openSelectText(),
             wait(() => selectTextView() !== null && selectTextView().activeFocus, "“Zaznacz tekst” opens with the page as text"),
+            // Wheel turns stay in the view: at the text's end and over its bar the page under it holds still.
+            () => {
+                test.contentBefore = list.contentY
+                const flick = window.findItem(editor.dockHost, "selectTextFlick")
+                flick.contentY = Math.max(0, flick.contentHeight - flick.height)
+                for (let i = 0; i < 5; ++i)
+                    events.mouseWheel(flick, flick.width / 2, flick.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+                const close = window.findShown(editor.dockHost, "selectTextClose")
+                for (let i = 0; i < 3; ++i)
+                    events.mouseWheel(close, close.width / 2, close.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+            },
+            () => {
+                check(Math.abs(list.contentY - test.contentBefore) < 1,
+                      "wheel turns over the view never scroll the page under it: " + list.contentY + " vs " + test.contentBefore)
+                window.findItem(editor.dockHost, "selectTextFlick").contentY = 0
+            },
             () => {
                 const text = selectTextView()
                 const all = text.getText(0, text.length)
@@ -413,18 +507,35 @@ QtObject {
                       "a mouse drag selects across paragraphs: " + JSON.stringify(text.selectedText.slice(0, 40)))
                 EditorInput.sendKey(text, Qt.Key_C, Qt.ControlModifier, "")
             },
-            wait(() => clipSpaces().indexOf("Budżet liczymy w Budżet domowy. #podróże\nPlan\nPierwszego dnia") === 0
+            // (Exactly: no no-break space joins "w" to the next word — the note has a space there.)
+            wait(() => clip().indexOf("Budżet liczymy w Budżet domowy. #podróże\nPlan\nPierwszego dnia") === 0
                        && clip() === EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
                                                            selectTextView().selectionEnd),
                  () => "Ctrl+C copies the selected text as plain text: " + codes(clip()) + " vs "
                        + codes(EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
                                                      selectTextView().selectionEnd))),
+            // A theme change while it is open: the text in the new colours, the selection kept.
+            () => {
+                const view = window.findItem(editor.dockHost, "selectTextView").item
+                test.textBefore = view.html
+                test.rowA = selectTextView().selectionStart
+                test.rowB = selectTextView().selectionEnd
+                test.themeBefore = Theme.mode
+                Theme.mode = Theme.dark ? "light" : "dark"
+            },
+            () => {
+                const view = window.findItem(editor.dockHost, "selectTextView").item
+                check(view.html !== test.textBefore && selectTextView().selectionStart === test.rowA
+                      && selectTextView().selectionEnd === test.rowB && test.rowA !== test.rowB,
+                      "a theme change renders the text again in its colours, the selection kept")
+                Theme.mode = test.themeBefore
+            },
             () => {
                 selectTextView().deselect()
                 tap(window.findShown(editor.dockHost, "selectTextCopy"))
             },
-            wait(() => clipSpaces().indexOf("Wyjazd w Tatry") === 0 && clipSpaces().indexOf("\n• Piątek: Gubałówka i Krupówki\n") > 0
-                       && clipSpaces().indexOf("\n☑ Buty trekkingowe ✅ pn 12 paź\n") > 0 && clipSpaces().indexOf("\n1. Pociąg") > 0,
+            wait(() => clip().indexOf("Wyjazd w Tatry") === 0 && clip().indexOf("\n• Piątek: Gubałówka i Krupówki\n") > 0
+                       && clip().indexOf("\n☑ Buty trekkingowe ✅ pn 12 paź\n") > 0 && clip().indexOf("\n1. Pociąg") > 0,
                  () => "with nothing selected Kopiuj copies the whole page, bullets and checkboxes included: "
                        + codes(clip().slice(0, 120)) + " … " + codes(clip().slice(clip().indexOf("Niedziela"), clip().indexOf("Niedziela") + 200))),
             () => EditorInput.sendKey(selectTextView(), Qt.Key_Escape, 0, ""),
@@ -472,6 +583,20 @@ QtObject {
             },
             () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić"),
                         "dragging the end grip moves the selection's end: " + page.selectedRow),
+            // ---- Usuń keeps the selection mode (the block before them selected); Ctrl+Z ------------------
+            () => {
+                test.textBefore = window.pageText()
+                revealTool(shown(toolbar(), "selectionDelete"))
+            },
+            () => tap(shown(toolbar(), "selectionDelete")),
+            wait(() => window.pageText().indexOf("Zadzwonić do hydraulika") < 0, "Usuń deletes the selected blocks"),
+            () => check(editor.selectionMode && editor.toolbarMode === "selection" && page.selectionCount === 1
+                        && page.editingRow < 0,
+                        "the block before them is selected, in the selection mode with its tools: " + page.selectionCount),
+            () => key(Qt.Key_Z, Qt.ControlModifier),
+            wait(() => window.pageText() === test.textBefore, "Ctrl+Z brings them back"),
+            () => check(editor.selectionMode && page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Kolejność"),
+                        "selected again, in the selection mode"),
             // ---- Back leaves the selection mode -----------------------------------------------------------
             () => key(Qt.Key_Back),
             () => check(!editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "",
@@ -515,6 +640,19 @@ QtObject {
                 tap(done)
             },
             () => check(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode"),
+            // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
+            () => editor.startEditing(rowOf("Skuć"), -1),
+            wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === rowOf("Skuć"),
+                 "Skuć is edited"),
+            () => editKey(Qt.Key_Escape),
+            () => {
+                check(page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
+                      && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools")
+                key(Qt.Key_Down, Qt.ShiftModifier)
+            },
+            () => check(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
+                        && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay"),
+            () => key(Qt.Key_Back),
             // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
             ...longPress(() => delegateAt(rowOf("Kolejność")), (d) => d.bulletX, (d) => d.firstLineCenter),
             wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a bullet's long press opens the block menu"),
@@ -548,6 +686,31 @@ QtObject {
             },
             () => check(selectTextView().selectedText.indexOf("Przygotowanie") === 0 && selectTextView().selectedText.length > 20,
                         "dragging the end handle extends it: " + JSON.stringify(selectTextView().selectedText.slice(0, 40))),
+            // The start handle dragged past the end: the end stays where it was, the finger moves the other end.
+            () => {
+                test.countBefore = selectTextView().selectionEnd
+                const handle = window.findShown(editor.dockHost, "selectTextHandleStart")
+                events.touchEvent(handle).press(0, handle, handle.width / 2, handle.height / 2).commit()
+                events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 10).commit()
+            },
+            () => {
+                const t = selectTextView()
+                const r = t.positionToRectangle(test.countBefore)
+                events.touchEvent(t).move(0, t, 30, r.y + 2 * r.height + 24).commit()
+            },
+            () => {
+                const t = selectTextView()
+                const r = t.positionToRectangle(test.countBefore)
+                events.touchEvent(t).move(0, t, 60, r.y + 3 * r.height + 24).commit()
+            },
+            () => {
+                const t = selectTextView()
+                const r = t.positionToRectangle(test.countBefore)
+                events.touchEvent(t).release(0, t, 60, r.y + 3 * r.height + 24).commit()
+            },
+            () => check(selectTextView().selectionStart === test.countBefore && selectTextView().selectionEnd > test.countBefore,
+                        "dragged past the end, the start handle keeps the old end fixed: " + selectTextView().selectionStart
+                        + "–" + selectTextView().selectionEnd + " (fixed " + test.countBefore + ")"),
             () => {
                 test.textBefore = EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
                                                         selectTextView().selectionEnd)

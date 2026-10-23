@@ -26,6 +26,9 @@ Row {
     /// One block selected (its two ends are the same block): the block's own tools apply.
     readonly property bool singleBlock: controller !== null && controller.selectedRow >= 0
                                         && controller.selectedRow === controller.selectionAnchorRow
+    /// The selection can be indented (PageController.canIndentSelection: in a document only list
+    /// items), read when "Więcej" opens.
+    property bool indentable: true
 
     spacing: 0
     Accessible.role: Accessible.ToolBar
@@ -123,6 +126,8 @@ Row {
     function openMenu() {
         if (!menu)
             menu = menuComponent.createObject(bar) as BMenu
+        // A document's paragraphs and headings have no outline: no Zwiększ / Zmniejsz wcięcie.
+        indentable = controller !== null && controller.canIndentSelection()
         // "Kopiuj odnośnik" only for one block (its item in the menu, made for the submenu).
         for (let i = 0; i < menu.count; ++i) {
             const entry = menu.itemAt(i) as T.MenuItem
@@ -190,13 +195,17 @@ Row {
                 }
             }
             BMenuSeparator {}
-            BMenuItem {
+            OptionalItem {
+                objectName: "selectionIndent"
+                shown: bar.indentable
                 text: qsTr("Indent")
                 iconName: "list-indent-increase"
                 shortcut: bar.docked ? "" : "Tab"
                 onTriggered: bar.controller.indentSelection()
             }
-            BMenuItem {
+            OptionalItem {
+                objectName: "selectionOutdent"
+                shown: bar.indentable
                 text: qsTr("Outdent")
                 iconName: "list-indent-decrease"
                 shortcut: bar.docked ? "" : "Shift+Tab"

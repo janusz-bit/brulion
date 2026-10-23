@@ -264,10 +264,18 @@ TextEdit {
         gesturePolicy: TapHandler.WithinBounds
         onTapped: (eventPoint) => edit.editor.openTextMenu(edit, eventPoint.position.x, eventPoint.position.y)
     }
-    // Read-only (not editing) persistent editors: a click starts editing there.
+    // Read-only (not editing) persistent editors (code, calculations): a click starts editing
+    // there, Shift+click selects blocks; a finger held on it selects the block (touch UIs).
     TapHandler {
+        id: persistentTap
         enabled: !edit.active && edit.persistent
-        onTapped: (eventPoint, button) => edit.editor.editAt(edit.row, eventPoint.position.x, eventPoint.position.y)
+        onTapped: (eventPoint, button) => edit.editor.editAt(edit.row, eventPoint.position.x, eventPoint.position.y,
+                                                             persistentTap.point.modifiers)
+    }
+    TapHandler {
+        enabled: !edit.active && edit.persistent && Theme.touchUi
+        acceptedDevices: PointerDevice.TouchScreen
+        onLongPressed: edit.editor.longPressText(edit.row)
     }
     HoverHandler {
         enabled: !edit.active && edit.persistent && !Theme.touchUi

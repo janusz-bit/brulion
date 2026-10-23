@@ -70,6 +70,7 @@ Rectangle {
 
     InlineEditor {
         id: input
+        objectName: "calcInput"
         x: Theme.space4
         y: Theme.space6
         width: parent.width - x - root.resultsWidth - Theme.space4

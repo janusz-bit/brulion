@@ -25,7 +25,8 @@ import Brulion
 //   * selecting blocks in a day (docs/UI.md "Selecting and copying"): a finger's long press (the
 //     selection mode; the stream holds still while the finger extends it, scrolls at the frame's
 //     edge, the selection tools dock on the frame, Kopiuj), another day's selection ending it,
-//     Back; a mouse drag from a block into the next ones, the stream scrolled at its edge.
+//     Back; a mouse drag from a block into the next ones, the stream scrolled at its edge;
+//     "Zaznacz tekst" of a day over the stream's frame (wheel turns over it never scroll the stream).
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 Item {
     id: test
@@ -487,6 +488,36 @@ Item {
                 test.check(c.selectionAnchorRow === 0 && c.selectedRow === c.lastVisibleRow() && c.editingRow < 0,
                            "the drag ends with the day's blocks selected, nothing edited")
                 c.clearSelection()
+            },
+            // ---- "Zaznacz tekst" of a day: over the stream's frame; wheel turns stay in the view ------
+            // (Passed on, they scrolled the stream underneath — far enough, the day and its view went.)
+            () => test.list.positionViewAtIndex(test.linkRow, ListView.Beginning),
+            () => test.dayAt(test.linkRow) !== null && test.dayAt(test.linkRow).controller.loaded,
+            () => {
+                test.tracked = test.dayAt(test.linkRow)
+                test.tracked.editor.openSelectText()
+            },
+            () => test.findShown(test.list.parent, "selectTextEdit") !== null,
+            () => {
+                const text = test.findShown(test.list.parent, "selectTextEdit")
+                test.check(text.getText(0, text.length).indexOf("Dzień 45, punkt 0") >= 0,
+                           "“Zaznacz tekst” shows the day over the stream's frame")
+                test.contentBefore = test.list.contentY
+                const flick = test.findShown(test.list.parent, "selectTextFlick")
+                flick.contentY = Math.max(0, flick.contentHeight - flick.height) // at the text's end
+                for (let i = 0; i < 5; ++i)
+                    test.events.mouseWheel(flick, flick.width / 2, flick.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+                const close = test.findShown(test.list.parent, "selectTextClose")
+                for (let i = 0; i < 3; ++i)
+                    test.events.mouseWheel(close, close.width / 2, close.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+            },
+            () => {
+                test.check(Math.abs(test.list.contentY - test.contentBefore) < 1 && test.tracked.editor.selectTextOpen,
+                           "wheel turns over the view leave the stream under it: " + test.list.contentY + " vs " + test.contentBefore)
+                EditorInput.sendKey(test.findShown(test.list.parent, "selectTextEdit"), Qt.Key_Back, 0, "")
+            },
+            () => {
+                test.check(!test.tracked.editor.selectTextOpen, "Back closes it")
                 test.list.positionViewAtBeginning()
             },
             // ---- Midnight while editing --------------------------------------------------------------

@@ -77,12 +77,9 @@ Item {
             id: tap
             gesturePolicy: TapHandler.ReleaseWithinBounds
             onTapped: (eventPoint, button) => {
-                if (root.editor.blockTapped(root.block.index))
+                // Shift+click, the touch selection mode (BlockEditor.blockTapped).
+                if (root.editor.blockTapped(root.block.index, tap.point.modifiers))
                     return
-                if ((tap.point.modifiers & Qt.ShiftModifier) && !Theme.touchUi) {
-                    root.editor.extendSelectionTo(root.block.index)
-                    return
-                }
                 const p = eventPoint.position
                 const link = rendered.linkAt(p.x, p.y)
                 if (link !== "")

@@ -24,7 +24,8 @@ FocusScope {
     readonly property PageController controller: editor ? editor.controller : null
     signal closed()
 
-    /// The page at the time the view opened (later changes are not followed: reopen for them).
+    /// The page at the time the view opened (later changes are not followed: reopen for them) —
+    /// in the current theme's colours: a theme change renders it again, the selection kept.
     property string html: ""
     readonly property alias textEdit: text
     readonly property bool hasSelection: text.selectionStart !== text.selectionEnd
@@ -33,6 +34,18 @@ FocusScope {
     Component.onCompleted: {
         html = controller ? controller.readingHtml() : ""
         text.forceActiveFocus()
+    }
+    Connections {
+        target: view.controller
+        function onPaletteChanged() {
+            const start = text.selectionStart
+            const end = text.selectionEnd
+            const y = flick.contentY
+            view.html = view.controller.readingHtml()
+            if (start !== end)
+                text.select(start, end)
+            flick.contentY = Math.max(0, Math.min(y, flick.contentHeight - flick.height))
+        }
     }
 
     /// Copy the selection — or, with nothing selected, the whole page — as plain text and say so.
@@ -54,11 +67,13 @@ FocusScope {
         anchors.fill: parent
         color: Theme.bg
     }
-    // Clicks between the bar and the text, and wheel turns, stay in the view.
+    // Clicks between the bar and the text, and wheel turns, stay in the view: a wheel turn at the
+    // text's end (or over the bar, or a text that fits) must not scroll the page or the journal
+    // stream underneath (a day scrolled away takes the view with it).
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.AllButtons
-        onWheel: (wheel) => wheel.accepted = false
+        onWheel: (wheel) => wheel.accepted = true
     }
 
     // ---- The bar ------------------------------------------------------------------------------
@@ -268,14 +283,21 @@ FocusScope {
                     border.color: Theme.bg
                 }
                 MouseArea {
+                    /// The selection's other end, fixed while this handle is dragged (the handle
+                    /// may cross it: then it is the start that moves past the end, or back).
+                    property int fixedEnd: -1
                     anchors.fill: parent
                     preventStealing: true
+                    onPressed: fixedEnd = handle.atStart ? text.selectionEnd : text.selectionStart
+                    onReleased: fixedEnd = -1
+                    onCanceled: fixedEnd = -1
                     onPositionChanged: (mouse) => {
+                        if (fixedEnd < 0)
+                            return
                         const p = mapToItem(text, mouse.x, mouse.y - handle.height / 2 + 4)
                         const pos = text.positionAt(p.x, p.y)
-                        const other = handle.atStart ? text.selectionEnd : text.selectionStart
-                        if (pos !== other)
-                            text.select(Math.min(pos, other), Math.max(pos, other))
+                        if (pos !== fixedEnd)
+                            text.select(Math.min(pos, fixedEnd), Math.max(pos, fixedEnd))
                         view.keepVisible(Qt.rect(p.x, p.y, 1, Theme.touchTarget))
                     }
                 }

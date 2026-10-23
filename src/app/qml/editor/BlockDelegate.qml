@@ -444,6 +444,7 @@ Item {
         embeds: block.hasEmbeds ? block.embeds : []
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
         onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
+        onBackgroundLongPressed: block.editor.longPressText(block.index)
     }
 
     TransclusionView {

@@ -183,6 +183,12 @@ Rectangle {
                 enabled: !root.block.editing
                 onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
             }
+            // A finger held on it selects the block (touch UIs).
+            TapHandler {
+                enabled: !root.block.editing && Theme.touchUi
+                acceptedDevices: PointerDevice.TouchScreen
+                onLongPressed: root.editor.longPressText(root.block.index)
+            }
         }
 
         // ---- The filters as chips (a tap edits the query) ----------------------------------------
@@ -247,6 +253,12 @@ Rectangle {
             TapHandler {
                 enabled: !root.block.editing
                 onTapped: if (!root.editor.blockTapped(root.block.index)) root.editor.startEditing(root.block.index, -1)
+            }
+            // A finger held on it selects the block (touch UIs).
+            TapHandler {
+                enabled: !root.block.editing && Theme.touchUi
+                acceptedDevices: PointerDevice.TouchScreen
+                onLongPressed: root.editor.longPressText(root.block.index)
             }
         }
 

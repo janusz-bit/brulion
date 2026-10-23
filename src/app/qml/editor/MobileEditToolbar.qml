@@ -296,13 +296,13 @@ Rectangle {
                 iconName: "undo-2"
                 label: qsTr("Undo")
                 enabled: bar.controller !== null && bar.controller.canUndo
-                onClicked: { bar.commitComposition(); bar.controller.undo() }
+                onClicked: { bar.commitComposition(); bar.editor.undoStep(false) }
             }
             ToolButton {
                 iconName: "redo-2"
                 label: qsTr("Redo")
                 enabled: bar.controller !== null && bar.controller.canRedo
-                onClicked: { bar.commitComposition(); bar.controller.redo() }
+                onClicked: { bar.commitComposition(); bar.editor.undoStep(true) }
             }
             ToolButton {
                 objectName: "toolbarSelect"

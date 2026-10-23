@@ -486,13 +486,22 @@ FocusScope {
         if (controller)
             controller.clearSelection()
     }
-    /// A tap or click that would start editing `row` (its text, a frame, a bullet): in the touch
-    /// selection mode it moves the selection's end there instead. True when it was taken.
-    function blockTapped(row) {
+    /// A tap or click that would start editing `row` (its text, a code or table frame, a query, an
+    /// embed, a rule, a bullet or number): Shift+click (`modifiers`, else the event's own:
+    /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it; in the
+    /// touch selection mode a tap moves the selection's end there. True when it was taken.
+    function blockTapped(row, modifiers) {
         // The press that ended a drag selection is no tap (its release may be on a block).
         if (drag.selected)
             return true
-        if (!selectionMode || !controller || row < 0)
+        if (!controller || row < 0)
+            return false
+        const mods = modifiers !== undefined ? modifiers : EditorInput.keyboardModifiers()
+        if (!touch && (mods & Qt.ShiftModifier)) {
+            extendSelectionTo(row)
+            return true
+        }
+        if (!selectionMode)
             return false
         if (controller.blocks.get(row).view !== "frontmatter")
             controller.extendSelectionTo(row)
@@ -577,7 +586,7 @@ FocusScope {
             return false
         const from = edit.selectionStart
         const to = edit.selectionEnd
-        const r = controller.copyEditText(edit.row, from, to)
+        const r = controller.copyEditText(edit.row, from, to, cut === true)
         if (!r.ok) {
             notice(selectionCopyFailure(r.reason), "error")
             return false
@@ -611,9 +620,10 @@ FocusScope {
         return -1
     }
 
-    /// A click on the rendered text of `row` at (x, y) in that text's coordinates.
-    function editAt(row, x, y) {
-        if (blockTapped(row))
+    /// A click on the rendered text of `row` at (x, y) in that text's coordinates (`modifiers`: the
+    /// click's, see blockTapped()).
+    function editAt(row, x, y, modifiers) {
+        if (blockTapped(row, modifiers))
             return
         pendingClickRow = row
         pendingClick = Qt.point(x, y)
@@ -629,6 +639,27 @@ FocusScope {
         if (select && row >= 0)
             controller.selectedRow = row
         list.forceActiveFocus()
+    }
+
+    /// Undo (`redo` false) or redo a step from the editor (keys, the toolbar). A step that brings a
+    /// block selection back ends the editing of another block (PageController.restore): the keys
+    /// go to the selection, and on touch UIs its tools replace the keyboard.
+    function undoStep(redo) {
+        if (!controller)
+            return
+        if (redo)
+            controller.redo()
+        else
+            controller.undo()
+        if (controller.editingRow >= 0 || controller.selectionCount === 0)
+            return
+        closeSuggestions()
+        if (touch) {
+            Qt.inputMethod.hide()
+            selectionMode = true
+        }
+        if (!list.activeFocus)
+            list.forceActiveFocus()
     }
 
     function toggleSourceMode() {
@@ -883,10 +914,8 @@ FocusScope {
         }
         if (ctrl && !alt) {
             switch (event.key) {
-            case Qt.Key_Z:
-                if (shift) controller.redo(); else controller.undo()
-                return true
-            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_Z: undoStep(shift); return true
+            case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E: toggleSourceMode(); return true
             case Qt.Key_Period: controller.toggleFold(row); return true
             case Qt.Key_Return:
@@ -1010,6 +1039,9 @@ FocusScope {
             return false
         case Qt.Key_Escape:
             stopEditing(true)
+            // A touch UI with a keyboard: the selected block has the selection's tools.
+            if (touch && controller.selectionCount > 0)
+                selectionMode = true
             return true
         }
         return false
@@ -1081,18 +1113,20 @@ FocusScope {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0
         const alt = (event.modifiers & Qt.AltModifier) !== 0
-        const multi = controller.multiSelection
+        // Blocks from one end to another (a block selected alone — with the children it brings
+        // along — keeps the block's own keys: Ctrl+Enter changes it, not its children).
+        const range = row >= 0 && controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row
         if (ctrl) {
             switch (event.key) {
-            case Qt.Key_Z: if (shift) controller.redo(); else controller.undo(); return true
-            case Qt.Key_Y: controller.redo(); return true
+            case Qt.Key_Z: undoStep(shift); return true
+            case Qt.Key_Y: undoStep(true); return true
             case Qt.Key_E: toggleSourceMode(); return true
             case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
             case Qt.Key_Return:
             case Qt.Key_Enter:
                 if (row >= 0 && shift)
-                    openTaskStatusMenuFor(row)
-                else if (row >= 0 && multi)
+                    openTaskStatusMenuFor(row, range)
+                else if (row >= 0 && range)
                     controller.cycleSelectionTasks()
                 else if (row >= 0)
                     controller.cycleTask(row)
@@ -1143,6 +1177,9 @@ FocusScope {
             case Qt.Key_Up:
             case Qt.Key_Down:
                 controller.extendSelection(event.key === Qt.Key_Down ? 1 : -1)
+                // A touch UI with a keyboard: the range has the selection's tools and grips.
+                if (touch && controller.selectionCount > 0)
+                    selectionMode = true
                 ensureRowVisible(controller.selectedRow)
                 return true
             case Qt.Key_Insert: pasteOverSelection(); return true
@@ -1151,12 +1188,12 @@ FocusScope {
         }
         if (alt) {
             if (event.key === Qt.Key_Up) {
-                if (multi) controller.moveSelectionUp(); else controller.moveUp(row)
+                if (range) controller.moveSelectionUp(); else controller.moveUp(row)
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
             if (event.key === Qt.Key_Down) {
-                if (multi) controller.moveSelectionDown(); else controller.moveDown(row)
+                if (range) controller.moveSelectionDown(); else controller.moveDown(row)
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
@@ -1189,10 +1226,10 @@ FocusScope {
             deleteSelection()
             return true
         case Qt.Key_Tab:
-            if (multi) controller.indentSelection(); else controller.indent(row)
+            if (range) controller.indentSelection(); else controller.indent(row)
             return true
         case Qt.Key_Backtab:
-            if (multi) controller.outdentSelection(); else controller.outdent(row)
+            if (range) controller.outdentSelection(); else controller.outdent(row)
             return true
         case Qt.Key_Escape:
             leaveSelectionMode()
@@ -1869,9 +1906,13 @@ FocusScope {
     /// Where the keyboard goes when the menu closes: "edit" (the block being edited), "list" (the
     /// selected block, Ctrl+Shift+Enter) or "" (opened with the pointer: wherever it was).
     property string taskMenuReturn: ""
+    /// The menu sets the status of every block from one end of the selection to the other
+    /// (Ctrl+Shift+Enter on a range: PageController.setSelectionTaskStatus), not of one block.
+    property bool taskMenuForSelection: false
     function openTaskStatusMenu(row, item, x, y) {
         if (!controller || row < 0 || row >= controller.blocks.count)
             return
+        taskMenuForSelection = false
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
@@ -1902,9 +1943,10 @@ FocusScope {
         return kind === "listItem" || kind === "paragraph"
     }
     /// Ctrl+Shift+Enter: the menu under the caret of the block being edited, else under the
-    /// selected block's first line.
-    function openTaskStatusMenuFor(row) {
-        if (!canHaveTaskStatus(row))
+    /// selected block's first line; `selection`: for every block of the selected range (`row` is
+    /// its focus end).
+    function openTaskStatusMenuFor(row, selection) {
+        if (!canHaveTaskStatus(row) && selection !== true)
             return
         const edit = activeEditor
         const item = list.itemAtIndex(row) as BlockDelegate
@@ -1916,6 +1958,7 @@ FocusScope {
         } else {
             openTaskStatusMenu(row, null, 0, 0)
         }
+        taskMenuForSelection = selection === true
         if (taskMenu)
             taskMenu.highlightStatus()
     }
@@ -1939,8 +1982,12 @@ FocusScope {
         const row = controller.trackedRow(taskMenuBlock)
         controller.untrack(taskMenuBlock)
         taskMenuBlock = -1
-        if (row >= 0 && status !== taskStatusOf(row))
+        if (taskMenuForSelection) {
+            taskMenuForSelection = false
+            controller.setSelectionTaskStatus(status) // one undo step; what already has it stays
+        } else if (row >= 0 && status !== taskStatusOf(row)) {
             controller.setTaskStatus(row, status)
+        }
     }
     Component {
         id: taskMenuComponent
