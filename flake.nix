@@ -48,7 +48,8 @@
         };
     in
     {
-      # nix build .#brulion                 desktop app (also the default)
+      # nix build .#brulion                 desktop app (also the default; with bin/brulion-cli)
+      # nix build .#brulion-cli             the command line alone (no Qt Quick: small, for servers)
       # nix build .#brulion-android         Android APK, arm64-v8a, unsigned (x86_64-linux hosts)
       # nix build .#brulion-android-x86_64  Android APK for the emulator, unsigned
       # nix build .#brulion-android-aab     arm64-v8a APK + Android App Bundle, unsigned
@@ -58,6 +59,7 @@
         rec {
           brulion = pkgs.callPackage ./nix/package.nix { };
           default = brulion;
+          brulion-cli = pkgs.callPackage ./nix/cli.nix { inherit brulion; };
           brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
         }
         // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
@@ -65,9 +67,19 @@
         )
       );
 
-      # pkgs.brulion built with the nixpkgs of whoever applies the overlay.
+      # nix run .#brulion-cli -- --vault ~/Notatki task list   the command line (docs/CLI.md)
+      apps = forAllSystems (pkgs: {
+        brulion-cli = {
+          type = "app";
+          program = lib.getExe self.packages.${pkgs.stdenv.hostPlatform.system}.brulion-cli;
+          meta.description = "Brulion's command line for scripts and AI agents (brulion-cli mcp: MCP server)";
+        };
+      });
+
+      # pkgs.brulion (and pkgs.brulion-cli) built with the nixpkgs of whoever applies the overlay.
       overlays.default = final: _prev: {
         brulion = final.callPackage ./nix/package.nix { };
+        brulion-cli = final.callPackage ./nix/cli.nix { };
       };
 
       # programs.brulion (desktop app, autostart in the tray) and services.brulion-web (the
@@ -114,8 +126,9 @@
           inherit (pkgs.stdenv.hostPlatform) system;
         in
         {
-          # Builds the app (no unit tests: doCheck = false) and checks the desktop file/AppStream data.
-          inherit (self.packages.${system}) brulion;
+          # Builds the app (no unit tests: doCheck = false) and checks the desktop file/AppStream data;
+          # the command line alone runs a capture on a notebook of its own.
+          inherit (self.packages.${system}) brulion brulion-cli;
 
           # The NixOS module evaluates; its nginx config and autostart entry build.
           nixos-module = import ./nix/tests/module-eval.nix {
