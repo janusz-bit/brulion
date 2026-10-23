@@ -16,7 +16,8 @@
 // This file holds what both ends share: parsing and encoding, the methods and their parameters
 // (checkRequest() refuses unknown methods, unknown parameters and wrong types before the app runs
 // anything), targets ({handle} | {x, y} | {text, objectName, type}), and the checks of who is at
-// the other end and where the socket may be (peerUid(), controlFolderProblem()).
+// the other end and where a socket may be (peerUid(), trustedPeer(), socketFolderProblem()), which
+// the single-instance socket (singleinstance.h) shares.
 #pragma once
 
 #include <QByteArray>
@@ -39,18 +40,28 @@ constexpr qsizetype MaxLineBytes = 1024 * 1024;
 /// folder (the user's runtime folder), "-control" appended.
 QString controlKeyFor(const QString &singleInstanceKey);
 
-/// Why the control socket must not be at `key` ("" when it may): it lives only in a folder of
+/// Why a socket of the app must not be at `key` ("" when it may): it lives only in a folder of
 /// this user that nobody else can write to (a real folder, not a symbolic link) — never a bare
 /// name, which QLocalServer puts into the shared temp folder (no runtime folder,
-/// $XDG_RUNTIME_DIR), where another user could take the name first.
+/// $XDG_RUNTIME_DIR), where another user could take the name first. `what` names the socket in
+/// the reason ("the remote control", "the single-instance socket").
+QString socketFolderProblem(const QString &key, const QString &what);
+/// socketFolderProblem() of the control socket.
 QString controlFolderProblem(const QString &key);
 
 /// The uid of the process at the other end of the connected local socket `descriptor` (Linux:
-/// SO_PEERCRED); -1 when it cannot be told. The server refuses other users' connections, the
-/// client a socket another user listens on.
+/// SO_PEERCRED); -1 when it cannot be told. The servers refuse other users' connections, the
+/// clients a socket another user listens on (trustedPeer()).
 qint64 peerUid(qintptr descriptor);
 /// This process's effective uid; -1 where uids are not known (not Unix).
 qint64 ownUid();
+/// May the process at the other end of a connection (`uid`: peerUid()) talk with this user's
+/// (`own`: ownUid())? On Linux only the same uid — credentials that cannot be read count as a
+/// stranger's; elsewhere uids are not known and the socket file's permissions decide.
+bool trustedPeer(qint64 uid, qint64 own);
+/// Why a client must not talk to the process listening at `key` (`uid`: peerUid() of the
+/// connection), "" when it may (trustedPeer()).
+QString listenerProblem(qint64 uid, const QString &key);
 
 struct ControlRequest {
     QJsonValue id; ///< a number or a string (null when the line had none)

@@ -24,25 +24,28 @@ QString controlKeyFor(const QString &singleInstanceKey)
     return singleInstanceKey + u"-control"_s;
 }
 
-QString controlFolderProblem(const QString &key)
+QString socketFolderProblem(const QString &key, const QString &what)
 {
     if (!QDir::isAbsolutePath(key))
-        return u"There is no private runtime folder ($XDG_RUNTIME_DIR): the remote control does not listen in the "
-               u"shared temporary folder"_s;
+        return u"There is no private runtime folder ($XDG_RUNTIME_DIR): %1 does not listen in the shared temporary "
+               u"folder"_s.arg(what);
 #ifdef Q_OS_UNIX
     const QString folder = QFileInfo(key).absolutePath();
     struct stat st{};
     // lstat: a symbolic link is not followed (its owner decides where it points).
     if (::lstat(QFile::encodeName(folder).constData(), &st) != 0 || !S_ISDIR(st.st_mode))
-        return u"%1 is not a folder (a symbolic link is not used for the remote control)"_s.arg(folder);
+        return u"%1 is not a folder (a symbolic link is not used for %2)"_s.arg(folder, what);
     if (qint64(st.st_uid) != ownUid())
-        return u"%1 belongs to another user: the remote control listens only in the user's own runtime folder"_s.arg(
-                folder);
+        return u"%1 belongs to another user: %2 listens only in the user's own runtime folder"_s.arg(folder, what);
     if (st.st_mode & (S_IWGRP | S_IWOTH))
-        return u"Others can write to %1: the remote control listens only in a folder only the user can change"_s.arg(
-                folder);
+        return u"Others can write to %1: %2 listens only in a folder only the user can change"_s.arg(folder, what);
 #endif
     return {};
+}
+
+QString controlFolderProblem(const QString &key)
+{
+    return socketFolderProblem(key, u"the remote control"_s);
 }
 
 qint64 peerUid(qintptr descriptor)
@@ -65,6 +68,23 @@ qint64 ownUid()
 #else
     return -1;
 #endif
+}
+
+bool trustedPeer(qint64 uid, qint64 own)
+{
+#ifdef Q_OS_LINUX
+    return uid >= 0 && uid == own;
+#else
+    return uid < 0 || own < 0 || uid == own;
+#endif
+}
+
+QString listenerProblem(qint64 uid, const QString &key)
+{
+    if (trustedPeer(uid, ownUid()))
+        return {};
+    return uid < 0 ? u"Could not tell who listens at %1"_s.arg(key)
+                   : u"Another user (uid %1) listens at %2: not this user's Brulion"_s.arg(uid).arg(key);
 }
 
 std::optional<ControlRequest> parseRequest(const QByteArray &rawLine, ControlFailure *failure)
