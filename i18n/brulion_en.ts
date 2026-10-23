@@ -123,7 +123,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="534"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="543"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -131,7 +131,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="544"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="553"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -139,7 +139,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="559"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="568"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -653,7 +653,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="419"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="431"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -691,7 +691,7 @@
 <context>
     <name>SelectionToolbar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="45"/>
+        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="67"/>
         <source>%n block(s) selected</source>
         <translation>
             <numerusform>%n block selected</numerusform>
