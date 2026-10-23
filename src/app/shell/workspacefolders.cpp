@@ -107,11 +107,15 @@ QString Workspace::createFolder(const QString &rawPath)
         const QString segment = raw.trimmed().normalized(QString::NormalizationForm_C);
         if (segment.isEmpty() || segment == u"." || segment == u"..")
             continue;
-        if (hiddenName(segment)) {
-            Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(segment));
+        // Hidden as typed (".notatki": the leading dot would be dropped) or once sanitised
+        // ("logseq?" becomes "logseq").
+        const QString clean = paths::sanitizeFileName(segment);
+        if (hiddenName(segment) || hiddenName(clean)) {
+            Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.")
+                                         .arg(hiddenName(segment) ? segment : clean));
             return {};
         }
-        segments.append(paths::sanitizeFileName(segment));
+        segments.append(clean);
     }
     if (segments.isEmpty())
         return {};

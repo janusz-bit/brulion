@@ -988,6 +988,9 @@ private Q_SLOTS:
         QTest::newRow("hidden below") << u"Projekty/.ukryty"_s << QString();
         QTest::newRow("ignored logseq") << u"logseq"_s << QString();
         QTest::newRow("ignored node_modules") << u"Kod/node_modules"_s << QString();
+        // Hidden once sanitised: the check is on the name the folder would get too.
+        QTest::newRow("ignored after sanitising") << u"logseq:"_s << QString();
+        QTest::newRow("ignored below after sanitising") << u"Kod/node_modules?"_s << QString();
         QTest::newRow("trash") << u".trash"_s << QString();
         QTest::newRow("empty") << u" / "_s << QString();
         QTest::newRow("a file") << u"Dom.md"_s << QString();
@@ -1002,8 +1005,9 @@ private Q_SLOTS:
         QCOMPARE(ws->createFolder(typed), expected);
         if (expected.isEmpty()) {
             QCOMPARE(errors.size(), typed.trimmed() == u"/" ? 0 : 1);
-            if (typed.contains(u"ukryty"_s) || typed.contains(u"logseq"_s))
+            if (typed.contains(u"ukryty"_s) || typed.contains(u"logseq"_s) || typed.contains(u"node_modules"_s))
                 QVERIFY(errors.first().first().toString().contains(u"hidden"_s));
+            QVERIFY(!ws->exists(u"logseq"_s) && !ws->exists(u"Kod/node_modules"_s));
         } else {
             QVERIFY(errors.isEmpty());
             QVERIFY(ws->vault()->stat(expected)->isDir);

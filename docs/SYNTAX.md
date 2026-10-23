@@ -31,8 +31,8 @@ This file is the single source of truth for parsers, renderers, importers and ex
 * **Folders** are created with their names sanitised like page titles (`a:b?` → `a b`, per
   segment) and as the vault spells existing ones (`projekty/Nowy` goes into `Projekty/`); a name
   the vault would hide — a leading `.` or one of the ignored folders below (`logseq`,
-  `node_modules`, …) — is refused ("Folder o nazwie „…” byłby ukryty"). Nothing is ever moved
-  into an ignored folder.
+  `node_modules`, …), also once sanitised (`logseq?`) — is refused ("Folder o nazwie „…” byłby
+  ukryty"). Nothing is ever moved into an ignored folder.
 * **Moving and renaming** (pages, attachments, folders — "Przenieś do…", drag and drop, a `/` in
   a name typed in the Rename dialog is a path from the vault root; in a page title edited in place
   it is sanitised like the other characters a file name cannot have, `TCP/IP` → `TCP IP.md`):
