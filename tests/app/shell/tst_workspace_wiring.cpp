@@ -12,11 +12,15 @@
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
+#include "index/query.h"
+#include "notebook/json.h"
 #include "reminders/reminders.h"
 #include "vault/vault.h"
 
 #include <QDir>
 #include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -209,6 +213,33 @@ private Q_SLOTS:
                          + v.toMap().value(u"time"_s).toString());
         QCOMPARE(kinds, (QStringList{ u"2026-10-14 reminder 17:00"_s, u"2026-10-14 journal "_s, u"2026-10-16 due "_s }));
         QVERIFY(ws->calendarItems(u"2026-01-01"_s, u"2028-01-01"_s).isEmpty()); // too long a range
+    }
+
+    // brulion-cli prints query results with notebook::queryResultJson(): the same keys and values
+    // as the app's Workspace::runQuery maps (plus the CLI's `ref`, added outside).
+    void queryJsonMatchesTheApp()
+    {
+        auto ws = open({{u"Praca.md"_s, u"- [ ] Raport #praca ⏫ 📅 2026-10-15 ⏳ 2026-10-14 🔁 co tydzień\n"
+                                        u"  - notatka ⏰ 2026-10-15 09:00\n- [x] Oferta ✅ 2026-10-13\n"_s},
+                        {u"journals/2026-10-14.md"_s, u"- Żółw #praca ^b1\n"_s}});
+        for (const QString &source : {u"type:tasks status:all"_s, u"type:reminders"_s, u"type:blocks tag:praca"_s,
+                                      u"type:pages"_s, u"type:tasks status:all group:status"_s}) {
+            const QVariantMap app = ws->runQuery(source);
+            QVERIFY2(app.value(u"ok"_s).toBool(), qPrintable(source));
+            const auto parsed = brulion::parseQuery(source);
+            QVERIFY(std::holds_alternative<brulion::Query>(parsed));
+            brulion::QueryOptions options;
+            options.now = QTime(10, 30);
+            const QJsonObject cli = brulion::notebook::queryResultJson(
+                    *ws->index(), brulion::runQuery(std::get<brulion::Query>(parsed), *ws->index(), m_now.date(),
+                                                    Qt::Monday, options));
+            QVariantMap expected = app;
+            for (const char *key : {"ok", "error", "complete"})
+                expected.remove(QString::fromLatin1(key));
+            // QML gets ints, JSON doubles: compare as JSON.
+            QCOMPARE(QJsonDocument(cli).toJson(QJsonDocument::Compact),
+                     QJsonDocument(QJsonObject::fromVariantMap(expected)).toJson(QJsonDocument::Compact));
+        }
     }
 
     void queryHost()

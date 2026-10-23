@@ -565,6 +565,51 @@ private Q_SLOTS:
         QCOMPARE(r.code, 3);
     }
 
+    // The other commands' JSON shapes and exit codes.
+    void moreCommands()
+    {
+        const QString dir = vault({{u"Projekty/Dom.md"_s, "- [ ] Malowanie #dom\n"},
+                                   {u"Projekty/Ogród.md"_s, "- trawa\n"},
+                                   {u"journals/2026-10-13.md"_s, "- wczoraj [[Dom]]\n"},
+                                   {u"Archiwum/.keep"_s, ""}});
+        Run r = run(dir, {u"page"_s, u"list"_s, u"--folder"_s, u"Projekty"_s, u"--sort"_s, u"title"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"total"_s).toInt(), 2);
+        QCOMPARE(r.result().value(u"pages"_s).toArray().first().toObject().value(u"path"_s).toString(),
+                 u"Projekty/Dom.md"_s);
+        r = run(dir, {u"page"_s, u"list"_s});
+        QCOMPARE(r.result().value(u"pages"_s).toArray().size(), 3);
+        r = run(dir, {u"page"_s, u"list"_s, u"--folder"_s, u"Brak"_s});
+        QCOMPARE(r.code, 3);
+        r = run(dir, {u"journal"_s, u"read"_s, u"wczoraj"_s, u"--blocks"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"blocks"_s).toArray().first().toObject().value(u"text"_s).toString(),
+                 u"wczoraj [[Dom]]"_s);
+        r = run(dir, {u"remind"_s, u"add"_s, u"Spotkanie"_s, u"--at"_s, u"9:00"_s, u"--date"_s, u"jutro"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"journals/2026-10-15.md"_s);
+        r = run(dir, {u"--allow-destructive"_s, u"folder"_s, u"move"_s, u"Projekty"_s, u"Archiwum"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Archiwum/Projekty"_s);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-13.md"_s), "- wczoraj [[Dom]]\n"_ba); // still unique
+        r = run(dir, {u"--allow-destructive"_s, u"folder"_s, u"move"_s, u"Archiwum"_s, u"Archiwum/Projekty"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"into_itself"_s);
+        r = run(dir, {u"--allow-destructive"_s, u"folder"_s, u"move"_s, u"Nie ma"_s, u"."_s});
+        QCOMPARE(r.code, 3);
+        r = run(dir, {u"calc"_s, u"--stdin"_s}, "a = 2\nb = 3\na * b\n");
+        QCOMPARE(r.result().value(u"value"_s).toString(), u"6"_s);
+        r = run(dir, {u"--diff"_s, u"journal"_s, u"append"_s, u"z diffem"_s});
+        QVERIFY(r.result().value(u"diff"_s).toString().contains(u"+- z diffem"_s));
+        r = run(dir, {u"--format"_s, u"text"_s, u"task"_s, u"list"_s});
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.out.startsWith("[todo] Malowanie #dom  Archiwum/Projekty/Dom.md#L1@"));
+        r = run(dir, {u"search"_s, u"trawa"_s, u"--limit"_s, u"1"_s});
+        QCOMPARE(r.result().value(u"hits"_s).toArray().size(), 1);
+        r = run(dir, {u"search"_s, u"x"_s, u"--limit"_s, u"dużo"_s});
+        QCOMPARE(r.code, 2);
+    }
+
     void polishArgvAndStdin()
     {
         const QString dir = vault();
