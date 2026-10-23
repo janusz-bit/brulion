@@ -2809,6 +2809,53 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.host.file(Page), u"- lokalnie\n"_s);
     }
 
+    // The page goes (another page, another host, the editor closing, the app sent to the
+    // background) and its last save finds another program's change nobody has reported yet, one
+    // that does not merge: the local text goes to a conflict copy — never lost, never written
+    // over the other version.
+    void flushWithAnUnreportedConflictKeepsTheLocalText_data()
+    {
+        QTest::addColumn<QString>("how");
+        QTest::newRow("another page") << u"setPath"_s;
+        QTest::newRow("destroyed") << u"destroy"_s;
+        QTest::newRow("another host") << u"setHost"_s;
+        QTest::newRow("background") << u"background"_s;
+    }
+    void flushWithAnUnreportedConflictKeepsTheLocalText()
+    {
+        QFETCH(QString, how);
+        FakeEditorHost host;
+        FakeEditorHost other;
+        host.setFile(Page, u"- a\n"_s);
+        host.setFile(u"Inna.md"_s, u"- inna\n"_s);
+        auto page = std::make_unique<PageController>();
+        page->setSaveDelay(10000);
+        page->setMergeFunction(
+                [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
+        page->setHost(&host);
+        page->setPath(Page);
+        page->setEditText(0, u"LOKALNIE ważny tekst"_s, 20);
+        QVERIFY(page->dirty());
+        host.setFile(Page, u"- zdalnie\n"_s); // brulion-cli or Syncthing, not reported yet
+        if (how == u"setPath")
+            page->setPath(u"Inna.md"_s);
+        else if (how == u"destroy")
+            page.reset();
+        else if (how == u"setHost")
+            page->setHost(&other);
+        else
+            Q_EMIT qGuiApp->applicationStateChanged(Qt::ApplicationSuspended);
+        QCOMPARE(host.file(Page), u"- zdalnie\n"_s);
+        QStringList copies;
+        for (const QString &p : host.files()) {
+            if (p.contains(u".conflict-"_s))
+                copies.append(p);
+        }
+        QCOMPARE(copies.size(), 1);
+        QCOMPARE(host.file(copies.first()), u"- LOKALNIE ważny tekst\n"_s);
+        QVERIFY(other.files().isEmpty());
+    }
+
     void saveOfACleanPageAfterAnUnreportedChangeReloads()
     {
         // Typed back to the saved text while the file changed: nothing to save, nothing written

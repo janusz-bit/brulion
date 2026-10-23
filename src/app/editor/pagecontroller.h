@@ -555,7 +555,8 @@ private:
     void writeConflictCopy();
     /// Follow kept blocks after BlockListModel::replaceContent (editing, selection, tracked).
     void remapBlocks(const QHash<quint64, quint64> &mapping);
-    /// Save now, or write the conflict copy while a conflict is unresolved.
+    /// Save now; while a conflict is unresolved (also one this save found) write the conflict
+    /// copy instead — before the page's text goes (another page, another host, destruction).
     void flush();
     void updateTitleRow();
     /// The text written to the file: text() with the lone opening fences of text blocks that

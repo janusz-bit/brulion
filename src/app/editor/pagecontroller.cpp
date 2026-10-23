@@ -219,11 +219,14 @@ PageController::~PageController()
 void PageController::flush()
 {
     // An unresolved conflict keeps the local text in memory only: it goes to a conflict copy
-    // (never over the other version in the file).
+    // (never over the other version in the file). The save itself may find one: its write only
+    // replaces the text last read here, and another program's change nobody reported yet can
+    // turn out not to merge — the page is about to go (another page, the editor closing, the app
+    // quitting or sent to the background), so that local text needs its copy now too.
+    if (!m_conflict)
+        save();
     if (m_conflict)
         writeConflictCopy();
-    else
-        save();
 }
 
 // --- Properties ---------------------------------------------------------------------------------
@@ -232,7 +235,7 @@ void PageController::setHost(EditorHost *host)
 {
     if (m_host == host)
         return;
-    save();
+    flush(); // load() below replaces the text: unsaved edits are written (or copied) first
     if (m_host)
         disconnect(m_host, nullptr, this, nullptr);
     m_host = host;
