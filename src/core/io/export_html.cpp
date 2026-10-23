@@ -8,6 +8,7 @@
 #include "io/importutil_p.h"
 #include "io/links_p.h"
 #include "io/messages_p.h"
+#include "markdown/linkformat.h"
 #include "util/paths.h"
 
 #include <QSet>
@@ -108,23 +109,36 @@ QString blockText(const ParsedNote &note, int index)
     return t.isEmpty() ? note.title : t;
 }
 
+/// The block of the heading of `note` that the link fragment `fragment` names, or -1 — by
+/// markdown::findHeading, the one matcher of the app's links and embeds (markup and tag hashes
+/// ignored, Obsidian heading paths "Budżet#Zadania").
+int linkedHeading(const ParsedNote &note, const QString &fragment)
+{
+    const int found = markdown::findHeading(note.headings, fragment);
+    if (found < 0)
+        return -1;
+    for (int i = 0; i < note.blocks.size(); ++i) {
+        const Block &b = note.blocks[i];
+        if (b.parent < 0 && b.kind == BlockKind::Heading && b.line == note.headings.at(found).line)
+            return i;
+    }
+    return -1;
+}
+
 /// Root blocks of a heading section ("[[Page#Heading]]" embeds): the heading and following roots
 /// up to the next heading of the same or a higher level.
 QList<int> sectionBlocks(const ParsedNote &note, const QString &heading)
 {
     QList<int> out;
-    int level = 0;
-    for (int i = 0; i < note.blocks.size(); ++i) {
+    const int first = linkedHeading(note, heading);
+    if (first < 0)
+        return out;
+    const int level = note.blocks[first].headingLevel;
+    out.append(first);
+    for (int i = first + 1; i < note.blocks.size(); ++i) {
         const Block &b = note.blocks[i];
         if (b.parent >= 0)
             continue;
-        if (level == 0) {
-            if (b.kind == BlockKind::Heading && b.text.compare(heading, Qt::CaseInsensitive) == 0) {
-                level = b.headingLevel;
-                out.append(i);
-            }
-            continue;
-        }
         if (b.kind == BlockKind::Heading && b.headingLevel <= level)
             break;
         out.append(i);
@@ -171,8 +185,17 @@ public:
             const QString prefix = m_idPrefix ? m_idPrefix(target) : QString();
             if (!blockId.isEmpty())
                 return prefix + HtmlRenderer::blockAnchor(blockId);
-            if (!heading.isEmpty())
-                return prefix + HtmlRenderer::headingAnchor(heading);
+            if (!heading.isEmpty()) {
+                // The anchor of the heading the fragment names (a heading path, a copied fragment
+                // without markup) as the heading itself gets it: its block id's, else its text's.
+                const ExportVault::Note *n = m_vault.note(target);
+                const int found = n && n->parsed ? linkedHeading(*n->parsed, heading) : -1;
+                if (found < 0)
+                    return prefix + HtmlRenderer::headingAnchor(heading);
+                const Block &b = n->parsed->blocks.at(found);
+                return prefix
+                       + (b.id.isEmpty() ? HtmlRenderer::headingAnchor(b.text) : HtmlRenderer::blockAnchor(b.id));
+            }
             return QString();
         };
         l.page = [=, this](const QString &target, const QString &heading,
