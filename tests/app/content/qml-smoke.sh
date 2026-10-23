@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # QML smoke test of the content views (ctest tst_content_qml): opens JournalsView, PageView (a
-# page, a daily note, a missing page, the rename / export dialogs, the side panel), AllPagesView,
-# TagsView (all tags, one tag), SearchView, TrashView and HistoryView in the real app with the
+# page, a daily note, a missing page, the rename / export dialogs, the side panel, pages named by
+# tags: a tag's page not written yet with its references, one with a sub-tag), AllPagesView,
+# TagsView (all tags, a tag's overview), SearchView, TrashView and HistoryView in the real app with the
 # sample notebook, desktop and phone sizes, headless, and fails when the app does not start or QML
 # reports a warning or error from one of these files (binding loops, type errors, missing
 # properties, layout loops).
@@ -31,6 +32,9 @@ routes=(
   '{"view":"allPages","sort":"modified"}'
   tags
   '{"view":"tag","tag":"praca"}'
+  '{"view":"tag","tag":"pomysł","overview":true}'
+  '{"view":"page","path":"pomysł.md"}'
+  '{"view":"page","path":"projekt.md"}'
   '{"view":"search","query":"remont"}'
   search
   trash

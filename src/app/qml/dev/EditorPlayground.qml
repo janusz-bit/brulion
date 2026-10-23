@@ -467,6 +467,21 @@ ApplicationWindow {
             },
             () => { key(Qt.Key_Return) },
             () => check(info(r).plainText.indexOf("Remont kuchni") > 0 && !editor.suggestions.opened, "Enter accepts a suggestion: " + info(r).plainText),
+            // `#` offers pages too (a tag names a page, docs/SYNTAX.md §3) — also after a written
+            // date on the line (here the merged "⏳ 2026-10-18") —; a name with a space is written
+            // #[[…]].
+            () => {
+                const e = editor.activeEditor
+                e.forceActiveFocus()
+                e.cursorPosition = e.length
+                e.insert(e.length, " #remont")
+            },
+            () => check(editor.suggestions.visible && editor.suggestions.trigger.mode === "tags"
+                        && editor.suggestions.model.count > 0 && editor.suggestions.model.get(0).icon === "file-text",
+                        "# offers pages next to the tags: " + JSON.stringify(editor.suggestions.model.get(0))),
+            () => { key(Qt.Key_Return) },
+            () => check(editor.activeEditor.text.indexOf(" #[[Remont ") > 0 && !editor.suggestions.opened,
+                        "a page accepted after # is written #[[…]]: " + editor.activeEditor.text),
             () => { key(Qt.Key_Escape) },
             () => check(page.editingRow === -1 && page.selectedRow === r, "Esc stops editing and selects the block"),
             () => { editor.handleSelectionKey({ key: Qt.Key_Down, modifiers: Qt.NoModifier }) },
@@ -1927,6 +1942,12 @@ ApplicationWindow {
         case "tags": {
             const row = page.insertBlockAfter(rowOf("Wywieźć gruz"), "")
             typeInto(row, "Zamówić kontener #za")
+            break
+        }
+        case "tag-pages": {
+            // `#` offers pages too (a tag names a page): pages no tag names yet, with their folder.
+            const row = page.insertBlockAfter(rowOf("Wywieźć gruz"), "")
+            typeInto(row, "Porównać z #rem")
             break
         }
         case "slash": {

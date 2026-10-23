@@ -179,8 +179,14 @@ public:
     /// Page routes the editor could not resolve get their path: {blockId} (a ((block)) of another
     /// page) the page holding the block; {target} (a link to a missing page) the path the page
     /// will have — newPagesFolder/<target>.md, or the journal page for a date — without creating
-    /// it (the editor creates it with its first content). Other routes are returned unchanged.
+    /// it (the editor creates it with its first content). A tag route {view: "tag", tag} — a
+    /// click on #tag — becomes the page the tag names (tagPage()); with `overview: true` it stays
+    /// the tag overview. Other routes are returned unchanged.
     QVariantMap resolveRoute(const QVariantMap &route);
+    /// The page a tag names (docs/SYNTAX.md §3, VaultIndex::resolveTag(): like [[tag]] written at
+    /// the vault root), else the path the page gets when written (newPagePath(): nested tags are
+    /// folders, a date the journal page; named as the tag was first written). "" for no tag.
+    Q_INVOKABLE QString tagPage(const QString &tag);
     /// Path a new page named `target` gets ("Projekty/Dom" -> "<newPagesFolder>/Projekty/Dom.md",
     /// "2026-10-20" -> that day's journal page); "" for an empty name.
     Q_INVOKABLE QString newPagePath(const QString &target) const;
@@ -371,6 +377,20 @@ private:
     void indexingFinished();
     void setReady(bool wasReady);
     QVariantMap queryItem(const brulion::QueryItem &item) const;
+    /// A page renamed or moved: what names it in other files (renamePage(), renameFolder()).
+    struct PageRename {
+        QString oldName;
+        QString newName;
+        QString oldPath;
+        QString newPath;
+        /// The tags naming the page before the rename (VaultIndex::tagsNaming()): only these are
+        /// rewritten — with a duplicate base name `#dom` or `#Stare/Dom` may name the other page.
+        QStringList tagKeys;
+    };
+    /// Rewrite the links (renameLinks()) in `linking` and the tags (renameTags()) in `tagging` of
+    /// a renamed page, each file read at `moved(file)` and written once.
+    void rewriteReferences(const QList<QString> &linking, const QList<QString> &tagging,
+                           const std::function<QString(const QString &)> &moved, const PageRename &rename);
 
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;

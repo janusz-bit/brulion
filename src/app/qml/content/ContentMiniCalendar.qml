@@ -105,8 +105,7 @@ Item {
                     readonly property string day: Workspace.journalDate(entry.modelData.path)
                     readonly property string where: (entry.modelData.time !== "" ? entry.modelData.time + " · " : "")
                                                     + (day !== "" ? DatesHelper.formatShort(day) : Workspace.pageTitle(entry.modelData.path))
-                    // The subtitle is shown as AutoText: a "<" in a file name must stay text.
-                    subtitle: where.indexOf("<") >= 0 ? TextHelper.escapeHtml(where) : where
+                    subtitle: where // plain text (BListItem)
                     iconName: entry.modelData.kind === "reminder" ? (entry.modelData.alarm ? "alarm-clock" : "bell")
                               : entry.modelData.status === "done" ? "circle-check"
                               : entry.modelData.kind === "scheduled" ? "hourglass" : "calendar-check"

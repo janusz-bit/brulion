@@ -382,6 +382,52 @@ private Q_SLOTS:
         QVERIFY(findTags(QString()).isEmpty());
     }
 
+    // tagSyntax(): the tag that names a page, simple when that reads back as the same name.
+    void tagSyntax_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("tag");
+        QTest::newRow("word") << u"praca"_s << u"#praca"_s;
+        QTest::newRow("polish") << u"żółw"_s << u"#żółw"_s;
+        QTest::newRow("nested") << u"Remont/Łazienka"_s << u"#Remont/Łazienka"_s;
+        QTest::newRow("dash and underscore") << u"do-zrobienia_2"_s << u"#do-zrobienia_2"_s;
+        QTest::newRow("trimmed") << u"  praca  "_s << u"#praca"_s;
+        QTest::newRow("trailing slash") << u"a/"_s << u"#a"_s;
+        QTest::newRow("date") << u"2026-10-13"_s << u"#2026-10-13"_s;
+        QTest::newRow("space") << u"Jan Kowalski"_s << u"#[[Jan Kowalski]]"_s;
+        QTest::newRow("plus") << u"C++"_s << u"#[[C++]]"_s;
+        QTest::newRow("hash") << u"C#"_s << u"#[[C#]]"_s;
+        QTest::newRow("digits") << u"2026"_s << u"#[[2026]]"_s;
+        QTest::newRow("arabic digits") << u"١٢"_s << u"#[[١٢]]"_s;
+        QTest::newRow("dot") << u"Dr. Nowak"_s << u"#[[Dr. Nowak]]"_s;
+        QTest::newRow("only punctuation") << u"-_"_s << u"#[[-_]]"_s;
+        QTest::newRow("emoji") << u"☕ kawa"_s << u"#[[☕ kawa]]"_s;
+        QTest::newRow("NFD") << u"z\u0307o\u0301\u0142w"_s << u"#\u017C\u00F3\u0142w"_s;
+        QTest::newRow("empty") << QString() << QString();
+        QTest::newRow("blank") << u"   "_s << QString();
+        QTest::newRow("slashes") << u"//"_s << QString();
+        QTest::newRow("bracket") << u"a]b"_s << QString();
+        QTest::newRow("open bracket") << u"a[b"_s << QString();
+        QTest::newRow("pipe") << u"x|y"_s << QString();
+        QTest::newRow("line break") << u"a\nb"_s << QString();
+    }
+
+    void tagSyntax()
+    {
+        QFETCH(QString, name);
+        QFETCH(QString, tag);
+        QCOMPARE(markdown::tagSyntax(name), tag);
+        // What it writes reads back as the name (the key).
+        if (!tag.isEmpty()) {
+            const QStringList read = tags(u"x "_s + tag + u" y"_s);
+            QCOMPARE(read.size(), 1);
+            QCOMPARE(read.first().toLower(), name.trimmed()
+                                                     .normalized(QString::NormalizationForm_C)
+                                                     .toLower()
+                                                     .remove(QRegularExpression(u"/+$"_s)));
+        }
+    }
+
     // What starts inside a formula is part of the formula (SYNTAX §11), as the editor shows it:
     // no tag, link or URL for the index; whatever starts first wins, as in the InlineRenderer.
     void formulasHideWhatStartsInside_data()

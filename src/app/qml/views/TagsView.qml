@@ -5,11 +5,15 @@ import QtQuick.Templates as T
 import Brulion
 
 // TagsView — routes "tags" (every tag with how often it is used: TagListModel; filter, most used
-// or A–Z with nested tags under their parent) and "tag" ({tag}: one tag — the pages that carry it
-// and every tagged block, grouped by page and rendered like in the editor (TagBlocksModel), its
-// parent and sub-tags, and "Zadania z tym tagiem" for TasksView).
+// or A–Z with nested tags under their parent) and "tag" ({tag}: the tag overview — the pages that
+// carry it and every tagged block, grouped by page and rendered like in the editor
+// (TagBlocksModel), its parent and sub-tags, "Otwórz stronę" / "Utwórz stronę" and "Zadania z tym
+// tagiem" for TasksView).
+// A tag names a page (docs/SYNTAX.md §3): a row of the list opens the tag's page
+// (AppController.openTag), its trailing button the overview; inside the overview the parent and
+// sub-tag chips stay in the overview ({view: "tag", overview: true}).
 //
-// Keys: typing filters the tags; Down moves into the list; Enter opens.
+// Keys: typing filters the tags; Down moves into the list; Enter opens the page.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {
     id: root
@@ -33,6 +37,10 @@ FocusScope {
         neutralFg: Theme.chipNeutralFg, neutralBg: Theme.chipNeutralBg
     })
 
+    /// `tag:` query of a tag key (quoted when it has a space, a comma or a quote).
+    function tagQuery(key) {
+        return "tag:" + (/[\s,"]/.test(key) ? "\"" + key + "\"" : key)
+    }
     function safe(s) {
         return s && s.indexOf("<") >= 0 ? TextHelper.escapeHtml(s) : (s || "")
     }
@@ -140,6 +148,24 @@ FocusScope {
                         required property int index
                         required property var model
                         readonly property bool nested: tags.sortKey === "name" && item.model.depth > 0 && filterField.text.trim() === ""
+                        // The count and the way to the tag overview (a click opens the tag's page).
+                        trailing: Row {
+                            spacing: Theme.space1
+                            BBadge {
+                                anchors.verticalCenter: parent.verticalCenter
+                                count: item.model.count
+                                variant: item.selected ? "accent" : "neutral"
+                            }
+                            BIconButton {
+                                objectName: "tagOverviewButton"
+                                anchors.verticalCenter: parent.verticalCenter
+                                iconName: "tags"
+                                size: "small"
+                                label: qsTr("Tag overview")
+                                Accessible.description: qsTr("Everything tagged #%1").arg(item.model.display)
+                                onClicked: AppController.navigate({ view: "tag", tag: item.model.tag, overview: true })
+                            }
+                        }
                         // Full width (ListView places delegates at x 0); the row itself is inset.
                         width: tagList.width
                         leftInset: root.sideMargin - Theme.space2
@@ -151,8 +177,10 @@ FocusScope {
                         text: nested ? item.model.leaf : item.model.display
                         titleMarkup: item.model.matches.length > 0
                                      ? TextHelper.markMatches(item.model.display, item.model.matches, String(Theme.accentText)) : ""
-                        subtitle: qsTr("%n note(s)", "", item.model.pageCount)
-                        count: item.model.count
+                        // Where a click goes: the page the tag names, when it is not just the tag's name.
+                        subtitle: item.model.pageTitle !== "" && item.model.pageTitle.toLowerCase() !== item.model.leaf.toLowerCase()
+                                  ? qsTr("%n note(s)", "", item.model.pageCount) + " · → " + item.model.pageTitle
+                                  : qsTr("%n note(s)", "", item.model.pageCount)
                         selected: tagList.currentIndex === item.index && tagList.activeFocus
                         onClicked: AppController.openTag(item.model.tag)
                     }
@@ -222,7 +250,7 @@ FocusScope {
                             iconName: "arrow-up"
                             text: "#" + root.safe(tagged.parentTag)
                             Accessible.name: qsTr("Parent tag %1").arg(tagged.parentTag)
-                            onClicked: AppController.openTag(tagged.parentTag)
+                            onClicked: AppController.navigate({ view: "tag", tag: tagged.parentTag, overview: true })
                         }
                         Text {
                             Layout.fillWidth: true
@@ -255,7 +283,7 @@ FocusScope {
                                     interactive: true
                                     text: "#" + root.safe(modelData.display) + " · " + modelData.count
                                     Accessible.name: qsTr("Tag %1").arg(modelData.display)
-                                    onClicked: AppController.openTag(modelData.tag)
+                                    onClicked: AppController.navigate({ view: "tag", tag: modelData.tag, overview: true })
                                 }
                             }
                         }
@@ -264,10 +292,23 @@ FocusScope {
                             Layout.topMargin: Theme.space1
                             spacing: Theme.space2
                             BButton {
+                                // The page the tag names (docs/SYNTAX.md §3), written by its first
+                                // content when it does not exist yet.
+                                objectName: "tagPageButton"
+                                readonly property bool pageExists: {
+                                    void Workspace.revision
+                                    return Workspace.exists(Workspace.tagPage(root.tag))
+                                }
+                                size: "small"
+                                iconName: pageExists ? "file-text" : "plus"
+                                text: pageExists ? qsTr("Open page") : qsTr("Create page")
+                                onClicked: AppController.openTag(root.tag)
+                            }
+                            BButton {
                                 size: "small"
                                 iconName: "list-todo"
                                 text: qsTr("Tasks with this tag")
-                                onClicked: AppController.navigate({ view: "tasks", query: "tag:" + root.tag })
+                                onClicked: AppController.navigate({ view: "tasks", query: root.tagQuery(root.tag) })
                             }
                             BButton {
                                 size: "small"
@@ -302,17 +343,9 @@ FocusScope {
                         journalDate: entry.model.journalDate
                         count: entry.model.count
                         collapsed: entry.model.collapsed
-                        compact: Theme.compact
-                    }
-                    BText {
                         // A page tagged as a whole (its properties) and not in any block.
-                        visible: entry.model.rowType === "page" && entry.model.pageLevel && entry.model.count === 0
-                        anchors.right: parent.right
-                        anchors.verticalCenter: groupHeader.verticalCenter
-                        anchors.rightMargin: root.sideMargin + Theme.space10
-                        text: qsTr("whole page")
-                        variant: "caption"
-                        color: Theme.fgFaint
+                        pageLevel: entry.model.pageLevel && entry.model.count === 0
+                        compact: Theme.compact
                     }
                     ContentRefRow {
                         id: refRow

@@ -827,6 +827,20 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         Fixture tag(u"- #zak\n"_s);
         tag.page.applyCompletion(0, completionTriggerAt(tag.edit(0), 4).toMap(), {{u"insertText"_s, u"zakupy domowe"_s}});
         QCOMPARE(tag.text(), u"- #[[zakupy domowe]] \n"_s);
+        // So do page names that are no simple tag (a tag names a page: docs/SYNTAX.md §3); a simple
+        // one stays simple, Polish letters too; no second space before an existing one.
+        const auto completeTag = [](const QString &name) {
+            Fixture t(u"- #c x\n"_s);
+            t.page.applyCompletion(0, completionTriggerAt(t.edit(0), 2).toMap(),
+                                   {{u"insertText"_s, name}, {u"kind"_s, u"tag"_s}});
+            return t.text();
+        };
+        QCOMPARE(completeTag(u"C++"_s), u"- #[[C++]] x\n"_s);
+        QCOMPARE(completeTag(u"2026"_s), u"- #[[2026]] x\n"_s);
+        QCOMPARE(completeTag(u"Dr. Nowak"_s), u"- #[[Dr. Nowak]] x\n"_s);
+        QCOMPARE(completeTag(u"Jan Kowalski"_s), u"- #[[Jan Kowalski]] x\n"_s);
+        QCOMPARE(completeTag(u"Żółw"_s), u"- #Żółw x\n"_s);
+        QCOMPARE(completeTag(u"Projekty/Dom"_s), u"- #Projekty/Dom x\n"_s);
         // Block refs: a block of this page gets an id; another page's through the host.
         Fixture refs(u"- cel\n- ((ce\n"_s);
         refs.page.startEditing(1, 4);
@@ -2172,7 +2186,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         f.page.activateLink(1, u"page:Nowa%20strona"_s);
         QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), QString());
         QCOMPARE(f.host.lastRoute().value(u"target"_s).toString(), u"Nowa strona"_s);
+        // A tag goes to the host as a tag route: the host opens the page it names.
         f.page.activateLink(0, u"tag:%C5%BC%C3%B3%C5%82w"_s);
+        QCOMPARE(f.host.lastRoute().value(u"view"_s).toString(), u"tag"_s);
         QCOMPARE(f.host.lastRoute().value(u"tag"_s).toString(), u"żółw"_s);
         f.page.activateLink(0, u"ext:https://example.com/a"_s);
         QCOMPARE(urls.size(), 1);

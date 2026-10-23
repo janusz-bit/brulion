@@ -5,6 +5,8 @@
 
 #include "types.h"
 
+#include <QList>
+#include <QString>
 #include <QStringView>
 
 namespace brulion::markdown {
@@ -23,5 +25,33 @@ ParsedNote parseNote(const VaultPath &path, QStringView content, const VaultConf
 
 /// Index (into note.blocks) of the innermost block whose line range contains `line`, or -1.
 int blockAtLine(const ParsedNote &note, int line);
+
+/// How a tag occurrence is written (see findNoteTags()).
+enum class TagForm {
+    Hash,        ///< `#tag` in the text (also in a property value: `tags:: #a`, `typ:: #b`)
+    Bracketed,   ///< `#[[tag with spaces]]`
+    Property,    ///< an item of a `tags::` / `tag::` value that is no `#tag` (`tags:: a, b`)
+    Frontmatter, ///< an item of the frontmatter `tags:` / `tag:` value (`tags: [a, "b"]`)
+};
+
+/// One tag occurrence of a note (findNoteTags()).
+struct NoteTag {
+    QString name;       ///< as written, NFC, without '#' and decoration (key: lower-cased name)
+    qsizetype from = 0; ///< document range: Hash / Bracketed from the '#' to the end of the tag
+    qsizetype to = 0;   ///< (a trailing '/' excluded, `]]` included); Property / Frontmatter
+                        ///< the name only (no quotes, no '#')
+    int line = 0;       ///< 0-based line of `from`
+    TagForm form = TagForm::Hash;
+
+    friend bool operator==(const NoteTag &, const NoteTag &) = default;
+};
+
+/// Every tag occurrence of a whole note, in document order, by exactly the rules parseNote()
+/// tags blocks and pages with (SYNTAX §3): inline `#tag` / `#[[…]]` outside code, fences, HTML
+/// blocks, comments and formulas, the items of `tags::` / `tag::` properties, and the items of
+/// the frontmatter's `tags:` / `tag:` key that can be placed in the YAML source (plain or quoted
+/// scalars, flow and block lists; an item that is a `[[link]]` is left to the links). Tags that
+/// are only the text of a `[[link]]` (`tags:: [[Dom]]`) are links: see renameLinks().
+QList<NoteTag> findNoteTags(QStringView content);
 
 } // namespace brulion::markdown

@@ -298,12 +298,21 @@ private Q_SLOTS:
         app->navigate(view(u"tasks"_s)); // no duplicate
         app->navigate(view(u"nonsense"_s)); // ignored
         QCOMPARE(routeSpy.size(), 1);
+        // A tag opens the page it names (a nested tag: a page in a folder, created when written);
+        // the tag overview is a route of its own.
         app->openTag(u"#projekt/dom"_s);
+        QCOMPARE(app->currentView(), u"page"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"projekt/dom.md"_s);
+        app->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, u"projekt/dom"_s}});
+        QCOMPARE(app->currentView(), u"tag"_s);
         QCOMPARE(app->currentRoute().value(u"tag"_s).toString(), u"projekt/dom"_s);
         app->search(u"żółw"_s);
         QCOMPARE(app->currentRoute().value(u"query"_s).toString(), u"żółw"_s);
         QVERIFY(app->back());
         QCOMPARE(app->currentView(), u"tag"_s);
+        QVERIFY(app->back());
+        QCOMPARE(app->currentView(), u"page"_s);
+        QVERIFY(app->forward());
         QVERIFY(app->forward());
         QCOMPARE(app->currentView(), u"search"_s);
         app->goHome();

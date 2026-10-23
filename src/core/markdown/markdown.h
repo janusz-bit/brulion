@@ -12,9 +12,13 @@
 //                    reminders (⏰, ⏰!, (@…)), block/page properties, frontmatter, headings,
 //                    block ids (^id, id::), journal date
 //                  blockAtLine(note, line) -> block index or -1
+//                  findNoteTags(content) -> NoteTag{name, from, to, line, form: Hash | Bracketed
+//                  | Property | Frontmatter} (every tag occurrence of a note with its range:
+//                  inline, `tags::` items, the frontmatter's `tags:` items)
 //   inline.h       extractInline(text, baseOffset, line) -> {links, tags}; findTags(text) ->
 //                  TagSpan{name, from, to} (every occurrence, for renderers/exporters);
-//                  maskInlineCode(text)
+//                  tagSyntax(name) -> "#name" | "#[[name with spaces]]" | "" (the tag naming a
+//                  page, SYNTAX §3); maskInlineCode(text)
 //   tokens.h       tokens::Due "📅", Scheduled "⏳", Start "🛫", Created "➕", Done "✅",
 //                  Cancelled "❌", Recurrence "🔁", Reminder "⏰", Alarm "⏰!", priorityEmoji(p)
 //                  findTokens(masked) -> QList<Token>, stripTokens(text),
@@ -33,7 +37,10 @@
 //                  toggleTask(content, line, today), removeTaskMarker(content, line) (no status),
 //                  ensureBlockId(content, line) -> {content, id},
 //                  generateBlockId(), listItemRange(content, line) -> {from, to}
-//   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath])
+//   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath]),
+//                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
+//                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`
+//                  keeps those of other pages with that name), tagsToRename(...)
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}

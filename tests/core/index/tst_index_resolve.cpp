@@ -234,7 +234,8 @@ private Q_SLOTS:
         index.update(u"A.md"_s, u"- see [[Nowa Strona]] and [[nowa strona#Sekcja]]"_s);
         QCOMPARE(index.missingPages().size(), 1);
         QCOMPARE(index.missingPages().first().name, u"Nowa Strona"_s);
-        QVERIFY(index.backlinks(u"folder/Nowa Strona.md"_s).isEmpty());
+        // Before the page exists, its references are the links that will resolve to it.
+        QCOMPARE(backlinkSources(index, u"folder/Nowa Strona.md"_s), QStringList({u"A.md"_s, u"A.md"_s}));
 
         index.update(u"folder/Nowa Strona.md"_s, u"hello"_s);
         QCOMPARE(backlinkSources(index, u"folder/Nowa Strona.md"_s), QStringList({u"A.md"_s, u"A.md"_s}));
@@ -242,7 +243,8 @@ private Q_SLOTS:
         QCOMPARE(index.linksTo(u"folder/Nowa Strona.md"_s), QList<VaultPath>{u"A.md"_s});
 
         index.remove(u"folder/Nowa Strona.md"_s);
-        QVERIFY(index.backlinks(u"folder/Nowa Strona.md"_s).isEmpty());
+        QCOMPARE(backlinkSources(index, u"folder/Nowa Strona.md"_s), QStringList({u"A.md"_s, u"A.md"_s}));
+        QVERIFY(index.backlinks(u"folder/Inna.md"_s).isEmpty());
         QCOMPARE(index.missingPages().size(), 1);
     }
 

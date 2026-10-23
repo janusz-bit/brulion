@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Screenshots of the content views in the real app with the sample notebook: journals, pages
-# (with the side panel, the rename and export dialogs, unlinked mentions), all pages, tags, a
-# tag, search, trash and history — × {desktop 1280×800, phone 412×915 --touch} × {light, dark}
+# (with the side panel, the rename and export dialogs, unlinked mentions, a tag's page with its
+# references — also a nested tag's), all pages, tags, a tag's overview, search, trash and history — × {desktop 1280×800, phone 412×915 --touch} × {light, dark}
 # — into tests/screenshots/content-<shot>-<size>-<theme>.png. QML warnings of the run are
 # printed. Fresh temporary XDG homes and the fixed clock --now keep the images reproducible.
 #
@@ -45,6 +45,8 @@ declare -A shot_route=(
   [side-outline]='{"view":"page","path":"Witaj w Brulionie.md","open":"outline"}'
   [side-calendar]='{"view":"journal","date":"2026-10-13","open":"calendar"}'
   [page-missing]='{"view":"page","path":"Pomysły na prezenty.md"}'
+  [page-tag]='{"view":"page","path":"pomysł.md"}'
+  [page-tag-nested]='{"view":"page","path":"projekt/dom.md"}'
   [allpages]='allPages'
   [allpages-modified]='{"view":"allPages","sort":"modified"}'
   [tags]='tags'
@@ -86,8 +88,8 @@ declare -A shot_trash=(
 declare -A shot_empty=(
   [empty-journals]=1 [empty-allpages]=1 [empty-tags]=1 [empty-search]=1
 )
-all_shots=(journals journals-day journals-missed journals-jump journals-write journal journal-new page page-refs page-rename page-export page-missing
-  side-links side-outline side-calendar
+all_shots=(journals journals-day journals-missed journals-jump journals-write journal journal-new page page-refs page-rename page-export page-missing page-tag
+  page-tag-nested side-links side-outline side-calendar
   allpages allpages-modified tags tag search search-empty trash trash-full history
   empty-journals empty-allpages empty-tags empty-search)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi

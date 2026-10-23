@@ -9,7 +9,8 @@
 // Roles: tag (canonical key, lower case), display (as first written: "Praca"), count (tagged
 // blocks, plus one per page tagged only at page level), pageCount, depth (nesting: 0 for "praca",
 // 1 for "praca/projekt"), leaf ("projekt"), parent ("praca"), matches (positions of the filter
-// words in `display`).
+// words in `display`), page (the note the tag names — docs/SYNTAX.md §3 — "" when it names none
+// yet), pageTitle (its title).
 #pragma once
 
 #include "workspacemodel.h"
@@ -35,6 +36,8 @@ public:
         LeafRole,
         ParentRole,
         MatchesRole,
+        PageRole,
+        PageTitleRole,
     };
     Q_ENUM(Role)
 
@@ -66,6 +69,7 @@ private:
         int count = 0;
         int pageCount = 0;
         QVariantList matches;
+        QString page;
 
         friend bool operator==(const Tag &, const Tag &) = default;
     };

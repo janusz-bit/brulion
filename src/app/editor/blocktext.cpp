@@ -937,7 +937,8 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
             static const QRegularExpression canonical(u"^\\d{4}-\\d{2}-\\d{2}"_s);
             if (!canonical.matchView(m.capturedView(2)).hasMatch())
                 return result(u"date"_s, m.capturedStart(2), m.capturedStart(2), m.captured(1));
-            return none;
+            // A written date: what follows it on the line (a #tag, an @date, a /command) may
+            // still complete.
         }
     }
     // @date

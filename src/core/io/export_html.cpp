@@ -192,8 +192,7 @@ public:
                 return std::nullopt;
             return m_attachmentUrl(*resolved);
         };
-        if (m_tagHref)
-            l.tag = m_tagHref;
+        l.tag = [this](const QString &tag) { return tagLink(tag); };
         l.block = [=, this](const QString &id) -> std::optional<std::pair<QString, QString>> {
             const auto block = m_vault.block(id);
             if (!block)
@@ -236,13 +235,22 @@ public:
         return renderer.renderNote(*n.parsed);
     }
 
+    /// Where a tag leads: the page it names (SYNTAX §3) when that note is exported, else the
+    /// tag's own page (when the export has them).
+    QString tagLink(const QString &tag) const
+    {
+        if (const auto page = m_vault.index().resolveTag(tag); page && m_vault.note(*page))
+            return m_noteHref(*page, {});
+        return m_tagHref ? m_tagHref(tag) : QString();
+    }
+
     QString tagsLine(const ExportVault::Note &n) const
     {
         if (n.parsed->tags.isEmpty())
             return {};
         QStringList items;
         for (const QString &t : n.parsed->tags) {
-            const QString href = m_tagHref ? m_tagHref(t) : QString();
+            const QString href = tagLink(t);
             if (href.isEmpty())
                 items.append(u"<span class=\"tag\">#"_s + esc(t) + u"</span>"_s);
             else
@@ -267,6 +275,22 @@ public:
             items.append(u"<li><a href=\""_s + esc(m_noteHref(b.path, {})) + u"\">"_s + esc(source->parsed->title)
                          + u"</a><span class=\"excerpt\">"_s
                          + renderer.renderInline(blockText(*source->parsed, b.blockIndex)) + u"</span></li>"_s);
+        }
+        // Tags name pages too: the tagged blocks, and pages tagged as a whole (title only).
+        for (const TagReference &r : m_vault.index().tagReferences(n.path)) {
+            const QString key = r.path + u'#' + QString::number(r.blockIndex);
+            const ExportVault::Note *source = m_vault.note(r.path);
+            if (seen.contains(key) || !source || !source->parsed)
+                continue;
+            seen.insert(key);
+            const HtmlRenderer renderer(links(r.path, n.path, false));
+            const QString excerpt = r.blockIndex >= 0
+                                            ? u"<span class=\"excerpt\">"_s
+                                                      + renderer.renderInline(blockText(*source->parsed, r.blockIndex))
+                                                      + u"</span>"_s
+                                            : QString();
+            items.append(u"<li><a href=\""_s + esc(m_noteHref(r.path, {})) + u"\">"_s + esc(source->parsed->title)
+                         + u"</a>"_s + excerpt + u"</li>"_s);
         }
         if (items.isEmpty())
             return {};

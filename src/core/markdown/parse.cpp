@@ -40,6 +40,7 @@ struct Ctx {
     const Structure *st = nullptr;
     QTime defaultTime;
     QList<Link> links;
+    QList<NoteTag> *tags = nullptr; ///< collects tag occurrences (findNoteTags()) when set
 };
 
 bool isPlanningLine(QStringView content)
@@ -513,6 +514,13 @@ bool isTagKey(const QString &key)
 struct LineScan {
     QString id;
     QStringList extraTags;
+    /// A `tags::` / `tag::` value as written (findNoteTags()): document offset of value[0], line.
+    struct TagValue {
+        qsizetype offset = 0;
+        int line = 0;
+        QString value;
+    };
+    QList<TagValue> tagValues;
 };
 
 /// Read `key:: value` property lines (into `props`), mark Logseq planning lines and find the
@@ -556,8 +564,12 @@ LineScan readLines(const Structure &st, const Node &node, QList<LineInfo> &infos
             props.insert(key, value);
             if (key == u"id" && !rawValue.isEmpty() && id.isEmpty() && node.kind != BlockKind::Frontmatter)
                 id = rawValue;
-            if (isTagKey(key) && value.typeId() == QMetaType::QStringList)
+            if (isTagKey(key) && value.typeId() == QMetaType::QStringList) {
                 out.extraTags.append(value.toStringList());
+                const qsizetype from = std::min(valueStart, valueEnd);
+                out.tagValues.append({info.own->view.offset + from, info.own->view.line,
+                                      text.sliced(from, valueEnd - from).toString()});
+            }
             info.cls = LineClass::Property;
         } else if (planningCandidate && isPlanningLine(content)) {
             info.cls = LineClass::Planning;
@@ -653,6 +665,20 @@ void blockReminders(const QList<LineInfo> &infos, Block &block, const Ctx &ctx)
     }
 }
 
+/// findNoteTags(): a block's inline tags and the items of its `tags::` values.
+void collectTags(const QList<TagHit> &hits, const LineScan &lines, Ctx &ctx)
+{
+    const QStringView content = ctx.st->content;
+    QSet<qsizetype> hashes;
+    for (const TagHit &t : hits) {
+        hashes.insert(t.from);
+        const bool bracketed = charAt(content, t.from + 1) == u'[';
+        ctx.tags->append(NoteTag{t.name, t.from, t.to, t.line, bracketed ? TagForm::Bracketed : TagForm::Hash});
+    }
+    for (const LineScan::TagValue &v : lines.tagValues)
+        ctx.tags->append(propertyTagItems(v.value, v.offset, v.line, [&](qsizetype p) { return hashes.contains(p); }));
+}
+
 /// Build one Block (without tree links) from a structural node.
 Block buildBlock(const Node &node, Ctx &ctx)
 {
@@ -689,6 +715,8 @@ Block buildBlock(const Node &node, Ctx &ctx)
     block.id = lines.id;
 
     ctx.links.append(inl.links);
+    if (ctx.tags)
+        collectTags(inl.tags, lines, ctx);
     if (!inl.tags.isEmpty() || !lines.extraTags.isEmpty()) {
         QStringList names;
         for (const TagHit &t : inl.tags)
@@ -739,11 +767,12 @@ ParsedNote parseNote(const VaultPath &path, QStringView content, const VaultConf
 }
 
 ParsedNote detail::parseNoteWith(const VaultPath &path, QStringView content, const VaultConfig &config,
-                                 StructureOptions options)
+                                 StructureOptions options, QList<NoteTag> *tagSites)
 {
     const Structure st = parseStructure(content.toString(), options);
     Ctx ctx;
     ctx.st = &st;
+    ctx.tags = tagSites;
     ctx.defaultTime = config.defaultReminderTime.isValid() ? config.defaultReminderTime : QTime(9, 0);
 
     ParsedNote note;

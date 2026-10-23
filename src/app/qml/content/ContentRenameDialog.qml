@@ -3,8 +3,9 @@ import QtQuick
 import QtQuick.Layouts
 import Brulion
 
-// ContentRenameDialog — confirms renaming a page when other notes link to it: how many links
-// in how many notes Workspace.renamePage rewrites. renamed(path) follows a successful rename.
+// ContentRenameDialog — confirms renaming a page when other notes link to it or carry a tag that
+// names it (docs/SYNTAX.md §3): how many links and tags in how many notes Workspace.renamePage
+// rewrites. renamed(path) follows a successful rename.
 //
 //   ContentRenameDialog { id: renameDialog; onRenamed: (path) => … }
 //   renameDialog.openFor(page.path, "Nowy tytuł", tools.renameImpact(page.path))
@@ -15,6 +16,7 @@ BDialog {
     property string newTitle
     property int notes: 0
     property int links: 0
+    property int tags: 0
 
     signal renamed(string newPath)
 
@@ -23,13 +25,16 @@ BDialog {
         newTitle = title
         notes = impact && impact.notes ? impact.notes : 0
         links = impact && impact.links ? impact.links : 0
+        tags = impact && impact.tags ? impact.tags : 0
         open()
     }
     /// Rename now (also without the dialog when nothing links to the page).
     function rename() {
         const renamed = Workspace.renamePage(dialog.path, dialog.newTitle)
         if (renamed !== "" && renamed !== dialog.path) {
-            AppController.toast(dialog.links > 0
+            AppController.toast(dialog.tags > 0
+                                ? qsTr("Renamed to “%1”, %n link(s) and tag(s) updated", "", dialog.links + dialog.tags).arg(Workspace.pageTitle(renamed))
+                                : dialog.links > 0
                                 ? qsTr("Renamed to “%1”, %n link(s) updated", "", dialog.links).arg(Workspace.pageTitle(renamed))
                                 : qsTr("Renamed to “%1”").arg(Workspace.pageTitle(renamed)), "success")
             dialog.renamed(renamed)
@@ -54,8 +59,10 @@ BDialog {
         BIcon { name: "link"; size: Theme.iconSize; color: Theme.fgMuted; Layout.alignment: Qt.AlignTop }
         BText {
             Layout.fillWidth: true
-            // One sentence (the verb agrees with the number of links in Polish); %1 = "in %n note(s)".
-            text: qsTr("%n link(s) %1 will be updated to the new name.", "", dialog.links)
+            // One sentence (the verb agrees with the number in Polish); %1 = "in %n note(s)". Tags
+            // that name the page follow it too (#old, #[[old]], tags:: and frontmatter tags).
+            text: (dialog.tags > 0 ? qsTr("%n link(s) and tag(s) %1 will be updated to the new name.", "", dialog.links + dialog.tags)
+                                   : qsTr("%n link(s) %1 will be updated to the new name.", "", dialog.links))
                   .arg(qsTr("in %n note(s)", "", dialog.notes))
             variant: "muted"
             wrapMode: Text.Wrap

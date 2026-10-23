@@ -245,11 +245,12 @@ void GroupedRefsModel::refresh()
     int hidden = 0;
     for (const Group &g : std::as_const(groups)) {
         const bool collapsed = m_collapsed.contains(g.path);
-        // Past the limit: count what is left out, list no more groups.
+        // A page tagged as a whole is one reference: its header.
+        const int whole = m_pageLevelCounts && g.pageLevel ? 1 : 0;
+        // Past the limit: count what is left out ("show more" lists it), list no more groups.
         if (m_limit > 0 && shown >= m_limit) {
-            refs += int(g.refs.size());
-            if (!collapsed)
-                hidden += int(g.refs.size());
+            refs += int(g.refs.size()) + whole;
+            hidden += (collapsed ? 0 : int(g.refs.size())) + whole;
             continue;
         }
         Row h;
@@ -266,7 +267,7 @@ void GroupedRefsModel::refresh()
             continue;
         keys.insert(h.key);
         next.append(h);
-        refs += h.count;
+        refs += h.count + whole;
         if (h.collapsed)
             continue;
         for (const Ref &r : g.refs) {
@@ -367,7 +368,10 @@ bool GroupedRefsModel::setTaskStatus(int row, const QString &status)
 
 // ---- BacklinksModel ---------------------------------------------------------------------------------
 
-BacklinksModel::BacklinksModel(QObject *parent) : GroupedRefsModel(parent) { }
+BacklinksModel::BacklinksModel(QObject *parent) : GroupedRefsModel(parent)
+{
+    setPageLevelCounts(true); // a page tagged as a whole is one reference
+}
 
 void BacklinksModel::setPath(const QString &path)
 {
@@ -409,23 +413,66 @@ QList<GroupedRefsModel::Group> BacklinksModel::collect()
 QList<GroupedRefsModel::Group> BacklinksModel::collectLinked()
 {
     const VaultIndex *idx = vaultIndex();
+    const QString path = paths::normalize(m_path);
     QList<Group> groups;
     QHash<QString, qsizetype> groupOf;
-    QSet<QString> seen;
-    for (const Backlink &b : idx->backlinks(paths::normalize(m_path))) {
-        qsizetype gi = groupOf.value(b.path, -1);
+    const auto group = [&](const QString &source) -> Group & {
+        qsizetype gi = groupOf.value(source, -1);
         if (gi < 0) {
-            groups.append(groupFor(b.path));
+            groups.append(groupFor(source));
             gi = groups.size() - 1;
-            groupOf.insert(b.path, gi);
+            groupOf.insert(source, gi);
         }
-        // One row per referencing block (a block may link several times).
+        return groups[gi];
+    };
+    // One row per referencing block (a block may link several times, and also carry a tag).
+    QSet<QString> seen;
+    for (const Backlink &b : idx->backlinks(path)) {
+        Group &g = group(b.path);
         const QString key = b.path + u'\n'
                             + (b.blockIndex >= 0 ? QString::number(b.blockIndex) : u"L"_s + QString::number(b.link.line));
         if (seen.contains(key))
             continue;
         seen.insert(key);
-        groups[gi].refs.append(b.blockIndex >= 0 ? refForBlock(b.path, b.blockIndex) : refForLine(b.path, b.link.line));
+        g.refs.append(b.blockIndex >= 0 ? refForBlock(b.path, b.blockIndex) : refForLine(b.path, b.link.line));
+    }
+    // A tag names a page (docs/SYNTAX.md §3): the tagged blocks join their page's group; a page
+    // tagged as a whole marks its group ("cała strona").
+    const QList<TagReference> tagged = idx->tagReferences(path);
+    for (const TagReference &r : tagged) {
+        Group &g = group(r.path);
+        if (r.blockIndex < 0) {
+            g.pageLevel = true;
+            continue;
+        }
+        const QString key = r.path + u'\n' + QString::number(r.blockIndex);
+        if (seen.contains(key))
+            continue;
+        seen.insert(key);
+        g.refs.append(refForBlock(r.path, r.blockIndex));
+    }
+    if (!tagged.isEmpty()) {
+        // Journals first (newest first), then the other pages by path — the order of both lists —
+        // and the references of a page in document order.
+        const auto journal = [idx](const QString &p) {
+            const ParsedNote *n = idx->note(p);
+            return n && n->journalDate ? *n->journalDate : QDate();
+        };
+        std::stable_sort(groups.begin(), groups.end(), [&](const Group &a, const Group &b) {
+            const QDate da = journal(a.path);
+            const QDate db = journal(b.path);
+            if (da.isValid() != db.isValid())
+                return da.isValid();
+            if (da.isValid() && da != db)
+                return da > db;
+            return a.path < b.path;
+        });
+        for (Group &g : groups)
+            std::stable_sort(g.refs.begin(), g.refs.end(), [](const Ref &a, const Ref &b) { return a.line < b.line; });
+    }
+    if (m_taggedCount != tagged.size()) {
+        m_taggedCount = int(tagged.size());
+        Q_EMIT taggedCountChanged();
     }
     return groups;
 }

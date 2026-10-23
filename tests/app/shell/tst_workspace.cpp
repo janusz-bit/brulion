@@ -667,6 +667,18 @@ private Q_SLOTS:
         QVERIFY(tagNames.contains(u"projekt/dom"_s));
         QCOMPARE(ws->suggestTags(u"dom"_s).first().toMap().value(u"tag"_s).toString(), u"projekt/dom"_s);
         QCOMPARE(ws->suggestTags(QString(), 2).size(), 2);
+        // A tag names a page: pages are offered too, after the tags that start with the text, once
+        // (a tag naming a page is that page), never by a fuzzy match.
+        const QVariantList zurek = ws->suggestTags(u"zur"_s);
+        QCOMPARE(zurek.size(), 1);
+        QCOMPARE(zurek.first().toMap().value(u"tag"_s).toString(), u"Żurek"_s);
+        QCOMPARE(zurek.first().toMap().value(u"kind"_s).toString(), u"page"_s);
+        QCOMPARE(zurek.first().toMap().value(u"path"_s).toString(), u"Żurek.md"_s);
+        const QVariantList remont = ws->suggestTags(u"remont"_s);
+        QVERIFY(!remont.isEmpty());
+        for (const QVariant &v : remont)
+            QCOMPARE(v.toMap().value(u"path"_s).toString(), u"Projekty/Remont mieszkania.md"_s);
+        QVERIFY(ws->suggestTags(u"qqq"_s).isEmpty());
 
         // Blocks.
         const QVariantList blocks = ws->suggestBlocks(u"budzet"_s);
@@ -782,10 +794,14 @@ private Q_SLOTS:
     {
         auto ws = open();
         QSignalSpy nav(ws.get(), &Workspace::navigationRequested);
+        // A tag opens the page it names (here one not written yet); the overview stays a tag route.
         ws->navigate({ { u"view"_s, u"tag"_s }, { u"tag"_s, u"kuchnia"_s } }, true);
         QCOMPARE(nav.size(), 1);
-        QCOMPARE(nav.first().at(0).toMap().value(u"tag"_s).toString(), u"kuchnia"_s);
+        QCOMPARE(nav.first().at(0).toMap(), QVariantMap({{u"view"_s, u"page"_s}, {u"path"_s, u"kuchnia.md"_s}}));
         QCOMPARE(nav.first().at(1).toBool(), true);
+        ws->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, u"kuchnia"_s}, {u"overview"_s, true}});
+        QCOMPARE(nav.last().at(0).toMap().value(u"view"_s).toString(), u"tag"_s);
+        QCOMPARE(nav.last().at(0).toMap().value(u"tag"_s).toString(), u"kuchnia"_s);
         ws->openUrl(QUrl(u"javascript:alert(1)"_s)); // refused (only a warning)
     }
 
@@ -832,7 +848,119 @@ private Q_SLOTS:
         // Unknown block, other views and routes with a path are passed on unchanged.
         QVERIFY(pathOf({ { u"view"_s, u"page"_s }, { u"blockId"_s, u"nieznany"_s } }).isEmpty());
         QCOMPARE(pathOf({ { u"view"_s, u"page"_s }, { u"path"_s, u"x.md"_s }, { u"target"_s, u"y"_s } }), u"x.md"_s);
-        QCOMPARE(routeOf({ { u"view"_s, u"tag"_s }, { u"tag"_s, u"dom"_s } }).value(u"tag"_s).toString(), u"dom"_s);
+        QCOMPARE(routeOf({{u"view"_s, u"tags"_s}}).value(u"view"_s).toString(), u"tags"_s);
+    }
+
+    // A tag names a page (docs/SYNTAX.md §3): like [[tag]] written at the vault root; a missing
+    // page goes where a link's would (nested tags: folders; a date: the journal page).
+    void tagRoutesOpenPages()
+    {
+        auto ws = open({{u"Projekty/Dom.md"_s, u"---\naliases: [Remont]\n---\n- x\n"_s},
+                        {u"Archiwum/Stare/Dom.md"_s, u"- stary\n"_s},
+                        {u"Ludzie/Jan Kowalski.md"_s, u"- tel.\n"_s},
+                        {u"Notatki.md"_s, u"- #Praca na dziś\n- #praca jutro i #dom\n"_s},
+                        {u".brulion/config.json"_s, uR"({"version": 1, "newPagesFolder": "strony"})"_s}});
+        QSignalSpy nav(ws.get(), &Workspace::navigationRequested);
+        const auto pathOf = [&](const QString &tag) {
+            nav.clear();
+            ws->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, tag}});
+            const QVariantMap r = nav.size() == 1 ? nav.first().at(0).toMap() : QVariantMap();
+            return r.value(u"view"_s) == u"page"_s ? r.value(u"path"_s).toString() : QString();
+        };
+        QCOMPARE(pathOf(u"Dom"_s), u"Projekty/Dom.md"_s);     // the shortest path
+        QCOMPARE(pathOf(u"#remont"_s), u"Projekty/Dom.md"_s); // an alias
+        QCOMPARE(pathOf(u"archiwum/stare/dom"_s), u"Archiwum/Stare/Dom.md"_s);
+        QCOMPARE(pathOf(u"Jan Kowalski"_s), u"Ludzie/Jan Kowalski.md"_s);
+        // Missing pages are not created: the first spelling names the file whichever was clicked.
+        QCOMPARE(pathOf(u"praca"_s), u"strony/Praca.md"_s);
+        QCOMPARE(pathOf(u"Nowy/Tag/"_s), u"strony/Nowy/Tag.md"_s);
+        QCOMPARE(pathOf(u"2026-10-13"_s), u"journals/2026-10-13.md"_s);
+        QCOMPARE(pathOf(u"żółw"_s), u"strony/żółw.md"_s);
+        QVERIFY(!ws->exists(u"strony/Praca.md"_s));
+        QCOMPARE(ws->tagPage(u"#[[Jan Kowalski]]"_s), u"Ludzie/Jan Kowalski.md"_s);
+        QVERIFY(ws->tagPage(u"#"_s).isEmpty());
+        // Folders as the vault spells them (case-insensitive storage).
+        QVERIFY(ws->createFolder(u"strony/Projekty"_s));
+        QCOMPARE(ws->tagPage(u"projekty/łódź"_s), u"strony/Projekty/łódź.md"_s);
+    }
+
+    void renameRewritesTags()
+    {
+        auto ws = open({
+                {u"Projekty/Dom.md"_s, u"# Dom\n- mój #dom ^d1\n"_s},
+                {u"Dziennik.md"_s, u"- #dom i #Dom, #[[dom]] (#DOM)\n- `#dom` w kodzie, #dom/kuchnia, #domek\n"_s},
+                {u"Lista.md"_s, u"---\ntags: [dom, zakupy]\n---\n- a\n  tags:: dom, pilne\n"_s},
+                {u"Obcy.md"_s, u"- [[Dom]] tylko link\n"_s},
+        });
+        QCOMPARE(ws->renamePage(u"Projekty/Dom.md"_s, u"Nowy dom"_s), u"Projekty/Nowy dom.md"_s);
+        QCOMPARE(
+                ws->readFile(u"Dziennik.md"_s),
+                u"- #[[Nowy dom]] i #[[Nowy dom]], #[[Nowy dom]] (#[[Nowy dom]])\n- `#dom` w kodzie, #dom/kuchnia, #domek\n"_s);
+        QCOMPARE(ws->readFile(u"Lista.md"_s), u"---\ntags: [Nowy dom, zakupy]\n---\n- a\n  tags:: Nowy dom, pilne\n"_s);
+        QCOMPARE(ws->readFile(u"Projekty/Nowy dom.md"_s), u"# Dom\n- mój #[[Nowy dom]] ^d1\n"_s);
+        QCOMPARE(ws->readFile(u"Obcy.md"_s), u"- [[Nowy dom]] tylko link\n"_s);
+        QCOMPARE(ws->tagPage(u"Nowy dom"_s), u"Projekty/Nowy dom.md"_s);
+        // One history step per rewritten file.
+        QCOMPARE(ws->vault()->history()->list(u"Dziennik.md"_s).size(), 1);
+    }
+
+    // With a duplicate base name, #dom names the shorter path: renaming the other page keeps it.
+    void renameDuplicateBaseNameKeepsOtherTags()
+    {
+        auto ws = open({{u"Projekty/Dom.md"_s, u"- x\n"_s},
+                        {u"Archiwum/Stare/Dom.md"_s, u"- y\n"_s},
+                        {u"Notatki.md"_s, u"- #dom i #Archiwum/Stare/Dom oraz #Stare/Dom\n"_s}});
+        QCOMPARE(ws->renamePage(u"Archiwum/Stare/Dom.md"_s, u"Stary"_s), u"Archiwum/Stare/Stary.md"_s);
+        QCOMPARE(ws->readFile(u"Notatki.md"_s), u"- #dom i #Archiwum/Stare/Stary oraz #Stare/Stary\n"_s);
+    }
+
+    // A path-suffix tag names the shortest page ending so (#Stare/Dom: Inne/Stare/Dom.md, not
+    // Archiwum/Stare/Dom.md): renaming or moving the other page leaves it alone.
+    void renameKeepsSuffixTagsOfOtherPages()
+    {
+        const QHash<QString, QString> files{{u"Archiwum/Stare/Dom.md"_s, u"- a\n"_s},
+                                            {u"Inne/Stare/Dom.md"_s, u"- b\n"_s},
+                                            {u"Notatki.md"_s, u"- #Stare/Dom i #Archiwum/Stare/Dom\n"_s}};
+        auto ws = open(files);
+        QCOMPARE(ws->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+        QCOMPARE(ws->renamePage(u"Archiwum/Stare/Dom.md"_s, u"Stary"_s), u"Archiwum/Stare/Stary.md"_s);
+        QCOMPARE(ws->readFile(u"Notatki.md"_s), u"- #Stare/Dom i #Archiwum/Stare/Stary\n"_s);
+        QCOMPARE(ws->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+
+        auto moved = open(files);
+        QCOMPARE(moved->renameFolder(u"Archiwum"_s, u"Archiwa"_s), u"Archiwa"_s);
+        QCOMPARE(moved->readFile(u"Notatki.md"_s), u"- #Stare/Dom i #Archiwa/Stare/Dom\n"_s);
+        QCOMPARE(moved->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+    }
+
+    // "#" completion: one entry per tag key, and diacritics count — #lodz does not name Łódź, so
+    // the page is offered too; a tag in use (here one matched inside its name) stays a tag.
+    void suggestTagsByTagKey()
+    {
+        auto ws = open({{u"Łódź.md"_s, u"- miasto\n"_s},
+                        {u"projekt-dom.md"_s, u"- x\n"_s},
+                        {u"Notatki.md"_s, u"- #lodz i #projekt-dom\n- #Projekt-Dom\n"_s}});
+        const auto entries = [&](const QString &typed) {
+            QStringList out;
+            for (const QVariant &v : ws->suggestTags(typed)) {
+                const QVariantMap m = v.toMap();
+                out.append(m.value(u"tag"_s).toString() + u' ' + m.value(u"kind"_s).toString() + u' '
+                           + m.value(u"count"_s).toString() + u' ' + m.value(u"path"_s).toString());
+            }
+            return out;
+        };
+        const QStringList lodz{u"lodz tag 1 "_s, u"Łódź page 0 Łódź.md"_s};
+        QCOMPARE(entries(u"lod"_s), lodz);
+        QCOMPARE(entries(u"#łód"_s), lodz);
+        QCOMPARE(entries(u"dom"_s), QStringList{u"projekt-dom tag 2 projekt-dom.md"_s});
+    }
+
+    void renameFolderRewritesPathTags()
+    {
+        auto ws = open({{u"Projekty/Dom.md"_s, u"- x\n"_s},
+                        {u"Indeks.md"_s, u"- #Projekty/Dom, #dom i #[[Projekty/Dom]]\n"_s}});
+        QCOMPARE(ws->renameFolder(u"Projekty"_s, u"Prace domowe"_s), u"Prace domowe"_s);
+        QCOMPARE(ws->readFile(u"Indeks.md"_s), u"- #[[Prace domowe/Dom]], #dom i #[[Prace domowe/Dom]]\n"_s);
     }
 
     void folderTree()

@@ -50,6 +50,16 @@ struct BlockRef {
     friend bool operator==(const BlockRef &, const BlockRef &) = default;
 };
 
+/// A block or page that carries a tag naming a page (see VaultIndex::tagReferences()).
+struct TagReference {
+    VaultPath path;      ///< the note carrying the tag
+    int blockIndex = -1; ///< the tagged block (index into ParsedNote::blocks); -1: the page itself
+                         ///< (frontmatter `tags:`, leading `tags::` properties)
+    QString tag;         ///< the tag key (lower-case, NFC) that names the page
+
+    friend bool operator==(const TagReference &, const TagReference &) = default;
+};
+
 /// A tag with usage statistics (see VaultIndex::tags()).
 struct TagCount {
     QString tag;            ///< canonical form: lower-case, NFC, without '#'
@@ -220,7 +230,10 @@ public:
     QList<ResolvedLink> outgoingLinks(const VaultPath &path) const;
     /// Links from other notes to `path`: wiki links, embeds, Markdown links and `((id))` block
     /// references to blocks of `path`. Journals first (newest first), then other notes by path;
-    /// links in document order. Links of `path` to itself are excluded.
+    /// links in document order. Links of `path` to itself are excluded. For a page that does not
+    /// exist (yet) — a link's or a tag's page opened before it is written — the links that would
+    /// resolve to it: unresolved `[[name]]` / `[[folder/name]]` whose target is `path` without
+    /// `.md` or a path suffix of it. Tags are not links here: see tagReferences().
     QList<Backlink> backlinks(const VaultPath &path) const;
     /// Notes whose path-based links (not `((id))`) resolve to `path`, sorted — the files to
     /// rewrite when `path` is renamed. Includes `path` itself when it links to itself by name.
@@ -239,6 +252,29 @@ public:
     std::optional<BlockRef> blockById(const QString &id) const;
     /// Tags with usage counts, most used first (ties by name).
     QList<TagCount> tags() const;
+    /// The note a tag names (SYNTAX §3 "Tagi jako linki do stron"): `tag` (with or without '#',
+    /// `[[ ]]`, trailing '/') resolved like a `[[link]]` written at the vault root — exact vault
+    /// path ± `.md`, base name (shortest path, then alphabetical), aliases; case-insensitive and
+    /// NFC, not diacritic-insensitive. Notes only (never attachments); nullopt when no note has
+    /// that name. `#Projekty/Dom` names Projekty/Dom.md, `#dom` the shortest Dom.md.
+    std::optional<VaultPath> resolveTag(const QString &tag) const;
+    /// The tags in use that name `path` (resolveTag(); keys: lower-case NFC, no '#'), sorted —
+    /// what tagReferences() and tagsTo() follow, and what a rename of `path` rewrites
+    /// (markdown::renameTags()). For a page that does not exist (yet), the unresolved tags that
+    /// would name it once written ("praca/raporty" and "raporty" for praca/raporty.md). Empty
+    /// for an attachment.
+    QStringList tagsNaming(const VaultPath &path) const;
+    /// The blocks and pages of other notes carrying a tag that names `path` (resolveTag()), one
+    /// entry per block (a block tagged twice is listed once) and one per page tagged as a whole
+    /// (blockIndex -1, listed before its blocks); journals first (newest first), then other notes
+    /// by path, blocks in document order. Exactly the tag: sub-tags (`#dom/kuchnia`) are other
+    /// pages. For a page that does not exist (yet), the tags that would name it once written:
+    /// unresolved tags equal to its path without `.md` or to a path suffix of it ("praca" for
+    /// Praca.md, "praca/raporty" and "raporty" for praca/raporty.md).
+    QList<TagReference> tagReferences(const VaultPath &path) const;
+    /// Notes with a tag that names `path`, sorted — with linksTo() the files to rewrite when
+    /// `path` is renamed. Includes `path` itself when it carries such a tag.
+    QList<VaultPath> tagsTo(const VaultPath &path) const;
     /// All tasks (notes by path, tasks in document order).
     QList<TaskRef> tasks() const;
     /// All reminders (notes by path, document order), with the task when the block is one.
@@ -266,10 +302,11 @@ public:
     // ---- graph ----------------------------------------------------------------------------------
 
     /// Note graph: a node per note, a directed edge per (source, target) pair of linked notes
-    /// (wiki links, embeds, Markdown links and block references; deduplicated, no self-loops,
-    /// attachments skipped; A->B and B->A are two edges). `includeTags`
-    /// adds "#tag" nodes linked to the notes using them; `includeMissing` adds nodes for link
-    /// targets that do not exist yet. Nodes: notes by path, then the others as first met.
+    /// (wiki links, embeds, Markdown links, block references and tags that name a note —
+    /// resolveTag(); deduplicated, no self-loops, attachments skipped; A->B and B->A are two
+    /// edges). `includeTags` adds "#tag" nodes for the tags that name no note, linked to the
+    /// notes using them; `includeMissing` adds nodes for link targets that do not exist yet
+    /// (never for tags). Nodes: notes by path, then the others as first met.
     GraphData graph(bool includeTags = false, bool includeMissing = false) const;
 
 Q_SIGNALS:

@@ -41,7 +41,9 @@ public:
     virtual QVariantList suggestPages(const QString &prefix, int limit = 20) const = 0;
     /// Block completions for `((`: list of { path, line, text, blockId? }.
     virtual QVariantList suggestBlocks(const QString &text, int limit = 20) const = 0;
-    /// Tag completions for `#`: list of { tag, count }.
+    /// Completions for `#` (a tag names a page, docs/SYNTAX.md §3): list of { tag (the name to
+    /// write, without '#'), count (tagged blocks), kind ("tag": in use | "page": a page no tag
+    /// names yet), path?, title?, folder? (the page it names) } — tags in use first.
     virtual QVariantList suggestTags(const QString &prefix, int limit = 20) const = 0;
     /// Resolve a wiki-link target seen from `fromPath`; "" when unresolved.
     virtual QString resolveLink(const QString &target, const QString &fromPath) const = 0;
@@ -77,8 +79,9 @@ public:
     virtual QVariantMap vaultConfig() const = 0;
 
     // --- Navigation --------------------------------------------------------------------------
-    /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} /
-    /// {view: "journal", date: "YYYY-MM-DD"}, see docs/UI.md); newPane = side panel/new tab.
+    /// Open a route ({view: "page", path, line?, blockId?} / {view: "tag", tag} — the page the
+    /// tag names / {view: "journal", date: "YYYY-MM-DD"}, see docs/UI.md); newPane = side
+    /// panel/new tab.
     virtual void navigate(const QVariantMap &route, bool newPane = false) = 0;
     /// Open an external http(s)/mailto link with the platform handler.
     virtual void openUrl(const QUrl &url) = 0;

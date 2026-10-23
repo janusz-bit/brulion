@@ -287,7 +287,7 @@ FocusScope {
     }
 
     ShellNewPageDialog { id: newPage }
-    ShellRenameDialog { id: rename }
+    ShellRenameDialog { id: rename; objectName: "shellRename" }
     ShellAboutDialog { id: about }
 
     BConfirmDialog {

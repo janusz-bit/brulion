@@ -9,6 +9,14 @@
 using namespace brulion;
 using namespace Qt::StringLiterals;
 
+namespace brulion {
+/// Readable QCOMPARE failures.
+char *toString(const TagReference &r)
+{
+    return QTest::toString(r.path + u'#' + QString::number(r.blockIndex) + u':' + r.tag);
+}
+} // namespace brulion
+
 namespace {
 
 QStringList pathsOf(const QList<Backlink> &links)
@@ -488,12 +496,16 @@ private Q_SLOTS:
     {
         const GraphData g = m_index.graph();
         QCOMPARE(g.nodes.size(), 9);
-        QCOMPARE(g.edges.size(), 10);
+        QCOMPARE(g.edges.size(), 13);
         QVERIFY(hasEdge(g, u"journals/2026-10-13.md"_s, u"Projekty/Dom.md"_s)); // block reference
         QVERIFY(hasEdge(g, u"Projekty/Budżet.md"_s, u"Zakupy.md"_s));           // Markdown link
         QVERIFY(hasEdge(g, u"Notatki.md"_s, u"Ludzie/Jan Kowalski.md"_s));      // alias
         QVERIFY(!hasEdge(g, u"Notatki.md"_s, u"assets/salon.png"_s));           // attachments skipped
-        QCOMPARE(findNode(g, u"Projekty/Dom.md"_s)->degree, 6);
+        // Tags that name a page are links to it (#dom, #zakupy), also without tag nodes.
+        QVERIFY(hasEdge(g, u"journals/2026-10-14.md"_s, u"Projekty/Dom.md"_s));
+        QVERIFY(hasEdge(g, u"journals/2026-10-13.md"_s, u"Zakupy.md"_s));
+        QVERIFY(hasEdge(g, u"Projekty/Dom.md"_s, u"Zakupy.md"_s));
+        QCOMPARE(findNode(g, u"Projekty/Dom.md"_s)->degree, 8);
         QCOMPARE(findNode(g, u"Archiwum/Stare/Dom.md"_s)->degree, 0);
         QCOMPARE(findNode(g, u"Projekty/Dom.md"_s)->title, u"Dom"_s);
         int degreeSum = 0;
@@ -510,12 +522,193 @@ private Q_SLOTS:
         QVERIFY(missing->isMissing);
         QCOMPARE(missing->degree, 2);
         QVERIFY(!findNode(g, u"brak.png"_s));
-        const GraphNode *tag = findNode(g, u"#zakupy"_s);
+        // "#tag" nodes only for tags that name no page; never missing-page nodes for tags.
+        const GraphNode *tag = findNode(g, u"#praca"_s);
         QVERIFY(tag);
         QVERIFY(tag->isTag);
-        QCOMPARE(tag->degree, 3);
-        QCOMPARE(g.nodes.size(), 9 + 1 + 6);
-        QCOMPARE(g.edges.size(), 10 + 2 + 9);
+        QCOMPARE(tag->degree, 2);
+        QVERIFY(!findNode(g, u"#zakupy"_s));
+        QVERIFY(!findNode(g, u"#dom"_s));
+        QVERIFY(!findNode(g, u"praca"_s));
+        QCOMPARE(g.nodes.size(), 9 + 1 + 4);
+        QCOMPARE(g.edges.size(), 10 + 3 + 2 + 5);
+    }
+
+    // ---- tags as page links (SYNTAX §3) ------------------------------------------------------
+
+    void resolveTag_data()
+    {
+        QTest::addColumn<QString>("tag");
+        QTest::addColumn<QString>("page");
+        QTest::newRow("base name, shortest path") << u"dom"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("hash and case") << u"#DOM"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("trailing slash") << u"dom/"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("alias") << u"remont"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("alias with space") << u"#[[Dom Jana]]"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("logseq alias") << u"Janek"_s << u"Ludzie/Jan Kowalski.md"_s;
+        QTest::newRow("exact path") << u"projekty/dom"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("exact path of the longer one") << u"Archiwum/Stare/Dom"_s << u"Archiwum/Stare/Dom.md"_s;
+        QTest::newRow("path suffix") << u"stare/dom"_s << u"Archiwum/Stare/Dom.md"_s;
+        QTest::newRow("page tag") << u"zakupy"_s << u"Zakupy.md"_s;
+        QTest::newRow("polish") << u"Budżet"_s << u"Projekty/Budżet.md"_s;
+        QTest::newRow("not diacritic-insensitive") << u"budzet"_s << QString();
+        QTest::newRow("journal") << u"2026-10-13"_s << u"journals/2026-10-13.md"_s;
+        QTest::newRow("no page") << u"praca"_s << QString();
+        QTest::newRow("nested, no page") << u"remont/łazienka"_s << QString();
+        QTest::newRow("attachment") << u"salon.png"_s << QString();
+        QTest::newRow("attachment base") << u"plan"_s << QString();
+        QTest::newRow("empty") << u"#"_s << QString();
+        QTest::newRow("brackets only") << u"#[[ ]]"_s << QString();
+    }
+
+    void resolveTag()
+    {
+        QFETCH(QString, tag);
+        QFETCH(QString, page);
+        QCOMPARE(m_index.resolveTag(tag).value_or(QString()), page);
+    }
+
+    // Notes only: a file that is no note (an extensionless TODO, a picture) never hides the note
+    // a tag names, neither at the root nor at a path.
+    void resolveTagNotesOnly()
+    {
+        VaultIndex index;
+        index.update(u"TODO"_s, QString());
+        index.update(u"Archiwum/plan"_s, QString());
+        index.update(u"kot.png"_s, QString());
+        index.update(u"Projekty/TODO.md"_s, u"- lista"_s);
+        index.update(u"Stare/Archiwum/plan.md"_s, u"- plan"_s);
+        index.update(u"Zwierzęta/kot.png.md"_s, u"- opis zdjęcia"_s);
+        index.update(u"A.md"_s, u"- #todo\n- #Archiwum/plan i #[[kot.png]]\n"_s);
+        QCOMPARE(index.attachments(), QList<VaultPath>({u"Archiwum/plan"_s, u"TODO"_s, u"kot.png"_s}));
+        QCOMPARE(index.resolveTag(u"todo"_s).value_or(QString()), u"Projekty/TODO.md"_s);
+        QCOMPARE(index.resolveTag(u"archiwum/plan"_s).value_or(QString()), u"Stare/Archiwum/plan.md"_s);
+        QCOMPARE(index.resolveTag(u"kot.png"_s).value_or(QString()), u"Zwierzęta/kot.png.md"_s);
+        QCOMPARE(index.tagsNaming(u"Projekty/TODO.md"_s), QStringList{u"todo"_s});
+        QCOMPARE(index.tagReferences(u"Projekty/TODO.md"_s), QList<TagReference>({{u"A.md"_s, 0, u"todo"_s}}));
+        QCOMPARE(index.tagsTo(u"Stare/Archiwum/plan.md"_s), QList<VaultPath>{u"A.md"_s});
+        // An attachment is named by no tag, written or not.
+        QVERIFY(index.tagsNaming(u"TODO"_s).isEmpty());
+        QVERIFY(index.tagsNaming(u"kot.png"_s).isEmpty());
+        QVERIFY(index.tagsNaming(u"assets/kot.png"_s).isEmpty());
+    }
+
+    void resolveTagKeepsHashInName()
+    {
+        VaultIndex index;
+        index.update(u"Języki/C#.md"_s, u"# C#"_s);
+        index.update(u"A.md"_s, u"Uczę się #[[C#]]"_s);
+        QCOMPARE(index.resolveTag(u"C#"_s).value_or(QString()), u"Języki/C#.md"_s);
+        QCOMPARE(index.tagReferences(u"Języki/C#.md"_s), QList<TagReference>({{u"A.md"_s, 0, u"c#"_s}}));
+    }
+
+    void tagReferences()
+    {
+        // #dom and #Dom in today's journal (two blocks); the page's own tags never count.
+        QCOMPARE(m_index.tagReferences(u"Projekty/Dom.md"_s),
+                 QList<TagReference>(
+                         {{u"journals/2026-10-14.md"_s, 1, u"dom"_s}, {u"journals/2026-10-14.md"_s, 3, u"dom"_s}}));
+        // Journals first, then pages; Zakupy.md's own `tags:: zakupy` is excluded.
+        QCOMPARE(m_index.tagReferences(u"Zakupy.md"_s),
+                 QList<TagReference>(
+                         {{u"journals/2026-10-13.md"_s, 1, u"zakupy"_s}, {u"Projekty/Dom.md"_s, 3, u"zakupy"_s}}));
+        QVERIFY(m_index.tagReferences(u"Archiwum/Stare/Dom.md"_s).isEmpty()); // #dom names the shorter
+        QVERIFY(m_index.tagReferences(u"Notatki.md"_s).isEmpty());
+        QVERIFY(m_index.tagReferences(u"assets/salon.png"_s).isEmpty());
+        QCOMPARE(m_index.tagsTo(u"Projekty/Dom.md"_s), QList<VaultPath>{u"journals/2026-10-14.md"_s});
+        QCOMPARE(m_index.tagsTo(u"Zakupy.md"_s),
+                 QList<VaultPath>({u"Projekty/Dom.md"_s, u"Zakupy.md"_s, u"journals/2026-10-13.md"_s}));
+        // Tags are no links: backlinks, linksTo and the missing pages stay as they were.
+        QVERIFY(!pathsOf(m_index.backlinks(u"Zakupy.md"_s)).contains(u"journals/2026-10-13.md"_s));
+        for (const MissingPage &m : m_index.missingPages())
+            QVERIFY2(m.name.compare(u"praca"_s, Qt::CaseInsensitive) != 0, qPrintable(m.name));
+    }
+
+    void tagsNaming()
+    {
+        QCOMPARE(m_index.tagsNaming(u"Projekty/Dom.md"_s), QStringList{u"dom"_s});
+        QCOMPARE(m_index.tagsNaming(u"Zakupy.md"_s), QStringList{u"zakupy"_s});
+        QVERIFY(m_index.tagsNaming(u"Archiwum/Stare/Dom.md"_s).isEmpty()); // #dom names the shorter
+        // A page not written yet: the unresolved tags that would name it.
+        QCOMPARE(m_index.tagsNaming(u"Praca.md"_s), QStringList{u"praca"_s});
+        QCOMPARE(m_index.tagsNaming(u"praca/raporty.md"_s), QStringList{u"praca/raporty"_s});
+        QVERIFY(m_index.tagsNaming(u"Inny/Dom.md"_s).isEmpty());
+        QVERIFY(m_index.tagsNaming(QString()).isEmpty());
+    }
+
+    void tagReferencesOfMissingPages()
+    {
+        // A page that exists only as a tag: its tagged blocks, exactly the tag (no sub-tags).
+        QCOMPARE(m_index.tagReferences(u"Praca.md"_s),
+                 QList<TagReference>({{u"journals/2026-10-12.md"_s, 0, u"praca"_s}, {u"Notatki.md"_s, 3, u"praca"_s}}));
+        QCOMPARE(m_index.tagReferences(u"praca/raporty.md"_s),
+                 QList<TagReference>({{u"journals/2026-10-13.md"_s, 3, u"praca/raporty"_s}}));
+        QCOMPARE(m_index.tagReferences(u"Strony/praca/raporty.md"_s), m_index.tagReferences(u"praca/raporty.md"_s));
+        QVERIFY(m_index.tagReferences(u"Inne/raporty.md"_s).isEmpty());
+        // A tag naming an existing page never names a missing one.
+        QVERIFY(m_index.tagReferences(u"Inny/Dom.md"_s).isEmpty());
+        QCOMPARE(m_index.tagsTo(u"Praca.md"_s), QList<VaultPath>({u"Notatki.md"_s, u"journals/2026-10-12.md"_s}));
+        // ... and its unresolved [[links]].
+        QCOMPARE(pathsOf(m_index.backlinks(u"Nieistniejąca strona.md"_s)),
+                 QStringList({u"Notatki.md"_s, u"Projekty/Dom.md"_s}));
+        QCOMPARE(pathsOf(m_index.backlinks(u"Nowe/Nieistniejąca strona.md"_s)),
+                 QStringList({u"Notatki.md"_s, u"Projekty/Dom.md"_s}));
+        QVERIFY(m_index.backlinks(u"Nieistniejąca.md"_s).isEmpty());
+        QVERIFY(m_index.backlinks(u"brak.png"_s).isEmpty()); // a missing attachment is no page
+    }
+
+    void tagReferencesPageLevel()
+    {
+        VaultIndex index;
+        index.update(u"Projekt.md"_s, u"# Projekt\n\n#projekt sam o sobie"_s);
+        index.update(u"A.md"_s, u"---\ntags: [Projekt, inne]\n---\n- treść #projekt\n- inna"_s);
+        index.update(u"B.md"_s, u"tags:: projekt\n\n- treść"_s);
+        index.update(u"C.md"_s, u"- zadanie\n  tags:: projekt, x\n- #projekt/dom podtag"_s);
+        QCOMPARE(index.tagReferences(u"Projekt.md"_s), QList<TagReference>({{u"A.md"_s, -1, u"projekt"_s},
+                                                                            {u"A.md"_s, 1, u"projekt"_s},
+                                                                            {u"B.md"_s, -1, u"projekt"_s},
+                                                                            {u"C.md"_s, 0, u"projekt"_s}}));
+        QCOMPARE(index.tagsTo(u"Projekt.md"_s), QList<VaultPath>({u"A.md"_s, u"B.md"_s, u"C.md"_s, u"Projekt.md"_s}));
+    }
+
+    void tagReferencesFromAnyFolder()
+    {
+        // Vault-wide: #dom in Archiwum/Stare names Projekty/Dom.md although [[dom]] there would be
+        // the page next to it.
+        VaultIndex index;
+        fixture::build(index);
+        index.update(u"Archiwum/Stare/Notatka.md"_s, u"- [[dom]] #dom"_s);
+        QCOMPARE(index.resolveLink(u"dom"_s, u"Archiwum/Stare/Notatka.md"_s).value_or(QString()),
+                 u"Archiwum/Stare/Dom.md"_s);
+        QVERIFY(index.tagReferences(u"Projekty/Dom.md"_s)
+                        .contains(TagReference{u"Archiwum/Stare/Notatka.md"_s, 0, u"dom"_s}));
+        QVERIFY(index.tagReferences(u"Archiwum/Stare/Dom.md"_s).isEmpty());
+    }
+
+    void tagResolutionIsIncremental()
+    {
+        VaultIndex index;
+        fixture::build(index);
+        QVERIFY(!index.resolveTag(u"praca"_s));
+        // A page appears: its tag resolves; it goes again: the tag is a missing page's.
+        index.update(u"Praca.md"_s, u"# Praca"_s);
+        QCOMPARE(index.resolveTag(u"praca"_s).value_or(QString()), u"Praca.md"_s);
+        QCOMPARE(index.tagReferences(u"Praca.md"_s).size(), 2);
+        QVERIFY(hasEdge(index.graph(), u"Notatki.md"_s, u"Praca.md"_s));
+        index.remove(u"Praca.md"_s);
+        QVERIFY(!index.resolveTag(u"praca"_s));
+        QCOMPARE(index.tagReferences(u"Praca.md"_s).size(), 2); // as a missing page
+        QVERIFY(!hasEdge(index.graph(), u"Notatki.md"_s, u"Praca.md"_s));
+        // An alias captures the tag.
+        index.update(u"Ludzie/Jan Kowalski.md"_s, u"alias:: Janek, Praca\n\n- Telefon"_s);
+        QCOMPARE(index.resolveTag(u"#Praca"_s).value_or(QString()), u"Ludzie/Jan Kowalski.md"_s);
+        QCOMPARE(index.tagReferences(u"Ludzie/Jan Kowalski.md"_s).size(), 2);
+        QVERIFY(index.tagReferences(u"Praca.md"_s).isEmpty());
+        // A rename moves the references.
+        index.rename(u"Zakupy.md"_s, u"Listy/Zakupy.md"_s, index.content(u"Zakupy.md"_s));
+        QCOMPARE(index.resolveTag(u"zakupy"_s).value_or(QString()), u"Listy/Zakupy.md"_s);
+        QCOMPARE(index.tagReferences(u"Listy/Zakupy.md"_s).size(), 2);
+        QVERIFY(index.tagReferences(u"Zakupy.md"_s).isEmpty());
     }
 
     void graphMissingPagesDeduplicated()
@@ -714,6 +907,13 @@ private Q_SLOTS:
             QCOMPARE(incremental.tags()[i].paths, fresh.tags()[i].paths);
         }
         QCOMPARE(incremental.graph(true, true).edges.size(), fresh.graph(true, true).edges.size());
+        // Tags as page links.
+        for (const VaultPath &p : fresh.paths() + QList<VaultPath>{u"Praca.md"_s, u"praca/raporty.md"_s}) {
+            QCOMPARE(incremental.tagReferences(p), fresh.tagReferences(p));
+            QCOMPARE(incremental.tagsTo(p), fresh.tagsTo(p));
+        }
+        for (const TagCount &t : fresh.tags())
+            QCOMPARE(incremental.resolveTag(t.tag), fresh.resolveTag(t.tag));
     }
 };
 

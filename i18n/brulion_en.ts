@@ -164,7 +164,7 @@
 <context>
     <name>ContentBacklinks</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="142"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="146"/>
         <source>%n linked reference(s)</source>
         <translation>
             <numerusform>%n linked reference</numerusform>
@@ -172,7 +172,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="149"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="153"/>
         <source>in %n page(s)</source>
         <translation>
             <numerusform>in %n page</numerusform>
@@ -180,8 +180,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="176"/>
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="235"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="187"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="246"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -189,7 +189,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="196"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="207"/>
         <source>%n unlinked mention(s)</source>
         <translation>
             <numerusform>%n unlinked mention</numerusform>
@@ -197,7 +197,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="208"/>
+        <location filename="../src/app/qml/content/ContentBacklinks.qml" line="219"/>
         <source>Linked %n mention(s)</source>
         <translation>
             <numerusform>Linked %n mention</numerusform>
@@ -244,7 +244,15 @@
 <context>
     <name>ContentRenameDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="33"/>
+        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="36"/>
+        <source>Renamed to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Renamed to “%1”, %n link or tag updated</numerusform>
+            <numerusform>Renamed to “%1”, %n links and tags updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="38"/>
         <source>Renamed to “%1”, %n link(s) updated</source>
         <translation>
             <numerusform>Renamed to “%1”, %n link updated</numerusform>
@@ -252,7 +260,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="58"/>
+        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="64"/>
+        <source>%n link(s) and tag(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link or tag %1 will be updated to the new name.</numerusform>
+            <numerusform>%n links and tags %1 will be updated to the new name.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="65"/>
         <source>%n link(s) %1 will be updated to the new name.</source>
         <translation>
             <numerusform>%n link %1 will be updated to the new name.</numerusform>
@@ -260,7 +276,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="59"/>
+        <location filename="../src/app/qml/content/ContentRenameDialog.qml" line="66"/>
         <source>in %n note(s)</source>
         <translation>
             <numerusform>in %n note</numerusform>
@@ -618,6 +634,49 @@
     </message>
 </context>
 <context>
+    <name>ShellRenameDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="32"/>
+        <source>%n link(s) and tag(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link or tag %1 will be updated to the new name.</numerusform>
+            <numerusform>%n links and tags %1 will be updated to the new name.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="33"/>
+        <source>%n link(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link %1 will be updated to the new name.</numerusform>
+            <numerusform>%n links %1 will be updated to the new name.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="34"/>
+        <source>in %n note(s)</source>
+        <translation>
+            <numerusform>in %n note</numerusform>
+            <numerusform>in %n notes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="49"/>
+        <source>Renamed to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Renamed to “%1”, %n link or tag updated</numerusform>
+            <numerusform>Renamed to “%1”, %n links and tags updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <source>Renamed to “%1”, %n link(s) updated</source>
+        <translation>
+            <numerusform>Renamed to “%1”, %n link updated</numerusform>
+            <numerusform>Renamed to “%1”, %n links updated</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>
@@ -764,7 +823,7 @@
 <context>
     <name>TagsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TagsView.qml" line="108"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="116"/>
         <source>%1 of %n tag(s)</source>
         <translation>
             <numerusform>%1 of %n tag</numerusform>
@@ -772,7 +831,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TagsView.qml" line="109"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="117"/>
         <source>%n tag(s)</source>
         <translation>
             <numerusform>%n tag</numerusform>
@@ -780,7 +839,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TagsView.qml" line="154"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="182"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="183"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -788,7 +848,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TagsView.qml" line="242"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="270"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>
@@ -796,8 +856,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TagsView.qml" line="242"/>
-        <location filename="../src/app/qml/views/TagsView.qml" line="243"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="270"/>
+        <location filename="../src/app/qml/views/TagsView.qml" line="271"/>
         <source>in %n note(s)</source>
         <translation>
             <numerusform>in %n note</numerusform>
@@ -822,7 +882,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="179"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="180"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -830,7 +890,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="181"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="182"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -838,7 +898,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="183"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="184"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -846,7 +906,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="265"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="267"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
@@ -903,7 +963,7 @@
 <context>
     <name>brulion::editor::SuggestionModel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/suggestionmodel.cpp" line="262"/>
+        <location filename="../src/app/editor/suggestionmodel.cpp" line="274"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>

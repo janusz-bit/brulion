@@ -130,6 +130,38 @@ private Q_SLOTS:
         QVERIFY(!titles(m).contains(u"#zakupy"_s));
     }
 
+    // `#` offers tags and pages (a tag names a page, docs/SYNTAX.md §3): a tag naming a page is
+    // one item; a page no tag names yet is offered with its folder.
+    void tagsAndPages()
+    {
+        FakeEditorHost host;
+        host.setFile(u"Żółw.md"_s, u"- zwierzę\n"_s);
+        host.setFile(u"Ludzie/Jan Kowalski.md"_s, u"- tel.\n"_s);
+        host.setFile(u"C++.md"_s, u"- język\n"_s);
+        host.setFile(u"Notatki.md"_s, u"- #żółw i #praca\n"_s);
+        SuggestionModel m;
+        m.setHost(&host);
+        m.setMode(u"tags"_s);
+        m.setFilter(u"zolw"_s);
+        QCOMPARE(titles(m), QStringList{u"#żółw"_s});
+        QCOMPARE(m.get(0).value(u"path"_s).toString(), u"Żółw.md"_s);
+        QCOMPARE(m.get(0).value(u"icon"_s).toString(), u"hash"_s);
+        m.setFilter(u"jan"_s);
+        QCOMPARE(titles(m), QStringList{u"#Jan Kowalski"_s});
+        QCOMPARE(m.get(0).value(u"icon"_s).toString(), u"file-text"_s);
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"Page in Ludzie"_s);
+        QCOMPARE(m.get(0).value(u"insertText"_s).toString(), u"Jan Kowalski"_s);
+        QCOMPARE(m.get(0).value(u"path"_s).toString(), u"Ludzie/Jan Kowalski.md"_s);
+        m.setFilter(u"c+"_s);
+        QCOMPARE(titles(m), QStringList{u"#C++"_s});
+        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"Page"_s);
+        m.setFilter(u"praca"_s); // typed out: nothing to complete
+        QVERIFY(titles(m).isEmpty());
+        m.setFilter(QString()); // tags first, then pages
+        QCOMPARE(titles(m).mid(0, 2), QStringList({u"#praca"_s, u"#żółw"_s}));
+        QVERIFY(titles(m).contains(u"#Notatki"_s));
+    }
+
     void slash()
     {
         SuggestionModel m;
@@ -306,10 +338,10 @@ private Q_SLOTS:
         SuggestionModel m;
         m.setHost(&host);
         m.setMode(u"tags"_s);
-        QCOMPARE(titles(m), QStringList({u"#alfa"_s}));
+        QCOMPARE(titles(m), QStringList({u"#alfa"_s, u"#A"_s})); // tags, then pages
         host.setFile(u"B.md"_s, u"- y #beta\n"_s);
         Q_EMIT host.indexChanged();
-        QCOMPARE(titles(m).size(), 2);
+        QCOMPARE(titles(m).size(), 4);
     }
 };
 

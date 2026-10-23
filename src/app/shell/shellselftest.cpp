@@ -148,17 +148,17 @@ void mouseMove(QQuickWindow *window, QPointF scenePos)
     settle(50);
 }
 
-/// A click (left by default) at `scenePos` of the window, as a real mouse sends it.
-void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton)
+/// A click (left by default; with `modifiers` held) at `scenePos` of the window, as a real mouse
+/// sends it.
+void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button = Qt::LeftButton,
+                Qt::KeyboardModifiers modifiers = Qt::NoModifier)
 {
     int &timestamp = mouseTimestamp;
     timestamp += 1000; // never a double click
     const QPointF global = window->mapToGlobal(scenePos);
-    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
-                        timestamp);
-    qt_handleMouseEvent(window, scenePos, global, button, button, QEvent::MouseButtonPress, Qt::NoModifier,
-                        timestamp += 20);
-    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, button, QEvent::MouseButtonRelease, Qt::NoModifier,
+    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, Qt::NoButton, QEvent::MouseMove, modifiers, timestamp);
+    qt_handleMouseEvent(window, scenePos, global, button, button, QEvent::MouseButtonPress, modifiers, timestamp += 20);
+    qt_handleMouseEvent(window, scenePos, global, Qt::NoButton, button, QEvent::MouseButtonRelease, modifiers,
                         timestamp += 80);
     settle(100);
 }
@@ -674,6 +674,145 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     lines logged anywhere reach the page (a secret never does), the search ignores diacritics,
 ///     an area chip filters, the detailed mode switches the Logger; the sync center's history
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
+/// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
+///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
+///     among its references and the tag strip in its header — and back returns; in Tasks a click
+///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
+///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
+///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
+///     the links and tags it rewrites.
+void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto view = [app] { return app->currentView(); };
+    const auto routePath = [app] { return app->currentRoute().value(u"path"_s).toString(); };
+    const QString tagPage = u"pomysł.md"_s; // #pomysł: the sample notebook has no such page
+    const auto onScreenText = [window](const QString &needle) {
+        QQuickItem *text = nullptr;
+        waitFor([&] { return (text = renderedTextContaining(window->contentItem(), needle)) != nullptr; });
+        return text;
+    };
+
+    // ---- A tag in today's journal.
+    app->goHome();
+    settle(300);
+    QQuickItem *idea = onScreenText(u"Pomysł na obiad"_s);
+    const QPointF tag = idea ? linkPoint(idea, u"tag:"_s) : QPointF(-1, -1);
+    check(tag.x() >= 0, "today's journal shows the #pomysł tag as a link");
+    if (tag.x() >= 0) {
+        tapOrClick(window, tag, touch);
+        check(waitFor([&] { return view() == u"page" && routePath() == tagPage; }),
+              "a tap or click on a #tag opens the page the tag names");
+        QObject *refs = window->findChild<QObject *>(u"pageReferences"_s);
+        check(refs && waitFor([&] { return refs->property("linkedCount").toInt() >= 2; }),
+              "the tag's page, not written yet, lists the tagged blocks among its references");
+        // (The editor's header is a list's: in the visual tree only.)
+        check(waitFor([&] {
+                  return findShown(window->contentItem(),
+                                   [](QQuickItem *item) { return item->objectName() == u"pageTagOverview"; })
+                         != nullptr;
+              }),
+              "the page header has the tag strip (tag overview, tasks with the tag)");
+        check(!app->workspace()->exists(tagPage), "looking at a tag's page does not create it");
+        check(app->back() && view() == u"journals", "back returns from the tag's page");
+    }
+
+    // ---- Tasks: a click filters by the tag, Ctrl+click or a long press opens its page.
+    app->navigate({{u"view"_s, u"tasks"_s}, {u"query"_s, u"zakwas"_s}});
+    settle(600);
+    QQuickItem *task = onScreenText(u"zakwas"_s);
+    QPointF taskTag = task ? linkPoint(task, u"tag:"_s) : QPointF(-1, -1);
+    check(taskTag.x() >= 0, "a task in Tasks shows its #zakupy tag as a link");
+    if (taskTag.x() >= 0) {
+        tapOrClick(window, taskTag, touch);
+        settle(400);
+        check(view() == u"tasks", "a tap or click on a tag in Tasks filters the list (and stays there)");
+        task = onScreenText(u"zakwas"_s);
+        taskTag = task ? linkPoint(task, u"tag:"_s) : QPointF(-1, -1);
+        if (qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG"))
+            std::fprintf(stderr, "selftest: tag of a task at %.0f,%.0f in \"%s\"\n", taskTag.x(), taskTag.y(),
+                         task ? qPrintable(task->property("text").toString().left(200)) : "");
+        if (touch)
+            touchTap(window, taskTag, 1000);
+        else
+            mouseClick(window, taskTag, Qt::LeftButton, Qt::ControlModifier);
+        const bool opened =
+                taskTag.x() >= 0 && waitFor([&] { return view() == u"page" && routePath() == u"zakupy.md"; });
+        if (!opened)
+            std::fprintf(stderr, "selftest: after the gesture on the tag: %s %s\n", qPrintable(view()),
+                         qPrintable(routePath()));
+        check(opened, touch ? "a long press on a tag in Tasks opens the tag's page"
+                            : "a Ctrl+click on a tag in Tasks opens the tag's page");
+        check(openMenus(window) == 0, "opening the tag's page from Tasks opens no menu");
+        closeMenus(window);
+    }
+
+    // ---- The tag list: a row opens the tag's page, its trailing button the tag overview.
+    app->navigate({{u"view"_s, u"tags"_s}});
+    settle(400);
+    const auto tagRow = [window] {
+        QQuickItem *row = nullptr;
+        waitFor([&] {
+            row = findShown(window->contentItem(), [](QQuickItem *item) {
+                return isA(item, "BListItem") && item->property("text").toString() == u"pomysł";
+            });
+            return row != nullptr;
+        });
+        return row;
+    };
+    QQuickItem *row = tagRow();
+    check(row != nullptr, "the tag list shows #pomysł");
+    if (row) {
+        tapOrClick(window, pointIn(row, 0.3), touch);
+        check(waitFor([&] { return view() == u"page" && routePath() == tagPage; }),
+              "a row of the tag list opens the tag's page");
+        app->back();
+        settle(300);
+        row = tagRow();
+        QQuickItem *overview =
+                row ? findShown(row, [](QQuickItem *item) { return item->objectName() == u"tagOverviewButton"; })
+                    : nullptr;
+        check(overview != nullptr, "a row of the tag list has a tag overview button");
+        if (overview) {
+            tapOrClick(window, pointIn(overview), touch);
+            check(waitFor([&] {
+                      return view() == u"tag" && app->currentRoute().value(u"tag"_s).toString() == u"pomysł";
+                  }),
+                  "the row's tag overview button opens the tag overview");
+            QQuickItem *pageButton = nullptr;
+            check(waitFor([&] {
+                      pageButton = findShown(window->contentItem(),
+                                             [](QQuickItem *item) { return item->objectName() == u"tagPageButton"; });
+                      return pageButton != nullptr;
+                  }) && !pageButton->property("pageExists").toBool()
+                          && pageButton->property("iconName").toString() == u"plus",
+                  "the tag overview offers to create the tag's page, not written yet");
+            if (pageButton) {
+                tapOrClick(window, pointIn(pageButton), touch);
+                check(waitFor([&] { return view() == u"page" && routePath() == tagPage; })
+                              && !app->workspace()->exists(tagPage),
+                      "the tag overview's page button opens the tag's page (still not created)");
+            }
+        }
+    }
+
+    // ---- Renaming from the sidebar says how many links and tags change.
+    QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
+    check(rename != nullptr, "the shell has its rename dialog");
+    if (rename) {
+        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(u"Witaj w Brulionie.md"_s)),
+                                  Q_ARG(QVariant, QVariant(false)));
+        const int changes = rename->property("changes").toInt();
+        check(waitFor([&] { return rename->property("opened").toBool(); }) && changes > 0
+                      && rename->property("subtitle").toString().contains(QString::number(changes)),
+              "the sidebar's rename dialog counts the links and tags naming the page");
+        QMetaObject::invokeMethod(rename, "close");
+        waitFor([&] { return !rename->property("opened").toBool(); });
+    }
+    app->goHome();
+    settle(200);
+}
+
 void checkLogsAndSyncDetails(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -1647,6 +1786,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3c. The task status menus (Tasks, backlinks, the agenda, a journal day) and "/" commands.
     checkTaskStatusMenus(window, app, check);
     closeMenus(window); // whatever a failed check left open
+    // 3d. Tags name pages: a tag opens its page (journal, Tasks with Ctrl+click / long press, the
+    //     tag list), the tag overview stays a tap away.
+    checkTagLinks(window, app, check);
+    closeMenus(window);
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");
         waitFor([&] { return !isOpen(drawer); });

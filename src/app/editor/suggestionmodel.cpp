@@ -253,13 +253,32 @@ QVariantList SuggestionModel::tagItems() const
     QVariantList out;
     if (!m_host)
         return out;
+    const QString typed = m_filter.trimmed().normalized(QString::NormalizationForm_C);
+    // Tags in use and pages (a tag names a page, docs/SYNTAX.md §3); the one already typed out
+    // (in any letter case) has nothing to complete.
     for (const QVariant &v : m_host->suggestTags(m_filter.trimmed(), m_limit)) {
         const QVariantMap t = v.toMap();
         const QString tag = t.value(u"tag"_s).toString();
-        if (tag.isEmpty() || tag == m_filter)
+        if (tag.isEmpty() || tag.normalized(QString::NormalizationForm_C).compare(typed, Qt::CaseInsensitive) == 0)
             continue;
         const int count = t.value(u"count"_s).toInt();
-        out.append(item(u"tag"_s, u"#"_s + tag, count > 0 ? tr("%n block(s)", "", count) : QString(), u"hash"_s, tag));
+        const QString path = t.value(u"path"_s).toString();
+        const QString title = t.value(u"title"_s).toString();
+        QString subtitle;
+        QString icon = u"hash"_s;
+        if (t.value(u"kind"_s).toString() == u"page") {
+            const QString folder = t.value(u"folder"_s).toString();
+            subtitle = folder.isEmpty() ? tr("Page") : tr("Page in %1").arg(folder);
+            icon = u"file-text"_s;
+        } else {
+            subtitle = count > 0 ? tr("%n block(s)", "", count) : QString();
+            // The page the tag opens, when its name says something else (an alias, a folder).
+            if (!title.isEmpty() && title.compare(paths::basename(tag), Qt::CaseInsensitive) != 0)
+                subtitle = subtitle.isEmpty() ? QString(u"→ "_s + title) : QString(subtitle + u" · → "_s + title);
+        }
+        QVariantMap it = item(u"tag"_s, u"#"_s + tag, subtitle, icon, tag);
+        it[u"path"_s] = path;
+        out.append(it);
     }
     return out;
 }

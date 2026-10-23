@@ -349,10 +349,40 @@ private Q_SLOTS:
                               u"Lista: [[Budżet]] i [[Nieistniejąca strona]]"_s}));
         QCOMPARE(texts(u"ref:Dom path:journals"_s),
                  QStringList({u"Spotkanie z [[Jan Kowalski]] w sprawie [[Projekty/Dom|domu]] #praca"_s,
-                              u"Pomysł na ((plan01))"_s}));
+                              u"Pomysł na ((plan01))"_s, u"Malowanie salonu #dom"_s,
+                              u"Kod: `Dom` oraz https://example.com/Dom i #Dom"_s}));
         // Code blocks are blocks too (calc), but the frontmatter is not.
         QCOMPARE(texts(u"farba path:Projekty"_s), QStringList({u"farba = 120"_s, u"Farba: [lista](../Zakupy.md)"_s}));
         QVERIFY(texts(u"aliases"_s).isEmpty());
+    }
+
+    // ref: also matches tags that name the page (SYNTAX §10); tag: stays tags-only.
+    void refMatchesTags()
+    {
+        QCOMPARE(texts(u"ref:praca"_s),
+                 QStringList({u"Bez daty #praca"_s,
+                              u"Spotkanie z [[Jan Kowalski]] w sprawie [[Projekty/Dom|domu]] #praca"_s}));
+        QCOMPARE(texts(u"tag:praca"_s).size(), 3); // with the sub-tag, as before
+        QVERIFY(texts(u"ref:zolw"_s).isEmpty());
+        // By title; Zakupy.md carries its own tag (as a page linking itself would match).
+        QCOMPARE(texts(u"type:pages ref:Zakupy"_s), QStringList({u"journals/2026-10-13.md"_s, u"Projekty/Budżet.md"_s,
+                                                                 u"Projekty/Dom.md"_s, u"Zakupy.md"_s}));
+        QVERIFY(texts(u"type:pages ref:Dom"_s).contains(u"journals/2026-10-14.md"_s));
+        QVERIFY(!texts(u"type:pages -ref:Dom"_s).contains(u"journals/2026-10-14.md"_s));
+        // A page tagged as a whole (frontmatter) is a page reference, its blocks are not.
+        VaultIndex index;
+        index.update(u"Projekt.md"_s, u"# Projekt"_s);
+        index.update(u"A.md"_s, u"---\ntags: [projekt]\n---\n- treść"_s);
+        index.update(u"B.md"_s, u"- zadanie #Projekt\n  - dziecko"_s);
+        const auto inIndex = [&](const QString &source, const QueryOptions &options = {}) {
+            return describe(index, runQuery(parsed(source), index, fixture::Today, Qt::Monday, options));
+        };
+        QCOMPARE(inIndex(u"type:pages ref:Projekt"_s), QStringList({u"A.md"_s, u"B.md"_s}));
+        QCOMPARE(inIndex(u"ref:Projekt"_s), QStringList{u"zadanie #Projekt"_s}); // the child shows inside it
+        QueryOptions here;
+        here.currentPath = u"Projekt.md"_s;
+        QCOMPARE(inIndex(u"type:pages ref:this"_s, here), QStringList({u"A.md"_s, u"B.md"_s}));
+        QVERIFY(inIndex(u"ref:this"_s).isEmpty()); // no current page
     }
 
     void queryBlocksDoNotMatchThemselves()
@@ -369,7 +399,9 @@ private Q_SLOTS:
         options.currentPath = u"Zakupy.md"_s;
         QCOMPARE(texts(u"type:tasks page:this"_s, options), QStringList({u"Mleko"_s, u"Chleb"_s}));
         QVERIFY(texts(u"type:tasks page:this"_s).isEmpty()); // no current page
-        QCOMPARE(texts(u"ref:this"_s, options), QStringList{u"Farba: [lista](../Zakupy.md)"_s});
+        // The link and the blocks tagged #zakupy (SYNTAX §10: ref: includes tags).
+        QCOMPARE(texts(u"ref:this"_s, options),
+                 QStringList({u"Farba: [lista](../Zakupy.md)"_s, u"Kupić płytki #zakupy"_s, u"Kupić farbę #zakupy"_s}));
     }
 
     void pages()
