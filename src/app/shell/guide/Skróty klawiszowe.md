@@ -36,7 +36,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+Shift+C | skopiuj odwołanie do bloku `((…))` |
 | Ctrl+Z, Ctrl+Y | cofnij / ponów |
 | Ctrl+C / Ctrl+X | kopiuj / wytnij zaznaczony tekst bloku (dokładnie, z twardymi spacjami) |
-| Ctrl+V | wklej: Markdown z kilkoma blokami staje się blokami, tekst ze strony WWW przychodzi z listami i nagłówkami; obraz lub pliki jako załączniki |
+| Ctrl+V | wklej: Markdown z kilkoma blokami staje się blokami, skopiowany punkt listy wkleja się bez drugiego znacznika, tekst ze strony WWW przychodzi z listami i nagłówkami; obraz lub pliki jako załączniki |
 | Ctrl+A | zaznacz tekst bloku; drugi raz: wszystkie bloki strony |
 | Shift+↑ / Shift+↓ | zaznacz tekst; na pierwszej / ostatniej linii, gdy zaznaczenie dojdzie do brzegu bloku: zaznacz ten blok i poprzedni / następny |
 | Esc | zamknij podpowiedzi, potem zakończ edycję i zaznacz blok |
@@ -55,7 +55,10 @@ Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu mysz�
 | Delete / Backspace | usuń zaznaczone bloki (Ctrl+Z przywraca je zaznaczone) |
 | Tab / Shift+Tab | wcięcie / wysunięcie wszystkich (wcięcie tylko, gdy da się wciąć każdy) |
 | Alt+↑ / Alt+↓ | przeniesienie wszystkich razem |
-| Ctrl+Enter | następny status zadania dla wszystkich |
+| Ctrl+Enter | następny status zadania dla wszystkich (jeden zaznaczony blok: tylko on, bez dzieci) |
+| Ctrl+Shift+Enter | menu statusu zadania — wybrany status dostają wszystkie |
+| Ctrl+. | zwiń / rozwiń blok na końcu zaznaczenia |
+| Ctrl+Shift+C | skopiuj odwołanie `((…))` do bloku na końcu zaznaczenia |
 | Enter | edytuj blok |
 | ↑ / ↓ | zaznacz sam poprzedni / następny blok |
 | Esc | odznacz |

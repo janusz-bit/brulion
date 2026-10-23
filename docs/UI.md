@@ -460,29 +460,36 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   subtree — a set of uids in `BlockListModel` (`isSelected`, `selectionEdge`: `single` | `first` |
   `middle` | `last` over the visible rows), so picking single blocks could come later. The ends
   follow edits, undo / redo (each step restores the selection it had: an undone deletion selects
-  its blocks again) and changes from other devices; a zoom ends it; editing ends it; the page's
+  its blocks again — and stops the editing of another block meanwhile: the keys go to the
+  selection) and changes from other devices; a zoom ends it; editing ends it; the page's
   properties are never part of a range. `selectionCount` counts the visible rows (folded children
-  come along unseen).
+  come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
+  the next one without an empty selection between (the touch selection mode stays).
 * **Ways in**: Esc in an edited block; Shift+↑ / Shift+↓ (from an edited block once its text
-  selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on a block's text; a drag
+  selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on any block — its text,
+  a code or calculation frame, a table, a query, an embed, a rule, a bullet or number
+  (`BlockEditor.blockTapped`, the click's modifiers); a drag
   with a mouse, touchpad or stylus from one block into another (`BlockEditor`'s tracker — a
   passive `PointHandler` over the list, the state in the editor because delegates may be destroyed
   meanwhile — scrolls near the view's edges; a left drag no longer scrolls the list on non-touch
   UIs, the wheel and the touchpad do — also in the journal stream); the block menu's "Zaznacz".
-  Touch UIs: a **long press on a block's text** (not the block being edited: there the system's word
-  selection and handles stay) enters the **selection mode** — the keyboard goes, the selection's
+  Touch UIs: a **long press on a block** — its text, a code or calculation frame, a table cell, a
+  query, beside an embed (not the block being edited: there the system's word selection and
+  handles stay) — enters the **selection mode** — the keyboard goes, the selection's
   tools dock where the editing toolbar is; moving the finger without lifting it extends the
   selection (the list holds still, scrolls at its edges); taps on blocks move the selection's end
   there instead of editing; two round **grips** (44 px) at the band's start and end move its
   ends; "Gotowe" and Back leave it. The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
-  enter it too. The journal stream: one selection per day (selecting in another day ends it); while
+  enter it too, and so does a hardware keyboard's Esc or Shift+↑/↓ on a touch UI (the same tools
+  whichever way the selection was made). The journal stream: one selection per day (selecting in another day ends it); while
   a finger or the mouse selects, the stream scrolls only as long as the day goes on beyond the edge.
 * **The band**: one band over the range from the editor's left edge (a block alone keeps its
   outline: from its own level, framed), rounded at its ends, a line down its left edge; made only
   for selected blocks (a `Loader`: "Scrolling performance").
 * **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej
   (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę /
-  w dół, Status zadania, Zaznacz tekst…), Gotowe. Docked in the editing toolbar's slot on touch
+  w dół, Status zadania, Zaznacz tekst…; the indents only where they can happen —
+  `canIndentSelection()`: a document's paragraphs and headings have none), Gotowe. Docked in the editing toolbar's slot on touch
   UIs (the `selection` mode of `BlockEditor.toolbarMode`; the bottom navigation makes way), a
   compact bar floating at the top of the view on desktops while two or more blocks are selected
   (its × clears the selection).
@@ -490,20 +497,33 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   written, each top block re-based to column 0 (visual columns: tabs and spaces keep their
   nesting), LF line breaks, no BOM, no page properties (`markdown::blocksMarkdown`) — and, from the
   host, escaped semantic **HTML** as text/html (`io::clipboardHtml`: lists, headings, checkboxes,
-  tables; links to notes as their text, pictures as links to their files, never data: URLs), so a
-  paste into mail or an office app is formatted and one into Obsidian, a plain field or Brulion
+  tables, dates, recurrence and priorities of any block; links to notes as their text, pictures as
+  links to their files, never data: URLs; marked `<meta name="generator" content="Brulion">`), so
+  a paste into mail or an office app is formatted and one into Obsidian, a plain field or Brulion
   is Markdown. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
-  numbers, ☐ / ☑ / ☒, no markup, `((id))` as its block's text). A copy is read back (never
-  "Skopiowano" for a clipboard that did not take it) and refuses more than 800 KB (Android's
-  clipboard takes about 1 MB per transaction) with a toast — never cut short. Cut = copy, then
-  delete as one undo step.
+  numbers, ☐ / ☑ / ☒, emphasis marks in pairs gone, code spans verbatim, `((id))` as its block's
+  text). A copy is read back (never "Skopiowano" for a clipboard that did not take it — except in
+  the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes
+  about 1 MB per transaction) with a toast — never cut short. Cut = copy, then delete as one undo
+  step.
+* **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
+  the toolbar's Status zadania act on the range from one end to the other; a block selected alone
+  keeps the block's own keys — Ctrl+Enter changes it, not the children it brings along (they are
+  copied, cut, moved and deleted with it).
 * **Pasting**: Ctrl+V in an edited block splits Markdown into blocks (`pasteText`, relative nesting
-  kept); HTML from other apps (a browser, an office suite) whose text does not look like Markdown
+  kept); one copied list item brings its text, not a second marker (into an empty bullet a task
+  keeps its checkbox, a code item its fence; over a whole paragraph the paragraph becomes the
+  item); HTML from other apps (a browser, an office suite) whose text does not look like Markdown
   comes as Markdown (`EditorHost::htmlToMarkdown`, io's converter); this app's own copies paste as
-  their Markdown. With blocks selected the paste replaces them (the pasted blocks are selected,
-  one undo step). Block ids (`^id`, `id::`) that already resolve elsewhere are dropped from what is
-  pasted — `((id))` is vault-wide —, except right after a cut (in any page of the app: a move) and
-  for the replaced blocks' own ids.
+  their Markdown (the last one, or HTML with the generator mark — also after a restart; text with
+  block ids, properties, task signifiers, `$$` or footnotes counts as Markdown). With blocks
+  selected the paste replaces them (the pasted blocks are selected, one undo step); a pasted
+  note's YAML frontmatter is left out — nothing else to paste: nothing is deleted —, and with the
+  page's properties selected the paste goes in below them (they are never replaced). Block ids
+  (`^id`, `id::`) that already resolve elsewhere are dropped from what is pasted — `((id))` is
+  vault-wide —, except right after a cut (in any page of the app, a block selection or an edited
+  block's text: a move — unless the cut page has them again, the cut undone) and for the replaced
+  blocks' own ids.
 * **Inside an edited block**: Ctrl+C / Ctrl+X and the text menu copy the exact characters
   (`PageController.copyEditText`; TextEdit's own copy turns no-break spaces into spaces), the
   selection stays shown while a menu or dialog has the keyboard (`persistentSelection`), and a
@@ -512,17 +532,18 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
 * **"Zaznacz tekst"** (`SelectTextView`; the page menu, the top bar's Więcej, the palette, the
   selection's Więcej; route `open: "selectText"`): the whole page — or the journal's day — in one
   read-only rich-text `TextEdit` (`PageController.readingHtml()`: the editor's escaping renderer,
-  never a note's own HTML; bullets, numbers and checkboxes as characters, chips without their
-  padding), over the editor (a day: over the stream's frame), readable at the editor's text width
-  in both themes. Desktops: the mouse selects across paragraphs (Shift+click extends),
+  never a note's own HTML, with the note's own spaces — no no-break space joins a one-letter word
+  to the next; bullets, numbers and checkboxes as characters, chips without their padding,
+  calculations with their results, tables with their formulas' values, a query's results), over
+  the editor (a day: over the stream's frame; wheel turns stay in the view), readable at the
+  editor's text width in both themes (a theme change renders it again, the selection kept). Desktops: the mouse selects across paragraphs (Shift+click extends),
   Shift+arrows, Ctrl+A, Ctrl+C. Touch UIs: a finger scrolls, a long press selects a word; on
   Android the system's selection handles and its Copy / Select all popup take it from there (Qt
   6.11 gives them to read-only text too; the popup's Copy arrives as Ctrl+C: the exact copy and a
   toast — checked on the emulator, docs/ANDROID.md), elsewhere (the browser on a phone, a
   desktop's touch UI) two handles of the view's own (44 px) move its ends; a tap clears. "Kopiuj"
   copies the selection — the whole page when nothing is selected — as plain text with every
-  character (no-break spaces too, also the renderer's after one-letter Polish words);
-  "Zamknij", Esc and Back close it.
+  character (the note's own no-break spaces too); "Zamknij", Esc and Back close it.
 * **Browser**: docs/WEB.md "Schowek".
 * **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
   controller `tst_editor_selection` (the real clipboard read back); the playground's
