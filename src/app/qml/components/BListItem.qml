@@ -12,7 +12,8 @@ import Brulion
 // text:        the title (also the accessible name)
 // titleMarkup: optional escaped rich text for the title (e.g. TextHelper.markMatches) —
 //              never raw note content
-// subtitle:    second line (muted); the row grows to the two-line height
+// subtitle:    second line (muted, plain text: a file name is never markup); the row grows to
+//              the two-line height
 // count:       badge on the right (≥ 0 shows); `trailing`: any item on the right
 // selected:    current item (tinted background, bold title, accent bar on the left when
 //              `selectionBar`); hover/press/keyboard focus states built in
@@ -97,6 +98,7 @@ T.ItemDelegate {
                 width: parent.width
                 visible: control.subtitle !== ""
                 text: control.subtitle
+                textFormat: Text.PlainText
                 font.family: Theme.fontUi
                 font.pixelSize: Theme.textSm
                 color: Theme.fgMuted
