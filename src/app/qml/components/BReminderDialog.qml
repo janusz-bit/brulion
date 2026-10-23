@@ -58,10 +58,9 @@ BDialog {
         }
     }
     readonly property string canonicalRule: rule ? DatesHelper.formatRule(rule, "en") : ""
-    readonly property string ruleLabel: {
-        void DatesHelper.locale
-        return rule ? DatesHelper.formatRule(rule) : ""
-    }
+    // The locale passed for real (a method call is not tracked; a bare `void DatesHelper.locale` is
+    // compiled away with the dependency): the label and the weekday names follow a language change.
+    readonly property string ruleLabel: rule ? DatesHelper.formatRule(rule, DatesHelper.locale) : ""
     readonly property var nextDates: rule && valid ? DatesHelper.nextOccurrences(rule, at, 3) : []
 
     property var quickPicks: []
@@ -255,6 +254,7 @@ BDialog {
 
             BDatePicker {
                 id: picker
+                objectName: "reminderDatePicker" // (the editor's self-tests)
                 Layout.fillWidth: true
                 withTime: true
                 timeRequired: true
@@ -400,12 +400,13 @@ BDialog {
                 // Weekday toggles for weekly rules.
                 Row {
                     id: weekdayRow
+                    objectName: "reminderWeekdays"
                     Layout.fillWidth: true
                     visible: control.repeatKind === "weekly" || (control.repeatKind === "custom" && control.repeatUnit === "week")
                     spacing: 4
                     readonly property var effective: control.rule && control.rule.weekdays ? control.rule.weekdays : []
-                    readonly property var shortNames: { void DatesHelper.locale; return DatesHelper.weekdayNames("short") }
-                    readonly property var fullNames: { void DatesHelper.locale; return DatesHelper.weekdayNames("full") }
+                    readonly property var shortNames: DatesHelper.weekdayNames("short", DatesHelper.locale)
+                    readonly property var fullNames: DatesHelper.weekdayNames("full", DatesHelper.locale)
                     readonly property real buttonSize: Math.min(Theme.touchUi ? 44 : 36, (width - 6 * spacing) / 7)
                     Accessible.role: Accessible.Grouping
                     Accessible.name: qsTr("Repeat on")

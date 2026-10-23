@@ -35,7 +35,7 @@ qt_target_qml_sources(brulion
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
-        qml/dev/SelectionSelfTest.qml)
+        qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml)
 else()
     qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

@@ -25,6 +25,7 @@
 #include <QImage>
 #include <QInputDevice>
 #include <QInputMethodEvent>
+#include <QJSValue>
 #include <QKeyEvent>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -198,7 +199,9 @@ using Check = std::function<void(bool, const char *)>;
 ///     and does not toggle it; a click / tap on a status writes it — in Tasks, the backlinks under a
 ///     page, the calendar's agenda, its day panel (on phones a bottom sheet, which stays open) and
 ///     a journal day's editor; "No status" removes the checkbox;
-///     "/zrobione" typed into a journal day completes its block. The notes are put back afterwards.
+///     "/zrobione" typed into a journal day completes its block. The agenda shows a task written
+///     into another note inside its day, the day panel the status it wrote. The notes are put back
+///     afterwards.
 void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -391,6 +394,37 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         check(choose(target) && waitFor([&] { return total(QLatin1String(target)) == targetBefore + 1; }),
               "choosing another status in the agenda writes it");
     }
+    // The agenda follows a change made elsewhere: a task dated today written into another note
+    // joins today's entries, and the day holds them all (its entries' height is their rows': it
+    // once read its Repeater's counter with a bare `void`, compiled away by qmlcachegen).
+    const QString chimney = u"Kominiarz.md"_s;
+    ws->writeFile(chimney,
+                  u"- [ ] Zadzwonić do kominiarza w sprawie przeglądu przewodów 📅 "_s + app->today(0) + u"\n"_s);
+    const auto entryTitle = [](QQuickItem *row) {
+        QVariant entry = row->property("entry");
+        if (entry.canConvert<QJSValue>())
+            entry = entry.value<QJSValue>().toVariant();
+        return entry.toMap().value(u"title"_s).toString();
+    };
+    QQuickItem *chimneyRow =
+            agenda ? shownWhere(agenda,
+                                [&](QQuickItem *item) {
+                                    return isA(item, "PlanningItemRow") && entryTitle(item).contains(u"kominiarza"_s);
+                                })
+                   : nullptr;
+    QQuickItem *entries = chimneyRow ? chimneyRow->parentItem() : nullptr;
+    const auto rowsHeight = [entries] {
+        qreal h = 0;
+        const QList<QQuickItem *> children = entries->childItems();
+        for (QQuickItem *child : children) {
+            if (isA(child, "PlanningItemRow"))
+                h += child->height();
+        }
+        return h;
+    };
+    check(entries && waitFor([&] { return qAbs(entries->height() - rowsHeight()) < 0.5; }),
+          "a task written into another note joins today's agenda, inside its day");
+    ws->deletePage(chimney);
     restore();
 
     // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
@@ -415,6 +449,23 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         return false;
     });
     check(box != nullptr, "the calendar's day panel shows an open task's checkbox");
+    // The day panel's checkboxes of a status.
+    const auto panelBoxes = [window](const QString &status) {
+        int n = 0;
+        std::function<void(QQuickItem *, bool)> visit = [&](QQuickItem *item, bool inPanel) {
+            if (!item->isVisible())
+                return;
+            inPanel = inPanel || isA(item, "CalendarDayPanel");
+            if (inPanel && item->objectName() == u"planningTaskBox" && item->property("status").toString() == status)
+                ++n;
+            const QList<QQuickItem *> children = item->childItems();
+            for (QQuickItem *child : children)
+                visit(child, inPanel);
+        };
+        visit(window->contentItem(), false);
+        return n;
+    };
+    const int panelDoingBefore = panelBoxes(u"doing"_s);
     if (box) {
         const int doingBefore = total(u"doing"_s);
         const int closedBefore = total(u"closed"_s);
@@ -425,6 +476,9 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
         check(choose("doing") && waitFor([&] { return total(u"doing"_s) == doingBefore + 1; })
                       && (!inSheet || daySheet->property("opened").toBool()),
               "choosing “W toku” in the day panel writes it, and its sheet stays open");
+        // (The panel's entries follow the calendar's revision, read for real.)
+        check(waitFor([&] { return panelBoxes(u"doing"_s) == panelDoingBefore + 1; }),
+              "the day panel shows the status it wrote");
     }
     if (inSheet)
         QMetaObject::invokeMethod(daySheet, "close");

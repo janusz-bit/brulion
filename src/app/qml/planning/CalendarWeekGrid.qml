@@ -23,9 +23,11 @@ FocusScope {
     readonly property real headerHeight: Theme.touchUi ? 52 : 46
     readonly property int pillHeight: Theme.touchUi ? 20 : 18
     readonly property bool narrowColumns: columnWidth < 80
-    /// Rows of the all-day strip (0–3).
+    /// Rows of the all-day strip (0–3). (`calendar.revision` read for real: the model's methods are
+    /// not tracked, and a bare `void calendar.revision` is compiled away with the dependency.)
     readonly property int allDayRows: {
-        void calendar.revision
+        if (calendar.revision < 0)
+            return 0
         let rows = 0
         for (let i = 0; i < calendar.rowCount(); ++i) {
             const items = calendar.data(calendar.index(i, 0), CalendarModel.ItemsRole) || []

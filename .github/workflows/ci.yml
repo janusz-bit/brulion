@@ -6,7 +6,8 @@
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer, ctest (fast feedback, independent of nixpkgs);
-#  * lint    — actionlint + shellcheck (workflows, scripts) and clang-format on the changed lines
+#  * lint    — actionlint + shellcheck (workflows, scripts), no QML read made only for a binding's
+#              dependency (scripts/check-qml-reads.sh) and clang-format on the changed lines
 #              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
 #  * perf    — non-blocking performance smoke: `scripts/perf-check.sh -s` (how running time
 #              scales with input size, and the index's memory; no absolute timings, so shared
@@ -147,6 +148,11 @@ jobs:
 
       - name: shellcheck scripts/*.sh tests/scripts/*.sh
         run: shellcheck scripts/*.sh tests/scripts/*.sh
+
+      # A binding follows what it reads for real: qmlcachegen compiles a bare `void x` read away,
+      # and the binding's dependency with it (docs/UI.md; also ctest tst_scripts_check_qml_reads).
+      - name: QML reads made only for a dependency (scripts/check-qml-reads.sh)
+        run: scripts/check-qml-reads.sh
 
       # Only the changed lines (the existing code is not reformatted wholesale): those of the
       # pushed commits, by hand those since the last release, for a release those since the one

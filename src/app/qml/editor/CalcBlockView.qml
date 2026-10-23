@@ -87,6 +87,7 @@ Rectangle {
         model: root.results
         delegate: Text {
             id: result
+            objectName: "calcResult" // (the editor's self-tests)
             required property var modelData
             required property int index
             readonly property bool isError: modelData.error !== ""
@@ -95,7 +96,15 @@ Rectangle {
             visible: text !== ""
             x: root.width - root.resultsWidth
             width: root.resultsWidth - Theme.space4
-            y: { void input.contentHeight; void input.width; return input.y + (offset <= input.length ? input.positionToRectangle(offset).y : 0) }
+            // The line's top as the input wraps it now: contentHeight and width read for real —
+            // positionToRectangle() is a method call, not tracked, and a bare `void input.width` is
+            // compiled away with the dependency (results stayed put when a narrower window wrapped
+            // the lines above them again).
+            y: {
+                if (input.contentHeight < 0 || input.width < 0)
+                    return input.y
+                return input.y + (offset <= input.length ? input.positionToRectangle(offset).y : 0)
+            }
             height: root.lineHeightPx
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignRight

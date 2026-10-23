@@ -20,7 +20,8 @@ import Brulion
 // (clockTest()) and exits; `taskstatus` checks the task status menu and commands
 // (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
-// to blocks and headings and following them (blockLinksTest()) and exits; `copylink` /
+// to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
+// that views follow what they depend on (RefreshSelfTest.qml) and exits; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
 // `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
 // table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
@@ -285,6 +286,18 @@ ApplicationWindow {
         id: selectionTestLoader
         active: false
         sourceComponent: SelectionSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- Views following what they depend on (`--editor-script refreshtest`) -----------------------
+    // The self-test lives in RefreshSelfTest.qml (qml/dev): it uses the step runner below.
+    Loader {
+        id: refreshTestLoader
+        active: false
+        sourceComponent: RefreshSelfTest {
             window: window
             editor: editor
             page: page
@@ -2751,6 +2764,9 @@ ApplicationWindow {
             break
         case "selectiontest":
             selectionTestLoader.active = true
+            break
+        case "refreshtest":
+            refreshTestLoader.active = true
             break
         case "link-flash": {
             // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
