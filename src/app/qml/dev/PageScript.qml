@@ -25,6 +25,9 @@ import Brulion
 //             (one word: the screenshot scripts split arguments at spaces), caret at the end or
 //             at <caret>
 //   select:<text>  any page: the block whose text starts with <text> selected (as after Esc)
+//   select-range:<first>..<last>  any page: the blocks from the one starting with <first> to the
+//             one starting with <last> selected — on touch UIs in the selection mode (its tools
+//             docked at the bottom), as after a long press and a drag
 //   mode-tooltip   the tooltip of the page header's note mode toggle
 Item {
     id: script
@@ -136,7 +139,14 @@ Item {
                 break
             }
             default:
-                if (script.scenario.indexOf("select:") === 0) {
+                if (script.scenario.indexOf("select-range:") === 0) {
+                    const ends = script.scenario.substring(13).split("..")
+                    const first = script.rowOf(ends[0])
+                    script.controller.selectRange(first, script.rowOf(ends.length > 1 ? ends[1] : ends[0]))
+                    if (script.editor.touch)
+                        script.editor.selectionMode = true
+                    script.editor.listView.positionViewAtIndex(first, ListView.Center)
+                } else if (script.scenario.indexOf("select:") === 0) {
                     const row = script.rowOf(script.scenario.substring(7))
                     script.editor.revealRow(row)
                 } else if (script.scenario.indexOf("edit:") === 0) {

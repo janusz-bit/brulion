@@ -54,13 +54,21 @@
       <br><sub><b>Centrum synchronizacji</b> — konflikt z dwóch urządzeń scalony wiersz po wierszu</sub>
     </td>
   </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/images/foldery-przenoszenie.png" width="640" alt="Drzewo folderów z otwartą stroną w folderze Projekty i okno „Przenieś do…” z wyszukiwaniem folderów">
+      <br><sub><b>Foldery</b> — drzewo pokazuje otwartą stronę, a „Przenieś do…” przenosi strony i foldery bez psucia linków</sub>
+    </td>
+  </tr>
 </table>
 
 <p align="center">
   <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji i przyciskiem szybkiej notatki">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi tuż nad klawiaturą">
-  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją oraz edycja z paskiem narzędzi tuż nad klawiaturą (motyw ciemny)</sub>
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/images/telefon-zaznaczenie.png" width="270" alt="Trzy zaznaczone zadania na stronie projektu na telefonie, z uchwytami zaznaczenia i paskiem Kopiuj, Wytnij, Usuń na dole">
+  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją, edycja z paskiem narzędzi tuż nad klawiaturą (motyw ciemny) i zaznaczone bloki z narzędziami zaznaczenia</sub>
 </p>
 
 ## Dlaczego Brulion?
