@@ -9,6 +9,8 @@ Read before changing code:
 * `docs/ARCHITECTURE.md` — layers, modules, platform strategy.
 * `docs/UI.md` — QML UI, block editor, navigation, components.
 * `src/core/types.h` — shared data model. Change only when strictly needed, keep compatible.
+* `TODO.md` — planned work (Polish). When the user asks for the next item, implement the top of
+  "Kolejka" fully (tests, docs, i18n), then remove it from the queue.
 * Branch `archive/web-v1` holds the previous TypeScript/Tauri implementation (well-tested
   logic for dates, markdown, calc, sync, storage, platform + an Android Kotlin plugin). Use it
   as a reference and port test cases from it: `git show archive/web-v1:src/core/dates/natural.ts`,
