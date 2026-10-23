@@ -42,6 +42,13 @@ T.MenuItem {
     Accessible.name: text
     Accessible.description: unavailable !== "" ? unavailable : shortcut
 
+    // A press inside a menu: it no longer moves out of the finger's way (BMenu.touched).
+    onPressedChanged: {
+        const owner = control.menu as BMenu
+        if (pressed && owner)
+            owner.touched = true
+    }
+
     contentItem: Item {
         implicitWidth: (menuIcon.width > 0 ? menuIcon.width + control.spacing : 0) + menuLabel.implicitWidth
                        + (trailing.width > 0 ? trailing.width + 24 : 0)

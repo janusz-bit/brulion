@@ -48,6 +48,10 @@ FocusScope {
     /// toolbar while typing; else the bottom navigation and the capture button on phones.
     readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
                                            : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
+    /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
+    /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
+    /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
+    readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && routeView.viewEditing)
     readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
     /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
     /// strony" first): [{ title, path }] — a crumb opens All pages in that folder.

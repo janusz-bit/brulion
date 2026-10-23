@@ -2298,7 +2298,8 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
-///     keeps the navigation away until the editing stops, above the system's navigation bar; a
+///     keeps the navigation away until the editing stops, above the system's navigation bar, and
+///     toasts then show at the top, away from the line being written; a
 ///     settings field that gets the focus is scrolled above the keyboard; on a wide touch window
 ///     a page in the side panel docks its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -2398,6 +2399,27 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); }),
               "the docked toolbar sits on the bottom edge of the view");
+        // A toast while typing ("Scalono…", a sync): at the top, never over the line being
+        // written (the caret is kept right above the toolbar, where the toasts used to be).
+        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+            QMetaObject::invokeMethod(toasts, "clear");
+        app->toast(u"Scalono zmiany wprowadzone na innym urządzeniu"_s, u"info"_s);
+        QQuickItem *typed = window->activeFocusItem();
+        const bool caretKnown = typed && typed->inherits("QQuickTextEdit");
+        QQuickItem *typingToast = nullptr;
+        check(waitFor([&] {
+                  typingToast = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToast_"); });
+                  if (!typingToast)
+                      return false;
+                  const QRectF box =
+                          typingToast->mapRectToScene(QRectF(0, 0, typingToast->width(), typingToast->height()));
+                  const QRectF caret =
+                          caretKnown ? typed->mapRectToScene(typed->property("cursorRectangle").toRectF()) : QRectF();
+                  return box.bottom() < window->height() / 4 && (!caretKnown || !box.intersects(caret));
+              }),
+              "a toast while typing shows at the top, not over the line being written");
+        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+            QMetaObject::invokeMethod(toasts, "clear");
         // A system navigation bar under the window's bottom edge (a phone's SafeArea margin, here
         // added to the shell's): the docked toolbar sits right above it.
         QQuickItem *shellItem =

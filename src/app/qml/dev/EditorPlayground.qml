@@ -2003,6 +2003,16 @@ ApplicationWindow {
         if (item)
             taskEvents.mouseClick(item, x, y, Qt.RightButton, Qt.NoModifier, -1)
     }
+    /// Where the block menu began before the keyboard moved, and its gap above the toolbar's
+    /// "Więcej" then (blocklinks).
+    property real menuTopBefore: 0
+    property real menuGapBefore: 0
+    /// From the block menu's bottom to the top of the toolbar's "Więcej" under it.
+    function menuGap() {
+        const menu = editor.blockMenu
+        return findItem(editor, "toolbarMore").mapToItem(null, 0, 0).y
+               - menu.background.mapToItem(null, 0, menu.background.height).y
+    }
     function blockMenuOpen() {
         return editor.blockMenu !== null && editor.blockMenu.opened
     }
@@ -2251,7 +2261,44 @@ ApplicationWindow {
                 check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
                 check(menuTop(menu) >= 48 + 8 - 1, "and below the status bar: " + menuTop(menu) + " ≥ 56")
                 check(editor.blockMenu.listItem && !editor.blockMenu.heading, "it is the edited block's menu")
+                window.menuGapBefore = menuGap()
+                window.menuTopBefore = menuTop(menu)
+                // A finger already on it: it stays where it is when the keyboard goes.
+                const item = menuItemNamed(menu, "blockMenuCopyText")
+                taskEvents.touchEvent(item).press(0, item, item.width / 2, item.height / 2).commit()
             },
+            () => { KeyboardInsets.simulated = 0 },
+            () => {},
+            () => {
+                const item = menuItemNamed(editor.blockMenu, "blockMenuCopyText")
+                check(editor.blockMenu.touched && Math.abs(menuTop(editor.blockMenu) - window.menuTopBefore) < 1,
+                      "touched, the menu does not move when the keyboard goes: " + menuTop(editor.blockMenu) + " vs "
+                      + window.menuTopBefore)
+                // Lifted off the menu (at the window's top): nothing chosen.
+                const away = item.mapFromItem(null, 20, 20)
+                taskEvents.touchEvent(item).move(0, item, away.x, away.y).commit()
+                taskEvents.touchEvent(item).release(0, item, away.x, away.y).commit()
+            },
+            () => {
+                check(editor.blockMenu.visible, "the menu stays open")
+                editor.blockMenu.close()
+                KeyboardInsets.simulated = 336
+            },
+            waitStep(() => !editor.blockMenu.visible && editor.toolbarVisible, "closed, the toolbar back on the keyboard"),
+            () => tapItem(findItem(editor, "toolbarMore")),
+            waitStep(() => blockMenuOpen() && !editor.blockMenu.touched, "“More” opens the block menu again"),
+            // The menu took the keys: the system hides the keyboard, the toolbar drops to the bottom.
+            () => { KeyboardInsets.simulated = 0 },
+            waitStep(() => {
+                const menu = editor.blockMenu
+                return menu.visible && menuGap() >= 0 && menuGap() < 24 && !menu.contentItem.interactive
+            }, () => "the untouched menu follows the toolbar down when the keyboard goes, right above it, every "
+                     + "item shown (none scrolled away): " + menuGap() + " px above it (" + window.menuGapBefore
+                     + " before), scrolls " + editor.blockMenu.contentItem.interactive),
+            () => check(menuItemNamed(editor.blockMenu, "blockMenuDelete").mapToItem(null, 0, 0).y
+                        + menuItemNamed(editor.blockMenu, "blockMenuDelete").height
+                        <= findItem(editor, "toolbarMore").mapToItem(null, 0, 0).y,
+                        "“Usuń blok”, its last item, is on screen above the toolbar"),
             ...copySteps("copyBlockLink", "“Link to block” copies [[Page#^id]]",
                          () => "[[" + doc + "#^" + info(window.targetRow).blockId + "]]"),
             () => {

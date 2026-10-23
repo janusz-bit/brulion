@@ -216,8 +216,17 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
   safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
   above the toolbar used to leave its first items untappable; one taller than the room left
-  scrolls); autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
-  the keyboard and the toolbar (`AppShell.toastClearance`); the command palette ends at it.
+  scrolls). A menu opened right above the toolbar (its Więcej, its task button held down) takes
+  the keys, so the system hides the keyboard and the toolbar drops to the bottom: the menu
+  follows it (`BlockEditor.followToolbarWith`), with the room the keyboard left — every item
+  shown, "Usuń blok" no longer scrolled away — until something in it is pressed or scrolled
+  (`BMenu.touched`): it never moves away from a finger aiming at it. Autocomplete is placed above
+  the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard and the toolbar
+  (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar
+  docked while a view edits text (`AppShell.toastsAtTop`): then they show at the window's top,
+  one at a time (`BToastHost.atTop`), since the caret's line is kept right above the keyboard and
+  its toolbar, where they covered it ("Scalono…" while typing on a phone); the command palette
+  ends at it.
 * **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
   `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and
   a document, a slide frame by frame, the system hiding the keyboard, typing, autocomplete,
@@ -225,8 +234,11 @@ everything near the bottom, the same way on Android, in the browser and with a s
   redo in the cell —, the tool rows kept between edits), the journal stream's self-test (`tst_content_journals_qml`: the
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast, the docked toolbar
-  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a settings field scrolled
-  above the keyboard, a page in the side panel of a wide touch window),
+  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a toast while typing at the
+  top, away from the caret's line, a settings field scrolled above the keyboard, a page in the
+  side panel of a wide touch window), `tst_editor_qml_blocklinks*` (the block menu from the
+  toolbar's Więcej following the toolbar down when the keyboard goes, every item shown, and
+  staying put once touched),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
   `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
   `scripts/android-emulator-test.sh --keyboard` (and `--folders`: the toolbar's "Więcej" and the

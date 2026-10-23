@@ -73,6 +73,10 @@ declare -A shot_args=(
   [page-editing-keyboard]="--demo --editor-script editing --keyboard 300"
   [journals-editing-keyboard]="--demo --route {\"view\":\"journals\",\"open\":\"write\"} --keyboard 300"
   [capture-keyboard]="--demo --route journals --popup capture --keyboard 300"
+  # While typing on a phone a toast shows at the top (not over the line being written); the
+  # toolbar's "Więcej" when the system has hidden the keyboard: the menu right above the toolbar.
+  [page-editing-toast]="--demo --editor-script editing-toast --keyboard 300"
+  [page-toolbar-menu]="--demo --editor-script toolbar-menu --keyboard 300"
   [page-suggest]="--demo --editor-script suggest"
   [page-tags]="--demo --editor-script tags"
   [page-slash]="--demo --editor-script slash"
@@ -82,6 +86,10 @@ declare -A shot_args=(
   [page-sidepanel]="--demo --editor-script sidepanel"
   [page-empty]="--demo --editor-script empty"
   [page-new]="--demo --route {\"view\":\"page\",\"path\":\"Prezenty.md\"}"
+  # A tag's page not written yet, opened from the tag: on phones not typing yet (the tagged blocks
+  # listed below stay in view); "Zaznacz tekst" on the guide (no capture button over it).
+  [page-tag-new]="--demo --route {\"view\":\"page\",\"path\":\"pomysł.md\",\"fromTag\":\"pomysł\"}"
+  [page-select-text]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"selectText\"}"
   # Note modes: the guide is a document; editing it; switched to an outline; the page menu with
   # "Przełącz na konspekt"; the renovation project (an outline).
   [page-doc-paragraph]="--demo --editor-script doc-paragraph"
@@ -123,7 +131,7 @@ declare -A shot_notemode=(
   [doc-journal-mixed]=journal-mixed
 )
 all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
-  page-suggest page-tags page-slash page-date page-reminder
+  page-editing-toast page-toolbar-menu page-tag-new page-select-text page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-selection page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app

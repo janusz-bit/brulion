@@ -1944,6 +1944,7 @@ FocusScope {
             return
         if (!blockMenu)
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
+        menuAbove = null
         closeSuggestions()
         // A word the keyboard is still composing becomes text before anything acts on the block.
         if (activeEditor)
@@ -1957,13 +1958,18 @@ FocusScope {
             blockMenu.popup()
     }
     /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
+    /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
+    /// follows the toolbar down into the room it leaves (followToolbarWith), every item shown.
     function openBlockMenuAbove(row, item) {
         if (!controller || row < 0)
             return
         if (!blockMenu)
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
         blockMenu.openFor(row)
-        openBlockMenu(row, item, 0, -blockMenu.openHeight() - Theme.space1)
+        const y = -blockMenu.openHeight() - Theme.space1
+        openBlockMenu(row, item, 0, y)
+        followToolbarWith(blockMenu, item, y)
+        Qt.inputMethod.hide()
     }
     /// The cell toolbar's "Więcej": the block menu of the table whose cell is being edited. A cell
     /// is no block editor that could go on under the menu: its editing ends (its text kept, the
@@ -2009,6 +2015,7 @@ FocusScope {
         taskMenuForSelection = false
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        menuAbove = null
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         taskMenu.bottomMargin = menuBottomMargin()
         if (taskMenuBlock >= 0)
@@ -2063,7 +2070,46 @@ FocusScope {
             return
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
-        openTaskStatusMenu(row, item, 0, -taskMenu.openHeight() - Theme.space1)
+        const y = -taskMenu.openHeight() - Theme.space1
+        openTaskStatusMenu(row, item, 0, y)
+        followToolbarWith(taskMenu, item, y)
+    }
+
+    // ---- Menus above the docked toolbar ---------------------------------------------------------
+    /// A menu opened right above the docked toolbar (its Więcej, its task button held down), the
+    /// toolbar's button it is above and its place there. Such a menu takes the keys, so the system
+    /// hides the on-screen keyboard and the toolbar drops to the bottom (it stays docked while the
+    /// editing goes on): the menu follows it — and gets the room the keyboard leaves, every item
+    /// shown, none scrolled away — until something in it is touched (BMenu.touched): it never
+    /// moves away from a finger that aims at it.
+    property BMenu menuAbove: null
+    property Item menuAboveAnchor: null
+    property real menuAboveY: 0
+    function followToolbarWith(menu, anchor, y) {
+        menuAbove = menu && menu.visible ? menu : null
+        menuAboveAnchor = anchor
+        menuAboveY = y
+    }
+    function followToolbar() {
+        const menu = menuAbove
+        const anchor = menuAboveAnchor
+        if (!menu || !anchor || !menu.visible || menu.touched)
+            return
+        const margin = menuBottomMargin()
+        if (Math.abs(margin - menu.bottomMargin) < 1)
+            return
+        menu.bottomMargin = margin
+        menu.popup(anchor, 0, menuAboveY) // (open already: placed again)
+    }
+    Connections {
+        target: KeyboardInsets
+        enabled: editor.menuAbove !== null
+        function onOverlapChanged() { Qt.callLater(editor.followToolbar) }
+    }
+    Connections {
+        target: editor.dockHost
+        enabled: editor.menuAbove !== null
+        function onHeightChanged() { Qt.callLater(editor.followToolbar) }
     }
     /// The status of a block's task as the menu shows it ("" = none).
     function taskStatusOf(row) {
