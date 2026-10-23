@@ -765,6 +765,20 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(dir + u"/Projekty/Dom.md"_s));
     }
 
+    void pageWriteCanEmptyAPage()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- farba\n"}});
+        const QString hash = run(dir, {u"page"_s, u"read"_s, u"Dom"_s}).result().value(u"hash"_s).toString();
+        Run r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"write"_s, u"Dom"_s, u"--content"_s, QString(),
+                          u"--expect-hash"_s, hash});
+        QCOMPARE(r.code, 0);
+        QVERIFY(QFileInfo::exists(dir + u"/Dom.md"_s));
+        QCOMPARE(readFile(dir + u"/Dom.md"_s), QByteArray());
+        r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"write"_s, u"Dom"_s, u"--expect-hash"_s, hash});
+        QCOMPARE(r.code, 2); // no text at all
+        QCOMPARE(r.errorCode(), u"text_required"_s);
+    }
+
     void polishArgvAndStdin()
     {
         const QString dir = vault();
@@ -968,6 +982,29 @@ private Q_SLOTS:
         for (const QJsonValue &t : tools)
             QVERIFY2(t.toObject().value(u"annotations"_s).toObject().value(u"readOnlyHint"_s).toBool(),
                      qPrintable(t.toObject().value(u"name"_s).toString()));
+
+        // --allow-destructive: page write may empty a page (content "" is a text).
+        QProcess rw;
+        rw.setProcessEnvironment(environment());
+        rw.start(QStringLiteral(BRULION_CLI), {u"--vault"_s, dir, u"mcp"_s, u"--allow-destructive"_s});
+        QVERIFY(rw.waitForStarted(kTimeoutMs));
+        const QString hash = brulion::notebook::contentHash(readFile(dir + u"/Nowy.md"_s));
+        rw.write(QJsonDocument(QJsonObject{{u"jsonrpc"_s, u"2.0"_s},
+                                           {u"id"_s, 1},
+                                           {u"method"_s, u"tools/call"_s},
+                                           {u"params"_s,
+                                            QJsonObject{{u"name"_s, u"brulion_page_write"_s},
+                                                        {u"arguments"_s, QJsonObject{{u"ref"_s, u"Nowy"_s},
+                                                                                     {u"content"_s, QString()},
+                                                                                     {u"expectHash"_s, hash}}}}}})
+                         .toJson(QJsonDocument::Compact)
+                 + '\n');
+        rw.closeWriteChannel();
+        QVERIFY(rw.waitForFinished(kTimeoutMs));
+        const QJsonObject written = QJsonDocument::fromJson(rw.readAllStandardOutput().trimmed()).object();
+        QVERIFY2(!written.value(u"result"_s).toObject().value(u"isError"_s).toBool(true),
+                 QJsonDocument(written).toJson().constData());
+        QCOMPARE(readFile(dir + u"/Nowy.md"_s), QByteArray());
     }
 
     // The app's binary hands `brulion cli …` over (the AppImage's one entry point): no window, no log

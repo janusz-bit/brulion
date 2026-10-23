@@ -313,7 +313,8 @@ Result pageWrite(Call &call)
     const auto ref = call.page(call.str(u"ref"_s), true);
     if (!ref)
         return call.failed();
-    if (!call.has(u"content"_s) && !call.ctx.globals.stdinText)
+    // An empty --content (or MCP content: "") is a text too: the page becomes empty.
+    if (!call.args.contains(u"content"_s) && !call.ctx.globals.stdinText)
         return call.fail(ExitUsage, u"text_required"_s, tr("Give the new text with --content or --stdin"));
     const QString content = call.text(u"content"_s);
     notebook::Notebook::WriteOptions options;
