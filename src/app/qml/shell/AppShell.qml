@@ -222,7 +222,8 @@ FocusScope {
         case "capture": openCapture(); break
         case "newPage": openNewPage(""); break
         case "newFolder": openNewFolder(""); break
-        case "movePage": if (route.view === "page") openMove(route.path, false); break
+        // (Not a daily note: its name is its date, its place the journals folder.)
+        case "movePage": if (route.view === "page" && Workspace.journalDate(route.path) === "") openMove(route.path, false); break
         case "revealInTree": revealInTree(currentFile); break
         case "about": openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
@@ -537,7 +538,7 @@ FocusScope {
     }
     Shortcut {
         sequence: "F2"
-        enabled: shell.route.view === "page"
+        enabled: shell.route.view === "page" && Workspace.journalDate(shell.route.path || "") === ""
         onActivated: shell.openRename(shell.route.path, false)
     }
 

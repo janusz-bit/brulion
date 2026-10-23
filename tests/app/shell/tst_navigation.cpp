@@ -1132,6 +1132,13 @@ private Q_SLOTS:
         app->openJournal(u"2026-10-12"_s);
         QVERIFY(model->run(u"page.reveal"_s));
         QVERIFY(!model->run(u"page.move"_s));
+        // A journal route with only its date (the journal stream's "open as page", the calendar).
+        app->navigate({{u"view"_s, u"journal"_s}, {u"date"_s, u"2026-10-12"_s}});
+        QVERIFY(model->run(u"page.reveal"_s));
+        // A daily note opened as a page: shown in the tree, not moved (its name is its date).
+        app->openPage(u"journals/2026-10-12.md"_s);
+        QVERIFY(model->run(u"page.reveal"_s));
+        QVERIFY(!model->run(u"page.move"_s));
 
         QSignalSpy changed(model, &CommandModel::commandsChanged);
         QSignalSpy language(app.get(), &AppController::languageChanged);

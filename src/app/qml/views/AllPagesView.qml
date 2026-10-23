@@ -516,6 +516,9 @@ FocusScope {
         }
         BMenuItem {
             objectName: "allPagesMenuMove"
+            // (Not a daily note: its name is its date, its place the journals folder.)
+            visible: rowMenu.page.journalDate === ""
+            height: visible ? implicitHeight : 0
             text: qsTr("Move to…")
             iconName: "folder-input"
             onTriggered: AppController.requestItemAction("move", rowMenu.page.path)

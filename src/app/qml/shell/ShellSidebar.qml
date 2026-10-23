@@ -15,10 +15,13 @@ import Brulion
 // folderze, Eksportuj folder…, Kopiuj link, …; the "Strony" header's "+" a menu with a new page or
 // folder at the root, "Zwiń wszystkie", "Pokaż załączniki" and "Pokazuj otwartą stronę" (reveal:
 // the open page or daily note is shown and highlighted in the tree on every route change,
-// `ui/sidebar/revealCurrent`, on by default). With a mouse or touchpad (never a finger: the list
-// flicks and press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens
-// after 600 ms) or onto the "Strony" header (the notebook's root) to move it there
-// (`dropMoveRequested()`); Escape cancels the drag.
+// `ui/sidebar/revealCurrent`, on by default — a collapsed "Strony" section stays collapsed, only
+// "Pokaż w drzewie" opens it). With a mouse or touchpad (never a finger: the list flicks and
+// press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens after
+// 600 ms; the list scrolls near its edges) or onto the "Strony" header (the notebook's root) to
+// move it there (`dropMoveRequested()`); the ghost names the target and what the move rewrites
+// (or why it cannot move); Escape cancels the drag. Daily notes (named by their date) are neither
+// dragged nor offered Przenieś do… or Zmień nazwę… — the journals folder itself is.
 Rectangle {
     id: sidebar
 
@@ -571,6 +574,8 @@ Rectangle {
                 // list and holds for the menu (the drawer's edge swipe too). It takes the pointer
                 // from the list (no flick) and keeps it.
                 DragHandler {
+                    // (Not a daily note: it stays in the journals folder.)
+                    enabled: row.journalDate === ""
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     acceptedButtons: Qt.LeftButton
                     target: null
@@ -761,6 +766,8 @@ Rectangle {
         property bool isDir: false
         readonly property bool favorite: !isDir && Workspace.favorites.some(f => f.path === contextMenu.path)
         readonly property bool page: !isDir && contextMenu.path.toLowerCase().endsWith(".md")
+        /// A daily note: named by its date, kept in the journals folder (no Move, no Rename).
+        readonly property bool daily: page && Workspace.journalDate(contextMenu.path) !== ""
 
         BMenuItem {
             objectName: "treeMenuNewPage"
@@ -814,6 +821,8 @@ Rectangle {
         }
         BMenuItem {
             objectName: "treeMenuMove"
+            visible: !contextMenu.daily
+            height: visible ? implicitHeight : 0
             text: qsTr("Move to…")
             iconName: "folder-input"
             onTriggered: sidebar.moveRequested(contextMenu.path, contextMenu.isDir)
@@ -836,6 +845,8 @@ Rectangle {
         }
         BMenuItem {
             objectName: "treeMenuRename"
+            visible: !contextMenu.daily
+            height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
             onTriggered: sidebar.renameRequested(contextMenu.path, contextMenu.isDir)
