@@ -766,6 +766,53 @@ private Q_SLOTS:
         QVERIFY(!isLocalDir(p.b, u"projekty"_s));
     }
 
+    void caseOnlyRenameOfAnEmptyFolder_data()
+    {
+        QTest::addColumn<bool>("onServer");
+        QTest::addColumn<bool>("aliased");
+        QTest::newRow("renamed here") << false << false;
+        QTest::newRow("renamed on the server") << true << false;
+        QTest::newRow("renamed on the server, case-insensitive storage") << true << true;
+    }
+
+    void caseOnlyRenameOfAnEmptyFolder()
+    {
+        QFETCH(bool, onServer);
+        QFETCH(bool, aliased);
+        Pair p(notesIn(u""_s, 2));
+        QVERIFY(p.a.vault->createFolder(u"projekty"_s));
+        p.a.sync();
+        QVERIFY(p.a.engine->knowsFolder(u"projekty"_s));
+        if (onServer)
+            QVERIFY(p.server.moveNode(u"Notatki/projekty"_s, u"Notatki/Projekty"_s));
+        else
+            QVERIFY(p.a.vault->rename(u"projekty"_s, u"Projekty"_s));
+        // Case-insensitive storage, simulated: "Projekty" opens the very folder "projekty".
+        if (aliased)
+            QVERIFY(QFile::link(p.a.root + u"/projekty"_s, p.a.root + u"/Projekty"_s));
+        const SyncReport r = p.a.sync();
+        QVERIFY(!r.failed());
+        if (aliased) {
+            // One folder: neither removed nor created a second time, now or later.
+            QCOMPARE(r.foldersDeleted + r.foldersCreated, 0);
+            QVERIFY(isLocalDir(p.a, u"projekty"_s));
+            QVERIFY(p.server.isDir(u"Notatki/Projekty"_s));
+            QCOMPARE(p.a.sync().changeCount(), 0);
+            QVERIFY(isLocalDir(p.a, u"projekty"_s));
+            return;
+        }
+        // Two folders on case-sensitive storage: the old one goes, the new one comes, in one run.
+        const SyncAction deleted = onServer ? SyncAction::DeleteFolderLocal : SyncAction::DeleteFolderRemote;
+        const SyncAction created = onServer ? SyncAction::CreateFolderLocal : SyncAction::CreateFolderRemote;
+        QCOMPARE(folderChanges(r, deleted), QStringList{u"projekty"_s});
+        QCOMPARE(folderChanges(r, created), QStringList{u"Projekty"_s});
+        QVERIFY(!isLocalDir(p.a, u"projekty"_s));
+        QVERIFY(isLocalDir(p.a, u"Projekty"_s));
+        QVERIFY(!p.server.isDir(u"Notatki/projekty"_s));
+        QVERIFY(p.server.isDir(u"Notatki/Projekty"_s));
+        QCOMPARE(p.a.sync().changeCount(), 0);
+    }
+
     void caseOnlyFileRenamesAreNotDeletions()
     {
         // Twelve notes renamed in letter case only, uploaded one by one (no folder rename): the

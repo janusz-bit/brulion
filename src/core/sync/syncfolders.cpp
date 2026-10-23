@@ -26,6 +26,8 @@
 #include <QJsonObject>
 
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
 
 using namespace Qt::StringLiterals;
 
@@ -50,6 +52,22 @@ void addAncestors(const VaultPath &path, QSet<VaultPath> &out)
 qsizetype depthOf(const VaultPath &path)
 {
     return path.count(u'/');
+}
+
+std::filesystem::path fsPath(const QString &path)
+{
+    const QByteArray utf8 = path.toUtf8();
+    return std::filesystem::path(
+            std::u8string(reinterpret_cast<const char8_t *>(utf8.constData()), static_cast<size_t>(utf8.size())));
+}
+
+/// Both absolute paths name one folder on disk (the same file system entry — case-insensitive
+/// storage: "Projekty" opens "projekty"). False when either is missing.
+bool sameFolderOnDisk(const QString &a, const QString &b)
+{
+    std::error_code error;
+    const bool same = std::filesystem::equivalent(fsPath(a), fsPath(b), error);
+    return !error && same;
 }
 
 } // namespace
@@ -430,19 +448,16 @@ void SyncRun::syncFolders(std::function<void()> done)
                 ops.append(FolderOp{FolderOp::Kind::DeleteRemote, folder});
         }
     }
-    // Then the new folders, parents first. A folder that exists on the other side in another
-    // letter case is that folder (case-insensitive storage; one folder for links): not created.
-    QSet<QString> remoteLower;
-    for (auto it = m_remoteAll.cbegin(); it != m_remoteAll.cend(); ++it)
-        remoteLower.insert(it.key().toLower());
+    // Then the new folders, parents first (the letter case is checked when they are created:
+    // after the deletions).
     for (const VaultPath &folder : std::as_const(sorted)) {
         if (known.contains(folder))
             continue;
         const bool l = local.contains(folder);
         const bool r = remote.contains(folder);
-        if (l && !r && !remoteLower.contains(folder.toLower()))
+        if (l && !r)
             ops.append(FolderOp{FolderOp::Kind::CreateRemote, folder});
-        else if (!l && r && vault()->existingCase(folder) == folder && !vault()->exists(folder))
+        else if (!l && r)
             ops.append(FolderOp{FolderOp::Kind::CreateLocal, folder});
     }
     runFolderOps(std::make_shared<const QList<FolderOp>>(std::move(ops)), 0, [this, done = std::move(done)] {
@@ -484,6 +499,13 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
             const QFileInfo info(absolute);
             if (!info.isDir() || info.isSymLink())
                 continue;
+            // On case-insensitive storage the server's "Projekty" is this very "projekty".
+            const bool stillThere = std::any_of(m_remoteAll.cbegin(), m_remoteAll.cend(), [&](const RemoteEntry &e) {
+                return e.isDir && e.path != op.path && e.path.compare(op.path, Qt::CaseInsensitive) == 0
+                       && sameFolderOnDisk(absolute, vault()->absolutePath(e.path));
+            });
+            if (stillThere)
+                continue;
             if (!QDir(absolute).isEmpty(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot)
                 || !QDir().rmdir(absolute)) {
                 qCInfo(lcSync).noquote() << u"%1 folder %2 deleted on the server is kept here: it is not empty"_s.arg(
@@ -495,12 +517,21 @@ void SyncRun::runFolderOps(std::shared_ptr<const QList<FolderOp>> ops, qsizetype
             continue;
         }
         case FolderOp::Kind::CreateLocal:
+            // A folder (or file) here in another letter case is that folder: case-insensitive
+            // storage holds one, and links do not tell them apart.
+            if (vault()->exists(op.path) || vault()->existingCase(op.path) != op.path)
+                continue;
             if (vault()->createFolder(op.path))
                 record(op.path, SyncAction::CreateFolderLocal);
             else
                 folderFailed(op.path, u"write-failed"_s, vault()->errorString());
             continue;
         case FolderOp::Kind::CreateRemote:
+            if (std::any_of(m_remoteAll.keyBegin(), m_remoteAll.keyEnd(), [&op](const VaultPath &path) {
+                    return path.compare(op.path, Qt::CaseInsensitive) == 0;
+                })) {
+                continue; // the server has it in another letter case
+            }
             client()->mkdirs(op.path, guarded([this, op, next, fatal](const WebDavError &error) {
                                  if (fatal(error))
                                      return;
