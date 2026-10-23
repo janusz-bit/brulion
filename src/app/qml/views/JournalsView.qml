@@ -364,9 +364,9 @@ FocusScope {
                 preferredWidth: Theme.dialogWidthSm
 
                 readonly property var marks: {
-                    void Workspace.revision
+                    // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
                     const cells = jumpPicker.cells
-                    if (!cells || cells.length === 0)
+                    if (!cells || cells.length === 0 || Workspace.revision < 0)
                         return ({})
                     const out = {}
                     for (const d of Workspace.journalDates(cells[0].date, cells[cells.length - 1].date))

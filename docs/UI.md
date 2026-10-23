@@ -995,6 +995,11 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   applies a typed date or time on Enter, when the field loses focus
   (`applyTypedOnFocusLoss`), when the keyboard is hidden and on Save (`commitPending()`, called
   from `BDialog.acceptRequested`); an invalid time keeps the dialog open with its hint.
+  A binding that has to follow a counter it does not otherwise use (`Workspace.revision`) reads
+  it for real — `if (Workspace.revision < 0) return …`, `revision >= 0 && …`: qmlcachegen
+  compiles a bare `void Workspace.revision` away, and the binding's dependency with it (a renamed
+  page's tag strip, a picture's text, a created daily note's top bar actions came only with some
+  later change).
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers

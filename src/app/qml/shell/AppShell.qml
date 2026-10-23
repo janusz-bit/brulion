@@ -69,9 +69,9 @@ FocusScope {
     readonly property string currentFile: {
         if (route.view === "page")
             return route.path || ""
-        if (route.view !== "journal" || !route.date)
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (route.view !== "journal" || !route.date || Workspace.revision < 0)
             return ""
-        void Workspace.revision
         const path = route.path || Workspace.journalPath(route.date)
         return Workspace.exists(path) ? path : ""
     }

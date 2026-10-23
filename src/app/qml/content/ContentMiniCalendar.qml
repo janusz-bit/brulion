@@ -19,9 +19,9 @@ Item {
     // only while the tab is shown — the side panel keeps it while another tab is open, and every
     // save while typing bumps the revision).
     readonly property var marks: {
-        void Workspace.revision
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         const cells = picker.cells
-        if (!root.visible || !cells || cells.length === 0)
+        if (!root.visible || !cells || cells.length === 0 || Workspace.revision < 0)
             return ({})
         const from = cells[0].date
         const to = cells[cells.length - 1].date
@@ -41,14 +41,13 @@ Item {
         return out
     }
     readonly property var dayItems: {
-        void Workspace.revision
-        if (!root.visible)
+        if (!root.visible || Workspace.revision < 0)
             return []
         return Workspace.calendarItems(root.selectedDate, root.selectedDate).filter(i => i.kind !== "journal")
     }
     readonly property bool hasJournal: {
-        void Workspace.revision
-        return root.visible && Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
+        return root.visible && Workspace.revision >= 0
+               && Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
     }
 
     Flickable {

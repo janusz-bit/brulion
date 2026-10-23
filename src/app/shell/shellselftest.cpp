@@ -635,6 +635,56 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
     }
 
+    // ---- A page renamed (in its header) to a tag in use gets the tag's strip with the rename;
+    //      renamed again — the tags naming it rewritten in other notes — it keeps it.
+    {
+        const QString draft = u"Szkic pomysłów.md"_s;
+        app->workspace()->writeFile(draft, u"- szkic\n"_s);
+        app->openPage(draft);
+        const auto strip = [window] {
+            return findShown(window->contentItem(),
+                             [](QQuickItem *item) { return item->objectName() == u"pageTagStrip"; });
+        };
+        const auto headerOf = [&](const QString &path) {
+            QQuickItem *found = nullptr;
+            waitFor([&] {
+                QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    auto *c = item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>()
+                                                                  : nullptr;
+                    return c && c->property("path").toString() == path && c->property("loaded").toBool();
+                });
+                found = editor ? findShown(editor, [](QQuickItem *item) { return isA(item, "ContentPageHeader"); })
+                               : nullptr;
+                return found != nullptr;
+            });
+            return found;
+        };
+        // The title edited in place (ContentPageHeader.renameRequested), confirmed when it asks.
+        const auto renameInHeader = [&](QQuickItem *header, const QString &title) {
+            if (!header)
+                return;
+            QMetaObject::invokeMethod(header, "renameRequested", Q_ARG(QString, title));
+            for (QObject *dialog : window->findChildren<QObject *>(u"pageRenameDialog"_s)) {
+                if (dialog->property("visible").toBool())
+                    QMetaObject::invokeMethod(dialog, "tryAccept");
+            }
+        };
+        QQuickItem *header = headerOf(draft);
+        check(header && !strip(), "a page no tag names has no tag strip");
+        renameInHeader(header, u"pomysł"_s);
+        check(strip() != nullptr && app->workspace()->exists(tagPage),
+              "renamed to a tag in use, the page has the tag's strip at once");
+        renameInHeader(headerOf(tagPage), u"Pomysły kuchenne"_s);
+        const QString renamed = u"Pomysły kuchenne.md"_s;
+        // (No waiting: the rename is done when the call returns. The strip used to come only with
+        // some later change — its binding had lost its dependency on Workspace.revision.)
+        check(app->workspace()->exists(renamed) && strip() != nullptr && !app->workspace()->exists(tagPage),
+              "renamed again, the tags naming it rewritten in other notes after it moved: the strip stays");
+        app->workspace()->deletePage(app->workspace()->exists(renamed) ? renamed : draft);
+        app->goHome();
+        settle(200);
+    }
+
     // ---- Renaming from the sidebar says how many links and tags change.
     QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
     check(rename != nullptr, "the shell has its rename dialog");
