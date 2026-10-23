@@ -339,12 +339,19 @@ FocusScope {
         })
         list.forceActiveFocus()
     }
-    /// A link's block (`blockId`) or heading is not on this page (nor anywhere): say so.
-    function noticeMissing(blockId, heading) {
-        if (blockId)
+    /// A link's block (`blockId`) or heading is not on this page (nor anywhere): say so. `ref`: the
+    /// block was named by a ((reference)), which no page of the notebook has.
+    function noticeMissing(blockId, heading, ref) {
+        if (blockId && ref)
+            notice(qsTr("No block in the notebook has the id %1").arg(blockId), "info")
+        else if (blockId)
             notice(qsTr("Block ^%1 is not on this page").arg(blockId), "info")
         else if (heading)
             notice(qsTr("Heading “%1” is not on this page").arg(heading), "info")
+    }
+    /// noticeMissing() for PageController.activateLink's {action: "notFound", kind, name}.
+    function noticeNotFound(r) {
+        noticeMissing(r.kind === "heading" ? "" : r.name, r.kind === "heading" ? r.name : "", r.kind === "ref")
     }
 
     // ---- Copying links (docs/SYNTAX.md §2 "Copied links") -----------------------------------------
@@ -551,7 +558,7 @@ FocusScope {
         } else if (r.action === "scrollTo") {
             revealRow(r.row)
         } else if (r.action === "notFound") {
-            noticeMissing(r.kind === "block" ? r.name : "", r.kind === "heading" ? r.name : "")
+            noticeNotFound(r)
         }
     }
 

@@ -142,8 +142,9 @@ public:
     Vault *vault() const { return m_vault.get(); }
     VaultIndex *index() const { return m_index.get(); }
 
-    /// Build the rest of the index now (tests; normally done in chunks in the background).
-    void finishIndexing();
+    /// Build the rest of the index now (normally done in chunks in the background): before what
+    /// needs every note known — a rename, a route to a block, a new block id — and in tests.
+    void finishIndexing() override;
     /// Clock for journals, templates and attachment names (default: current local time).
     void setClock(std::function<QDateTime()> clock);
     QDateTime now() const;

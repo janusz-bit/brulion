@@ -1991,6 +1991,8 @@ QString PageController::ensureBlockRef(int row)
     if (!existing.isEmpty())
         return existing;
     const QPointer<EditorHost> host = m_host;
+    if (host)
+        host->finishIndexing(); // every id of the vault known (not inside the edit: it signals)
     QString id;
     beginCommand();
     applyOp([&](BlockDocument &d) {
@@ -2614,11 +2616,20 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         return QVariantMap{{u"action"_s, u"notFound"_s}, {u"kind"_s, kind}, {u"name"_s, name}};
     };
     const auto scrollTo = [](int target) { return QVariantMap{{u"action"_s, u"scrollTo"_s}, {u"row"_s, target}}; };
+    // Right after opening the index may not know the block yet: complete it before saying the
+    // block is nowhere.
+    const auto nowhere = [this](const QString &id) {
+        if (!m_host)
+            return true;
+        m_host->finishIndexing();
+        return !m_host->blockIdTaken(id);
+    };
     if (scheme == u"block") {
         if (const int found = rowOfBlockId(rest); found >= 0 && !newPane)
             return scrollTo(found);
-        if (m_host && !m_host->blockIdTaken(rest))
-            return notFound(u"block"_s, rest);
+        // A ((reference)) is the notebook's: no page has the id.
+        if (m_host && nowhere(rest))
+            return notFound(u"ref"_s, rest);
         if (m_host)
             m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
         return out;
@@ -2651,7 +2662,7 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
                 if (const int found = rowOfBlockId(id); found >= 0)
                     return scrollTo(found);
                 // Moved to another page: the shell opens it there (Workspace::resolveRoute).
-                if (!m_host || !m_host->blockIdTaken(id))
+                if (nowhere(id))
                     return notFound(u"block"_s, id);
             }
         } else if (!fragment.isEmpty()) {

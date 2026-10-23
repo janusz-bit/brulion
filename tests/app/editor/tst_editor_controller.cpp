@@ -1052,6 +1052,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(r.value(u"name"_s).toString(), u"brak"_s);
         r = activate(u"block:brak"_s);
         QCOMPARE(r.value(u"action"_s).toString(), u"notFound"_s);
+        QCOMPARE(r.value(u"kind"_s).toString(), u"ref"_s); // a ((reference)): nowhere in the notebook
         QCOMPARE(nav.size(), 0);
         // The block is on another page now (Inna.md has ^inny1): the shell is asked to open it.
         r = activate(u"page:Strona#%5Einny1"_s);
@@ -1070,6 +1071,47 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // [[Inna#^inny1]] without an alias reads like the block.
         Fixture other(u"- [[Inna#^inny1]]\n"_s);
         QVERIFY(other.role(0, "html").toString().contains(u"Inna › Blok z innej strony"_s));
+    }
+
+    void linksWaitForTheIndex()
+    {
+        // Right after opening the index is built in the background: a ((id)) or a moved block of a
+        // page not indexed yet must not be said to be missing, nor a new id be taken by one.
+        struct LateIndexHost : FakeEditorHost {
+            int finished = 0;
+            void finishIndexing() override { ++finished; }
+            bool blockIdTaken(const QString &id) const override
+            {
+                return finished > 0 && FakeEditorHost::blockIdTaken(id);
+            }
+        };
+        LateIndexHost host;
+        host.setFile(Page, u"- ((inny1)) [[Strona#^inny1]]\n- nowy blok\n"_s);
+        host.setFile(u"Inna.md"_s, u"- Blok z innej strony ^inny1\n"_s);
+        PageController page;
+        page.setHost(&host);
+        page.setPath(Page);
+        QSignalSpy nav(&host, &FakeEditorHost::navigated);
+        QVERIFY(page.activateLink(0, u"block:inny1"_s).isEmpty());
+        QCOMPARE(host.finished, 1);
+        QCOMPARE(nav.size(), 1);
+        QCOMPARE(host.lastRoute().value(u"blockId"_s).toString(), u"inny1"_s);
+        QVERIFY(page.activateLink(0, u"page:Strona#%5Einny1"_s).isEmpty()); // moved: the shell opens it
+        QCOMPARE(nav.size(), 2);
+        // Here: no index needed.
+        page.ensureBlockRef(1);
+        const int before = host.finished;
+        const QString id = page.blocks()->document().at(1).blockId;
+        QCOMPARE(page.activateLink(0, u"block:"_s + id).value(u"action"_s).toString(), u"scrollTo"_s);
+        QCOMPARE(host.finished, before);
+        // A new id: the index is complete before the ids are checked.
+        LateIndexHost fresh;
+        fresh.setFile(Page, u"- blok\n"_s);
+        PageController other;
+        other.setHost(&fresh);
+        other.setPath(Page);
+        QVERIFY(!other.ensureBlockRef(0).isEmpty());
+        QCOMPARE(fresh.finished, 1);
     }
 
     // --- completions and slash commands ------------------------------------------------------------

@@ -423,8 +423,9 @@ public:
     /// { action: "scrollTo", row } for a block or heading of this page — `((id))`, `[[#^id]]`,
     /// `[[#Heading]]` and links naming this page (`[[ThisPage#^id]]`, `[[ThisPage#A#B]]`), every
     /// time, also when the route would not change; { action: "notFound", kind: "block" |
-    /// "heading", name } when that block or heading is nowhere (a block moved to another page is
-    /// opened there: EditorHost::blockIdTaken, the shell's route resolution).
+    /// "heading" | "ref" (a `((id))`), name } when that block or heading is nowhere (a block moved
+    /// to another page is opened there: EditorHost::blockIdTaken once the index is complete, the
+    /// shell's route resolution).
     Q_INVOKABLE QVariantMap activateLink(int row, const QString &url, bool newPane = false);
 
     // --- Tasks and blocks elsewhere (query results, embeds) ------------------------------------------

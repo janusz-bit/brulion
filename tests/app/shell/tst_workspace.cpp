@@ -886,6 +886,25 @@ private Q_SLOTS:
         QCOMPARE(routeOf(u"Nowa.md"_s, u"moved1"_s).value(u"path"_s).toString(), u"Nowa.md"_s);
     }
 
+    void blockIdsRightAfterOpening()
+    {
+        // Right after opening the index is still being built: an id in a file not read yet is
+        // unknown until EditorHost::finishIndexing(), which the editor calls before it decides
+        // that an id is free (a new one) or nowhere (a link to it).
+        const QString root = m_tmp.filePath(u"wczesne-id"_s);
+        for (int i = 0; i < 30; ++i)
+            writeRaw(root + u"/Notatka %1.md"_s.arg(i), "- tekst\n");
+        writeRaw(root + u"/Późna.md"_s, "- Blok z identyfikatorem ^pozny1\n");
+        Workspace ws;
+        QVERIFY(ws.open(root, QString()));
+        QVERIFY(ws.indexing());
+        QVERIFY(!ws.blockIdTaken(u"pozny1"_s)); // nothing read yet (the first chunk waits for the event loop)
+        brulion::EditorHost *host = &ws;
+        host->finishIndexing();
+        QVERIFY(!ws.indexing());
+        QVERIFY(host->blockIdTaken(u"pozny1"_s));
+    }
+
     // A tag names a page (docs/SYNTAX.md §3): like [[tag]] written at the vault root; a missing
     // page goes where a link's would (nested tags: folders; a date: the journal page).
     void tagRoutesOpenPages()

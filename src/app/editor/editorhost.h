@@ -51,7 +51,12 @@ public:
     virtual QString blockText(const QString &blockId) const = 0;
     /// A block somewhere in the vault has this id (also one whose text is empty): new ids avoid
     /// it, and a link to it is followed to wherever the block is. Default: blockText() is not "".
+    /// Right after opening the index may be incomplete: finishIndexing() first.
     virtual bool blockIdTaken(const QString &blockId) const { return !blockText(blockId).isEmpty(); }
+    /// Complete the vault index now. Right after opening it is built in the background, and what
+    /// is not indexed yet looks missing: called before deciding that a block id is free (a new
+    /// one) or nowhere (a link to it). Default: nothing to do.
+    virtual void finishIndexing() { }
     /// Id of the block at `line` of `path`, writing ` ^id` into that file when missing.
     virtual QString ensureBlockId(const QString &path, int line) = 0;
     /// Templates: list of { path, title }.

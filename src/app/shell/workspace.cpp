@@ -695,6 +695,7 @@ QString Workspace::ensureBlockId(const QString &path, int line)
     const QString content = m_vault->readText(path, &ok);
     if (!ok)
         return {};
+    finishIndexing(); // a new id avoids every id of the vault, also those not indexed yet
     const auto taken = [this](const QString &id) { return blockIdTaken(id); };
     const markdown::EnsuredBlockId result = markdown::ensureBlockId(content, line, taken);
     if (result.id.isEmpty())
