@@ -8,6 +8,7 @@
 #include "workspace.h"
 #include "workspaceintegration.h"
 
+#include "notebook/session.h"
 #include "sync/syncengine.h"
 #include "vault/localstore.h"
 #include "vault/vault.h"
@@ -587,7 +588,8 @@ QString AppController::demoVaultPath() const
 
 QString AppController::deviceStatePath(const QString &vaultPath) const
 {
-    return QDir::cleanPath(m_dataDir + u"/vaults/"_s + Vault::idForPath(vaultPath));
+    // The same folder brulion-cli uses (History and LocalStore shared with it on this device).
+    return notebook::deviceStatePath(m_dataDir, vaultPath);
 }
 
 QString AppController::localPath(const QUrl &url) const
@@ -1023,7 +1025,7 @@ bool AppController::capture(const QString &text)
 {
     if (!m_workspace->isOpen() || inDocsVault())
         return false;
-    // A date in the text makes it a task with a reminder / due date (workspacecapture.h).
+    // A date in the text makes it a task with a reminder / due date (notebook/capture.h).
     return !m_workspace->quickCapture(text).isEmpty();
 }
 

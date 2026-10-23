@@ -1,5 +1,6 @@
 // The Workspace wired to the real core against a QTemporaryDir vault: background indexing with
-// progress and `ready`, quick capture (Polish phrases -> tasks with ⏰ / 📅), index queries for
+// progress and `ready`, quick capture into the journal (the phrases themselves:
+// tests/core/notebook tst_notebook_capture), index queries for
 // the views, the QueryHost (```query blocks, checking tasks), rename with link rewriting and the
 // device-local state that follows it (fold state, favourites), the trash, version history,
 // reminders through a fake notification sink (scheduling, firing late, missed reminders after a
@@ -8,7 +9,6 @@
 #include "appcontroller.h"
 #include "appsettings.h"
 #include "workspace.h"
-#include "workspacecapture.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -24,7 +24,6 @@
 using namespace Qt::StringLiterals;
 using brulion::ScheduledNotification;
 using brulion::shell::AppController;
-using brulion::shell::CaptureLine;
 using brulion::shell::Workspace;
 
 namespace {
@@ -144,51 +143,6 @@ private Q_SLOTS:
     }
 
     // ---- Quick capture ----------------------------------------------------------------------------
-
-    void captureLine_data()
-    {
-        QTest::addColumn<QString>("input");
-        QTest::addColumn<QString>("block");
-        QTest::addColumn<QString>("kind");
-
-        QTest::newRow("reminder") << u"Kupić mleko jutro o 18"_s << u"- [ ] Kupić mleko ⏰ 2026-10-15 18:00"_s
-                                  << u"reminder"_s;
-        QTest::newRow("weekday due") << u"Oddać książkę w piątek"_s << u"- [ ] Oddać książkę 📅 2026-10-16"_s
-                                     << u"due"_s;
-        QTest::newRow("in two hours") << u"Zadzwonić do Łukasza za 2 godziny"_s
-                                      << u"- [ ] Zadzwonić do Łukasza ⏰ 2026-10-14 12:30"_s << u"reminder"_s;
-        QTest::newRow("explicit date and time") << u"Odebrać garnitur 20.10 o 17:30"_s
-                                                << u"- [ ] Odebrać garnitur ⏰ 2026-10-20 17:30"_s << u"reminder"_s;
-        QTest::newRow("existing checkbox") << u"- [ ] Spotkanie z zespołem w poniedziałek o 9:30"_s
-                                           << u"- [ ] Spotkanie z zespołem ⏰ 2026-10-19 09:30"_s << u"reminder"_s;
-        QTest::newRow("logseq keyword") << u"TODO Wysłać fakturę 15 października"_s
-                                        << u"- TODO Wysłać fakturę 📅 2026-10-15"_s << u"due"_s;
-        QTest::newRow("numbered") << u"1. Przeczytać rozdział jutro"_s << u"1. [ ] Przeczytać rozdział 📅 2026-10-15"_s
-                                  << u"due"_s;
-        QTest::newRow("english") << u"Call mom tomorrow at 6pm"_s << u"- [ ] Call mom ⏰ 2026-10-15 18:00"_s
-                                 << u"reminder"_s;
-        QTest::newRow("only a date") << u"jutro o 9"_s << u"- [ ] jutro o 9 ⏰ 2026-10-15 09:00"_s << u"reminder"_s;
-        QTest::newRow("past is a note") << u"Wczoraj byłem u dentysty"_s << u"- Wczoraj byłem u dentysty"_s
-                                        << u"note"_s;
-        QTest::newRow("plain note") << u"Pomysł: żółta ściana w salonie"_s << u"- Pomysł: żółta ściana w salonie"_s
-                                    << u"note"_s;
-        QTest::newRow("amount is no time") << u"Podwyżka o 5 zł"_s << u"- Podwyżka o 5 zł"_s << u"note"_s;
-        QTest::newRow("token kept") << u"Kupić mleko ⏰ 2026-10-20 10:00"_s << u"- Kupić mleko ⏰ 2026-10-20 10:00"_s
-                                    << u"note"_s;
-        QTest::newRow("more lines") << u"\nLista zakupów jutro\r\nmleko\n\n  chleb  \n\n"_s
-                                    << u"- [ ] Lista zakupów 📅 2026-10-15\n  mleko\n\n  chleb"_s << u"due"_s;
-        QTest::newRow("empty") << u"  \n \n"_s << QString() << QString();
-    }
-
-    void captureLine()
-    {
-        QFETCH(QString, input);
-        QFETCH(QString, block);
-        QFETCH(QString, kind);
-        const CaptureLine line = brulion::shell::buildCaptureLine(input, m_now);
-        QCOMPARE(line.block, block);
-        QCOMPARE(brulion::shell::captureKindName(line.kind), kind);
-    }
 
     void quickCaptureWritesTheJournal()
     {

@@ -29,7 +29,7 @@
 //   journals                           journalPath(date), ensureJournal(date) (creates the daily
 //                                      note from the journal template), quickCapture(text)
 //                                      ("Kupić mleko jutro o 18" -> a task with ⏰ in today's
-//                                      journal, workspacecapture.h), captureToJournal(text)
+//                                      journal, notebook/capture.h), captureToJournal(text)
 //   device-local state                 favorites, recentPages, foldState(path) (LocalStore)
 //
 // Changes: every Vault change (own writes, other views, Syncthing/Nextcloud, other programs)
@@ -41,6 +41,7 @@
 #pragma once
 
 #include "editorhost.h"
+#include "notebook/pages.h"
 #include "queryhost.h"
 #include "types.h"
 #include "workspacereminders.h"
@@ -350,7 +351,7 @@ public:
     Q_INVOKABLE QString captureToJournal(const QString &text);
     /// Quick capture: like captureToJournal(), but a date in the first line makes it a task with
     /// a reminder (with a time: "Kupić mleko jutro o 18" -> "- [ ] Kupić mleko ⏰ 2026-10-15
-    /// 18:00") or a due date (without one: "📅 2026-10-16"); see workspacecapture.h.
+    /// 18:00") or a due date (without one: "📅 2026-10-16"); see notebook/capture.h.
     /// Returns the journal's path ("" when nothing was written).
     Q_INVOKABLE QString quickCapture(const QString &text);
     /// What quickCapture(text) would write: { kind: "note" | "reminder" | "due" | "", text (without
@@ -426,32 +427,19 @@ private:
     void storeList(const QString &key, const QStringList &list);
     void forgetPath(const QString &path);
     void renamePathInLists(const QString &oldPath, const QString &newPath);
-    QString templateText(const QString &templatePath, const QDateTime &when, const QString &title) const;
-    /// A daily note of `date` under any name journalDateFromPath() accepts ("" when none).
-    QString existingJournal(QDate date) const;
     /// Append a block (lines joined with "\n") to today's journal; returns its path.
     QString appendToTodaysJournal(const QString &block);
     void indexingFinished();
     void setReady(bool wasReady);
     QVariantMap queryItem(const brulion::QueryItem &item) const;
-    /// Why `from` cannot be moved or renamed to `to` (translated), "" when it can.
-    QString relocationError(const QString &from, const QString &to) const;
-    /// The path a rename gives `path` (`newName` in its folder; with `slashMoves` a "/" makes it a
-    /// path from the notebook root); "" when unusable.
-    QString renamedPath(const QString &path, const QString &newName, bool isDir, bool slashMoves) const;
-    /// The settings of .brulion/config.json naming `path` or something in it: [{ special, path }].
-    QVariantList specialsWithin(const QString &path) const;
-    /// `path` with its folders spelled as the vault spells them (case-insensitive storage).
-    QString spelledFolders(const QString &path) const;
-    /// The file moves of moving `from` (a file or a folder with everything in it) to `to`.
-    QList<brulion::FileMove> fileMoves(const QString &from, const QString &to) const;
+    /// The translated message of a refused page / folder operation (notebook/pages.h).
+    QString pathProblemMessage(const notebook::PathProblem &problem) const;
     /// What relocate(from, to) rewrites: { ok, error, path, links, tags, notes, specials }.
     QVariantMap relocationImpact(const QString &from, const QString &to);
     /// Move or rename `from` to `to` keeping every link and tag (renamePage, renameFolder,
-    /// movePath); returns `to` or "" (an error was emitted).
+    /// movePath: notebook::relocate()); returns `to` or "" (an error was emitted). Settings naming
+    /// `from` or a path in it follow it (a notice says so).
     QString relocate(const QString &from, const QString &to);
-    /// Settings naming `from` or a path in it (special folders, the journal template) follow it.
-    void rebaseConfig(const QString &from, const QString &to);
     /// Folders produce no Vault change of their own (only files do): tell the lists and the tree.
     void notifyFolderChange(const QStringList &paths);
 

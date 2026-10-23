@@ -1,7 +1,6 @@
 #include "workspace.h"
 
 #include "picturesize.h"
-#include "workspacecapture.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -10,6 +9,9 @@
 #include "log/categories.h"
 #include "log/slowscope.h"
 #include "markdown/markdown.h"
+#include "notebook/capture.h"
+#include "notebook/journals.h"
+#include "notebook/pages.h"
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -70,15 +72,6 @@ constexpr int kIndexIntervalMs = 0;
 QVariantMap pageEntry(const QString &path)
 {
     return { { u"path"_s, path }, { u"title"_s, paths::pageTitle(path) } };
-}
-
-/// A page title typed with its extension ("Notatka.md") names the page "Notatka".
-QString withoutMdExtension(const QString &title)
-{
-    const QString t = title.trimmed();
-    if (t.size() > 3 && t.endsWith(u".md"_s, Qt::CaseInsensitive) && t.at(t.size() - 4) != u'/')
-        return t.chopped(3);
-    return title;
 }
 
 QString lineOf(const QString &text)
@@ -980,29 +973,7 @@ QString Workspace::tagPage(const QString &rawTag)
 
 QString Workspace::newPagePath(const QString &target) const
 {
-    if (!m_vault)
-        return {};
-    const VaultConfig config = m_vault->config();
-    // [[2026-10-20]]: a day without a note yet opens that day's journal page.
-    const QString name = withoutMdExtension(target).trimmed();
-    QDate day = QDate::fromString(name, config.journalFileFormat);
-    if (!day.isValid())
-        day = QDate::fromString(name, Qt::ISODate);
-    if (day.isValid())
-        return markdown::journalPathForDate(day, config);
-    // SYNTAX.md §2: an unresolved link points to a page in newPagesFolder ("Projekty/Dom" keeps
-    // its folders). The page is not created here: the editor creates it with its first content.
-    QStringList parts;
-    for (const QString &part : name.split(u'/', Qt::SkipEmptyParts)) {
-        if (!part.trimmed().isEmpty())
-            parts.append(paths::sanitizeFileName(part.trimmed()));
-    }
-    if (parts.isEmpty())
-        return {};
-    const QString base = paths::normalize(config.newPagesFolder);
-    const QString relative = parts.join(u'/') + u".md"_s;
-    // Folders as the vault spells them: [[projekty/Dom]] next to "Projekty/" is a page in it.
-    return m_vault->existingCase(base.isEmpty() ? relative : paths::join(base, relative));
+    return m_vault ? notebook::newPagePath(*m_vault, target) : QString();
 }
 
 void Workspace::openUrl(const QUrl &url)
@@ -1023,39 +994,17 @@ QString Workspace::createPage(const QString &title, const QString &folder, const
 {
     if (!m_vault)
         return {};
-    // "Projekty/Dom" creates the page "Dom" in the folder "Projekty".
-    QStringList parts;
-    for (const QString &part : withoutMdExtension(title).split(u'/', Qt::SkipEmptyParts)) {
-        if (!part.trimmed().isEmpty())
-            parts.append(paths::sanitizeFileName(part));
-    }
-    if (parts.isEmpty())
-        return {};
-    QString base = folder.isNull() ? m_vault->config().newPagesFolder : folder;
-    base = paths::normalize(base);
-    const QString relative = parts.join(u'/') + u".md"_s;
-    const QString wanted = base.isEmpty() ? relative : paths::join(base, relative);
+    const notebook::CreatedPage page =
+            notebook::createPage(*m_vault, title, folder, markdown::parseNoteMode(mode), QString(), ChangeSource::User);
     // A page whose name differs only in letter case ("dom" next to "Dom"): one file on Android's
     // shared storage and other case-insensitive folders a synced vault may land in, and one page
     // for links — that page is opened instead of a second one.
-    const VaultPath spelled = m_vault->existingCase(wanted);
-    if (const auto existing = spelled != wanted ? m_vault->stat(spelled) : std::nullopt; existing && !existing->isDir) {
+    if (page.existing)
         Q_EMIT noticeOccurred(tr("“%1” is the page “%2” (names that differ only in letter case are the same page).")
-                                      .arg(paths::pageTitle(wanted), paths::pageTitle(spelled)));
-        return spelled;
-    }
-    // The mode chosen for the page is written only when the new page would not get it anyway
-    // (docs/SYNTAX.md §4 "Tryb notatki": an empty page takes the notebook's page mode).
-    QString content;
-    if (const auto chosen = markdown::parseNoteMode(mode)) {
-        const VaultConfig config = m_vault->config();
-        content = markdown::withNoteModeChoice(QString(), *chosen,
-                                               markdown::journalDateFromPath(wanted, config).has_value(), config);
-    }
-    const VaultPath path = m_vault->create(wanted, content, ChangeSource::User);
-    if (path.isEmpty())
-        Q_EMIT errorOccurred(tr("Could not create the page: %1").arg(m_vault->errorString()));
-    return path;
+                                      .arg(paths::pageTitle(page.wanted), paths::pageTitle(page.path)));
+    else if (page.problem.kind == notebook::PathProblem::Failed)
+        Q_EMIT errorOccurred(tr("Could not create the page: %1").arg(page.problem.detail));
+    return page.path;
 }
 
 QString Workspace::deletePage(const QString &rawPath)
@@ -1065,26 +1014,16 @@ QString Workspace::deletePage(const QString &rawPath)
     const QString path = paths::normalize(rawPath);
     if (path.isEmpty() || !m_vault->exists(path))
         return {};
-    QSet<QString> before;
-    for (const FileStat &f : m_vault->trash())
-        before.insert(f.path);
-    const auto stat = m_vault->stat(path);
-    const bool folder = stat && stat->isDir;
-    if (!m_vault->remove(path, ChangeSource::User)) {
-        Q_EMIT errorOccurred(tr("Could not move “%1” to the trash: %2").arg(paths::pageTitle(path), m_vault->errorString()));
+    const notebook::DeletedPath deleted = notebook::deletePath(*m_vault, path, ChangeSource::User);
+    if (deleted.trashPath.isEmpty()) {
+        Q_EMIT errorOccurred(
+                tr("Could not move “%1” to the trash: %2").arg(paths::pageTitle(path), deleted.problem.detail));
         return {};
     }
     forgetPath(path);
-    if (folder)
+    if (deleted.folder)
         notifyFolderChange({path}); // an empty folder (or one of folders only) has no file changes
-    // The new entry in the trash: ".trash/<path with a time stamp>" (a folder: its top entry).
-    const int depth = int(path.count(u'/')) + 2; // ".trash" + the path's segments
-    for (const FileStat &f : m_vault->trash()) {
-        if (before.contains(f.path))
-            continue;
-        return f.path.split(u'/').mid(0, depth).join(u'/');
-    }
-    return vaultTrashFolder() + u'/' + path;
+    return deleted.trashPath;
 }
 
 QString Workspace::restore(const QString &trashPath)
@@ -1109,90 +1048,30 @@ QString Workspace::journalPath(const QString &date) const
     return markdown::journalPathForDate(d, m_vault ? m_vault->config() : VaultConfig());
 }
 
-QString Workspace::templateText(const QString &templatePath, const QDateTime &when, const QString &title) const
-{
-    bool ok = false;
-    const QString tpl = m_vault->readText(paths::normalize(templatePath), &ok);
-    if (!ok)
-        return {};
-    markdown::TemplateVars vars;
-    vars.now = when;
-    vars.title = title;
-    vars.locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
-    return markdown::applyTemplate(tpl, vars).text;
-}
-
 QString Workspace::journalFileFor(const QString &date) const
 {
     if (!m_vault)
         return {};
-    const QDate d = QDate::fromString(date, Qt::ISODate);
-    if (!d.isValid())
-        return {};
-    const QString path = markdown::journalPathForDate(d, m_vault->config());
-    // Also check the disk: a note that just arrived (Syncthing) may not be known yet.
-    if (m_vault->exists(path) || QFileInfo::exists(m_vault->absolutePath(path)))
-        return path;
-    // The day may have a note under another name the journal folder accepts: Logseq's
-    // "2026_10_14.md", "Journals/" capitalised on another device, the previous file name format.
-    // Never a second note for the same day next to it.
-    const QString existing = existingJournal(d);
-    return existing.isEmpty() ? path : existing;
+    return notebook::journalFileFor(*m_vault, QDate::fromString(date, Qt::ISODate));
 }
 
 QString Workspace::ensureJournal(const QString &date)
 {
-    const QString path = journalFileFor(date);
-    if (path.isEmpty())
-        return {};
-    if (m_vault->exists(path) || QFileInfo::exists(m_vault->absolutePath(path)))
-        return path;
     const QDate d = QDate::fromString(date, Qt::ISODate);
-    QString content;
-    const QString tpl = paths::normalize(m_vault->config().journalTemplate);
-    if (!tpl.isEmpty() && m_vault->exists(tpl))
-        content = templateText(tpl, QDateTime(d, now().time()), paths::pageTitle(path));
-    if (!m_vault->writeText(path, content, ChangeSource::User)) {
-        Q_EMIT errorOccurred(tr("Could not create the journal page: %1").arg(m_vault->errorString()));
+    if (!m_vault || !d.isValid())
         return {};
-    }
-    return path;
-}
-
-QString Workspace::existingJournal(QDate date) const
-{
-    if (!m_vault)
-        return {};
-    const VaultConfig config = m_vault->config();
-    const QString preferred = config.journalsFolder.isEmpty() ? QString() : config.journalsFolder + u'/';
-    const auto inPreferred = [&](const QString &path) { return !preferred.isEmpty() && path.startsWith(preferred); };
-    QString found;
-    for (const FileStat &f : m_vault->markdownFiles()) {
-        if (markdown::journalDateFromPath(f.path, config) != date)
-            continue;
-        // Several (e.g. "journals/" and "Journals/"): the configured spelling, else the first.
-        if (found.isEmpty() || (inPreferred(f.path) && !inPreferred(found)))
-            found = f.path;
-    }
-    return found;
+    const notebook::EnsuredJournal journal =
+            notebook::ensureJournal(*m_vault, d, now(), notebook::contentLocale(m_language), ChangeSource::User);
+    if (journal.path.isEmpty())
+        Q_EMIT errorOccurred(tr("Could not create the journal page: %1").arg(journal.error));
+    return journal.path;
 }
 
 QString Workspace::captureToJournal(const QString &text)
 {
-    static const QRegularExpression listMarker(u"^([-*+]|\\d+[.)])\\s"_s);
-    QStringList lines = QString(text).remove(u'\r').split(u'\n');
-    while (!lines.isEmpty() && lines.first().trimmed().isEmpty())
-        lines.removeFirst();
-    while (!lines.isEmpty() && lines.last().trimmed().isEmpty())
-        lines.removeLast();
-    if (lines.isEmpty() || !m_vault)
+    const QString block = notebook::blockFromText(text);
+    if (block.isEmpty() || !m_vault)
         return {};
-    QString first = lines.first().trimmed();
-    if (!listMarker.match(first).hasMatch())
-        first.prepend(u"- "_s);
-    QString block = first;
-    for (qsizetype i = 1; i < lines.size(); ++i)
-        block += u"\n  "_s + lines.at(i).trimmed();
     return appendToTodaysJournal(block);
 }
 
@@ -1200,50 +1079,39 @@ QString Workspace::quickCapture(const QString &text)
 {
     if (!m_vault)
         return {};
-    const CaptureLine line = buildCaptureLine(text, now(), m_vault->config().weekStartsOn,
-                                              m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish);
-    if (line.kind == CaptureLine::Kind::Empty)
+    const notebook::CaptureLine line = notebook::buildCaptureLine(text, now(), m_vault->config().weekStartsOn,
+                                                                  notebook::contentLocale(m_language));
+    if (line.kind == notebook::CaptureLine::Kind::Empty)
         return {};
     return appendToTodaysJournal(line.block);
 }
 
 QVariantMap Workspace::quickCapturePreview(const QString &text) const
 {
-    const dates::UiLocale locale = m_language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    const dates::UiLocale locale = notebook::contentLocale(m_language);
     const QDateTime current = now();
-    const CaptureLine line = buildCaptureLine(text, current, m_vault ? m_vault->config().weekStartsOn : Qt::Monday, locale);
+    const notebook::CaptureLine line =
+            notebook::buildCaptureLine(text, current, m_vault ? m_vault->config().weekStartsOn : Qt::Monday, locale);
     const bool dated = line.when.isValid();
     return {
-        { u"kind"_s, captureKindName(line.kind) },
-        { u"text"_s, line.text },
-        { u"date"_s, dated ? line.when.date.toString(Qt::ISODate) : QString() },
-        { u"time"_s, dated && line.when.time ? line.when.time->toString(u"HH:mm"_s) : QString() },
-        { u"when"_s, dated ? dates::formatHuman(line.when, locale, current.date()) : QString() },
-        { u"line"_s, line.block.section(u'\n', 0, 0) },
+            {u"kind"_s, notebook::captureKindName(line.kind)},
+            {u"text"_s, line.text},
+            {u"date"_s, dated ? line.when.date.toString(Qt::ISODate) : QString()},
+            {u"time"_s, dated && line.when.time ? line.when.time->toString(u"HH:mm"_s) : QString()},
+            {u"when"_s, dated ? dates::formatHuman(line.when, locale, current.date()) : QString()},
+            {u"line"_s, line.block.section(u'\n', 0, 0)},
     };
 }
 
 QString Workspace::appendToTodaysJournal(const QString &block)
 {
-    static const QRegularExpression emptyBullet(u"^\\s*[-*+]\\s*$"_s);
     if (!m_vault || block.trimmed().isEmpty())
         return {};
     const QString path = ensureJournal(now().date().toString(Qt::ISODate));
     if (path.isEmpty())
         return {};
-    QString content = m_vault->readText(path);
-    const QString eol = text::detectEol(content);
-
-    // A template often ends with an empty bullet ("- "): fill that instead of adding below it.
-    QList<text::Line> existing = text::splitLines(content);
-    while (!existing.isEmpty() && existing.last().text.trimmed().isEmpty())
-        existing.removeLast();
-    if (!existing.isEmpty() && emptyBullet.match(existing.last().text).hasMatch())
-        existing.removeLast();
-    content = text::joinLines(existing);
-    if (!content.isEmpty() && !content.endsWith(u'\n'))
-        content += eol;
-    content += QString(block).replace(u'\n', eol) + eol;
+    // A template's empty last bullet is filled, the note's line ending kept (notebook/journals.h).
+    const QString content = notebook::appendBlock(m_vault->readText(path), block);
     return writeFile(path, content) ? path : QString();
 }
 

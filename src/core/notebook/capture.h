@@ -1,5 +1,6 @@
-// Quick capture (Workspace::quickCapture): what a captured line becomes in today's journal.
-// Pure, so the Polish phrases are unit-tested without a vault.
+// Quick capture (Workspace::quickCapture, `brulion-cli capture`): what a captured line becomes in
+// today's journal. Pure, so the Polish phrases are unit-tested without a vault. Part of the
+// notebook module — see notebook/notebook.h.
 //
 //   "Kupić mleko jutro o 18"      -> "- [ ] Kupić mleko ⏰ 2026-10-15 18:00"   (a reminder)
 //   "Oddać książkę w piątek"      -> "- [ ] Oddać książkę 📅 2026-10-16"       (a due date)
@@ -19,7 +20,7 @@
 #include <QDateTime>
 #include <QString>
 
-namespace brulion::shell {
+namespace brulion::notebook {
 
 struct CaptureLine {
     enum class Kind { Empty, Note, Reminder, Due };
@@ -38,4 +39,4 @@ QString captureKindName(CaptureLine::Kind kind);
 CaptureLine buildCaptureLine(const QString &input, const QDateTime &now, Qt::DayOfWeek weekStart = Qt::Monday,
                              dates::UiLocale locale = dates::UiLocale::Polish);
 
-} // namespace brulion::shell
+} // namespace brulion::notebook

@@ -90,7 +90,7 @@ struct QuickAdd {
 /// Natural-language quick add (TasksView): the input always becomes a task. The first date
 /// phrase (dates::parseNaturalDate) is taken out of the text — with a time it becomes a ⏰
 /// reminder, without one a 📅 due date — the same convention as the shell's quick capture
-/// (shell/workspacecapture.h). Dates before today stay text. Without a phrase the task gets no
+/// (notebook/capture.h). Dates before today stay text. Without a phrase the task gets no
 /// date.
 QuickAdd parseQuickAdd(const QString &input, const QDateTime &now, Qt::DayOfWeek weekStart = Qt::Monday,
                        dates::UiLocale locale = dates::UiLocale::Polish);

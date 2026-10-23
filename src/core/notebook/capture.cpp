@@ -1,4 +1,4 @@
-#include "workspacecapture.h"
+#include "notebook/capture.h"
 
 #include "dates/dates.h"
 #include "markdown/markdown.h"
@@ -8,7 +8,7 @@
 
 using namespace Qt::StringLiterals;
 
-namespace brulion::shell {
+namespace brulion::notebook {
 
 QString captureKindName(CaptureLine::Kind kind)
 {
@@ -79,7 +79,7 @@ CaptureLine buildCaptureLine(const QString &input, const QDateTime &now, Qt::Day
         line = marker + task + content.trimmed();
     }
 
-    QStringList block{ line.trimmed() };
+    QStringList block{line.trimmed()};
     for (qsizetype i = 1; i < lines.size(); ++i) {
         const QString rest = lines.at(i).trimmed();
         block.append(rest.isEmpty() ? QString() : u"  "_s + rest);
@@ -88,4 +88,4 @@ CaptureLine buildCaptureLine(const QString &input, const QDateTime &now, Qt::Day
     return out;
 }
 
-} // namespace brulion::shell
+} // namespace brulion::notebook

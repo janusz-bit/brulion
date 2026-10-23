@@ -41,6 +41,6 @@ brulion_add_core_module(io
         export_logseq.cpp
         export_html.cpp
         export_data.cpp
-    DEPS util text dates markdown index
+    DEPS util text dates markdown index notebook
     QT Gui)
 target_link_libraries(brulion_core_io PRIVATE brulion_miniz)
