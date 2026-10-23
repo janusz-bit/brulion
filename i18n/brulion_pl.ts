@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="57"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1504"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1527"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -521,7 +521,7 @@
         <translation>Anuluj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/components/BDialog.qml" line="207"/>
+        <location filename="../src/app/qml/components/BDialog.qml" line="212"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
@@ -972,7 +972,7 @@
 <context>
     <name>BTextField</name>
     <message>
-        <location filename="../src/app/qml/components/BTextField.qml" line="142"/>
+        <location filename="../src/app/qml/components/BTextField.qml" line="154"/>
         <source>Clear</source>
         <translation>Wyczyść</translation>
     </message>
@@ -1076,7 +1076,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockDelegate.qml" line="299"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1089"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1100"/>
         <source>Zoom into block</source>
         <translation>Przybliż blok</translation>
     </message>
@@ -1120,14 +1120,14 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="409"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1572"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1591"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1595"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1614"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="431"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1625"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1648"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -1259,32 +1259,32 @@
         <translation>Druga wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1825"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1829"/>
         <source>Drop to add to this page</source>
         <translation>Upuść, aby dodać do tej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2173"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2177"/>
         <source>Cut</source>
         <translation>Wytnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2181"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2185"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2192"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2196"/>
         <source>Paste</source>
         <translation>Wklej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2205"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2209"/>
         <source>Select all</source>
         <translation>Zaznacz wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2211"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2215"/>
         <source>Block…</source>
         <translation>Blok…</translation>
     </message>
@@ -2301,13 +2301,13 @@
     <name>ContentPictureView</name>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="97"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1800"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1823"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="97"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1792"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1815"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2334,7 +2334,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="337"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1942"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1965"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -6416,7 +6416,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1263"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1274"/>
         <source>Move here</source>
         <translation>Przenieś tutaj</translation>
     </message>
@@ -6566,6 +6566,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellNewPageDialog.qml" line="38"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1313"/>
         <source>Create</source>
         <translation>Utwórz</translation>
     </message>
@@ -6617,6 +6618,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2237"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -6867,7 +6869,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="556"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="936"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="947"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -7099,7 +7101,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="362"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1818"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1841"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -7135,7 +7137,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1827"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1850"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -7156,7 +7158,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="232"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1826"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1849"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
