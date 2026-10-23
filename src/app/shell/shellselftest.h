@@ -6,7 +6,8 @@
 // with context menus driven by real input (phones: finger taps and long presses through the
 // drawer's page tree, All pages, tasks and the editor's bullets; desktops: left and right clicks),
 // tags as page links (a #tag opens its page with the tagged blocks among its references; in
-// Tasks a click filters, Ctrl+click or a long press opens the page; the tag list's rows),
+// Tasks a click filters, Ctrl+click or a long press opens the page; the tag list's rows), folders
+// (reveal, "Przenieś do…", a root folder, mouse drag and drop with Escape, All pages' folders),
 // switching to the documentation notebook and back with the sidebar's notebook switcher, and
 // closing the notebook from the UI. Prints one line per check (BRULION_SELFTEST_DEBUG=1 adds
 // the focused item); the exit code is the number of failures. Run by ctest as tst_shell_qml

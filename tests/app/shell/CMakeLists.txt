@@ -14,9 +14,11 @@ brulion_add_test(tst_shell_singleinstance SOURCES tst_singleinstance.cpp LIBS br
 # key routing and focus (Escape/back with the drawer and the palette open, back through the
 # history, back at home left to the system), rows with context menus with real input (the phone
 # run: touch taps and long presses in the drawer opened from the bottom bar and the top bar, All
-# pages, tasks, editor bullets; the desktop run: left and right clicks), the block editor inside
-# the shell (real keys, source mode, a link to a missing page) and closing the notebook from the
-# UI. Exit code = failures.
+# pages, tasks, editor bullets; the desktop run: left and right clicks), folders (the open page
+# revealed in the tree, "Przenieś do…" from a row's "⋯" / right-click menu, a root folder from the
+# "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
+# breadcrumb), the block editor inside the shell (real keys, source mode, a link to a missing
+# page) and closing the notebook from the UI. Exit code = failures.
 # A private XDG home keeps the sample notebook and settings out of the user's own.
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)

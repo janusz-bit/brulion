@@ -31,9 +31,7 @@ components — no Material/Fusion look, so all targets look identical.
     notebook whose folder is gone is not recreated: a warning, and it leaves the list) and a
     new-page button; navigation Dziennik,
     Kalendarz, Zadania, Wszystkie strony, Tagi, Graf, Szukaj; Ulubione; Ostatnie; Strony (the
-    folder tree, lazy, with a context menu: new page / folder here, open in side panel,
-    favourite, rename, history, trash; an empty folder opens to "Pusty folder"); a sync status
-    footer (opens the sync center).
+    folder tree — see "Folders" below); a sync status footer (opens the sync center).
   * Top bar (`ShellTopBar`): sidebar toggle, back / forward, the title (a breadcrumb for pages
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
@@ -49,7 +47,8 @@ components — no Material/Fusion look, so all targets look identical.
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
-  ulubionych, Zmień nazwę… (F2, pages only), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
+  ulubionych, Zmień nazwę… (F2, pages only), Przenieś do… (pages only), Pokaż w drzewie (the
+  sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
   Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
   offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
@@ -70,9 +69,59 @@ components — no Material/Fusion look, so all targets look identical.
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
-  new page, capture, theme, language, sync, panels, settings, about), quick switcher
-  (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
-  the text become ⏰ / 📅), new page / folder, rename, delete confirmation, about; toasts.
+  new page, Nowy folder…, Przenieś do…, Pokaż w drzewie, capture, theme, language, sync, panels,
+  settings, about), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
+  line → today's journal; dates in the text become ⏰ / 📅), new page / folder, rename, move
+  (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
+  page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
+  `delete`, `newPage`, `newFolder`, `reveal`).
+
+## Folders (the sidebar's tree, "Przenieś do…")
+
+Folders are namespaces of pages (docs/SYNTAX.md §1); moving never breaks a link (§2 "Rewriting on
+rename and move").
+
+* **The tree** (`FolderTreeModel` in `ShellSidebar`): lazy (rows only under open folders);
+  folders first, then pages, in Polish order with numbers by value (`text::compareNames`, the
+  same in All pages and on every platform); the journals folder first, with a calendar icon,
+  its days by readable dates ("śr, 14 paź"), newest first, closed by default; attachments hidden
+  unless "Pokaż załączniki". Vault changes reach it as inserted and removed rows (never a reset
+  while rows stay: the list keeps its place, Syncthing's deliveries included); open folders are
+  remembered per notebook (device-local), follow renamed and moved folders and are forgotten
+  with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
+  note is revealed (its folders opened, scrolled into view) and highlighted on every route
+  change — the "+" menu's "Pokazuj otwartą stronę" (`ui/sidebar/revealCurrent`, on by default)
+  turns that off. "Strony" counts pages without the daily notes.
+* **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
+  every row (44 px; press-and-hold stays). A folder: Nowa strona tutaj, Nowy folder…, Pokaż
+  strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
+  folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
+  counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
+  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`[[…]]` with the shortest target:
+  `Workspace.linkTarget`), Zmień nazwę…, Historia strony, Przenieś do kosza. The "Strony"
+  header's "+": Nowa strona, Nowy folder (at the root), Zwiń wszystkie, Pokaż załączniki,
+  Pokazuj otwartą stronę.
+* **Drag and drop** (mouse and touchpad only — a finger keeps the list's flick, press-and-hold
+  and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
+  list scrolls near its edges) or a page (its folder), or onto the "Strony" header (the root),
+  is moved there by `Workspace.movePath`; a ghost names the target, the target is outlined, Escape
+  cancels. The toast has Undo (moving it back).
+* **"Przenieś do…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
+  (fuzzy: names, then paths), "Główny folder notatnika" first, the current folder shown but
+  disabled, a folder's own subtree left out, and "Nowy folder „…”" for the name typed (created,
+  then moved into). A chosen folder shows what the move rewrites (`Workspace.moveImpact`:
+  "Zaktualizowane linki: 3 (w 2 notatkach)", the special-folder settings that follow, or why it
+  cannot move) before "Przenieś tutaj". From the tree, the Więcej menu, the page's menu, All
+  pages' rows and the palette. Its pick mode is the new-page dialog's folder picker.
+* **Rename** (`ShellRenameDialog`): a "/" moves — a path from the notebook root ("Archiwum/Dom"),
+  with a live "Nowe miejsce: …" and the links it rewrites; hidden folder names are refused.
+* **New page** (Ctrl+N, the top bar, the sidebar's pencil): in the folder of the page shown, as a
+  removable chip "W folderze: Projekty ×" with "Zmień…"; without it the notebook's folder for new
+  pages. Pages created from `[[links]]` keep `newPagesFolder`. A new folder is shown in the tree.
+* **All pages** with a folder: its subfolders as rows above its pages (at the root the top-level
+  folders; a tap opens one, back returns), "Z podfolderami" (pages of subfolders too, on by
+  default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
+  ("Wszystkie strony › Projekty › …").
 
 ## On-screen keyboard (`KeyboardInsets`)
 
@@ -196,8 +245,8 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click or a long press opens the tag's page | `query?` |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates | `path?`, `depth?`, `select?` |
-| `search` | `SearchView` | `query?` |
-| `allPages` | `AllPagesView` | `path?` (folder), `sort?` |
+| `search` | `SearchView` — results in a folder of any depth with `folder` (the tree's "Szukaj w folderze"; the route follows its renames and moves) | `query?`, `folder?` |
+| `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge) | `tab?`, `copy?`, `run?` (open a run's details) |
 | `importExport` | `ImportExportView` | `tab?`, … |
@@ -866,13 +915,13 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
-| `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
+| `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>]` (else the page shown), `about`, `drawer` |
 | `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `mode-tooltip`, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -898,7 +947,8 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
   outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,
   `doc-journal-mixed`: one document day among outlines), settings, palette, switcher, new page
-  (with the mode choice), capture, drawer; with a simulated keyboard (`--keyboard 300`) the guide
+  (with the mode choice), capture, drawer, folders (`tree`, `drawer-tree`, `move`, `newpage-folder`,
+  `newfolder`, `allpages`, `allpages-folder`); with a simulated keyboard (`--keyboard 300`) the guide
   being edited (`page-editing-keyboard`), today in the journal stream
   (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,

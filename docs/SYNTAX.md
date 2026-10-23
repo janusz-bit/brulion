@@ -28,6 +28,17 @@ This file is the single source of truth for parsers, renderers, importers and ex
   macOS) they are one file, and links do not tell them apart. Brulion never creates such a twin:
   a new page with that name opens the existing one, a rename to it is refused, an imported page
   gets ` 2`, and new files go into the folder as it is spelled.
+* **Folders** are created with their names sanitised like page titles (`a:b?` → `a b`, per
+  segment) and as the vault spells existing ones (`projekty/Nowy` goes into `Projekty/`); a name
+  the vault would hide — a leading `.` or one of the ignored folders below (`logseq`,
+  `node_modules`, …) — is refused ("Folder o nazwie „…” byłby ukryty"). Nothing is ever moved
+  into an ignored folder.
+* **Moving and renaming** (pages, attachments, folders — "Przenieś do…", drag and drop, a `/` in
+  a new name is a path from the vault root): refused onto a name that exists (also in another
+  letter case) and into the item itself; every link and tag keeps its target (§2 "Rewriting on
+  rename and move"). Renaming or moving a special folder of `.brulion/config.json`
+  (`journalsFolder`, `templatesFolder`, `attachmentsFolder`, `newPagesFolder`), a folder holding
+  one, or the `journalTemplate` file updates those keys in the same operation.
 * Device-local state (sync bookkeeping, merge bases, history snapshots, caches) is **never**
   stored inside the vault — it lives in the app data directory on the device (`QStandardPaths::AppDataLocation`). This keeps Syncthing /
   Nextcloud from syncing machine-specific data.
@@ -83,6 +94,25 @@ match (case-insensitive, Unicode NFC); if several, the one with the shortest pat
 alphabetical; 4) frontmatter `aliases`. Unresolved links point to a page that will be
 created on click (in `newPagesFolder`).
 
+**Rewriting on rename and move** (`VaultIndex::planRelocation()`): before files move, every link
+that the move can affect — wiki links, embeds and Markdown links to the moved files or to files of
+the same name, the links of the moved notes themselves — is resolved as it is and as it will be
+with the files at their new paths. A link whose file would change is rewritten so that it keeps
+naming the same file; only its target changes (`|alias`, `#Heading`, `#^id`, `!` stay):
+* a link to a moved file as before: a bare name keeps the bare new name (`[[Old]]` →
+  `[[New]]`), a path-qualified link gets the new path (`[[Projekty/Dom]]` → `[[Archiwum/Dom]]`;
+  a rename in place keeps the written folder prefix, `[[../b/Old]]` → `[[../b/New]]`), a
+  Markdown link the new vault path (`[x](Projekty/Mój%20dom.md)`);
+* when that name would reach another file — or a link to a file that did not move would now
+  reach a moved one (a page moved to a shallower folder takes `[[Dom]]` over) — the **shortest
+  unique path**: `[[Projekty/Dom]]` (the title, then longer path suffixes, then the vault path;
+  `VaultIndex::linkTarget()`, also what `[[` completion inserts for a duplicate name);
+* tags the same way (they resolve like links at the vault root): `#dom` → `#Projekty/Dom`,
+  `#Projekty/Dom` → `#Archiwum/Dom`, `#[[…]]`, `tags::` and frontmatter items in their form.
+Links that were unresolved stay so. Each rewritten note is written once (one history step).
+Attachments inside a moved folder are covered too (`![[Projekty/plan.png]]`,
+`![](Projekty/plan.png)`).
+
 **Pictures:** an attachment whose extension is `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`,
 `.bmp`, `.avif` or `.ico` (any case; `paths::pictureExtensions()`, the one list the editor, the
 picture view, the file dialog and the HTML export share) is embedded as a picture; any other
@@ -136,7 +166,9 @@ frontmatter's `tags:`.
   rewritten as a list). Only tags that name this page change (with a duplicate name, `#dom` or
   `#Stare/Dom` naming the other page stays). Sub-tags are not renamed; an alias tag (`#Janek`)
   still names the page. A folder rename rewrites path-qualified tags (`#Projekty/Dom` →
-  `#Archiwum/Dom`). Queries are not rewritten: `tag:old` in a ```` ```query ```` block (like a
+  `#Archiwum/Dom`); a move keeps `#Dom` while it still names the page and writes the shortest path
+  that does (`#Projekty/Dom`) when it would not (§2 "Rewriting on rename and move"). Queries are
+  not rewritten: `tag:old` in a ```` ```query ```` block (like a
   `[[link]]` there) keeps the old name and has to be changed by hand.
 * **Queries** — `tag:` stays tags-only; `ref:` also matches tags naming the page (§10).
 * **Graph** — a tag naming a page is an edge to it; "#tag" nodes remain only for tags that name

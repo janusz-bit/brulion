@@ -106,6 +106,14 @@
   z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)).
   Eksport do ZIP z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego
   pliku HTML, JSON, iCalendar, OPML i CSV zadań.
+* **Foldery bez psucia linków.** Strony, załączniki i całe foldery przenosisz poleceniem
+  „Przenieś do…” (z drzewa, menu „Więcej”, listy stron albo palety; na telefonie przycisk „⋯”
+  przy każdym wierszu), przeciągając myszą w drzewie albo wpisując „/” przy zmianie nazwy
+  („Archiwum/Dom”). Każdy link i tag dalej prowadzi do tej samej strony — Brulion pokazuje przed
+  przeniesieniem, ile linków poprawi, a niejednoznaczny `[[Dom]]` zapisze jako
+  `[[Projekty/Dom]]`. Nowy folder zakładasz z „+” przy „Strony”, nowa strona trafia do folderu
+  otwartej strony, drzewo samo pokazuje otwartą stronę i sortuje po polsku („Rozdział 2” przed
+  „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze.
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
   wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
 * **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
@@ -294,6 +302,12 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   without it.
 * Tags are links to pages, as in Logseq: `#work` opens the page "work" (created by its first
   content), whose linked references list the tagged blocks; renaming a page renames its tags.
+* Folders you can reorganise: move pages, attachments and whole folders ("Move to…" from the
+  tree, the More menu, All pages or the palette, a "⋯" button per row on phones, mouse drag and
+  drop in the tree, or a "/" in Rename) and every link and tag keeps pointing at the same file —
+  the impact is shown before moving, an ambiguous `[[Home]]` becomes `[[Projects/Home]]`, and
+  moving the journals or templates folder updates the notebook's settings. The tree reveals the
+  open page and sorts in Polish order with numbers by value; All pages browses folder by folder.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.
