@@ -41,6 +41,7 @@
 #include "workspace.h"
 
 #include <QDateTime>
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QStringList>
@@ -279,6 +280,11 @@ public:
     Q_INVOKABLE bool capture(const QString &text);
     /// Bring the main window to the front (tray, second launch, notification tap).
     Q_INVOKABLE void showWindow();
+    /// A message of a second launch or brulion-cli over the single-instance socket
+    /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today` and `open {"route",
+    /// "vault"}` show the window and do their part; false for any other verb, which changes
+    /// nothing (not even the window) — newer senders stay harmless.
+    bool handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload);
     /// Quit for real (also when closing to the tray is on).
     Q_INVOKABLE void quit();
     /// Android: send the app to the background (the back key at home), as Android 12+ does for
@@ -353,6 +359,8 @@ private:
     QVariantMap initialRoute() const;
     /// `path` is the documentation notebook's folder.
     bool isDocsPath(const QString &path) const;
+    /// The notice for openRoute()'s route of another notebook than the open one.
+    void refuseOtherNotebookRoute(const QString &vault);
 
     std::unique_ptr<AppSettings> m_settings;
     std::unique_ptr<Workspace> m_workspace;

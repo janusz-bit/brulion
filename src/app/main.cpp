@@ -270,15 +270,7 @@ int main(int argc, char *argv[])
                                      qCWarning(brulion::logging::lcApp) << "Ignoring a malformed instance message";
                                      return;
                                  }
-                                 ctl->showWindow();
-                                 // They wait for the notebook when it is still opening.
-                                 if (message->verb == "capture")
-                                     ctl->quickCapture();
-                                 else if (message->verb == "today")
-                                     ctl->openToday();
-                                 else if (message->verb == "open")
-                                     ctl->openRoute(message->payload.value(u"route"_s).toObject().toVariantMap(),
-                                                    message->payload.value(u"vault"_s).toString());
+                                 ctl->handleInstanceMessage(message->verb, message->payload);
                              });
         }
 #endif

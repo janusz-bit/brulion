@@ -398,12 +398,16 @@ void AppController::openRoute(const QVariantMap &route, const QString &vault)
     if (m_status != u"ready")
         return;
     if (!sameNotebook(m_workspace->rootPath())) {
-        toast(tr("The command line asked to open a page of another notebook (%1).")
-                      .arg(QDir::toNativeSeparators(vault)),
-              u"warning"_s);
+        refuseOtherNotebookRoute(vault);
         return;
     }
     navigate(m_workspace->resolveRoute(r));
+}
+
+void AppController::refuseOtherNotebookRoute(const QString &vault)
+{
+    toast(tr("The command line asked to open a page of another notebook (%1).").arg(QDir::toNativeSeparators(vault)),
+          u"warning"_s);
 }
 
 QString AppController::today(int offsetDays) const
@@ -857,9 +861,12 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     // The first route before "ready": the shell is built then and shows it right away.
     const QVariantMap first = initialRoute();
     const QString afterVault = std::exchange(m_routeAfterOpenVault, {});
-    if (const QVariantMap after = std::exchange(m_routeAfterOpen, {});
-        !after.isEmpty()
-        && (afterVault.isEmpty() || Vault::idForPath(afterVault) == Vault::idForPath(m_workspace->rootPath()))) {
+    const QVariantMap after = std::exchange(m_routeAfterOpen, {});
+    const bool afterHere =
+            afterVault.isEmpty() || Vault::idForPath(afterVault) == Vault::idForPath(m_workspace->rootPath());
+    if (!after.isEmpty() && !afterHere)
+        refuseOtherNotebookRoute(afterVault); // asked for (app open) while this notebook was opening
+    if (!after.isEmpty() && afterHere) {
         m_startToday = false;
         m_history.navigate(afterVault.isEmpty() ? after : m_workspace->resolveRoute(after));
     } else if (m_startToday) {
@@ -1066,6 +1073,23 @@ bool AppController::capture(const QString &text)
 void AppController::showWindow()
 {
     Q_EMIT showWindowRequested();
+}
+
+bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)
+{
+    if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open") {
+        qCInfo(lcApp) << "Ignoring an instance message with an unknown verb" << verb;
+        return false;
+    }
+    showWindow();
+    // They wait for the notebook when it is still opening.
+    if (verb == "capture")
+        quickCapture();
+    else if (verb == "today")
+        openToday();
+    else if (verb == "open")
+        openRoute(payload.value(u"route"_s).toObject().toVariantMap(), payload.value(u"vault"_s).toString());
+    return true;
 }
 
 void AppController::quit()

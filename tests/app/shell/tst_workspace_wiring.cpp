@@ -664,6 +664,71 @@ private Q_SLOTS:
         QTRY_VERIFY(!ws->isOpen());
         QVERIFY(!ws->reminders()->isRunning());
     }
+
+    // brulion-cli `app open` and a second launch (ipc/appmessage.h) as main() hands them over: the
+    // payload as it comes off the socket (the line a JSON number), a route asked for while the
+    // notebook is still opening (shown once it is ready — or, for another notebook, a notice), and
+    // verbs of newer senders that change nothing.
+    void instanceMessages()
+    {
+        AppController::Options options;
+        options.settingsFile = m_tmp.filePath(u"app-messages/settings.ini"_s);
+        options.dataDir = m_tmp.filePath(u"app-messages/data"_s);
+        AppController app(options);
+        app.setClock([this] { return m_now; });
+        app.workspace()->sync()->setSyncthingDiscovery(false);
+        QSignalSpy shown(&app, &AppController::showWindowRequested);
+        QSignalSpy toasts(&app, &AppController::toastRequested);
+        // The payload as main() gets it: written by brulion-cli, parsed from the socket's line.
+        const auto payload = [](const QJsonObject &sent) {
+            return QJsonDocument::fromJson(QJsonDocument(sent).toJson(QJsonDocument::Compact)).object();
+        };
+        const QString root = newRoot();
+        writeRaw(root + u"/Projekty/Dom.md"_s, "- a\n- b\n- c\n");
+
+        // While it opens: the route waits for the notebook.
+        app.openVault(root);
+        QCOMPARE(app.status(), u"loading"_s);
+        const QJsonObject open{
+                {u"route"_s, QJsonObject{{u"view"_s, u"page"_s}, {u"path"_s, u"Projekty/Dom.md"_s}, {u"line"_s, 2}}},
+                {u"vault"_s, root}};
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QCOMPARE(shown.size(), 1);
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"page"_s);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
+        QCOMPARE(app.currentRoute().value(u"line"_s).toInt(), 2);
+        QCOMPARE(toasts.size(), 0);
+
+        // Ready: today's journal, then a page by the same payload shape.
+        QVERIFY(app.handleInstanceMessage("today", {}));
+        QCOMPARE(app.currentRoute().value(u"view"_s).toString(), u"journal"_s);
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QCOMPARE(app.currentRoute().value(u"line"_s).toInt(), 2);
+        QVERIFY(app.handleInstanceMessage("activate", {}));
+        QCOMPARE(shown.size(), 4);
+
+        // Unknown verbs (wave 4's remote control on an older app): not even the window.
+        QVERIFY(!app.handleInstanceMessage("screenshot", payload({{u"path"_s, u"/tmp/x.png"_s}})));
+        QVERIFY(!app.handleInstanceMessage("navigate", payload(open)));
+        QCOMPARE(shown.size(), 4);
+        QCOMPARE(app.currentRoute().value(u"path"_s).toString(), u"Projekty/Dom.md"_s);
+
+        // A route of another notebook asked for while this one opens: a notice, no navigation.
+        app.openPage(u"Projekty/Dom.md"_s);
+        const QString other = newRoot();
+        writeRaw(other + u"/Start.md"_s, "- start\n");
+        app.openVault(other);
+        QCOMPARE(app.status(), u"loading"_s);
+        QVERIFY(app.handleInstanceMessage("open", payload(open)));
+        QTRY_COMPARE(app.status(), u"ready"_s);
+        QCOMPARE(toasts.size(), 1);
+        QVERIFY(toasts.first().first().toString().contains(QDir::toNativeSeparators(root)));
+        QVERIFY(app.currentRoute().value(u"path"_s).toString() != u"Projekty/Dom.md"_s);
+
+        app.closeVault();
+        QTRY_VERIFY(!app.workspace()->isOpen());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWorkspaceWiring)

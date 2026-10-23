@@ -12,9 +12,10 @@
 //                                     a route for another notebook than the one open is refused
 //                                     with a notice (brulion-cli app open)
 //
-// The channel is one-way (nothing is answered). Unknown verbs are ignored by the app, so newer
-// senders stay harmless; the full remote control of the running app (state, navigate,
-// screenshot, click, type …) will add request/response verbs on a socket of its own.
+// The channel is one-way (nothing is answered). Unknown verbs are ignored by the app
+// (AppController::handleInstanceMessage: not even the window comes up), so newer senders stay
+// harmless; the full remote control of the running app (state, navigate, screenshot, click,
+// type …) will add request/response verbs on a socket of its own.
 #pragma once
 
 #include <QByteArray>
