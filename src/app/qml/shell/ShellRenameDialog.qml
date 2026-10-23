@@ -85,11 +85,13 @@ BDialog {
             return
         const n = (result.links || 0) + (result.tags || 0)
         const tags = (result.tags || 0) > 0
+        const title = dialog.isDir ? renamed.split("/").pop() : Workspace.pageTitle(renamed)
         if (moves) {
-            AppController.toast(words.movedText(Workspace.folderOf(renamed), n, tags), "success")
+            // Moved, and renamed too when the name after the last "/" is another one.
+            AppController.toast(words.movedText(Workspace.folderOf(renamed), n, tags,
+                                                title !== dialog.currentName ? title : ""), "success")
             return
         }
-        const title = dialog.isDir ? renamed.split("/").pop() : Workspace.pageTitle(renamed)
         AppController.toast(tags ? qsTr("Renamed to “%1”, %n link(s) and tag(s) updated", "", n).arg(title)
                             : n > 0 ? qsTr("Renamed to “%1”, %n link(s) updated", "", n).arg(title)
                             : qsTr("Renamed to “%1”").arg(title), "success")

@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Brulion
 
-// BToastHost — shows BToasts stacked at the bottom of the window, auto-dismisses them and
-// announces them politely to screen readers.
+// BToastHost — shows BToasts stacked at the bottom of the window (`atTop`: at its top, the newest
+// one only — while typing on a touch screen, where the bottom is the line being written),
+// auto-dismisses them and announces them politely to screen readers.
 //
 // Put one in the main window, above everything (also above dialogs):
 //   BToastHost { id: toasts; parent: T.Overlay.overlay; anchors.fill: parent; z: 1000 }
@@ -21,6 +22,10 @@ Item {
     property int maxVisible: 3
     property int defaultTimeout: 4000
     property real bottomMargin: Theme.space4
+    /// At the window's top (below `topMargin`), one toast at a time: nothing is covered but the
+    /// top bar.
+    property bool atTop: false
+    property real topMargin: Theme.space2
     property var _actions: ({})
     property int _nextId: 1
 
@@ -39,7 +44,7 @@ Item {
             actionText: o.actionText || "",
             timeout: o.timeout !== undefined ? o.timeout : (hasAction ? 7000 : defaultTimeout)
         })
-        while (toastModel.count > maxVisible)
+        while (toastModel.count > (atTop ? 1 : maxVisible))
             _remove(toastModel.count - 1)
         _announce(text)
         toastShown(id, String(text), o.kind || "info")
@@ -76,13 +81,18 @@ Item {
         id: toastModel
     }
 
+    // (The older toasts go when they move to the top.)
+    onAtTopChanged: {
+        while (atTop && toastModel.count > 1)
+            _remove(toastModel.count - 1)
+    }
+
     ListView {
         id: list
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: host.bottomMargin
+        y: host.atTop ? host.topMargin : parent.height - host.bottomMargin - height
         width: Theme.compact ? parent.width - 2 * Theme.space3 : Math.min(480, parent.width - 2 * Theme.space4)
-        height: Math.min(contentHeight, parent.height - host.bottomMargin)
+        height: Math.min(contentHeight, parent.height - (host.atTop ? host.topMargin : host.bottomMargin))
         interactive: false
         // No current item: a view gives its current item the focus, and the first toast shown
         // (none before it) took the keyboard from whatever had it — the block being edited when
@@ -90,7 +100,7 @@ Item {
         currentIndex: -1
         keyNavigationEnabled: false
         spacing: Theme.space2
-        verticalLayoutDirection: ListView.BottomToTop
+        verticalLayoutDirection: host.atTop ? ListView.TopToBottom : ListView.BottomToTop
         model: toastModel
 
         delegate: Item {

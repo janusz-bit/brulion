@@ -48,13 +48,15 @@ Item {
     readonly property bool loaded: controller ? controller.loaded : false
     readonly property bool journal: journalDate !== ""
     readonly property bool documentMode: controller ? controller.documentMode : false
-    // Workspace.revision: the summary follows saves (frontmatter edits) and other devices.
-    // Workspace.indexing: a page opened while the notebook is still being read (at start-up)
-    // gets its tags and aliases once the index has it.
+    // Workspace.revision: the summary follows saves (frontmatter edits), renames — the tags naming
+    // a renamed page are rewritten after it moved — and other devices. Workspace.indexing: a page
+    // opened while the notebook is still being read (at start-up) gets its tags and aliases once
+    // the index has it. Both read for real: qmlcachegen compiles a bare `void Workspace.revision`
+    // away, and the binding's dependency with it (the tag strip of a renamed page came only with
+    // some later change).
     readonly property var summary: {
-        void Workspace.revision
-        void Workspace.indexing
-        return path !== "" ? tools.summary(path) : ({})
+        const changes = Workspace.revision + (Workspace.indexing ? 1 : 0)
+        return path !== "" && changes >= 0 ? tools.summary(path) : ({})
     }
     readonly property var folderParts: summary.folderParts || []
     readonly property bool favorite: Workspace.favorites.some(f => f.path === header.path)

@@ -17,8 +17,9 @@ import Brulion
 // tight list items, air above headings.
 //
 // A selected block is drawn on a band (`selectionEdge`: one band over a range of blocks, rounded
-// at its ends, from the editor's left edge; a block alone from its own level); in the touch
-// selection mode the band's first and last blocks carry its grips (BlockEditor.beginGripDrag()).
+// at its ends, from the editor's left edge; a block alone from its own level — blocks picked one by
+// one with gaps between them: a band for each run); in the touch selection mode the band's first
+// and last blocks carry its grips (BlockEditor.beginGripDrag(); a selection without gaps only).
 // Hidden rows (zoom, folds) stay in the model with `visible` false: the delegate collapses to
 // zero height. flash() highlights the block for a moment (a link to it was followed: Theme.mark
 // fading out in about 1.2 s, drawn over the selection and under the text, no height change).
@@ -577,7 +578,7 @@ Item {
         Accessible.name: atStart ? qsTr("Start of the selection") : qsTr("End of the selection")
     }
     Loader {
-        active: block.bandStart && block.editor.selectionMode && block.editor.touch
+        active: block.bandStart && block.editor.selectionGrips
         z: 5
         // (Inside the window: a document's band starts near the screen's edge on a phone.)
         x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
@@ -585,7 +586,7 @@ Item {
         sourceComponent: Grip { atStart: true }
     }
     Loader {
-        active: block.bandEnd && block.editor.selectionMode && block.editor.touch
+        active: block.bandEnd && block.editor.selectionGrips
         z: 5
         // (Inside the window: the band reaches the screen's edge on a phone.)
         x: Math.min(block.bandRight, block.width - 12) - Theme.touchTarget / 2

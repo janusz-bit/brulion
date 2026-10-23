@@ -4,10 +4,11 @@ import QtQuick.Templates as T
 import Brulion
 
 // SelectionToolbar — the tools of a block selection (docs/UI.md "Selecting and copying"):
-// "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej (Kopiuj jako tekst, the block
-// menu's "Kopiuj odnośnik" for a single block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę / w dół,
-// the task status, Zaznacz tekst) and Gotowe (docked, first: leaves the selection mode) or ×
-// (floating, last: clears the selection). Two places:
+// "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Pojedynczo (docked: taps pick single
+// blocks, BlockEditor.pickMode), Więcej (Kopiuj jako tekst, the block menu's "Kopiuj odnośnik" for a
+// single block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę / w dół — for blocks picked with gaps
+// between them shown disabled, a tap says why —, the task status, Zaznacz tekst) and Gotowe
+// (docked, first: leaves the selection mode) or × (floating, last: clears the selection). Two places:
 //   * docked: the "selection" tool set of MobileEditToolbar on touch UIs — in the editing
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
@@ -23,12 +24,24 @@ Row {
     property bool docked: false
     readonly property PageController controller: editor ? editor.controller : null
     readonly property int count: controller ? controller.selectionCount : 0
-    /// One block selected (its two ends are the same block): the block's own tools apply.
+    /// One block selected (its two ends are the same block, nothing picked besides it): the
+    /// block's own tools apply.
     readonly property bool singleBlock: controller !== null && controller.selectedRow >= 0
                                         && controller.selectedRow === controller.selectionAnchorRow
+                                        && !controller.selectionPicked
     /// The selection can be indented (PageController.canIndentSelection: in a document only list
     /// items), read when "Więcej" opens.
     property bool indentable: true
+    /// Why the selection is not indented or moved ("" when it can be: no gaps between its
+    /// blocks), read when "Więcej" opens.
+    property string unmovable: ""
+    /// Indenting and moving from the menu: a selection with gaps says why instead.
+    function moveOr(action) {
+        if (unmovable !== "")
+            editor.notice(unmovable, "info")
+        else
+            action()
+    }
 
     spacing: 0
     Accessible.role: Accessible.ToolBar
@@ -103,6 +116,19 @@ Row {
         enabled: bar.controller !== null
         onClicked: bar.editor.selectAllBlocks()
     }
+    // Docked: taps pick single blocks into or out of the selection instead of moving its end.
+    Tool {
+        objectName: "selectionPickMode"
+        visible: bar.docked
+        iconName: "list-checks"
+        label: qsTr("One by one", "pick single blocks into the selection")
+        // (Not `checkable`: a click must not break the binding to the editor's mode.)
+        checked: bar.editor !== null && bar.editor.pickMode
+        Accessible.checkable: true
+        Accessible.checked: checked
+        enabled: true
+        onClicked: bar.editor.pickMode = !bar.editor.pickMode
+    }
     Tool {
         id: moreButton
         objectName: "selectionMore"
@@ -128,6 +154,7 @@ Row {
             menu = menuComponent.createObject(bar) as BMenu
         // A document's paragraphs and headings have no outline: no Zwiększ / Zmniejsz wcięcie.
         indentable = controller !== null && controller.canIndentSelection()
+        unmovable = controller !== null && !controller.selectionContiguous ? editor.gapReason : ""
         // "Kopiuj odnośnik" only for one block (its item in the menu, made for the submenu).
         for (let i = 0; i < menu.count; ++i) {
             const entry = menu.itemAt(i) as T.MenuItem
@@ -201,7 +228,8 @@ Row {
                 text: qsTr("Indent")
                 iconName: "list-indent-increase"
                 shortcut: bar.docked ? "" : "Tab"
-                onTriggered: bar.controller.indentSelection()
+                unavailable: bar.unmovable
+                onTriggered: bar.moveOr(() => bar.controller.indentSelection())
             }
             OptionalItem {
                 objectName: "selectionOutdent"
@@ -209,19 +237,24 @@ Row {
                 text: qsTr("Outdent")
                 iconName: "list-indent-decrease"
                 shortcut: bar.docked ? "" : "Shift+Tab"
-                onTriggered: bar.controller.outdentSelection()
+                unavailable: bar.unmovable
+                onTriggered: bar.moveOr(() => bar.controller.outdentSelection())
             }
             BMenuItem {
+                objectName: "selectionMoveUp"
                 text: qsTr("Move up")
                 iconName: "move-up"
                 shortcut: bar.docked ? "" : "Alt+Up"
-                onTriggered: bar.controller.moveSelectionUp()
+                unavailable: bar.unmovable
+                onTriggered: bar.moveOr(() => bar.controller.moveSelectionUp())
             }
             BMenuItem {
+                objectName: "selectionMoveDown"
                 text: qsTr("Move down")
                 iconName: "move-down"
                 shortcut: bar.docked ? "" : "Alt+Down"
-                onTriggered: bar.controller.moveSelectionDown()
+                unavailable: bar.unmovable
+                onTriggered: bar.moveOr(() => bar.controller.moveSelectionDown())
             }
             BMenu {
                 objectName: "selectionTaskMenu"

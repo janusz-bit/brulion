@@ -9,7 +9,8 @@ import Brulion
 //
 // View contract: every view has `property var route`; optional `property string title` (top
 // bar), `property Component sidePanel` (context panel: backlinks, outline, mini calendar) and
-// `property bool editing` (text is being edited: the floating capture button hides),
+// `property bool editing` (text is being edited, or a picture or the "Zaznacz tekst" view fills the
+// view: the floating capture button hides),
 // `property bool toolbarDocked` (an editor's touch toolbar is docked at the view's bottom edge,
 // on the keyboard: the bottom navigation hides),
 // `pictureRoute` / `pictureAsText` (PageView: a picture is shown, as text or not — the top bar's

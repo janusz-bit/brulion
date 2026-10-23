@@ -323,8 +323,9 @@ int PageController::selectedRow() const
 void PageController::setSelectedRow(int row)
 {
     const quint64 uid = validRow(row) ? m_model->uidAt(row) : 0;
-    if (uid == m_selectedUid && uid == m_anchorUid)
+    if (uid == m_selectedUid && uid == m_anchorUid && m_pickedUids.isEmpty())
         return;
+    m_pickedUids.clear();
     m_selectedUid = uid;
     m_anchorUid = uid;
     updateSelection();
@@ -856,7 +857,10 @@ bool PageController::validRow(int row) const
 
 PageController::Focus PageController::currentFocus() const
 {
-    return {editingRow(), m_cursor, selectionAnchorRow(), selectedRow()};
+    Focus focus{editingRow(), m_cursor, selectionAnchorRow(), selectedRow()};
+    for (const quint64 uid : m_pickedUids)
+        focus.selectionPicks.append(m_model->rowOfUid(uid));
+    return focus;
 }
 
 void PageController::beginCommand()
@@ -901,6 +905,11 @@ void PageController::restore(const QString &snapshot, const Focus &focus)
         // with no block edited: the two never go together (another block edited meanwhile stops).
         m_anchorUid = m_model->uidAt(focus.selectionAnchor);
         m_selectedUid = m_model->uidAt(focus.selectionFocus);
+        m_pickedUids.clear();
+        for (const int row : focus.selectionPicks) {
+            if (validRow(row))
+                m_pickedUids.append(m_model->uidAt(row));
+        }
         m_editingUid = 0;
     }
     updateSelection();
@@ -1913,6 +1922,9 @@ void PageController::remapBlocks(const QHash<quint64, quint64> &mapping)
     m_editingUid = mapping.value(m_editingUid, 0);
     m_selectedUid = mapping.value(m_selectedUid, 0);
     m_anchorUid = mapping.value(m_anchorUid, 0);
+    for (quint64 &uid : m_pickedUids)
+        uid = mapping.value(uid, 0);
+    m_pickedUids.removeAll(0);
     for (auto it = m_tracked.begin(); it != m_tracked.end(); ++it)
         it.value() = mapping.value(it.value(), 0);
 }

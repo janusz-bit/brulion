@@ -295,10 +295,9 @@ FocusScope {
                                 // The page the tag names (docs/SYNTAX.md §3), written by its first
                                 // content when it does not exist yet.
                                 objectName: "tagPageButton"
-                                readonly property bool pageExists: {
-                                    void Workspace.revision
-                                    return Workspace.exists(Workspace.tagPage(root.tag))
-                                }
+                                // (`revision` read for real: a bare `void` read is compiled away.)
+                                readonly property bool pageExists: Workspace.revision >= 0
+                                                                   && Workspace.exists(Workspace.tagPage(root.tag))
                                 size: "small"
                                 iconName: pageExists ? "file-text" : "plus"
                                 text: pageExists ? qsTr("Open page") : qsTr("Create page")

@@ -844,11 +844,12 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
 {
     // A tag names a page (docs/SYNTAX.md §3): a click on #tag opens that page, created by its
     // first content when it does not exist yet. {view: "tag", overview: true} (and routes the
-    // shell navigates to itself) keep the tag overview.
+    // shell navigates to itself) keep the tag overview. `fromTag`: a page not written yet waits for
+    // a tap on touch screens instead of bringing the keyboard over the blocks with the tag.
     if (route.value(u"view"_s).toString() == u"tag" && !route.value(u"overview"_s).toBool() && m_vault) {
         const QString path = tagPage(route.value(u"tag"_s).toString());
         if (!path.isEmpty())
-            return {{u"view"_s, u"page"_s}, {u"path"_s, path}};
+            return {{u"view"_s, u"page"_s}, {u"path"_s, path}, {u"fromTag"_s, route.value(u"tag"_s).toString()}};
         return route;
     }
     if (route.value(u"view"_s).toString() != u"page" || !m_vault)

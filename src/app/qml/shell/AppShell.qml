@@ -48,6 +48,10 @@ FocusScope {
     /// toolbar while typing; else the bottom navigation and the capture button on phones.
     readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
                                            : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
+    /// Toasts go to the window's top (Main.qml) while text is typed on a touch screen — the
+    /// on-screen keyboard up, or an editing toolbar docked while a view edits text: the caret's
+    /// line is kept right above the keyboard and the toolbar, under the toasts' usual place.
+    readonly property bool toastsAtTop: KeyboardInsets.shown || (toolbarDocked && routeView.viewEditing)
     readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
     /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
     /// strony" first): [{ title, path }] — a crumb opens All pages in that folder.
@@ -69,9 +73,9 @@ FocusScope {
     readonly property string currentFile: {
         if (route.view === "page")
             return route.path || ""
-        if (route.view !== "journal" || !route.date)
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (route.view !== "journal" || !route.date || Workspace.revision < 0)
             return ""
-        void Workspace.revision
         const path = route.path || Workspace.journalPath(route.date)
         return Workspace.exists(path) ? path : ""
     }
@@ -342,7 +346,9 @@ FocusScope {
     }
 
     ShellCaptureButton {
-        // Not while a view edits text: it would cover the editor's toolbar (and the caret). Nor
+        objectName: "shellCaptureButton"
+        // Not while a view edits text: it would cover the editor's toolbar (and the caret), nor
+        // over a picture or "Zaznacz tekst" (the view's `editing`: it covered their text). Nor
         // on views of forms and tools (settings, sync, import/export, history, trash, the graph
         // with its zoom buttons): there it covered their buttons and fields, and capturing a note
         // is not what they are for.

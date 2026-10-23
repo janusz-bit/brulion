@@ -128,6 +128,11 @@ ApplicationWindow {
         // While typing above the keyboard and the editing toolbar docked on it (AppShell).
         bottomMargin: Theme.space4 + (window.shell ? window.shell.toastClearance
                                                     : (parent ? parent.SafeArea.margins.bottom : 0) + KeyboardInsets.overlap)
+        // While typing on a touch screen: at the top, below the status bar (at the bottom it
+        // covered the line being written — the caret is kept right above the keyboard and its
+        // toolbar).
+        atTop: window.shell !== null && window.shell.toastsAtTop
+        topMargin: Theme.space2 + (parent ? parent.SafeArea.margins.top : 0)
     }
 
     // A simulated on-screen keyboard (--keyboard <px>, the self-tests): a grey block with rows of

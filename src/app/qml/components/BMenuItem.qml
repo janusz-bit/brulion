@@ -11,12 +11,17 @@ import Brulion
 //               onTriggered: copyLink() }
 //   BMenuItem { text: qsTr("Pokaż ukończone"); checkable: true; checked: showDone }
 //   BMenuItem { text: qsTr("Usuń"); iconName: "trash-2"; danger: true }
+//   BMenuItem { text: qsTr("Przenieś w górę"); unavailable: gaps ? qsTr("…why…") : "" }
+// `unavailable`: shown but not possible now — drawn disabled, the reason in a tooltip on hover;
+// it still triggers (and closes the menu), so the menu can say why with a toast on touch screens,
+// where there is no hover.
 T.MenuItem {
     id: control
 
     property string iconName
     property string shortcut
     property bool danger: false
+    property string unavailable: ""
 
     readonly property color textColor: danger ? Theme.dangerText : Theme.fg
 
@@ -35,7 +40,14 @@ T.MenuItem {
 
     Accessible.role: Accessible.MenuItem
     Accessible.name: text
-    Accessible.description: shortcut
+    Accessible.description: unavailable !== "" ? unavailable : shortcut
+
+    // A press inside a menu: it no longer moves out of the finger's way (BMenu.touched).
+    onPressedChanged: {
+        const owner = control.menu as BMenu
+        if (pressed && owner)
+            owner.touched = true
+    }
 
     contentItem: Item {
         implicitWidth: (menuIcon.width > 0 ? menuIcon.width + control.spacing : 0) + menuLabel.implicitWidth
@@ -99,5 +111,14 @@ T.MenuItem {
              : "transparent"
     }
 
-    opacity: enabled ? 1 : Theme.disabledOpacity
+    opacity: enabled && unavailable === "" ? 1 : Theme.disabledOpacity
+
+    Loader {
+        active: control.unavailable !== "" && control.hovered && !Theme.touchUi
+        sourceComponent: BToolTip {
+            parent: control
+            text: control.unavailable
+            visible: true
+        }
+    }
 }

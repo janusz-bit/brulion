@@ -37,8 +37,8 @@ Rectangle {
     /// A daily note opened as a page ("journal" route) whose file exists: it gets the page
     /// actions too (favorite, history, side panel, trash), but not Rename (its name is its date).
     readonly property string journalPagePath: {
-        void Workspace.revision
-        if (route.view !== "journal" || !route.date)
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (Workspace.revision < 0 || route.view !== "journal" || !route.date)
             return ""
         const path = route.path || Workspace.journalPath(route.date)
         return Workspace.exists(path) ? path : ""

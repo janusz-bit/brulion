@@ -45,10 +45,12 @@ import Brulion
 // Block selection (docs/UI.md "Selecting and copying"; PageController keeps it as two uids):
 // Shift+↑/↓ (also from the first / last line of an edited block), Ctrl+A twice, Shift+click, a
 // mouse drag from one block into another (the list no longer scrolls with a left drag on non-touch
-// UIs; it scrolls near its edges while selecting), the block menu's "Zaznacz"; on touch UIs a long
-// press on a block's text — the selection mode: taps extend or shrink, two grips adjust the ends,
-// the selection tools are docked where the editing toolbar is ("Gotowe" and Back leave). Ctrl+C /
-// Ctrl+X / Ctrl+V / Delete / Tab / Alt+↑/↓ / Ctrl+Enter act on the whole selection; desktops show a
+// UIs; it scrolls near its edges while selecting), the block menu's "Zaznacz"; Ctrl+click picks
+// single blocks into or out of it (gaps allowed); on touch UIs a long press on a block's text — the
+// selection mode: taps extend or shrink (with the tools' "Pojedynczo" on: pick single blocks), two
+// grips adjust the ends, the selection tools are docked where the editing toolbar is ("Gotowe" and
+// Back leave). Ctrl+C / Ctrl+X / Ctrl+V / Delete / Ctrl+Enter act on the whole selection, Tab and
+// Alt+↑/↓ on one without gaps (else a toast says why not); desktops show a
 // compact SelectionToolbar at the top when two or more blocks are selected. In an edited block
 // Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Wytnij / Kopiuj / Wklej / Zaznacz
 // wszystko. openSelectText() shows the whole page in the read-only "Zaznacz tekst" view
@@ -192,7 +194,19 @@ FocusScope {
     /// band's ends adjust it, the selection tools are docked like the editing toolbar ("selection"
     /// toolbarMode); "Gotowe" and Back leave it. Ends with the selection or when editing starts.
     property bool selectionMode: false
+    /// The selection mode's "Pojedynczo" (one by one): taps pick single blocks into or out of the
+    /// selection (PageController.toggleSelected) instead of moving its end. Off again when the
+    /// selection mode ends.
+    property bool pickMode: false
+    onSelectionModeChanged: if (!selectionMode) pickMode = false
+    /// The band's grips are shown (the touch selection mode, its blocks without gaps, not picking
+    /// one by one).
+    readonly property bool selectionGrips: selectionMode && touch && !pickMode && controller !== null
+                                           && controller.selectionContiguous
     readonly property int selectionCount: controller !== null ? controller.selectionCount : 0
+    /// Why a selection with gaps between its blocks is not indented or moved (a toast, the tools'
+    /// tooltips).
+    readonly property string gapReason: qsTr("Only blocks selected without gaps can be indented or moved")
     /// The "Zaznacz tekst" view is open (SelectTextView).
     readonly property bool selectTextOpen: selectTextLoader.active
 
@@ -521,8 +535,9 @@ FocusScope {
     }
     /// A tap or click that would start editing `row` (its text, a code or table frame, a query, an
     /// embed, a rule, a bullet or number): Shift+click (`modifiers`, else the event's own:
-    /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it; in the
-    /// touch selection mode a tap moves the selection's end there. True when it was taken.
+    /// EditorInput.keyboardModifiers()) selects from the edited or selected block to it, Ctrl+click
+    /// picks it into or out of the selection; in the touch selection mode a tap moves the
+    /// selection's end there (with "Pojedynczo": picks it). True when it was taken.
     function blockTapped(row, modifiers) {
         // The press that ended a drag selection is no tap (its release may be on a block).
         if (drag.selected)
@@ -534,11 +549,43 @@ FocusScope {
             extendSelectionTo(row)
             return true
         }
+        if (!touch && (mods & Qt.ControlModifier)) {
+            toggleBlock(row)
+            return true
+        }
         if (!selectionMode)
             return false
-        if (controller.blocks.get(row).view !== "frontmatter")
+        if (pickMode)
+            toggleBlock(row)
+        else if (controller.blocks.get(row).view !== "frontmatter")
             controller.extendSelectionTo(row)
         return true
+    }
+    /// Ctrl+click on `row` (a tap with "Pojedynczo"): that block with its children into the
+    /// selection or out of it, the rest stays (gaps allowed); the block being edited joins it.
+    function toggleBlock(row) {
+        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.get(row).view === "frontmatter")
+            return
+        if (activeEditor)
+            EditorInput.commitPreedit(activeEditor)
+        closeSuggestions()
+        const result = controller.toggleSelected(row)
+        if (result === "inParent")
+            notice(qsTr("This block is selected with the block it belongs to"), "info")
+        if (!list.activeFocus)
+            list.forceActiveFocus()
+        if (touch && controller.selectionCount > 0) {
+            Qt.inputMethod.hide()
+            selectionMode = true
+        }
+    }
+    /// Indenting or moving the selection: only without gaps (blocks picked one by one may leave
+    /// some) — else a toast says why. True when it may go on.
+    function selectionMovable() {
+        if (!controller || controller.selectionContiguous)
+            return true
+        notice(gapReason, "info")
+        return false
     }
     /// Shift+click on `row`: the selection from the block being edited or the selection's anchor
     /// to it (a block alone when there is neither).
@@ -1148,9 +1195,11 @@ FocusScope {
         const ctrl = (event.modifiers & Qt.ControlModifier) !== 0
         const shift = (event.modifiers & Qt.ShiftModifier) !== 0
         const alt = (event.modifiers & Qt.AltModifier) !== 0
-        // Blocks from one end to another (a block selected alone — with the children it brings
-        // along — keeps the block's own keys: Ctrl+Enter changes it, not its children).
-        const range = row >= 0 && controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row
+        // Blocks from one end to another, or picked one by one (a block selected alone — with the
+        // children it brings along — keeps the block's own keys: Ctrl+Enter changes it, not its
+        // children).
+        const range = row >= 0 && ((controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row)
+                                   || controller.selectionPicked)
         if (ctrl) {
             switch (event.key) {
             case Qt.Key_Z: undoStep(shift); return true
@@ -1223,12 +1272,12 @@ FocusScope {
         }
         if (alt) {
             if (event.key === Qt.Key_Up) {
-                if (range) controller.moveSelectionUp(); else controller.moveUp(row)
+                if (!range) controller.moveUp(row); else if (selectionMovable()) controller.moveSelectionUp()
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
             if (event.key === Qt.Key_Down) {
-                if (range) controller.moveSelectionDown(); else controller.moveDown(row)
+                if (!range) controller.moveDown(row); else if (selectionMovable()) controller.moveSelectionDown()
                 ensureRowVisible(controller.selectedRow)
                 return true
             }
@@ -1261,10 +1310,10 @@ FocusScope {
             deleteSelection()
             return true
         case Qt.Key_Tab:
-            if (range) controller.indentSelection(); else controller.indent(row)
+            if (!range) controller.indent(row); else if (selectionMovable()) controller.indentSelection()
             return true
         case Qt.Key_Backtab:
-            if (range) controller.outdentSelection(); else controller.outdent(row)
+            if (!range) controller.outdent(row); else if (selectionMovable()) controller.outdentSelection()
             return true
         case Qt.Key_Escape:
             leaveSelectionMode()
@@ -1730,6 +1779,12 @@ FocusScope {
     function longPressText(row) {
         if (!touch || !controller || row < 0 || controller.blocks.get(row).view === "frontmatter")
             return
+        if (selectionMode && pickMode && controller.selectionCount > 0) {
+            // "Pojedynczo": a long press picks like a tap (its release is no tap).
+            toggleBlock(row)
+            drag.selected = true
+            return
+        }
         if (selectionMode && controller.selectionCount > 0) {
             controller.extendSelectionTo(row)
         } else {
@@ -1889,6 +1944,7 @@ FocusScope {
             return
         if (!blockMenu)
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
+        menuAbove = null
         closeSuggestions()
         // A word the keyboard is still composing becomes text before anything acts on the block.
         if (activeEditor)
@@ -1902,13 +1958,18 @@ FocusScope {
             blockMenu.popup()
     }
     /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
+    /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
+    /// follows the toolbar down into the room it leaves (followToolbarWith), every item shown.
     function openBlockMenuAbove(row, item) {
         if (!controller || row < 0)
             return
         if (!blockMenu)
             blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
         blockMenu.openFor(row)
-        openBlockMenu(row, item, 0, -blockMenu.openHeight() - Theme.space1)
+        const y = -blockMenu.openHeight() - Theme.space1
+        openBlockMenu(row, item, 0, y)
+        followToolbarWith(blockMenu, item, y)
+        Qt.inputMethod.hide()
     }
     /// The cell toolbar's "Więcej": the block menu of the table whose cell is being edited. A cell
     /// is no block editor that could go on under the menu: its editing ends (its text kept, the
@@ -1954,6 +2015,7 @@ FocusScope {
         taskMenuForSelection = false
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
+        menuAbove = null
         // Above the docked toolbar and the keyboard (it flips above its item when needed).
         taskMenu.bottomMargin = menuBottomMargin()
         if (taskMenuBlock >= 0)
@@ -2008,7 +2070,46 @@ FocusScope {
             return
         if (!taskMenu)
             taskMenu = taskMenuComponent.createObject(editor) as TaskStatusMenu
-        openTaskStatusMenu(row, item, 0, -taskMenu.openHeight() - Theme.space1)
+        const y = -taskMenu.openHeight() - Theme.space1
+        openTaskStatusMenu(row, item, 0, y)
+        followToolbarWith(taskMenu, item, y)
+    }
+
+    // ---- Menus above the docked toolbar ---------------------------------------------------------
+    /// A menu opened right above the docked toolbar (its Więcej, its task button held down), the
+    /// toolbar's button it is above and its place there. Such a menu takes the keys, so the system
+    /// hides the on-screen keyboard and the toolbar drops to the bottom (it stays docked while the
+    /// editing goes on): the menu follows it — and gets the room the keyboard leaves, every item
+    /// shown, none scrolled away — until something in it is touched (BMenu.touched): it never
+    /// moves away from a finger that aims at it.
+    property BMenu menuAbove: null
+    property Item menuAboveAnchor: null
+    property real menuAboveY: 0
+    function followToolbarWith(menu, anchor, y) {
+        menuAbove = menu && menu.visible ? menu : null
+        menuAboveAnchor = anchor
+        menuAboveY = y
+    }
+    function followToolbar() {
+        const menu = menuAbove
+        const anchor = menuAboveAnchor
+        if (!menu || !anchor || !menu.visible || menu.touched)
+            return
+        const margin = menuBottomMargin()
+        if (Math.abs(margin - menu.bottomMargin) < 1)
+            return
+        menu.bottomMargin = margin
+        menu.popup(anchor, 0, menuAboveY) // (open already: placed again)
+    }
+    Connections {
+        target: KeyboardInsets
+        enabled: editor.menuAbove !== null
+        function onOverlapChanged() { Qt.callLater(editor.followToolbar) }
+    }
+    Connections {
+        target: editor.dockHost
+        enabled: editor.menuAbove !== null
+        function onHeightChanged() { Qt.callLater(editor.followToolbar) }
     }
     /// The status of a block's task as the menu shows it ("" = none).
     function taskStatusOf(row) {

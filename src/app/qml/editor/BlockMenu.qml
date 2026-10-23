@@ -32,6 +32,9 @@ BMenu {
     /// deleting act on all of them.
     property bool inSelection: false
     property int selectionCount: 0
+    /// Why that selection is not indented or moved (blocks picked with gaps between them; "" when
+    /// it can be): the items are shown disabled, a tap says why.
+    property string unmovable: ""
     readonly property bool documentMode: editor !== null && editor.documentMode
 
     /// Follow the block at `row` (until the next openFor) and take its shape.
@@ -48,6 +51,17 @@ BMenu {
         collapsed = info.collapsed
         inSelection = controller.multiSelection && controller.selectedRows().indexOf(row) >= 0
         selectionCount = inSelection ? controller.selectionCount : 1
+        unmovable = inSelection && !controller.selectionContiguous ? editor.gapReason : ""
+    }
+    /// Indent or move: the selection the block is part of (`selection`), else the block (`one`) —
+    /// a selection with gaps says why not instead.
+    function moveOr(one, selection) {
+        if (!inSelection)
+            act(one)
+        else if (unmovable !== "")
+            editor.notice(unmovable, "info")
+        else
+            act(selection)
     }
     /// Copying and cutting act on the selection the block is part of, else on the block (with its
     /// children), which becomes the selection.
@@ -175,26 +189,31 @@ BMenu {
         text: qsTr("Indent")
         iconName: "list-indent-increase"
         shortcut: "Tab"
-        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.indentSelection() : menu.controller.indent(r))
+        unavailable: menu.unmovable
+        onTriggered: menu.moveOr((r) => menu.controller.indent(r), () => menu.controller.indentSelection())
     }
     OptionalItem {
         shown: !menu.documentMode || menu.listItem
         text: qsTr("Outdent")
         iconName: "list-indent-decrease"
         shortcut: "Shift+Tab"
-        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.outdentSelection() : menu.controller.outdent(r))
+        unavailable: menu.unmovable
+        onTriggered: menu.moveOr((r) => menu.controller.outdent(r), () => menu.controller.outdentSelection())
     }
     BMenuItem {
+        objectName: "blockMenuMoveUp"
         text: qsTr("Move up")
         iconName: "move-up"
         shortcut: "Alt+Up"
-        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.moveSelectionUp() : menu.controller.moveUp(r))
+        unavailable: menu.unmovable
+        onTriggered: menu.moveOr((r) => menu.controller.moveUp(r), () => menu.controller.moveSelectionUp())
     }
     BMenuItem {
         text: qsTr("Move down")
         iconName: "move-down"
         shortcut: "Alt+Down"
-        onTriggered: menu.act((r) => menu.inSelection ? menu.controller.moveSelectionDown() : menu.controller.moveDown(r))
+        unavailable: menu.unmovable
+        onTriggered: menu.moveOr((r) => menu.controller.moveDown(r), () => menu.controller.moveSelectionDown())
     }
     BMenuSeparator {}
     BMenuItem {

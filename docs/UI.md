@@ -131,7 +131,8 @@ rename and move").
   cannot move) before "Przenieś tutaj". From the tree, the Więcej menu, the page's menu, All
   pages' rows and the palette. Its pick mode is the new-page dialog's folder picker.
 * **Rename** (`ShellRenameDialog`): a "/" moves — a path from the notebook root ("Archiwum/Dom"),
-  with a live "Nowe miejsce: …"; for any name typed it counts exactly what is rewritten
+  with a live "Nowe miejsce: …", and its toast names the new name too when the move renames
+  ("Przeniesiono do „Archiwum” jako „Dom 2”"); for any name typed it counts exactly what is rewritten
   (`Workspace.renameImpact`: also links a new name would otherwise take over), hidden folder
   names are refused. The page header's title edit renames in place: a "/" there is part of the
   title ("TCP/IP" -> "TCP IP.md"), and its confirmation counts the same way.
@@ -215,8 +216,17 @@ everything near the bottom, the same way on Android, in the browser and with a s
   toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
   safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
   above the toolbar used to leave its first items untappable; one taller than the room left
-  scrolls); autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
-  the keyboard and the toolbar (`AppShell.toastClearance`); the command palette ends at it.
+  scrolls). A menu opened right above the toolbar (its Więcej, its task button held down) takes
+  the keys, so the system hides the keyboard and the toolbar drops to the bottom: the menu
+  follows it (`BlockEditor.followToolbarWith`), with the room the keyboard left — every item
+  shown, "Usuń blok" no longer scrolled away — until something in it is pressed or scrolled
+  (`BMenu.touched`): it never moves away from a finger aiming at it. Autocomplete is placed above
+  the toolbar (`BlockEditor.visibleBottom()`); toasts above the keyboard and the toolbar
+  (`AppShell.toastClearance`), except while text is typed — the keyboard up, or a toolbar
+  docked while a view edits text (`AppShell.toastsAtTop`): then they show at the window's top,
+  one at a time (`BToastHost.atTop`), since the caret's line is kept right above the keyboard and
+  its toolbar, where they covered it ("Scalono…" while typing on a phone); the command palette
+  ends at it.
 * **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
   `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and
   a document, a slide frame by frame, the system hiding the keyboard, typing, autocomplete,
@@ -224,8 +234,11 @@ everything near the bottom, the same way on Android, in the browser and with a s
   redo in the cell —, the tool rows kept between edits), the journal stream's self-test (`tst_content_journals_qml`: the
   toolbar on the keyboard, not at the day's bottom, while the list scrolls or is flicked),
   `tst_shell_qml` (the bottom navigation, the view's end, a sheet, a toast, the docked toolbar
-  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a settings field scrolled
-  above the keyboard, a page in the side panel of a wide touch window),
+  above a navigation bar — the shell's `SafeArea.additionalMargins` —, a toast while typing at the
+  top, away from the caret's line, a settings field scrolled above the keyboard, a page in the
+  side panel of a wide touch window), `tst_editor_qml_blocklinks*` (the block menu from the
+  toolbar's Więcej following the toolbar down when the keyboard goes, every item shown, and
+  staying put once touched),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
   `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
   `scripts/android-emulator-test.sh --keyboard` (and `--folders`: the toolbar's "Więcej" and the
@@ -281,7 +294,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 |---|---|---|
 | `journals` (home) | `JournalsView` — the stream of daily notes, "Przejdź do dnia…", missed reminders banner | `date?` |
 | `journal` | `JournalsView`, one day (opened "jako strona") | `date`, `path?` |
-| `page` | `PageView` — page header (tags, properties, note mode toggle, favourite, page menu; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?` |
+| `page` | `PageView` — page header (tags, properties, note mode toggle, favourite, page menu; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips — with a rename at once), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. A page not written yet opens ready to type, except one opened from a `#tag` (`fromTag`, set by `Workspace::resolveRoute`) on a touch UI: the keyboard would cover the tagged blocks listed below, so the header's "Zacznij pisać" or a tap under it starts typing. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?`, `fromTag?` |
 | `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click or a long press opens the tag's page | `query?` |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates | `path?`, `depth?`, `select?` |
@@ -361,7 +374,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   tracked while it is open): **Kopiuj**, **Wytnij**, **Kopiuj jako tekst** (the block with its
   children, which becomes the selection — or, for a block that is part of a selection of several,
   "Kopiuj 3 bloki", "Wytnij 3 bloki": the whole selection; indenting, moving and "Usuń 3 bloki"
-  then act on all of it too), **Zaznacz** (the block becomes the selection; on touch UIs the
+  then act on all of it too — a selection with gaps is not indented or moved: those items are
+  shown disabled, a tap says why), **Zaznacz** (the block becomes the selection; on touch UIs the
   selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
   Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
   nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
@@ -471,22 +485,32 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 One block is edited at a time (its `InlineEditor` selects characters inside it); a selection that
 crosses blocks is a **block selection** (Logseq / Notion): whole blocks, each with its subtree —
 folded children too —, the same in both note modes (a document's paragraphs, headings and list
-items). Any characters across blocks are selected in the read-only **"Zaznacz tekst"** view.
+items), one run of blocks or blocks picked one by one with gaps between them (bullets 1, 3 and
+5). Any characters across blocks are selected in the read-only **"Zaznacz tekst"** view.
 
 * **Model** (`PageController`, docs/ARCHITECTURE.md): two uids, the anchor (`selectionAnchorRow`)
   and the focus end (`selectedRow`); the selection is the visible rows between them with every
   subtree — a set of uids in `BlockListModel` (`isSelected`, `selectionEdge`: `single` | `first` |
-  `middle` | `last` over the visible rows), so picking single blocks could come later. The ends
+  `middle` | `last` over the visible rows, so a selection with gaps is a band for each run). Blocks
+  picked one by one (`toggleSelected(row)`: Ctrl+click, "Pojedynczo") are a list of uids instead,
+  none inside another's subtree (a picked parent takes in its picked children; a child of a picked
+  block cannot leave alone: "Ten blok jest zaznaczony razem z blokiem, do którego należy"), both
+  ends on the one picked last; a range picked into becomes its top blocks first, the block being
+  edited joins (as Shift+click starts from it), one left is a range of one again, and a range
+  (Shift+click, Shift+↑/↓, a drag, Ctrl+A, ↑/↓) replaces them, from the one picked last.
+  `selectionPicked`: two or more picked; `selectionContiguous`: no gaps (picked blocks next to each
+  other are a run like a range). The ends and the picked blocks
   follow edits, undo / redo (each step restores the selection it had: an undone deletion selects
   its blocks again — and stops the editing of another block meanwhile: the keys go to the
   selection) and changes from other devices; a zoom ends it; editing ends it; the page's
-  properties are never part of a range. `selectionCount` counts the visible rows (folded children
-  come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
+  properties are never part of a range nor picked. `selectionCount` counts the visible rows
+  (folded children come along unseen). A command on the selection (Delete, Wytnij, a paste over it) goes from it to
   the next one without an empty selection between (the touch selection mode stays).
 * **Ways in**: Esc in an edited block; Shift+↑ / Shift+↓ (from an edited block once its text
   selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on any block — its text,
   a code or calculation frame, a table, a query, an embed, a rule, a bullet or number
-  (`BlockEditor.blockTapped`, the click's modifiers); a drag
+  (`BlockEditor.blockTapped`, the click's modifiers) —, and Ctrl+click on any of them to pick that
+  block into the selection or out of it (`BlockEditor.toggleBlock`, desktops); a drag
   with a mouse, touchpad or stylus from one block into another (`BlockEditor`'s tracker — a
   passive `PointHandler` over the list, the state in the editor because delegates may be destroyed
   meanwhile — scrolls near the view's edges; a left drag no longer scrolls the list on non-touch
@@ -497,22 +521,30 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   tools dock where the editing toolbar is; moving the finger without lifting it extends the
   selection (the list holds still, scrolls at its edges); taps on blocks move the selection's end
   there instead of editing; two round **grips** (44 px) at the band's start and end move its
-  ends; "Gotowe" and Back leave it. The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
+  ends (a selection without gaps); the tools' **"Pojedynczo"** (a toggle, `BlockEditor.pickMode`)
+  makes taps — and long presses — pick single blocks into the selection or out of it instead (no
+  grips meanwhile; off again, a tap moves the end from the block picked last); "Gotowe" and Back
+  leave it (and "Pojedynczo" with it). The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
   enter it too, and so does a hardware keyboard's Esc or Shift+↑/↓ on a touch UI (the same tools
   whichever way the selection was made). The journal stream: one selection per day (selecting in another day ends it); while
   a finger or the mouse selects, the stream scrolls only as long as the day goes on beyond the edge.
 * **The band**: one band over the range from the editor's left edge (a block alone keeps its
-  outline: from its own level, framed), rounded at its ends, a line down its left edge; made only
-  for selected blocks (a `Loader`: "Scrolling performance").
-* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej
-  (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę /
-  w dół, Status zadania, Zaznacz tekst…; the indents only where they can happen —
-  `canIndentSelection()`: a document's paragraphs and headings have none), Gotowe. Docked in the editing toolbar's slot on touch
+  outline: from its own level, framed), rounded at its ends, a line down its left edge — blocks
+  picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
+  "Scrolling performance").
+* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko,
+  Pojedynczo (docked only), Więcej (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ /
+  Zmniejsz wcięcie, Przenieś w górę / w dół, Status zadania, Zaznacz tekst…; the indents only where
+  they can happen — `canIndentSelection()`: a document's paragraphs and headings have none; with
+  gaps the indents and moves are shown disabled — `BMenuItem.unavailable`, the reason in a tooltip
+  — and a tap says why in a toast: "Wcięcia i przenoszenie działają tylko dla bloków zaznaczonych
+  bez przerw"), Gotowe. Docked in the editing toolbar's slot on touch
   UIs (the `selection` mode of `BlockEditor.toolbarMode`; the bottom navigation makes way), a
   compact bar floating at the top of the view on desktops while two or more blocks are selected
   (its × clears the selection).
-* **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — as
-  written, each top block re-based to column 0 (visual columns: tabs and spaces keep their
+* **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — the
+  top blocks in document order, also with gaps between them —, as written, each top block re-based
+  to column 0 (visual columns: tabs and spaces keep their
   nesting), LF line breaks, no BOM, no page properties (`markdown::blocksMarkdown`) — and, from the
   host, escaped semantic **HTML** as text/html (`io::clipboardHtml`: lists, headings, checkboxes,
   tables, dates, recurrence and priorities of any block; links to notes as their text, pictures as
@@ -533,9 +565,12 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   czasu".
   A toast's button takes no focus when pressed: the editor keeps the keys.
 * **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
-  the toolbar's Status zadania act on the range from one end to the other; a block selected alone
-  keeps the block's own keys — Ctrl+Enter changes it, not the children it brings along (they are
-  copied, cut, moved and deleted with it).
+  the toolbar's Status zadania act on the range from one end to the other — on the picked blocks
+  of a selection with gaps (Ctrl+Enter and the statuses; Tab and Alt+↑/↓ only without gaps, else a
+  toast says why); a block selected alone keeps the block's own keys — Ctrl+Enter changes it, not
+  the children it brings along (they are copied, cut, moved and deleted with it). Delete, Wytnij
+  and a paste over the selection take all of it, gaps too (one undo step; a paste goes where the
+  first selected block was).
 * **Pasting**: Ctrl+V in an edited block splits Markdown into blocks (`pasteText`, relative nesting
   kept); one copied list item brings its text, not a second marker (into an empty bullet a task
   keeps its checkbox, a code item its fence; over a whole paragraph the paragraph becomes the
@@ -569,12 +604,20 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   toast — checked on the emulator, docs/ANDROID.md), elsewhere (the browser on a phone, a
   desktop's touch UI) two handles of the view's own (44 px) move its ends; a tap clears. "Kopiuj"
   copies the selection — the whole page when nothing is selected — as plain text with every
-  character (the note's own no-break spaces too); "Zamknij", Esc and Back close it.
+  character (the note's own no-break spaces too) that keeps its paragraphs when pasted into a note
+  (`PageController::readingText`, `EditorInput.textRange`): blocks — paragraphs, headings, code, a
+  table, a list as a whole — a blank line apart, the lines of one block (its soft line breaks, a
+  calculation's lines, its embeds, a query's results) and the items of a list one line break
+  apart, a table's cells a tab apart and its rows a line break (the reading HTML marks each block's
+  elements with `-qt-user-state`, its group). "Zamknij", Esc and Back close it; while it is open
+  the floating capture button makes way (the view's `editing`: it covered the text on phones).
 * **Browser**: docs/WEB.md "Schowek".
 * **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
-  controller `tst_editor_selection` (the real clipboard read back); the playground's
-  `selectiontest` with real keys, mouse and touch (`tst_editor_qml_selection`, `_touch`); the
-  journal stream's self-test; the shell's self-test (the palette's "Zaznacz tekst");
+  controller `tst_editor_selection` (the real clipboard read back; blocks picked one by one, their
+  copy, cut, delete, paste, undo, statuses, no moves with gaps; the "Zaznacz tekst" text of a
+  page); the playground's `selectiontest` with real keys, mouse and touch
+  (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` — "Pojedynczo"); the journal stream's
+  self-test; the shell's self-test (the palette's "Zaznacz tekst", no capture button over it);
   `scripts/android-emulator-test.sh --selection`.
 
 ## Scrolling performance
@@ -995,6 +1038,11 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   applies a typed date or time on Enter, when the field loses focus
   (`applyTypedOnFocusLoss`), when the keyboard is hidden and on Save (`commitPending()`, called
   from `BDialog.acceptRequested`); an invalid time keeps the dialog open with its hint.
+  A binding that has to follow a counter it does not otherwise use (`Workspace.revision`) reads
+  it for real — `if (Workspace.revision < 0) return …`, `revision >= 0 && …`: qmlcachegen
+  compiles a bare `void Workspace.revision` away, and the binding's dependency with it (a renamed
+  page's tag strip, a picture's text, a created daily note's top bar actions came only with some
+  later change).
 * **C++ helpers** (QML singletons): `DatesHelper` (natural-language dates, human formatting,
   recurrence rules, localised names, month grids — all values are strings, no JS `Date`),
   `TextHelper` (diacritic folding, fuzzy ranking for palettes, escaping), `DiffHelper` (Myers

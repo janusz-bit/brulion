@@ -32,8 +32,9 @@ FocusScope {
     property ContentJournalDay activeDay: null
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
+    /// A day is being edited or shown in "Zaznacz tekst" (the shell hides its capture button).
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
-                                           : (activeDay !== null && activeDay.editing)
+                                           : (activeDay !== null && (activeDay.editing || activeDay.editor.selectTextOpen))
     /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)
@@ -364,9 +365,9 @@ FocusScope {
                 preferredWidth: Theme.dialogWidthSm
 
                 readonly property var marks: {
-                    void Workspace.revision
+                    // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
                     const cells = jumpPicker.cells
-                    if (!cells || cells.length === 0)
+                    if (!cells || cells.length === 0 || Workspace.revision < 0)
                         return ({})
                     const out = {}
                     for (const d of Workspace.journalDates(cells[0].date, cells[cells.length - 1].date))

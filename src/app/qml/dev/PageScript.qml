@@ -9,6 +9,10 @@ import Brulion
 //            sourceComponent: PageScript { editor: editor; controller: page } }
 // States (blocks are found by their text on the sample notebook's guide page, else the first):
 //   editing   edit a block with bold text (raw Markdown + highlighting, caret at the end)
+//   editing-toast  the same, then a toast ("Scalono…": on phones at the top while typing)
+//   toolbar-menu   (touch UIs) the same, the toolbar's "Więcej" — the block menu above it —, then
+//             the system hides the keyboard (KeyboardInsets.simulated 0): the menu follows the
+//             toolbar down, every item shown
 //   suggest   a new block, "Zobacz też [[Prze" typed: page suggestions
 //   tags      a new block, "Kupić farbę #pro" typed: tag suggestions
 //   slash     a new block, "Kupić bilety /przy" typed: slash commands
@@ -67,6 +71,18 @@ Item {
         return row
     }
 
+    /// Runs `fn` a moment later (after the editor has its toolbar, the menu its place).
+    Timer {
+        id: later
+        property var pending: null
+        interval: 250
+        function run(fn) {
+            pending = fn
+            restart()
+        }
+        onTriggered: if (pending) pending()
+    }
+
     Timer {
         id: typing
         property string pending
@@ -86,6 +102,25 @@ Item {
             case "editing":
                 script.editor.startEditing(script.rowOf("Każdy punkt listy"), -1)
                 break
+            case "editing-toast":
+                script.editor.startEditing(script.rowOf("Każdy punkt listy"), -1)
+                later.run(() => AppController.toast(qsTranslate("PageView", "Merged changes made elsewhere into this page"),
+                                                    "info"))
+                break
+            case "toolbar-menu": {
+                const row = script.rowOf("Każdy punkt listy")
+                script.editor.startEditing(row, -1)
+                later.run(() => {
+                    const more = script.findItem(script.editor.dockHost, "toolbarMore")
+                    const flick = script.findItem(script.editor.dockHost, "editToolbarFlick")
+                    if (flick)
+                        flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                    if (more)
+                        script.editor.openBlockMenuAbove(row, more)
+                    later.run(() => KeyboardInsets.simulated = 0)
+                })
+                break
+            }
             case "suggest":
                 script.typeAfter("Link do strony", "Zobacz też [[Prze")
                 break

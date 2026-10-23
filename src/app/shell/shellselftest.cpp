@@ -515,11 +515,13 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
 /// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
-///     among its references and the tag strip in its header — and back returns; in Tasks a click
+///     among its references and the tag strip in its header, ready to type on a desktop, waiting
+///     for a tap on a touch screen — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
 ///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
 ///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
-///     the links and tags it rewrites.
+///     the links and tags it rewrites, and a "/" in it moves a page (renamed too: the toast says
+///     both).
 void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -552,6 +554,38 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                          != nullptr;
               }),
               "the page header has the tag strip (tag overview, tasks with the tag)");
+        // Not written yet: on a desktop it opens ready to type; on a touch screen it waits for a tap
+        // (the keyboard would cover the tagged blocks it lists), which starts typing.
+        QQuickItem *tagEditor = nullptr;
+        QObject *tagController = nullptr;
+        waitFor([&] {
+            tagEditor = findShown(window->contentItem(), [&](QQuickItem *item) {
+                auto *c =
+                        item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
+                return c && c->property("path").toString() == tagPage && c->property("loaded").toBool();
+            });
+            tagController = tagEditor ? tagEditor->property("controller").value<QObject *>() : nullptr;
+            return tagController != nullptr;
+        });
+        check(tagController != nullptr, "the tag's page is in the editor");
+        if (tagController) {
+            settle(200);
+            const int editing = tagController->property("editingRow").toInt();
+            if (touch) {
+                check(editing < 0, "on a touch screen the tag's page, not written yet, does not start typing");
+                const QString startText = QCoreApplication::translate("ContentPageHeader", "Start writing");
+                QQuickItem *start = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "BButton") && item->property("text").toString() == startText;
+                });
+                if (start)
+                    tapOrClick(window, start->mapToScene(QPointF(start->width() / 2, start->height() / 2)), true);
+                check(start && waitFor([&] { return tagController->property("editingRow").toInt() >= 0; }),
+                      "a tap on its “Zacznij pisać” starts typing");
+            } else {
+                check(editing >= 0, "on a desktop the tag's page, not written yet, opens ready to type");
+            }
+            QMetaObject::invokeMethod(tagController, "stopEditing");
+        }
         check(!app->workspace()->exists(tagPage), "looking at a tag's page does not create it");
         check(app->back() && view() == u"journals", "back returns from the tag's page");
     }
@@ -635,6 +669,56 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         }
     }
 
+    // ---- A page renamed (in its header) to a tag in use gets the tag's strip with the rename;
+    //      renamed again — the tags naming it rewritten in other notes — it keeps it.
+    {
+        const QString draft = u"Szkic pomysłów.md"_s;
+        app->workspace()->writeFile(draft, u"- szkic\n"_s);
+        app->openPage(draft);
+        const auto strip = [window] {
+            return findShown(window->contentItem(),
+                             [](QQuickItem *item) { return item->objectName() == u"pageTagStrip"; });
+        };
+        const auto headerOf = [&](const QString &path) {
+            QQuickItem *found = nullptr;
+            waitFor([&] {
+                QQuickItem *editor = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    auto *c = item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>()
+                                                                  : nullptr;
+                    return c && c->property("path").toString() == path && c->property("loaded").toBool();
+                });
+                found = editor ? findShown(editor, [](QQuickItem *item) { return isA(item, "ContentPageHeader"); })
+                               : nullptr;
+                return found != nullptr;
+            });
+            return found;
+        };
+        // The title edited in place (ContentPageHeader.renameRequested), confirmed when it asks.
+        const auto renameInHeader = [&](QQuickItem *header, const QString &title) {
+            if (!header)
+                return;
+            QMetaObject::invokeMethod(header, "renameRequested", Q_ARG(QString, title));
+            for (QObject *dialog : window->findChildren<QObject *>(u"pageRenameDialog"_s)) {
+                if (dialog->property("visible").toBool())
+                    QMetaObject::invokeMethod(dialog, "tryAccept");
+            }
+        };
+        QQuickItem *header = headerOf(draft);
+        check(header && !strip(), "a page no tag names has no tag strip");
+        renameInHeader(header, u"pomysł"_s);
+        check(strip() != nullptr && app->workspace()->exists(tagPage),
+              "renamed to a tag in use, the page has the tag's strip at once");
+        renameInHeader(headerOf(tagPage), u"Pomysły kuchenne"_s);
+        const QString renamed = u"Pomysły kuchenne.md"_s;
+        // (No waiting: the rename is done when the call returns. The strip used to come only with
+        // some later change — its binding had lost its dependency on Workspace.revision.)
+        check(app->workspace()->exists(renamed) && strip() != nullptr && !app->workspace()->exists(tagPage),
+              "renamed again, the tags naming it rewritten in other notes after it moved: the strip stays");
+        app->workspace()->deletePage(app->workspace()->exists(renamed) ? renamed : draft);
+        app->goHome();
+        settle(200);
+    }
+
     // ---- Renaming from the sidebar says how many links and tags change.
     QObject *rename = window->findChild<QObject *>(u"shellRename"_s);
     check(rename != nullptr, "the shell has its rename dialog");
@@ -647,6 +731,33 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
               "the sidebar's rename dialog counts the links and tags naming the page");
         QMetaObject::invokeMethod(rename, "close");
         waitFor([&] { return !rename->property("opened").toBool(); });
+        // A "/" moves the page, here renamed too: the toast names the folder and the new name.
+        const QString probe = u"Próba przenosin.md"_s;
+        app->workspace()->writeFile(probe, u"- żółw\n"_s);
+        QString toast;
+        const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
+                                                                [&toast](const QString &text) { toast = text; });
+        QMetaObject::invokeMethod(rename, "openFor", Q_ARG(QVariant, QVariant(probe)),
+                                  Q_ARG(QVariant, QVariant(false)));
+        QQuickItem *field = nullptr;
+        waitFor([&] {
+            field = findShown(window->contentItem(),
+                              [](QQuickItem *item) { return item->objectName() == u"renameField"; });
+            return field != nullptr;
+        });
+        if (field) {
+            field->setProperty("text", u"Projekty/Próba po zmianie"_s);
+            QMetaObject::invokeMethod(rename, "tryAccept");
+        }
+        const QString expected = QCoreApplication::translate("ShellMoveWords", "Moved to “%1” as “%2”")
+                                         .arg(u"Projekty"_s, u"Próba po zmianie"_s);
+        const bool moved = field && waitFor([&] { return toast == expected; });
+        if (!moved)
+            std::fprintf(stderr, "selftest: the move's toast: %s\n", qPrintable(toast));
+        check(moved && app->workspace()->exists(u"Projekty/Próba po zmianie.md"_s),
+              "a “/” in the rename dialog moves the page, renamed too: the toast names the folder and the new name");
+        QObject::disconnect(toasts);
+        app->workspace()->deletePage(app->workspace()->exists(probe) ? probe : u"Projekty/Próba po zmianie.md"_s);
     }
     app->goHome();
     settle(200);
@@ -2187,7 +2298,8 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
-///     keeps the navigation away until the editing stops, above the system's navigation bar; a
+///     keeps the navigation away until the editing stops, above the system's navigation bar, and
+///     toasts then show at the top, away from the line being written; a
 ///     settings field that gets the focus is scrolled above the keyboard; on a wide touch window
 ///     a page in the side panel docks its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
@@ -2287,6 +2399,27 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); }),
               "the docked toolbar sits on the bottom edge of the view");
+        // A toast while typing ("Scalono…", a sync): at the top, never over the line being
+        // written (the caret is kept right above the toolbar, where the toasts used to be).
+        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+            QMetaObject::invokeMethod(toasts, "clear");
+        app->toast(u"Scalono zmiany wprowadzone na innym urządzeniu"_s, u"info"_s);
+        QQuickItem *typed = window->activeFocusItem();
+        const bool caretKnown = typed && typed->inherits("QQuickTextEdit");
+        QQuickItem *typingToast = nullptr;
+        check(waitFor([&] {
+                  typingToast = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToast_"); });
+                  if (!typingToast)
+                      return false;
+                  const QRectF box =
+                          typingToast->mapRectToScene(QRectF(0, 0, typingToast->width(), typingToast->height()));
+                  const QRectF caret =
+                          caretKnown ? typed->mapRectToScene(typed->property("cursorRectangle").toRectF()) : QRectF();
+                  return box.bottom() < window->height() / 4 && (!caretKnown || !box.intersects(caret));
+              }),
+              "a toast while typing shows at the top, not over the line being written");
+        if (QObject *toasts = window->findChild<QObject *>(u"toastHost"_s))
+            QMetaObject::invokeMethod(toasts, "clear");
         // A system navigation bar under the window's bottom edge (a phone's SafeArea margin, here
         // added to the shell's): the docked toolbar sits right above it.
         QQuickItem *shellItem =
@@ -2790,6 +2923,9 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             // "Zaznacz tekst" (the Więcej menu, the palette): the page as one read-only text over the
             // editor, any part of it selectable; Esc closes it (docs/UI.md "Selecting and copying").
             {
+                // Phones: the floating capture button makes way while it is open (it covered the text).
+                auto *captureButton = window->findChild<QQuickItem *>(u"shellCaptureButton"_s);
+                const bool captureShown = captureButton && captureButton->isVisible();
                 app->requestUiAction(u"selectText"_s);
                 QQuickItem *text = nullptr;
                 check(waitFor([&] {
@@ -2797,6 +2933,7 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                           return text && text->hasActiveFocus();
                       }),
                       "the \"Select text\" command shows the page as one text");
+                check(captureButton && !captureButton->isVisible(), "no floating capture button over it");
                 if (text) {
                     QString shownText;
                     QMetaObject::invokeMethod(text, "getText", qReturnArg(shownText), 0,
@@ -2810,6 +2947,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     check(!text->property("selectedText").toString().isEmpty(), "Ctrl+A's select all selects it");
                     sendKey(window, Qt::Key_Escape);
                     check(waitFor([&] { return !shownNamed(editor, u"selectTextEdit"_s); }), "Esc closes it");
+                    if (captureShown)
+                        check(waitFor([&] { return captureButton->isVisible(); }), "the capture button is back");
                 }
             }
 

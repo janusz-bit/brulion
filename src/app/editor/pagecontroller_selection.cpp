@@ -13,6 +13,10 @@
 #include <QGuiApplication>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextTable>
 
 #include <algorithm>
 
@@ -110,13 +114,64 @@ RowRange PageController::rangeOf(int anchor, int focus) const
 
 RowRange PageController::selectionRange() const
 {
-    return rangeOf(selectionAnchorRow(), selectedRow());
+    if (m_pickedUids.isEmpty())
+        return rangeOf(selectionAnchorRow(), selectedRow());
+    // Picked blocks: one run only when they leave no gap.
+    const QList<int> rows = selectionRowList();
+    if (rows.isEmpty() || rows.last() - rows.first() + 1 != rows.size())
+        return {};
+    return {rows.first(), int(rows.size())};
+}
+
+QList<int> PageController::selectionTops() const
+{
+    const BlockDocument &doc = m_model->document();
+    if (m_pickedUids.isEmpty()) {
+        const RowRange range = rangeOf(selectionAnchorRow(), selectedRow());
+        return range.count > 0 ? doc.rangeTops(range.first, range.last()) : QList<int>();
+    }
+    QList<int> rows;
+    for (const quint64 uid : m_pickedUids) {
+        if (const int row = m_model->rowOfUid(uid); row >= 0)
+            rows.append(row);
+    }
+    // (Ascending, and none inside another's subtree — whatever edits did to them meanwhile.)
+    return markdown::topRows(doc, rows);
+}
+
+QList<int> PageController::selectionRowList() const
+{
+    QList<int> rows;
+    if (m_pickedUids.isEmpty()) {
+        const RowRange range = rangeOf(selectionAnchorRow(), selectedRow());
+        for (int r = range.first; r < range.first + range.count; ++r)
+            rows.append(r);
+        return rows;
+    }
+    const BlockDocument &doc = m_model->document();
+    for (const int top : selectionTops()) {
+        const RowRange sub = doc.subtreeRange(top);
+        for (int r = sub.first; r < sub.first + sub.count; ++r)
+            rows.append(r);
+    }
+    return rows;
 }
 
 void PageController::updateSelection()
 {
     if (m_selectionHold > 0)
         return; // a selection command runs: its end updates once
+    // Picked blocks that are gone (deleted, an undo, an external change) leave the selection; one
+    // left is a range of one block, none an empty selection.
+    if (!m_pickedUids.isEmpty()) {
+        m_pickedUids.removeIf([this](quint64 uid) { return m_model->rowOfUid(uid) < 0; });
+        if (m_pickedUids.size() <= 1) {
+            m_anchorUid = m_selectedUid = m_pickedUids.value(0, 0);
+            m_pickedUids.clear();
+        } else if (!m_pickedUids.contains(m_selectedUid)) {
+            m_anchorUid = m_selectedUid = m_pickedUids.last();
+        }
+    }
     // An end that is gone (deleted, an undo, an external change) takes the other one's place.
     if (m_selectedUid && m_model->rowOfUid(m_selectedUid) < 0)
         m_selectedUid = 0;
@@ -126,12 +181,12 @@ void PageController::updateSelection()
         m_anchorUid = m_selectedUid;
     if (!m_selectedUid)
         m_selectedUid = m_anchorUid;
-    const RowRange range = selectionRange();
+    const QList<int> rows = selectionRowList();
     QSet<quint64> uids;
     int count = 0;
     int first = -1;
     int last = -1;
-    for (int r = range.first; r < range.first + range.count; ++r) {
+    for (const int r : rows) {
         uids.insert(m_model->uidAt(r));
         if (m_model->isRowVisible(r)) {
             ++count;
@@ -140,22 +195,25 @@ void PageController::updateSelection()
             last = r;
         }
     }
+    const bool uidsChanged = uids != m_model->selectedUids();
     m_model->setSelectedUids(uids);
     // (Visibility is current only now: a lone selected note-mode frontmatter shows when selected.)
-    if (range.count == 1 && count == 0 && m_model->isRowVisible(range.first)) {
+    if (rows.size() == 1 && count == 0 && m_model->isRowVisible(rows.first())) {
         count = 1;
-        first = last = range.first;
+        first = last = rows.first();
     }
+    const bool contiguous = rows.isEmpty() || rows.last() - rows.first() + 1 == rows.size();
     const int anchorRow = selectionAnchorRow();
     const int focusRow = selectedRow();
-    if (count == m_selectionCount && first == m_selectionFirst && last == m_selectionLast
-        && anchorRow == m_selectionAnchorRow && focusRow == m_selectionFocusRow)
+    if (!uidsChanged && count == m_selectionCount && first == m_selectionFirst && last == m_selectionLast
+        && anchorRow == m_selectionAnchorRow && focusRow == m_selectionFocusRow && contiguous == m_selectionContiguous)
         return;
     m_selectionCount = count;
     m_selectionFirst = first;
     m_selectionLast = last;
     m_selectionAnchorRow = anchorRow;
     m_selectionFocusRow = focusRow;
+    m_selectionContiguous = contiguous;
     Q_EMIT selectedRowChanged();
     Q_EMIT selectionChanged();
 }
@@ -181,9 +239,67 @@ void PageController::selectRange(int anchor, int focus)
     }
     if (m_editingUid)
         stopEditing();
+    m_pickedUids.clear(); // a range replaces blocks picked one by one
     m_anchorUid = m_model->uidAt(anchor);
     m_selectedUid = m_model->uidAt(focus);
     updateSelection();
+}
+
+QString PageController::toggleSelected(int row)
+{
+    if (!validRow(row) || m_model->document().at(row).kind == BlockKind::Frontmatter)
+        return {};
+    const quint64 uid = m_model->uidAt(row);
+    // The block being edited joins the selection (as Shift+click starts from it).
+    const quint64 edited = m_editingUid;
+    if (m_editingUid)
+        stopEditing(); // (may close a lone fence: rows are read again below)
+    const BlockDocument &doc = m_model->document();
+    QList<quint64> picks = m_pickedUids;
+    if (picks.isEmpty()) {
+        for (const int top : selectionTops()) {
+            if (doc.at(top).kind != BlockKind::Frontmatter)
+                picks.append(m_model->uidAt(top));
+        }
+        if (picks.isEmpty() && edited && m_model->rowOfUid(edited) >= 0 && edited != uid)
+            picks.append(edited);
+    }
+    const int at = int(picks.indexOf(uid));
+    const int clicked = m_model->rowOfUid(uid);
+    QString result;
+    if (at >= 0) {
+        picks.removeAt(at);
+        result = u"removed"_s;
+    } else {
+        // Inside a picked block's subtree: selected with that block, it cannot leave alone (a
+        // child of the block that was being edited: that block is selected).
+        for (int p = doc.parent(clicked); p >= 0; p = doc.parent(p)) {
+            if (picks.contains(m_model->uidAt(p))) {
+                if (!m_selectedUid && picks.size() == 1) {
+                    m_anchorUid = m_selectedUid = picks.first();
+                    updateSelection();
+                }
+                return u"inParent"_s;
+            }
+        }
+        // Picked blocks inside its subtree now come with it.
+        const RowRange sub = doc.subtreeRange(clicked);
+        picks.removeIf([&](quint64 u) {
+            const int r = m_model->rowOfUid(u);
+            return r > clicked && r < sub.first + sub.count;
+        });
+        picks.append(uid);
+        result = u"added"_s;
+    }
+    if (picks.size() <= 1) {
+        m_pickedUids.clear();
+        m_anchorUid = m_selectedUid = picks.value(0, 0);
+    } else {
+        m_pickedUids = picks;
+        m_anchorUid = m_selectedUid = result == u"added" ? uid : picks.last();
+    }
+    updateSelection();
+    return result;
 }
 
 void PageController::extendSelectionTo(int row)
@@ -262,8 +378,7 @@ void PageController::clearSelection()
 QVariantList PageController::selectedRows() const
 {
     QVariantList out;
-    const RowRange range = selectionRange();
-    for (int r = range.first; r < range.first + range.count; ++r)
+    for (const int r : selectionRowList())
         out.append(r);
     return out;
 }
@@ -271,16 +386,24 @@ QVariantList PageController::selectedRows() const
 QList<quint64> PageController::selectedTaskUids() const
 {
     QList<quint64> out;
+    const auto take = [&](int r) {
+        const BlockKind kind = m_model->document().at(r).kind;
+        if (m_model->isRowVisible(r) && (kind == BlockKind::ListItem || kind == BlockKind::Paragraph))
+            out.append(m_model->uidAt(r));
+    };
+    if (!m_pickedUids.isEmpty()) {
+        // The picked blocks themselves, not the children they bring along.
+        for (const int top : selectionTops())
+            take(top);
+        return out;
+    }
     const int anchor = selectionAnchorRow();
     const int focus = selectedRow();
     if (anchor < 0 || focus < 0)
         return out;
     // From one end to the other: not the children the last block brings along.
-    for (int r = std::min(anchor, focus); r <= std::max(anchor, focus); ++r) {
-        const BlockKind kind = m_model->document().at(r).kind;
-        if (m_model->isRowVisible(r) && (kind == BlockKind::ListItem || kind == BlockKind::Paragraph))
-            out.append(m_model->uidAt(r));
-    }
+    for (int r = std::min(anchor, focus); r <= std::max(anchor, focus); ++r)
+        take(r);
     return out;
 }
 
@@ -288,23 +411,21 @@ QList<quint64> PageController::selectedTaskUids() const
 
 QString PageController::selectionMarkdown() const
 {
-    const RowRange range = selectionRange();
-    if (range.count <= 0)
+    const QList<int> tops = selectionTops();
+    if (tops.isEmpty())
         return {};
-    const BlockDocument &doc = m_model->document();
-    return markdown::blocksMarkdown(doc, doc.rangeTops(range.first, range.last()));
+    return markdown::blocksMarkdown(m_model->document(), tops);
 }
 
 QString PageController::selectionPlainText() const
 {
-    const RowRange range = selectionRange();
-    if (range.count <= 0)
+    const QList<int> tops = selectionTops();
+    if (tops.isEmpty())
         return {};
-    const BlockDocument &doc = m_model->document();
     markdown::PlainTextOptions options;
     const QPointer<EditorHost> host = m_host;
     options.blockText = [host](const QString &id) { return host ? host->blockText(id) : QString(); };
-    return markdown::blocksPlainText(doc, doc.rangeTops(range.first, range.last()), options);
+    return markdown::blocksPlainText(m_model->document(), tops, options);
 }
 
 QVariantMap PageController::writeClipboard(const QString &text, const QString &html)
@@ -353,8 +474,7 @@ QVariantMap PageController::cutSelection()
         return result;
     // A paste of this text is a move: the ids of the cut blocks stay theirs.
     QSet<QString> ids;
-    const RowRange range = selectionRange();
-    for (int r = range.first; r < range.first + range.count; ++r) {
+    for (const int r : selectionRowList()) {
         if (const QString id = m_model->document().at(r).blockId; !id.isEmpty())
             ids.insert(id);
     }
@@ -399,17 +519,34 @@ QVariantMap PageController::copyText(const QString &text)
 
 int PageController::deleteSelection()
 {
-    const RowRange range = selectionRange();
-    if (range.count <= 0)
+    const QList<int> tops = selectionTops();
+    if (tops.isEmpty())
         return -1;
     const int zoom = zoomBlock();
-    const bool removesZoom = zoom >= range.first && zoom <= range.last();
-    const int prev = m_model->previousVisibleRow(range.first);
+    const bool removesZoom = zoom >= 0 && selectionRowList().contains(zoom);
+    const int prev = m_model->previousVisibleRow(tops.first());
+    // The runs of selected rows, the last one first (the rows before it keep their places).
+    QList<RowRange> runs;
+    {
+        const BlockDocument &doc = m_model->document();
+        for (const int top : tops) {
+            const RowRange sub = doc.subtreeRange(top);
+            if (!runs.isEmpty() && runs.last().first + runs.last().count == sub.first)
+                runs.last().count += sub.count;
+            else
+                runs.append(sub);
+        }
+    }
     beginCommand();
     ++m_selectionHold; // from the deleted blocks to the one before them, nothing empty between
-    const EditResult r = applyOp([&](BlockDocument &d) { return d.removeRange(range.first, range.last()); });
+    EditResult r;
+    bool changed = false;
+    for (auto run = runs.crbegin(); run != runs.crend(); ++run) {
+        r = applyOp([&](BlockDocument &d) { return d.removeRange(run->first, run->last()); });
+        changed = changed || r.changed();
+    }
     int focusRow = -1;
-    if (r.changed()) {
+    if (changed) {
         focusRow = prev >= 0 ? prev : (r.focus >= 0 && validRow(r.focus) ? r.focus : -1);
         if (focusRow >= 0 && !m_model->isRowVisible(focusRow))
             focusRow = m_model->firstVisibleRow();
@@ -417,6 +554,7 @@ int PageController::deleteSelection()
             focusRow = -1; // not the page's properties: nothing selected then
     }
     // The block before the range is selected (the undo step brings the deleted ones back selected).
+    m_pickedUids.clear();
     m_anchorUid = m_selectedUid = focusRow >= 0 ? m_model->uidAt(focusRow) : 0;
     --m_selectionHold;
     updateSelection();
@@ -428,12 +566,12 @@ int PageController::deleteSelection()
 
 bool PageController::canIndentSelection() const
 {
-    const RowRange range = selectionRange();
-    if (range.count <= 0)
+    const QList<int> tops = selectionTops();
+    if (tops.isEmpty())
         return false;
     const BlockDocument &doc = m_model->document();
     const int zoom = zoomBlock();
-    for (const int t : doc.rangeTops(range.first, range.last())) {
+    for (const int t : tops) {
         if (t == zoom || (documentMode() && doc.at(t).kind != BlockKind::ListItem))
             return false;
     }
@@ -442,9 +580,9 @@ bool PageController::canIndentSelection() const
 
 bool PageController::indentSelection()
 {
-    if (!canIndentSelection())
-        return false;
     const RowRange range = selectionRange();
+    if (range.count <= 0 || !canIndentSelection())
+        return false;
     const BlockDocument &doc = m_model->document();
     const QList<int> tops = doc.rangeTops(range.first, range.last());
     QList<quint64> topUids;
@@ -632,12 +770,12 @@ QString PageController::withoutTakenIds(const QString &text, const QSet<QString>
 QVariantMap PageController::replaceSelection(const QString &pasted)
 {
     const auto result = [](int row, int count) { return QVariantMap{{u"row"_s, row}, {u"count"_s, count}}; };
-    const RowRange range = selectionRange();
+    const QList<int> selected = selectionRowList();
     QString text = normalizedPaste(pasted);
-    if (range.count <= 0 || text.trimmed().isEmpty())
+    if (selected.isEmpty() || text.trimmed().isEmpty())
         return result(-1, 0);
     const int zoom = zoomBlock();
-    if (zoom >= range.first && zoom <= range.last())
+    if (zoom >= 0 && selected.contains(zoom))
         return result(-1, 0); // the zoomed block stays (paste into it instead)
     // A pasted note's YAML frontmatter cannot go into the middle of a page (Logseq page
     // properties can: a block of `key:: value` lines, as pasteText() inserts them). Nothing else:
@@ -658,14 +796,26 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
     int pinned = 0;
     while (pinned < doc.count() && doc.at(pinned).kind == BlockKind::Frontmatter)
         ++pinned;
-    const int first = std::max(range.first, pinned);
-    const int last = range.last();
-    const bool removes = first <= last;
+    // The runs of replaced rows (a selection with gaps has several: the paste goes where the first
+    // one was).
+    QList<RowRange> runs;
+    for (const int r : selected) {
+        if (r < pinned)
+            continue;
+        if (!runs.isEmpty() && runs.last().first + runs.last().count == r)
+            ++runs.last().count;
+        else
+            runs.append({r, 1});
+    }
+    const bool removes = !runs.isEmpty();
+    const int first = removes ? runs.first().first : std::max(selected.first(), pinned);
     // The replaced blocks' ids may go on in the pasted text (pasting a block over itself).
     QSet<QString> freed = cutIdsFor(text);
-    for (int r = first; r <= last; ++r) {
-        if (!doc.at(r).blockId.isEmpty())
-            freed.insert(doc.at(r).blockId);
+    for (const RowRange &run : std::as_const(runs)) {
+        for (int r = run.first; r <= run.last(); ++r) {
+            if (!doc.at(r).blockId.isEmpty())
+                freed.insert(doc.at(r).blockId);
+        }
     }
     const bool hasNext = first < doc.count();
     const int baseDepth = removes ? doc.at(first).depth : 0;
@@ -676,8 +826,8 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
         m_host->finishIndexing();
     beginCommand();
     ++m_selectionHold; // from the replaced blocks to the pasted ones, nothing empty between
-    if (removes)
-        applyOp([&](BlockDocument &d) { return d.removeRange(first, last); });
+    for (auto run = runs.crbegin(); run != runs.crend(); ++run)
+        applyOp([&](BlockDocument &d) { return d.removeRange(run->first, run->last()); });
     text = withoutTakenIds(text, freed, true);
     const BlockDocument pasteDoc(text);
     int after = prev;
@@ -702,6 +852,7 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
                 firstUid = lastUid;
         }
     }
+    m_pickedUids.clear();
     m_anchorUid = firstUid;
     m_selectedUid = lastUid;
     --m_selectionHold;
@@ -766,7 +917,7 @@ QString unpaddedChips(const QString &html)
 
 } // namespace
 
-QString PageController::queryReadingHtml(const QString &source, int indent) const
+QString PageController::queryReadingHtml(const QString &source, int indent, int readingGroup) const
 {
     auto *queries = m_host ? qobject_cast<QueryHost *>(m_host.data()) : nullptr;
     if (!queries || source.trimmed().isEmpty())
@@ -778,7 +929,9 @@ QString PageController::queryReadingHtml(const QString &source, int indent) cons
         return {};
     const bool pages = r.value(u"type"_s).toString() == u"pages";
     const QString muted = m_model->palette().muted.toHtmlEscaped();
-    const QString style = u"margin-top:2px; margin-bottom:2px; margin-left:%1px; line-height:140%;"_s.arg(indent);
+    const QString style =
+            u"margin-top:2px; margin-bottom:2px; margin-left:%1px; line-height:140%; -qt-user-state:%2;"_s.arg(indent)
+                    .arg(readingGroup);
     // An item as the block lists it: its checkbox or bullet, its text, the page it is on.
     const auto item = [&](const QVariantMap &it) -> QString {
         QString marker = u"• "_s;
@@ -815,11 +968,19 @@ QString PageController::readingHtml() const
     const auto esc = [](const QString &s) { return s.toHtmlEscaped(); };
     const QString muted = esc(palette.muted);
     const QString codeBg = esc(palette.codeBackground);
+    // The group of the block's elements (readingText(): one group's lines stay together): a new
+    // one for every block, except the next item of a list.
+    int group = 0;
+    bool previousListLine = false;
     // A paragraph style: spacing like a page of text, the list levels indented.
-    const auto block = [](int indent, int top, int bottom) {
-        return u"margin-top:%1px; margin-bottom:%2px; margin-left:%3px; line-height:140%;"_s.arg(top).arg(bottom).arg(
-                indent);
+    const auto block = [&group](int indent, int top, int bottom) {
+        return u"margin-top:%1px; margin-bottom:%2px; margin-left:%3px; line-height:140%; -qt-user-state:%4;"_s.arg(top)
+                .arg(bottom)
+                .arg(indent)
+                .arg(group);
     };
+    // Code as one block of lines (a line break in a <pre> would start a block of its own).
+    const auto preText = [&esc](const QString &text) { return esc(text).replace(u'\n', u"<br/>"_s); };
     static const QStringList bullets{u"•"_s, u"◦"_s, u"▪"_s};
     QString out = u"<html><body>"_s;
     for (int row = 0; row < doc.count(); ++row) {
@@ -829,6 +990,10 @@ QString PageController::readingHtml() const
         const QModelIndex index = m_model->index(row);
         const BlockShape shape = m_model->shapeAt(row);
         const bool listItem = e.kind == BlockKind::ListItem;
+        const bool listLine = listItem && shape.view == BlockView::Text;
+        if (!listLine || !previousListLine)
+            ++group;
+        previousListLine = listLine;
         const int indent = listItem ? 24 * e.depth : 0;
         QString marker;
         if (listItem) {
@@ -869,24 +1034,24 @@ QString PageController::readingHtml() const
                     lines[line] += u" = "_s + value;
             }
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(lines.join(u'\n')));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(lines.join(u'\n')));
             break;
         }
         case BlockView::Query: {
-            const QString results = queryReadingHtml(shape.editText, indent + (listItem ? 18 : 0));
+            const QString results = queryReadingHtml(shape.editText, indent + (listItem ? 18 : 0), group);
             if (!results.isEmpty()) {
                 out += results;
                 break;
             }
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(shape.editText));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(shape.editText));
             break;
         }
         case BlockView::Code:
         case BlockView::Math:
         case BlockView::Html:
             out += u"<pre style=\"%1 background-color:%2; white-space:pre-wrap;\">%3</pre>"_s.arg(
-                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, esc(shape.editText));
+                    block(indent + (listItem ? 18 : 0), 6, 6), codeBg, preText(shape.editText));
             break;
         case BlockView::Table: {
             const QVariantMap table = m_model->readingTableAt(row);
@@ -937,6 +1102,53 @@ QString PageController::readingHtml() const
         }
     }
     out += u"</body></html>"_s;
+    return out;
+}
+
+QString PageController::readingText(const QTextDocument *document, int from, int to)
+{
+    if (!document)
+        return {};
+    const int end = std::max(0, document->characterCount() - 1);
+    from = std::clamp(from, 0, end);
+    to = std::clamp(to, 0, end);
+    if (to < from)
+        std::swap(from, to);
+    if (from == to)
+        return {};
+    // What goes between two blocks of text (readingHtml()'s groups, a table's cells and rows).
+    const auto separator = [](const QTextBlock &a, const QTextBlock &b) {
+        const QTextTable *ta = QTextCursor(a).currentTable();
+        const QTextTable *tb = QTextCursor(b).currentTable();
+        if (ta && ta == tb)
+            return ta->cellAt(a.position()).row() == tb->cellAt(b.position()).row() ? u"\t"_s : u"\n"_s;
+        if (!ta && !tb && a.userState() >= 0 && a.userState() == b.userState())
+            return u"\n"_s;
+        return u"\n\n"_s;
+    };
+    QString out;
+    QTextBlock previous;
+    for (QTextBlock b = document->findBlock(from); b.isValid() && b.position() <= to; b = b.next()) {
+        const QString text = b.text();
+        // The empty block after a table, a rule: no text of its own (an empty cell is a cell).
+        if (text.isEmpty() && !QTextCursor(b).currentTable())
+            continue;
+        // A block boundary crossed on the way (every block after the first one reached).
+        if (previous.isValid())
+            out += separator(previous, b);
+        const int position = b.position();
+        const int start = std::max(from, position) - position;
+        const int stop = std::min(to, position + int(text.size())) - position;
+        if (stop > start)
+            out += QStringView(text).sliced(start, stop - start);
+        previous = b;
+    }
+    for (QChar &c : out) {
+        // Line breaks inside a block (<br/>), frame markers.
+        if (c == QChar::LineSeparator || c == QChar::ParagraphSeparator || c.unicode() == 0xfdd0
+            || c.unicode() == 0xfdd1)
+            c = u'\n';
+    }
     return out;
 }
 

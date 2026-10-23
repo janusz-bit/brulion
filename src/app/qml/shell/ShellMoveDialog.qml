@@ -93,9 +93,9 @@ BDialog {
 
     /// The rows: the root, the folders matching the query, a new folder of the typed name.
     readonly property var rows: {
-        if (!visible)
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (!visible || Workspace.revision < 0)
             return []
-        void Workspace.revision
         const own = mode === "move" && isDir ? path : ""
         const folders = Workspace.folderPaths().filter(f => own === "" || (f !== own && !f.startsWith(own + "/")))
         const q = query.trim()

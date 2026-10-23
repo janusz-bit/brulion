@@ -22,11 +22,16 @@ import Brulion
 // A submenu is a BMenu inside the menu (its `title` and `iconName` make its item); it opens beside
 // the menu with a mouse, in place of it on touch UIs (one menu at a time on a phone's width).
 //   BMenu { BMenu { title: qsTr("Kopiuj odnośnik"); iconName: "link"; BMenuItem { … } } }
+// `touched`: something in the open menu was pressed or scrolled — whoever moves a menu out of the
+// way of something else (the editor's, when the keyboard goes) leaves it where it is from then on.
 T.Menu {
     id: control
 
     /// The icon of this menu's item in its parent menu (a submenu).
     property string iconName
+    /// An item was pressed or the list scrolled since the menu opened.
+    property bool touched: false
+    onAboutToShow: touched = false
     /// What the system's bars cover of the window's top (Android 11+ draws the window under the
     /// status bar).
     readonly property real safeTop: T.Overlay.overlay && T.Overlay.overlay.SafeArea
@@ -65,6 +70,7 @@ T.Menu {
         clip: true
         currentIndex: control.currentIndex
         keyNavigationWraps: true
+        onMovementStarted: control.touched = true
         T.ScrollBar.vertical: BScrollBar {}
     }
 

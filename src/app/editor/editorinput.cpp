@@ -1,5 +1,8 @@
 #include "editorinput.h"
 
+#include "editorhost.h"
+#include "pagecontroller.h"
+
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -8,10 +11,7 @@
 #include <QQuickItem>
 #include <QQuickTextDocument>
 #include <QQuickWindow>
-#include <QTextCursor>
 #include <QTextDocument>
-
-#include <algorithm>
 
 namespace brulion::editor {
 
@@ -32,25 +32,7 @@ QString EditorInput::plainText(QQuickTextDocument *document) const
 
 QString EditorInput::textRange(QQuickTextDocument *document, int from, int to) const
 {
-    if (!document || !document->textDocument())
-        return {};
-    QTextDocument *doc = document->textDocument();
-    const int end = std::max(0, doc->characterCount() - 1);
-    from = std::clamp(from, 0, end);
-    to = std::clamp(to, 0, end);
-    if (to < from)
-        std::swap(from, to);
-    QTextCursor cursor(doc);
-    cursor.setPosition(from);
-    cursor.setPosition(to, QTextCursor::KeepAnchor);
-    QString text = cursor.selectedText();
-    for (QChar &c : text) {
-        // Paragraph and line separators, frame markers (a table's cells).
-        if (c == QChar::ParagraphSeparator || c == QChar::LineSeparator || c.unicode() == 0xfdd0
-            || c.unicode() == 0xfdd1)
-            c = u'\n';
-    }
-    return text;
+    return document ? PageController::readingText(document->textDocument(), from, to) : QString();
 }
 
 bool EditorInput::commitPreedit(QQuickItem *item) const

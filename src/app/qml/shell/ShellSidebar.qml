@@ -48,9 +48,9 @@ Rectangle {
     readonly property string currentPath: {
         if (route.view === "page")
             return route.path || ""
-        if (route.view !== "journal")
+        // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
+        if (route.view !== "journal" || Workspace.revision < 0)
             return ""
-        void Workspace.revision
         const p = route.path || (route.date ? Workspace.journalPath(route.date) : "")
         return p !== "" && Workspace.exists(p) ? p : ""
     }
