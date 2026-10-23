@@ -1,10 +1,12 @@
 #include "pagetools.h"
 
 #include "contentutil.h"
+#include "index/query.h"
 #include "index/vaultindex.h"
 #include "io/exporter.h"
 #include "markdown/inline.h"
 #include "markdown/rename.h"
+#include "notebook/links.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 #include "workspace.h"
@@ -115,6 +117,7 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
 {
     int links = 0;
     int tags = 0;
+    int queries = 0;
     QSet<QString> notes;
     const VaultIndex *idx = m_workspace ? m_workspace->index() : nullptr;
     const QString path = paths::normalize(rawPath);
@@ -149,8 +152,47 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
                 tags += int(here);
             }
         }
+        // The ```query filters that name the page follow it too (VaultIndex::planRelocation()):
+        // its tags (tag:, #tag) and the page itself (ref:, [[…]], page:, path:).
+        const QString stem = paths::stripMarkdownExtension(path);
+        for (const VaultPath &source : idx->notesWithQueries()) {
+            int here = 0;
+            for (const QueryNameRef &q : findQueryNames(idx->content(source))) {
+                const QString value = q.value.trimmed();
+                bool names = false;
+                switch (q.kind) {
+                case QueryFilterKind::Tag:
+                    names = keys.contains(value.normalized(QString::NormalizationForm_C).toLower());
+                    if (names)
+                        ++tags;
+                    break;
+                case QueryFilterKind::Ref:
+                case QueryFilterKind::Page: {
+                    const qsizetype cut = std::min(value.indexOf(u'#') < 0 ? value.size() : value.indexOf(u'#'),
+                                                   value.indexOf(u'|') < 0 ? value.size() : value.indexOf(u'|'));
+                    const QString target = value.left(cut).trimmed();
+                    names = !target.isEmpty() && !target.contains(u'*')
+                            && idx->resolveLink(target, source).value_or(QString()) == path;
+                    break;
+                }
+                case QueryFilterKind::Path:
+                    names = value.compare(stem, Qt::CaseInsensitive) == 0
+                            || value.compare(path, Qt::CaseInsensitive) == 0;
+                    break;
+                default: break;
+                }
+                if (names && q.kind != QueryFilterKind::Tag)
+                    ++links;
+                if (names)
+                    ++here;
+            }
+            if (here > 0) {
+                notes.insert(source);
+                queries += here;
+            }
+        }
     }
-    return {{u"notes"_s, int(notes.size())}, {u"links"_s, links}, {u"tags"_s, tags}};
+    return {{u"notes"_s, int(notes.size())}, {u"links"_s, links}, {u"tags"_s, tags}, {u"queries"_s, queries}};
 }
 
 QString PageTools::tagFor(const QString &rawPath) const
@@ -299,9 +341,18 @@ QVariantMap PageTools::tagInfo(const VaultIndex *idx, const QString &path, int r
             {u"subTags"_s, subTags}};
 }
 
-QString PageTools::wikiLink(const QString &path) const
+QString PageTools::wikiLink(const QString &rawPath) const
 {
-    return wikiLinkFor(m_workspace ? m_workspace->index() : nullptr, paths::normalize(path));
+    const VaultPath path = paths::normalize(rawPath);
+    const VaultIndex *index = m_workspace ? m_workspace->index() : nullptr;
+    // A note: the page part of every copied link (notebook::pageLinkTarget — the editor's and the
+    // command line's too); an attachment: the shortest name that reaches it.
+    if (paths::isMarkdown(path)) {
+        const Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+        return u"[["_s + notebook::pageLinkTarget(path, vault ? vault->config() : VaultConfig(), index) + u"]]"_s;
+    }
+    const auto target = index ? index->linkTarget(path) : std::nullopt;
+    return u"[["_s + target.value_or(paths::basename(path)) + u"]]"_s;
 }
 
 bool PageTools::openLink(const QString &url, const QString &fromPath, bool newPane) const

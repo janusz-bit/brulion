@@ -6,6 +6,7 @@
 #include "index/suggest_p.h"
 #include "index/textutil_p.h"
 #include "index/unlinked_p.h"
+#include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
 #include "text/text.h"
@@ -128,6 +129,19 @@ VaultPath VaultIndex::Private::resolveTagPath(const QString &tag) const
     return entry(hit) ? hit : VaultPath();
 }
 
+const QList<VaultPath> &VaultIndex::Private::queryNotes()
+{
+    if (!cache.queryNotes) {
+        QList<VaultPath> out;
+        for (const Entry *e : sortedEntries()) {
+            if (hasQueryBlocks(e->content, e->note))
+                out.append(e->path);
+        }
+        cache.queryNotes = std::move(out);
+    }
+    return *cache.queryNotes;
+}
+
 const TagTargets &VaultIndex::Private::tagTargets()
 {
     if (!cache.tagTargets) {
@@ -196,6 +210,11 @@ QList<VaultPath> VaultIndex::attachments() const
         d->cache.attachments = std::move(out);
     }
     return *d->cache.attachments;
+}
+
+QList<VaultPath> VaultIndex::notesWithQueries() const
+{
+    return d->queryNotes();
 }
 
 bool VaultIndex::contains(const VaultPath &path) const
@@ -474,7 +493,6 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
         QString tag;
     };
     QList<Found> found;
-    QHash<const Private::Entry *, QStringList> pageLevel;
     for (const QString &key : d->tagKeysFor(path)) {
         const auto notes = d->tagIndex.constFind(key);
         if (notes == d->tagIndex.constEnd())
@@ -483,10 +501,7 @@ QList<TagReference> VaultIndex::tagReferences(const VaultPath &path) const
             const Private::Entry *e = it.key() == path ? nullptr : d->entry(it.key());
             if (!e)
                 continue;
-            auto level = pageLevel.find(e);
-            if (level == pageLevel.end())
-                level = pageLevel.insert(e, pageLevelTags(e->note));
-            if (level->contains(key))
+            if (e->pageTags().contains(key))
                 found.append(Found{e, -1, key});
             const QList<Block> &blocks = e->note.blocks;
             for (qsizetype i = 0; i < blocks.size(); ++i) {
@@ -682,6 +697,75 @@ QList<PageSuggestion> VaultIndex::suggestPages(const QString &prefix, int limit)
     });
     for (qsizetype i = 0; i < std::min<qsizetype>(limit, scored.size()); ++i)
         out.append(scored[i].s);
+    return out;
+}
+
+QList<TagSuggestion> VaultIndex::suggestTags(const QString &prefix, int limit) const
+{
+    QList<TagSuggestion> out;
+    if (limit <= 0)
+        return out;
+    const QStringView typed = prefix.startsWith(u'#') ? QStringView(prefix).mid(1) : QStringView(prefix);
+    const QString key = text::foldKey(typed); // what was typed matches without diacritics …
+    // … but a tag names a page with them (#zolw is not Żółw): one entry per tag key.
+    const auto tagKey = [](const QString &name) { return nfc(name).toLower(); };
+    QSet<QString> seen; // tag keys offered so far
+    const auto tagItem = [&](const TagCount &t) {
+        TagSuggestion s;
+        s.tag = t.display.isEmpty() ? t.tag : t.display;
+        s.count = t.count;
+        s.path = resolveTag(t.tag).value_or(QString());
+        seen.insert(t.tag);
+        return s;
+    };
+    // Tags in use (most used first) that start with the text, then pages no tag names yet, then
+    // tags that contain the text. A page whose tag is in use is offered as that tag.
+    QHash<QString, const TagCount *> contains;
+    QList<const TagCount *> containsOrder;
+    const QList<TagCount> all = tags();
+    for (const TagCount &t : all) {
+        const QString folded = text::foldKey(t.tag);
+        if (key.isEmpty() || folded.startsWith(key)) {
+            out.append(tagItem(t));
+        } else if (folded.contains(key)) {
+            contains.insert(t.tag, &t);
+            containsOrder.append(&t);
+        }
+        if (out.size() >= limit)
+            return out;
+    }
+    for (const PageSuggestion &s : suggestPages(typed.toString(), limit)) {
+        // What was typed is in the name (no fuzzy matches among the tags).
+        if (!key.isEmpty() && !text::foldKey(s.alias.isEmpty() ? s.title : s.alias).contains(key)
+            && !text::foldKey(s.path).contains(key))
+            continue;
+        // The name of the tag: the alias that matched or the title — or, when that name is another
+        // page's (a duplicate base name), the shortest tag that names this one.
+        QString name = s.alias.isEmpty() ? s.title : s.alias;
+        if (resolveTag(name) != s.path)
+            name = tagTarget(s.path).value_or(QString());
+        const QString k = tagKey(name);
+        if (name.isEmpty() || seen.contains(k) || markdown::tagSyntax(name).isEmpty())
+            continue;
+        if (const TagCount *inUse = contains.value(k)) {
+            out.append(tagItem(*inUse));
+        } else {
+            seen.insert(k);
+            TagSuggestion page;
+            page.tag = name;
+            page.page = true;
+            page.path = s.path;
+            out.append(page);
+        }
+        if (out.size() >= limit)
+            return out;
+    }
+    for (const TagCount *t : std::as_const(containsOrder)) {
+        if (out.size() >= limit)
+            break;
+        if (!seen.contains(t->tag))
+            out.append(tagItem(*t));
+    }
     return out;
 }
 

@@ -24,9 +24,7 @@ namespace {
 
 bool isThisPage(const QString &folded)
 {
-    static const QSet<QString> words = {u"this"_s,    u"current"_s, u"ta"_s,   u"ten"_s,
-                                        u"biezaca"_s, u"biezacy"_s, u"tutaj"_s};
-    return words.contains(folded);
+    return isThisPageValue(folded); // (already folded: folding again changes nothing)
 }
 
 int priorityRank(Priority p)
@@ -469,7 +467,7 @@ NoteMeta &Runner::meta(const Entry *entry)
         return *it;
     const ParsedNote &note = entry->note;
     NoteMeta m;
-    m.pageTags = pageLevelTags(note);
+    m.pageTags = entry->pageTags();
     m.effective.resize(note.blocks.size());
     return *m_meta.insert(entry, std::move(m));
 }

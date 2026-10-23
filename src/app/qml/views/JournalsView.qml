@@ -18,7 +18,7 @@ import Brulion
 // The touch toolbar of the day being edited docks on the stream's frame (`journals`), which the
 // shell keeps on the keyboard: it never scrolls with the days, and the caret is kept above it.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
-// (one day: its date), `sidePanel`, `editing` and `toolbarDocked`.
+// (one day: its date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`.
 FocusScope {
     id: root
 
@@ -37,6 +37,8 @@ FocusScope {
     /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)
+    /// One day as a page in source mode (the stream opens a day as a page for that).
+    readonly property bool sourceMode: single && pageView !== null && pageView.sourceMode
     readonly property Component sidePanel: inSidePanel ? null : single ? (pageView ? pageView.sidePanel : null) : journalsPanel
 
     focus: true

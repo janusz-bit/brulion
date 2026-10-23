@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJSEngine>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -1043,6 +1044,30 @@ private Q_SLOTS:
         QVERIFY(alone->inDocsVault());
     }
 
+    // The editor's toasts with a button ("Cofnij" after deleting blocks): AppController carries the
+    // function to the shell's toast host (Main.qml), which calls it when the button is pressed.
+    void toastWithAction()
+    {
+        auto app = openApp(u"toastaction"_s);
+        QJSEngine engine;
+        const QJSValue undo = engine.evaluate(u"var undone = 0; (function () { undone += 1 })"_s);
+        QVERIFY(undo.isCallable());
+        QSignalSpy plain(app.get(), &AppController::toastRequested);
+        QSignalSpy withAction(app.get(), &AppController::toastActionRequested);
+        app->toastAction(u"Usunięto 3 bloki"_s, u"info"_s, u"Cofnij"_s, undo);
+        QCOMPARE(withAction.size(), 1);
+        QCOMPARE(plain.size(), 0);
+        const QList<QVariant> args = withAction.first();
+        QCOMPARE(args.at(0).toString(), u"Usunięto 3 bloki"_s);
+        QCOMPARE(args.at(1).toString(), u"info"_s);
+        QCOMPARE(args.at(2).toString(), u"Cofnij"_s);
+        QJSValue carried = args.at(3).value<QJSValue>();
+        QVERIFY(carried.isCallable());
+        const QJSValue result = carried.call();
+        QVERIFY2(!result.isError(), qPrintable(result.toString()));
+        QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
+    }
+
     void commands()
     {
         auto app = openApp(u"commands"_s);
@@ -1088,6 +1113,20 @@ private Q_SLOTS:
             return QVariantMap();
         };
         QCOMPARE(commandNamed(u"block.copyRef"_s).value(u"shortcut"_s).toString(), u"Ctrl+Shift+C"_s);
+        // Source mode: no blocks to point at — the block and heading commands are off (not a toast
+        // after choosing them), the page's link stays; back to blocks, they are on again.
+        QSignalSpy commandsChanged(model, &CommandModel::commandsChanged);
+        app->setSourceModeShown(true);
+        QCOMPARE(commandsChanged.size(), 1);
+        for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
+            QVERIFY(!commandNamed(command).value(u"enabled"_s).toBool());
+            QVERIFY(!model->run(command));
+        }
+        QVERIFY(commandNamed(u"page.copyLink"_s).value(u"enabled"_s).toBool());
+        QVERIFY(commandNamed(u"page.source"_s).value(u"enabled"_s).toBool()); // the way back
+        app->setSourceModeShown(false);
+        for (const QString &command : {u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s})
+            QVERIFY(commandNamed(command).value(u"enabled"_s).toBool());
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
         QVERIFY(!model->run(u"page.mode"_s));

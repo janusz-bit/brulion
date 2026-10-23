@@ -33,7 +33,8 @@ This file is the single source of truth for parsers, renderers, importers and ex
   the vault would hide — a leading `.` or one of the ignored folders below (`logseq`,
   `node_modules`, …), also once sanitised (`logseq?`) — is refused ("Folder o nazwie „…” byłby
   ukryty"). Nothing is ever moved into an ignored folder.
-* **Moving and renaming** (pages, attachments, folders — "Przenieś do…", drag and drop, a `/` in
+* **Moving and renaming** (pages — daily notes too: they are files —, attachments, folders —
+  "Przenieś do…", drag and drop, a `/` in
   a name typed in the Rename dialog is a path from the vault root; in a page title edited in place
   it is sanitised like the other characters a file name cannot have, `TCP/IP` → `TCP IP.md`):
   refused onto a name that exists (also in another letter case) and into the item itself, and a
@@ -113,6 +114,16 @@ naming the same file; only its target changes (`|alias`, `#Heading`, `#^id`, `!`
   `VaultIndex::linkTarget()`, also what `[[` completion inserts for a duplicate name);
 * tags the same way (they resolve like links at the vault root): `#dom` → `#Projekty/Dom`,
   `#Projekty/Dom` → `#Archiwum/Dom`, `#[[…]]`, `tags::` and frontmatter items in their form.
+* the filters of ```` ```query ```` blocks (§10) that name a moved file or a renamed tag, in every
+  note (`findQueryNames()` / `retargetQueryNames()`: any spelling of the key, negated, each value
+  of a comma list, never in comments, phrases or outside the fence): `tag:` / `#tag` exactly that
+  tag as tags are (sub-tags stay); `ref:` / `[[…]]` like a link written in the query's note;
+  `page:` (no `*`, not `this`) when it named the moved page and no longer matches it; `path:` (no
+  `*`) when every file it matched moved by one folder change (`path:Projekty/` →
+  `path:Archiwum/Projekty/`; a prefix that also matches a file that stays is left). The new value
+  keeps the written form (`[[…]]`, quotes) or goes into `[[…]]` when it holds a blank or a comma
+  (`tag:[[Mój dom]]`). They count as links (`ref:`, `page:`, `path:`) and tags (`tag:`) in the
+  rename and move dialogs.
 Links that were unresolved stay so. Each rewritten note is written once (one history step).
 Attachments inside a moved folder are covered too (`![[Projekty/plan.png]]`,
 `![](Projekty/plan.png)`).
@@ -176,9 +187,12 @@ the side panel's outline (docs/UI.md "The block editor"; `PageController::copyLi
 | Osadzenie | `!((id))`; on a heading its section `![[Page#Heading]]` (same fallbacks, `![[Page#^id]]`) |
 | Kopiuj link do strony | `[[Page]]` |
 
-* `Page` is the page's title, or its vault path without `.md` when the title leads to another page
-  (the same name in another folder); a daily note is named by its file name
-  (`[[2026-10-22#^abc123]]`).
+* `Page` is the same in every copied link — the editor's, the page menu's and the folder tree's
+  "Kopiuj link", `brulion-cli block link` (`notebook::pageLinkTarget`): the page's title, or, when
+  the title leads to another page (the same name in another folder), the shortest unique path
+  `VaultIndex::linkTarget()` gives (`[[Projekty/Dom]]`, not `[[Archiwum/2025/Projekty/Dom]]`; what
+  `[[` completion and moves write too); a daily note is named by its file name
+  (`[[2026-10-22#^abc123]]`), also when a page elsewhere has that name.
 * The block kinds use the block's `^id` or its Logseq `id::` (a UUID, as it is); a block without
   one gets a generated id (§4 "Block id": placement, 6 characters `[a-z0-9]`, never one any block
   of the vault has, also a block without text) as one undoable edit. Heading and page links change
@@ -231,9 +245,9 @@ frontmatter's `tags:`.
   `#Stare/Dom` naming the other page stays). Sub-tags are not renamed; an alias tag (`#Janek`)
   still names the page. A folder rename rewrites path-qualified tags (`#Projekty/Dom` →
   `#Archiwum/Dom`); a move keeps `#Dom` while it still names the page and writes the shortest path
-  that does (`#Projekty/Dom`) when it would not (§2 "Rewriting on rename and move"). Queries are
-  not rewritten: `tag:old` in a ```` ```query ```` block (like a
-  `[[link]]` there) keeps the old name and has to be changed by hand.
+  that does (`#Projekty/Dom`) when it would not (§2 "Rewriting on rename and move"). The `tag:`
+  filters of ```` ```query ```` blocks follow the same way — exactly the tag, `tag:old/x` stays
+  (§2).
 * **Queries** — `tag:` stays tags-only; `ref:` also matches tags naming the page (§10).
 * **Graph** — a tag naming a page is an edge to it; "#tag" nodes remain only for tags that name
   no page. Unresolved tags are never "missing pages" (hex colours, issue numbers…).
@@ -492,6 +506,8 @@ sort:due,-priority limit:20
   `[[Strona]]` = `ref:Strona`. A value with `//` right after the colon is text (URLs). Since a tag
   names a page (§3), `ref:` matches the page's tags too, while `tag:` stays tags-only (with
   sub-tags).
+* Renaming or moving a page, a folder or a tag's page rewrites the `tag:`, `#tag`, `ref:`,
+  `[[…]]`, `page:` and `path:` values that name it (§2 "Rewriting on rename and move").
 * Keys and keyword values are case- and diacritic-insensitive (`ścieżka:` = `sciezka:`,
   `STATUS:Zrobione`) and have Polish spellings. An unknown key or value shows a helpful error
   (in the UI language) instead of results.

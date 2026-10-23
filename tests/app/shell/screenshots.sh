@@ -90,6 +90,8 @@ declare -A shot_args=(
   [page-doc-outline]="--demo --editor-script doc-outline"
   [page-menu]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"menu\"}"
   [page-project]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
+  # Three of the project's tasks selected (on phones the selection mode: its tools at the bottom).
+  [page-selection]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --editor-script select-range:Zamówić..Odebrać"
   # A picture attachment: the picture with the notes that embed it, its text (read-only), and
   # its references in the side panel (wide windows).
   [page-picture]="--demo --route {\"view\":\"page\",\"path\":\"assets/plan-mieszkania.svg\"}"
@@ -123,7 +125,7 @@ declare -A shot_notemode=(
 all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
   page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
-  page-menu page-project page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
+  page-menu page-project page-selection page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer tree drawer-tree move move-chosen newpage-folder newpage-root newfolder
   allpages allpages-folder)

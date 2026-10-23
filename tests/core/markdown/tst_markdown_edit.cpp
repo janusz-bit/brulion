@@ -934,6 +934,9 @@ private Q_SLOTS:
             byLink.insert(t.section(u'=', 0, 0).toInt(), t.section(u'=', 1));
         const QString out = markdown::retargetLinks(content, editsFor(content, byLink));
         QCOMPARE(out, expected);
+        // The same with the links of a parse the caller has (the index's, with a path).
+        const ParsedNote parsed = parseNote(u"Notatki/Spotkanie.md"_s, content);
+        QCOMPARE(markdown::retargetLinks(content, editsFor(content, byLink), &parsed.links), expected);
         // The links still parse, with their alias / heading / block id.
         const ParsedNote before = parseNote(QString(), content);
         const ParsedNote after = parseNote(QString(), out);

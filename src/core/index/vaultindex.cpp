@@ -106,6 +106,13 @@ const QHash<QString, QString> &Entry::tagSpellings() const
     return *m_tagSpellings;
 }
 
+const QStringList &Entry::pageTags() const
+{
+    if (!m_pageTags)
+        m_pageTags = pageLevelTags(note);
+    return *m_pageTags;
+}
+
 const Entry *IndexAccess::entry(const VaultIndex &index, const VaultPath &path)
 {
     return index.d->entry(path);

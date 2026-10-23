@@ -54,13 +54,21 @@
       <br><sub><b>Centrum synchronizacji</b> — konflikt z dwóch urządzeń scalony wiersz po wierszu</sub>
     </td>
   </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/images/foldery-przenoszenie.png" width="640" alt="Drzewo folderów z otwartą stroną w folderze Projekty i okno „Przenieś do…” z wyszukiwaniem folderów">
+      <br><sub><b>Foldery</b> — drzewo pokazuje otwartą stronę, a „Przenieś do…” przenosi strony i foldery bez psucia linków</sub>
+    </td>
+  </tr>
 </table>
 
 <p align="center">
   <img src="docs/images/telefon-dziennik.png" width="270" alt="Dziennik na telefonie z dolnym paskiem nawigacji i przyciskiem szybkiej notatki">
   &nbsp;&nbsp;&nbsp;
   <img src="docs/images/telefon-edycja-ciemny.png" width="270" alt="Edycja strony na telefonie w ciemnym motywie z paskiem narzędzi tuż nad klawiaturą">
-  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją oraz edycja z paskiem narzędzi tuż nad klawiaturą (motyw ciemny)</sub>
+  &nbsp;&nbsp;&nbsp;
+  <img src="docs/images/telefon-zaznaczenie.png" width="270" alt="Trzy zaznaczone zadania na stronie projektu na telefonie, z uchwytami zaznaczenia i paskiem Kopiuj, Wytnij, Usuń na dole">
+  <br><sub><b>Na telefonie</b> — dziennik z dolną nawigacją, edycja z paskiem narzędzi tuż nad klawiaturą (motyw ciemny) i zaznaczone bloki z narzędziami zaznaczenia</sub>
 </p>
 
 ## Dlaczego Brulion?
@@ -77,9 +85,9 @@
   `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
   pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
-  bloku i nagłówka skopiujesz z menu bloku (prawy przycisk myszy, na telefonie „Więcej” nad
-  klawiaturą) albo `Ctrl+Shift+C`: `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]`; kliknięty
-  przewija do celu i go podświetla.
+  bloku i nagłówka — `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]` — skopiujesz z menu bloku
+  (prawy przycisk myszy, przytrzymanie punktora, na telefonie „Więcej” nad klawiaturą), a
+  odwołanie `((…))` także skrótem `Ctrl+Shift+C`; kliknięty przewija do celu i go podświetla.
 * **Zaznaczanie i kopiowanie grup bloków.** Kilka punktów listy albo akapitów dokumentu
   zaznaczysz `Shift+↑/↓`, `Ctrl+A`, `Shift`+kliknięciem, przeciągnięciem myszą albo — na
   telefonie — przytrzymaniem palca na tekście (potem stuknięcia i uchwyty). Zaznaczone bloki
@@ -119,9 +127,10 @@
 * **Foldery bez psucia linków.** Strony, załączniki i całe foldery przenosisz poleceniem
   „Przenieś do…” (z drzewa, menu „Więcej”, listy stron albo palety; na telefonie przycisk „⋯”
   przy każdym wierszu), przeciągając myszą w drzewie albo wpisując „/” przy zmianie nazwy
-  („Archiwum/Dom”). Każdy link i tag dalej prowadzi do tej samej strony — Brulion pokazuje przed
-  przeniesieniem, ile linków poprawi, a niejednoznaczny `[[Dom]]` zapisze jako
-  `[[Projekty/Dom]]`. Nowy folder zakładasz z „+” przy „Strony”, nowa strona trafia do folderu
+  („Archiwum/Dom”). Każdy link, tag i filtr zapytania dalej prowadzi do tej samej strony —
+  Brulion pokazuje przed przeniesieniem, ile linków poprawi, a niejednoznaczny `[[Dom]]` zapisze
+  jako `[[Projekty/Dom]]`. Dzień dziennika to też plik: źle zapisany przeniesiesz albo zmienisz mu
+  nazwę tak samo. Nowy folder zakładasz z „+” przy „Strony”, nowa strona trafia do folderu
   otwartej strony, drzewo samo pokazuje otwartą stronę i sortuje po polsku („Rozdział 2” przed
   „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze.
 * **Wiersz poleceń i agenci AI.** `brulion-cli` dopisuje do dziennika, dodaje zadania
@@ -358,13 +367,15 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   content), whose linked references list the tagged blocks; renaming a page renames its tags.
 * Folders you can reorganise: move pages, attachments and whole folders ("Move to…" from the
   tree, the More menu, All pages or the palette, a "⋯" button per row on phones, mouse drag and
-  drop in the tree, or a "/" in Rename) and every link and tag keeps pointing at the same file —
-  the impact is shown before moving, an ambiguous `[[Home]]` becomes `[[Projects/Home]]`, and
-  moving the journals or templates folder updates the notebook's settings. The tree reveals the
+  drop in the tree, or a "/" in Rename) and every link, tag and query filter keeps pointing at the
+  same file — the impact is shown before moving, an ambiguous `[[Home]]` becomes
+  `[[Projects/Home]]`, and moving the journals or templates folder updates the notebook's
+  settings. A daily note is a file too: a misfiled day is moved or renamed the same way. The tree reveals the
   open page and sorts in Polish order with numbers by value; All pages browses folder by folder.
-* Copy a link to any block or heading from the block menu (a right-click, or "More" on the
-  phone's editing toolbar) or with `Ctrl+Shift+C`: `((id))`, `[[Page#^id]]`, `[[Page#Heading]]`
-  or an embed; following one scrolls to it and highlights it.
+* Copy a link to any block or heading — `((id))`, `[[Page#^id]]`, `[[Page#Heading]]` or an embed
+  — from the block menu (a right-click, a long press on the bullet, or "More" on the phone's
+  editing toolbar); `Ctrl+Shift+C` copies the reference `((id))`. Following one scrolls to it and
+  highlights it.
 * Select groups of blocks — bullets or a document's paragraphs, with their children — with
   `Shift+↑/↓`, `Ctrl+A`, Shift+click, a mouse drag or, on phones, a long press (then taps and
   grips), and copy, cut, delete, indent or move them together: the clipboard gets Markdown plus

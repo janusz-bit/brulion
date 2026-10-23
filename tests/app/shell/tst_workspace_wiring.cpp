@@ -13,7 +13,9 @@
 #include "workspacesync.h"
 
 #include "index/query.h"
+#include "index/vaultindex.h"
 #include "notebook/json.h"
+#include "reminders/calendar.h"
 #include "reminders/reminders.h"
 #include "vault/vault.h"
 
@@ -220,10 +222,13 @@ private Q_SLOTS:
     void queryJsonMatchesTheApp()
     {
         auto ws = open({{u"Praca.md"_s, u"- [ ] Raport #praca ⏫ 📅 2026-10-15 ⏳ 2026-10-14 🔁 co tydzień\n"
-                                        u"  - notatka ⏰ 2026-10-15 09:00\n- [x] Oferta ✅ 2026-10-13\n"_s},
+                                        u"  - notatka ⏰ 2026-10-15 09:00\n- [x] Oferta ✅ 2026-10-13\n"
+                                        u"- [ ] Zgłoszenie 🔽 ➕ 2026-10-01 🛫 2026-10-12\n- [-] Wyjazd ❌ 2026-10-12\n"
+                                        u"- leki ⏰! 2026-10-16 08:00 🔁 every day\n"_s},
                         {u"journals/2026-10-14.md"_s, u"- Żółw #praca ^b1\n"_s}});
-        for (const QString &source : {u"type:tasks status:all"_s, u"type:reminders"_s, u"type:blocks tag:praca"_s,
-                                      u"type:pages"_s, u"type:tasks status:all group:status"_s}) {
+        for (const QString &source :
+             {u"type:tasks status:all"_s, u"type:reminders"_s, u"type:blocks tag:praca"_s, u"type:pages"_s,
+              u"type:tasks status:all group:status"_s, u"type:tasks status:all group:priority sort:-priority"_s}) {
             const QVariantMap app = ws->runQuery(source);
             QVERIFY2(app.value(u"ok"_s).toBool(), qPrintable(source));
             const auto parsed = brulion::parseQuery(source);
@@ -240,6 +245,39 @@ private Q_SLOTS:
             QCOMPARE(QJsonDocument(cli).toJson(QJsonDocument::Compact),
                      QJsonDocument(QJsonObject::fromVariantMap(expected)).toJson(QJsonDocument::Compact));
         }
+        // The keys QML reads stay (the created / cancelled dates are there too).
+        const QVariantList tasks = ws->runQuery(u"type:tasks status:all"_s).value(u"items"_s).toList();
+        QCOMPARE(tasks.size(), 4);
+        const QVariantMap raport = tasks.at(0).toMap();
+        for (const char *key : {"path", "title", "folder", "line", "depth", "text", "raw", "task"})
+            QVERIFY2(raport.contains(QString::fromLatin1(key)), key);
+        const QVariantMap task = raport.value(u"task"_s).toMap();
+        QCOMPARE(task.value(u"status"_s).toString(), u"todo"_s);
+        QCOMPARE(task.value(u"priority"_s).toString(), u"high"_s);
+        QCOMPARE(task.value(u"due"_s).toString(), u"2026-10-15"_s);
+        QCOMPARE(raport.value(u"line"_s).toInt(), 0);
+        QCOMPARE(tasks.at(2).toMap().value(u"task"_s).toMap().value(u"created"_s).toString(), u"2026-10-01"_s);
+        QCOMPARE(tasks.at(3).toMap().value(u"task"_s).toMap().value(u"cancelled"_s).toString(), u"2026-10-12"_s);
+        QCOMPARE(tasks.at(3).toMap().value(u"line"_s).toInt(), 4);
+
+        // Search hits, calendar items and the notebook's settings: the command line's JSON too.
+        const brulion::VaultConfig config = ws->vault()->config();
+        const QList<brulion::SearchHit> hits = ws->index()->search(u"żółw"_s, 10);
+        QVERIFY(!hits.isEmpty());
+        QVariantList cliHits;
+        for (const brulion::SearchHit &h : hits)
+            cliHits.append(brulion::notebook::searchHitJson(h, config).toVariantMap());
+        QCOMPARE(ws->search(u"żółw"_s, 10), cliHits);
+        QCOMPARE(ws->search(u"żółw"_s, 10).first().toMap().value(u"journal"_s).toString(), u"2026-10-14"_s);
+        QVariantList cliCalendar;
+        for (const brulion::CalendarItem &item :
+             brulion::calendarItems(*ws->index(), QDate(2026, 10, 12), QDate(2026, 10, 16)))
+            cliCalendar.append(brulion::notebook::calendarItemJson(item).toVariantMap());
+        QCOMPARE(ws->calendarItems(u"2026-10-12"_s, u"2026-10-16"_s), cliCalendar);
+        QVERIFY(cliCalendar.size() >= 4);
+        QCOMPARE(QJsonObject::fromVariantMap(ws->vaultConfig()), brulion::notebook::vaultConfigJson(config));
+        QCOMPARE(ws->vaultConfig().value(u"weekStartsOn"_s).toInt(), 1);
+        QCOMPARE(ws->vaultConfig().value(u"defaultReminderTime"_s).toString(), u"09:00"_s);
     }
 
     void queryHost()

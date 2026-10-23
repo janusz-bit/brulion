@@ -30,9 +30,13 @@ QString isoOf(qint64 mtime)
 QJsonObject relocationJson(const VaultPath &from, const notebook::RelocationImpact &impact,
                            const notebook::Relocation *moved)
 {
-    QJsonObject o{{u"from"_s, from},          {u"path"_s, moved ? moved->path : impact.path},
-                  {u"links"_s, impact.links}, {u"tags"_s, impact.tags},
-                  {u"notes"_s, impact.notes}, {u"settings"_s, QJsonArray::fromStringList(impact.specials)}};
+    QJsonObject o{{u"from"_s, from},
+                  {u"path"_s, moved ? moved->path : impact.path},
+                  {u"links"_s, impact.links},
+                  {u"tags"_s, impact.tags},
+                  {u"queries"_s, impact.queries},
+                  {u"notes"_s, impact.notes},
+                  {u"settings"_s, QJsonArray::fromStringList(impact.specials)}};
     if (!moved) {
         // The dry run: every note that would be rewritten, as a diff (a moved one from its old
         // path to its new one).

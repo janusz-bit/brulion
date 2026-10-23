@@ -350,8 +350,8 @@ QList<FileMove> fileMoves(const Vault &vault, const VaultPath &from, const Vault
     return moves;
 }
 
-RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, const VaultPath &rawFrom,
-                                  const VaultPath &rawTo)
+RelocationImpact relocationChecks(const Vault &vault, const VaultIndex *index, const VaultPath &rawFrom,
+                                  const VaultPath &rawTo, QList<FileMove> *moves)
 {
     RelocationImpact out;
     const QString from = paths::normalize(rawFrom);
@@ -369,14 +369,29 @@ RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, c
     // The settings relocate() changes (special folders, the journal template file).
     for (const SpecialPath &s : specialsWithin(vault.config(), from))
         out.specials.append(s.special);
-    if (!index)
-        return out;
-    const RelocationPlan plan = index->planRelocation(fileMoves(vault, from, to));
-    out.links = plan.links();
-    out.tags = plan.tags();
-    out.notes = int(plan.files().size());
+    if (moves)
+        *moves = fileMoves(vault, from, to);
+    return out;
+}
+
+void addRelocationPlan(RelocationImpact &impact, const RelocationPlan &plan)
+{
+    impact.links = plan.links();
+    impact.tags = plan.tags();
+    impact.queries = plan.queries();
+    impact.notes = int(plan.files().size());
+    impact.rewrites.clear();
     for (const RelocationPlan::File &f : plan.files())
-        out.rewrites.append(PlannedRewrite{f.path, f.newPath, f.before, f.after});
+        impact.rewrites.append(PlannedRewrite{f.path, f.newPath, f.before, f.after});
+}
+
+RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, const VaultPath &from,
+                                  const VaultPath &to)
+{
+    QList<FileMove> moves;
+    RelocationImpact out = relocationChecks(vault, index, from, to, index ? &moves : nullptr);
+    if (index && out.ok && !out.same)
+        addRelocationPlan(out, index->planRelocation(moves));
     return out;
 }
 

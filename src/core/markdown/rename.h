@@ -83,8 +83,9 @@ struct LinkEdit {
 /// '#' always; spaces and parentheses in a plain destination, '<' and '>' in an angle one).
 /// Edits that match no link, overlap an earlier one or have a target no link can hold (empty, a
 /// line break, `[[`, `]]`, '|' or '#' in a wiki target) are ignored; every other byte — line
-/// endings, a BOM — is preserved, and content without changes is returned as is.
-QString retargetLinks(const QString &content, const QList<LinkEdit> &edits);
+/// endings, a BOM — is preserved, and content without changes is returned as is. `links`: the
+/// links of parseNote() of `content` when the caller has them (else it is parsed).
+QString retargetLinks(const QString &content, const QList<LinkEdit> &edits, const QList<Link> *links = nullptr);
 
 /// Rename tags by key (content in → content out): every occurrence of findNoteTags() — `#tag`,
 /// `#[[tag]]`, `tags::` items, the frontmatter's `tags:` items — whose key (lower-case NFC,

@@ -47,7 +47,7 @@ brulion_add_bench(bench_text SOURCES bench_text.cpp LIBS brulion_core_text)
 brulion_add_bench(bench_dates SOURCES bench_dates.cpp LIBS brulion_core_dates)
 brulion_add_bench(bench_calc SOURCES bench_calc.cpp LIBS brulion_core_calc)
 brulion_add_bench(bench_markdown SOURCES bench_markdown.cpp LIBS brulion_core_markdown)
-brulion_add_bench(bench_index SOURCES bench_index.cpp LIBS brulion_core_index brulion_core_vault)
+brulion_add_bench(bench_index SOURCES bench_index.cpp LIBS brulion_core_index brulion_core_vault brulion_core_notebook)
 brulion_add_bench(bench_vault SOURCES bench_vault.cpp LIBS brulion_core_vault)
 # The in-memory WebDAV server of the sync tests (tests/core/sync) drives SyncEngine.
 brulion_add_bench(bench_sync SOURCES bench_sync.cpp LIBS brulion_sync_testsupport)

@@ -1,5 +1,6 @@
 #include "notebook/links.h"
 
+#include "index/vaultindex.h"
 #include "markdown/blockdocument.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
@@ -52,6 +53,7 @@ int headingOf(const markdown::BlockEntry &e, QString *name)
 } // namespace
 
 QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
+                       const std::function<QString(const VaultPath &)> &shortestTarget,
                        const std::function<QString(const QString &)> &resolveTitle)
 {
     if (path.isEmpty())
@@ -60,12 +62,25 @@ QString pageLinkTarget(const VaultPath &path, const VaultConfig &config,
     // A daily note by its file name ([[2026-10-22]] reads as the date), also before it exists.
     if (markdown::journalDateFromPath(path, config))
         return title;
-    // The title, unless it leads to another page (the same name in another folder): then the
-    // path. A title that leads nowhere yet (a new page) will lead here once the page is saved.
+    // The shortest target that reaches the page ("Dom", "Projekty/Dom" next to another Dom).
+    if (const QString shortest = shortestTarget ? shortestTarget(path) : QString(); !shortest.isEmpty())
+        return shortest;
+    // Not indexed yet (a new page): the title, unless it leads to another page (the same name in
+    // another folder) — then the path. A title that leads nowhere yet will lead here once the
+    // page is saved.
     const QString resolved = resolveTitle ? resolveTitle(title) : QString();
     if (resolved.isEmpty() || resolved == path)
         return title;
     return paths::stripMarkdownExtension(path);
+}
+
+QString pageLinkTarget(const VaultPath &path, const VaultConfig &config, const VaultIndex *index)
+{
+    if (!index)
+        return pageLinkTarget(path, config, {}, {});
+    return pageLinkTarget(
+            path, config, [index](const VaultPath &p) { return index->linkTarget(p).value_or(QString()); },
+            [index](const QString &title) { return index->resolveLink(title).value_or(QString()); });
 }
 
 std::optional<BlockLinks> blockLinks(const QString &content, int line, const QString &pageTarget,

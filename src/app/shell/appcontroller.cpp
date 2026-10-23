@@ -338,6 +338,14 @@ void AppController::setSidePanelAllowed(bool allowed)
     Q_EMIT sidePanelAllowedChanged();
 }
 
+void AppController::setSourceModeShown(bool shown)
+{
+    if (m_sourceModeShown == shown)
+        return;
+    m_sourceModeShown = shown;
+    Q_EMIT sourceModeShownChanged();
+}
+
 void AppController::clearSidePanelRoute()
 {
     if (m_sideRoute.isEmpty())
@@ -1146,6 +1154,12 @@ void AppController::hiddenToTray()
 void AppController::toast(const QString &text, const QString &kind)
 {
     Q_EMIT toastRequested(text, kind);
+}
+
+void AppController::toastAction(const QString &text, const QString &kind, const QString &actionText,
+                                const QJSValue &onAction)
+{
+    Q_EMIT toastActionRequested(text, kind, actionText, onAction);
 }
 
 void AppController::requestUiAction(const QString &action)

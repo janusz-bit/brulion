@@ -147,12 +147,12 @@ Never compute a hash yourself.
 | `page create <title>` | `[--folder F] [--mode outline\|document] [--content T \| --stdin]` | a new page; a name differing only in letter case is that page (`existing`) | yes |
 | `page append <ref> <text>` | `[--under "## Heading" \| ^id] [--stdin]` | a block at the end, of a section, or as a block's last child | yes |
 | `page write <ref>` | `--expect-hash H (--content T \| --stdin)` | replace the whole text (H from `page read`) | destructive |
-| `page rename <ref> <title>` | | rename in its folder; links and tags follow | destructive |
-| `page move <ref> <folder>` | `. = root` | move; links and tags follow | destructive |
+| `page rename <ref> <title>` | | rename in its folder; links, tags and the ```query filters naming it follow (`{links, tags, queries, notes}`) | destructive |
+| `page move <ref> <folder>` | `. = root` | move; links, tags and query filters follow | destructive |
 | `page delete <ref>` | | to `.trash/` | destructive |
 | `folder list [<folder>]` | | folders with page / attachment counts and special roles | |
 | `folder create <path>` | | a folder (names sanitised, hidden names refused) | yes |
-| `folder move <path> <target>` | | move; links, tags and the notebook's special folders follow | destructive |
+| `folder move <path> <target>` | | move; links, tags, query filters (`path:` too) and the notebook's special folders follow | destructive |
 | `folder rename <path> <name>` | | rename; the same | destructive |
 | `folder delete <path>` | | to `.trash/` | destructive |
 | `journal read [<date>]` | `[--blocks]`; also `journal [<date>]` | a daily note (today by default) | |
@@ -181,7 +181,7 @@ Never compute a hash yourself.
 | `date parse <phrase>` | | how Brulion reads a date phrase: `{date, time, spec, human, past, matched, rest}` | |
 | `calc <expression>` | `[--stdin]` | Brulion's calculator (units, percent, Polish decimal comma) | |
 | `calc page <ref>` | | the results of a page's calc blocks and inline `= …` | |
-| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Kopiuj odnośnik", adding the id | yes |
+| `block link <ref>` | | `{id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink}` — the app's "Kopiuj odnośnik" (the same page name: the shortest unique target, a daily note's file name), adding the id | yes |
 | `history list <ref>` | | versions of a page on this device (also a deleted one) | |
 | `history show <id>` | | a version's text | |
 | `history restore <ref> <id>` | | write a version back (the current text is kept as one) | destructive |

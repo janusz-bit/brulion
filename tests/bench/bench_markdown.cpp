@@ -212,6 +212,38 @@ private Q_SLOTS:
         QVERIFY(doc.count() >= blocks / 2);
     }
 
+    // Selecting every block of an outline and copying it (PageController::selectAll() and
+    // copySelection(), docs/UI.md "Selecting and copying"): the top rows of the range and the
+    // clipboard's Markdown, or its plain text ("Kopiuj jako tekst"); the HTML flavour is
+    // bench_io clipboardHtml.
+    void selectAllCopy_data()
+    {
+        QTest::addColumn<int>("blocks");
+        QTest::addColumn<QString>("what");
+        for (int n : {500, 5000, 20000}) {
+            for (const QString &w : {u"markdown"_s, u"plain text"_s})
+                QTest::newRow(qPrintable(u"%1 blocks %2"_s.arg(n).arg(w))) << n << w;
+        }
+    }
+    void selectAllCopy()
+    {
+        QFETCH(int, blocks);
+        QFETCH(QString, what);
+        const BlockDocument doc(outline(blocks));
+        const QString before = doc.toString();
+        PlainTextOptions options;
+        options.blockText = [](const QString &id) { return u"Tekst bloku "_s + id; };
+        qsizetype size = 0;
+        QBENCHMARK {
+            const QList<int> tops = doc.rangeTops(0, doc.count() - 1);
+            if (what == u"plain text")
+                size = blocksPlainText(doc, tops, options).size();
+            else
+                size = blocksMarkdown(doc, tops).size();
+        }
+        QVERIFY(size > before.size() / 2);
+    }
+
     // ---- InlineRenderer ----------------------------------------------------------------------
 
     void renderBlock_data()

@@ -14,6 +14,7 @@
 #include "markdown/notemode.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
+#include "notebook/links.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -102,8 +103,13 @@ public:
     void setMergeable(bool mergeable) { m_mergeable = mergeable; }
     /// Characters held by the step.
     qsizetype size() const { return m_delta.size(); }
+    /// Unique among the steps of the app's run (PageController::undoToken(): an edit undone and
+    /// replaced by another at the same place in the history is another step).
+    quint64 serial() const { return m_serial; }
 
 private:
+    static inline quint64 s_serials = 0;
+    const quint64 m_serial = ++s_serials;
     PageController *m_controller;
     TextDelta m_delta;
     PageController::Focus m_focusBefore;
@@ -476,6 +482,7 @@ void PageController::load()
     m_model->resetContent(ok ? content : QString());
     m_savedText = ok ? content : QString();
     m_undo->clear();
+    ++m_undoGeneration;
     m_typingOpen = false;
     m_editingUid = 0;
     resetSelection();
@@ -776,6 +783,7 @@ void PageController::onFileChanged(const QString &path)
         m_model->setEditingUid(m_editingUid);
         updateSelection();
         m_undo->clear();
+        ++m_undoGeneration;
         m_typingOpen = false;
         Q_EMIT editingRowChanged();
         Q_EMIT selectedRowChanged();
@@ -1749,6 +1757,7 @@ int PageController::startNewPage(const QString &templatePath)
     }
     m_savedText = text();
     m_undo->clear();
+    ++m_undoGeneration;
     m_typingOpen = false;
     m_saveTimer.stop();
     setDirty(false);
@@ -2131,16 +2140,13 @@ QString PageController::linkTarget() const
 {
     if (m_path.isEmpty())
         return {};
-    const QString title = paths::pageTitle(m_path);
-    // A daily note by its file name ([[2026-10-22]] reads as the date), also before it exists.
-    if (m_host && markdown::journalDateFromPath(m_path, vaultConfigFromMap(m_host->vaultConfig())))
-        return title;
-    // The title, unless it leads to another page (the same name in another folder): then the
-    // path. A title that leads nowhere yet (a new page) will lead here once the page is saved.
-    const QString resolved = m_host ? m_host->resolveLink(title, QString()) : QString();
-    if (resolved.isEmpty() || resolved == m_path)
-        return title;
-    return paths::stripMarkdownExtension(m_path);
+    // One rule for every copied link (notebook::pageLinkTarget): a daily note by its file name,
+    // else the index's shortest target ("Dom", "Projekty/Dom" next to another Dom).
+    const VaultConfig config = m_host ? vaultConfigFromMap(m_host->vaultConfig()) : VaultConfig();
+    return notebook::pageLinkTarget(
+            m_path, config,
+            [this](const VaultPath &path) { return m_host ? m_host->linkTarget(path, QString()) : QString(); },
+            [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
 }
 
 QVariantMap PageController::linkText(int row, const QString &kind)
@@ -3050,6 +3056,25 @@ void PageController::undo()
         return;
     m_typingOpen = false;
     m_undo->undo();
+}
+
+QString PageController::undoToken() const
+{
+    // The history's generation, the position in it and the step there: after an undo, a new
+    // edit takes the same position but is another step.
+    const int index = m_undo->index();
+    const auto *last = index > 0 ? static_cast<const EditCommand *>(m_undo->command(index - 1)) : nullptr;
+    return u"%1:%2:%3"_s.arg(m_undoGeneration).arg(index).arg(last ? last->serial() : 0);
+}
+
+bool PageController::undoStep(const QString &token)
+{
+    // Only while the edit is the last step of this history: undoing it later would undo the
+    // edits made after it first (or, after a reload, an unrelated step).
+    if (m_sourceMode || token.isEmpty() || token != undoToken() || !m_undo->canUndo())
+        return false;
+    undo();
+    return true;
 }
 
 void PageController::redo()

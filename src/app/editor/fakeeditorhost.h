@@ -1,6 +1,7 @@
 // FakeEditorHost — an in-memory EditorHost for the editor playground (`brulion --editor`) and
 // the editor tests: files in a hash, suggestions/link resolution/block ids computed by parsing
-// those files with the markdown module (simple, not the real index), assets as generated
+// those files with the markdown module (simple, not the real index; link targets come from the
+// real index, as the app's), assets as generated
 // images, navigation recorded and announced by signals. It is also a QueryHost: ```query blocks
 // run on the real index module (a VaultIndex rebuilt from the files after changes), so live
 // results and their checkboxes work as in the app. Writes, external changes and task edits
@@ -67,6 +68,8 @@ public:
     QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
     QString resolveLink(const QString &target, const QString &fromPath) const override;
+    /// The real index's shortest target (VaultIndex::linkTarget(), as the shell's Workspace).
+    QString linkTarget(const QString &path, const QString &fromPath) const override;
     QString blockText(const QString &blockId) const override;
     bool blockIdTaken(const QString &blockId) const override;
     QString linkedBlockText(const QString &path, const QString &blockId) const override;
@@ -156,9 +159,10 @@ private:
     int m_queryRuns = 0;
     bool m_queriesFail = false;
     QStringList m_undecodable;
-    /// The index for queries, rebuilt from the files after a change.
-    std::unique_ptr<VaultIndex> m_index;
-    bool m_indexDirty = true;
+    /// The index for queries and link targets, rebuilt from the files after a change.
+    mutable std::unique_ptr<VaultIndex> m_index;
+    mutable bool m_indexDirty = true;
+    const VaultIndex &currentIndex() const;
     bool m_indexSignalPending = false;
     /// Files changed: the index is out of date; indexChanged() follows on the next turn.
     void filesChanged(bool announce = true);

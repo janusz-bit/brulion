@@ -24,6 +24,7 @@ namespace brulion {
 class Vault;
 class VaultIndex;
 struct FileMove;
+class RelocationPlan;
 } // namespace brulion
 
 namespace brulion::notebook {
@@ -147,8 +148,9 @@ struct RelocationImpact {
     bool same = false; ///< `to` is `from`: nothing to do
     VaultPath path;    ///< the new path (spelled as the vault spells its folders)
     PathProblem problem;
-    int links = 0;                  ///< links rewritten
-    int tags = 0;                   ///< tag occurrences rewritten
+    int links = 0;                  ///< links rewritten (with ```query filters naming a page or folder)
+    int tags = 0;                   ///< tag occurrences rewritten (with ```query tag: filters)
+    int queries = 0;                ///< ```query filter values among them (RelocationPlan::queries())
     int notes = 0;                  ///< notes rewritten
     QStringList specials;           ///< the settings that follow ("journals", …)
     QList<PlannedRewrite> rewrites; ///< the notes rewritten, with their texts (with an index)
@@ -156,6 +158,13 @@ struct RelocationImpact {
 /// `index` must hold every note (the CLI builds it whole, the app finishes indexing first).
 RelocationImpact relocationImpact(const Vault &vault, const VaultIndex *index, const VaultPath &from,
                                   const VaultPath &to);
+/// relocationImpact() in two parts, for a caller that plans a few notes at a time
+/// (RelocationPlanner: the dragged row's ghost): the checks and the settings that follow, with
+/// the file moves to plan in `moves` (none unless ok and not same) …
+RelocationImpact relocationChecks(const Vault &vault, const VaultIndex *index, const VaultPath &from,
+                                  const VaultPath &to, QList<FileMove> *moves);
+/// … and the counts and rewrites of their plan.
+void addRelocationPlan(RelocationImpact &impact, const RelocationPlan &plan);
 
 /// A setting of .brulion/config.json rebased by relocate().
 struct RebasedSetting {

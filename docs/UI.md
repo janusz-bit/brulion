@@ -48,7 +48,8 @@ components — no Material/Fusion look, so all targets look identical.
   through the history; the app closes only from the home view. The drawer also lists
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
-  ulubionych, Zmień nazwę… (F2, pages only), Przenieś do… (pages only), Pokaż w drzewie (the
+  ulubionych, Zmień nazwę… (F2) and Przenieś do… (on a page route — a daily note opened as a page
+  too —, not in the journal views by date: "Folders" below), Pokaż w drzewie (the
   sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Zaznacz tekst (the
   page or day as one text, "Selecting and copying"), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
@@ -77,7 +78,8 @@ components — no Material/Fusion look, so all targets look identical.
   do bloku", "Kopiuj link do nagłówka": the current block is the one being edited (a table whose
   cell is edited too; a cell left for the palette leaves its table selected), else the selected
   one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok lub umieść
-  w nim kursor"), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
+  w nim kursor"; in Markdown source the three block and heading commands are disabled — the
+  page's views report it as `sourceMode`, AppShell binds `AppController.sourceModeShown`), quick switcher (`BQuickSwitcher`, fuzzy page search), quick capture (one
   line → today's journal; dates in the text become ⏰ / 📅), new page / folder, rename, move
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
@@ -105,8 +107,8 @@ rename and move").
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
   folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
-  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`[[…]]` with the shortest target:
-  `Workspace.linkTarget`), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
+  bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`PageTools.wikiLink`: the page part of every
+  copied link, `notebook::pageLinkTarget` — the shortest target, a daily note by its file name), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
   file here like any other — renamed, moved and dragged (a misfiled day can be put right) — also
   in All pages, F2 and the Więcej menu of a daily note opened as a page; only the journal view
   (by date) and the page's own menu there offer neither. The "Strony" header's "+": Nowa strona,
@@ -115,10 +117,12 @@ rename and move").
   and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
   list scrolls near its edges, the target following the rows that pass under the pointer) or a
   page (its folder), or onto the "Strony" header while it shows (the root), is moved there by
-  `Workspace.movePath`; the ghost names the target and, a moment later, what the move rewrites
-  (`Workspace.moveImpact`: "Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow)
-  or why it cannot move there; the target is outlined, Escape cancels. The toast has Undo (moving
-  it back).
+  `Workspace.movePath`; the ghost names the target and, a moment later (150 ms on one target),
+  what the move rewrites ("Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow) or
+  why it cannot move there — `Workspace.requestMoveImpact()`, planned a few milliseconds per frame
+  (`RelocationPlanner`) and dropped when the target changes, so a big folder never stalls the
+  drag; impacts are kept per target until the notebook changes. The target is outlined, Escape
+  cancels. The toast has Undo (moving it back).
 * **"Przenieś do…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
   (fuzzy: names, then paths), "Główny folder notatnika" first, the current folder shown but
   disabled, a folder's own subtree left out, and "Nowy folder „…”" for the name typed (created,
@@ -323,7 +327,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
   (+ create), `((` blocks (creates the target's block id), `#` tags and pages (a tag names a
   page: tags in use first, with the page they open, then pages no tag names yet with their
-  folder — a duplicate base name path-qualified —; a name that is no simple tag is written
+  folder — a duplicate base name by the shortest path that names it, `VaultIndex::suggestTags` /
+  `tagTarget` —; a name that is no simple tag is written
   `#[[Jan Kowalski]]`, `#[[C++]]`), `/` slash commands,
   natural-language dates after `📅 ⏳ 🛫 ⏰ ⏰!` or `@` (Polish and English, e.g. "jutro o 9";
   `@` also offers the journal link and a reminder).
@@ -505,7 +510,15 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   text). A copy is read back (never "Skopiowano" for a clipboard that did not take it — except in
   the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes
   about 1 MB per transaction) with a toast — never cut short. Cut = copy, then delete as one undo
-  step.
+  step. The toasts "Wycięto %n bloków" and "Usunięto %n bloków" (two or more blocks) have
+  "Cofnij": the editor's `message(text, kind, action)` carries `{text, run}`
+  (`BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` and the
+  shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
+  only while it is still the page's last step (`undoToken()` taken right after it names the
+  history, the position and the step there) — after other edits (one made in its place after
+  Ctrl+Z too), on another page or once undone it says "Nie cofnięto: strona zmieniła się od tego
+  czasu".
+  A toast's button takes no focus when pressed: the editor keeps the keys.
 * **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
   the toolbar's Status zadania act on the range from one end to the other; a block selected alone
   keeps the block's own keys — Ctrl+Enter changes it, not the children it brings along (they are
@@ -1078,11 +1091,11 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), no menu from a finger's long press on text, each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, "Zaznacz tekst" with the mouse; with `--touch` a long press, taps, the end grip, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz", "Zaznacz tekst" with a long press and a handle — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `select-text`, `select-text-selected`, `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), no menu from a finger's long press on text, each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, the toast's Cofnij (clicked; one whose deletion was undone already undoes nothing), Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, "Zaznacz tekst" with the mouse; with `--touch` a long press, taps, the end grip, Usuń and a tap on the toast's Cofnij, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz", "Zaznacz tekst" with a long press and a handle — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `select-text`, `select-text-selected`, `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
-| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `mode-tooltip`, …) |
+| `--editor-script <state>` (with the app) | `qml/dev/PageScript.qml`: the editor on the guide page (a document) in a state (`editing`, `slash`, `reminder`, `source`, `sidepanel`, `doc-paragraph`, `doc-list`, `doc-heading`, `doc-outline`; any page given by `--route`: `edit:<text>[@<caret>]`, `select:<text>`, `select-range:<first>..<last>` — on touch UIs in the selection mode —, `mode-tooltip`, …) |
 | `--screenshot <file> [--delay <ms>]` | save the window after loading and quit |
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
@@ -1161,3 +1174,5 @@ nixpkgs#oxipng`; keep each under 150 KB):
 | `synchronizacja.png` | io `sync-conflict-merge`, run without the Nextcloud account of `io_nextcloud_home` (so the sidebar footer shows no connection error) | desktop, light |
 | `telefon-dziennik.png` | content `journals` | phone, light |
 | `telefon-edycja-ciemny.png` | shell `page-editing-keyboard` | phone, dark |
+| `foldery-przenoszenie.png` | shell `move` | desktop, light |
+| `telefon-zaznaczenie.png` | shell `page-selection` | phone, light |

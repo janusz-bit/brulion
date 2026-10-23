@@ -65,7 +65,8 @@ Rectangle {
     property string dropFolder
     /// `dropFolder` is a folder the item may go into (not itself, its subtree or where it is).
     property bool dropAllowed: false
-    /// Workspace.moveImpact() of the drop (a moment after the target changed; null before).
+    /// Workspace.moveImpact() of the drop (a moment after the target changed, planned without
+    /// blocking — Workspace.requestMoveImpact(); null before).
     property var dropImpact: null
     readonly property bool dropValid: dropAllowed && !(dropImpact && dropImpact.ok === false)
     /// The pointer is over the "Strony" header (the root).
@@ -125,9 +126,9 @@ Rectangle {
         if (currentPath !== "")
             reveal(currentPath, false)
     }
+    /// "Kopiuj link": the same text as the page menu's and the editor's (PageTools.wikiLink).
     function copyLink(path) {
-        const target = Workspace.linkTarget(path, "")
-        const link = "[[" + (target !== "" ? target : Workspace.pageTitle(path)) + "]]"
+        const link = tools.wikiLink(path)
         if (tools.copyText(link))
             AppController.toast(qsTr("Copied %1").arg(link), "success")
     }
@@ -144,6 +145,8 @@ Rectangle {
         dropOnRoot = false
     }
     function cancelDrag() {
+        if (dragging)
+            Workspace.cancelMoveImpact() // (not another sidebar's: the drawer's and the window's)
         dragPath = ""
         dropAllowed = false
         dropImpact = null
@@ -197,6 +200,7 @@ Rectangle {
         // What the move would rewrite: asked once the target stays a moment.
         if (target !== dropFolder || allowed !== dropAllowed) {
             dropImpact = null
+            Workspace.cancelMoveImpact()
             if (allowed)
                 impactTimer.restart()
             else
@@ -267,11 +271,20 @@ Rectangle {
             sidebar.dragTo(sidebar.dragScenePos)
         }
     }
+    // The ghost's second line: asked once the target stays a moment, planned a few notes per
+    // frame (a big folder never stalls the drag), dropped when the target changes.
     Timer {
         id: impactTimer
         interval: 150
         onTriggered: if (sidebar.dragging && sidebar.dropAllowed)
-                         sidebar.dropImpact = Workspace.moveImpact(sidebar.dragPath, sidebar.dropFolder)
+                         Workspace.requestMoveImpact(sidebar.dragPath, sidebar.dropFolder)
+    }
+    Connections {
+        target: Workspace
+        function onMoveImpactReady(path, folder, impact) {
+            if (sidebar.dragging && sidebar.dropAllowed && path === sidebar.dragPath && folder === sidebar.dropFolder)
+                sidebar.dropImpact = impact
+        }
     }
     ShellMoveWords { id: words }
     Shortcut {

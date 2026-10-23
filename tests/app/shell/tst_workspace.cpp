@@ -1230,6 +1230,68 @@ private Q_SLOTS:
             QCOMPARE(ws->resolveLink(u"Plan"_s, u"Notatka.md"_s), u"Plan.md"_s);
     }
 
+    // requestMoveImpact(): moveImpact() delivered by a signal, never from inside the request; a
+    // new request drops the one in progress; the impact is kept per target until the notebook
+    // changes.
+    void requestMoveImpact()
+    {
+        auto ws = open({{u"Notatka.md"_s, u"- [[Projekty/Dom]] i #[[Projekty/Dom]] [[Plan]]\n"_s},
+                        {u"Zapytania.md"_s, u"```query\npath:Projekty/ ref:[[Projekty/Dom]]\n```\n"_s},
+                        {u"Projekty/Dom.md"_s, u"- [[Plan]]\n"_s},
+                        {u"Projekty/Łąka.md"_s, u"x"_s},
+                        {u"Plan.md"_s, u"x"_s},
+                        {u"Archiwum/Stare.md"_s, u"x"_s}});
+        QSignalSpy ready(ws.get(), &Workspace::moveImpactReady);
+        const QVariantMap expected = ws->moveImpact(u"Projekty"_s, u"Archiwum"_s);
+        QVERIFY(expected.value(u"ok"_s).toBool());
+        QCOMPARE(expected.value(u"notes"_s).toInt(), 1); // path:Projekty/ (the links still resolve)
+        ws->requestMoveImpact(u"Projekty"_s, u"Archiwum"_s);
+        QCOMPARE(ready.size(), 0); // not from inside the request
+        QVERIFY(ready.wait());
+        QCOMPARE(ready.size(), 1);
+        QCOMPARE(ready.first().at(0).toString(), u"Projekty"_s);
+        QCOMPARE(ready.first().at(1).toString(), u"Archiwum"_s);
+        QCOMPARE(ready.first().at(2).toMap(), expected);
+
+        // A new target drops the request in progress; a cancelled one says nothing.
+        ready.clear();
+        ws->requestMoveImpact(u"Projekty"_s, QString());
+        ws->requestMoveImpact(u"Projekty/Łąka.md"_s, u"Archiwum"_s);
+        QVERIFY(ready.wait());
+        QTest::qWait(50);
+        QCOMPARE(ready.size(), 1);
+        QCOMPARE(ready.first().at(0).toString(), u"Projekty/Łąka.md"_s);
+        QCOMPARE(ready.first().at(2).toMap().value(u"path"_s).toString(), u"Archiwum/Łąka.md"_s);
+        ready.clear();
+        ws->requestMoveImpact(u"Projekty"_s, QString());
+        ws->cancelMoveImpact();
+        QTest::qWait(50);
+        QCOMPARE(ready.size(), 0);
+
+        // A refusal comes the same way.
+        ws->requestMoveImpact(u"Projekty"_s, u"Projekty/Dom"_s);
+        QVERIFY(ready.wait());
+        QVERIFY(!ready.first().at(2).toMap().value(u"ok"_s).toBool());
+        QCOMPARE(ready.first().at(2).toMap().value(u"error"_s).toString(), u"A folder cannot be moved into itself."_s);
+
+        // New settings: the special folders that follow are the new ones.
+        QVERIFY(ws->moveImpact(u"Projekty"_s, u"Archiwum"_s).value(u"specials"_s).toStringList().isEmpty());
+        QVERIFY(ws->setConfig({{u"newPagesFolder"_s, u"Projekty"_s}}));
+        QCOMPARE(ws->moveImpact(u"Projekty"_s, u"Archiwum"_s).value(u"specials"_s).toStringList(),
+                 (QStringList{u"newPages"_s}));
+
+        // A note saved since: planned anew (one more query names the folder's page).
+        QVERIFY(ws->write(u"Nowa.md"_s, u"```query\npath:Projekty/Łąka\n```\n"_s));
+        ready.clear();
+        ws->requestMoveImpact(u"Projekty"_s, u"Archiwum"_s);
+        QVERIFY(ready.wait());
+        QCOMPARE(ready.first().at(2).toMap().value(u"notes"_s).toInt(), 2);
+        QCOMPARE(ws->moveImpact(u"Projekty"_s, u"Archiwum"_s).value(u"notes"_s).toInt(), 2);
+        // The move itself rewrites what was planned.
+        QCOMPARE(ws->movePath(u"Projekty"_s, u"Archiwum"_s), u"Archiwum/Projekty"_s);
+        QCOMPARE(ws->read(u"Nowa.md"_s), u"```query\npath:Archiwum/Projekty/Łąka\n```\n"_s);
+    }
+
     // Favourites, recent pages, fold state, history and the expanded folders follow a folder
     // move; the tree, the trash count and the page count hear of folder changes.
     void moveKeepsLocalState()

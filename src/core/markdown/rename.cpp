@@ -10,6 +10,7 @@
 #include "util/paths.h"
 
 #include <algorithm>
+#include <optional>
 
 #include <QRegularExpression>
 
@@ -398,7 +399,7 @@ QString renameLinks(const QString &content, const QString &oldName, const QStrin
     return out;
 }
 
-QString retargetLinks(const QString &content, const QList<LinkEdit> &edits)
+QString retargetLinks(const QString &content, const QList<LinkEdit> &edits, const QList<Link> *links)
 {
     if (edits.isEmpty())
         return content;
@@ -412,11 +413,15 @@ QString retargetLinks(const QString &content, const QList<LinkEdit> &edits)
         return !t.trimmed().isEmpty() && !t.contains(u"[["_s) && !t.contains(u"]]"_s) && !t.contains(u'|')
                && !t.contains(u'#') && !t.contains(u'\n') && !t.contains(u'\r');
     };
-    const ParsedNote note = parseNote(QString(), content);
+    std::optional<ParsedNote> parsed;
+    if (!links) {
+        parsed = parseNote(QString(), content);
+        links = &parsed->links;
+    }
     QString out;
     qsizetype last = 0;
     bool changed = false;
-    for (const Link &link : note.links) {
+    for (const Link &link : *links) {
         const LinkEdit *edit = byStart.value(link.from);
         if (!edit || edit->to != link.to || link.from < last)
             continue;

@@ -1,15 +1,20 @@
-// Query parser (docs/SYNTAX.md §10) — see index/query.h for the language.
+// Query parser (docs/SYNTAX.md §10) — see index/query.h for the language — and the names in query
+// blocks that renames and moves rewrite (findQueryNames(), retargetQueryNames()), read by the same
+// tokenizer.
 #include "index/query.h"
 
 #include "dates/expr.h"
 #include "index/querymessages_p.h"
 #include "index/textutil_p.h"
+#include "index/vaultindex_p.h"
+#include "markdown/parse.h"
 #include "text/text.h"
 
 #include <QHash>
 #include <QSet>
 
 #include <algorithm>
+#include <optional>
 
 namespace brulion {
 
@@ -366,6 +371,7 @@ qsizetype quoteEnd(QStringView s, qsizetype i)
 
 struct Token {
     QString raw;
+    qsizetype from = 0; ///< offset in the source
 };
 
 /// Does a `#` at `i` start a comment: followed by whitespace or the end (`# Moje zadania`, as in
@@ -413,7 +419,7 @@ bool tokenize(QStringView src, QList<Token> &out)
                 ++i;
             }
         }
-        out.append(Token{src.sliced(start, i - start).toString()});
+        out.append(Token{src.sliced(start, i - start).toString(), start});
     }
     return true;
 }
@@ -810,6 +816,308 @@ std::variant<Query, QString> Parser::parse(const QString &source)
 std::variant<Query, QString> parseQuery(const QString &source)
 {
     return Parser().parse(source);
+}
+
+// ---- Names in query blocks -----------------------------------------------------------------------
+
+namespace {
+
+/// A fence line alone: three or more backticks or tildes, after indentation and quote markers.
+bool isFenceOnly(QStringView line)
+{
+    qsizetype i = 0;
+    while (i < line.size() && (line[i].isSpace() || line[i] == u'>'))
+        ++i;
+    const QStringView rest = line.sliced(i).trimmed();
+    if (rest.size() < 3 || (rest.front() != u'`' && rest.front() != u'~'))
+        return false;
+    return std::all_of(rest.cbegin(), rest.cend(), [&](QChar c) { return c == rest.front(); });
+}
+
+/// The language of the fence `text` opens (up to three spaces before three or more backticks or
+/// tildes, lower-cased: "query"); "" when it opens none.
+QString fenceLanguage(QStringView text)
+{
+    qsizetype i = 0;
+    while (i < text.size() && i < 3 && text[i] == u' ')
+        ++i;
+    if (i >= text.size() || (text[i] != u'`' && text[i] != u'~'))
+        return {};
+    const QChar marker = text[i];
+    qsizetype n = 0;
+    while (i + n < text.size() && text[i + n] == marker)
+        ++n;
+    if (n < 3)
+        return {};
+    QStringView info = text.sliced(i + n).trimmed();
+    if (marker == u'`' && info.contains(u'`'))
+        return {};
+    while (!info.isEmpty() && (info.front() == u'{' || info.front().isSpace()))
+        info = info.sliced(1);
+    qsizetype end = 0;
+    while (end < info.size() && !info[end].isSpace() && info[end] != u'{' && info[end] != u'}')
+        ++end;
+    return end > 0 ? info.first(end).toString().toLower() : u"-"_s; // "-": a fence without a language
+}
+
+/// A list item's line without its marker ("- ```query" -> "```query"); other lines as they are.
+QStringView afterListMarker(QStringView line)
+{
+    qsizetype i = 0;
+    while (i < line.size() && line[i].isSpace())
+        ++i;
+    qsizetype j = i;
+    if (j < line.size() && (line[j] == u'-' || line[j] == u'*' || line[j] == u'+')) {
+        ++j;
+    } else {
+        while (j < line.size() && line[j].isDigit())
+            ++j;
+        if (j == i || j >= line.size() || (line[j] != u'.' && line[j] != u')'))
+            return line;
+        ++j;
+    }
+    if (j < line.size() && !line[j].isSpace())
+        return line;
+    while (j < line.size() && line[j].isSpace())
+        ++j;
+    return line.sliced(j);
+}
+
+/// The ranges [from, to) of the bodies of the ```query blocks of `content` (their own lines, not
+/// the fences): fenced code blocks, and fences inside list items (Logseq's "- ```query", the
+/// outline's query blocks).
+QList<std::pair<qsizetype, qsizetype>> queryBodies(const QString &content, const ParsedNote *parsed = nullptr)
+{
+    QList<std::pair<qsizetype, qsizetype>> out;
+    // Most notes have no fence at all: the (fast) case-sensitive search for one first, the
+    // case-insensitive search (slow: case folding per character) only then.
+    if ((!content.contains(u"```") && !content.contains(u"~~~")) || !content.contains(u"query", Qt::CaseInsensitive))
+        return out;
+    std::optional<ParsedNote> own;
+    if (!parsed)
+        own = markdown::parseNote(QString(), content);
+    const ParsedNote &note = parsed ? *parsed : *own;
+    QList<text::Line> lines;
+    const auto body = [&](int first, int last) {
+        if (last >= first)
+            out.append({lines.at(first).start, lines.at(last).start + lines.at(last).text.size()});
+    };
+    for (const Block &b : note.blocks) {
+        if (b.kind != BlockKind::ListItem && (b.kind != BlockKind::Code || b.lang != u"query"))
+            continue;
+        if (lines.isEmpty())
+            lines = text::splitLines(content);
+        const int end = std::min<int>(b.ownEndLine, int(lines.size()) - 1);
+        if (b.kind == BlockKind::Code) {
+            const int last = end > b.line && isFenceOnly(lines.at(end).text) ? end - 1 : end;
+            body(b.line + 1, last);
+            continue;
+        }
+        // A list item: its own lines may hold fences.
+        for (int ln = b.line; ln <= end; ++ln) {
+            const QStringView text =
+                    ln == b.line ? afterListMarker(lines.at(ln).text) : QStringView(lines.at(ln).text).trimmed();
+            const QString lang = fenceLanguage(text);
+            if (lang.isEmpty())
+                continue;
+            int close = ln + 1;
+            while (close <= end && !isFenceOnly(lines.at(close).text))
+                ++close;
+            if (lang == u"query")
+                body(ln + 1, std::min(close, end + 1) - 1);
+            ln = close; // past the closing fence (code is not looked into)
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+/// One value of a filter as written (`part`, at `at`): bare, quoted or in `[[ ]]`; a tag's may
+/// start with '#'.
+void addName(QueryFilterKind kind, QStringView part, qsizetype at, QList<QueryNameRef> &out)
+{
+    QueryNameRef r;
+    r.kind = kind;
+    qsizetype a = 0;
+    qsizetype b = part.size();
+    if (kind == QueryFilterKind::Tag && b > a && part[a] == u'#')
+        ++a;
+    const QStringView v = part.sliced(a, b - a);
+    if (v.size() >= 2 && opensQuote(v.front()) && closersFor(v.front()).contains(v.back())) {
+        r.quote = v.front();
+        ++a;
+        --b;
+    } else if (v.size() >= 4 && v.startsWith(u"[[") && v.endsWith(u"]]")) {
+        r.bracketed = true;
+        a += 2;
+        b -= 2;
+    }
+    while (a < b && part[a].isSpace())
+        ++a;
+    while (b > a && part[b - 1].isSpace())
+        --b;
+    if (a >= b)
+        return;
+    r.value = part.sliced(a, b - a).toString();
+    r.from = at + a;
+    r.to = at + b;
+    out.append(r);
+}
+
+/// The names in one token (at `at`), as Parser::applyToken() reads it.
+void tokenNames(QStringView token, qsizetype at, QList<QueryNameRef> &out)
+{
+    if (token == u"-")
+        return;
+    const qsizetype neg = token.startsWith(u'-') ? 1 : 0;
+    const QStringView raw = token.sliced(neg);
+    at += neg;
+    if (raw.isEmpty() || opensQuote(raw.front()))
+        return; // a phrase
+    if (raw.size() > 1 && raw.front() == u'#' && !raw[1].isSpace()) {
+        addName(QueryFilterKind::Tag, raw.sliced(1), at + 1, out);
+        return;
+    }
+    if (raw.startsWith(u"[[") && raw.endsWith(u"]]")) {
+        addName(QueryFilterKind::Ref, raw, at, out);
+        return;
+    }
+    const qsizetype k = keyLength(raw);
+    if (k <= 0 || raw.sliced(k + 1).startsWith(u"//"))
+        return;
+    const auto it = keyAliases().constFind(text::foldKey(raw.first(k)));
+    if (it == keyAliases().constEnd())
+        return;
+    QueryFilterKind kind = QueryFilterKind::Ref;
+    switch (*it) {
+    case Key::Tag: kind = QueryFilterKind::Tag; break;
+    case Key::Page: kind = QueryFilterKind::Page; break;
+    case Key::Path: kind = QueryFilterKind::Path; break;
+    case Key::Ref: kind = QueryFilterKind::Ref; break;
+    default: return;
+    }
+    // The comma list, split as splitValues() does (not inside quotes or `[[…]]`).
+    const QStringView value = raw.sliced(k + 1);
+    const qsizetype base = at + k + 1;
+    qsizetype start = 0;
+    for (qsizetype i = 0; i <= value.size(); ++i) {
+        if (i == value.size() || value[i] == u',') {
+            addName(kind, value.sliced(start, i - start), base + start, out);
+            start = i + 1;
+        } else if (opensQuote(value[i])) {
+            const qsizetype end = quoteEnd(value, i);
+            i = (end < 0 ? value.size() : end) - 1;
+        } else if (value.sliced(i).startsWith(u"[[")) {
+            const qsizetype close = value.indexOf(u"]]", i + 2);
+            i = (close < 0 ? value.size() : close + 2) - 1;
+        }
+    }
+}
+
+/// Can `value` stand bare as a filter value (one token, one value of a comma list)?
+bool bareValue(QStringView value)
+{
+    if (value.startsWith(u"//"))
+        return false;
+    for (QChar c : value) {
+        if (c.isSpace() || c == u',' || opensQuote(c))
+            return false;
+    }
+    return !value.contains(u"[[") && !value.contains(u"]]");
+}
+
+} // namespace
+
+bool index_detail::hasQueryBlocks(const QString &content, const ParsedNote &note)
+{
+    return !queryBodies(content, &note).isEmpty();
+}
+
+QList<QueryNameRef> findQueryNames(const QString &content, const ParsedNote *parsed)
+{
+    QList<QueryNameRef> out;
+    for (const auto &[from, to] : queryBodies(content, parsed)) {
+        const QStringView body = QStringView(content).sliced(from, to - from);
+        QList<Token> tokens;
+        if (!tokenize(body, tokens)) {
+            // An unclosed quote: the query does not run; the tokens before it are still names.
+            tokens.clear();
+            qsizetype end = body.size();
+            for (qsizetype i = 0; i < body.size(); ++i) {
+                if (opensQuote(body[i]) && quoteEnd(body, i) < 0) {
+                    end = i;
+                    break;
+                }
+            }
+            tokenize(body.first(end), tokens);
+        }
+        for (const Token &t : std::as_const(tokens))
+            tokenNames(t.raw, from + t.from, out);
+    }
+    return out;
+}
+
+QString formatQueryName(const QueryNameRef &name, const QString &value)
+{
+    if (value.trimmed().isEmpty() || value.contains(u'\n') || value.contains(u'\r'))
+        return {};
+    const bool brackets = value.contains(u"[[") || value.contains(u"]]");
+    if (name.bracketed)
+        return brackets ? QString() : value;
+    if (!name.quote.isNull()) {
+        for (QChar c : closersFor(name.quote)) {
+            if (value.contains(c))
+                return {};
+        }
+        return value;
+    }
+    if (bareValue(value))
+        return value;
+    return brackets ? QString() : u"[["_s + value + u"]]"_s;
+}
+
+QString retargetQueryNames(const QString &content, const QList<QueryNameEdit> &edits, int *applied)
+{
+    if (applied)
+        *applied = 0;
+    if (edits.isEmpty())
+        return content;
+    const QList<QueryNameRef> names = findQueryNames(content);
+    struct Replacement {
+        qsizetype from;
+        qsizetype to;
+        QString text;
+    };
+    QList<Replacement> replacements;
+    for (const QueryNameEdit &e : edits) {
+        const auto it = std::find_if(names.cbegin(), names.cend(),
+                                     [&](const QueryNameRef &n) { return n.from == e.from && n.to == e.to; });
+        if (it == names.cend())
+            continue;
+        const QString written = formatQueryName(*it, e.value);
+        if (written.isEmpty() || written == content.sliced(e.from, e.to - e.from))
+            continue;
+        replacements.append({e.from, e.to, written});
+    }
+    std::sort(replacements.begin(), replacements.end(),
+              [](const Replacement &a, const Replacement &b) { return a.from < b.from; });
+    QString out;
+    qsizetype pos = 0;
+    int count = 0;
+    for (const Replacement &r : std::as_const(replacements)) {
+        if (r.from < pos)
+            continue; // overlaps an earlier edit
+        out += QStringView(content).sliced(pos, r.from - pos);
+        out += r.text;
+        pos = r.to;
+        ++count;
+    }
+    if (count == 0)
+        return content;
+    out += QStringView(content).sliced(pos);
+    if (applied)
+        *applied = count;
+    return out;
 }
 
 } // namespace brulion

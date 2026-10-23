@@ -17,6 +17,9 @@ inline constexpr qsizetype ExcerptLength = 120;
 
 /// NFC form of `s` (ASCII fast path).
 QString nfc(QStringView s);
+/// `s`.toLower() with a fast path for ASCII text (most names and paths; Qt converts every
+/// character after the first upper-case one through the Unicode tables).
+QString lower(const QString &s);
 
 /// Code point starting at `i` and its length in UTF-16 units (a lone surrogate is itself).
 std::pair<char32_t, qsizetype> codePointAt(QStringView s, qsizetype i);
@@ -83,6 +86,10 @@ qsizetype indexOfWordStart(QStringView hay, QStringView needle);
 /// case — never exponential, unlike a backtracking regular expression built from the pattern
 /// (`*a*a*a*…` from a note must not freeze the app).
 bool globMatch(QStringView text, QStringView pattern, bool prefixOnly = false);
+
+/// A query's word for "the page containing the query" (`page:this`, `ref:ta`): this, current, ta,
+/// ten, bieżąca, bieżący, tutaj — case- and diacritic-insensitive.
+bool isThisPageValue(QStringView value);
 
 /// Collapse whitespace runs (tabs, newlines) into single spaces and trim.
 QString squash(QStringView s);

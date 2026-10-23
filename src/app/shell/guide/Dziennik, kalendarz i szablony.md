@@ -11,6 +11,7 @@ Każdy dzień ma własną stronę — plik w folderze `journals/` o nazwie z dat
 - Link do dnia, np. `[[2026-10-14]]`, wyświetla się jako czytelna data („śr 14 paź”).
 - Szybka notatka (Ctrl+Shift+N) dopisuje się na końcu dzisiejszego dziennika.
 - Nazwę pliku i folder dziennika zmienisz w *Ustawienia → Notatnik*.
+- Dzień zapisany pod złą datą przeniesiesz albo przemianujesz jak każdy plik: w drzewie folderów, na liście **Wszystkie strony** albo po „Otwórz jako stronę” (F2, menu **Więcej**) — zobacz [[Pierwsze kroki#Foldery|Foldery]].
 
 ## Kalendarz
 Widok **Kalendarz** ma układ miesiąca, tygodnia i agendy. Pokazuje:

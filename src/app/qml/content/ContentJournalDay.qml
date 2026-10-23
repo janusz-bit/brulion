@@ -288,7 +288,8 @@ FocusScope {
         // blocks are laid out at their final width right away.
         controller: page
         focus: true
-        onNotice: (text, kind) => AppController.toast(text, kind)
+        onMessage: (text, kind, action) => action ? AppController.toastAction(text, kind, action.text, action.run)
+                                                  : AppController.toast(text, kind)
         listView.interactive: false
         maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
         horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8

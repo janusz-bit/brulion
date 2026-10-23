@@ -479,8 +479,10 @@ public:
     /// linkText() put on the clipboard. Not ok with reason "noClipboard" (and the text) when the
     /// platform has no clipboard or it did not take the text — success is never claimed then.
     Q_INVOKABLE QVariantMap copyLink(int row, const QString &kind);
-    /// The page as links name it: its title, or its vault path without ".md" when the title
-    /// would lead to another page (the title of a daily note always: its file name).
+    /// The page as every copied link names it (notebook::pageLinkTarget(), the same text as the
+    /// page menu and `brulion-cli block link`): a daily note by its file name, else the host's
+    /// shortest link target (EditorHost::linkTarget(): the title, or the shortest folder path
+    /// that tells it from a page of the same name, "Projekty/Dom").
     Q_INVOKABLE QString linkTarget() const;
     /// The row of the heading `fragment` names ([[Page#Heading]], an Obsidian heading path
     /// [[Page#A#B]], a fragment written by hand; markdown::findHeading — the matcher embeds use
@@ -584,6 +586,13 @@ public:
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
+    /// Where the undo history stands — taken right after an edit, it names that edit for a
+    /// toast's "Cofnij" (undoStep()).
+    Q_INVOKABLE QString undoToken() const;
+    /// Undo the edit `token` (undoToken() right after it) while it is still the last step of the
+    /// history: false — nothing undone — when other edits came after it, it was undone already,
+    /// the history was reset (another page, a reload) or the page is in source mode.
+    Q_INVOKABLE bool undoStep(const QString &token);
 
     // --- Conflicts --------------------------------------------------------------------------------
     /// Use `text` (e.g. from BMergeView) and save it.
@@ -731,6 +740,7 @@ private:
     QString m_shownPath;
     BlockListModel *m_model = nullptr;
     QUndoStack *m_undo = nullptr;
+    int m_undoGeneration = 0; ///< bumped whenever m_undo is cleared (undoToken())
     QTimer m_saveTimer;
     bool m_saving = false; ///< save() is inside the host's compare-and-swap write
     QString m_savedText;

@@ -9,10 +9,54 @@ using namespace Qt::StringLiterals;
 class TestPaths : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void normalize_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("normalized");
+        QTest::newRow("dots and empty segments") << u"/a//b/./c/../d.md"_s << u"a/b/d.md"_s;
+        QTest::newRow("backslash") << u"a\\b"_s << u"a/b"_s;
+        QTest::newRow("clean, as it is") << u"Projekty/Dom.md"_s << u"Projekty/Dom.md"_s;
+        QTest::newRow("Polish, clean") << u"Zwierzęta/Żółw i łódź.md"_s << u"Zwierzęta/Żółw i łódź.md"_s;
+        QTest::newRow("decomposed to NFC") << u"Z\u0307o\u0301\u0142w.md"_s << u"Żółw.md"_s;
+        QTest::newRow("trailing slash") << u"Projekty/"_s << u"Projekty"_s;
+        QTest::newRow("leading ./") << u"./Dom.md"_s << u"Dom.md"_s;
+        QTest::newRow("a dot segment at the end") << u"a/."_s << u"a"_s;
+        QTest::newRow("up past the root") << u"../../a.md"_s << u"a.md"_s;
+        QTest::newRow("up to nothing") << u"a/.."_s << QString();
+        QTest::newRow("dots inside a name stay") << u"a.b/..c/c..md"_s << u"a.b/..c/c..md"_s;
+        QTest::newRow("empty") << QString() << QString();
+        QTest::newRow("only a slash") << u"/"_s << QString();
+        QTest::newRow("a space segment stays") << u"a/ /b"_s << u"a/ /b"_s;
+    }
     void normalize()
     {
-        QCOMPARE(paths::normalize(QStringLiteral("/a//b/./c/../d.md")), QStringLiteral("a/b/d.md"));
-        QCOMPARE(paths::normalize(QStringLiteral("a\\b")), QStringLiteral("a/b"));
+        QFETCH(QString, path);
+        QFETCH(QString, normalized);
+        QCOMPARE(paths::normalize(path), normalized);
+        QCOMPARE(paths::normalize(paths::normalize(path)), normalized);
+    }
+    void stripMarkdownExtension_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("stripped");
+        QTest::addColumn<QString>("title");
+        QTest::newRow("md") << u"Projekty/Dom.md"_s << u"Projekty/Dom"_s << u"Dom"_s;
+        QTest::newRow("markdown, upper case") << u"Żółw.MARKDOWN"_s << u"Żółw"_s << u"Żółw"_s;
+        QTest::newRow("Md") << u"a/Łąka.Md"_s << u"a/Łąka"_s << u"Łąka"_s;
+        QTest::newRow("only the last one") << u"Notatka.md.md"_s << u"Notatka.md"_s << u"Notatka.md"_s;
+        QTest::newRow("another extension") << u"assets/plan.png"_s << u"assets/plan.png"_s << u"plan.png"_s;
+        QTest::newRow("md inside the name") << u"a.md/b.mdx"_s << u"a.md/b.mdx"_s << u"b.mdx"_s;
+        QTest::newRow("no dot") << u"Projekty/md"_s << u"Projekty/md"_s << u"md"_s;
+        QTest::newRow("only the extension") << u".md"_s << QString() << QString();
+        QTest::newRow("empty") << QString() << QString() << QString();
+    }
+    void stripMarkdownExtension()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, stripped);
+        QFETCH(QString, title);
+        QCOMPARE(paths::stripMarkdownExtension(path), stripped);
+        QCOMPARE(paths::pageTitle(path), title);
     }
     void ignored()
     {

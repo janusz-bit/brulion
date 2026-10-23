@@ -131,8 +131,7 @@ Result blockLink(Call &call)
     if (!index)
         return call.failed();
     const VaultConfig config = call.vault()->config();
-    const QString pageTarget = notebook::pageLinkTarget(
-            ref->path, config, [&](const QString &title) { return index->resolveLink(title).value_or(QString()); });
+    const QString pageTarget = notebook::pageLinkTarget(ref->path, config, index);
     notebook::ItemRef item = *ref->item;
     item.page = ref->path;
     std::optional<notebook::BlockLinks> links;

@@ -107,6 +107,14 @@ struct PageSuggestion {
     QString alias; ///< the frontmatter alias that matched, empty when the title/path matched
 };
 
+/// A `#` completion (VaultIndex::suggestTags()): a tag in use, or a page no tag in use names yet.
+struct TagSuggestion {
+    QString tag;       ///< the name to write, without '#' (as first written; a page's tagTarget())
+    int count = 0;     ///< tagged blocks (0 for a page)
+    bool page = false; ///< a page no tag names yet (else a tag in use)
+    VaultPath path;    ///< the page the tag names ("" when none)
+};
+
 /// A link target that does not exist (yet).
 struct MissingPage {
     QString name;             ///< target as first written (fragment stripped, NFC)
@@ -147,9 +155,11 @@ struct FileMove {
 /// link the move would turn to another file — a bare [[Dom]] that a shorter Dom.md now takes, a
 /// relative link of a moved note — gets the shortest target that still reaches its file
 /// (VaultIndex::linkTarget(): [[Projekty/Dom]]); tags the same way (VaultIndex::tagTarget():
-/// #Projekty/Dom). Links that could not be kept (no written form reaches the file) stay as they
-/// are. A plan stays valid after the index changed: it keeps the lookup tables of before and
-/// after the move.
+/// #Projekty/Dom). The filters of ```query blocks that name them follow too (findQueryNames()):
+/// `tag:` / `#tag` exactly that tag (not its sub-tags) as the tags, `ref:` / `[[…]]` and `page:` a
+/// moved page as links, `path:` a prefix whose every file moved by one folder change. Links that
+/// could not be kept (no written form reaches the file) stay as they are. A plan stays valid after
+/// the index changed: it keeps the lookup tables of before and after the move.
 class RelocationPlan {
 public:
     struct File {
@@ -159,6 +169,8 @@ public:
         QString after;     ///< ... and with the links and tags rewritten
         int links = 0;     ///< links rewritten
         int tags = 0;      ///< tag occurrences rewritten
+        int queries = 0;   ///< ```query filter values rewritten (tag:, ref:, page:, path:)
+        int queryTags = 0; ///< … of them tag: / #tag values
     };
 
     RelocationPlan();
@@ -170,9 +182,13 @@ public:
     QList<FileMove> moves() const;
     /// The notes to rewrite, by path.
     const QList<File> &files() const;
-    /// Links / tag occurrences rewritten in all notes.
+    /// Links / tag occurrences rewritten in all notes — the ```query filters that name a moved
+    /// page or folder (ref:, [[…]], page:, path:) counted as links, their tag: / #tag filters as
+    /// tags, as the rename and move dialogs say it.
     int links() const;
     int tags() const;
+    /// The ```query filter values among them.
+    int queries() const;
     /// The plan for note `path` (its path before the move) applied to `content` — the note as
     /// read after the move, when it no longer equals File::before (an edit saved meanwhile).
     /// Notes outside the plan get their links checked too. Returns `content` when nothing changes.
@@ -180,9 +196,38 @@ public:
 
 private:
     friend class VaultIndex;
+    friend class RelocationPlanner;
     struct Private;
     std::shared_ptr<const Private> d;
     QList<File> m_files;
+};
+
+class VaultIndex;
+
+/// VaultIndex::planRelocation() a few notes at a time, for a caller that must stay responsive
+/// (the dragged row's ghost asks for every folder it rests on): the lookup tables and the notes
+/// to look at are prepared at once, step() plans notes until its time is up. The plan equals
+/// planRelocation()'s; it holds only while the index does not change (valid(); a planner whose
+/// index changed is dropped and made anew). The index must outlive the planner.
+class RelocationPlanner {
+public:
+    RelocationPlanner(const VaultIndex &index, const QList<FileMove> &moves);
+    ~RelocationPlanner();
+    RelocationPlanner(const RelocationPlanner &) = delete;
+    RelocationPlanner &operator=(const RelocationPlanner &) = delete;
+
+    /// Plan notes for about `budgetMs` milliseconds (at least one note while there are any);
+    /// true once every note is planned. Does nothing when !valid().
+    bool step(int budgetMs);
+    bool done() const;
+    /// The index has not changed since the planner was made.
+    bool valid() const;
+    /// The plan (complete once done()).
+    RelocationPlan plan() const;
+
+private:
+    struct State;
+    std::unique_ptr<State> s;
 };
 
 /// Incremental in-memory index of a vault's notes.
@@ -269,6 +314,8 @@ public:
     QList<VaultPath> paths() const;
     /// Known attachment paths (non-Markdown files), sorted.
     QList<VaultPath> attachments() const;
+    /// Notes with a ```query block (sorted by path; cached until the next change).
+    QList<VaultPath> notesWithQueries() const;
     /// Is `path` an indexed note or attachment?
     bool contains(const VaultPath &path) const;
     /// Raw content of a note as last indexed (null QString when unknown).
@@ -311,6 +358,7 @@ public:
     /// Plan moving or renaming files (notes and attachments; a folder is all the files in it)
     /// so that links and tags keep their targets: see RelocationPlan. Files the index does not
     /// know are left out. Nothing is changed: apply the plan after the files moved.
+    /// RelocationPlanner makes the same plan a few notes at a time.
     RelocationPlan planRelocation(const QList<FileMove> &moves) const;
 
     // ---- blocks, tags, tasks, reminders, journals ---------------------------------------------
@@ -366,6 +414,13 @@ public:
     /// query, then blocks of more recently updated notes. Empty text: blocks with ids of the most
     /// recently updated notes, then other blocks.
     QList<BlockRef> suggestBlocks(const QString &text, int limit = 20) const;
+    /// Completions for `#` (a tag names a page, docs/SYNTAX.md §3): the tags in use that start with
+    /// `prefix` (most used first; '#' and diacritics ignored), then pages no tag in use names yet
+    /// (suggestPages(), no fuzzy matches; named by the title or alias that matched, or — that
+    /// name being another page's — by the shortest tag that names the page, tagTarget(); a page
+    /// whose tag is in use is offered as that tag), then the tags that contain `prefix`. One entry
+    /// per tag key (case-insensitive, NFC, not diacritic-insensitive: #lodz is not Łódź).
+    QList<TagSuggestion> suggestTags(const QString &prefix, int limit = 20) const;
 
     // ---- graph ----------------------------------------------------------------------------------
 
@@ -383,6 +438,7 @@ Q_SIGNALS:
 
 private:
     friend struct index_detail::IndexAccess;
+    friend class RelocationPlanner;
     struct Private;
     std::unique_ptr<Private> d;
 };

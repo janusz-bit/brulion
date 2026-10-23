@@ -10,6 +10,7 @@
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
+#include "notebook/json.h"
 #include "text/text.h"
 #include "util/paths.h"
 
@@ -95,88 +96,11 @@ QByteArray sampleImagePng()
 
 namespace {
 
-/// The shell's QueryHost item shape (src/app/shell/workspacequery.cpp, editor/queryhost.h).
-QString statusName(TaskStatus status)
-{
-    return taskStatusName(status);
-}
-
-QString priorityName(Priority priority)
-{
-    switch (priority) {
-    case Priority::None: return {};
-    case Priority::Lowest: return u"lowest"_s;
-    case Priority::Low: return u"low"_s;
-    case Priority::Medium: return u"medium"_s;
-    case Priority::High: return u"high"_s;
-    case Priority::Highest: return u"highest"_s;
-    }
-    return {};
-}
-
-QVariantMap taskMap(const Task &task)
-{
-    QVariantMap m{{u"status"_s, statusName(task.status)},
-                  {u"marker"_s, task.marker},
-                  {u"text"_s, task.text},
-                  {u"priority"_s, priorityName(task.priority)}};
-    if (task.due)
-        m.insert(u"due"_s, task.due->toString());
-    if (task.scheduled)
-        m.insert(u"scheduled"_s, task.scheduled->toString());
-    if (task.start)
-        m.insert(u"start"_s, task.start->toString());
-    if (task.doneDate)
-        m.insert(u"done"_s, task.doneDate->toString(Qt::ISODate));
-    if (!task.recurrence.isEmpty())
-        m.insert(u"recurrence"_s, task.recurrence);
-    return m;
-}
-
+/// The shell's QueryHost item shape (editor/queryhost.h): the command line's JSON of an item, as
+/// the shell's Workspace gives it (notebook::queryItemJson).
 QVariantMap queryItemMap(const QueryItem &item, const VaultIndex &index)
 {
-    const ParsedNote *note = index.note(item.path);
-    QVariantMap m{{u"path"_s, item.path},
-                  {u"title"_s, note ? note->title : paths::pageTitle(item.path)},
-                  {u"folder"_s, paths::dirname(item.path)},
-                  {u"line"_s, 0},
-                  {u"depth"_s, 0}};
-    if (note && item.blockIndex >= 0 && item.blockIndex < note->blocks.size()) {
-        const Block &block = note->blocks.at(item.blockIndex);
-        m.insert(u"line"_s, block.line);
-        m.insert(u"text"_s, block.text);
-        m.insert(u"raw"_s, block.raw);
-        m.insert(u"depth"_s, block.depth);
-        if (!block.id.isEmpty())
-            m.insert(u"blockId"_s, block.id);
-    } else {
-        m.insert(u"text"_s, note ? note->title : paths::pageTitle(item.path));
-        m.insert(u"raw"_s, QString());
-    }
-    if (item.task) {
-        m.insert(u"task"_s, taskMap(*item.task));
-        if (item.blockIndex < 0)
-            m.insert(u"line"_s, item.task->line);
-    }
-    if (item.reminder) {
-        QVariantMap r{{u"at"_s, item.reminder->at.toString()}, {u"alarm"_s, item.reminder->alarm}};
-        if (!item.reminder->recurrence.isEmpty())
-            r.insert(u"recurrence"_s, item.reminder->recurrence);
-        m.insert(u"reminder"_s, r);
-        m.insert(u"line"_s, item.reminder->line);
-    }
-    return m;
-}
-
-QString queryTypeName(QueryType type)
-{
-    switch (type) {
-    case QueryType::Tasks: return u"tasks"_s;
-    case QueryType::Blocks: return u"blocks"_s;
-    case QueryType::Pages: return u"pages"_s;
-    case QueryType::Reminders: return u"reminders"_s;
-    }
-    return {};
+    return notebook::queryItemJson(index, item).toVariantMap();
 }
 
 } // namespace
@@ -195,6 +119,25 @@ void FakeEditorHost::filesChanged(bool announce)
         m_indexSignalPending = false;
         Q_EMIT indexChanged();
     });
+}
+
+const VaultIndex &FakeEditorHost::currentIndex() const
+{
+    if (!m_index || m_indexDirty) {
+        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
+        VaultIndex::Batch batch(*m_index);
+        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
+            m_index->update(it.key(), it.value());
+        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
+            m_index->update(it.key(), QString());
+        m_indexDirty = false;
+    }
+    return *m_index;
+}
+
+QString FakeEditorHost::linkTarget(const QString &path, const QString &fromPath) const
+{
+    return currentIndex().linkTarget(path, fromPath).value_or(QString());
 }
 
 void FakeEditorHost::setNow(const QString &now)
@@ -220,34 +163,26 @@ QVariantMap FakeEditorHost::runQuery(const QString &source, const QString &curre
         out.insert(u"error"_s, *error);
         return out;
     }
-    if (!m_index || m_indexDirty) {
-        m_index = std::make_unique<VaultIndex>(vaultConfigFromMap(vaultConfig()));
-        VaultIndex::Batch batch(*m_index);
-        for (auto it = m_files.constBegin(); it != m_files.constEnd(); ++it)
-            m_index->update(it.key(), it.value());
-        for (auto it = m_assets.constBegin(); it != m_assets.constEnd(); ++it)
-            m_index->update(it.key(), QString());
-        m_indexDirty = false;
-    }
+    const VaultIndex &index = currentIndex();
     QDateTime current = QDateTime::currentDateTime();
     if (const auto spec = dates::parseDateSpec(m_now))
         current = spec->toLocalDateTime();
     QueryOptions options;
     options.currentPath = paths::normalize(currentPath);
     options.now = current.time();
-    const QueryResult result = brulion::runQuery(std::get<Query>(parsed), *m_index, current.date(), Qt::Monday, options);
+    const QueryResult result = brulion::runQuery(std::get<Query>(parsed), index, current.date(), Qt::Monday, options);
     QVariantList items;
     for (const QueryItem &item : result.items)
-        items.append(queryItemMap(item, *m_index));
+        items.append(queryItemMap(item, index));
     QVariantList groups;
     for (const QueryGroup &group : result.groups) {
         QVariantList groupItems;
         for (const QueryItem &item : group.items)
-            groupItems.append(queryItemMap(item, *m_index));
+            groupItems.append(queryItemMap(item, index));
         groups.append(QVariantMap{{u"key"_s, group.key}, {u"label"_s, group.label}, {u"items"_s, groupItems}});
     }
     out.insert(u"ok"_s, true);
-    out.insert(u"type"_s, queryTypeName(result.type));
+    out.insert(u"type"_s, notebook::queryTypeName(result.type));
     out.insert(u"total"_s, result.total);
     out.insert(u"items"_s, items);
     out.insert(u"groups"_s, groups);

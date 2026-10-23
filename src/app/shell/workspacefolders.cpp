@@ -152,19 +152,135 @@ QString Workspace::pathProblemMessage(const notebook::PathProblem &problem) cons
     return {};
 }
 
-QVariantMap Workspace::relocationImpact(const QString &from, const QString &to)
+QVariantMap Workspace::impactMap(const notebook::RelocationImpact &impact) const
 {
-    if (!m_vault)
-        return {{u"ok"_s, false}, {u"path"_s, to}, {u"error"_s, tr("No notebook is open.")}};
-    finishIndexing(); // every linking note must be known
-    const notebook::RelocationImpact impact = notebook::relocationImpact(*m_vault, m_index.get(), from, to);
-    QVariantMap out{{u"ok"_s, impact.ok},     {u"path"_s, impact.path},   {u"links"_s, impact.links},
-                    {u"tags"_s, impact.tags}, {u"notes"_s, impact.notes}, {u"specials"_s, QVariant(impact.specials)}};
+    QVariantMap out{{u"ok"_s, impact.ok},
+                    {u"path"_s, impact.path},
+                    {u"links"_s, impact.links},
+                    {u"tags"_s, impact.tags},
+                    {u"queries"_s, impact.queries},
+                    {u"notes"_s, impact.notes},
+                    {u"specials"_s, QVariant(impact.specials)}};
     if (impact.same)
         out.insert(u"same"_s, true);
     if (!impact.ok)
         out.insert(u"error"_s, pathProblemMessage(impact.problem));
     return out;
+}
+
+QVariantMap Workspace::cachedImpact(const QString &from, const QString &to)
+{
+    if (!m_index)
+        return {};
+    if (m_impacts.version != m_index->version() || m_impacts.revision != m_revision) {
+        // The notebook changed: what was planned may be different now.
+        m_impacts.maps.clear();
+        m_impacts.version = m_index->version();
+        m_impacts.revision = m_revision;
+        return {};
+    }
+    return m_impacts.maps.value(paths::normalize(from) + u'\n' + paths::normalize(to));
+}
+
+void Workspace::storeImpact(const QString &from, const QString &to, const QVariantMap &impact)
+{
+    // Only what a plan found (a refusal is checked again: it is quick, and its message is in the
+    // current language).
+    if (!m_index || !impact.value(u"ok"_s).toBool())
+        return;
+    cachedImpact(from, to); // drops what an older state of the notebook planned
+    m_impacts.maps.insert(paths::normalize(from) + u'\n' + paths::normalize(to), impact);
+}
+
+QVariantMap Workspace::relocationImpact(const QString &from, const QString &to)
+{
+    if (!m_vault)
+        return {{u"ok"_s, false}, {u"path"_s, to}, {u"error"_s, tr("No notebook is open.")}};
+    finishIndexing(); // every linking note must be known
+    if (QVariantMap known = cachedImpact(from, to); !known.isEmpty())
+        return known;
+    const QVariantMap out = impactMap(notebook::relocationImpact(*m_vault, m_index.get(), from, to));
+    storeImpact(from, to, out);
+    return out;
+}
+
+// ---- The move's impact, a few notes per event-loop turn -------------------------------------
+
+struct Workspace::PendingImpact {
+    QString path; ///< as requested (moveImpactReady() hands them back)
+    QString folder;
+    QString from;
+    QString to;
+    notebook::RelocationImpact impact;          ///< the checks, then the plan's counts
+    std::unique_ptr<RelocationPlanner> planner; ///< once the checks passed
+};
+
+namespace {
+/// Planning time per event-loop turn: half a frame.
+constexpr int kImpactSliceMs = 8;
+} // namespace
+
+void Workspace::requestMoveImpact(const QString &path, const QString &targetFolder)
+{
+    cancelMoveImpact();
+    auto pending = std::make_shared<PendingImpact>();
+    pending->path = path;
+    pending->folder = targetFolder;
+    pending->from = paths::normalize(path);
+    const QString folder = paths::normalize(targetFolder);
+    const QString name = paths::basename(pending->from);
+    pending->to = folder.isEmpty() ? name : folder + u'/' + name;
+    m_pendingImpact = std::move(pending);
+    m_impactTimer.start(); // the first step on the next turn: never from inside the request
+}
+
+void Workspace::cancelMoveImpact()
+{
+    m_impactTimer.stop();
+    m_pendingImpact.reset();
+}
+
+void Workspace::moveImpactStep()
+{
+    const std::shared_ptr<PendingImpact> p = m_pendingImpact;
+    if (!p) {
+        m_impactTimer.stop();
+        return;
+    }
+    const auto deliver = [this, p](const QVariantMap &impact) {
+        cancelMoveImpact();
+        Q_EMIT moveImpactReady(p->path, p->folder, impact);
+    };
+    if (!m_vault || !m_index) {
+        deliver(relocationImpact(p->from, p->to)); // "No notebook is open."
+        return;
+    }
+    if (p->planner && !p->planner->valid())
+        p->planner.reset(); // the notebook changed meanwhile: from the start
+    if (!p->planner) {
+        finishIndexing(); // every linking note must be known
+        if (m_pendingImpact != p)
+            return; // what finishing the index told the views asked for another target
+        if (QVariantMap known = cachedImpact(p->from, p->to); !known.isEmpty()) {
+            deliver(known);
+            return;
+        }
+        QList<FileMove> moves;
+        p->impact = notebook::relocationChecks(*m_vault, m_index.get(), p->from, p->to, &moves);
+        if (!p->impact.ok || p->impact.same) {
+            deliver(impactMap(p->impact));
+            return;
+        }
+        p->planner = std::make_unique<RelocationPlanner>(*m_index, moves);
+        if (!p->planner->done())
+            return; // the notes on the next turns
+    }
+    if (!p->planner->step(kImpactSliceMs))
+        return; // more on the next turn
+    notebook::addRelocationPlan(p->impact, p->planner->plan());
+    const QVariantMap impact = impactMap(p->impact);
+    storeImpact(p->from, p->to, impact);
+    deliver(impact);
 }
 
 QVariantMap Workspace::moveImpact(const QString &path, const QString &targetFolder)

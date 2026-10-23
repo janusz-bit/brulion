@@ -31,6 +31,12 @@ benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsk
 * **Przeglądarka:** notatnik dokańcza indeksowanie bez ruszania myszą (wcześniej stał, dopóki
   nie było żadnego zdarzenia), powroty na stronę są szybsze (przeglądarka zachowuje
   skompilowany kod), plik aplikacji jest o 0,5 MB mniejszy.
+* **Przenoszenie i zmiana nazwy** (2026-10-23): plan, które linki, tagi i zapytania trzeba
+  poprawić, liczy się 4–12 razy szybciej (folder 500 stron w notatniku 5000 notatek: przeniesienie
+  0,12 → 0,03 s, zmiana nazwy 0,49 → 0,11 s; strona z setkami linków do niej 0,11 → 0,01 s).
+  Przeciąganie strony lub folderu w drzewie już nie przycina się nad kolejnymi folderami:
+  podpowiedź „Zaktualizowane linki: …” liczy się po kawałku, w tle między klatkami.
+  Otwarcie strony, którą nazywa popularny tag, jest do 2 razy szybsze.
 
 ### Jak jest teraz
 
@@ -254,6 +260,65 @@ throttling; MinSizeRel builds, Qt 6.11.2 + Emscripten 4.0.7):
 "Settled" of the older builds stops early because their index stalls without input (N13), so
 it understates their real time to a usable search.
 
+### Wave 4: folders, tags as pages, selection (2026-10-23)
+
+The integration of the six features (folders, tags as page links, block links, block selection,
+keyboard toolbar, agent CLI) brought new hot paths; their benchmarks are in `tests/bench`
+(`bench_index` `planRelocation`, `moveImpact`, `relocationSteps`, `tagPageOpen`, `suggestTags`;
+`bench_markdown` `selectAllCopy`; `bench_io` `clipboardHtml`) and the probe's `select-copy`
+scenario (`tests/bench/app`). `relocationVault()` (bench_index) is `bench::makeVault()` with a
+tenth of the notes in a folder `Projekty` (500 of 5000), path-qualified links, bracketed tags and
+query blocks naming it, and the pages tags name.
+
+**Core** (laptop, Release, P-cores, 5 repetitions, the machine shared with other builds: `-q 6`;
+before = `c92ab1d`, the benchmarks on the code as merged, after = this branch):
+
+| operation | before | after | change |
+|---|---:|---:|---:|
+| plan a move: folder of 500 notes moved into another (5000 notes) | 121 ms | 25.5 ms | −79 % |
+| … the folder renamed (its path-qualified links, tags and queries rewritten) | 487 ms | 109 ms | −78 % |
+| … the most linked page renamed (567 notes rewritten) | 113 ms | 9.1 ms | −92 % |
+| … the same, 20 000 notes: folder moved / renamed / page renamed | 839 / 2290 / 462 ms | 133 / 460 / 39 ms | −84 / −80 / −92 % |
+| `notebook::relocationImpact` (move dialog, drop), 5000 notes on disk: folder moved / renamed / page moved | 123 / 489 / 25 ms | 25.5 / 110 / 6.9 ms | −79 / −77 / −73 % |
+| the dragged row's ghost, GUI thread per event-loop turn (5000 notes, folder moved) | one stall of 123 ms | 3.3 ms, then ≤ 8.5 ms × 3 turns | |
+| … 20 000 notes | one stall of 839 ms | 16 ms, then ≤ 8.7 ms × 15 turns | |
+| open the page `#praca` names (5000 notes): warm / right after a save | 2.7 / 6.5 ms | 1.2 / 4.8 ms | −57 / −26 % |
+| … 20 000 notes | 15.5 / 29.5 ms | 8.1 / 22 ms | −48 / −25 % |
+| `#` completion (`suggestTags`), 5000 notes: 'pra' / 'stro' / nothing typed | 0.59 / 1.44 / 0.014 ms | same | |
+| select all + copy, 5000 blocks: top rows + Markdown / plain text / HTML flavour | – | 0.42 / 11.4 / 34.5 ms | new |
+
+What was not linear or too slow, and what changed:
+* **Move plans** looked at every note linking to a moved name as new text: `findQueryNames()` (a
+  case-insensitive search through the whole note, then a parse) and `retargetTags()` (a parse) for
+  each, links re-keyed and resolved twice, and every `path:` filter folded every path of the vault
+  (O(query notes × notes): folder move k 1.40 between 5000 and 20 000 notes, now 1.19; rename 1.12
+  → 1.04). Now the index's own link keys and resolutions are used, only notes with a query block or
+  a renamed tag are parsed, `retargetLinks()` reuses the parsed links, `path:` prefixes are a range
+  in a sorted list of folded paths, and the table of names after the move is an overlay on the one
+  before (no copy of the whole table). `paths::normalize()` / `stripMarkdownExtension()` lost their
+  split-and-join and regular expression, the name table lowers ASCII without Qt's Unicode tables.
+* **The drag ghost** asked `Workspace.moveImpact()` synchronously 150 ms after each target change:
+  `Workspace.requestMoveImpact()` now plans 8 ms per event-loop turn (`RelocationPlanner`), drops a
+  request when the target changes and keeps impacts per target until the notebook changes.
+* **Tags as pages**: the page-level tags of every tagged note were worked out again on every page
+  open (and per note in every query with a tag filter); the index entry keeps them.
+* The remaining super-linear rows are memory, not algorithm: `suggestTags` 5000 → 20 000 notes k
+  1.36–1.53 (the `suggestPages()` scan, as `suggestPages` itself at 10 000 → 50 000) and the warm
+  tag page k 1.4 (per-block reads of every tagged note); "after a save" stays k 1.10.
+
+**App** (laptop, Xvfb + llvmpipe, Release, 10 000-note vault, 5 runs; `select-copy`: Ctrl+A twice,
+Ctrl+C, Escape, three rounds per run):
+
+| | outline 5000 blocks | document 5000 blocks |
+|---|---:|---:|
+| select every block (2nd Ctrl+A): key handling / key → frame | 8.1 / 18 ms (p95 44 ms) | 8.6 / 18 ms (p95 43 ms) |
+| copy (Ctrl+C): key handling / key → frame | 53 / 62 ms | 59 / 68 ms |
+| copied | 478 190 characters | 597 309 characters |
+
+A copy of a whole 5000-block page costs about 55 ms on the desktop, two thirds of it the HTML
+flavour (`io::clipboardHtml`, linear: 3.5 / 34.5 / 140 ms for 500 / 5000 / 20 000 blocks); see
+"Next steps".
+
 ### Budgets
 
 Desktop = the laptop above, phone = Pi 4 (floor) and the emulator (optimistic), web = headless
@@ -294,7 +359,9 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
-Also open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
+Also open: the HTML flavour of a copy made only when another app asks for it (a `QMimeData`
+whose `text/html` is rendered in `retrieveData()`; a whole 5000-block page copies in ~20 instead
+of ~55 ms; Android takes the data at once), serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
 only) and the ~90 ms later content on a desktop first start (above).
 
 ### How to run the benchmarks
@@ -410,7 +477,9 @@ sync with the arrays in the script):
 Scaling limits (`limits.csv`): `foldKey` / `foldKeyWithMap` polish k ≤ 1.2 (N1),
 `searchLargeNote` k ≤ 1.3 (N1), `parsePathological` inline HTML and one paragraph of `<`
 k ≤ 1.3 (N6), `unlinkedLongLine` k ≤ 1.3 (N6), `htmlToMarkdown` flat and nested lists k ≤ 1.3
-(N10) — 1.5 for all of them in the Pi's small profile; index heap at 10 000 notes ≤ 560 MiB.
+(N10), and from wave 4 `planRelocation` folder rename and page rename, `tagPageOpen` after a save,
+`selectAllCopy` Markdown and plain text, `clipboardHtml` k ≤ 1.3 (measured k 0.98–1.10) — 1.5 for
+all of them in the Pi's small profile; index heap at 10 000 notes ≤ 560 MiB.
 
 App-level guards (startup, typing, open-page, views, idle) are not automated: run
 `bench-matrix.sh` before a release and compare with the tables above (same rule: medians of 5

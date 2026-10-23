@@ -2,6 +2,7 @@
 #include "fixture.h"
 
 #include "index/textutil_p.h"
+#include "markdown/parse.h"
 
 #include <QElapsedTimer>
 #include <QTest>
@@ -580,6 +581,141 @@ private Q_SLOTS:
         QVERIFY(r.groups.isEmpty());
         // An empty query lists every block (frontmatter excluded, nested blocks collapsed).
         QVERIFY(run(QString()).total > 20);
+    }
+
+    // ---- Names in query blocks (renames and moves rewrite them) ------------------------------------
+
+    // findQueryNames(): "kind value" of every name, and the value's range holds it as written.
+    void findQueryNames_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("names");
+        const auto q = [](const QString &body) { return u"Wstęp\n\n```query\n"_s + body + u"\n```\n"_s; };
+        QTest::newRow("every key") << q(u"type:tasks tag:praca ref:Dom page:Zakupy path:Projekty/ status:open"_s)
+                                   << QStringList{u"tag praca"_s, u"ref Dom"_s, u"page Zakupy"_s, u"path Projekty/"_s};
+        QTest::newRow("shorthands and negation")
+                << q(u"#dom -#prywatne [[Jan Kowalski]] -[[Stare]] -tag:x"_s)
+                << QStringList{u"tag dom"_s, u"tag prywatne"_s, u"ref Jan Kowalski"_s, u"ref Stare"_s, u"tag x"_s};
+        QTest::newRow("Polish and folded keys")
+                << q(u"tagi:ogród Strona:Łąka ŚCIEŻKA:Działka/ odnośnik:[[Żółw]] folder:a/ linki:b"_s)
+                << QStringList{u"tag ogród"_s, u"page Łąka"_s, u"path Działka/"_s,
+                               u"ref Żółw"_s,  u"path a/"_s,   u"ref b"_s};
+        QTest::newRow("comma lists, quotes, brackets")
+                << q(u"tag:praca,#dom,[[Mój tag]] page:\"Lista zakupów\",„Plan”,Inne ref:[[A, B]],C"_s)
+                << QStringList{u"tag praca"_s, u"tag dom"_s,   u"tag Mój tag"_s, u"page Lista zakupów"_s,
+                               u"page Plan"_s, u"page Inne"_s, u"ref A, B"_s,    u"ref C"_s};
+        QTest::newRow("comments, phrases, URLs and text are no names")
+                << q(u"# tag:komentarz\nref:Dom // tag:też-komentarz\n\"tag:fraza\" słowo ref://adres tag:"_s)
+                << QStringList{u"ref Dom"_s};
+        QTest::newRow("only inside query fences")
+                << u"tag:tekst ref:Dom\n```js\ntag:kod\n```\n~~~query\ntag:tylda\n~~~\n```Query\nref:Duże\n```\n"_s
+                << QStringList{u"tag tylda"_s, u"ref Duże"_s};
+        QTest::newRow("in a list item (Logseq, the outline)")
+                << u"- notatka\n- ```query\n  tag:lista\n  ```\n\t- dziecko tag:nie\n- tekst\n  ~~~query\n  ref:Dalej\n"
+                   "  ~~~\n  ```js\n  tag:kod\n  ```\n1. ```query\n   page:Numer\n   ```\n"_s
+                << QStringList{u"tag lista"_s, u"ref Dalej"_s, u"page Numer"_s};
+        QTest::newRow("CRLF, an unclosed fence")
+                << u"```query\r\ntag:a\r\nref:B\r\n"_s << QStringList{u"tag a"_s, u"ref B"_s};
+        QTest::newRow("an unclosed quote: the names before it")
+                << q(u"tag:przed \"bez końca ref:po"_s) << QStringList{u"tag przed"_s};
+        QTest::newRow("blanks inside brackets")
+                << q(u"ref:[[ Dom ]] tag:[[ x ]]"_s) << QStringList{u"ref Dom"_s, u"tag x"_s};
+        QTest::newRow("no query") << u"- zwykła notatka #tag [[Link]]\n"_s << QStringList();
+        QTest::newRow("two backticks or tildes are no fence")
+                << u"``query\ntag:a\n``\n~~query\nref:B\n~~\n"_s << QStringList();
+        QTest::newRow("the word query without a fence")
+                << u"- query tag:x ref:[[Dom]]\n- `query` i ``query``\n"_s << QStringList();
+        QTest::newRow("empty values") << q(u"tag: ref:[[]] page:\"\""_s) << QStringList();
+    }
+    void findQueryNames()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, names);
+        QStringList got;
+        for (const QueryNameRef &n : brulion::findQueryNames(content)) {
+            const QString kind = n.kind == QueryFilterKind::Tag    ? u"tag"_s
+                                 : n.kind == QueryFilterKind::Ref  ? u"ref"_s
+                                 : n.kind == QueryFilterKind::Page ? u"page"_s
+                                                                   : u"path"_s;
+            got.append(kind + u' ' + n.value);
+            QCOMPARE(content.sliced(n.from, n.to - n.from), n.value);
+        }
+        QCOMPARE(got, names);
+        // The same with the caller's parse of the note (the index's, with a path).
+        const ParsedNote parsed = markdown::parseNote(u"Zapytania/Łąka.md"_s, content);
+        QCOMPARE(brulion::findQueryNames(content, &parsed), brulion::findQueryNames(content));
+    }
+
+    // formatQueryName(): the new value in the old one's form, or in [[ ]] when bare cannot hold it.
+    void formatQueryName_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("value");
+        QTest::addColumn<QString>("written");
+        const auto q = [](const QString &body) { return u"```query\n"_s + body + u"\n```"_s; };
+        QTest::newRow("bare") << q(u"tag:dom"_s) << u"Mieszkanie"_s << u"Mieszkanie"_s;
+        QTest::newRow("bare with a space") << q(u"tag:dom"_s) << u"Mój dom"_s << u"[[Mój dom]]"_s;
+        QTest::newRow("bare with a comma") << q(u"ref:dom"_s) << u"A, B"_s << u"[[A, B]]"_s;
+        QTest::newRow("bare with a quote") << q(u"page:dom"_s) << u"Dom „Pod lasem”"_s << u"[[Dom „Pod lasem”]]"_s;
+        QTest::newRow("bare starting with //") << q(u"path:a/"_s) << u"//x"_s << u"[[//x]]"_s;
+        QTest::newRow("bracketed") << q(u"ref:[[Dom]]"_s) << u"Mój dom"_s << u"Mój dom"_s;
+        QTest::newRow("quoted") << q(u"page:\"Dom\""_s) << u"Mój dom"_s << u"Mój dom"_s;
+        QTest::newRow("quoted, its closing quote inside") << q(u"page:\"Dom\""_s) << u"a\"b"_s << QString();
+        QTest::newRow("brackets inside brackets") << q(u"ref:[[Dom]]"_s) << u"a]]b"_s << QString();
+        QTest::newRow("a line break") << q(u"ref:Dom"_s) << u"a\nb"_s << QString();
+        QTest::newRow("empty") << q(u"ref:Dom"_s) << u" "_s << QString();
+        QTest::newRow("the tag shorthand") << q(u"#dom"_s) << u"Projekty/Mój dom"_s << u"[[Projekty/Mój dom]]"_s;
+    }
+    void formatQueryName()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, value);
+        QFETCH(QString, written);
+        const QList<QueryNameRef> names = brulion::findQueryNames(content);
+        QCOMPARE(names.size(), 1);
+        QCOMPARE(brulion::formatQueryName(names.first(), value), written);
+    }
+
+    // retargetQueryNames(): only the named values change, byte for byte everything else; the query
+    // still parses and reads the new values.
+    void retargetQueryNames()
+    {
+        const QString content = u"\uFEFF# Zapytania\r\n\r\n```query\r\n# Moje zadania\r\ntype:tasks -tag:dom,praca "
+                                "#dom\r\nref:[[Dom]] page:\"Dom\" // tag:dom\r\n```\r\ntag:dom poza zapytaniem\r\n"_s;
+        const QList<QueryNameRef> names = brulion::findQueryNames(content);
+        QCOMPARE(names.size(), 5);
+        QList<QueryNameEdit> edits;
+        for (const QueryNameRef &n : names) {
+            if (n.value.compare(u"dom"_s, Qt::CaseInsensitive) == 0)
+                edits.append({n.from, n.to, n.kind == QueryFilterKind::Tag ? u"Mój dom"_s : u"Projekty/Mój dom"_s});
+        }
+        QCOMPARE(edits.size(), 4);
+        edits.append({0, 3, u"x"_s});                             // no value there: ignored
+        edits.append({names.at(0).from, names.at(0).to, u"y"_s}); // overlaps the first: ignored
+        int applied = -1;
+        const QString out = brulion::retargetQueryNames(content, edits, &applied);
+        QCOMPARE(applied, 4);
+        QCOMPARE(out, u"\uFEFF# Zapytania\r\n\r\n```query\r\n# Moje zadania\r\ntype:tasks -tag:[[Mój dom]],praca "
+                      "#[[Mój dom]]\r\nref:[[Projekty/Mój dom]] page:\"Projekty/Mój dom\" // tag:dom\r\n```\r\n"
+                      "tag:dom poza zapytaniem\r\n"_s);
+        // The query reads the new names.
+        const QList<QueryNameRef> after = brulion::findQueryNames(out);
+        QCOMPARE(after.at(0).value, u"Mój dom"_s);
+        QCOMPARE(after.at(2).value, u"Mój dom"_s);
+        QCOMPARE(after.at(3).value, u"Projekty/Mój dom"_s);
+        const QString body = out.section(u"```query\r\n"_s, 1).section(u"\r\n```"_s, 0, 0);
+        const auto parsedQuery = parseQuery(body);
+        QVERIFY(std::holds_alternative<Query>(parsedQuery));
+        const Query &query = std::get<Query>(parsedQuery);
+        QCOMPARE(query.filters.at(0).values, (QStringList{u"mój dom"_s, u"praca"_s}));
+        QCOMPARE(query.filters.at(1).values, QStringList{u"mój dom"_s});
+        QCOMPARE(query.filters.at(2).values, QStringList{u"Projekty/Mój dom"_s});
+        QCOMPARE(query.filters.at(3).values, QStringList{u"Projekty/Mój dom"_s});
+        // Nothing to do: the same string.
+        QCOMPARE(brulion::retargetQueryNames(content, {}), content);
+        QCOMPARE(brulion::retargetQueryNames(content, {{names.at(0).from, names.at(0).to, u"dom"_s}}, &applied),
+                 content);
+        QCOMPARE(applied, 0);
     }
 };
 

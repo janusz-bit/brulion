@@ -73,9 +73,10 @@ QString taskLine(const QString &text, const std::optional<DateSpec> &due = std::
 QString reminderLine(const QString &text, const DateSpec &at, bool alarm = false, const QString &recurrence = {});
 
 /// Append `block` (one or more lines; continuation lines get a two-space indent under a list
-/// item) at the end of `content`, keeping its line endings. A trailing empty bullet ("- ", e.g.
-/// left by a journal template) is replaced instead of kept above the new block; trailing blank
-/// lines are dropped. An empty block returns `content` unchanged.
+/// item) at the end of `content`, keeping its line endings — notebook::appendBlock(), what the
+/// command line and quick capture append with. A trailing empty bullet ("- ", e.g. left by a
+/// journal template) is replaced instead of kept above the new block; trailing blank lines are
+/// dropped. An empty block returns `content` unchanged.
 QString appendBlock(const QString &content, const QString &block);
 
 /// Result of parsing quick-add input ("Zadzwonić do Ani jutro o 9 #praca").

@@ -41,6 +41,7 @@
 #include "workspace.h"
 
 #include <QDateTime>
+#include <QJSValue>
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
@@ -81,6 +82,9 @@ class AppController : public QObject {
     Q_PROPERTY(bool sidePanelVisible READ sidePanelVisible WRITE setSidePanelVisible NOTIFY sidePanelVisibleChanged FINAL)
     /// Set by the shell: a side panel fits (wide window). Otherwise newPane opens in the main view.
     Q_PROPERTY(bool sidePanelAllowed READ sidePanelAllowed WRITE setSidePanelAllowed NOTIFY sidePanelAllowedChanged FINAL)
+    /// Set by the shell: the main view's editor shows its page as Markdown source (source mode,
+    /// Ctrl+E). The palette's commands for blocks and headings are off then.
+    Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
 
     // ---- Platform -----------------------------------------------------------------------
     /// "linux", "android" or "wasm".
@@ -174,6 +178,8 @@ public:
     void setSidePanelVisible(bool visible);
     bool sidePanelAllowed() const { return m_sidePanelAllowed; }
     void setSidePanelAllowed(bool allowed);
+    bool sourceModeShown() const { return m_sourceModeShown; }
+    void setSourceModeShown(bool shown);
 
     Q_INVOKABLE void navigate(const QVariantMap &route, bool newPane = false);
     Q_INVOKABLE void replaceRoute(const QVariantMap &route);
@@ -302,6 +308,10 @@ public:
     Q_INVOKABLE void hiddenToTray();
     /// Show a toast: kind "info" | "success" | "warning" | "error".
     Q_INVOKABLE void toast(const QString &text, const QString &kind = QStringLiteral("info"));
+    /// Show a toast with a button (the editor's "Cofnij"): `onAction`, a function, runs when it is
+    /// pressed (Main.qml shows it like toast()).
+    Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
+                                 const QJSValue &onAction);
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
     /// "about", "toggleTheme", "toggleSidePanel".
     Q_INVOKABLE void requestUiAction(const QString &action);
@@ -330,6 +340,7 @@ Q_SIGNALS:
     void sidePanelRouteChanged();
     void sidePanelVisibleChanged();
     void sidePanelAllowedChanged();
+    void sourceModeShownChanged();
     void trayAvailableChanged();
     void quittingChanged();
     void pendingVaultPathChanged();
@@ -340,6 +351,8 @@ Q_SIGNALS:
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
+    void toastActionRequested(const QString &text, const QString &kind, const QString &actionText,
+                              const QJSValue &onAction);
     void showWindowRequested();
     void uiActionRequested(const QString &action);
     void itemActionRequested(const QString &action, const QString &path);
@@ -380,6 +393,7 @@ private:
     QVariantMap m_sideRoute;
     bool m_sidePanelVisible = false;
     bool m_sidePanelAllowed = true;
+    bool m_sourceModeShown = false;
     bool m_trayAvailable = false;
     bool m_startHidden = false;
     bool m_quitting = false;

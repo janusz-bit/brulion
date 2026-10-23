@@ -3,16 +3,21 @@
 // full build (in memory, and the app's open path from disk: scan + read + index), the first
 // search (builds the full-text index), memory, incremental updates after one file change,
 // full-text search (exact, prefix, diacritics, fuzzy, many results), page/block suggestions,
-// the query language, backlinks / unlinked references and the vault-wide lists.
+// the query language, backlinks / unlinked references and the vault-wide lists; moving and
+// renaming (planRelocation, the move dialog's and the drag's notebook::relocationImpact), tags as
+// pages on page open and the `#` completion (relocationVault(): 1250 / 5000 / 20000 notes).
 #include "benchdata.h"
 
 #include "index/index.h"
 #include "markdown/markdown.h"
+#include "notebook/pages.h"
 #include "vault/vault.h"
 
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 
@@ -29,6 +34,64 @@ struct Fixture {
 /// The note the most links point to (pageTarget() favours pages 0–9).
 const QString kPopular = u"Strony/Folder 1/Strona 1.md"_s;
 
+/// The moved page "Strona n" of relocationVault(): pages with n % 20 < 3 are in "Projekty".
+bool inProjekty(int n)
+{
+    return n % 20 < 3;
+}
+
+/// bench::makeVault(notes) for moving, renaming and tags as pages: a tenth of the notes in the
+/// folder "Projekty" (the pages "Strona n" with n % 20 < 3, in their "Folder F" subfolders —
+/// 500 of 5000 notes), the pages tags name ("Projekty/Praca.md" for #praca, "Dom.md",
+/// "Projekt/Kuchnia.md" for #projekt/kuchnia), in every tenth note a block with a path-qualified
+/// link and a bracketed tag naming a page in "Projekty" (rewritten when the folder is renamed),
+/// and in every 200th note a ```query block naming the folder, a page in it and tags. The
+/// additions draw nothing from an Rng: the same vault on every machine.
+QList<bench::VaultFile> relocationVault(int notes)
+{
+    QList<bench::VaultFile> files = bench::makeVault(notes, 77);
+    int pageCount = 0;
+    for (bench::VaultFile &f : files) {
+        static const QRegularExpression page(u"^Strony/(Folder \\d+)/Strona (\\d+)\\.md$"_s);
+        const QRegularExpressionMatch m = page.match(f.path);
+        if (!m.hasMatch())
+            continue;
+        ++pageCount;
+        if (inProjekty(m.captured(2).toInt()))
+            f.path = u"Projekty/%1/Strona %2.md"_s.arg(m.captured(1), m.captured(2));
+    }
+    const int steps = std::max(1, pageCount / 20);
+    for (qsizetype i = 0; i < files.size(); ++i) {
+        QString &content = files[i].content;
+        if (i % 10 == 5) {
+            const int n = 20 * int((i * 7) % steps) + int(i % 3); // a page in "Projekty"
+            const QString target = u"Projekty/Folder %1/Strona %2"_s.arg(n % 50).arg(n);
+            content += u"- Zobacz [[%1]] i #[[%1]] oraz [[Strona %2]]\n"_s.arg(target).arg(n + 1);
+        }
+        if (i % 200 == 7) {
+            content += u"\n```query\ntag:praca path:Projekty/ ref:[[Projekty/Folder 1/Strona 1]]\n```\n"_s
+                       u"\n```query\ntag:[[Projekty/Folder 1/Strona 1]] -tag:dom\n```\n"_s;
+        }
+    }
+    files.append({u"Projekty/Praca.md"_s, u"# Praca\n\n- strona tagu #ważne\n"_s});
+    files.append({u"Dom.md"_s, u"- dom i ogród\n"_s});
+    files.append({u"Projekt/Kuchnia.md"_s, u"- przepisy #dom\n"_s});
+    return files;
+}
+
+/// The moves of `from` (a folder of `files`, or one file) to `to`.
+QList<FileMove> movesOf(const QList<bench::VaultFile> &files, const QString &from, const QString &to)
+{
+    QList<FileMove> moves;
+    for (const bench::VaultFile &f : files) {
+        if (f.path == from)
+            moves.append({f.path, to});
+        else if (f.path.startsWith(from + u'/'))
+            moves.append({f.path, to + f.path.mid(from.size())});
+    }
+    return moves;
+}
+
 } // namespace
 
 class BenchIndex : public QObject {
@@ -36,6 +99,25 @@ class BenchIndex : public QObject {
 
     std::map<int, std::unique_ptr<Fixture>> m_fixtures;
     std::map<int, std::unique_ptr<QTemporaryDir>> m_disk;
+    std::map<int, std::unique_ptr<Fixture>> m_relocation; ///< relocationVault(), no search index
+    std::unique_ptr<QTemporaryDir> m_moveDir;             ///< relocationVault(5000) on disk
+    std::unique_ptr<Vault> m_moveVault;
+
+    /// The index of relocationVault(notes) (once per process; the full-text index not built).
+    Fixture &relocation(int notes)
+    {
+        auto &f = m_relocation[notes];
+        if (!f) {
+            f = std::make_unique<Fixture>();
+            f->files = relocationVault(notes);
+            bench::reportInput(u"relocationVault %1 notes"_s.arg(notes), f->files);
+            f->index = std::make_unique<VaultIndex>();
+            VaultIndex::Batch batch(*f->index);
+            for (const bench::VaultFile &file : std::as_const(f->files))
+                f->index->update(file.path, file.content);
+        }
+        return *f;
+    }
 
     const QList<bench::VaultFile> &files(int notes)
     {
@@ -95,6 +177,8 @@ private Q_SLOTS:
         for (const auto &[notes, f] : m_fixtures)
             qInfo("[bench] vault %d notes: %lld bytes, sha256 %s", notes, qlonglong(bench::totalBytes(f->files)),
                   bench::digest(f->files).constData());
+        m_moveVault.reset();
+        m_moveDir.reset();
     }
 
     // ---- building ---------------------------------------------------------------------------
@@ -486,6 +570,195 @@ private Q_SLOTS:
             const auto refs = idx.unlinkedReferences(u"Strona 1.md"_s);
             QCOMPARE(refs.size(), qsizetype(1));
         }
+    }
+
+    // ---- moving and renaming ---------------------------------------------------------------------
+
+    // VaultIndex::planRelocation() of the folder "Projekty" of relocationVault() — a tenth of the
+    // notes — renamed in place ("Archiwum": its path-qualified links, bracketed tags and query
+    // filters are rewritten) or moved into another folder ("Archiwum/Projekty": every link
+    // still resolves; the plan checks them all), and of the most linked page renamed.
+    void planRelocation_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("what");
+        for (int n : bench::sizes({1250, 5000, 20000}, {1250, 5000})) {
+            for (const QString &w : {u"folder rename"_s, u"folder move"_s, u"page rename"_s})
+                QTest::newRow(qPrintable(u"%1 notes %2"_s.arg(n).arg(w))) << n << w;
+        }
+    }
+    void planRelocation()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, what);
+        Fixture &f = relocation(notes);
+        QList<FileMove> moves;
+        if (what == u"folder rename")
+            moves = movesOf(f.files, u"Projekty"_s, u"Archiwum"_s);
+        else if (what == u"folder move")
+            moves = movesOf(f.files, u"Projekty"_s, u"Archiwum/Projekty"_s);
+        else
+            moves = {{u"Projekty/Folder 1/Strona 1.md"_s, u"Projekty/Folder 1/Strona pierwsza.md"_s}};
+        RelocationPlan plan;
+        QBENCHMARK {
+            plan = f.index->planRelocation(moves);
+        }
+        qInfo("[bench] planRelocation %d notes %s: %lld moves, %lld notes rewritten, %d links, %d tags, %d queries",
+              notes, qPrintable(what), qlonglong(plan.moves().size()), qlonglong(plan.files().size()), plan.links(),
+              plan.tags(), plan.queries());
+        QVERIFY(!plan.moves().isEmpty());
+        QVERIFY(!plan.files().isEmpty());
+    }
+
+    // notebook::relocationImpact() — what the move dialog and the dragged row's ghost ask for each
+    // target (Workspace::moveImpact): the checks against the vault on disk, the file moves of the
+    // folder and the plan. relocationVault(5000) opened from disk.
+    void moveImpact_data()
+    {
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("to");
+        QTest::newRow("5000 notes folder rename") << u"Projekty"_s << u"Archiwum"_s;
+        QTest::newRow("5000 notes folder move") << u"Projekty"_s << u"Archiwum/Projekty"_s;
+        QTest::newRow("5000 notes page move") << u"Projekty/Folder 1/Strona 1.md"_s << u"Archiwum/Strona 1.md"_s;
+    }
+    void moveImpact()
+    {
+        QFETCH(QString, from);
+        QFETCH(QString, to);
+        Fixture &f = relocation(5000);
+        if (!m_moveVault) {
+            m_moveDir = bench::makeTempDir();
+            if (!bench::writeVault(m_moveDir->path(), f.files))
+                qFatal("cannot write the benchmark vault");
+            m_moveVault = std::make_unique<Vault>(m_moveDir->path(), QString());
+            if (!m_moveVault->open())
+                qFatal("cannot open the benchmark vault");
+        }
+        notebook::RelocationImpact impact;
+        QBENCHMARK {
+            impact = notebook::relocationImpact(*m_moveVault, f.index.get(), from, to);
+        }
+        QVERIFY(impact.ok);
+        QVERIFY(impact.notes > 0);
+    }
+
+    // The same plans a few notes per event-loop turn (RelocationPlanner, Workspace's
+    // requestMoveImpact() for the dragged row's ghost: 8 ms per turn): what the GUI thread is
+    // blocked for at most — the preparation (lookup tables, the notes to look at), then the
+    // longest step; and the number of turns.
+    void relocationSteps_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("what");
+        for (int n : bench::sizes({1250, 5000, 20000}, {1250, 5000})) {
+            for (const QString &w : {u"folder move prepare"_s, u"folder move longest step"_s, u"folder move turns"_s,
+                                     u"folder rename prepare"_s, u"folder rename longest step"_s})
+                QTest::newRow(qPrintable(u"%1 notes %2"_s.arg(n).arg(w))) << n << w;
+        }
+    }
+    void relocationSteps()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, what);
+        Fixture &f = relocation(notes);
+        const QList<FileMove> moves = what.contains(u"rename"_s)
+                                              ? movesOf(f.files, u"Projekty"_s, u"Archiwum"_s)
+                                              : movesOf(f.files, u"Projekty"_s, u"Archiwum/Projekty"_s);
+        if (what.endsWith(u"prepare"_s)) {
+            QBENCHMARK {
+                RelocationPlanner planner(*f.index, moves);
+                QVERIFY(!planner.done());
+            }
+            return;
+        }
+        // One planner per repetition: the longest step (or the number of turns) of the median run.
+        QList<qreal> results;
+        for (int run = 0; run < 7; ++run) {
+            RelocationPlanner planner(*f.index, moves);
+            qint64 longest = 0;
+            int turns = 0;
+            bool done = false;
+            while (!done) {
+                QElapsedTimer t;
+                t.start();
+                done = planner.step(8);
+                longest = std::max(longest, t.nsecsElapsed());
+                ++turns;
+            }
+            QVERIFY(!planner.plan().files().isEmpty());
+            results.append(what.endsWith(u"turns"_s) ? qreal(turns) : qreal(longest) / 1e6);
+        }
+        std::sort(results.begin(), results.end());
+        QTest::setBenchmarkResult(results.at(results.size() / 2),
+                                  what.endsWith(u"turns"_s) ? QTest::Events : QTest::WalltimeMilliseconds);
+    }
+
+    // ---- tags as pages ----------------------------------------------------------------------------
+
+    // Opening the page a tag names (PageTools::pageInfo, the references list): the tag list, the
+    // tags naming the page, the blocks tagged with it, its backlinks — with the caches built
+    // ("warm"), and right after a save elsewhere, which drops them ("after a save"; "save" alone
+    // for comparison). relocationVault(): #praca names "Projekty/Praca.md".
+    void tagPageOpen_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("what");
+        for (int n : bench::sizes({1250, 5000, 20000}, {1250, 5000})) {
+            for (const QString &w : {u"warm"_s, u"after a save"_s, u"save"_s})
+                QTest::newRow(qPrintable(u"%1 notes %2"_s.arg(n).arg(w))) << n << w;
+        }
+    }
+    void tagPageOpen()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, what);
+        Fixture &f = relocation(notes);
+        VaultIndex &idx = *f.index;
+        const QString page = u"Projekty/Praca.md"_s;
+        const QString journal = f.files.first().path;
+        const QString original = idx.content(journal);
+        const QString edited = original + u"- nowy wpis #praca\n"_s;
+        int flip = 0;
+        qsizetype references = 0;
+        QBENCHMARK {
+            if (what != u"warm")
+                idx.update(journal, (flip++ & 1) ? original : edited);
+            if (what != u"save") {
+                qsizetype n = idx.tags().size() + idx.tagsNaming(page).size();
+                references = idx.tagReferences(page).size();
+                n += idx.backlinks(page).size();
+                QVERIFY(n > 0);
+            }
+        }
+        idx.update(journal, original);
+        if (what != u"save")
+            QVERIFY(references > 0);
+    }
+
+    // `#` completion (VaultIndex::suggestTags: tags in use, then the pages a tag would name):
+    // a tag's prefix, nothing typed yet, many pages and no tag ('stro'), a tag that only contains
+    // the text ('kuch').
+    void suggestTags_data()
+    {
+        QTest::addColumn<int>("notes");
+        QTest::addColumn<QString>("prefix");
+        for (int n : bench::sizes({1250, 5000, 20000}, {1250, 5000})) {
+            QTest::newRow(qPrintable(u"%1 notes 'pra'"_s.arg(n))) << n << u"pra"_s;
+            QTest::newRow(qPrintable(u"%1 notes empty"_s.arg(n))) << n << QString();
+            QTest::newRow(qPrintable(u"%1 notes 'stro'"_s.arg(n))) << n << u"stro"_s;
+            QTest::newRow(qPrintable(u"%1 notes 'kuch'"_s.arg(n))) << n << u"kuch"_s;
+        }
+    }
+    void suggestTags()
+    {
+        QFETCH(int, notes);
+        QFETCH(QString, prefix);
+        const VaultIndex &idx = *relocation(notes).index;
+        qsizetype count = 0;
+        QBENCHMARK {
+            count = idx.suggestTags(prefix, 20).size();
+        }
+        QVERIFY(count > 0);
     }
 
     // ---- vault-wide lists -----------------------------------------------------------------------
