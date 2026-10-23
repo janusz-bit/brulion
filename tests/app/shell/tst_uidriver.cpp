@@ -9,12 +9,14 @@
 #include "uidriver.h"
 
 #include <QElapsedTimer>
+#include <QGuiApplication>
 #include <QPointer>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QStyleHints>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -88,6 +90,33 @@ Window {
             // Beyond the view's width: no flicking sideways reaches it.
             Text { x: 230; height: 40; text: "Poza zasięgiem" }
         }
+    }
+    // A page that stops at its ends with a switch at its bottom (the settings page), a strip
+    // covering its top (a bar over a page), and a list whose content fits it.
+    property int toggles: 0
+    Flickable {
+        id: page; objectName: "page"
+        x: 60; y: 100; width: 150; height: 100
+        clip: true
+        contentHeight: 300
+        boundsBehavior: Flickable.StopAtBounds
+        MouseArea {
+            objectName: "toggle"
+            y: 250; width: 150; height: 40
+            onClicked: win.toggles++
+        }
+    }
+    MouseArea {
+        objectName: "cover"
+        x: 60; y: 100; width: 150; height: 20
+        z: 1
+    }
+    Flickable {
+        objectName: "fits"
+        x: 60; y: 205; width: 150; height: 45
+        contentHeight: 30
+        flickableDirection: Flickable.AutoFlickIfNeeded
+        Text { text: "Krótka lista" }
     }
     // A row of tools wider than the window, scrolled sideways (the phone's editing toolbar).
     Flickable {
@@ -342,6 +371,73 @@ private Q_SLOTS:
         ud::run(ud::wheel(m_window, ud::pointIn(flick), QPointF(0, -100)));
         const qreal up = settled();
         QVERIFY2(std::abs(up - 200) < 2, qPrintable(QString::number(up)));
+    }
+
+    // A finger moves content only where a Flickable under it can move that way: at the end of a
+    // page that stops there (or where the content fits) a finger dragged over a switch toggles it
+    // (Qt hands the press on) — what canScroll() tells the remote control beforehand.
+    void fingerScrollsOnlyWhereContentMoves()
+    {
+        QQuickItem *page = named(u"page"_s);
+        QQuickItem *toggle = named(u"toggle"_s);
+        QVERIFY(page && toggle);
+        QVERIFY(!ud::onScreen(m_window, toggle));
+        QVERIFY(ud::scrollIntoView(m_window, toggle));
+        QCOMPARE(page->property("contentY").toReal(), 200.0); // at its end
+        const QPointF at = ud::pointIn(toggle);
+        QCOMPARE(ud::pressTargetAt(m_window, at), toggle);
+        QCOMPARE(ud::flickablesAt(m_window, at), QList<QQuickItem *>{page});
+        QVERIFY(!ud::canScroll(page, QPointF(0, 10))); // further down: no
+        QVERIFY(ud::canScroll(page, QPointF(0, -10)));
+        QVERIFY(!ud::canScroll(page, QPointF(10, 0))); // its content is as wide as it
+        // What the check prevents: a finger moving up (the content would go down) taps it.
+        const int drag = QGuiApplication::styleHints()->startDragDistance() + 3;
+        ud::run(ud::touchDrag(m_window, at, QPointF(0, -drag), 6, 16, 120, 300));
+        QCOMPARE(prop("toggles"), 1);
+        QCOMPARE(page->property("contentY").toReal(), 200.0);
+        // Down (the content goes up): the page takes the drag, no tap.
+        ud::run(ud::touchDrag(m_window, at, QPointF(0, drag), 6, 16, 120, 300));
+        QCOMPARE(prop("toggles"), 1);
+        // A finger scroll moves the content by exactly what was asked, past the threshold (or
+        // from its first move while the page is still `moving`: a drag that did not move it
+        // can leave it so).
+        const auto scroll = [&](qreal dy) {
+            ud::run(ud::touchScroll(m_window, at, QPointF(0, dy), !page->property("moving").toBool()));
+        };
+        scroll(-30);
+        QCOMPARE(prop("toggles"), 1);
+        QCOMPARE(page->property("contentY").toReal(), 170.0);
+        scroll(1);
+        QCOMPARE(page->property("contentY").toReal(), 171.0);
+        scroll(-21);
+        QCOMPARE(page->property("contentY").toReal(), 150.0);
+        QCOMPARE(prop("toggles"), 1);
+        QVERIFY(ud::canScroll(page, QPointF(0, 10)));
+        // At the top: not up any more.
+        page->setProperty("contentY", 0);
+        QVERIFY(!ud::canScroll(page, QPointF(0, -10)));
+        QVERIFY(ud::canScroll(page, QPointF(0, 10)));
+        // Not interactive: never.
+        page->setProperty("interactive", false);
+        QVERIFY(!ud::canScroll(page, QPointF(0, 10)));
+        page->setProperty("interactive", true);
+        // A bar over the page takes the press: no flickable under the finger there.
+        QQuickItem *cover = named(u"cover"_s);
+        QCOMPARE(ud::pressTargetAt(m_window, ud::pointIn(cover)), cover);
+        QVERIFY(ud::flickablesAt(m_window, ud::pointIn(cover)).isEmpty());
+        // Content that fits its list (flicking only if needed): nothing moves either way.
+        QQuickItem *fits = named(u"fits"_s);
+        QCOMPARE(ud::flickablesAt(m_window, ud::pointIn(fits)), QList<QQuickItem *>{fits});
+        QVERIFY(!ud::canScroll(fits, QPointF(0, 10)));
+        QVERIFY(!ud::canScroll(fits, QPointF(0, -10)));
+        // A list that may be dragged beyond its ends moves at its end too (and springs back).
+        QQuickItem *flick = named(u"flick"_s);
+        QCOMPARE(flick->property("contentY").toReal(), 0.0);
+        QVERIFY(ud::canScroll(flick, QPointF(0, -10)));
+        QVERIFY(!ud::canScroll(flick, QPointF(10, 0))); // it flicks only up and down
+        // Nothing takes a press at an empty spot of the window.
+        QCOMPARE(ud::pressTargetAt(m_window, QPointF(395, 295)), nullptr);
+        QVERIFY(ud::flickablesAt(m_window, QPointF(395, 295)).isEmpty());
     }
 
     void playedFromTimersAndStoppedWhenTheWindowGoes()

@@ -10,9 +10,10 @@
 // (run, unknown, disabled); quick capture with a date; waitFor (a timeout, idle); screenshots (a
 // PNG of the window's size, where asked, relative paths, the runtime folder by default, a refused
 // path); scroll, long press, double click and drag; the MCP server's app tools (--app-control),
-// a screenshot as an image; quit, after which nothing listens any more. Without a private runtime
-// folder the app still starts, with neither socket in the shared temp folder. The app's log must
-// hold no QML TypeError, ReferenceError or binding loop.
+// a screenshot as an image; quit, after which nothing listens any more. The settings switch turns it off, in a
+// window where the page fits and in a low one (a finger scrolling over the switch never taps it). Without a private
+// runtime folder the app still starts, with neither socket in the shared temp folder. The app's log must hold no QML
+// TypeError, ReferenceError or binding loop.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"
@@ -161,9 +162,9 @@ class TestRemoteControl : public QObject {
         return false;
     }
 
-    void startApp(bool remoteControl)
+    void startApp(bool remoteControl, const QString &size = u"1280x800"_s)
     {
-        QStringList args{u"--vault"_s,          m_vault,       u"--size"_s, u"1280x800"_s, u"--now"_s,
+        QStringList args{u"--vault"_s,          m_vault,       u"--size"_s, size, u"--now"_s,
                          u"2026-10-14 10:00"_s, u"--locale"_s, u"pl"_s};
         if (remoteControl)
             args.append(u"--remote-control"_s);
@@ -661,14 +662,23 @@ private Q_SLOTS:
 
     // The device setting alone turns it on (no --remote-control), the switch in Settings →
     // Application turns it off at once (the connections too), and a second launch with
-    // --remote-control cannot turn it on in the running app.
+    // --remote-control cannot turn it on in the running app. In a window the settings page fits
+    // and in a low one (the switch scrolled into view at the page's end; fonts differ between
+    // systems, so either can be the case anywhere).
+    void settingTurnsItOnAndOff_data()
+    {
+        QTest::addColumn<QString>("size");
+        QTest::newRow("1280x800") << u"1280x800"_s;
+        QTest::newRow("1280x480") << u"1280x480"_s;
+    }
     void settingTurnsItOnAndOff()
     {
+        QFETCH(QString, size);
         {
             QSettings settings(m_home + u"/config/Brulion/Brulion.ini"_s, QSettings::IniFormat);
             settings.setValue(u"devtools/remoteControl"_s, true);
         }
-        startApp(false);
+        startApp(false, size);
         Run r;
         QVERIFY2(until(
                          {u"state"_s},
@@ -688,13 +698,28 @@ private Q_SLOTS:
         r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool());
-        // A finger scrolling a little over it scrolls the page (it travels the drag threshold
-        // first): it is no tap.
-        r = app({u"scroll"_s, u"--object-name"_s, u"settingsRemoteControl"_s, u"--dy"_s, u"1"_s, u"--device"_s,
-                 u"touch"_s});
-        QVERIFY2(r.code == 0, qPrintable(r.describe()));
-        r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
-        QVERIFY(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool());
+        // A finger scrolling a little over it, down and up: where the page can move that way it
+        // scrolls (the finger travels the drag threshold first), at its end or where it fits
+        // the window nothing is touched (a real finger would toggle the switch) — never a tap.
+        bool moved = false;
+        for (const int dy : {1, -1}) {
+            r = app({u"scroll"_s, u"--object-name"_s, u"settingsRemoteControl"_s, u"--dy"_s, QString::number(dy),
+                     u"--device"_s, u"touch"_s});
+            QVERIFY2(r.code == 0, qPrintable(r.describe()));
+            const double scrolled = r.result().value(u"scrolled"_s).toObject().value(u"dy"_s).toDouble();
+            if (r.result().value(u"touched"_s).toBool()) {
+                QVERIFY2(scrolled * dy > 0, qPrintable(r.describe()));
+                moved = true;
+            } else {
+                QCOMPARE(scrolled, 0.0);
+            }
+            r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
+            QVERIFY2(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool(),
+                     qPrintable(r.describe()));
+        }
+        // The page is longer than the low window: one of the two moved it.
+        if (size == u"1280x480")
+            QVERIFY(moved);
         // Switched off by its own click: the connection that asked is closed with the socket.
         r = app({u"click"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
         QCOMPARE(r.code, 5);

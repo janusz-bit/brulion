@@ -198,7 +198,7 @@ Never compute a hash yourself.
 | `app long-press [<target>]` | the target options, `[--ms 800] [--device]` | press and hold | yes |
 | `app double-click [<target>]` | the target options, `[--button] [--modifiers] [--device]` | a double click / double tap | yes |
 | `app drag <from> <to>` | `[--hold-ms N] [--button] [--modifiers] [--device]` | drag between two targets | yes |
-| `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle | |
+| `app scroll [<target>]` | `--dy N [--dx N] [--device]` | scroll by pixels (positive: down / right) at a target, else the window's middle; says how far the content moved (`scrolled`) | |
 | `app type <text>` | `[--stdin]` | type into the focused item, key by key (Polish letters; a real line break in the text is Return and a tab Tab — the two characters `\n` are typed as they are: pass a line break itself, e.g. `$'a\nb'` in bash or with `--stdin`) | yes |
 | `app key <keys>` | `[--count N]` | press keys: `Ctrl+K`, `Escape`, `"Down, Down, Return"` | yes |
 | `app wait` | `[--route R] [--text T --object-name N --type T --exact \| --handle H] [--gone] [--idle] [--timeout MS]` | until a route shows, an item is shown (or gone), the app is idle; exit 3 `timeout` | |
@@ -352,14 +352,28 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   a point in window coordinates (`120,340`), or the topmost shown item with a text (part of it,
   any letter case; `--exact` for all of it), an `objectName` or a QML type (`BButton`,
   `TasksRow`, `TextEdit` — Qt Quick types also by their QML names). An item off screen inside a
-  list is scrolled into view first.
+  list is scrolled into view first (down / up; sideways in a row that scrolls sideways). An item
+  that scrolling cannot bring into the window — its middle still outside the window or outside
+  the view of a list around it (beyond the width of a list that only scrolls up and down, in a
+  clipped part nothing scrolls) — is **not touched**: `off_screen` (exit 3) with the item and its
+  geometry, never a click at a point that belongs to another item. A point target is used as
+  given.
 * **Real input.** Mouse and touch events go through Qt like a device's (pointer handlers see
   whole clicks and long presses), keys like a keyboard's (shortcuts first, so `Ctrl+K` opens the
   palette as it does for a user — and a text field keeps the keys it handles). `--device touch`
   taps, holds and drags with a finger (default: a finger when the app runs with `--touch`, except
-  for `scroll`, which turns the wheel unless asked for a finger: like a real one, a finger where
-  nothing can scroll that way presses what it is on). Input needs a shown, active window: it is
-  shown and asked to be active first.
+  for `scroll`, which turns the wheel unless asked for a finger). Input needs a shown, active
+  window: it is shown and asked to be active first.
+* **Scrolling** answers `scrolled: {dx, dy}`, how far the content under the point moved (0 at the
+  end of a list). The wheel scrolls whatever is under it. A finger (`--device touch`) first
+  travels the drag threshold and then the distance asked, so the content moves by it (within its
+  bounds); it is put down only where a list or page under it — the item the press would reach
+  and the lists around that item — can move that way: not at its end (a list that stops at its
+  ends), not where the content fits its view, not on an open popup's dimmed area. Elsewhere a real
+  finger would press what it is on (a switch, a button, the area that closes a popup): nothing is
+  touched then, and the answer says `"touched": false` with `scrolled` 0 (else `"touched": true`).
+  A finger over an item that keeps the drag itself (a slider, text being selected) drags that
+  item, as a real one does.
 * **One at a time, settled.** Gestures are played on the app's event loop, one after another
   (nothing nested: the app stays in real use), started and answered once the window has stopped
   changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next
@@ -377,7 +391,7 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   commands that can change notes (click, type, key, command, capture, quit …) and a screenshot
   path (it could replace a picture of the notebook; without one the screenshot goes to the
   runtime folder).
-* Exit codes of the app's errors: `bad_params` 2, `not_found` and `timeout` 3, `stale_handle`
+* Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3, `stale_handle`
   and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a disabled command, the
   documentation notebook for capture) 7, `failed` 1.
 
@@ -400,10 +414,10 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `capture` | `text` | quick capture's `{kind, text, date, time, when, line, path}` |
 | `screenshot` | `path` | `{path, width, height, devicePixelRatio}` |
 | `find` | `text`, `objectName`, `type`, `exact`, `visibleOnly` (true), `within` (a handle), `limit` (50) | `{items, total}` |
-| `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}` |
+| `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}`; `off_screen` |
 | `longPress` | a target, `ms` (800), `device` | the same |
 | `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}` |
-| `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click |
+| `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click and `scrolled: {dx, dy}`; with a finger `touched` |
 | `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
 | `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
 | `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` |

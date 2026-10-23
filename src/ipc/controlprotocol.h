@@ -78,6 +78,7 @@ inline constexpr auto BadParams = "bad_params";     ///< unknown parameter, wron
 inline constexpr auto NotReady = "not_ready";       ///< no notebook open, no window yet
 inline constexpr auto NotFound = "not_found";       ///< no such item, page, block, command
 inline constexpr auto StaleHandle = "stale_handle"; ///< the item of a handle is gone
+inline constexpr auto OffScreen = "off_screen";     ///< the item cannot be scrolled into the window
 inline constexpr auto Ambiguous = "ambiguous_ref";  ///< several pages have that name
 inline constexpr auto Refused = "refused";          ///< a disabled command, another notebook
 inline constexpr auto Timeout = "timeout";          ///< waitFor's condition was not met in time

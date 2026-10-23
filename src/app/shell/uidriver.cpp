@@ -2,12 +2,14 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QGuiApplication>
 #include <QHash>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QStyleHints>
 #include <QThread>
 #include <QTimer>
 #include <QWheelEvent>
@@ -361,6 +363,104 @@ bool scrollIntoView(QQuickWindow *window, QQuickItem *item, const std::function<
     return onScreen(window, item);
 }
 
+namespace {
+
+/// Does `item` take presses itself: touch, mouse buttons, or a pointer handler that does?
+bool takesPresses(const QQuickItem *item)
+{
+    // The popups' overlay covers the window and accepts presses, but lets them through while no
+    // popup is open in it (items of the app's own shown there — toasts — do not count).
+    if (item->inherits("QQuickOverlay")) {
+        const QList<QQuickItem *> children = item->childItems();
+        return std::any_of(children.cbegin(), children.cend(),
+                           [](const QQuickItem *c) { return c->isVisible() && c->inherits("QQuickPopupItem"); });
+    }
+    if (item->acceptTouchEvents() || item->acceptedMouseButtons() != Qt::NoButton)
+        return true;
+    const QObjectList children = item->children();
+    for (const QObject *child : children) {
+        if (child->inherits("QQuickPointerHandler") && !child->inherits("QQuickHoverHandler")
+            && !child->inherits("QQuickWheelHandler") && !child->inherits("QQuickPointHandler")
+            && child->property("enabled").toBool())
+            return true;
+    }
+    return false;
+}
+
+QQuickItem *pressTargetUnder(QQuickItem *item, QPointF scenePos)
+{
+    if (!item->isVisible() || !item->isEnabled() || item->opacity() <= 0.01)
+        return nullptr;
+    const QPointF local = item->mapFromScene(scenePos);
+    if (item->clip() && !QRectF(0, 0, item->width(), item->height()).contains(local))
+        return nullptr; // nothing of it there, its children clipped too
+    QList<QQuickItem *> children = item->childItems();
+    std::stable_sort(children.begin(), children.end(),
+                     [](const QQuickItem *a, const QQuickItem *b) { return a->z() < b->z(); });
+    for (auto it = children.crbegin(); it != children.crend(); ++it) {
+        if (QQuickItem *found = pressTargetUnder(*it, scenePos))
+            return found;
+    }
+    if (item->contains(local) && (takesPresses(item) || item->inherits("QQuickFlickable")))
+        return item;
+    return nullptr;
+}
+
+} // namespace
+
+QQuickItem *pressTargetAt(QQuickWindow *window, QPointF scenePos)
+{
+    return window ? pressTargetUnder(window->contentItem(), scenePos) : nullptr;
+}
+
+QList<QQuickItem *> flickablesAt(QQuickWindow *window, QPointF scenePos)
+{
+    QList<QQuickItem *> out;
+    for (QQuickItem *p = pressTargetAt(window, scenePos); p; p = p->parentItem()) {
+        if (p->inherits("QQuickFlickable"))
+            out.append(p);
+    }
+    return out;
+}
+
+bool canScroll(const QQuickItem *flickable, QPointF delta)
+{
+    if (!flickable || !flickable->property("interactive").toBool() || !flickable->isEnabled())
+        return false;
+    // Flickable.FlickableDirection: AutoFlickDirection 0, HorizontalFlick 1, VerticalFlick 2,
+    // HorizontalAndVerticalFlick 3, AutoFlickIfNeeded 0xc; BoundsBehavior: DragOverBounds 1.
+    const int direction = flickable->property("flickableDirection").toInt();
+    const bool dragOverBounds = flickable->property("boundsBehavior").toInt() & 0x1;
+    // The content's size as Flickable reads it: its content item's (contentWidth -1 is the view's).
+    const auto *contentItem = flickable->property("contentItem").value<QQuickItem *>();
+    const auto axis = [&](qreal d, bool vertical) {
+        if (d == 0 || !contentItem)
+            return false;
+        const qreal margins = flickable->property(vertical ? "topMargin" : "leftMargin").toReal()
+                              + flickable->property(vertical ? "bottomMargin" : "rightMargin").toReal();
+        const qreal content = (vertical ? contentItem->height() : contentItem->width()) + margins;
+        const qreal view = vertical ? flickable->height() : flickable->width();
+        const int flag = vertical ? 0x2 : 0x1;
+        bool flicks = false;
+        if (direction == 0)
+            flicks = std::floor(std::abs(content - view)) > 0;
+        else if (direction & 0xc)
+            flicks = (direction & flag) || content > view;
+        else
+            flicks = direction & flag;
+        if (!flicks)
+            return false;
+        if (dragOverBounds)
+            return true;
+        const qreal origin = flickable->property(vertical ? "originY" : "originX").toReal();
+        const qreal at = flickable->property(vertical ? "contentY" : "contentX").toReal();
+        const qreal start = origin - flickable->property(vertical ? "topMargin" : "leftMargin").toReal();
+        const qreal end = start + std::max<qreal>(0, content - view);
+        return d > 0 ? at < end - 0.5 : at > start + 0.5;
+    };
+    return axis(delta.y(), true) || axis(delta.x(), false);
+}
+
 // ---- Playing gestures ---------------------------------------------------------------------------
 
 void run(const Gesture &gesture)
@@ -563,6 +663,39 @@ Gesture touchDrag(QQuickWindow *window, QPointF from, QPointF delta, int steps, 
     }
     g.append(Step{[sequence, window, p = (from + delta).toPoint()] { sequence->release(0, p, window).commit(false); },
                   afterMs, true});
+    return g;
+}
+
+Gesture touchScroll(QQuickWindow *window, QPointF scenePos, QPointF delta, bool crossThreshold)
+{
+    const qreal length = std::hypot(delta.x(), delta.y());
+    if (length <= 0)
+        return {};
+    // The finger moves against the way the content is to go (the content follows it).
+    const QPointF unit = -delta / length;
+    QList<qreal> stops;
+    if (crossThreshold) {
+        // Flickable measures the threshold per axis: the dominant one crosses it.
+        const qreal along = std::max(std::abs(unit.x()), std::abs(unit.y()));
+        const qreal threshold = QGuiApplication::styleHints()->startDragDistance();
+        stops = {(threshold + 1) / along, (threshold + 2) / along};
+    }
+    const qreal start = stops.isEmpty() ? 0 : stops.last();
+    const int steps = qMax(1, int(std::ceil(length / 12.0)));
+    for (int step = 1; step <= steps; ++step)
+        stops.append(start + length * step / steps);
+    auto sequence = std::make_shared<TouchSequence>(window, touchDevice());
+    Gesture g{Step{[sequence, window, p = scenePos.toPoint()] { sequence->press(0, p, window).commit(false); }, 16,
+                   true}};
+    for (qsizetype i = 0; i < stops.size(); ++i) {
+        const QPoint p = (scenePos + unit * stops.at(i)).toPoint();
+        g.append(Step{[sequence, window, p] { sequence->move(0, p, window).commit(false); },
+                      i + 1 == stops.size() ? 120 : 16, true});
+    }
+    g.append(Step{[sequence, window, p = (scenePos + unit * stops.last()).toPoint()] {
+                      sequence->release(0, p, window).commit(false);
+                  },
+                  300, true});
     return g;
 }
 

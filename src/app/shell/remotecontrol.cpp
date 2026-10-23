@@ -19,7 +19,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
-#include <QGuiApplication>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -29,7 +28,6 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
-#include <QStyleHints>
 
 #include <cmath>
 
@@ -776,27 +774,71 @@ bool RemoteControl::resolveTarget(QQuickWindow *window, const QJsonObject &objec
     return false;
 }
 
-void RemoteControl::reachTarget(QQuickWindow *window, const Target &target, std::function<void(QPointF)> then)
+void RemoteControl::reachTarget(QQuickWindow *window, const Target &target,
+                                std::function<void(QPointF, const char *)> then)
 {
     if (!target.isItem) {
-        then(target.point);
+        then(target.point, nullptr);
         return;
     }
     QQuickItem *item = target.item;
     if (!item) {
-        then(QPointF(-1, -1));
+        then(QPointF(-1, -1), E::StaleHandle);
         return;
     }
     if (uidriver::onScreen(window, item)) {
-        then(uidriver::pointIn(item));
+        then(uidriver::pointIn(item), nullptr);
         return;
     }
-    // Scrolled into view first, as a user scrolls to what they want to touch.
+    // Scrolled into view first, as a user scrolls to what they want to touch. What still is not
+    // on screen then (beyond the width of a list that only scrolls up and down, in a clipped part
+    // nothing scrolls, outside the window) is not touched: the point would be another item's.
     uidriver::scrollIntoView(window, item);
-    QTimer::singleShot(150, this, [item = target.item, then = std::move(then)] {
-        then(item ? uidriver::pointIn(item) : QPointF(-1, -1));
+    QTimer::singleShot(150, this, [this, item = target.item, then = std::move(then)] {
+        QQuickWindow *w = this->window();
+        if (!item || !w)
+            then(QPointF(-1, -1), E::StaleHandle);
+        else if (!uidriver::onScreen(w, item))
+            then(uidriver::pointIn(item), E::OffScreen);
+        else
+            then(uidriver::pointIn(item), nullptr);
     });
 }
+
+namespace {
+
+/// Where the content of each Flickable whose view holds a point is (contentX, contentY).
+using ContentPositions = QList<std::pair<QPointer<QQuickItem>, QPointF>>;
+
+ContentPositions contentPositions(QQuickWindow *window, QPointF scenePos)
+{
+    ContentPositions out;
+    for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+        if (!item->inherits("QQuickFlickable"))
+            continue;
+        if (item->mapRectToScene(QRectF(0, 0, item->width(), item->height())).contains(scenePos))
+            out.append({item, QPointF(item->property("contentX").toReal(), item->property("contentY").toReal())});
+    }
+    return out;
+}
+
+/// How far the content under the point moved since `before` (contentPositions()): the flickable
+/// that moved most.
+QJsonObject scrolledSince(const ContentPositions &before)
+{
+    QPointF most;
+    for (const auto &[flickable, was] : before) {
+        if (!flickable)
+            continue;
+        const QPointF moved =
+                QPointF(flickable->property("contentX").toReal(), flickable->property("contentY").toReal()) - was;
+        if (std::hypot(moved.x(), moved.y()) > std::hypot(most.x(), most.y()))
+            most = moved;
+    }
+    return {{u"dx"_s, std::round(most.x() * 10) / 10}, {u"dy"_s, std::round(most.y() * 10) / 10}};
+}
+
+} // namespace
 
 // ---- Input ------------------------------------------------------------------------------------
 
@@ -884,12 +926,49 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                 finished();
                 return;
             }
-            reachTarget(settled, target, [=, this](QPointF point) {
+            reachTarget(settled, target, [=, this](QPointF point, const char *problem) {
                 QQuickWindow *reached = window();
-                if (!reached || point.x() < 0) {
+                if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0)) {
                     reply.fail(code(E::StaleHandle), u"The item went away before it could be reached"_s);
                     finished();
                     return;
+                }
+                if (problem) {
+                    reply.fail(code(E::OffScreen),
+                               u"The item is outside the window, and scrolling cannot bring it in: nothing "
+                               "was touched"_s,
+                               {{u"item"_s, describe(target.item)},
+                                {u"window"_s,
+                                 QJsonObject{{u"width"_s, reached->width()}, {u"height"_s, reached->height()}}}});
+                    finished();
+                    return;
+                }
+                const QJsonObject where{{u"x"_s, std::round(point.x() * 10) / 10},
+                                        {u"y"_s, std::round(point.y() * 10) / 10},
+                                        {u"device"_s, touch ? u"touch"_s : u"mouse"_s}};
+                ContentPositions contentBefore;
+                // The Flickable a finger would drag: the innermost under it that can move that way.
+                QQuickItem *dragged = nullptr;
+                if (method == u"scroll") {
+                    contentBefore = contentPositions(reached, point);
+                    for (QQuickItem *flickable : uidriver::flickablesAt(reached, point)) {
+                        if (!dragged && uidriver::canScroll(flickable, delta))
+                            dragged = flickable;
+                    }
+                    // A finger moves content only where some Flickable under it can move that way;
+                    // elsewhere a real one would press what it is on (a switch, a button) — not
+                    // done: nothing is touched, and the answer says nothing scrolled.
+                    if (touch && !dragged) {
+                        QJsonObject out = where;
+                        if (target.item)
+                            out.insert(u"item"_s, describe(target.item));
+                        out.insert(u"windowActive"_s, reached->isActive());
+                        out.insert(u"scrolled"_s, QJsonObject{{u"dx"_s, 0}, {u"dy"_s, 0}});
+                        out.insert(u"touched"_s, false);
+                        reply.ok(out);
+                        finished();
+                        return;
+                    }
                 }
                 uidriver::Gesture gesture;
                 if (method == u"click") {
@@ -910,14 +989,9 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                                     : uidriver::mouseDoubleClick(reached, point, button, modifiers);
                 } else { // scroll
                     if (touch) {
-                        // The content follows the finger: a finger moving up scrolls down. Held still
-                        // before lifting, so it does not fling on.
-                        // The finger first travels the drag threshold: Flickable moves the content
-                        // only past it, and a shorter move would be a tap on the item there.
-                        const qreal length = std::hypot(delta.x(), delta.y());
-                        const qreal travel = length + QGuiApplication::styleHints()->startDragDistance() + 2;
-                        gesture = uidriver::touchDrag(reached, point, -delta * (travel / length),
-                                                      qMax(6, int(travel / 12)), 16, 120, 300);
+                        // The content follows the finger past the drag threshold (only where it
+                        // can move: checked above).
+                        gesture = uidriver::touchScroll(reached, point, delta, !dragged->property("moving").toBool());
                     } else {
                         gesture = uidriver::wheel(reached, point, delta, modifiers);
                     }
@@ -929,13 +1003,16 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                         return;
                     }
                     afterSettled(100, 2000, [=, this] {
-                        QJsonObject out{{u"x"_s, std::round(point.x() * 10) / 10},
-                                        {u"y"_s, std::round(point.y() * 10) / 10},
-                                        {u"device"_s, touch ? u"touch"_s : u"mouse"_s}};
+                        QJsonObject out = where;
                         if (target.item)
                             out.insert(u"item"_s, describe(target.item));
                         if (QQuickWindow *after = window())
                             out.insert(u"windowActive"_s, after->isActive());
+                        if (method == u"scroll") {
+                            out.insert(u"scrolled"_s, scrolledSince(contentBefore));
+                            if (touch)
+                                out.insert(u"touched"_s, true);
+                        }
                         reply.ok(out);
                         finished();
                     });
@@ -975,11 +1052,22 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
                 finished();
                 return;
             }
-            reachTarget(settled, from, [=, this](QPointF start) {
+            reachTarget(settled, from, [=, this](QPointF start, const char *problem) {
                 QQuickWindow *reached = window();
                 const QPointF end = to.isItem ? (to.item ? uidriver::pointIn(to.item) : QPointF(-1, -1)) : to.point;
-                if (!reached || start.x() < 0 || end.x() < 0) {
+                if (!reached || (problem && qstrcmp(problem, E::StaleHandle) == 0) || end.x() < 0) {
                     reply.fail(code(E::StaleHandle), u"An item went away before the drag"_s);
+                    finished();
+                    return;
+                }
+                // Both ends on screen (the start was scrolled into view; scrolling to the end
+                // now would move the start away).
+                if (problem || (to.isItem && !uidriver::onScreen(reached, to.item))) {
+                    QQuickItem *off = problem ? from.item.data() : to.item.data();
+                    reply.fail(code(E::OffScreen),
+                               u"The %1 item is outside the window, and scrolling cannot bring it in: nothing was "
+                               "touched"_s.arg(problem ? u"from"_s : u"to"_s),
+                               {{u"param"_s, problem ? u"from"_s : u"to"_s}, {u"item"_s, describe(off)}});
                     finished();
                     return;
                 }

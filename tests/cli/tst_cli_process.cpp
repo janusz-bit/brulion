@@ -1074,9 +1074,10 @@ private Q_SLOTS:
         r = cliLive({u"app"_s, u"capture"_s, u"Kupić mleko jutro o 18"_s});
         QCOMPARE(requests.last().method, u"capture"_s);
         // The app's errors as exit codes.
-        const QList<std::pair<QString, int>> codes{{u"bad_params"_s, 2},   {u"not_found"_s, 3},     {u"timeout"_s, 3},
-                                                   {u"stale_handle"_s, 4}, {u"ambiguous_ref"_s, 4}, {u"not_ready"_s, 5},
-                                                   {u"refused"_s, 7},      {u"failed"_s, 1}};
+        const QList<std::pair<QString, int>> codes{
+                {u"bad_params"_s, 2},   {u"not_found"_s, 3},     {u"timeout"_s, 3},
+                {u"stale_handle"_s, 4}, {u"ambiguous_ref"_s, 4}, {u"not_ready"_s, 5},
+                {u"refused"_s, 7},      {u"failed"_s, 1},        {u"off_screen"_s, 3}};
         for (const auto &[code, exit] : codes) {
             r = cliLive({u"app"_s, u"find"_s, u"fail:"_s + code});
             QCOMPARE(r.code, exit);
