@@ -147,8 +147,10 @@ Pozostałe opcje:
   uruchamia `?selftest=keyboard`: aplikacja przy każdej zmianie publikuje
   `window.brulionKeyboardSelfTest` (`{overlap, shown, animating, source}`), a skrypt „otwiera”
   klawiaturę 300 px, 250 px przy stronie przewiniętej o 20 px (jak robi iOS), podaje wartość
-  błędną (NaN → 0) i chowa klawiaturę — za każdym razem aplikacja musi zgłosić właściwą wysokość
-  (niżej, „Klawiatura ekranowa”). Ze `--screenshot` dochodzi zrzut `…-keyboard.png`.
+  błędną (NaN → 0), powiększa stronę gestem (`scale` 2: to nie klawiatura, 0), przewija stronę
+  o 40 px (aplikacja musi ją przewinąć z powrotem na górę) i chowa klawiaturę — za każdym razem
+  aplikacja musi zgłosić właściwą wysokość (niżej, „Klawiatura ekranowa”). Ze `--screenshot`
+  dochodzi zrzut `…-keyboard.png`. CI uruchamia go przy pierwszym teście.
 * `--two-tabs` — otwiera drugą kartę: musi czekać z komunikatem „Brulion jest otwarty w innej
   karcie…”, a po opuszczeniu aplikacji w pierwszej karcie przejąć dane.
 * `--loader-screenshot plik.png` — przy pierwszym wczytaniu dławi sieć do ~3 MiB/s i robi

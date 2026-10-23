@@ -18,7 +18,8 @@
 // itself has no emoji font, every ⏰ 🔔 📅 was an empty box). --keyboard stubs window.visualViewport
 // (a phone browser's on-screen keyboard shrinks it) and runs ?selftest=keyboard: the app must
 // report how much of the page the keyboard covers (KeyboardInsets, src/app/ui/keyboardsources.h)
-// as the stub changes, 0 for malformed values. --two-tabs opens a second tab,
+// as the stub changes, 0 for malformed values and for a pinch-zoomed page, and put a page the
+// browser scrolled (iOS) back at the top. --two-tabs opens a second tab,
 // which must wait ("open in another tab") until the first one leaves the app. --index-notes N
 // writes a vault of N generated notes into IndexedDB before the first load (as the app's IDBFS
 // mount stores it, named the current vault): every load must then report a complete index
@@ -112,22 +113,34 @@ function seedVaultScript(count) {
 }
 
 // A visualViewport the test controls (installed before the page's own scripts): its height is
-// the window's minus a keyboard set with window.__brulionKeyboard(px, offsetTop).
+// the window's minus a keyboard, divided by a pinch zoom — window.__brulionKeyboard(px,
+// offsetTop, scale). window.__brulionScroll(y) scrolls the page as iOS does (to the input element
+// Qt keeps for the keyboard; scrollY and scrollTo are stubbed too), __brulionScrollY() reads it.
 const viewportStub = `(() => {
   const vv = new EventTarget();
   let keyboard = 0;
   let offset = 0;
-  Object.defineProperty(vv, 'width', { get: () => window.innerWidth });
-  Object.defineProperty(vv, 'height', { get: () => window.innerHeight - keyboard });
+  let scale = 1;
+  let scrollY = 0;
+  Object.defineProperty(vv, 'width', { get: () => window.innerWidth / scale });
+  Object.defineProperty(vv, 'height', { get: () => (window.innerHeight - keyboard) / scale });
   Object.defineProperty(vv, 'offsetTop', { get: () => offset });
   Object.defineProperty(vv, 'offsetLeft', { get: () => 0 });
-  Object.defineProperty(vv, 'scale', { get: () => 1 });
+  Object.defineProperty(vv, 'scale', { get: () => scale });
   Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
-  window.__brulionKeyboard = (px, top) => {
+  Object.defineProperty(window, 'scrollY', { get: () => scrollY, configurable: true });
+  window.scrollTo = (x, y) => { scrollY = typeof x === 'object' && x ? (x.top || 0) : (y || 0); };
+  window.__brulionKeyboard = (px, top, zoom) => {
     keyboard = px;
     offset = top || 0;
+    scale = zoom || 1;
     vv.dispatchEvent(new Event('resize'));
   };
+  window.__brulionScroll = (y) => {
+    scrollY = y;
+    vv.dispatchEvent(new Event('scroll'));
+  };
+  window.__brulionScrollY = () => scrollY;
 })()`;
 
 function findChrome() {
@@ -396,19 +409,29 @@ async function main() {
       }
       return k;
     };
+    // [what, the stub's call, the report expected, the page's scroll expected after it]
     const steps = [
       ['no keyboard', null, (k) => k.overlap === 0 && k.source === 'platform'],
-      ['a 300 px keyboard', '300', (k) => k.overlap === 300 && k.shown && k.source === 'platform'],
-      ['a 250 px keyboard, the page scrolled 20 px (iOS)', '270, 20', (k) => k.overlap === 250 && k.shown],
-      ['malformed (NaN)', 'NaN', (k) => k.overlap === 0 && !k.shown],
-      ['a 300 px keyboard again', '300', (k) => k.overlap === 300],
-      ['the keyboard goes', '0', (k) => k.overlap === 0 && !k.shown],
+      ['a 300 px keyboard', '__brulionKeyboard(300)', (k) => k.overlap === 300 && k.shown && k.source === 'platform'],
+      ['a 250 px keyboard, the page scrolled 20 px (iOS)', '__brulionKeyboard(270, 20)', (k) => k.overlap === 250 && k.shown],
+      ['malformed (NaN)', '__brulionKeyboard(NaN)', (k) => k.overlap === 0 && !k.shown],
+      ['a 300 px keyboard again', '__brulionKeyboard(300)', (k) => k.overlap === 300],
+      // A pinch-zoomed page (a desktop touchpad) shrinks the visual viewport too: no keyboard.
+      ['a page zoomed in twice, no keyboard', '__brulionKeyboard(0, 0, 2)', (k) => k.overlap === 0 && !k.shown],
+      ['a 300 px keyboard, not zoomed', '__brulionKeyboard(300, 0, 1)', (k) => k.overlap === 300 && k.shown],
+      ['the browser scrolls the page 40 px (iOS)', '__brulionScroll(40)', (k) => k.overlap === 300 && k.shown, 0],
+      ['the keyboard goes', '__brulionKeyboard(0)', (k) => k.overlap === 0 && !k.shown],
     ];
-    for (const [what, call, pred] of steps) {
-      if (call !== null) await evaluate(`window.__brulionKeyboard(${call})`);
+    for (const [what, call, pred, scrollAfter] of steps) {
+      if (call !== null) await evaluate(`window.${call}`);
       const k = await waitKeyboard(pred);
       console.log(`keyboard: ${what}: ${JSON.stringify(k)}`);
       if (!k || !pred(k)) problems.push(`keyboard: ${what}: the app reported ${JSON.stringify(k)}`);
+      if (scrollAfter !== undefined) {
+        const scrollY = await evaluate('window.__brulionScrollY()');
+        console.log(`keyboard: ${what}: the page's scroll ${scrollY}`);
+        if (scrollY !== scrollAfter) problems.push(`keyboard: ${what}: the page stays scrolled ${scrollY} px`);
+      }
       if (what === 'a 300 px keyboard' && args.screenshot) await shoot(args.screenshot.replace(/\.png$/, '-keyboard.png'));
     }
   }
