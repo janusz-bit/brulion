@@ -170,7 +170,8 @@ public:
 
     QDateTime now() const;
     QDate today() const { return now().date(); }
-    /// The language of note content: --lang, else the app's setting ui/language, else "pl".
+    /// The language of note content: --lang, else the app's setting ui/language, else (never
+    /// chosen) the system's, as the app (notebook::appLanguage()).
     QString language() const;
     dates::UiLocale locale() const;
     Qt::DayOfWeek weekStart() const;

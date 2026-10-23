@@ -20,6 +20,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QSaveFile>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -653,6 +654,56 @@ private Q_SLOTS:
         r = run(dir, {u"page"_s, u"read"_s, u"Weekend"_s});
         QCOMPARE(r.code, 4);
         QCOMPARE(r.errorCode(), u"ambiguous_ref"_s);
+    }
+
+    // Without --vault: the app's notebook, also when it was quit in its documentation, and the
+    // app's language also when it was never chosen.
+    void notebookAndLanguageAsTheApp()
+    {
+        const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});
+        const QString ini = m_home + u"/config/Brulion/Brulion.ini"_s;
+        const QString docs = m_home + u"/data/Brulion/Brulion/Dokumentacja Brulionu"_s;
+        QDir().mkpath(docs);
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"vaults/current"_s, docs);
+            settings.setValue(u"vaults/recent"_s,
+                              QVariantList{QVariantMap{{u"path"_s, docs}}, QVariantMap{{u"path"_s, dir}}});
+        }
+        Run r = cli({u"info"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.json.value(u"vault"_s).toString(), dir);
+        r = cli({u"capture"_s, u"Leki jutro o 9"_s, u"--now"_s, kNow});
+        QCOMPARE(r.code, 0);
+        QVERIFY(QFileInfo::exists(dir + u"/journals/2026-10-14.md"_s));
+        QVERIFY(!QFileInfo::exists(docs + u"/journals"_s));
+        // No notebook of the user's known: refused, the documentation is never written.
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"vaults/recent"_s, QVariantList{QVariantMap{{u"path"_s, docs}}});
+        }
+        r = cli({u"capture"_s, u"x"_s});
+        QCOMPARE(r.code, 5);
+        QCOMPARE(r.errorCode(), u"no_vault"_s);
+        QVERIFY(!QFileInfo::exists(docs + u"/journals"_s));
+        // ui/language never chosen: the system's, as the app (an English one: English notes).
+        {
+            QSettings settings(ini, QSettings::IniFormat);
+            settings.setValue(u"vaults/current"_s, dir);
+        }
+        QProcessEnvironment env = environment();
+        for (const QString &v : {u"LC_ALL"_s, u"LC_NUMERIC"_s, u"LC_MESSAGES"_s, u"LANGUAGE"_s})
+            env.remove(v);
+        env.insert(u"LANG"_s, u"en_US.UTF-8"_s);
+        r = cli({u"info"_s}, {}, env);
+        QCOMPARE(r.result().value(u"language"_s).toString(), u"en"_s);
+        r = cli({u"date"_s, u"parse"_s, u"jutro o 9"_s, u"--now"_s, kNow}, {}, env);
+        QCOMPARE(r.result().value(u"human"_s).toString(), u"tomorrow 09:00"_s);
+        env.insert(u"LANG"_s, u"pl_PL.UTF-8"_s);
+        r = cli({u"info"_s}, {}, env);
+        QCOMPARE(r.result().value(u"language"_s).toString(), u"pl"_s);
+        QFile::remove(ini);
+        QDir(docs).removeRecursively();
     }
 
     void polishArgvAndStdin()

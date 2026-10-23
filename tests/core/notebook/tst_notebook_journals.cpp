@@ -10,6 +10,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLocale>
 #include <QSaveFile>
 #include <QTemporaryDir>
 #include <QTest>
@@ -112,6 +113,23 @@ private Q_SLOTS:
         QCOMPARE(notebook::contentLocale(u"pl"), dates::UiLocale::Polish);
         QCOMPARE(notebook::contentLocale(u""), dates::UiLocale::Polish);
         QCOMPARE(notebook::contentLocale(u"de"), dates::UiLocale::Polish);
+    }
+
+    // The app's language for its setting ui/language: as saved, else the system's.
+    void appLanguages()
+    {
+        const QLocale system;
+        QCOMPARE(notebook::appLanguage(u"pl"_s), u"pl"_s);
+        QCOMPARE(notebook::appLanguage(u"en"_s), u"en"_s);
+        QLocale::setDefault(QLocale(u"en_GB"_s));
+        QCOMPARE(notebook::appLanguage(QString()), u"en"_s); // never chosen
+        QCOMPARE(notebook::appLanguage(u"de"_s), u"en"_s);   // unknown
+        QCOMPARE(notebook::appLanguage(u"pl"_s), u"pl"_s);
+        QLocale::setDefault(QLocale(u"pl_PL"_s));
+        QCOMPARE(notebook::appLanguage(QString()), u"pl"_s);
+        QLocale::setDefault(QLocale(u"de_DE"_s));
+        QCOMPARE(notebook::appLanguage(QString()), u"pl"_s);
+        QLocale::setDefault(system);
     }
 
     void ensureJournalFromTheTemplate_data()

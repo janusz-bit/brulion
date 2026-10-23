@@ -56,8 +56,8 @@ QString Context::language() const
 {
     if (!globals.lang.isEmpty())
         return globals.lang;
-    const QString saved = settingsValue(u"ui/language"_s);
-    return saved == u"en" ? u"en"_s : u"pl"_s;
+    // The app's language setting, also when it was never chosen (then the system's).
+    return notebook::appLanguage(settingsValue(u"ui/language"_s));
 }
 
 dates::UiLocale Context::locale() const
@@ -96,6 +96,27 @@ std::optional<Error> Context::resolveVault()
     } else {
         path = settingsValue(u"vaults/current"_s);
         m_source = u"settings"_s;
+        // The app's documentation ("Dokumentacja Brulionu") is for reading, never where quick
+        // capture, the journal or reminders go: while it is open, or the app was quit in it, the
+        // user's notebook is the last other one — where the app itself starts (AppController).
+        const QString docs = QDir::cleanPath(appDataDir() + u"/Dokumentacja Brulionu"_s);
+        if (!path.trimmed().isEmpty() && QDir::cleanPath(path.trimmed()) == docs) {
+            path.clear();
+            const QSettings settings(QSettings::IniFormat, QSettings::UserScope, u"Brulion"_s, u"Brulion"_s);
+            for (const QVariant &recent : settings.value(u"vaults/recent"_s).toList()) {
+                const QString candidate = recent.toMap().value(u"path"_s).toString();
+                if (!candidate.trimmed().isEmpty() && QDir::cleanPath(candidate.trimmed()) != docs) {
+                    path = candidate;
+                    break;
+                }
+            }
+            if (path.isEmpty())
+                return Error{ExitUnavailable,
+                             u"no_vault"_s,
+                             tr("The app shows its documentation, not a notebook of yours: give --vault <folder> "
+                                "or set BRULION_VAULT"),
+                             {{u"source"_s, m_source}}};
+        }
     }
     if (path.trimmed().isEmpty())
         return Error{ExitUnavailable, u"no_vault"_s,

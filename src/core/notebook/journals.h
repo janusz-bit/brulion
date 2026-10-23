@@ -21,6 +21,12 @@ namespace brulion::notebook {
 /// English, anything else Polish.
 dates::UiLocale contentLocale(QStringView language);
 
+/// The app's language, "pl" or "en", for the value of its setting ui/language: that value, else
+/// (never chosen, or unknown) the system's — English for an English locale, Polish otherwise.
+/// AppSettings::language() and brulion-cli (which only reads the settings) both use it, so they
+/// write notes in the same language.
+QString appLanguage(const QString &saved);
+
 /// A daily note of `date` under any name markdown::journalDateFromPath() accepts (Logseq's
 /// "2026_10_14.md", "Journals/" capitalised on another device, an earlier file name format), the
 /// configured folder's spelling first; "" when there is none.

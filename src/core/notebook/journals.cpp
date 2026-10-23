@@ -7,6 +7,7 @@
 #include "vault/vault.h"
 
 #include <QFileInfo>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QStringList>
 
@@ -17,6 +18,13 @@ namespace brulion::notebook {
 dates::UiLocale contentLocale(QStringView language)
 {
     return language == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+}
+
+QString appLanguage(const QString &saved)
+{
+    if (saved == u"pl" || saved == u"en")
+        return saved;
+    return QLocale().name().startsWith(u"en"_s) ? u"en"_s : u"pl"_s;
 }
 
 VaultPath existingJournal(const Vault &vault, QDate date)

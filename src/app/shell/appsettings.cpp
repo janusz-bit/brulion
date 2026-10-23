@@ -2,6 +2,7 @@
 
 #include "workspacesync.h"
 
+#include "notebook/journals.h"
 #include "text/text.h"
 #include "vault/vault.h"
 
@@ -11,7 +12,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
-#include <QLocale>
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
@@ -121,11 +121,6 @@ QString serverFolderFromName(const QString &name)
     return out.normalized(QString::NormalizationForm_C);
 }
 
-QString defaultLanguage()
-{
-    return QLocale().name().startsWith(u"en"_s) ? u"en"_s : u"pl"_s;
-}
-
 QString cleanPath(const QString &path)
 {
     if (path.trimmed().isEmpty())
@@ -179,8 +174,8 @@ void AppSettings::setThemeMode(const QString &mode)
 
 QString AppSettings::language() const
 {
-    const QString lang = m_settings->value(key(kLanguage)).toString();
-    return lang == u"pl" || lang == u"en" ? lang : defaultLanguage();
+    // Never chosen: the system's (brulion-cli reads this setting the same way).
+    return notebook::appLanguage(m_settings->value(key(kLanguage)).toString());
 }
 
 void AppSettings::setLanguage(const QString &language)
