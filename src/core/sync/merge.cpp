@@ -13,6 +13,38 @@ namespace brulion::sync {
 
 namespace {
 
+/// Lines one side only added right before or right after the region.
+struct AddedLines {
+    QStringList before, after;
+};
+
+/// `side` is `base` (not empty) with lines added only before it or only after it: those lines.
+std::optional<AddedLines> addedAround(const QStringList &base, const QStringList &side)
+{
+    if (base.isEmpty() || side.size() <= base.size())
+        return std::nullopt;
+    const qsizetype extra = side.size() - base.size();
+    if (side.first(base.size()) == base)
+        return AddedLines{{}, side.last(extra)};
+    if (side.last(base.size()) == base)
+        return AddedLines{side.first(extra), {}};
+    return std::nullopt;
+}
+
+/// `changed` with the other side's added lines around it (those it has already there once).
+QStringList withAdded(const QStringList &changed, const AddedLines &added)
+{
+    QStringList out;
+    const qsizetype nb = added.before.size();
+    const qsizetype na = added.after.size();
+    if (nb > 0 && !(changed.size() >= nb && changed.first(nb) == added.before))
+        out += added.before;
+    out += changed;
+    if (na > 0 && !(changed.size() >= na && changed.last(na) == added.after))
+        out += added.after;
+    return out;
+}
+
 /// Resolve one diff3 conflict region, or std::nullopt when it is a real conflict.
 std::optional<QStringList> resolveRegion(const QStringList &base, const QStringList &local, const QStringList &remote)
 {
@@ -24,6 +56,14 @@ std::optional<QStringList> resolveRegion(const QStringList &base, const QStringL
         return local;
     if (base.isEmpty())
         return unionLines(local, remote);
+    // One side only added lines next to lines the other side changed — diff3 calls adjacent
+    // changes a conflict, but both apply: the last block of a journal edited in the app while an
+    // agent (or another device) appended to the journal. The changed side, then the added lines.
+    // Lines the other side deleted (an emptied file too) stay a conflict.
+    if (const std::optional<AddedLines> added = addedAround(base, remote); added && !local.isEmpty())
+        return withAdded(local, *added);
+    if (const std::optional<AddedLines> added = addedAround(base, local); added && !remote.isEmpty())
+        return withAdded(remote, *added);
     return std::nullopt;
 }
 

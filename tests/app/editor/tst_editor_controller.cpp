@@ -2844,6 +2844,26 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 #endif
     }
 
+    // The last block of today's journal being edited while an agent (brulion-cli journal append)
+    // adds a block after it: both, no conflict banner (diff3 alone calls adjacent changes one).
+    void editedLastBlockMergesWithAnAppendAfterIt()
+    {
+        Fixture f(u"- kawa\n- zadzwonić do hydraulika\n"_s, 10000);
+        f.page.startEditing(1, -1);
+        f.page.setEditText(1, u"zadzwonić do hydraulika — pilne"_s, 31);
+        QCOMPARE(f.page.editingRow(), 1);
+        f.host.externalWrite(Page, u"- kawa\n- zadzwonić do hydraulika\n- Agent: kupić uszczelki 15 mm\n"_s);
+#ifdef BRULION_TEST_NO_SYNC
+        QVERIFY(f.page.conflict());
+#else
+        QVERIFY(!f.page.conflict());
+        QCOMPARE(f.text(), u"- kawa\n- zadzwonić do hydraulika — pilne\n- Agent: kupić uszczelki 15 mm\n"_s);
+        QCOMPARE(f.page.editingRow(), 1); // the typing goes on in the same block
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- kawa\n- zadzwonić do hydraulika — pilne\n- Agent: kupić uszczelki 15 mm\n"_s);
+#endif
+    }
+
     // An agent (brulion-cli) or Syncthing writes the page while an edit waits for its debounced
     // save, and the host has not reported that write yet: the save never overwrites it.
     void saveKeepsAnUnreportedExternalAppend()
