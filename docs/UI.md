@@ -515,9 +515,11 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   never a note's own HTML; bullets, numbers and checkboxes as characters, chips without their
   padding), over the editor (a day: over the stream's frame), readable at the editor's text width
   in both themes. Desktops: the mouse selects across paragraphs (Shift+click extends),
-  Shift+arrows, Ctrl+A, Ctrl+C. Touch UIs: a finger scrolls, a long press selects a word and two
-  handles move its ends (a read-only TextEdit gets no handles or popup from Android: those come
-  only for editable text — checked on the emulator, docs/ANDROID.md); a tap clears. "Kopiuj"
+  Shift+arrows, Ctrl+A, Ctrl+C. Touch UIs: a finger scrolls, a long press selects a word; on
+  Android the system's selection handles and its Copy / Select all popup take it from there (Qt
+  6.11 gives them to read-only text too; the popup's Copy arrives as Ctrl+C: the exact copy and a
+  toast — checked on the emulator, docs/ANDROID.md), elsewhere (the browser on a phone, a
+  desktop's touch UI) two handles of the view's own (44 px) move its ends; a tap clears. "Kopiuj"
   copies the selection — the whole page when nothing is selected — as plain text with every
   character (no-break spaces too, also the renderer's after one-letter Polish words);
   "Zamknij", Esc and Back close it.
