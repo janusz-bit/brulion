@@ -4,42 +4,9 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 
-#ifdef Q_OS_LINUX
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 using namespace Qt::StringLiterals;
 
 namespace brulion::ipc {
-
-namespace {
-
-/// The uid of the process at the other end of `socket`; -1 when unknown (not Linux).
-qint64 peerUid(QLocalSocket *socket)
-{
-#ifdef Q_OS_LINUX
-    ucred credentials{};
-    socklen_t size = sizeof(credentials);
-    if (::getsockopt(int(socket->socketDescriptor()), SOL_SOCKET, SO_PEERCRED, &credentials, &size) == 0)
-        return qint64(credentials.uid);
-#else
-    Q_UNUSED(socket);
-#endif
-    return -1;
-}
-
-qint64 ownUid()
-{
-#ifdef Q_OS_LINUX
-    return qint64(::geteuid());
-#else
-    return -1;
-#endif
-}
-
-} // namespace
 
 ControlReply::ControlReply(QLocalSocket *socket, const QJsonValue &id) : m_socket(socket), m_id(id) { }
 
@@ -81,6 +48,11 @@ bool ControlServer::listen(const QString &key)
 {
     close();
     m_error.clear();
+    // Only in the user's own folder (controlFolderProblem()): never the shared temp folder.
+    if (const QString problem = controlFolderProblem(key); !problem.isEmpty()) {
+        m_error = problem;
+        return false;
+    }
     // A live server there (another Brulion run with --no-single-instance) keeps its socket; a
     // file left by a crashed run is replaced.
     {
@@ -135,9 +107,16 @@ QString ControlServer::socketPath() const
 
 void ControlServer::accept(QLocalSocket *socket)
 {
-    const qint64 uid = peerUid(socket);
+    // Linux tells who connected: anyone else, or someone it cannot tell, is refused. (Elsewhere the
+    // socket file's permissions decide.)
+    const qint64 uid = peerUid(socket->socketDescriptor());
     const qint64 own = ownUid();
-    if (uid >= 0 && own >= 0 && uid != own) {
+#ifdef Q_OS_LINUX
+    const bool foreign = uid < 0 || uid != own;
+#else
+    const bool foreign = uid >= 0 && own >= 0 && uid != own;
+#endif
+    if (foreign) {
         Q_EMIT refused(uid);
         socket->abort();
         socket->deleteLater();

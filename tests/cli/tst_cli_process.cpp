@@ -988,6 +988,8 @@ private Q_SLOTS:
                 reply.fail(fail.mid(5), u"Nie wyszło"_s);
             else if (request.method == u"open" && request.params.value(u"ref"_s).toString() == u"today")
                 reply.fail(u"not_ready"_s, u"No notebook is open (status loading)"_s); // still opening
+            else if (request.method == u"screenshot" && request.params.contains(u"path"_s))
+                reply.ok(QJsonObject{{u"path"_s, request.params.value(u"path"_s)}}); // "saved" there
             else
                 reply.ok(QJsonObject{{u"method"_s, request.method}, {u"params"_s, request.params}});
         });
@@ -1014,6 +1016,43 @@ private Q_SLOTS:
         p.start(QStringLiteral(BRULION_CLI), {u"app"_s, u"screenshot"_s, u"okno.png"_s});
         QTRY_VERIFY_WITH_TIMEOUT(p.state() == QProcess::NotRunning, kTimeoutMs);
         QCOMPARE(requests.last().params.value(u"path"_s).toString(), m_tmp.filePath(u"tu/okno.png"_s));
+        // MCP: the screenshot comes back as a picture only when the file the answer names is a PNG
+        // (a socket answering in the app's place must not make it hand over another file).
+        writeFile(m_tmp.filePath(u"tu/okno.png"_s), QByteArray("\x89PNG\r\n\x1a\n", 8) + "obraz");
+        writeFile(m_tmp.filePath(u"tu/sekret.png"_s), "SEKRET: hasło do banku\n");
+        for (const QString &name : {u"okno.png"_s, u"sekret.png"_s}) {
+            QProcess mcp;
+            mcp.setProcessEnvironment(environment());
+            mcp.start(QStringLiteral(BRULION_CLI), {u"mcp"_s, u"--app-control"_s});
+            QVERIFY(mcp.waitForStarted(kTimeoutMs));
+            const QJsonObject call{
+                    {u"jsonrpc"_s, u"2.0"_s},
+                    {u"id"_s, 2},
+                    {u"method"_s, u"tools/call"_s},
+                    {u"params"_s,
+                     QJsonObject{{u"name"_s, u"brulion_app_screenshot"_s},
+                                 {u"arguments"_s, QJsonObject{{u"path"_s, m_tmp.filePath(u"tu/"_s + name)}}}}}};
+            mcp.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})"
+                      "\n"
+                      + QJsonDocument(call).toJson(QJsonDocument::Compact) + '\n');
+            mcp.closeWriteChannel();
+            QElapsedTimer t;
+            t.start();
+            while (mcp.state() != QProcess::NotRunning && t.elapsed() < kTimeoutMs)
+                QTest::qWait(20);
+            QCOMPARE(mcp.state(), QProcess::NotRunning);
+            const QList<QByteArray> lines = mcp.readAllStandardOutput().trimmed().split('\n');
+            QCOMPARE(lines.size(), 2);
+            const QJsonObject result = QJsonDocument::fromJson(lines.last()).object().value(u"result"_s).toObject();
+            QVERIFY(!result.value(u"isError"_s).toBool());
+            const QJsonArray content = result.value(u"content"_s).toArray();
+            QCOMPARE(content.size(), name == u"okno.png" ? 2 : 1);
+            if (content.size() == 2) {
+                QCOMPARE(content.at(1).toObject().value(u"type"_s).toString(), u"image"_s);
+                QCOMPARE(QByteArray::fromBase64(content.at(1).toObject().value(u"data"_s).toString().toLatin1()),
+                         QByteArray("\x89PNG\r\n\x1a\n", 8) + "obraz");
+            }
+        }
         // `app open` asks the app (it resolves the ref in the notebook it shows).
         r = cliLive({u"app"_s, u"open"_s, u"Dom"_s, u"--line"_s, u"3"_s});
         QCOMPARE(r.code, 0);

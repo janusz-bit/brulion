@@ -540,6 +540,46 @@ private Q_SLOTS:
         const ControlClient::Response r = client.call(u"hello"_s);
         QCOMPARE(r.code, u"not_ready"_s);
     }
+
+    // The socket only in a folder no other user can write to: in a shared one (the temp folder,
+    // where QLocalServer puts a bare name when there is no runtime folder) another user could
+    // take the name first, answer the command line in the app's place and read what it sends.
+    void onlyInAPrivateFolder()
+    {
+        // A bare name (no runtime folder): never the temp folder.
+        const QString bare = u"brulion-test-bare-%1-control"_s.arg(QCoreApplication::applicationPid());
+        ControlServer server;
+        QVERIFY(!server.listen(bare));
+        QVERIFY(!server.errorString().isEmpty());
+        QVERIFY(!server.isListening());
+        QVERIFY(!QFileInfo::exists(QDir::temp().filePath(bare)));
+
+        // A folder the group or others can write to (the shared /tmp is 1777).
+        const QString shared = key(u"wspólny"_s);
+        QVERIFY(QDir().mkpath(shared));
+        QCOMPARE(::chmod(QFile::encodeName(shared).constData(), 01777), 0);
+        QVERIFY(!server.listen(shared + u"/brulion-test-control"_s));
+        QVERIFY(!QFileInfo::exists(shared + u"/brulion-test-control"_s));
+        QCOMPARE(::chmod(QFile::encodeName(shared).constData(), 0770), 0);
+        QVERIFY(!server.listen(shared + u"/brulion-test-control"_s));
+
+        // A symbolic link to a private folder: whoever owns the link decides where it points.
+        const QString target = key(u"prywatny"_s);
+        QVERIFY(QDir().mkpath(target));
+        QCOMPARE(::chmod(QFile::encodeName(target).constData(), 0700), 0);
+        QVERIFY(QFile::link(target, key(u"dowiązanie"_s)));
+        QVERIFY(!server.listen(key(u"dowiązanie/brulion-test-control"_s)));
+
+        // The private folder itself (also readable by the group: nobody else can add a file).
+        QVERIFY2(server.listen(target + u"/brulion-test-control"_s), qPrintable(server.errorString()));
+        server.close();
+        QCOMPARE(::chmod(QFile::encodeName(target).constData(), 0750), 0);
+        QVERIFY2(server.listen(target + u"/brulion-test-control"_s), qPrintable(server.errorString()));
+        ControlClient client(target + u"/brulion-test-control"_s);
+        QVERIFY(client.connect());
+        QVERIFY(client.errorString().isEmpty());
+        server.close();
+    }
 };
 
 QTEST_GUILESS_MAIN(TestIpcControl)

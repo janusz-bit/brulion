@@ -23,12 +23,24 @@ ControlClient::~ControlClient()
 
 bool ControlClient::connect(int timeoutMs)
 {
+    m_error.clear();
     m_socket = std::make_unique<QLocalSocket>();
     m_socket->connectToServer(m_key);
     if (!m_socket->waitForConnected(timeoutMs)) {
         m_socket.reset();
         return false;
     }
+#ifdef Q_OS_LINUX
+    // Only the app of this user: a socket another user created at that name (the shared temp
+    // folder when there is no runtime folder) gets no request.
+    if (const qint64 uid = peerUid(m_socket->socketDescriptor()); uid < 0 || uid != ownUid()) {
+        m_error = uid < 0 ? u"Could not tell who listens at %1"_s.arg(m_key)
+                          : u"Another user (uid %1) listens at %2: not this user's Brulion"_s.arg(uid).arg(m_key);
+        m_socket->abort();
+        m_socket.reset();
+        return false;
+    }
+#endif
     return true;
 }
 

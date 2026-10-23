@@ -575,10 +575,15 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
     enqueueInput(reply, [this, path, reply](const std::function<void()> &finished) {
         QString file = path;
         if (file.isEmpty()) {
-            // The user's private runtime folder (else the temp folder), a folder of its own.
-            QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-            if (runtime.isEmpty())
-                runtime = QDir::tempPath();
+            // The user's private runtime folder, a folder of its own — never the shared temp
+            // folder, where another user could have made that folder and read the notes shown.
+            const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+            if (runtime.isEmpty()) {
+                reply.fail(code(E::BadParams), u"There is no private runtime folder ($XDG_RUNTIME_DIR): give a path"_s,
+                           {{u"param"_s, u"path"_s}});
+                finished();
+                return;
+            }
             const QString dir = QDir(runtime).filePath(u"brulion-screenshots"_s);
             QDir().mkpath(dir);
             QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);

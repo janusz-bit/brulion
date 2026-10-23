@@ -1,9 +1,19 @@
 #include "controlprotocol.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 
 #include <cmath>
+
+#ifdef Q_OS_UNIX
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -12,6 +22,49 @@ namespace brulion::ipc {
 QString controlKeyFor(const QString &singleInstanceKey)
 {
     return singleInstanceKey + u"-control"_s;
+}
+
+QString controlFolderProblem(const QString &key)
+{
+    if (!QDir::isAbsolutePath(key))
+        return u"There is no private runtime folder ($XDG_RUNTIME_DIR): the remote control does not listen in the "
+               u"shared temporary folder"_s;
+#ifdef Q_OS_UNIX
+    const QString folder = QFileInfo(key).absolutePath();
+    struct stat st{};
+    // lstat: a symbolic link is not followed (its owner decides where it points).
+    if (::lstat(QFile::encodeName(folder).constData(), &st) != 0 || !S_ISDIR(st.st_mode))
+        return u"%1 is not a folder (a symbolic link is not used for the remote control)"_s.arg(folder);
+    if (qint64(st.st_uid) != ownUid())
+        return u"%1 belongs to another user: the remote control listens only in the user's own runtime folder"_s.arg(
+                folder);
+    if (st.st_mode & (S_IWGRP | S_IWOTH))
+        return u"Others can write to %1: the remote control listens only in a folder only the user can change"_s.arg(
+                folder);
+#endif
+    return {};
+}
+
+qint64 peerUid(qintptr descriptor)
+{
+#ifdef Q_OS_LINUX
+    ucred credentials{};
+    socklen_t size = sizeof(credentials);
+    if (descriptor >= 0 && ::getsockopt(int(descriptor), SOL_SOCKET, SO_PEERCRED, &credentials, &size) == 0)
+        return qint64(credentials.uid);
+#else
+    Q_UNUSED(descriptor);
+#endif
+    return -1;
+}
+
+qint64 ownUid()
+{
+#ifdef Q_OS_UNIX
+    return qint64(::geteuid());
+#else
+    return -1;
+#endif
 }
 
 std::optional<ControlRequest> parseRequest(const QByteArray &rawLine, ControlFailure *failure)

@@ -24,9 +24,13 @@ public:
     explicit ControlClient(const QString &key);
     ~ControlClient();
 
-    /// Connect to the app. False when nothing listens (no app, or its remote control is off).
+    /// Connect to the app. False when nothing listens (no app, or its remote control is off), or
+    /// with errorString() when another user's process listens there (never talked to: it could
+    /// answer in the app's place and read what is sent).
     bool connect(int timeoutMs = 1000);
     bool isConnected() const;
+    /// Why connect() refused the socket ("" when nothing listened or it connected).
+    QString errorString() const { return m_error; }
 
     struct Response {
         bool ok = false;
@@ -43,6 +47,7 @@ public:
 
 private:
     QString m_key;
+    QString m_error;
     std::unique_ptr<QLocalSocket> m_socket;
     qint64 m_nextId = 1;
 };

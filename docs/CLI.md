@@ -309,12 +309,18 @@ both with a `hint`.
 **Security.** The socket is `<single-instance socket>-control` in the user's runtime folder
 (`$XDG_RUNTIME_DIR/brulion-<hash>-control`, a folder only the user can enter), the socket itself
 owner-only (0600), and connections of other users are refused (their credentials are checked).
+It is never anywhere else: without a private runtime folder (no `$XDG_RUNTIME_DIR`, and Qt's
+`/tmp/runtime-<user>` taken by someone else) or in a folder others can write to, the remote
+control does not start (the settings show why); `brulion-cli` talks only to a socket of its own
+user (another user's socket at that name: exit 5 `app_not_reached`, nothing sent).
 But while it is on, **any program of this user can drive the UI and read the notes it shows** (and
 type into them): turn it on only while an agent needs it. `state` holds nothing secret (no
 passwords, no tokens), and the text of a password field never leaves the app (`find`, `state` and
 the input commands describe it as `"secret": true` with no text, a text selector never matches
 it); a screenshot is written only to the path asked for (an absolute `.png` in a
-folder that exists) or, by default, into `$XDG_RUNTIME_DIR/brulion-screenshots/`; every request is
+folder that exists — any such path the user can write to, as the user's own programs can; an
+existing file there is replaced) or, by default, into `$XDG_RUNTIME_DIR/brulion-screenshots/`,
+and the MCP server hands the agent the file only when it is a PNG; every request is
 in the event log ("Rejestr zdarzeń", detailed mode: the method and its parameters — typed and
 captured text only by its length).
 

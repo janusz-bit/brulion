@@ -1,6 +1,7 @@
 // ControlServer — the socket of the remote control (controlprotocol.h): a QLocalServer at
-// controlKeyFor(<single-instance key>) in the user's runtime folder, the socket file owner-only
-// (0600), connections of other users refused (their credentials are checked: SO_PEERCRED).
+// controlKeyFor(<single-instance key>) in the user's runtime folder — only there, never in the
+// shared temp folder (controlFolderProblem()) —, the socket file owner-only (0600), connections
+// of other users refused (their credentials are checked: SO_PEERCRED).
 // Requests are parsed and checked (checkRequest()); the handler answers each one through its
 // ControlReply, now or later (waitFor), or not at all when the client left meanwhile.
 //
@@ -54,7 +55,8 @@ public:
     ~ControlServer() override;
 
     void setHandler(Handler handler) { m_handler = std::move(handler); }
-    /// Listen at `key` (a socket path, or a name put in the temp folder). False with errorString()
+    /// Listen at `key` (a socket path in a folder only this user can change). False with
+    /// errorString() for a bare name or a folder others can write to (controlFolderProblem()),
     /// when another server answers there or the socket cannot be created.
     bool listen(const QString &key);
     /// Stop listening and drop every connection.

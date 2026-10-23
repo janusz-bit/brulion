@@ -192,13 +192,17 @@ private:
         const QJsonObject envelopeJson = envelope(m_ctx, command, result);
         const QString text = QString::fromUtf8(QJsonDocument(envelopeJson).toJson(QJsonDocument::Compact));
         QJsonArray content{QJsonObject{{u"type"_s, u"text"_s}, {u"text"_s, text}}};
-        // A screenshot of the app as a picture the agent can look at (up to 8 MB).
+        // A screenshot of the app as a picture the agent can look at (up to 8 MB). Only a PNG: the
+        // path is the app's answer, and no other file goes to the agent.
         if (command->id == u"app.screenshot" && !result.error) {
             QFile file(result.value.toObject().value(u"path"_s).toString());
-            if (file.size() <= 8 * 1024 * 1024 && file.open(QIODevice::ReadOnly))
-                content.append(QJsonObject{{u"type"_s, u"image"_s},
-                                           {u"data"_s, QString::fromLatin1(file.readAll().toBase64())},
-                                           {u"mimeType"_s, u"image/png"_s}});
+            if (file.size() <= 8 * 1024 * 1024 && file.open(QIODevice::ReadOnly)) {
+                const QByteArray png = file.readAll();
+                if (png.startsWith(QByteArrayView("\x89PNG\r\n\x1a\n", 8)))
+                    content.append(QJsonObject{{u"type"_s, u"image"_s},
+                                               {u"data"_s, QString::fromLatin1(png.toBase64())},
+                                               {u"mimeType"_s, u"image/png"_s}});
+            }
         }
         sendResult(id, QJsonObject{{u"content"_s, content},
                                    {u"structuredContent"_s, envelopeJson},

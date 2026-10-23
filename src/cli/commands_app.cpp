@@ -64,6 +64,13 @@ std::optional<QJsonValue> askApp(Call &call, const QString &method, const QJsonO
 {
     ipc::ControlClient client(ipc::controlKeyFor(singleInstanceKey(call)));
     if (!client.connect()) {
+        if (!client.errorString().isEmpty()) {
+            // Another user's socket at the app's name: nothing was sent to it.
+            call.setError(ExitUnavailable, u"app_not_reached"_s,
+                          tr("The running app did not answer: %1").arg(client.errorString()),
+                          {{u"reason"_s, u"foreign_socket"_s}});
+            return std::nullopt;
+        }
         const bool running = ipc::SingleInstance(singleInstanceKey(call)).isPrimaryRunning();
         if (!running)
             call.setError(ExitUnavailable, u"app_not_running"_s,
