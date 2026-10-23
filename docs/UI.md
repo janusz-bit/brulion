@@ -104,9 +104,12 @@ rename and move").
   Pokazuj otwartą stronę.
 * **Drag and drop** (mouse and touchpad only — a finger keeps the list's flick, press-and-hold
   and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
-  list scrolls near its edges) or a page (its folder), or onto the "Strony" header (the root),
-  is moved there by `Workspace.movePath`; a ghost names the target, the target is outlined, Escape
-  cancels. The toast has Undo (moving it back).
+  list scrolls near its edges, the target following the rows that pass under the pointer) or a
+  page (its folder), or onto the "Strony" header while it shows (the root), is moved there by
+  `Workspace.movePath`; the ghost names the target and, a moment later, what the move rewrites
+  (`Workspace.moveImpact`: "Zaktualizowane linki: 3 (w 2 notatkach)", the settings that follow)
+  or why it cannot move there; the target is outlined, Escape cancels. The toast has Undo (moving
+  it back).
 * **"Przenieś do…"** (`ShellMoveDialog`; a bottom sheet on phones): a search over the folders
   (fuzzy: names, then paths), "Główny folder notatnika" first, the current folder shown but
   disabled, a folder's own subtree left out, and "Nowy folder „…”" for the name typed (created,

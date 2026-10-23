@@ -1323,8 +1323,11 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
 ///     folder (named in the dialog, typed with real keys) and a deleted empty folder leaves the
 ///     tree; on desktops a page dragged with the mouse onto a folder moves into it, onto the
 ///     "Strony" header back to the root, a closed folder hovered over opens and Escape cancels
-///     the drag; All pages lists folders as rows (a tap opens one) and the top bar's breadcrumb
-///     goes back. The sample notebook is put back afterwards.
+///     the drag, the target follows the rows the list scrolls under a still pointer and the
+///     header scrolled out of the list is none; a collapsed "Strony" stays collapsed when another
+///     page opens, "Pokaż w drzewie" opens it; a "/" typed into the page header's title stays in
+///     the title (the page keeps its folder); All pages lists folders as rows (a tap opens one)
+///     and the top bar's breadcrumb goes back. The sample notebook is put back afterwards.
 void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -1405,7 +1408,7 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             if (ws->exists(moved))
                 ws->movePath(moved, QString());
         }
-        for (const QString &folder : {u"Zażółć"_s}) {
+        for (const QString &folder : {u"Zażółć"_s, u"Przewijanie"_s}) {
             if (ws->exists(folder))
                 ws->deletePage(folder);
         }
@@ -1532,6 +1535,77 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
         tap(treeRow(recipes));
         check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == recipes; }),
               "a click on a row still opens the page");
+    }
+    restore();
+
+    // ---- The drop target follows the rows that scroll under a pointer held at the list's edge;
+    //      the "Strony" header scrolled out above the list is no target (desktop drags, driven
+    //      through the sidebar's own drag functions).
+    if (!touch) {
+        QQuickItem *sidebar = sidebarItem();
+        QQuickItem *list = treeList();
+        QObject *model = treeModel();
+        for (int i = 1; i <= 40; ++i)
+            ws->createFolder(u"Przewijanie/Folder %1"_s.arg(i, 2, 10, QChar(u'0')));
+        if (model)
+            QMetaObject::invokeMethod(model, "setExpanded", u"Przewijanie"_s, true);
+        settle(200);
+        auto *pagesHeader = sidebar ? sidebar->property("pagesHeader").value<QQuickItem *>() : nullptr;
+        auto *content = list ? list->property("contentItem").value<QQuickItem *>() : nullptr;
+        check(sidebar && list && model && pagesHeader && content && expanded(u"Przewijanie"_s),
+              "the tree shows a folder of 40 subfolders to scroll through");
+        if (sidebar && list && model && pagesHeader && content) {
+            const auto folderAt = [&](QPointF scene) {
+                const QPointF p = list->mapFromScene(scene);
+                int index = -1;
+                QMetaObject::invokeMethod(list, "indexAt", qReturnArg(index),
+                                          p.x() + list->property("contentX").toReal(),
+                                          p.y() + list->property("contentY").toReal());
+                QVariantMap entry;
+                if (index >= 0)
+                    QMetaObject::invokeMethod(model, "get", qReturnArg(entry), index);
+                const QString path = entry.value(u"path"_s).toString();
+                return entry.value(u"isDir"_s).toBool() ? path : ws->folderOf(path);
+            };
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+            const qreal top = list->property("contentY").toReal();
+            QMetaObject::invokeMethod(sidebar, "beginDrag", QVariant(remont), QVariant(false),
+                                      QVariant(u"Remont mieszkania"_s));
+            const QPointF still = list->mapToScene(QPointF(list->width() / 2, list->height() - 12));
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(still));
+            const QString first = sidebar->property("dropFolder").toString();
+            settle(700);
+            const QString now = folderAt(still);
+            std::fprintf(stderr, "selftest: drag scroll: %.0f -> %.0f px, target %s -> %s (under the pointer: %s)\n",
+                         top, list->property("contentY").toReal(), qPrintable(first),
+                         qPrintable(sidebar->property("dropFolder").toString()), qPrintable(now));
+            check(list->property("contentY").toReal() > top + 100 && now != first
+                          && sidebar->property("dropFolder").toString() == now,
+                  "while the list scrolls under a still pointer the drop target follows the rows");
+            // The header in view is the root; scrolled just above the list's top edge it is not.
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(pointIn(pagesHeader, 0.5)));
+            const bool rootShown = sidebar->property("dropOnRoot").toBool() && sidebar->property("dropValid").toBool();
+            // A moment later the ghost says what the move would rewrite.
+            QQuickItem *impactLine = sidebar->findChild<QQuickItem *>(u"treeDragImpact"_s);
+            check(impactLine && waitFor([&] {
+                      return impactLine->isVisible() && !impactLine->property("text").toString().isEmpty()
+                             && sidebar->property("dropValid").toBool();
+                  }),
+                  "the drag's ghost says what the move rewrites before the drop");
+            const qreal headerBottom = pagesHeader->mapToItem(content, QPointF(0, pagesHeader->height())).y();
+            list->setProperty("contentY", headerBottom + 4);
+            settle(100);
+            const QPointF above = list->mapToScene(QPointF(list->width() / 2, -10));
+            const bool overHeader = pagesHeader->contains(pagesHeader->mapFromScene(above));
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(above));
+            check(rootShown && overHeader && !sidebar->property("dropOnRoot").toBool()
+                          && !sidebar->property("dropValid").toBool(),
+                  "the “Strony” header is a drop target while it shows, not once scrolled out of the list");
+            QMetaObject::invokeMethod(sidebar, "cancelDrag");
+        }
     }
     restore();
 

@@ -60,10 +60,16 @@ Rectangle {
     readonly property bool dragging: dragPath !== ""
     /// Where it would go: a folder ("" = the root), valid only while `dropValid`.
     property string dropFolder
-    property bool dropValid: false
+    /// `dropFolder` is a folder the item may go into (not itself, its subtree or where it is).
+    property bool dropAllowed: false
+    /// Workspace.moveImpact() of the drop (a moment after the target changed; null before).
+    property var dropImpact: null
+    readonly property bool dropValid: dropAllowed && !(dropImpact && dropImpact.ok === false)
     /// The pointer is over the "Strony" header (the root).
     property bool dropOnRoot: false
     property point dragPoint
+    /// The pointer's last scene position: the target is found again as the list scrolls under it.
+    property point dragScenePos
     /// The "Strony" header in the list's header: the drop target of the notebook's root.
     property Item pagesHeader: null
 
@@ -129,14 +135,18 @@ Rectangle {
         dragPath = path
         dragIsDir = isDir
         dragTitle = title
-        dropValid = false
+        dropFolder = ""
+        dropAllowed = false
+        dropImpact = null
         dropOnRoot = false
     }
     function cancelDrag() {
         dragPath = ""
-        dropValid = false
+        dropAllowed = false
+        dropImpact = null
         dropOnRoot = false
         expandTimer.stop()
+        impactTimer.stop()
         scrollTimer.direction = 0
     }
     /// Can the dragged item go into `folder`? Not into itself, its own subtree or where it is.
@@ -150,20 +160,24 @@ Rectangle {
     function dragTo(scenePos) {
         if (!dragging)
             return
+        dragScenePos = scenePos
         dragPoint = sidebar.mapFromItem(null, scenePos.x, scenePos.y)
         const inList = list.mapFromItem(null, scenePos.x, scenePos.y)
-        // Near the list's edges: scroll.
+        // Near the list's edges: scroll (scrollTimer finds the target again on every step).
         scrollTimer.direction = inList.y < 36 && inList.y >= 0 ? -1 : inList.y > list.height - 36 && inList.y <= list.height ? 1 : 0
+        // Only what shows in the list is a target: the header scrolled above its top edge is
+        // clipped away, though still `visible`.
+        const inside = inList.x >= 0 && inList.x <= list.width && inList.y >= 0 && inList.y <= list.height
         const header = sidebar.pagesHeader
         let folder = null
         let hoveredFolder = ""
         let collapsed = false
-        if (header && header.visible) {
+        if (inside && header && header.visible) {
             const h = header.mapFromItem(null, scenePos.x, scenePos.y)
             if (h.x >= 0 && h.y >= 0 && h.x <= header.width && h.y <= header.height)
                 folder = ""
         }
-        if (folder === null && inList.x >= 0 && inList.x <= list.width && inList.y >= 0 && inList.y <= list.height) {
+        if (folder === null && inside) {
             const index = list.indexAt(inList.x + list.contentX, inList.y + list.contentY)
             const entry = index >= 0 ? tree.get(index) : null
             if (entry && entry.path !== undefined) {
@@ -175,8 +189,18 @@ Rectangle {
             }
         }
         dropOnRoot = folder === ""
-        dropValid = folder !== null && canDropInto(folder)
-        dropFolder = folder !== null ? folder : ""
+        const allowed = folder !== null && canDropInto(folder)
+        const target = folder !== null ? folder : ""
+        // What the move would rewrite: asked once the target stays a moment.
+        if (target !== dropFolder || allowed !== dropAllowed) {
+            dropImpact = null
+            if (allowed)
+                impactTimer.restart()
+            else
+                impactTimer.stop()
+        }
+        dropAllowed = allowed
+        dropFolder = target
         // A closed folder under the pointer opens after a moment.
         if (collapsed && expandTimer.folder !== hoveredFolder) {
             expandTimer.folder = hoveredFolder
@@ -220,7 +244,12 @@ Rectangle {
         id: expandTimer
         property string folder
         interval: 600
-        onTriggered: if (sidebar.dragging && folder !== "") tree.setExpanded(folder, true)
+        onTriggered: {
+            if (!sidebar.dragging || folder === "")
+                return
+            tree.setExpanded(folder, true)
+            Qt.callLater(() => sidebar.dragTo(sidebar.dragScenePos))
+        }
     }
     Timer {
         id: scrollTimer
@@ -231,8 +260,17 @@ Rectangle {
         onTriggered: {
             const max = Math.max(0, list.contentHeight + list.originY - list.height)
             list.contentY = Math.max(list.originY, Math.min(list.originY + max, list.contentY + direction * 12))
+            // Other rows are under the still pointer now: they are the target (and open).
+            sidebar.dragTo(sidebar.dragScenePos)
         }
     }
+    Timer {
+        id: impactTimer
+        interval: 150
+        onTriggered: if (sidebar.dragging && sidebar.dropAllowed)
+                         sidebar.dropImpact = Workspace.moveImpact(sidebar.dragPath, sidebar.dropFolder)
+    }
+    ShellMoveWords { id: words }
     Shortcut {
         sequence: "Escape"
         enabled: sidebar.dragging
@@ -593,38 +631,60 @@ Rectangle {
             onActiveChanged: if (!active && sidebar.dragging) sidebar.drop()
         }
     }
-    // The dragged row under the pointer, with where it would go.
+    // The dragged row under the pointer, with where it would go and what that rewrites (or why
+    // it cannot go there).
     Rectangle {
+        id: ghost
         objectName: "treeDragGhost"
+        /// The second line: Workspace.moveImpact() of the target.
+        readonly property string impactText: !sidebar.dragging || !sidebar.dropAllowed || !sidebar.dropImpact ? ""
+                                             : sidebar.dropImpact.ok ? words.impactText(sidebar.dropImpact)
+                                             : (sidebar.dropImpact.error || "")
         visible: sidebar.dragging
         z: 11
         x: Math.min(sidebar.dragPoint.x + 12, sidebar.width - width - 4)
         y: sidebar.dragPoint.y + 8
-        width: Math.min(ghostRow.implicitWidth + 2 * Theme.space2, sidebar.width - 8)
-        height: ghostRow.implicitHeight + Theme.space2
+        width: Math.min(Math.max(ghostRow.implicitWidth, ghostImpact.visible ? ghostImpact.implicitWidth : 0)
+                        + 2 * Theme.space2, sidebar.width - 8)
+        height: ghostColumn.implicitHeight + Theme.space2
         radius: Theme.radius
         color: Theme.bgElevated
         border.width: 1
         border.color: sidebar.dropValid ? Theme.accent : Theme.border
-        Row {
-            id: ghostRow
+        Column {
+            id: ghostColumn
             x: Theme.space2
+            width: ghost.width - 2 * Theme.space2
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.space1
-            BIcon {
-                anchors.verticalCenter: parent.verticalCenter
-                name: sidebar.dragIsDir ? "folder" : "file-text"
-                size: Theme.iconSizeSm
-                color: Theme.fgMuted
+            spacing: 2
+            Row {
+                id: ghostRow
+                spacing: Theme.space1
+                BIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: sidebar.dragIsDir ? "folder" : "file-text"
+                    size: Theme.iconSizeSm
+                    color: Theme.fgMuted
+                }
+                BText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, sidebar.width - 60)
+                    elide: Text.ElideRight
+                    text: sidebar.dropValid ? qsTr("%1 → %2").arg(sidebar.dragTitle)
+                                                            .arg(sidebar.dropFolder !== "" ? sidebar.dropFolder.split("/").pop() : qsTr("Notebook root"))
+                                            : sidebar.dragTitle
+                    font.pixelSize: Theme.textSm
+                }
             }
             BText {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Math.min(implicitWidth, sidebar.width - 60)
-                elide: Text.ElideRight
-                text: sidebar.dropValid ? qsTr("%1 → %2").arg(sidebar.dragTitle)
-                                                        .arg(sidebar.dropFolder !== "" ? sidebar.dropFolder.split("/").pop() : qsTr("Notebook root"))
-                                        : sidebar.dragTitle
-                font.pixelSize: Theme.textSm
+                id: ghostImpact
+                objectName: "treeDragImpact"
+                visible: text !== ""
+                width: Math.min(implicitWidth, sidebar.width - 8 - 2 * Theme.space2)
+                text: ghost.impactText
+                wrapMode: Text.Wrap
+                font.pixelSize: Theme.textXs
+                color: sidebar.dropValid ? Theme.fgMuted : Theme.dangerText
             }
         }
     }
