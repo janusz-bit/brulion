@@ -113,6 +113,7 @@ int main(int argc, char *argv[])
 #ifdef BRULION_DESKTOP_INTEGRATION
     // A second launch brings the running Brulion to the front and ends.
     std::unique_ptr<brulion::ipc::SingleInstance> singleInstance;
+    QString singleInstanceProblem; // why this run has none (written to the event log below)
     if (mainUi && !devTools.screenshotMode() && !args.contains(u"--no-single-instance"_s)) {
         singleInstance = std::make_unique<brulion::ipc::SingleInstance>(brulion::ipc::SingleInstance::keyFor(
                 QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
@@ -127,7 +128,17 @@ int main(int argc, char *argv[])
                                      "quit it first.\n");
             return 0;
         }
-        if (!singleInstance->listen()) {
+        if (singleInstance->listen()) {
+            QObject::connect(singleInstance.get(), &brulion::ipc::SingleInstance::refused, [](qint64 uid) {
+                qCWarning(brulion::logging::lcApp).noquote()
+                        << u"Single instance: refused a connection of another user (uid %1)"_s.arg(uid);
+            });
+        } else if (!singleInstance->errorString().isEmpty()) {
+            // Nowhere safe for it (no private runtime folder …): run without, never in the shared
+            // temp folder where another user could block the start or read what is sent.
+            singleInstanceProblem = singleInstance->errorString();
+            singleInstance.reset();
+        } else {
             // Another launch started at the same moment and is the primary: hand it the message
             // once it listens. Should it not answer, run anyway rather than not at all.
             for (int attempt = 0; attempt < 20; ++attempt) {
@@ -135,6 +146,7 @@ int main(int argc, char *argv[])
                 if (singleInstance->sendToPrimary(message, 200))
                     return 0;
             }
+            singleInstanceProblem = u"another Brulion holds %1.lock but does not answer"_s.arg(singleInstance->key());
             singleInstance.reset();
         }
     }
@@ -159,6 +171,12 @@ int main(int argc, char *argv[])
             QStringLiteral(BRULION_VERSION), brulion::platform::deviceDescription(), QString::fromLatin1(qVersion()));
     Logger *logger = Logger::install(logOptions);
     logger->setVerbosity(brulion::logging::Verbosity::Normal);
+#ifdef BRULION_DESKTOP_INTEGRATION
+    if (!singleInstanceProblem.isEmpty())
+        qCWarning(brulion::logging::lcApp).noquote()
+                << u"No single instance: %1. A second launch starts another Brulion, and brulion-cli app open, "
+                   u"today and capture do not reach this one."_s.arg(singleInstanceProblem);
+#endif
     QObject::connect(&app, &QCoreApplication::aboutToQuit, logger, &Logger::endSession);
     // Going to the background: write the log now (Android may stop the process there without
     // aboutToQuit) and note how long the app was away when it comes back.

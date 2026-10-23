@@ -157,7 +157,10 @@ QML smoke tests and screenshot scripts that run the real app headless).
   over before anything else (the AppImage's one entry point). CMake `BRULION_BUILD_APP=OFF` builds
   only the core and the command line (no Qt Quick/QML/SVG): the Nix package `brulion-cli`.
 * **`brulion_ipc`**: `SingleInstance` (one app per session over a `QLocalServer` in
-  `$XDG_RUNTIME_DIR`, a lock file decides the primary) and the messages of its socket
+  `$XDG_RUNTIME_DIR`, a lock file decides the primary; only in a folder of the user's own —
+  `socketFolderProblem()`, never the shared temp folder: without one the app runs without a
+  single instance and the event log says why — and both ends talk only to this user's processes,
+  `trustedPeer()` of the peer's `SO_PEERCRED`) and the messages of its socket
   (`appmessage.h`: `activate`, `capture`, `today`, `open {"route", "vault"}` — one-way lines a
   second launch or `brulion-cli app open` sends); the **remote control** of the running app
   (`controlprotocol.h`: JSON-line requests and responses, the methods and their parameters;
