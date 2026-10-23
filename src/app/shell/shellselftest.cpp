@@ -1116,7 +1116,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                       && r->property("subtitle").toString() == emptyText && openMenus(window) == 0,
               "an empty folder opens and says it is empty");
     };
-    check(app->workspace()->createFolder(empty), "an empty folder is created");
+    check(!app->workspace()->createFolder(empty).isEmpty(), "an empty folder is created");
     app->goHome();
     pause(200);
 

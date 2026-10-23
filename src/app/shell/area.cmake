@@ -4,7 +4,8 @@
 #
 # C++: the static library brulion_shell (QtCore, QtGui, QtNetwork + core modules; unit-tested by
 # tests/app/shell without the app): AppController, AppSettings, Workspace (implements the
-# editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, quick
+# editor's EditorHost and QueryHost; workspace*.cpp: index queries, history and trash, folders and
+# moves, quick
 # capture, reminders — WorkspaceReminders over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
 # workspaceintegration), CommandModel, FolderTreeModel, the sample vault, SingleInstance
@@ -43,6 +44,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
     ${_brulion_shell_dir}/workspacehistory.cpp
+    ${_brulion_shell_dir}/workspacefolders.cpp
     ${_brulion_shell_dir}/workspacecapture.h ${_brulion_shell_dir}/workspacecapture.cpp
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp

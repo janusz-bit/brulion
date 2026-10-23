@@ -413,6 +413,40 @@ private Q_SLOTS:
         QVERIFY(!app->canGoBack());
     }
 
+    // A folder renamed or moved: its All pages and search routes (and the pages in it) follow,
+    // back and forward included; other folders' routes stay.
+    void followsRenamedFolders()
+    {
+        auto app = openApp(u"folders"_s);
+        Workspace *ws = app->workspace();
+        const QString dom = ws->createPage(u"Projekty/Dom"_s);
+        QCOMPARE(dom, u"Projekty/Dom.md"_s);
+        QVERIFY(!ws->createFolder(u"Projekty/Puste"_s).isEmpty());
+        QVERIFY(!ws->createFolder(u"Projektyzm"_s).isEmpty());
+        app->navigate({{u"view"_s, u"allPages"_s}, {u"path"_s, u"Projektyzm"_s}});
+        app->navigate({{u"view"_s, u"allPages"_s}, {u"path"_s, u"Projekty/Puste"_s}});
+        app->navigate({{u"view"_s, u"search"_s}, {u"query"_s, u"dom"_s}, {u"folder"_s, u"Projekty"_s}});
+        app->openPage(dom);
+        app->navigate({{u"view"_s, u"allPages"_s}, {u"path"_s, u"Projekty"_s}});
+        app->navigate({{u"view"_s, u"search"_s}, {u"folder"_s, u"Projekty"_s}}, true); // the side panel
+        QCOMPARE(ws->movePath(u"Projekty"_s, u"Archiwum"_s), u"Archiwum/Projekty"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Archiwum/Projekty"_s);
+        QCOMPARE(app->sidePanelRoute().value(u"folder"_s).toString(), u"Archiwum/Projekty"_s);
+        QVERIFY(app->back());
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Archiwum/Projekty/Dom.md"_s);
+        QVERIFY(app->back());
+        QCOMPARE(app->currentRoute().value(u"folder"_s).toString(), u"Archiwum/Projekty"_s);
+        QCOMPARE(app->currentRoute().value(u"query"_s).toString(), u"dom"_s);
+        QVERIFY(app->back());
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Archiwum/Projekty/Puste"_s);
+        QVERIFY(app->back());
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Projektyzm"_s); // only a prefix: stays
+        // Renamed in place, the same.
+        QVERIFY(app->forward());
+        QCOMPARE(ws->renameFolder(u"Archiwum/Projekty/Puste"_s, u"Pełne"_s), u"Archiwum/Projekty/Pełne"_s);
+        QCOMPARE(app->currentRoute().value(u"path"_s).toString(), u"Archiwum/Projekty/Pełne"_s);
+    }
+
     void notificationBeforeReady()
     {
         const QString vault = m_tmp.filePath(u"notify"_s);

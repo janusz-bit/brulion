@@ -113,6 +113,7 @@ AppController::AppController(const Options &options, QObject *parent)
     connect(m_workspace.get(), &Workspace::noticeOccurred, this,
             [this](const QString &message) { toast(message, u"info"_s); });
     connect(m_workspace.get(), &Workspace::pathRenamed, this, &AppController::onPathRenamed);
+    connect(m_workspace.get(), &Workspace::folderRenamed, this, &AppController::onFolderRenamed);
     connect(m_workspace.get(), &Workspace::pathRemoved, this, &AppController::onPathRemoved);
 
     // Developer / screenshot options.
@@ -445,6 +446,35 @@ void AppController::onPathRenamed(const QString &oldPath, const QString &newPath
             return true;
         }
         return false;
+    };
+    bool changed = false;
+    m_history.transform([&](QVariantMap &route) { changed |= rewrite(route); });
+    if (changed)
+        Q_EMIT currentRouteChanged();
+    if (rewrite(m_sideRoute))
+        Q_EMIT sidePanelRouteChanged();
+}
+
+void AppController::onFolderRenamed(const QString &oldPath, const QString &newPath)
+{
+    // Pages and other files moved with the folder already (onPathRenamed); routes naming the
+    // folder itself: All pages {path}, search {folder}, import/export {folder}.
+    const auto rebase = [&](QVariantMap &route, const QString &key) {
+        const QString value = route.value(key).toString();
+        if (value == oldPath)
+            route.insert(key, newPath);
+        else if (value.startsWith(oldPath + u'/'))
+            route.insert(key, QString(newPath + value.mid(oldPath.size())));
+        else
+            return false;
+        return true;
+    };
+    const auto rewrite = [&](QVariantMap &route) {
+        const QString view = route.value(u"view"_s).toString();
+        bool changed = rebase(route, u"folder"_s);
+        if (view == u"allPages")
+            changed = rebase(route, u"path"_s) || changed;
+        return changed;
     };
     bool changed = false;
     m_history.transform([&](QVariantMap &route) { changed |= rewrite(route); });
@@ -1053,6 +1083,11 @@ void AppController::toast(const QString &text, const QString &kind)
 void AppController::requestUiAction(const QString &action)
 {
     Q_EMIT uiActionRequested(action);
+}
+
+void AppController::requestItemAction(const QString &action, const QString &path)
+{
+    Q_EMIT itemActionRequested(action, path);
 }
 
 // ---- Sync seam --------------------------------------------------------------------------------

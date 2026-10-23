@@ -19,6 +19,12 @@
 //   pages                              createPage, renamePage (rewrites links in every file
 //                                      linking to it), deletePage (-> .trash/), restore,
 //                                      trashItems, deleteForever, emptyTrash
+//   folders                            createFolder (names sanitised, hidden ones refused),
+//                                      renameFolder, movePath (pages, attachments and folders;
+//                                      every link and tag keeps its target: the index's
+//                                      planRelocation(); special folders rebase the notebook's
+//                                      settings), moveImpact / relocationImpact (what a move
+//                                      would rewrite), folderPaths, folderInfo, subfolders
 //   history                            history(path), historyText(id), restoreVersion(path, id)
 //   journals                           journalPath(date), ensureJournal(date) (creates the daily
 //                                      note from the journal template), quickCapture(text)
@@ -56,6 +62,7 @@
 namespace brulion {
 class Vault;
 class VaultIndex;
+struct FileMove;
 struct QueryItem;
 } // namespace brulion
 
@@ -101,6 +108,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(int revision READ revision NOTIFY revisionChanged FINAL)
     /// Number of Markdown pages.
     Q_PROPERTY(int pageCount READ pageCount NOTIFY revisionChanged FINAL)
+    /// Pages without the daily notes and conflict copies (the sidebar's "Strony" count).
+    Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY revisionChanged FINAL)
     /// Vault configuration (see vaultConfig()).
     Q_PROPERTY(QVariantMap config READ vaultConfig NOTIFY configChanged FINAL)
     /// [{ path, title }] pinned pages, in the user's order.
@@ -138,6 +147,7 @@ public:
     int trashCount() const;
     int revision() const { return m_revision; }
     int pageCount() const;
+    int pagesWithoutJournals() const;
 
     Vault *vault() const { return m_vault.get(); }
     VaultIndex *index() const { return m_index.get(); }
@@ -164,6 +174,9 @@ public:
     Q_INVOKABLE QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     Q_INVOKABLE QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
     Q_INVOKABLE QString resolveLink(const QString &target, const QString &fromPath) const override;
+    /// The shortest [[target]] reaching `path` from `fromPath` (VaultIndex::linkTarget(): "Dom",
+    /// "Projekty/Dom" when the title alone names another page); "" when unknown.
+    Q_INVOKABLE QString linkTarget(const QString &path, const QString &fromPath = QString()) const override;
     Q_INVOKABLE QString blockText(const QString &blockId) const override;
     Q_INVOKABLE QString ensureBlockId(const QString &path, int line) override;
     Q_INVOKABLE QVariantList templates() const override;
@@ -231,12 +244,43 @@ public:
     /// is never changed).
     Q_INVOKABLE QString createPage(const QString &title, const QString &folder = QString(),
                                    const QString &mode = QString());
-    Q_INVOKABLE bool createFolder(const QString &path);
-    /// Rename a page in place and rewrite links to it in every file. Returns the new path or
-    /// "" (target exists, invalid name, I/O error).
+    /// Create a folder ("Projekty/Dom" creates both levels; folders used as spelled in the vault).
+    /// Every new name is sanitised like a page title ("a:b?" -> "a b"); a name that would be hidden
+    /// (a leading '.', or one of the ignored folders: logseq, node_modules, …) is refused with an
+    /// error. Returns the folder's path ("" on failure); an existing folder is fine.
+    Q_INVOKABLE QString createFolder(const QString &path);
+    /// Rename a page and rewrite what names it in every file (links, tags: docs/SYNTAX.md §2,
+    /// §3; every link keeps its target, an ambiguous one gets the shortest path). A "/" in
+    /// `newTitle` moves the page: the path from the notebook root ("Archiwum/Dom"). Returns the new
+    /// path or "" (target exists, invalid name, I/O error).
     Q_INVOKABLE QString renamePage(const QString &path, const QString &newTitle);
-    /// Rename a folder (pages keep their links: links by page name do not change).
+    /// Rename a folder the same way (a "/" in `newName` moves it, from the notebook root).
     Q_INVOKABLE QString renameFolder(const QString &path, const QString &newName);
+    /// Move a page, an attachment or a folder into `targetFolder` ("" = the notebook root):
+    /// every link and tag that named a moved file still names it (VaultIndex::planRelocation(),
+    /// one history step per rewritten note); favourites, recent pages, fold state, history and
+    /// open routes follow; moving a special folder (journals, templates, attachments, new pages)
+    /// or one holding it updates .brulion/config.json (a notice says so). Refused with an error:
+    /// into itself, into a hidden or ignored folder, onto an existing name or a letter-case twin.
+    /// Returns the new path ("" on failure; the path itself when it is in that folder already).
+    Q_INVOKABLE QString movePath(const QString &path, const QString &targetFolder);
+    /// What movePath(path, targetFolder) would do: { ok, error (translated, when not ok), path (the
+    /// new path), links, tags (rewritten), notes (rewritten files), special (see folderInfo) }.
+    Q_INVOKABLE QVariantMap moveImpact(const QString &path, const QString &targetFolder);
+    /// The same for a rename (renamePage() / renameFolder() with `newName`, "/" moves): also
+    /// { path } — "" when the name is not usable.
+    Q_INVOKABLE QVariantMap renameImpact(const QString &path, const QString &newName, bool isDir);
+    /// Tracked folders (not hidden or ignored ones) in Polish alphabetical order of their paths.
+    Q_INVOKABLE QStringList folderPaths() const;
+    /// { exists, pages (Markdown files inside, at any depth, without conflict copies),
+    ///   attachments, folders (subfolders at any depth), special: "journals" | "templates" |
+    ///   "attachments" | "newPages" when the folder is or holds one of the notebook's special
+    ///   folders, else "" }.
+    Q_INVOKABLE QVariantMap folderInfo(const QString &path) const;
+    /// The direct subfolders of `folder` ("" = the root) for All pages' folder rows, in Polish
+    /// order: [{ path, name, pages (at any depth, without journals) }]; attachment-only folders
+    /// left out.
+    Q_INVOKABLE QVariantList subfolders(const QString &folder) const;
     /// Move a file or folder to the trash. Returns its path inside .trash/ ("" on failure).
     Q_INVOKABLE QString deletePage(const QString &path);
     /// Restore a trashed file; returns the path it was restored to ("" on failure).
@@ -352,6 +396,9 @@ Q_SIGNALS:
     void filesChanged(const QStringList &paths);
     /// A path was renamed or moved (pages: links were rewritten already).
     void pathRenamed(const QString &oldPath, const QString &newPath);
+    /// A folder was renamed or moved (after the pathRenamed() of the files in it): routes, the
+    /// tree's expanded folders and views showing it follow.
+    void folderRenamed(const QString &oldPath, const QString &newPath);
     /// A path was deleted (moved to the trash or removed by another program).
     void pathRemoved(const QString &path);
     /// navigate() from the editor or a view; AppController handles it.
@@ -377,20 +424,23 @@ private:
     void indexingFinished();
     void setReady(bool wasReady);
     QVariantMap queryItem(const brulion::QueryItem &item) const;
-    /// A page renamed or moved: what names it in other files (renamePage(), renameFolder()).
-    struct PageRename {
-        QString oldName;
-        QString newName;
-        QString oldPath;
-        QString newPath;
-        /// The tags naming the page before the rename (VaultIndex::tagsNaming()): only these are
-        /// rewritten — with a duplicate base name `#dom` or `#Stare/Dom` may name the other page.
-        QStringList tagKeys;
-    };
-    /// Rewrite the links (renameLinks()) in `linking` and the tags (renameTags()) in `tagging` of
-    /// a renamed page, each file read at `moved(file)` and written once.
-    void rewriteReferences(const QList<QString> &linking, const QList<QString> &tagging,
-                           const std::function<QString(const QString &)> &moved, const PageRename &rename);
+    /// Why `from` cannot be moved or renamed to `to` (translated), "" when it can.
+    QString relocationError(const QString &from, const QString &to) const;
+    /// The path a rename gives `path` (`newName`, "/" = from the notebook root); "" when unusable.
+    QString renamedPath(const QString &path, const QString &newName, bool isDir) const;
+    /// `path` with its folders spelled as the vault spells them (case-insensitive storage).
+    QString spelledFolders(const QString &path) const;
+    /// The file moves of moving `from` (a file or a folder with everything in it) to `to`.
+    QList<brulion::FileMove> fileMoves(const QString &from, const QString &to) const;
+    /// What relocate(from, to) rewrites: { ok, error, path, links, tags, notes, special }.
+    QVariantMap relocationImpact(const QString &from, const QString &to);
+    /// Move or rename `from` to `to` keeping every link and tag (renamePage, renameFolder,
+    /// movePath); returns `to` or "" (an error was emitted).
+    QString relocate(const QString &from, const QString &to);
+    /// Settings naming `from` or a path in it (special folders, the journal template) follow it.
+    void rebaseConfig(const QString &from, const QString &to);
+    /// Folders produce no Vault change of their own (only files do): tell the lists and the tree.
+    void notifyFolderChange(const QStringList &paths);
 
     std::unique_ptr<Vault> m_vault;
     std::unique_ptr<VaultIndex> m_index;

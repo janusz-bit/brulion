@@ -9,6 +9,7 @@
 #include "markdown/markdown.h"
 #include "vault/vault.h"
 
+#include <QAbstractItemModelTester>
 #include <QBuffer>
 #include <QDir>
 #include <QFile>
@@ -523,7 +524,7 @@ private Q_SLOTS:
         QVERIFY(ws->setConfig({ { u"newPagesFolder"_s, u"Nowe"_s } }));
         QCOMPARE(ws->createPage(u"Gdzie?"_s), u"Nowe/Gdzie.md"_s);
         QCOMPARE(ws->createPage(u"W korzeniu"_s, u""_s), u"W korzeniu.md"_s);
-        QVERIFY(ws->createFolder(u"Puste/Głębiej"_s));
+        QVERIFY(!ws->createFolder(u"Puste/Głębiej"_s).isEmpty());
         QVERIFY(ws->exists(u"Puste/Głębiej"_s));
         // Typing the extension does not double it.
         QCOMPARE(ws->createPage(u"Łąka.md"_s, u""_s), u"Łąka.md"_s);
@@ -829,7 +830,7 @@ private Q_SLOTS:
         QVERIFY(!ws->newPagePath(u"a:b?"_s).contains(u'?'));
         QVERIFY(ws->newPagePath(u"  "_s).isEmpty());
         // Folders as the vault spells them (one folder on case-insensitive storage).
-        QVERIFY(ws->createFolder(u"strony/Projekty"_s));
+        QVERIFY(!ws->createFolder(u"strony/Projekty"_s).isEmpty());
         QCOMPARE(ws->newPagePath(u"projekty/Łódź"_s), u"strony/Projekty/Łódź.md"_s);
         // QML calls it too (GraphView opens a missing page's node at its future path).
         QString fromQml;
@@ -880,7 +881,7 @@ private Q_SLOTS:
         QCOMPARE(ws->tagPage(u"#[[Jan Kowalski]]"_s), u"Ludzie/Jan Kowalski.md"_s);
         QVERIFY(ws->tagPage(u"#"_s).isEmpty());
         // Folders as the vault spells them (case-insensitive storage).
-        QVERIFY(ws->createFolder(u"strony/Projekty"_s));
+        QVERIFY(!ws->createFolder(u"strony/Projekty"_s).isEmpty());
         QCOMPARE(ws->tagPage(u"projekty/łódź"_s), u"strony/Projekty/łódź.md"_s);
     }
 
@@ -963,6 +964,327 @@ private Q_SLOTS:
         QCOMPARE(ws->readFile(u"Indeks.md"_s), u"- #[[Prace domowe/Dom]], #dom i #[[Prace domowe/Dom]]\n"_s);
     }
 
+    // ---- folders and moves ---------------------------------------------------------------------
+
+    void createFolderSanitizes_data()
+    {
+        QTest::addColumn<QString>("typed");
+        QTest::addColumn<QString>("expected"); // "" = refused
+        QTest::newRow("reserved characters") << u"a:b?"_s << u"a b"_s;
+        QTest::newRow("nested, Polish") << u"Zażółć/Gęślą jaźń"_s << u"Zażółć/Gęślą jaźń"_s;
+        QTest::newRow("as spelled in the vault") << u"projekty/Nowy"_s << u"Projekty/Nowy"_s;
+        QTest::newRow("blanks and slashes") << u"  /Nowy//Głębiej/ "_s << u"Nowy/Głębiej"_s;
+        QTest::newRow("backslashes") << u"Raz\\Dwa"_s << u"Raz/Dwa"_s;
+        QTest::newRow("hidden") << u".ukryty"_s << QString();
+        QTest::newRow("hidden below") << u"Projekty/.ukryty"_s << QString();
+        QTest::newRow("ignored logseq") << u"logseq"_s << QString();
+        QTest::newRow("ignored node_modules") << u"Kod/node_modules"_s << QString();
+        QTest::newRow("trash") << u".trash"_s << QString();
+        QTest::newRow("empty") << u" / "_s << QString();
+        QTest::newRow("a file") << u"Dom.md"_s << QString();
+    }
+    void createFolderSanitizes()
+    {
+        QFETCH(QString, typed);
+        QFETCH(QString, expected);
+        auto ws = open({{u"Projekty/Dom.md"_s, u"x"_s}, {u"Dom.md"_s, u"x"_s}});
+        QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
+        QSignalSpy files(ws.get(), &Workspace::filesChanged);
+        QCOMPARE(ws->createFolder(typed), expected);
+        if (expected.isEmpty()) {
+            QCOMPARE(errors.size(), typed.trimmed() == u"/" ? 0 : 1);
+            if (typed.contains(u"ukryty"_s) || typed.contains(u"logseq"_s))
+                QVERIFY(errors.first().first().toString().contains(u"hidden"_s));
+        } else {
+            QVERIFY(errors.isEmpty());
+            QVERIFY(ws->vault()->stat(expected)->isDir);
+            QCOMPARE(files.size(), 1); // the tree hears of it
+        }
+    }
+
+    void renameKeepsTargets_data()
+    {
+        QTest::addColumn<QStringList>("files"); // "path=content"
+        QTest::addColumn<QString>(
+                "action"); // "page:<path>:<new title>", "folder:<path>:<name>", "move:<path>:<folder>"
+        QTest::addColumn<QString>("newPath");
+        QTest::addColumn<QStringList>("expected"); // "path=content" after
+        QTest::newRow("rename next to a root page of that name")
+                << QStringList{u"Ogród.md=x"_s, u"Projekty/Dom.md=x"_s,
+                               u"Notatka.md=[[Dom]] [[Dom#Kuchnia|kuchnia]] ![[Dom#^abc1]] [[Ogród]] #dom"_s}
+                << u"page:Projekty/Dom.md:Ogród"_s << u"Projekty/Ogród.md"_s
+                << QStringList{
+                           u"Notatka.md=[[Projekty/Ogród]] [[Projekty/Ogród#Kuchnia|kuchnia]] ![[Projekty/Ogród#^abc1]] [[Ogród]] #Projekty/Ogród"_s};
+        QTest::newRow("folder rename keeps a bare link")
+                << QStringList{u"A/Dom.md=x"_s, u"Bardzo/Dom.md=x"_s, u"Notatka.md=- [[Dom]]\r\n- [[Bardzo/Dom]]\r\n"_s}
+                << u"folder:A:Archiwum"_s << u"Archiwum"_s
+                << QStringList{u"Notatka.md=- [[Archiwum/Dom]]\r\n- [[Bardzo/Dom]]\r\n"_s};
+        QTest::newRow("move to a shallower folder qualifies the other page")
+                << QStringList{u"Projekty/Dom.md=x"_s, u"Archiwum/Stare/Dom.md=x"_s,
+                               u"Notatka.md=[[Dom]] i [x](Dom.md) i #dom"_s}
+                << u"move:Archiwum/Stare/Dom.md:"_s << u"Dom.md"_s
+                << QStringList{u"Notatka.md=[[Projekty/Dom]] i [x](Projekty/Dom.md) i #Projekty/Dom"_s};
+        QTest::newRow("attachments in a renamed folder")
+                << QStringList{u"Projekty/plan.png=png"_s,
+                               u"Notatka.md=![[Projekty/plan.png]] ![](Projekty/plan.png)"_s}
+                << u"folder:Projekty:Prace domowe"_s << u"Prace domowe"_s
+                << QStringList{u"Notatka.md=![[Prace domowe/plan.png]] ![](Prace%20domowe/plan.png)"_s};
+        QTest::newRow("renamed attachment")
+                << QStringList{u"assets/plan.png=png"_s, u"Notatka.md=![[plan.png|300]] ![plan](assets/plan.png)"_s}
+                << u"page:assets/plan.png:rzut"_s << u"assets/rzut.png"_s
+                << QStringList{u"Notatka.md=![[rzut.png|300]] ![plan](assets/rzut.png)"_s};
+        QTest::newRow("slash moves the page")
+                << QStringList{u"Projekty/Dom.md=x"_s, u"Notatka.md=[[Projekty/Dom]] [[Dom]]"_s}
+                << u"page:Projekty/Dom.md:Archiwum/Stary dom"_s << u"Archiwum/Stary dom.md"_s
+                << QStringList{u"Notatka.md=[[Archiwum/Stary dom]] [[Stary dom]]"_s};
+        QTest::newRow("slash moves the folder")
+                << QStringList{u"A/B/Dom.md=x"_s, u"Notatka.md=[[A/B/Dom]]"_s} << u"folder:A/B:Archiwum/B2"_s
+                << u"Archiwum/B2"_s << QStringList{u"Notatka.md=[[Archiwum/B2/Dom]]"_s};
+        QTest::newRow("moved page's relative links")
+                << QStringList{u"Projekty/B.md=x"_s, u"Xy/B.md=x"_s, u"Projekty/A.md=[[B]] [[#Nagłówek]]"_s}
+                << u"move:Projekty/A.md:Archiwum"_s << u"Archiwum/A.md"_s
+                << QStringList{u"Archiwum/A.md=[[Projekty/B]] [[#Nagłówek]]"_s};
+        QTest::newRow("Polish names, CRLF and a BOM kept")
+                << QStringList{u"Żółw.md=x"_s, u"Zwierzęta/Żółw.md=y"_s,
+                               u"Łąka.md=\uFEFF- [[Żółw]]\r\n- [[Zwierzęta/Żółw]] #żółw\r\n"_s}
+                << u"move:Zwierzęta/Żółw.md:Gady"_s << u"Gady/Żółw.md"_s
+                << QStringList{u"Łąka.md=\uFEFF- [[Żółw]]\r\n- [[Gady/Żółw]] #żółw\r\n"_s};
+    }
+    void renameKeepsTargets()
+    {
+        QFETCH(QStringList, files);
+        QFETCH(QString, action);
+        QFETCH(QString, newPath);
+        QFETCH(QStringList, expected);
+        QHash<QString, QString> map;
+        for (const QString &f : std::as_const(files))
+            map.insert(f.section(u'=', 0, 0), f.section(u'=', 1));
+        auto ws = open(map);
+        const QString kind = action.section(u':', 0, 0);
+        const QString path = action.section(u':', 1, 1);
+        const QString arg = action.section(u':', 2);
+        // The impact is known before.
+        const QVariantMap impact =
+                kind == u"move" ? ws->moveImpact(path, arg) : ws->renameImpact(path, arg, kind == u"folder");
+        QVERIFY(impact.value(u"ok"_s).toBool());
+        QCOMPARE(impact.value(u"path"_s).toString(), newPath);
+        const QString result = kind == u"page"     ? ws->renamePage(path, arg)
+                               : kind == u"folder" ? ws->renameFolder(path, arg)
+                                                   : ws->movePath(path, arg);
+        QCOMPARE(result, newPath);
+        QVERIFY(ws->exists(newPath));
+        QVERIFY(!ws->exists(path));
+        int changedNotes = 0;
+        for (const QString &e : std::as_const(expected)) {
+            const QString file = e.section(u'=', 0, 0);
+            const QString text = e.section(u'=', 1);
+            QCOMPARE(ws->readFile(file).prepend(text.startsWith(QChar(0xFEFF)) ? u"\uFEFF"_s : QString()), text);
+            ++changedNotes;
+        }
+        QCOMPARE(impact.value(u"notes"_s).toInt(), changedNotes);
+    }
+
+    void movePath_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<QString>("expected"); // "" = refused
+        QTest::addColumn<bool>("error");
+        QTest::newRow("page into a subfolder")
+                << u"Notatka.md"_s << u"Projekty/Dom"_s << u"Projekty/Dom/Notatka.md"_s << false;
+        QTest::newRow("page to the root") << u"Archiwum/Stare.md"_s << QString() << u"Stare.md"_s << false;
+        QTest::newRow("folder into a folder") << u"Projekty/Dom"_s << u"Archiwum"_s << u"Archiwum/Dom"_s << false;
+        QTest::newRow("empty folder") << u"Pusty"_s << u"Archiwum"_s << u"Archiwum/Pusty"_s << false;
+        QTest::newRow("attachment") << u"assets/plan.png"_s << u"Projekty"_s << u"Projekty/plan.png"_s << false;
+        QTest::newRow("into a new folder")
+                << u"Notatka.md"_s << u"Nowy/Głęboko"_s << u"Nowy/Głęboko/Notatka.md"_s << false;
+        QTest::newRow("folder spelled in another case")
+                << u"Notatka.md"_s << u"archiwum"_s << u"Archiwum/Notatka.md"_s << false;
+        QTest::newRow("where it is") << u"Projekty/Plan.md"_s << u"Projekty"_s << u"Projekty/Plan.md"_s << false;
+        QTest::newRow("into itself") << u"Projekty"_s << u"Projekty/Dom"_s << QString() << true;
+        QTest::newRow("into its own folder name") << u"Projekty"_s << u"Projekty"_s << QString() << true;
+        QTest::newRow("onto an existing name") << u"Plan.md"_s << u"Projekty"_s << QString() << true;
+        QTest::newRow("onto a case twin") << u"Notatka.md"_s << u"Inne"_s << QString() << true;
+        QTest::newRow("folder onto a case twin") << u"Archiwum"_s << u"Inne"_s << QString() << true;
+        QTest::newRow("into .git") << u"Notatka.md"_s << u".git"_s << QString() << true;
+        QTest::newRow("into logseq") << u"Notatka.md"_s << u"logseq"_s << QString() << true;
+        QTest::newRow("into a new hidden folder") << u"Notatka.md"_s << u".ukryty"_s << QString() << true;
+        QTest::newRow("into a file") << u"Notatka.md"_s << u"Plan.md"_s << QString() << true;
+        QTest::newRow("missing") << u"Brak.md"_s << QString() << QString() << false;
+    }
+    void movePath()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, folder);
+        QFETCH(QString, expected);
+        QFETCH(bool, error);
+        QString root;
+        auto ws = open({{u"Notatka.md"_s, u"- [[Plan]] i [[Dom]]\n"_s},
+                        {u"Plan.md"_s, u"x"_s},
+                        {u"Projekty/Plan.md"_s, u"- [[Notatka]]\n"_s},
+                        {u"Projekty/Dom/Kuchnia.md"_s, u"x"_s},
+                        {u"Archiwum/Stare.md"_s, u"x"_s},
+                        {u"Inne/notatka.md"_s, u"x"_s},
+                        {u"Inne/archiwum/x.md"_s, u"x"_s},
+                        {u"assets/plan.png"_s, u"png"_s},
+                        {u".git/config"_s, u"x"_s},
+                        {u"logseq/config.edn"_s, u"x"_s}},
+                       &root);
+        QDir(root).mkpath(u"Pusty"_s);
+        ws->vault()->rescan();
+        QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
+        const QVariantMap impact = ws->moveImpact(path, folder);
+        QCOMPARE(ws->movePath(path, folder), expected);
+        QCOMPARE(errors.size(), error ? 1 : 0);
+        QCOMPARE(impact.value(u"ok"_s).toBool(), !expected.isEmpty());
+        if (error)
+            QCOMPARE(impact.value(u"error"_s).toString(), errors.first().first().toString());
+        if (!expected.isEmpty())
+            QVERIFY(ws->exists(expected));
+        // Whatever happened, the links still reach their pages.
+        if (ws->exists(u"Notatka.md"_s))
+            QCOMPARE(ws->resolveLink(u"Plan"_s, u"Notatka.md"_s), u"Plan.md"_s);
+    }
+
+    // Favourites, recent pages, fold state, history and the expanded folders follow a folder
+    // move; the tree, the trash count and the page count hear of folder changes.
+    void moveKeepsLocalState()
+    {
+        auto ws = open({{u"Projekty/Dom/Kuchnia.md"_s, u"- a\n  - b\n"_s}, {u"Projekty/Plan.md"_s, u"x"_s}});
+        ws->setFavorite(u"Projekty/Dom/Kuchnia.md"_s, true);
+        ws->notePageOpened(u"Projekty/Plan.md"_s);
+        ws->setFoldState(u"Projekty/Dom/Kuchnia.md"_s, {0});
+        QVERIFY(ws->write(u"Projekty/Dom/Kuchnia.md"_s, u"- a\n  - b\n- c\n"_s));
+        FolderTreeModel tree;
+        tree.setWorkspace(ws.get());
+        tree.setExpanded(u"Projekty"_s, true);
+        tree.setExpanded(u"Projekty/Dom"_s, true);
+        QSignalSpy renamed(ws.get(), &Workspace::folderRenamed);
+        QCOMPARE(ws->movePath(u"Projekty"_s, u"Archiwum"_s), u"Archiwum/Projekty"_s);
+        QCOMPARE(renamed.size(), 1);
+        QCOMPARE(strings(renamed.first()), (QStringList{u"Projekty"_s, u"Archiwum/Projekty"_s}));
+        QVERIFY(ws->isFavorite(u"Archiwum/Projekty/Dom/Kuchnia.md"_s));
+        QVERIFY(!ws->isFavorite(u"Projekty/Dom/Kuchnia.md"_s));
+        QCOMPARE(ws->recentPages().first().toMap().value(u"path"_s).toString(), u"Archiwum/Projekty/Plan.md"_s);
+        QCOMPARE(ws->foldState(u"Archiwum/Projekty/Dom/Kuchnia.md"_s), (QVariantList{0}));
+        QCOMPARE(ws->vault()->history()->list(u"Archiwum/Projekty/Dom/Kuchnia.md"_s).size(), 1);
+        // The tree keeps the moved folders open.
+        QVERIFY(tree.isExpanded(u"Archiwum/Projekty"_s));
+        QVERIFY(tree.isExpanded(u"Archiwum/Projekty/Dom"_s));
+        QVERIFY(!tree.isExpanded(u"Projekty"_s));
+    }
+
+    void folderChangesRefresh()
+    {
+        QString root;
+        auto ws = open({{u"a.md"_s, u"x"_s}}, &root);
+        QVERIFY(!ws->createFolder(u"Pusty/Głębszy"_s).isEmpty());
+        QSignalSpy files(ws.get(), &Workspace::filesChanged);
+        QSignalSpy trash(ws.get(), &Workspace::trashChanged);
+        QSignalSpy revision(ws.get(), &Workspace::revisionChanged);
+        // An empty folder deleted: no file changes, but the lists hear of it.
+        const QString trashed = ws->deletePage(u"Pusty/Głębszy"_s);
+        QVERIFY(!trashed.isEmpty());
+        QCOMPARE(files.size(), 1);
+        QVERIFY(trash.size() >= 1);
+        QVERIFY(revision.size() >= 1);
+        // ... restored, renamed, moved.
+        files.clear();
+        QCOMPARE(ws->restore(trashed), u"Pusty/Głębszy"_s);
+        QCOMPARE(files.size(), 1);
+        files.clear();
+        QCOMPARE(ws->renameFolder(u"Pusty"_s, u"Pełny?"_s), u"Pełny"_s);
+        QCOMPARE(files.size(), 1);
+        QCOMPARE(files.first().first().toStringList(), (QStringList{u"Pusty"_s, u"Pełny"_s}));
+        QVERIFY(ws->exists(u"Pełny/Głębszy"_s));
+        // A hidden name is refused.
+        QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
+        QVERIFY(ws->renameFolder(u"Pełny"_s, u".ukryty"_s).isEmpty());
+        QVERIFY(ws->renameFolder(u"Pełny"_s, u"Ok/node_modules"_s).isEmpty());
+        QCOMPARE(errors.size(), 2);
+    }
+
+    // Renaming or moving a special folder (or one holding it) updates .brulion/config.json in the
+    // same operation, and says so.
+    void renameSpecialFoldersUpdatesConfig()
+    {
+        auto ws = open({{u"journals/2026-10-13.md"_s, u"- wczoraj [[Dom]]\n"_s},
+                        {u"templates/journal.md"_s, u"- szablon {{date}}\n"_s},
+                        {u"assets/plan.png"_s, u"png"_s},
+                        {u"Dom.md"_s, u"![[plan.png]]\n"_s}});
+        QSignalSpy notices(ws.get(), &Workspace::noticeOccurred);
+        QCOMPARE(ws->folderInfo(u"journals"_s).value(u"special"_s).toString(), u"journals"_s);
+        QCOMPARE(ws->renameFolder(u"journals"_s, u"Dziennik"_s), u"Dziennik"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        QCOMPARE(notices.size(), 1);
+        QVERIFY(notices.first().first().toString().contains(u"Dziennik"_s));
+        QCOMPARE(ws->journalDate(u"Dziennik/2026-10-13.md"_s), u"2026-10-13"_s);
+        QCOMPARE(ws->ensureJournal(u"2026-10-14"_s), u"Dziennik/2026-10-14.md"_s);
+        QVERIFY(!ws->exists(u"journals"_s));
+        // Templates and the journal template; then the attachments folder moved into another.
+        QCOMPARE(ws->renameFolder(u"templates"_s, u"Szablony"_s), u"Szablony"_s);
+        QCOMPARE(ws->vaultConfig().value(u"templatesFolder"_s).toString(), u"Szablony"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalTemplate"_s).toString(), u"Szablony/journal.md"_s);
+        QVERIFY(ws->readFile(u"Dziennik/2026-10-15.md"_s).isEmpty());
+        QVERIFY(ws->readFile(ws->ensureJournal(u"2026-10-15"_s)).startsWith(u"- szablon"_s));
+        QCOMPARE(ws->movePath(u"assets"_s, u"Pliki"_s), u"Pliki/assets"_s);
+        QCOMPARE(ws->vaultConfig().value(u"attachmentsFolder"_s).toString(), u"Pliki/assets"_s);
+        QCOMPARE(ws->resolveLink(u"plan.png"_s, u"Dom.md"_s), u"Pliki/assets/plan.png"_s);
+        QCOMPARE(ws->folderInfo(u"Pliki"_s).value(u"special"_s).toString(), u"attachments"_s);
+        // The template moved on its own.
+        QCOMPARE(ws->movePath(u"Szablony/journal.md"_s, QString()), u"journal.md"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalTemplate"_s).toString(), u"journal.md"_s);
+        // The new pages' folder, moved with its parent.
+        QVERIFY(ws->setConfig({{u"newPagesFolder"_s, u"Strony/Nowe"_s}}));
+        QVERIFY(!ws->createFolder(u"Strony/Nowe"_s).isEmpty());
+        QCOMPARE(ws->renameFolder(u"Strony"_s, u"Notatki"_s), u"Notatki"_s);
+        QCOMPARE(ws->vaultConfig().value(u"newPagesFolder"_s).toString(), u"Notatki/Nowe"_s);
+        QCOMPARE(ws->createPage(u"Gdzie"_s), u"Notatki/Nowe/Gdzie.md"_s);
+        // Other folders leave the settings alone.
+        notices.clear();
+        QVERIFY(!ws->createFolder(u"Inny"_s).isEmpty());
+        QCOMPARE(ws->renameFolder(u"Inny"_s, u"Inny 2"_s), u"Inny 2"_s);
+        QVERIFY(notices.isEmpty());
+    }
+
+    void folderQueries()
+    {
+        auto ws = open({{u"Projekty/Dom.md"_s, u"x"_s},
+                        {u"Projekty/Dom/Kuchnia.md"_s, u"x"_s},
+                        {u"Projekty/plan.png"_s, u"png"_s},
+                        {u"Projekty/Notatka.sync-conflict-20261014-101010-ABCDEFG.md"_s, u"x"_s},
+                        {u"Żagle/a.md"_s, u"x"_s},
+                        {u"Zakupy/b.md"_s, u"x"_s},
+                        {u"Łódź/c.md"_s, u"x"_s},
+                        {u"Rozdział 10/d.md"_s, u"x"_s},
+                        {u"Rozdział 2/e.md"_s, u"x"_s},
+                        {u"assets/x.png"_s, u"png"_s},
+                        {u"journals/2026-10-14.md"_s, u"x"_s},
+                        {u"strona.md"_s, u"x"_s}});
+        QCOMPARE(ws->folderPaths(),
+                 (QStringList{u"assets"_s, u"journals"_s, u"Łódź"_s, u"Projekty"_s, u"Projekty/Dom"_s, u"Rozdział 2"_s,
+                              u"Rozdział 10"_s, u"Zakupy"_s, u"Żagle"_s}));
+        const QVariantMap info = ws->folderInfo(u"Projekty"_s);
+        QCOMPARE(info.value(u"exists"_s).toBool(), true);
+        QCOMPARE(info.value(u"pages"_s).toInt(), 2);
+        QCOMPARE(info.value(u"attachments"_s).toInt(), 1);
+        QCOMPARE(info.value(u"folders"_s).toInt(), 1);
+        QCOMPARE(info.value(u"special"_s).toString(), QString());
+        QCOMPARE(ws->folderInfo(u"Brak"_s).value(u"exists"_s).toBool(), false);
+        QStringList names;
+        for (const QVariant &v : ws->subfolders(QString()))
+            names.append(v.toMap().value(u"name"_s).toString() + u' ' + v.toMap().value(u"pages"_s).toString());
+        // Attachment-only folders left out; journals counted without their days.
+        QCOMPARE(names, (QStringList{u"journals 0"_s, u"Łódź 1"_s, u"Projekty 2"_s, u"Rozdział 2 1"_s,
+                                     u"Rozdział 10 1"_s, u"Zakupy 1"_s, u"Żagle 1"_s}));
+        QCOMPARE(ws->subfolders(u"Projekty"_s).size(), 1);
+        QCOMPARE(ws->pageCount(), 10);
+        QCOMPARE(ws->pagesWithoutJournals(), 8);
+        // The shortest [[target]] for completion and "Kopiuj link".
+        QCOMPARE(ws->linkTarget(u"Projekty/Dom/Kuchnia.md"_s), u"Kuchnia"_s);
+        QCOMPARE(ws->linkTarget(u"Brak.md"_s), QString());
+    }
+
     void folderTree()
     {
         auto ws = open({ { u"b.md"_s, QString() },
@@ -1010,7 +1332,7 @@ private Q_SLOTS:
         // Changes in the vault refresh it (debounced); an empty new folder shows.
         ws->createPage(u"Projekty/Nowy"_s);
         QTRY_COMPARE(model.count(), 7);
-        QVERIFY(ws->createFolder(u"Pusty"_s));
+        QVERIFY(!ws->createFolder(u"Pusty"_s).isEmpty());
         QTRY_VERIFY(model.indexOf(u"Pusty"_s) >= 0);
         model.setShowAttachments(true);
         QVERIFY(model.indexOf(u"assets"_s) >= 0);
@@ -1029,6 +1351,131 @@ private Q_SLOTS:
         QVERIFY(model.indexOf(u"Projekty/Archiwum/Stare.md"_s) >= 0);
         model.collapseAll();
         QCOMPARE(paths(), (QStringList{ u"assets"_s, u"Projekty"_s, u"Pusty"_s, u"A.md"_s, u"b.md"_s }));
+    }
+
+    // The tree follows the vault with inserted and removed rows (never a reset while rows stay:
+    // the sidebar keeps its scroll position), in every shape: changes in collapsed and expanded,
+    // nested folders, renames, moves, deletions. A shadow list kept only from the signals must
+    // equal the model afterwards; QAbstractItemModelTester checks the signals' consistency.
+    void folderTreeDiffs()
+    {
+        auto ws = open({{u"A/a1.md"_s, u"x"_s},
+                        {u"A/B/b1.md"_s, u"x"_s},
+                        {u"A/B/C/c1.md"_s, u"x"_s},
+                        {u"D/d1.md"_s, u"x"_s},
+                        {u"z.md"_s, u"x"_s}});
+        FolderTreeModel model;
+        QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        model.setWorkspace(ws.get());
+        const auto pathAt = [&](int row) { return model.data(model.index(row), FolderTreeModel::PathRole).toString(); };
+        const auto paths = [&] {
+            QStringList out;
+            for (int i = 0; i < model.rowCount(); ++i)
+                out.append(pathAt(i));
+            return out;
+        };
+        QStringList shadow = paths();
+        int resets = 0;
+        connect(&model, &QAbstractItemModel::rowsInserted, this, [&](const QModelIndex &, int first, int last) {
+            for (int i = first; i <= last; ++i)
+                shadow.insert(i, pathAt(i));
+        });
+        connect(&model, &QAbstractItemModel::rowsRemoved, this,
+                [&](const QModelIndex &, int first, int last) { shadow.remove(first, last - first + 1); });
+        connect(&model, &QAbstractItemModel::modelReset, this, [&] {
+            ++resets;
+            shadow = paths();
+        });
+        model.setExpanded(u"A"_s, true);
+        model.setExpanded(u"A/B"_s, true);
+        model.setExpanded(u"A/B/C"_s, true);
+        QCOMPARE(paths(), (QStringList{u"A"_s, u"A/B"_s, u"A/B/C"_s, u"A/B/C/c1.md"_s, u"A/B/b1.md"_s, u"A/a1.md"_s,
+                                       u"D"_s, u"z.md"_s}));
+        const auto settle = [&] {
+            model.refresh();
+            QCOMPARE(shadow, paths());
+        };
+        // A page in a deeply expanded folder, one in a collapsed folder, one at the root.
+        ws->createPage(u"A/B/C/c0"_s);
+        ws->createPage(u"D/d0"_s);
+        ws->createPage(u"m"_s);
+        settle();
+        QVERIFY(paths().contains(u"A/B/C/c0.md"_s) && paths().contains(u"m.md"_s) && !paths().contains(u"D/d0.md"_s));
+        // A nested folder renamed: its rows go and come back under the new name, still open.
+        QCOMPARE(ws->renameFolder(u"A/B"_s, u"Bę"_s), u"A/Bę"_s);
+        settle();
+        QVERIFY(model.isExpanded(u"A/Bę/C"_s));
+        QVERIFY(paths().contains(u"A/Bę/C/c1.md"_s));
+        // Moved to another folder (collapsed there: its rows leave the list).
+        QCOMPARE(ws->movePath(u"A/Bę"_s, u"D"_s), u"D/Bę"_s);
+        settle();
+        QVERIFY(!paths().contains(u"A/Bę"_s));
+        model.setExpanded(u"D"_s, true);
+        QCOMPARE(shadow, paths());
+        QVERIFY(paths().contains(u"D/Bę/C/c1.md"_s));
+        // Deleted: gone, and its expanded state forgotten.
+        QVERIFY(!ws->deletePage(u"D/Bę"_s).isEmpty());
+        settle();
+        QVERIFY(!model.isExpanded(u"D/Bę"_s) && !model.isExpanded(u"D/Bę/C"_s));
+        // Pages renamed into another place in the order, a folder created at the top.
+        QCOMPARE(ws->renamePage(u"z.md"_s, u"Ą"_s), u"Ą.md"_s);
+        QVERIFY(!ws->createFolder(u"0 Pierwszy"_s).isEmpty());
+        settle();
+        QCOMPARE(paths().first(), u"0 Pierwszy"_s);
+        QCOMPARE(resets, 0);
+        // Everything gone: a reset, and back.
+        for (const QString &p : paths()) {
+            if (!p.contains(u'/'))
+                ws->deletePage(p);
+        }
+        settle();
+        QCOMPARE(model.rowCount(), 0);
+        ws->createPage(u"nowa"_s);
+        settle();
+        QCOMPARE(paths(), QStringList{u"nowa.md"_s});
+    }
+
+    // Polish order with numbers by value; the journals folder first, its days newest first with
+    // their dates; a changed journals folder in the settings moves the pin.
+    void folderTreeOrderAndJournals()
+    {
+        auto ws = open({{u"Żagle.md"_s, u"x"_s},
+                        {u"Zakupy.md"_s, u"x"_s},
+                        {u"Łódź.md"_s, u"x"_s},
+                        {u"Ćwiczenia.md"_s, u"x"_s},
+                        {u"Rozdział 10.md"_s, u"x"_s},
+                        {u"Rozdział 2.md"_s, u"x"_s},
+                        {u"Archiwum/a.md"_s, u"x"_s},
+                        {u"Notatki/n.md"_s, u"x"_s},
+                        {u"journals/2026-10-12.md"_s, u"x"_s},
+                        {u"journals/2026-10-14.md"_s, u"x"_s},
+                        {u"journals/2025-01-01.md"_s, u"x"_s},
+                        {u"journals/Notatka.md"_s, u"x"_s}});
+        FolderTreeModel model;
+        model.setWorkspace(ws.get());
+        const auto paths = [&] {
+            QStringList out;
+            for (int i = 0; i < model.rowCount(); ++i)
+                out.append(model.data(model.index(i), FolderTreeModel::PathRole).toString());
+            return out;
+        };
+        QCOMPARE(paths(), (QStringList{u"journals"_s, u"Archiwum"_s, u"Notatki"_s, u"Ćwiczenia.md"_s, u"Łódź.md"_s,
+                                       u"Rozdział 2.md"_s, u"Rozdział 10.md"_s, u"Zakupy.md"_s, u"Żagle.md"_s}));
+        QCOMPARE(model.data(model.index(0), FolderTreeModel::SpecialRole).toString(), u"journals"_s);
+        QCOMPARE(model.data(model.index(0), FolderTreeModel::IconRole).toString(), u"calendar-days"_s);
+        QVERIFY(!model.isExpanded(u"journals"_s)); // collapsed by default
+        model.toggle(0);
+        QCOMPARE(paths().mid(1, 4), (QStringList{u"journals/2026-10-14.md"_s, u"journals/2026-10-12.md"_s,
+                                                 u"journals/2025-01-01.md"_s, u"journals/Notatka.md"_s}));
+        QCOMPARE(model.data(model.index(1), FolderTreeModel::JournalDateRole).toString(), u"2026-10-14"_s);
+        QCOMPARE(model.data(model.index(1), FolderTreeModel::IconRole).toString(), u"calendar"_s);
+        QCOMPARE(model.data(model.index(4), FolderTreeModel::JournalDateRole).toString(), QString());
+        // Another journals folder in the settings: the pin moves.
+        QVERIFY(ws->setConfig({{u"journalsFolder"_s, u"Notatki"_s}}));
+        model.refresh();
+        QCOMPARE(paths().first(), u"Notatki"_s);
+        QCOMPARE(model.data(model.index(0), FolderTreeModel::SpecialRole).toString(), u"journals"_s);
+        QCOMPARE(ws->pagesWithoutJournals(), 12);
     }
 };
 

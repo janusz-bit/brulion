@@ -47,6 +47,18 @@ public:
     virtual QVariantList suggestTags(const QString &prefix, int limit = 20) const = 0;
     /// Resolve a wiki-link target seen from `fromPath`; "" when unresolved.
     virtual QString resolveLink(const QString &target, const QString &fromPath) const = 0;
+    /// The shortest wiki-link target that reaches `path` from `fromPath` ("Dom", or "Projekty/Dom"
+    /// when the title alone names another page) — what `[[` completion writes; "" when no link
+    /// can. Default: the title when resolveLink() takes it to `path`, else the path without .md.
+    virtual QString linkTarget(const QString &path, const QString &fromPath) const
+    {
+        const qsizetype slash = path.lastIndexOf(u'/');
+        QString stem = path;
+        if (stem.endsWith(QLatin1String(".md"), Qt::CaseInsensitive))
+            stem.chop(3);
+        const QString title = stem.mid(slash + 1);
+        return resolveLink(title, fromPath) == path ? title : stem;
+    }
     /// Text of the block with this id (for ((id)) rendering); "" when unknown.
     virtual QString blockText(const QString &blockId) const = 0;
     /// Id of the block at `line` of `path`, writing ` ^id` into that file when missing.
