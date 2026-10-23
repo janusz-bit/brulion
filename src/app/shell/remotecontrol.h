@@ -18,7 +18,8 @@
 // condition holds or its time is up, polled on the event loop. Item handles ("h12", from find,
 // state, click) are stable while their item lives. An item target is scrolled into view first and
 // not touched when it cannot be (off_screen); a finger scroll is put down only where a Flickable
-// under it can move that way (uidriver::canScroll()), so it never turns into a tap.
+// under it can move that way (uidriver::canScroll()), so it never turns into a tap. `idle` means
+// every shown page saved, none with a conflict waiting for the user (`state.conflicts`).
 //
 // main() creates it for the real app (not the dev tools) once the QML is loaded; it reports its
 // state to AppController::setRemoteControl() for the settings page.
@@ -29,6 +30,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -116,6 +118,13 @@ private:
     /// animations are over: a popup that opened has given its field the keyboard), at most after
     /// `maxMs`. Input starts and is answered that way, so the next request sees a settled UI.
     void afterSettled(int quietMs, int maxMs, std::function<void()> then);
+
+    /// The page controllers of the block editors in the window (the main view, the side panel,
+    /// every day of the journal stream).
+    QList<QObject *> pageControllers();
+    /// The pages shown with a conflict waiting for the user (changed here and elsewhere, not
+    /// merged): [{page}], each page once.
+    QJsonArray conflicts();
 
     // ---- waitFor
     bool satisfied(const Wait &wait);

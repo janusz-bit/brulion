@@ -9,8 +9,9 @@
 // saved with them; Ctrl+K opening the command palette, Escape closing it; the palette's commands
 // (run, unknown, disabled); quick capture with a date; waitFor (a timeout, idle); screenshots (a
 // PNG of the window's size, where asked, relative paths, the runtime folder by default, a refused
-// path); scroll, long press, double click and drag; the MCP server's app tools (--app-control),
-// a screenshot as an image; quit, after which nothing listens any more. The settings switch turns it off, in a
+// path); scroll, long press, double click and drag; a page with a conflict (in state, never
+// idle until the user decides); the MCP server's app tools (--app-control), a screenshot as an
+// image; quit, after which nothing listens any more. The settings switch turns it off, in a
 // window where the page fits and in a low one (a finger scrolling over the switch never taps it). Without a private
 // runtime folder the app still starts, with neither socket in the shared temp folder. The app's log must hold no QML
 // TypeError, ReferenceError or binding loop.
@@ -200,6 +201,7 @@ private Q_SLOTS:
         m_vault = m_tmp.filePath(u"Notatnik żółwia"_s);
         writeFile(vaultFile(u"Test.md"_s), "- Pierwszy blok\n- Drugi blok\n");
         writeFile(vaultFile(u"Projekty/Remont mieszkania.md"_s), "# Remont\n- Kupić farbę\n");
+        writeFile(vaultFile(u"Konflikt.md"_s), "- pierwsza linia\n- druga linia\n");
         m_log = m_tmp.filePath(u"app.log"_s);
         QVERIFY(QFileInfo::exists(QStringLiteral(BRULION_APP)));
         QVERIFY(QFileInfo::exists(QStringLiteral(BRULION_CLI)));
@@ -563,6 +565,59 @@ private Q_SLOTS:
         QVERIFY2(stopped < 3000, qPrintable(QString::number(stopped)));
         QCOMPARE(app({u"key"_s, u"Escape, Escape"_s}).code, 0);
         QCOMPARE(app({u"wait"_s, u"--idle"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)}).code, 0);
+    }
+
+    // A page edited in the app while another program changes the same line: a conflict waiting
+    // for the user. `state` lists it (and says so of the edited block), `wait --idle` never calls
+    // that idle (the page is not saved) and says why; once the user keeps their version, it is.
+    void conflictIsNotIdle()
+    {
+        QCOMPARE(app({u"open"_s, u"Konflikt.md"_s}).code, 0);
+        QCOMPARE(app({u"wait"_s, u"--text"_s, u"druga linia"_s, u"--exact"_s}).code, 0);
+        QCOMPARE(app({u"click"_s, u"--text"_s, u"druga linia"_s, u"--exact"_s}).code, 0);
+        QCOMPARE(app({u"key"_s, u"End"_s}).code, 0);
+        const auto state = [this] { return app({u"state"_s}).result(); };
+        QTRY_COMPARE_WITH_TIMEOUT(state().value(u"editing"_s).toObject().value(u"page"_s).toString(), u"Konflikt.md"_s,
+                                  10000 * kSlowdown);
+        QVERIFY(state().value(u"conflicts"_s).toArray().isEmpty());
+        QVERIFY(!state().value(u"editing"_s).toObject().value(u"conflict"_s).toBool());
+        QCOMPARE(state().value(u"syncConflicts"_s).toInt(-1), 0);
+        // Typing on (the page stays unsaved) while another program changes that line.
+        QProcess typing;
+        typing.setProcessEnvironment(environment());
+        typing.start(QStringLiteral(BRULION_CLI), {u"app"_s, u"type"_s, QString(3000, u'ż')});
+        QVERIFY(typing.waitForStarted(kCallMs));
+        QTRY_VERIFY_WITH_TIMEOUT(state().value(u"editing"_s).toObject().value(u"text"_s).toString().count(u'ż') >= 5,
+                                 20000 * kSlowdown);
+        writeFile(vaultFile(u"Konflikt.md"_s), "- pierwsza linia\n- druga linia, zmieniona gdzie indziej\n");
+        const auto conflicted = [&] {
+            const QJsonArray list = state().value(u"conflicts"_s).toArray();
+            return list.size() == 1 && list.first().toObject().value(u"page"_s).toString() == u"Konflikt.md";
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(conflicted(), 20000 * kSlowdown);
+        typing.kill();
+        typing.waitForFinished();
+        QVERIFY(state().value(u"editing"_s).toObject().value(u"conflict"_s).toBool());
+        // Not idle while the user has not decided: a timeout naming the page.
+        Run r = app({u"wait"_s, u"--idle"_s, u"--timeout"_s, u"1500"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.errorCode(), u"timeout"_s);
+        const QJsonObject details = r.json.value(u"error"_s).toObject().value(u"details"_s).toObject();
+        QVERIFY(!details.value(u"idle"_s).toBool());
+        QCOMPARE(details.value(u"conflicts"_s).toArray().first().toObject().value(u"page"_s).toString(),
+                 u"Konflikt.md"_s);
+        // The other version is still in the file; the user keeps theirs (the banner's button).
+        QCOMPARE(readFile(vaultFile(u"Konflikt.md"_s)),
+                 QByteArray("- pierwsza linia\n- druga linia, zmieniona gdzie indziej\n"));
+        r = app({u"click"_s, u"--text"_s, u"Zachowaj moją"_s, u"--exact"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        r = app({u"wait"_s, u"--idle"_s, u"--timeout"_s, QString::number(20000 * kSlowdown)});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QVERIFY(state().value(u"conflicts"_s).toArray().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(
+                readFile(vaultFile(u"Konflikt.md"_s)).startsWith("- pierwsza linia\n- druga liniażżżżż"),
+                10000 * kSlowdown);
+        QCOMPARE(app({u"key"_s, u"Escape, Escape"_s}).code, 0);
     }
 
     // A password field's text never leaves the app: not in find, not in state, not matched.

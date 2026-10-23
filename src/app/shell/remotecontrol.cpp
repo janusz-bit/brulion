@@ -6,6 +6,7 @@
 #include "navigation.h"
 #include "uidriver.h"
 #include "workspace.h"
+#include "workspacesync.h"
 
 #include "dates/local.h"
 #include "dates/natural.h"
@@ -334,7 +335,9 @@ QJsonObject RemoteControl::state()
                 controller = p->property("controller").value<QObject *>();
         }
         if (controller && (block || source)) {
-            QJsonObject e{{u"page"_s, controller->property("path").toString()}, {u"source"_s, source && !block}};
+            QJsonObject e{{u"page"_s, controller->property("path").toString()},
+                          {u"source"_s, source && !block},
+                          {u"conflict"_s, controller->property("conflict").toBool()}};
             QQuickItem *edit = block ? block : focus;
             if (block) {
                 e.insert(u"row"_s, block->property("row").toInt());
@@ -355,6 +358,9 @@ QJsonObject RemoteControl::state()
     }
     out.insert(u"focusedItem"_s, focused);
     out.insert(u"editing"_s, editing);
+    out.insert(u"conflicts"_s, conflicts());
+    // Conflict copies sync left to merge (Synchronizacja → Konflikty): not pages waiting here.
+    out.insert(u"syncConflicts"_s, ws->isOpen() && ws->sync() ? ws->sync()->conflictCount() : 0);
     out.insert(u"openPopups"_s, popups);
     QJsonArray toasts;
     for (const Toast &t : std::as_const(m_toasts))
@@ -1271,6 +1277,36 @@ bool RemoteControl::satisfied(const Wait &wait)
     return true;
 }
 
+QList<QObject *> RemoteControl::pageControllers()
+{
+    QList<QObject *> out;
+    QQuickWindow *w = window();
+    if (!w)
+        return out;
+    const QList<QQuickItem *> items = uidriver::allItems(w->contentItem());
+    for (QQuickItem *item : items) {
+        if (!uidriver::isA(item, "BlockEditor"))
+            continue;
+        if (auto *controller = item->property("controller").value<QObject *>(); controller && !out.contains(controller))
+            out.append(controller);
+    }
+    return out;
+}
+
+QJsonArray RemoteControl::conflicts()
+{
+    QStringList pages;
+    for (const QObject *controller : pageControllers()) {
+        const QString page = controller->property("path").toString();
+        if (controller->property("conflict").toBool() && !pages.contains(page))
+            pages.append(page);
+    }
+    QJsonArray out;
+    for (const QString &page : std::as_const(pages))
+        out.append(QJsonObject{{u"page"_s, page}});
+    return out;
+}
+
 bool RemoteControl::idle()
 {
     const QString status = m_app->status();
@@ -1286,16 +1322,11 @@ bool RemoteControl::idle()
         return false;
     if (m_frameWindow && !popupsSettled(m_frameWindow))
         return false;
-    // Unsaved edits: every block editor's page saved.
-    if (QQuickWindow *w = window()) {
-        const QList<QQuickItem *> items = uidriver::allItems(w->contentItem());
-        for (QQuickItem *item : items) {
-            if (!uidriver::isA(item, "BlockEditor"))
-                continue;
-            const QObject *controller = item->property("controller").value<QObject *>();
-            if (controller && controller->property("dirty").toBool())
-                return false;
-        }
+    // Unsaved edits: every block editor's page saved — none with a conflict waiting for the user
+    // either (its text is not saved until they decide; another program's change not shown).
+    for (const QObject *controller : pageControllers()) {
+        if (controller->property("dirty").toBool() || controller->property("conflict").toBool())
+            return false;
     }
     return true;
 }
@@ -1311,8 +1342,11 @@ void RemoteControl::pollWaits()
             wait->reply.ok(waitAnswer(*wait));
             done = true;
         } else if (wait->since.elapsed() > wait->ms) {
-            wait->reply.fail(code(E::Timeout), u"The condition did not hold within %1 ms"_s.arg(wait->ms),
-                             {{u"route"_s, toJson(m_app->currentRoute())}, {u"idle"_s, idle()}});
+            QJsonObject details{{u"route"_s, toJson(m_app->currentRoute())}, {u"idle"_s, idle()}};
+            // Why it is not idle when that is a page waiting for the user.
+            if (const QJsonArray pending = conflicts(); !pending.isEmpty())
+                details.insert(u"conflicts"_s, pending);
+            wait->reply.fail(code(E::Timeout), u"The condition did not hold within %1 ms"_s.arg(wait->ms), details);
             done = true;
         }
         if (done)

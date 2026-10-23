@@ -188,7 +188,7 @@ Never compute a hash yourself.
 | `app open <target>` | a ref, `today` or `capture`; `[--line N] [--block-id ID] [--heading H] [--side]` | show the running app there (exit 5 when none runs); with its remote control on the app resolves the ref and says what it opened | |
 | `app today` | | the running app at today's note | |
 | `app capture [<text>]` | `[--stdin]` | no text: open quick capture in the running app; a text: save it as quick capture does (remote control) | yes |
-| `app state` | | what the app shows: status, notebook, routes, focused item, the edited block, open popups, last toasts, window, theme, language (remote control, below) | |
+| `app state` | | what the app shows: status, notebook, routes, focused item, the edited block, pages with a conflict waiting for the user, open popups, last toasts, window, theme, language (remote control, below) | |
 | `app navigate <route>` | a view or `{"view": …}`; `[--side]` | show a view | |
 | `app commands` | | the command palette's commands `{id, title, subtitle, shortcut, enabled}` | |
 | `app command <id>` | | run one (`go.calendar`, `page.source`, `theme.toggle` …) | yes |
@@ -381,7 +381,14 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   for by a client that has gone (an interrupted command) is dropped, and its typing stops.
 * `app wait` polls without blocking the app; several conditions must all hold; `--idle` means no
   new frame for 300 ms, no popup opening or closing, no indexing, no input queued and every page
-  saved.
+  saved. A page with a **conflict** waiting for the user — changed in the app and by another
+  program or device at once in a way that could not be merged; the banner „Ta strona zmieniła się
+  też w innym miejscu…” — is not saved until the user decides, so it is not idle:
+  `wait --idle` times out (exit 3) with `details.conflicts: [{page}]`, and `app state` lists
+  such pages in `conflicts` (and `editing.conflict` for the edited one). Agents should report it
+  to the user rather than click the banner's choices themselves. `syncConflicts` counts the
+  conflict copies sync left to merge (Synchronizacja → Konflikty); they do not keep the app from
+  being idle.
 * `app open` with remote control on: the app resolves the ref in the notebook it shows, as this
   command line resolves refs (paths, names as `[[links]]` read them, aliases, `today`, dates,
   `Dom.md#L12@hash`, `^id`), and answers with the route it opened (`not_found` with
@@ -407,7 +414,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | Method | Parameters | Result |
 |---|---|---|
 | `hello` | | `{protocol, app, version, platform, methods}` |
-| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source}, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
+| `state` | | `{status, ready, indexing, vault: {path, name, documentation}, currentRoute, sidePanelRoute, sidePanelVisible, canGoBack, focusedItem, editing: {page, row, text, cursorPosition, source, conflict}, conflicts: [{page}], syncConflicts, openPopups: [{type, objectName}], lastToasts: [{text, kind, at}], window: {width, height, visible, active, devicePixelRatio}, theme, themeSetting, touchUi, language, version}` |
 | `navigate` | `route` (a view name or a route object, docs/UI.md "Navigation"), `side` | `{route, sidePanelRoute}` |
 | `open` | `ref`, `line` (0-based), `blockId`, `heading`, `side` | `{route, currentRoute}` |
 | `commands` / `command` | — / `id` | `{commands}` / `{id, route}` |
@@ -420,7 +427,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click and `scrolled: {dx, dy}`; with a finger `touched` |
 | `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
 | `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
-| `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` |
+| `waitFor` | `route`, `text` / `objectName` / `type` / `exact` or `handle`, `gone`, `idle`, `ms` (5000, at most 120000) | `{waitedMs, route, item?}`; `timeout` with `{route, idle, conflicts?}` |
 | `quit` | | `{quitting: true}`, then the app quits |
 
 ### Android and the browser
