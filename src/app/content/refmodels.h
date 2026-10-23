@@ -50,7 +50,8 @@ class GroupedRefsModel : public WorkspaceListModel {
     Q_PROPERTY(QStringList collapsedPaths READ collapsedPaths WRITE setCollapsedPaths NOTIFY collapsedPathsChanged FINAL)
     /// Most ref rows listed (0 = all): long lists show the first ones and a "show more" button.
     Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged FINAL)
-    /// References left out by `limit` (not counting collapsed groups).
+    /// References left out by `limit` (not counting collapsed groups' rows; BacklinksModel: a page
+    /// tagged as a whole counts as one).
     Q_PROPERTY(int hiddenCount READ hiddenCount NOTIFY totalsChanged FINAL)
     /// References (ref rows, also of collapsed groups; BacklinksModel: a page tagged as a whole
     /// counts as one) and pages (groups).

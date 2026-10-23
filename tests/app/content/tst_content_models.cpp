@@ -432,6 +432,35 @@ private Q_SLOTS:
         QCOMPARE(value(pages, int(paths.indexOf(u"Projekty/Dom.md"_s)), "backlinks").toInt(), 4);
     }
 
+    // Past the limit a page tagged as a whole is left out like a block: counted as hidden, so
+    // "show more" lists it.
+    void referencesLimitCountsWholePages()
+    {
+        auto ws = open({{u"Projekt.md"_s, u"- opis\n"_s},
+                        {u"journals/2026-10-13.md"_s, u"- a #projekt\n- b #projekt\n"_s},
+                        {u"Zeta.md"_s, u"---\ntags: [projekt]\n---\n- treść\n"_s},
+                        {u"Omega.md"_s, u"tags:: projekt\n\n- treść\n"_s}});
+        BacklinksModel model;
+        model.setWorkspace(ws.get());
+        model.setPath(u"Projekt.md"_s);
+        model.setLimit(2);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"2026-10-13 (2)"_s, u"  0: a #projekt"_s, u"  1: b #projekt"_s}));
+        QCOMPARE(model.refCount(), 4);
+        QCOMPARE(model.pageCount(), 3);
+        QCOMPARE(model.hiddenCount(), 2);
+        model.setLimit(4);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"2026-10-13 (2)"_s, u"  0: a #projekt"_s, u"  1: b #projekt"_s,
+                                              u"Omega (0)"_s, u"Zeta (0)"_s}));
+        QCOMPARE(model.hiddenCount(), 0);
+        // A block past the limit after a page tagged as a whole: both counted.
+        model.setLimit(1);
+        model.refreshNow();
+        QCOMPARE(outline(model), (QStringList{u"2026-10-13 (2)"_s, u"  0: a #projekt"_s}));
+        QCOMPARE(model.hiddenCount(), 3);
+    }
+
     // The tag that names a page not written yet is the one in use naming it most exactly
     // (#praca/raporty for praca/raporty.md, not #raporty); the tag list knows each tag's page.
     void tagsOfNestedAndAliasPages()

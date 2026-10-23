@@ -245,11 +245,12 @@ void GroupedRefsModel::refresh()
     int hidden = 0;
     for (const Group &g : std::as_const(groups)) {
         const bool collapsed = m_collapsed.contains(g.path);
-        // Past the limit: count what is left out, list no more groups.
+        // A page tagged as a whole is one reference: its header.
+        const int whole = m_pageLevelCounts && g.pageLevel ? 1 : 0;
+        // Past the limit: count what is left out ("show more" lists it), list no more groups.
         if (m_limit > 0 && shown >= m_limit) {
-            refs += int(g.refs.size()) + (m_pageLevelCounts && g.pageLevel ? 1 : 0);
-            if (!collapsed)
-                hidden += int(g.refs.size());
+            refs += int(g.refs.size()) + whole;
+            hidden += (collapsed ? 0 : int(g.refs.size())) + whole;
             continue;
         }
         Row h;
@@ -266,7 +267,7 @@ void GroupedRefsModel::refresh()
             continue;
         keys.insert(h.key);
         next.append(h);
-        refs += h.count + (m_pageLevelCounts && h.pageLevel ? 1 : 0);
+        refs += h.count + whole;
         if (h.collapsed)
             continue;
         for (const Ref &r : g.refs) {
