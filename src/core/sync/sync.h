@@ -19,7 +19,9 @@
 //     (recursive Depth-1 PROPFINDs; the server's NFD spelling of listed names is kept for
 //     requests, also for new files inside such folders), stat(path, cb), get(path, GetOptions, cb),
 //     put(path, data, PutOptions{ifMatch, ifNoneMatch, mtime}, cb) (creates parent folders),
-//     remove(path, RemoveOptions, cb), mkcol(path, cb), ensureBase(cb), identity().
+//     remove(path, RemoveOptions, cb), move(from, to, MoveOptions{folder, overwrite}, cb) (WebDAV
+//     MOVE, "Overwrite: F" by default, parents of the target created), listFolder(path, cb) (one
+//     folder's children), mkcol(path, cb), mkdirs(path, cb), ensureBase(cb), identity().
 //     Instrumentation: signal exchanged(HttpExchange), setLogTag("#42") (brulion.net: a debug line
 //     per request, info for answers ≥ 5 s, warnings for timeouts / network failures),
 //     requestsInFlight(), inFlight() ("PROPFIND Dziennik/"), idleMs(), relativePath(url),
@@ -42,8 +44,12 @@
 //   Engine                                              sync/syncengine.h, sync/synctypes.h
 //     SyncEngine(vault, client, store, device): sync(options, done) / cancel() / isSyncing(),
 //     signals started(), progress(SyncProgress), finished(SyncReport); resetState(),
-//     stateOf(path), mergeBaseOf(path); setClock/setConcurrency/setMaxFileSize/setMaxBaseSize.
-//     SyncReport{uploaded, downloaded, deletedLocal, deletedRemote, merged, conflicts,
+//     stateOf(path), mergeBaseOf(path), knowsFolder(path);
+//     setClock/setConcurrency/setMaxFileSize/setMaxBaseSize.
+//     Folders travel too (empty ones, deletions of emptied ones, a folder renamed in the vault
+//     moved on the server with one MOVE); moved content is not counted as deleted by the guards.
+//     SyncReport{uploaded, downloaded, deletedLocal, deletedRemote, merged, foldersCreated,
+//     foldersDeleted, foldersMoved, folderMoves, conflicts,
 //     conflictCopies, errors (SyncFileError{path, message, code, status}), skipped, changes,
 //     started, finished, cancelled, remoteError, syncError, needsConfirmation, pendingDeletions,
 //     runNumber, trigger, phases (SyncPhaseTime: connect, list-remote, list-local, compare,

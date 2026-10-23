@@ -187,7 +187,13 @@ w pozostałych. Brulion synchronizuje w tle
 (domyślnie co 15 minut), chwilę po zmianach i po powrocie sieci; równoległe dopiski
 w dzienniku z dwóch urządzeń scalają się same. Ochrona przed masowym usuwaniem wstrzymuje
 kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (ponad 25%, co najmniej
-10 plików) — dopóki nie potwierdzisz listy.
+10 plików) — dopóki nie potwierdzisz listy. Foldery też się synchronizują: pusty folder pojawia
+się na drugim urządzeniu, a usunięty znika — ale tylko wtedy, gdy nie ma w nim nic, co nie
+dotarło jeszcze na drugą stronę (folder z nową notatką albo plikiem, którego Brulion nie
+synchronizuje, zostaje). Przeniesienie albo zmiana nazwy folderu czy strony to przeniesienie, nie
+usunięcie: ochrona przed masowym usuwaniem o nie nie pyta, a folder, którego nazwę zmienisz
+w Brulionie, przenosi się na serwerze jednym poleceniem (WebDAV MOVE), bez ponownego wysyłania
+plików. Syncthing synchronizuje foldery sam.
 
 W zakładce *Nextcloud* widać na żywo, co robi trwająca synchronizacja (etap, „folder 12 z
 ok. 40”, aktualne pliki, czas trwania, ilość danych), ostrzeżenie, gdy serwer przestaje
@@ -343,7 +349,9 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
-  mass-deletion guard).
+  mass-deletion guard; folders travel too — empty ones, deletions of emptied ones, and a folder
+  renamed in the app is moved on the server in one WebDAV MOVE, never mistaken for a mass
+  deletion).
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when
   a page is created and switchable at any time; stored in the note as `brulion: document` /

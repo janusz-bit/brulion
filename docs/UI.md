@@ -139,6 +139,10 @@ rename and move").
   folders; a tap opens one, back returns), "Z podfolderami" (pages of subfolders too, on by
   default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
   ("Wszystkie strony › Projekty › …").
+* **Sync**: Nextcloud carries folders faithfully — new empty folders, deletions (only of folders
+  that hold nothing unsynced), and moves: a folder renamed or moved here is moved on the server
+  with one WebDAV MOVE, other devices see the move, not a mass deletion ("Sync visibility" below).
+  Syncthing syncs folders itself.
 
 ## On-screen keyboard (`KeyboardInsets`)
 
@@ -863,7 +867,16 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   (sidebar footer, settings) follows the phases at the same pace.
 * **Retry and decisions:** a failed run shows "Kolejna próba za 25 s" (a countdown) with
   "Spróbuj teraz"; held-back deletions and conflicts are "Czeka na Twoją decyzję" / "Konflikt w
-  … — scal wersje" (the deletion guard and the conflict list stay as before).
+  … — scal wersje" (the deletion guard and the conflict list stay as before). Moving or renaming
+  folders and pages never asks: content that arrives under a new path in the same run is a move,
+  not a deletion (`SyncEngine`, docs/ARCHITECTURE.md "Sync guards").
+* **Folders** (Nextcloud): empty folders travel both ways, an emptied folder deleted on one side
+  goes on the other, a folder renamed in the app is moved on the server (one MOVE). The status
+  card, the history row ("1 przeniesiony folder", "2 nowe foldery") and the run's details
+  ("Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze"; `WorkspaceSync.folderCountsText`)
+  name them; folders a run created or removed here reach the tree at once
+  (`WorkspaceSync.foldersChanged` -> `Workspace.notifyFolderChange`: folders make no Vault change
+  of their own).
 * **History** (`SyncHistoryList.qml`, card "Historia synchronizacji"): the last runs (20 kept,
   5 shown, "Pokaż wszystkie"), quiet ones folded ("Bez zmian ×3, 09:25–09:55"); each row: the
   result in words with a coloured icon (never colour alone), when, why ("ręcznie", "po zmianie
