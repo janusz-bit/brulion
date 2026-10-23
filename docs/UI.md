@@ -228,7 +228,8 @@ everything near the bottom, the same way on Android, in the browser and with a s
   above the keyboard, a page in the side panel of a wide touch window),
   `tst_appio_import_qml` (onboarding's folder field); screenshots
   `page-editing-keyboard`, `journals-editing-keyboard`, `capture-keyboard`; on Android
-  `scripts/android-emulator-test.sh --keyboard`, in the browser `scripts/wasm-smoke.mjs --keyboard`.
+  `scripts/android-emulator-test.sh --keyboard` (and `--folders`: the toolbar's "Więcej" and the
+  block menu with a real finger), in the browser `scripts/wasm-smoke.mjs --keyboard`.
 
 ## Keyboard shortcuts (desktop)
 

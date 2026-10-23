@@ -646,7 +646,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -759,7 +759,41 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   tylko w przeglądarce i w dotykowym interfejsie na komputerze) — „Copy” z menu systemu przychodzi
   do aplikacji jako Ctrl+C (dokładny tekst, komunikat „Skopiowano zaznaczony tekst”), uchwyt
   systemu przeciągnięty rozszerza zaznaczenie, „Kopiuj” w pasku widoku, Wstecz zamyka widok.
-  Zrzuty `sel-*.png` w `dist-android/emulator-test/`; sprawdzone 2026-10-23 (Android 16, Pixel 6).
+  Bloki, przyciski i „Copy” systemu skrypt znajduje po nazwach (jak `--folders` niżej; wcześniej
+  — po ułamkach ekranu, które na Androidzie 11, z niższym paskiem stanu, trafiały w drugi blok
+  i obok menu systemu, a sprawdzenia i tak przechodziły). Zrzuty `sel-*.png`
+  w `dist-android/emulator-test/`; sprawdzone 2026-10-23 (Android 16 i 11, Pixel 6).
+* Foldery, odnośniki i tagi prawdziwym palcem (ten sam APK debugowalny):
+  ```sh
+  scripts/android-emulator-test.sh --folders
+  ```
+  Elementy aplikacji skrypt znajduje po nazwach dostępności: `uiautomator dump` (usługa
+  UiAutomator włącza dostępność, a Qt oddaje jej drzewo elementów QML; `content-desc` to etykieta
+  przycisku ze skrótem, tekst bloku, komunikat — zwykłe etykiety tekstowe nazwy nie mają;
+  `resource-id` zawiera `objectName`), klawisze klawiatury ekranowej — po ich nazwach w zrzucie
+  wszystkich okien (`uiautomator dump --windows`), pliki notatnika czyta przez `run-as`. Słowa
+  wpisuje stuknięciami w klawisze, nie przez `input text`: Gboard na Androidzie 11 składał
+  wstrzyknięte klawisze — po pierwszym lub dwóch, które trafiały wprost do pola — w słowo
+  w budowie i zatwierdzał je przed nimi („Archiwum” → „rchiwumA”, „archiwum” → „chiwumar”; może to dotyczyć klawiatury sprzętowej
+  z Gboard na Androidzie 11 — niesprawdzone). Kroki: stuknięcie w `#przewodnik` w dzienniku
+  otwiera stronę z tym aliasem (z paskiem tagu), w `#pomysł` — pustą stronę tagu z odnośnikami do
+  oznaczonych bloków (pliku nie tworzy), Wstecz wraca; „Więcej” paska edycji (przewiniętego
+  palcem) otwiera menu bloku, „Kopiuj odnośnik” → „Odwołanie do bloku” dopisuje id bloku
+  w notatce i kopiuje `((id))` (komunikat „Skopiowano ((id))”; na Androidzie 13+ Ctrl+V —
+  `input keycombination` — wkleja je na końcu innego bloku, co widać w pliku); „+” nagłówka
+  „Strony” w szufladzie → „Nowy folder”: nazwa wpisana na klawiaturze i „Utwórz” stuknięte, gdy
+  klawiatura jeszcze składa słowo; „⋯” strony w drzewie → „Przenieś do…” (arkusz, folder
+  wyszukany, „Zaktualizowane linki: 1 (w 1 notatce)”) przenosi „Remont mieszkania” z `Projekty`
+  do nowego folderu: plik leży w nowym miejscu, filtr `path:Projekty` jego zapytania zmienia się
+  na `path:Archiwum`, komunikat ma „Cofnij”. Zrzuty `fl-*.png`; sprawdzone 2026-10-23 (Android 16
+  i 11, Pixel 6). Test znalazł dwa błędy (poprawione): menu wyższe niż miejsce nad paskiem edycji
+  wchodziło pod pasek stanu, gdzie stuknięcie trafia do systemu — „Odwołanie do bloku”
+  w podmenu było nieosiągalne palcem (`BMenu.topMargin`); a słowo, które klawiatura jeszcze
+  składa (Gboard trzyma każde słowo poza tekstem pola aż do spacji), nie liczyło się jako
+  wpisane — „Utwórz” nowego folderu i „Dodaj” szybkiej notatki z jednym słowem zostawały
+  wyłączone (`typedText`, docs/UI.md „On-screen keyboard”). Zostaje (niepoprawione): gdy menu
+  bloku otwiera się z „Więcej”, klawiatura się chowa (menu bierze fokus), pasek edycji zjeżdża
+  na dół, a menu zostaje tam, gdzie je ustawiono nad klawiaturą — z przerwą nad paskiem.
 * Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
   i zmienne środowiska z intencji):
 
