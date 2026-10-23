@@ -336,18 +336,22 @@ if ((SELECTION)); then
   sleep 2
   app_shot sel-3-extended
   check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
-  # Kopiuj: the docked tools' first button after "Zaznaczono …", above the navigation bar.
-  bottom=$(adb shell dumpsys window windows | sed -nE 's/.*mStableInsets=\[[0-9]+,[0-9]+\]\[[0-9]+,([0-9]+)\].*/\1/p' | head -n 1)
-  nav=${bottom:-$(dp 48)}
-  adb shell input tap "$(dp 160)" $((SCREEN_H - nav - $(dp 27)))
+  # Kopiuj: the docked tools' first button after "Zaznaczono …", right above the navigation bar
+  # (its top from `dumpsys window displays`: "type=navigationBars frame=[l,t][r,b]").
+  nav_top=$(adb shell dumpsys window displays | grep -E 'InsetsSource .*type=navigationBars' | head -n 1 |
+    sed -nE 's/.* frame=\[[0-9]+,([0-9]+)\].*/\1/p')
+  nav_top=${nav_top:-$((SCREEN_H - $(dp 24)))}
+  echo "    the navigation bar starts at $nav_top px"
+  adb shell input tap "$(dp 160)" $((nav_top - $(dp 27)))
   sleep 2
   app_shot sel-4-copied
   adb shell input keyevent 4
   sleep 2
   app_shot sel-5-back
   check "the app is still running" running
-  # "Zaznacz tekst" on the guide page (route.open): a long press on a word of its first paragraph.
-  start_app '--demo --locale pl --route {"view":"page","path":"Witaj w Brulionie.md","open":"selectText"}'
+  # "Zaznacz tekst" on a page of the sample notebook (route.open; Qt splits the arguments at
+  # spaces: a path without them): a long press on a word of its first paragraph.
+  start_app '--demo --locale pl --route {"view":"page","path":"Przepisy.md","open":"selectText"}'
   app_shot sel-6-select-text
   long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
   sleep 2
