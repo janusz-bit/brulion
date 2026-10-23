@@ -634,6 +634,49 @@
     </message>
 </context>
 <context>
+    <name>ShellRenameDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="32"/>
+        <source>%n link(s) and tag(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link or tag %1 will be updated to the new name.</numerusform>
+            <numerusform>%n links and tags %1 will be updated to the new name.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="33"/>
+        <source>%n link(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link %1 will be updated to the new name.</numerusform>
+            <numerusform>%n links %1 will be updated to the new name.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="34"/>
+        <source>in %n note(s)</source>
+        <translation>
+            <numerusform>in %n note</numerusform>
+            <numerusform>in %n notes</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="49"/>
+        <source>Renamed to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Renamed to “%1”, %n link or tag updated</numerusform>
+            <numerusform>Renamed to “%1”, %n links and tags updated</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <source>Renamed to “%1”, %n link(s) updated</source>
+        <translation>
+            <numerusform>Renamed to “%1”, %n link updated</numerusform>
+            <numerusform>Renamed to “%1”, %n links updated</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>

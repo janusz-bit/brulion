@@ -975,7 +975,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockDelegate.qml" line="239"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1232"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1247"/>
         <source>Zoom into block</source>
         <translation>Przybliż blok</translation>
     </message>
@@ -1685,7 +1685,7 @@
         <translation>Pisz w dzienniku z tego dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="120"/>
+        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="119"/>
         <source>No tasks or reminders on this day.</source>
         <translation>Brak zadań i przypomnień tego dnia.</translation>
     </message>
@@ -1931,7 +1931,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPageHeader.qml" line="313"/>
-        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="355"/>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="361"/>
         <source>Tag %1</source>
         <translation>Tag %1</translation>
     </message>
@@ -1951,7 +1951,7 @@
         <translation>Zadania z tym tagiem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="368"/>
+        <location filename="../src/app/qml/content/ContentPageHeader.qml" line="374"/>
         <source>Start writing</source>
         <translation>Zacznij pisać</translation>
     </message>
@@ -1960,13 +1960,13 @@
     <name>ContentPictureView</name>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="97"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1346"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1361"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="97"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1338"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1353"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -1993,7 +1993,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="337"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1488"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1503"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -2011,7 +2011,7 @@
         <translation>Ukryj odwołania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentRefGroupHeader.qml" line="70"/>
+        <location filename="../src/app/qml/content/ContentRefGroupHeader.qml" line="71"/>
         <source>whole page</source>
         <translation>cała strona</translation>
     </message>
@@ -5828,42 +5828,87 @@
 <context>
     <name>ShellRenameDialog</name>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="20"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="28"/>
         <source>Rename folder</source>
         <translation>Zmień nazwę folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="20"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="28"/>
         <source>Rename page</source>
         <translation>Zmień nazwę strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="21"/>
-        <source>Links that name the folder are updated.</source>
-        <translation>Linki zawierające nazwę folderu zostaną zaktualizowane.</translation>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="30"/>
+        <source>Links and tags that name the folder are updated.</source>
+        <translation>Linki i tagi zawierające nazwę folderu zostaną zaktualizowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="21"/>
-        <source>Links to this page are updated in all notes.</source>
-        <translation>Linki do tej strony zostaną zaktualizowane we wszystkich notatkach.</translation>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="31"/>
+        <source>Links and tags that name this page are updated in all notes.</source>
+        <translation>Linki do tej strony i tagi z jej nazwą zostaną zaktualizowane we wszystkich notatkach.</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="32"/>
+        <source>%n link(s) and tag(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link lub tag %1 zostanie zaktualizowany.</numerusform>
+            <numerusform>%n linki i tagi %1 zostaną zaktualizowane.</numerusform>
+            <numerusform>%n linków i tagów %1 zostanie zaktualizowanych.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="33"/>
+        <source>%n link(s) %1 will be updated to the new name.</source>
+        <translation>
+            <numerusform>%n link %1 zostanie zaktualizowany.</numerusform>
+            <numerusform>%n linki %1 zostaną zaktualizowane.</numerusform>
+            <numerusform>%n linków %1 zostanie zaktualizowanych.</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="34"/>
+        <source>in %n note(s)</source>
+        <translation>
+            <numerusform>w %n notatce</numerusform>
+            <numerusform>w %n notatkach</numerusform>
+            <numerusform>w %n notatkach</numerusform>
+        </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="23"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="36"/>
         <source>Rename</source>
         <translation>Zmień nazwę</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="49"/>
+        <source>Renamed to “%1”, %n link(s) and tag(s) updated</source>
+        <translation>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n link lub tag</numerusform>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n linki i tagi</numerusform>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n linków i tagów</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="51"/>
+        <source>Renamed to “%1”, %n link(s) updated</source>
+        <translation>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n link</numerusform>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n linki</numerusform>
+            <numerusform>Zmieniono nazwę na „%1”, zaktualizowano %n linków</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="33"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="52"/>
         <source>Renamed to “%1”</source>
         <translation>Zmieniono nazwę na „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="39"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="58"/>
         <source>Folder name</source>
         <translation>Nazwa folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="39"/>
+        <location filename="../src/app/qml/shell/ShellRenameDialog.qml" line="58"/>
         <source>Page title</source>
         <translation>Tytuł strony</translation>
     </message>
@@ -5991,7 +6036,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="281"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1079"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1094"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -6163,7 +6208,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="158"/>
         <location filename="../src/app/io/ioselftest.cpp" line="326"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1364"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1379"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -6189,7 +6234,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="192"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1373"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1388"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -6205,7 +6250,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="203"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1372"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1387"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -8785,28 +8830,28 @@
 <context>
     <name>brulion::content::PageTools</name>
     <message>
-        <location filename="../src/app/content/pagetools.cpp" line="148"/>
+        <location filename="../src/app/content/pagetools.cpp" line="167"/>
         <source>Enter a title.</source>
         <translation>Wpisz tytuł.</translation>
     </message>
     <message>
-        <location filename="../src/app/content/pagetools.cpp" line="151"/>
+        <location filename="../src/app/content/pagetools.cpp" line="170"/>
         <source>The title has no characters a file name can use.</source>
         <translation>Tytuł nie zawiera znaków, których można użyć w nazwie pliku.</translation>
     </message>
     <message>
-        <location filename="../src/app/content/pagetools.cpp" line="158"/>
-        <location filename="../src/app/content/pagetools.cpp" line="165"/>
+        <location filename="../src/app/content/pagetools.cpp" line="177"/>
+        <location filename="../src/app/content/pagetools.cpp" line="184"/>
         <source>A page named “%1” already exists in this folder.</source>
         <translation>Strona o nazwie „%1” już istnieje w tym folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/content/pagetools.cpp" line="362"/>
+        <location filename="../src/app/content/pagetools.cpp" line="381"/>
         <source>Markdown</source>
         <translation>Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/content/pagetools.cpp" line="363"/>
+        <location filename="../src/app/content/pagetools.cpp" line="382"/>
         <source>HTML document</source>
         <translation>Dokument HTML</translation>
     </message>
@@ -10303,53 +10348,53 @@
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="786"/>
+        <location filename="../src/app/shell/workspace.cpp" line="796"/>
         <source>Could not save the attachment %1: %2</source>
         <translation>Nie udało się zapisać załącznika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="855"/>
+        <location filename="../src/app/shell/workspace.cpp" line="865"/>
         <source>Could not save the notebook settings: %1</source>
         <translation>Nie udało się zapisać ustawień notatnika: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1003"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1013"/>
         <source>“%1” is the page “%2” (names that differ only in letter case are the same page).</source>
         <translation>„%1” to strona „%2” (nazwy różniące się tylko wielkością liter to ta sama strona).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1017"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1027"/>
         <source>Could not create the page: %1</source>
         <translation>Nie udało się utworzyć strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1053"/>
-        <location filename="../src/app/shell/workspace.cpp" line="1062"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1063"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1072"/>
         <source>A page named “%1” already exists here.</source>
         <translation>Strona o nazwie „%1” już tu istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1074"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1084"/>
         <source>Could not rename the page: %1</source>
         <translation>Nie udało się zmienić nazwy strony: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1136"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1149"/>
         <source>Could not rename the folder: %1</source>
         <translation>Nie udało się zmienić nazwy folderu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1159"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1172"/>
         <source>Could not move “%1” to the trash: %2</source>
         <translation>Nie udało się przenieść „%1” do kosza: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1179"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1192"/>
         <source>Could not restore the file: %1</source>
         <translation>Nie udało się przywrócić pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspace.cpp" line="1237"/>
+        <location filename="../src/app/shell/workspace.cpp" line="1250"/>
         <source>Could not create the journal page: %1</source>
         <translation>Nie udało się utworzyć strony dziennika: %1</translation>
     </message>
