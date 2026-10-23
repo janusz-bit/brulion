@@ -16,13 +16,19 @@ import Brulion
 //   "cell"    a table cell: undo, redo, next cell, hide keyboard;
 //   "source"  source mode: [[, #, /, undo, redo (the source's own), hide keyboard.
 // "Hide keyboard" ends the editing (the toolbar goes with it). Buttons never take focus, so the
-// caret stays where it is. Scrolls sideways when the window is narrower than the buttons.
+// caret stays where it is; a tap beside them stays on the bar. Scrolls sideways when the window is
+// narrower than the buttons. Each tool set is made the first time its mode is used and kept (the
+// bar is hidden, not rebuilt, between two edits: the scroll position stays).
+// Extending it: a new button goes into its mode's row; another tool set (a selection's) is a new
+// mode of BlockEditor.toolbarMode with its own row here, docked in the same slot.
 Rectangle {
     id: bar
 
     property BlockEditor editor
     /// "block" | "cell" | "source" (see above).
     readonly property string mode: editor ? editor.toolbarMode : ""
+    /// The tools shown: `mode`, kept while the bar is hidden between two edits.
+    property string shownMode: ""
     readonly property PageController controller: editor ? editor.controller : null
     readonly property int row: controller ? controller.editingRow : -1
     readonly property InlineEditor edit: editor ? editor.activeEditor : null
@@ -43,6 +49,22 @@ Rectangle {
         width: parent.width
         height: 1
         color: Theme.border
+    }
+
+    onModeChanged: showMode()
+    Component.onCompleted: showMode()
+    // A tool set is made when its mode first comes (latched here: a Loader loads synchronously
+    // inside its `active` binding) and then kept.
+    function showMode() {
+        if (mode === "")
+            return
+        shownMode = mode
+        if (mode === "block")
+            blockLoader.active = true
+        else if (mode === "cell")
+            cellLoader.active = true
+        else if (mode === "source")
+            sourceLoader.active = true
     }
 
     /// Commit the word the keyboard is composing before a button acts on the block: otherwise
@@ -74,6 +96,9 @@ Rectangle {
             Qt.inputMethod.hide()
             bar.editor.stopEditing(false)
         } else if (bar.mode === "cell") {
+            // The composed word first: hiding the keyboard may drop it.
+            if (bar.table && bar.table.cellInput)
+                EditorInput.commitPreedit(bar.table.cellInput)
             Qt.inputMethod.hide()
             if (bar.table)
                 bar.table.closeCell()
@@ -154,8 +179,18 @@ Rectangle {
         }
     }
 
+    // Taps between and beside the buttons stay on the bar (the Flickable takes them only while
+    // the buttons are wider than the bar): they went through to what the bar covers — a block
+    // started being edited, the source's caret moved under the bar.
+    MouseArea {
+        objectName: "editToolbarBackground"
+        anchors.fill: parent
+        acceptedButtons: Qt.AllButtons
+    }
+
     Flickable {
         id: flick
+        objectName: "editToolbarFlick"
         anchors.fill: parent
         anchors.topMargin: 1
         contentWidth: buttons.width
@@ -172,23 +207,27 @@ Rectangle {
             rightPadding: Theme.space1
             spacing: 0
 
-            // One tool set at a time (the Loaders take their Row's width).
+            // One tool set at a time (the Loaders take their Row's width; hidden ones take no
+            // room). Made when first needed (showMode()), then kept.
             Loader {
+                id: blockLoader
                 height: parent.height
-                active: bar.mode === "block"
-                visible: active
+                active: false
+                visible: bar.shownMode === "block"
                 sourceComponent: blockTools
             }
             Loader {
+                id: cellLoader
                 height: parent.height
-                active: bar.mode === "cell"
-                visible: active
+                active: false
+                visible: bar.shownMode === "cell"
                 sourceComponent: cellTools
             }
             Loader {
+                id: sourceLoader
                 height: parent.height
-                active: bar.mode === "source"
-                visible: active
+                active: false
+                visible: bar.shownMode === "source"
                 sourceComponent: sourceTools
             }
         }

@@ -1929,10 +1929,37 @@ ApplicationWindow {
         const input = editor.editingTable ? editor.editingTable.cellInput : null
         return input ? input.mapToItem(null, 0, input.height).y : 1e9
     }
+    /// The shown item called `name` under `item` (hidden tool sets keep theirs), or null.
+    function findShown(item, name) {
+        if (!item || !item.visible)
+            return null
+        if (item.objectName === name)
+            return item
+        for (let i = 0; i < item.children.length; ++i) {
+            const found = findShown(item.children[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
     function toolbarButton(name) {
-        return findItem(toolbarSlot(), name)
+        return findShown(toolbarSlot(), name)
+    }
+    /// Cell (r, c) is being edited, with the cell tools on the keyboard.
+    function cellEdited(r, c) {
+        const table = editor.editingTable
+        return editor.toolbarMode === "cell" && table !== null && table.editRow === r && table.editColumn === c
+               && table.cellInput !== null && table.cellInput.activeFocus && dockedOn(320)
+               && toolbarButton("toolbarCellTools") !== null
+    }
+    /// A finger's tap at (x, y) of `item`.
+    function fingerTap(item, x, y) {
+        taskEvents.touchEvent(item).press(0, item, x, y).commit()
+        taskEvents.touchEvent(item).release(0, item, x, y).commit()
     }
     property real contentBefore: 0
+    property var toolsBefore: null
+    property real toolsScroll: 0
     property int linesBefore: 0
     function keyboardTest() {
         taskEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "keyboardEvents")
@@ -2014,15 +2041,42 @@ ApplicationWindow {
             () => {
                 editor.closeSuggestions()
                 page.undo()
+                // The tools scrolled to their end before the editing stops.
+                const flick = toolbarButton("editToolbarFlick")
+                flick.contentX = flick.contentWidth - flick.width
+                window.toolsScroll = flick.contentX
+                window.toolsBefore = toolbarButton("toolbarBlockTools")
                 page.stopEditing()
             },
             waitStep(() => !editor.toolbarVisible, "stopping the editing takes the toolbar away"),
+            // The next edit shows the same tools (not made again), where they were scrolled to.
+            () => editor.startEditing(window.realRow, -1),
+            waitStep(() => editor.toolbarMode === "block" && dockedOn(320) && toolbarButton("toolbarBlockTools") !== null,
+                     "editing again brings the toolbar back"),
+            () => check(window.toolsScroll > 0 && toolbarButton("toolbarBlockTools") === window.toolsBefore
+                        && near(toolbarButton("editToolbarFlick").contentX, window.toolsScroll),
+                        "the block tools are kept between two edits, scrolled where they were: "
+                        + toolbarButton("editToolbarFlick").contentX + " = " + window.toolsScroll),
+            () => page.stopEditing(),
+            waitStep(() => !editor.toolbarVisible, "the editing stops again"),
             // (g) Source mode: the toolbar with the source tools on the keyboard.
             () => editor.toggleSourceMode(),
             waitStep(() => page.sourceMode && editor.sourceTextEdit !== null && editor.sourceTextEdit.activeFocus,
                      "source mode: the source has the keyboard"),
             waitStep(() => editor.toolbarMode === "source" && dockedOn(320) && toolbarButton("toolbarSourceTag") !== null,
                      "source mode: the toolbar with the source tools sits on the keyboard"),
+            // A tap on the bar beside its buttons stays on the bar: it moved the caret to the
+            // text under the bar.
+            () => editor.sourceTextEdit.cursorPosition = 0,
+            waitStep(() => sourceCaretBottom() < slotTop() / 2, "source mode: the caret at the start of the file"),
+            () => {
+                const slot = toolbarSlot()
+                fingerTap(slot, slot.width - 24, slot.height / 2)
+            },
+            () => check(editor.toolbarMode === "source" && editor.sourceTextEdit.activeFocus
+                        && editor.sourceTextEdit.cursorPosition === 0,
+                        "source mode: a tap on the bar beside its buttons leaves the caret where it was: "
+                        + editor.sourceTextEdit.cursorPosition),
             () => {
                 const edit = editor.sourceTextEdit
                 edit.cursorPosition = edit.length
@@ -2062,14 +2116,44 @@ ApplicationWindow {
             () => {
                 window.baseRow = editor.editingTable.editRow
                 window.pasteRow = editor.editingTable.editColumn
-                tapItem(toolbarButton("toolbarNextCell"))
             },
+            // A word the keyboard is still composing (Android) goes into the cell left with the
+            // toolbar's next cell.
+            () => EditorInput.sendInputMethod(editor.editingTable.cellInput, "Kminek"),
+            () => check(editor.editingTable.cellInput.preeditText === "Kminek", "a word composed in the cell is preedit"),
+            () => tapItem(toolbarButton("toolbarNextCell")),
             waitStep(() => editor.editingTable !== null && editor.editingTable.cellInput !== null
                            && editor.editingTable.cellInput.activeFocus
                            && (editor.editingTable.editRow !== window.baseRow || editor.editingTable.editColumn !== window.pasteRow),
                      "the toolbar's next cell moves to the next cell"),
+            () => check(editor.editingTable.rawText(window.baseRow, window.pasteRow).endsWith("Kminek"),
+                        "the word being composed is kept in the cell left: " + editor.editingTable.rawText(window.baseRow, window.pasteRow)),
+            // Undo and redo keep the cell edited (the toolbar and the keyboard stay).
+            () => {
+                const table = editor.editingTable
+                window.baseRow = table.editRow
+                window.pasteRow = table.editColumn
+                window.textBefore = table.rawText(table.editRow, table.editColumn)
+                EditorInput.sendInputMethod(table.cellInput, "Szczaw")
+            },
+            () => tapItem(toolbarButton("toolbarCellUndo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow) && editor.editingTable.cellInput.text === window.textBefore
+                           && editor.editingTable.rawText(window.baseRow, window.pasteRow) === window.textBefore,
+                     () => "the toolbar's undo takes the cell's typing back (the composed word too), the cell stays edited: "
+                           + (editor.editingTable && editor.editingTable.cellInput ? editor.editingTable.cellInput.text : "(no cell)")),
+            () => tapItem(toolbarButton("toolbarCellRedo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow)
+                           && editor.editingTable.cellInput.text === window.textBefore + "Szczaw",
+                     () => "the toolbar's redo brings it back, the cell stays edited: "
+                           + (editor.editingTable && editor.editingTable.cellInput ? editor.editingTable.cellInput.text : "(no cell)")),
+            () => tapItem(toolbarButton("toolbarCellUndo")),
+            waitStep(() => cellEdited(window.baseRow, window.pasteRow) && editor.editingTable.cellInput.text === window.textBefore,
+                     "undo again, still in the cell"),
+            // Hide keyboard ends the cell's editing, with the word being composed.
+            () => EditorInput.sendInputMethod(editor.editingTable.cellInput, "Rzodkiew"),
             () => tapItem(toolbarButton("toolbarHideKeyboard")),
             waitStep(() => editor.editingTable === null && !editor.toolbarVisible, "hide keyboard ends the cell's editing and the toolbar"),
+            () => check(page.sourceText.indexOf("Rzodkiew") >= 0, "the word being composed is kept in the cell"),
             // (f) The document mode: the same docking.
             () => page.path = host.documentPath,
             waitStep(() => page.path === host.documentPath && page.loaded && page.documentMode, "the trip plan opens as a document"),

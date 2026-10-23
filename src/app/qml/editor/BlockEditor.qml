@@ -412,6 +412,18 @@ FocusScope {
             later(() => editor.ensureEditVisible())
     }
 
+    /// Edit cell (r, c) of the table in `row` (the cell's toolbar after an undo or redo: a table
+    /// whose text changed is a new delegate, so it is looked up again).
+    function editTableCell(row, r, c) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        list.forceLayout()
+        const item = list.itemAtIndex(row) as BlockDelegate
+        const table = item ? item.contentItem as TableBlockView : null
+        if (table)
+            table.startCell(r, c)
+    }
+
     function releaseSourceKeyboard() {
         if (sourceLoader.item)
             (sourceLoader.item as SourceEditor).releaseKeyboard()

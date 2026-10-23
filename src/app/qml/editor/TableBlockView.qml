@@ -15,7 +15,8 @@ import Brulion
 // selected or a cell is edited (Enter in the last row and Tab in the last cell add a row too).
 // While a cell is edited the editor knows (BlockEditor.editingTable): on touch UIs its toolbar,
 // docked on the keyboard, offers undo, redo, the next cell and "hide keyboard" (nextCell(),
-// undoInCell(), redoInCell(), closeCell()), and the cell is kept above it.
+// undoInCell(), redoInCell(), closeCell(): the cell stays edited after undo and redo), and the
+// cell is kept above it.
 Item {
     id: root
 
@@ -117,33 +118,53 @@ Item {
             editor.editingTable = null
     }
     // ---- The touch toolbar's cell tools -----------------------------------------------------------
+    // Each commits the word the keyboard is still composing first: Android keyboards compose
+    // every word, and it is not in the field's text until committed (a cell left without that
+    // lost the word).
     /// The next cell (Tab: the next column, else the first one of the next row — a new row after
     /// the last).
     function nextCell() {
         const input = root.cellInput
-        if (input)
-            input.next()
+        if (!input)
+            return
+        EditorInput.commitPreedit(input)
+        input.next()
     }
-    /// Undo (Ctrl+Z in a cell): the cell's typing first.
+    /// Undo / redo: like Ctrl+Z in a cell (the cell's typing first), but the same cell goes on
+    /// being edited, with the text the step left in it — the toolbar and the keyboard stay. (A
+    /// step that takes the caret to a block leaves the editing there.)
     function undoInCell() {
-        const input = root.cellInput
-        if (input)
-            input.undoTable()
+        stepInCell(true)
     }
-    /// Redo: the cell's text is kept, then the controller redoes.
     function redoInCell() {
+        stepInCell(false)
+    }
+    function stepInCell(back) {
         const input = root.cellInput
         if (!input)
             return
+        EditorInput.commitPreedit(input)
+        const r = editRow
+        const c = editColumn
         const controller = root.block.controller
+        const editor = root.block.editor
+        const blockRow = root.block.index
         input.leave()
-        controller.redo()
+        if (back)
+            controller.undo()
+        else
+            controller.redo()
+        // A changed table is a new delegate: the editor finds it again.
+        if (controller.editingRow < 0)
+            editor.editTableCell(blockRow, r, c)
     }
     /// End the cell's editing, keeping its text ("hide keyboard").
     function closeCell() {
         const input = root.cellInput
-        if (input)
-            input.leave()
+        if (!input)
+            return
+        EditorInput.commitPreedit(input)
+        input.leave()
     }
 
     Flickable {
