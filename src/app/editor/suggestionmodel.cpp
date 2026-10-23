@@ -215,9 +215,14 @@ QVariantList SuggestionModel::pageItems() const
             folder = paths::dirname(path);
         if (text::foldKey(title) == typedKey || (!alias.isEmpty() && text::foldKey(alias) == typedKey))
             exact = true;
+        // The title alone may name another page of that name (the shortest path wins, docs/SYNTAX.md
+        // §2): then the link names this one by its shortest unique path ("Projekty/Dom").
+        QString target = path.isEmpty() ? title : m_host->linkTarget(path, m_currentPath);
+        if (target.isEmpty())
+            target = title;
         QVariantMap it = alias.isEmpty()
-                                 ? item(u"page"_s, title, folder, u"file-text"_s, title)
-                                 : item(u"alias"_s, alias, u"→ "_s + title, u"file-text"_s, title + u'|' + alias);
+                                 ? item(u"page"_s, title, folder, u"file-text"_s, target)
+                                 : item(u"alias"_s, alias, u"→ "_s + title, u"file-text"_s, target + u'|' + alias);
         it[u"path"_s] = path;
         out.append(it);
     }
