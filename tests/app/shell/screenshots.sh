@@ -3,7 +3,8 @@
 # window with the sample notebook (journals, the guide page and its editor states: page-editing,
 # page-suggest, page-reminder, …; with a simulated on-screen keyboard: page-editing-keyboard,
 # journals-editing-keyboard, capture-keyboard), settings, the command palette, the
-# quick switcher, quick capture and the phone drawer — × {desktop 1280×800, phone 412×915
+# quick switcher, quick capture, the phone drawer and folders (tree, drawer-tree, move,
+# newpage-folder, newfolder, allpages, allpages-folder) — × {desktop 1280×800, phone 412×915
 # --touch} × {light, dark} — into tests/screenshots/shell-<shot>-<size>-<theme>.png.
 #
 # Every run gets a fresh, temporary XDG config/data home (settings, app data, the sample
@@ -50,6 +51,16 @@ declare -A shot_args=(
   [switcher]="--demo --route journals --popup switcher:rem"
   [capture]="--demo --route journals --popup capture"
   [drawer]="--demo --route journals --popup drawer"
+  # Folders: the renovation project open (the tree shows it, the drawer on phones with each row's
+  # "⋯"), "Przenieś do…" for it, a new page in its folder (the folder chip), a new folder, and All
+  # pages as a folder browser (the root's folders; the project folder with its breadcrumb).
+  [tree]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"}"
+  [drawer-tree]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup drawer"
+  [move]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup move"
+  [newpage-folder]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup newPage"
+  [newfolder]="--demo --route journals --popup newFolder"
+  [allpages]="--demo --route allPages"
+  [allpages-folder]="--demo --route {\"view\":\"allPages\",\"path\":\"Projekty\"}"
   # The block editor in the real app on the guide page (qml/dev/PageScript.qml).
   [page-editing]="--demo --editor-script editing"
   # A simulated on-screen keyboard (--keyboard, drawn grey): the touch toolbar docked on it, the
@@ -109,7 +120,7 @@ all_shots=(onboarding journals page page-editing page-editing-keyboard journals-
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
-  palette switcher capture newpage about drawer)
+  palette switcher capture newpage about drawer tree drawer-tree move newpage-folder newfolder allpages allpages-folder)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 if [[ ! -x "$bin" ]]; then
@@ -139,7 +150,7 @@ for shot in "${shots[@]}"; do
       *) echo "screenshots: unknown size $size" >&2; exit 2 ;;
     esac
     # The drawer only exists on narrow windows.
-    [[ "$shot" == drawer && "$size" == desktop* ]] && continue
+    [[ ( "$shot" == drawer || "$shot" == drawer-tree ) && "$size" == desktop* ]] && continue
     # The side panel only exists on wide windows.
     [[ ( "$shot" == page-sidepanel || "$shot" == page-picture-links ) && "$size" == phone* ]] && continue
     for theme in "${themes[@]}"; do

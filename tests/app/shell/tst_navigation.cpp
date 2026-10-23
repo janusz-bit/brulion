@@ -62,6 +62,15 @@ public:
 
 } // namespace
 
+/// The first argument of every signal a spy recorded, as strings.
+static QStringList strings(const QSignalSpy &spy)
+{
+    QStringList out;
+    for (const QList<QVariant> &args : spy)
+        out.append(args.value(0).toString());
+    return out;
+}
+
 class TestNavigation : public QObject {
     Q_OBJECT
 
@@ -1102,6 +1111,27 @@ private Q_SLOTS:
         QVERIFY(model->run(u"theme.toggle"_s));
         QCOMPARE(ui.size(), 2);
         QCOMPARE(ui.at(1).first().toString(), u"toggleTheme"_s);
+
+        // The folder commands follow "New page"; moving and showing in the tree need a page.
+        const QStringList order = model->ids();
+        QCOMPARE(order.mid(order.indexOf(u"page.new"_s) + 1, 3),
+                 (QStringList{u"folder.new"_s, u"page.move"_s, u"page.reveal"_s}));
+        ui.clear();
+        QVERIFY(model->run(u"folder.new"_s));
+        QVERIFY(model->run(u"page.move"_s));
+        QVERIFY(model->run(u"page.reveal"_s));
+        QCOMPARE(ui.size(), 3);
+        QCOMPARE(strings(ui), (QStringList{u"newFolder"_s, u"movePage"_s, u"revealInTree"_s}));
+        app->navigate({{u"view"_s, u"tasks"_s}});
+        QVERIFY(model->run(u"folder.new"_s));
+        QVERIFY(!model->run(u"page.move"_s));
+        QVERIFY(!model->run(u"page.reveal"_s));
+        app->openJournal(u"2026-10-13"_s); // a day without a note: nothing to show
+        QVERIFY(!model->run(u"page.reveal"_s));
+        QVERIFY(app->workspace()->writeFile(u"journals/2026-10-12.md"_s, u"- x\n"_s));
+        app->openJournal(u"2026-10-12"_s);
+        QVERIFY(model->run(u"page.reveal"_s));
+        QVERIFY(!model->run(u"page.move"_s));
 
         QSignalSpy changed(model, &CommandModel::commandsChanged);
         QSignalSpy language(app.get(), &AppController::languageChanged);

@@ -275,7 +275,7 @@ public:
     /// { exists, pages (Markdown files inside, at any depth, without conflict copies),
     ///   attachments, folders (subfolders at any depth), special: "journals" | "templates" |
     ///   "attachments" | "newPages" when the folder is or holds one of the notebook's special
-    ///   folders, else "" }.
+    ///   folders, else "", specialPath: that special folder's path }.
     Q_INVOKABLE QVariantMap folderInfo(const QString &path) const;
     /// The direct subfolders of `folder` ("" = the root) for All pages' folder rows, in Polish
     /// order: [{ path, name, pages (at any depth, without journals) }]; attachment-only folders

@@ -12,9 +12,10 @@ import Brulion
 // navigation bar and a floating quick-capture button; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
-// Owns the shell's popups (command palette, quick switcher, quick capture, new page, rename,
-// delete confirmation, about) and the global shortcuts; bars and the sidebar call the open*()
-// functions. Content is laid out edge-to-edge: bars extend under the system bars and pad
+// Owns the shell's popups (command palette, quick switcher, quick capture, new page or folder,
+// rename, "Przenieś do…", delete confirmation, about) and the global shortcuts; bars, the sidebar
+// and views call the open*() functions (views through AppController.requestItemAction(action,
+// path): move, rename, delete, newPage, newFolder, reveal). Content is laid out edge-to-edge: bars extend under the system bars and pad
 // themselves with the SafeArea margins.
 // On-screen keyboard (docs/UI.md "On-screen keyboard"): the content — sidebar, view and side
 // panel — ends at the keyboard's top (KeyboardInsets.overlap, a strip under it), so the editing
@@ -48,8 +49,14 @@ FocusScope {
     readonly property real toastClearance: typing ? keyboardRoom + (toolbarDocked ? Theme.editToolbarHeight : 0)
                                            : Theme.narrow ? bottomNav.height + 56 + Theme.space4 : safe.bottom + keyboardRoom
     readonly property string title: routeView.viewTitle !== "" ? routeView.viewTitle : routeTitle(route)
-    /// Folders above the current page: [{ title, path }].
+    /// Folders above the current page, or above the folder All pages shows (with "Wszystkie
+    /// strony" first): [{ title, path }] — a crumb opens All pages in that folder.
     readonly property var crumbs: {
+        if (route.view === "allPages" && route.path) {
+            const parts = String(route.path).split("/")
+            return [{ title: qsTr("All pages"), path: "" }].concat(
+                        parts.slice(0, -1).map((part, i) => ({ title: part, path: parts.slice(0, i + 1).join("/") })))
+        }
         if (route.view !== "page" || !route.path)
             return []
         const folder = Workspace.folderOf(route.path)
@@ -57,6 +64,16 @@ FocusScope {
             return []
         const parts = folder.split("/")
         return parts.map((part, i) => ({ title: part, path: parts.slice(0, i + 1).join("/") }))
+    }
+    /// The file the current route shows: a page, or a daily note that exists.
+    readonly property string currentFile: {
+        if (route.view === "page")
+            return route.path || ""
+        if (route.view !== "journal" || !route.date)
+            return ""
+        void Workspace.revision
+        const path = route.path || Workspace.journalPath(route.date)
+        return Workspace.exists(path) ? path : ""
     }
 
     function flag(value) {
@@ -135,9 +152,61 @@ FocusScope {
         else
             capture.open()
     }
-    function openNewPage(folder) { newPage.openFor(folder, false) }
+    /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
+    /// folder of the page shown (a removable chip in the dialog); else the notebook's folder for
+    /// new pages.
+    function openNewPage(folder) {
+        if (!folder && route.view === "page" && route.path && Workspace.journalDate(route.path) === "")
+            folder = Workspace.folderOf(route.path)
+        newPage.openFor(folder || "", false)
+    }
     function openNewFolder(parentFolder) { newPage.openFor(parentFolder, true) }
     function openRename(path, isDir) { rename.openFor(path, isDir) }
+    /// "Przenieś do…" for a page, an attachment or a folder.
+    function openMove(path, isDir) {
+        if (path)
+            moveDialog.openFor(path, isDir === true)
+    }
+    /// Move `path` into `folder` (created first when `create`; "" = the root) and say how it went,
+    /// with Undo (moving it back).
+    function performMove(path, folder, create) {
+        let target = folder
+        if (create) {
+            target = Workspace.createFolder(folder)
+            if (target === "")
+                return false
+        }
+        const impact = Workspace.moveImpact(path, target)
+        const moved = Workspace.movePath(path, target)
+        if (moved === "" || moved === path)
+            return false
+        const n = (impact.links || 0) + (impact.tags || 0)
+        const place = target !== "" ? target.split("/").pop() : qsTr("Notebook root")
+        const text = n === 0 ? qsTr("Moved to “%1”").arg(place)
+                   : (impact.tags || 0) > 0 ? qsTr("Moved to “%1”, %n link(s) and tag(s) updated", "", n).arg(place)
+                   : qsTr("Moved to “%1”, %n link(s) updated", "", n).arg(place)
+        const back = Workspace.folderOf(path)
+        if (shell.toasts)
+            shell.toasts.show(text, { kind: "success", actionText: qsTr("Undo"), onAction: () => Workspace.movePath(moved, back) })
+        return true
+    }
+    /// "Pokaż w drzewie": the sidebar (the drawer on phones) shows `path`.
+    function revealInTree(path) {
+        if (!path)
+            return
+        if (Theme.narrow) {
+            drawer.open()
+            const sidebar = drawerSidebar.item as ShellSidebar
+            if (sidebar)
+                sidebar.reveal(path)
+        } else {
+            if (!sidebarVisible)
+                toggleSidebar()
+            const sidebar = sidebarLoader.item as ShellSidebar
+            if (sidebar)
+                sidebar.reveal(path)
+        }
+    }
     function openAbout() { about.open() }
     function confirmDelete(path) {
         deleteDialog.path = path
@@ -154,6 +223,9 @@ FocusScope {
         case "switcher": openSwitcher(); break
         case "capture": openCapture(); break
         case "newPage": openNewPage(""); break
+        case "newFolder": openNewFolder(""); break
+        case "movePage": if (route.view === "page") openMove(route.path, false); break
+        case "revealInTree": revealInTree(currentFile); break
         case "about": openAbout(); break
         case "toggleSidePanel": AppController.sidePanelVisible = !AppController.sidePanelVisible; break
         }
@@ -197,6 +269,8 @@ FocusScope {
                 onNewFolderRequested: (folder) => shell.openNewFolder(folder)
                 onRenameRequested: (path, isDir) => shell.openRename(path, isDir)
                 onDeleteRequested: (path) => shell.confirmDelete(path)
+                onMoveRequested: (path, isDir) => shell.openMove(path, isDir)
+                onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
             }
         }
 
@@ -221,6 +295,8 @@ FocusScope {
                 onNewPageRequested: shell.openNewPage("")
                 onRenameRequested: (path) => shell.openRename(path, false)
                 onDeleteRequested: (path) => shell.confirmDelete(path)
+                onMoveRequested: (path) => shell.openMove(path, false)
+                onRevealRequested: (path) => shell.revealInTree(path)
                 onAboutRequested: shell.openAbout()
             }
             ShellRouteView {
@@ -292,6 +368,7 @@ FocusScope {
         background: Rectangle { color: Theme.bgSunken }
 
         Loader {
+            id: drawerSidebar
             anchors.fill: parent
             active: Theme.narrow
             sourceComponent: ShellSidebar {
@@ -314,6 +391,11 @@ FocusScope {
                     drawer.close()
                     shell.confirmDelete(path)
                 }
+                onMoveRequested: (path, isDir) => {
+                    drawer.close()
+                    shell.openMove(path, isDir)
+                }
+                onDropMoveRequested: (path, folder) => shell.performMove(path, folder, false)
             }
         }
     }
@@ -351,18 +433,61 @@ FocusScope {
         }
     }
 
-    ShellNewPageDialog { id: newPage }
+    ShellNewPageDialog { id: newPage; objectName: "shellNewPage" }
     ShellRenameDialog { id: rename; objectName: "shellRename" }
+    ShellMoveDialog {
+        id: moveDialog
+        onMoveRequested: (path, folder, create) => shell.performMove(path, folder, create)
+    }
     ShellAboutDialog { id: about }
 
     BConfirmDialog {
         id: deleteDialog
+        objectName: "shellDeleteDialog"
 
         property string path
+        /// Workspace.folderInfo() of a folder ({} for a file).
+        readonly property var info: path !== "" && visible ? Workspace.folderInfo(path) : ({})
+        readonly property bool folder: info.exists === true
+        readonly property string name: path.endsWith(".md") ? Workspace.pageTitle(path) : path.split("/").pop()
+
+        /// A special folder (or one holding it): what deleting it does to the notebook.
+        function specialWarning() {
+            if (!info.special)
+                return ""
+            const self = info.specialPath === path
+            switch (info.special) {
+            case "journals":
+                return self ? qsTr("This is the journals folder: new daily notes will create it again.")
+                            : qsTr("It holds the journals folder “%1”: new daily notes will create it again.").arg(info.specialPath)
+            case "templates":
+                return self ? qsTr("This is the templates folder: its templates will no longer be offered.")
+                            : qsTr("It holds the templates folder “%1”: its templates will no longer be offered.").arg(info.specialPath)
+            case "attachments":
+                return self ? qsTr("This is the attachments folder: the pictures and files in it go too.")
+                            : qsTr("It holds the attachments folder “%1”: the pictures and files in it go too.").arg(info.specialPath)
+            case "newPages":
+                return self ? qsTr("This is the folder for new pages: new pages will create it again.")
+                            : qsTr("It holds the folder for new pages “%1”: new pages will create it again.").arg(info.specialPath)
+            }
+            return ""
+        }
 
         title: qsTr("Move to trash?")
-        message: qsTr("“%1” will be moved to the trash. You can restore it from there.")
-                 .arg(path.endsWith(".md") ? Workspace.pageTitle(path) : path.split("/").pop())
+        message: {
+            const parts = []
+            if (!folder)
+                parts.push(qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
+            else if ((info.pages || 0) > 0)
+                parts.push(qsTr("The folder “%1” and %n page(s) in it will be moved to the trash.", "", info.pages).arg(name),
+                           qsTr("You can restore them from there."))
+            else
+                parts.push(qsTr("“%1” will be moved to the trash. You can restore it from there.").arg(name))
+            const warning = specialWarning()
+            if (warning !== "")
+                parts.push(warning)
+            return parts.join(" ")
+        }
         confirmText: qsTr("Move to trash")
         destructive: true
         onAccepted: {
@@ -377,6 +502,18 @@ FocusScope {
         target: AppController
         function onUiActionRequested(action) {
             shell.handleUiAction(action)
+        }
+        // A page or folder of the tree from a view (All pages, the page's menu, the palette).
+        function onItemActionRequested(action, path) {
+            const isDir = Workspace.folderInfo(path).exists === true
+            switch (action) {
+            case "move": shell.openMove(path, isDir); break
+            case "rename": shell.openRename(path, isDir); break
+            case "delete": shell.confirmDelete(path); break
+            case "newPage": shell.openNewPage(path); break
+            case "newFolder": shell.openNewFolder(path); break
+            case "reveal": shell.revealInTree(path); break
+            }
         }
     }
 
@@ -416,6 +553,9 @@ FocusScope {
             case "switcher": shell.openSwitcher(query); break
             case "capture": shell.openCapture(); break
             case "newPage": shell.openNewPage(""); break
+            case "newFolder": shell.openNewFolder(""); break
+            // move:<path> (else the page shown): the move dialog, a folder chosen by its name.
+            case "move": shell.openMove(query || shell.route.path, Workspace.folderInfo(query).exists === true); break
             case "about": shell.openAbout(); break
             case "drawer": drawer.open(); break
             }

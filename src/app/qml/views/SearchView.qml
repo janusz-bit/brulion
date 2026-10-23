@@ -4,11 +4,13 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SearchView — route "search" ({query?}): full-text search over every note (SearchResultModel:
-// folded words — "zolw" finds "Żółw" —, prefix of the last word, fuzzy, titles first) with the
-// matched words highlighted in titles and excerpts, filters (Wszystko / Strony / Dzienniki, a
-// folder) and the recent searches when the field is empty. A result opens its page at the
-// matching line. The query is kept in the route (back from a page returns to the results).
+// SearchView — route "search" ({query?, folder?}): full-text search over every note
+// (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of the last word, fuzzy, titles
+// first) with the matched words highlighted in titles and excerpts, filters (Wszystko / Strony /
+// Dzienniki, a folder: the route's — the sidebar's "Szukaj w folderze", any depth — or a top-level
+// one from the menu) and the recent searches when the field is empty. A result opens its page at
+// the matching line. The query and the folder are kept in the route (back from a page returns to
+// the results; a folder renamed or moved is followed).
 //
 // Keys: the field has the focus; Up/Down move through the results, Enter opens (Ctrl+Enter in
 // the side panel), Escape clears.
@@ -58,10 +60,27 @@ FocusScope {
         field.cursorPosition = q.length
         results.query = q
     }
+    /// The route keeps the query and the folder (back returns to them; folder moves follow).
+    function syncRoute() {
+        if (AppController.currentRoute.view !== "search")
+            return
+        const r = { view: "search" }
+        if (field.text.trim() !== "")
+            r.query = field.text
+        if (results.folder !== "")
+            r.folder = results.folder
+        AppController.replaceRoute(r)
+    }
+    function setFolder(folder) {
+        results.folder = folder
+        syncRoute()
+    }
 
     focus: true
     Component.onCompleted: {
         loadRecent()
+        if (route && route.folder)
+            results.folder = String(route.folder)
         if (route && route.query)
             applyQuery(String(route.query))
         field.forceActiveFocus()
@@ -69,6 +88,9 @@ FocusScope {
     onRouteChanged: {
         if (route && route.query !== undefined && String(route.query) !== field.text)
             applyQuery(String(route.query))
+        const folder = route && route.folder ? String(route.folder) : ""
+        if (folder !== results.folder)
+            results.folder = folder
     }
 
     SearchResultModel {
@@ -92,14 +114,14 @@ FocusScope {
             Layout.fillWidth: true
             Layout.leftMargin: root.sideMargin
             Layout.rightMargin: root.sideMargin
-            placeholderText: qsTr("Search in all notes…")
+            placeholderText: results.folder !== "" ? qsTr("Search in %1…").arg(results.folder) : qsTr("Search in all notes…")
             accessibleName: qsTr("Search")
             debounce: 180
             onSearch: (q) => {
                 results.query = q
                 // Back from a result comes back to these results.
-                if (AppController.currentRoute.view === "search" && String(AppController.currentRoute.query || "") !== q)
-                    AppController.replaceRoute(q.trim() !== "" ? { view: "search", query: q } : { view: "search" })
+                if (String(AppController.currentRoute.query || "") !== q)
+                    root.syncRoute()
             }
             onAccepted: if (results.count > 0) root.openResult(Math.max(0, list.currentIndex), false)
             Keys.onDownPressed: root.move(1)
@@ -121,7 +143,7 @@ FocusScope {
 
         // ---- Filters ---------------------------------------------------------------------------------
         RowLayout {
-            visible: root.query !== ""
+            visible: root.query !== "" || results.folder !== ""
             Layout.fillWidth: true
             Layout.leftMargin: root.sideMargin
             Layout.rightMargin: root.sideMargin
@@ -252,7 +274,7 @@ FocusScope {
                 actionText: results.totalCount > 0 ? qsTr("Show all results") : ""
                 onActionTriggered: {
                     results.scope = "all"
-                    results.folder = ""
+                    root.setFolder("")
                 }
             }
         }
@@ -321,7 +343,7 @@ FocusScope {
             iconName: "files"
             checkable: true
             checked: results.folder === ""
-            onTriggered: results.folder = ""
+            onTriggered: root.setFolder("")
         }
         BMenuSeparator {}
     }
@@ -334,7 +356,7 @@ FocusScope {
             checkable: true
             checked: results.folder === modelData.folder && modelData.folder !== ""
             enabled: modelData.folder !== ""
-            onTriggered: results.folder = modelData.folder
+            onTriggered: root.setFolder(modelData.folder)
         }
         onObjectAdded: (index, object) => folderMenu.insertItem(index + 2, object)
         onObjectRemoved: (index, object) => folderMenu.removeItem(object)

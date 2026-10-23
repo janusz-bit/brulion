@@ -632,7 +632,19 @@ private Q_SLOTS:
         model.setFolder(u"Projekty"_s);
         model.refreshNow();
         QCOMPARE(column(model, "title"), (QStringList{ u"Żaba"_s }));
+        // Without subfolders: only the folder's own pages (at the root: the root's).
+        QVERIFY(ws->writeFile(u"Projekty/Stare/Dom.md"_s, u"- x\n"_s));
+        model.refreshNow();
+        QCOMPARE(column(model, "title"), (QStringList{u"Dom"_s, u"Żaba"_s}));
+        model.setRecursive(false);
+        model.refreshNow();
+        QCOMPARE(column(model, "title"), (QStringList{u"Żaba"_s}));
+        QCOMPARE(model.totalCount(), 1);
         model.setFolder(QString());
+        model.refreshNow();
+        QCOMPARE(column(model, "title"), (QStringList{u"Lody"_s, u"Łódź"_s, u"Zebra"_s}));
+        model.setRecursive(true);
+        QVERIFY(ws->deletePage(u"Projekty/Stare"_s).size() > 0);
         model.setIncludeJournals(true);
         model.refreshNow();
         QCOMPARE(model.rowCount(), 5);

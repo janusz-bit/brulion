@@ -346,6 +346,17 @@ int FolderTreeModel::indexOf(const QString &path) const
     return -1;
 }
 
+QVariantMap FolderTreeModel::get(int row) const
+{
+    if (row < 0 || row >= m_rows.size())
+        return {};
+    const Row &r = m_rows.at(row);
+    return {{u"path"_s, r.entry.path},
+            {u"isDir"_s, r.entry.isDir},
+            {u"expanded"_s, r.entry.isDir && m_expanded.contains(r.entry.path)},
+            {u"depth"_s, r.depth}};
+}
+
 void FolderTreeModel::loadExpanded()
 {
     m_expanded.clear();

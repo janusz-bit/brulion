@@ -43,6 +43,19 @@ bool hiddenName(const QString &segment)
     return segment.startsWith(u'.') || paths::isIgnored(segment);
 }
 
+/// A folder name typed in a rename that the vault would hide (a page's own name is sanitised
+/// instead), else "". A "/" moves: every segment before the last names a folder.
+QString hiddenTypedSegment(const QString &newName, bool isDir)
+{
+    const QStringList segments = QString(newName).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts);
+    for (qsizetype i = 0; i < segments.size(); ++i) {
+        const QString segment = segments.at(i).trimmed();
+        if ((isDir || i + 1 < segments.size()) && hiddenName(segment))
+            return segment;
+    }
+    return {};
+}
+
 /// The settings of the notebook that name folders, with their keys.
 struct SpecialFolder {
     const char *key;
@@ -145,6 +158,7 @@ QVariantMap Workspace::folderInfo(const QString &rawPath) const
     int attachments = 0;
     int folders = 0;
     QString special;
+    QString specialPath;
     bool exists = false;
     if (m_vault && !path.isEmpty()) {
         const auto stat = m_vault->stat(path);
@@ -164,15 +178,14 @@ QVariantMap Workspace::folderInfo(const QString &rawPath) const
         const QVariantMap config = vaultConfig();
         for (const SpecialFolder &s : kSpecialFolders) {
             const QString value = paths::normalize(config.value(QString::fromLatin1(s.key)).toString());
-            if (special.isEmpty() && isWithin(value, path))
+            if (special.isEmpty() && isWithin(value, path)) {
                 special = QString::fromLatin1(s.special);
+                specialPath = value;
+            }
         }
     }
-    return {{u"exists"_s, exists},
-            {u"pages"_s, pages},
-            {u"attachments"_s, attachments},
-            {u"folders"_s, folders},
-            {u"special"_s, special}};
+    return {{u"exists"_s, exists},   {u"pages"_s, pages},     {u"attachments"_s, attachments},
+            {u"folders"_s, folders}, {u"special"_s, special}, {u"specialPath"_s, specialPath}};
 }
 
 QVariantList Workspace::subfolders(const QString &rawFolder) const
@@ -371,6 +384,10 @@ QVariantMap Workspace::moveImpact(const QString &path, const QString &targetFold
 
 QVariantMap Workspace::renameImpact(const QString &path, const QString &newName, bool isDir)
 {
+    if (const QString hidden = hiddenTypedSegment(newName, isDir); !hidden.isEmpty())
+        return {{u"ok"_s, false},
+                {u"path"_s, QString()},
+                {u"error"_s, tr("A folder named “%1” would be hidden — choose another name.").arg(hidden)}};
     const QString to = renamedPath(path, newName, isDir);
     if (to.isEmpty())
         return {{u"ok"_s, false}, {u"path"_s, QString()}, {u"error"_s, tr("Enter a name.")}};
@@ -449,6 +466,10 @@ QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
     const QString path = paths::normalize(rawPath);
     if (!m_vault->exists(path))
         return {};
+    if (const QString hidden = hiddenTypedSegment(newTitle, false); !hidden.isEmpty()) {
+        Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
+        return {};
+    }
     const QString to = renamedPath(path, newTitle, false);
     if (to.isEmpty())
         return {};
@@ -463,12 +484,9 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
     if (path.isEmpty() || newName.trimmed().isEmpty())
         return {};
     // A name the vault would hide is refused (as for a new folder), before it is sanitised.
-    for (const QString &segment : QString(newName).replace(u'\\', u'/').split(u'/', Qt::SkipEmptyParts)) {
-        if (hiddenName(segment.trimmed())) {
-            Q_EMIT errorOccurred(
-                    tr("A folder named “%1” would be hidden — choose another name.").arg(segment.trimmed()));
-            return {};
-        }
+    if (const QString hidden = hiddenTypedSegment(newName, true); !hidden.isEmpty()) {
+        Q_EMIT errorOccurred(tr("A folder named “%1” would be hidden — choose another name.").arg(hidden));
+        return {};
     }
     const QString to = renamedPath(path, newName, true);
     if (to.isEmpty())

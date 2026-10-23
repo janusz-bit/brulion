@@ -459,6 +459,14 @@ FocusScope {
             onTriggered: if (root.pageHeader) root.pageHeader.startTitleEdit()
         }
         BMenuItem {
+            objectName: "pageMenuMove"
+            visible: root.journalDate === "" && page.exists
+            height: visible ? implicitHeight : 0
+            text: qsTr("Move to…")
+            iconName: "folder-input"
+            onTriggered: AppController.requestItemAction("move", page.path)
+        }
+        BMenuItem {
             visible: !Theme.narrow && !root.inSidePanel
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")

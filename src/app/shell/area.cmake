@@ -98,6 +98,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellAboutDialog.qml
     qml/shell/ShellBottomNav.qml
     qml/shell/ShellCaptureButton.qml
+    qml/shell/ShellMoveDialog.qml
     qml/shell/ShellNewPageDialog.qml
     qml/shell/ShellQuickCapture.qml
     qml/shell/ShellRenameDialog.qml

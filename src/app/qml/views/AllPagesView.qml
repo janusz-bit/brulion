@@ -9,8 +9,12 @@ import Brulion
 // title, folder, last change, backlinks, tags. Wide windows show columns (click a column to sort
 // by it, again to reverse); phones show two-line rows and a sort menu. The filter finds titles,
 // aliases and folders without Polish letters ("lodz" → "Łódź"); "Dzienniki" adds the daily
-// notes. route.path lists one folder (the top bar's breadcrumb and the sidebar's folders lead
-// here). "Nowa strona" creates a page (in that folder).
+// notes. route.path lists one folder (the top bar's breadcrumb and the sidebar's "Pokaż strony
+// folderu" lead here): its pages, with those of its subfolders unless "Z podfolderami" is off
+// (remembered per device), and its subfolders as rows above them (at the root: the top-level
+// folders) — a phone's folder browser; the top bar's breadcrumb goes back up. "Nowa strona"
+// creates a page (in that folder). The rows' menus move and rename pages and folders through the
+// shell (AppController.requestItemAction).
 //
 // Keys: typing goes to the filter; Down moves into the list; Enter opens; Ctrl+Enter opens in
 // the side panel.
@@ -20,6 +24,9 @@ FocusScope {
 
     property var route: ({})
     readonly property string folder: route && route.path ? route.path : ""
+    /// The folder's direct subfolders: [{ path, name, pages }] (Workspace.subfolders).
+    readonly property var subfolders: Workspace.revision >= 0 && filterField.text.trim() === ""
+                                      ? Workspace.subfolders(root.folder) : []
     readonly property bool wide: width >= 760
     readonly property int maximumWidth: 1100
     /// Side margin of the rows (and the toolbar and column headers above them).
@@ -64,6 +71,8 @@ FocusScope {
         pages.descending = saved[1] === "desc" || (saved.length === 1 && (saved[0] === "modified" || saved[0] === "backlinks"))
         pages.includeJournals = AppSettings.value("allPages/journals", false) === true
                                 || AppSettings.value("allPages/journals", false) === "true"
+        const sub = AppSettings.value("allPages/subfolders", true)
+        pages.recursive = sub === true || sub === "true"
         // Keyboard users can type to filter at once; on touch screens that would pop up the
         // on-screen keyboard over the list the user came to browse.
         if (!Theme.touchUi)
@@ -136,6 +145,19 @@ FocusScope {
                 height: Theme.controlHeight
                 Accessible.name: qsTr("Only folder %1").arg(root.folder)
                 onRemoveClicked: AppController.navigate({ view: "allPages" })
+            }
+            BChip {
+                objectName: "allPagesSubfolders"
+                text: qsTr("With subfolders")
+                iconName: "folder-tree"
+                interactive: true
+                selected: pages.recursive
+                height: Theme.controlHeight
+                Accessible.name: qsTr("Pages of subfolders too")
+                onClicked: {
+                    pages.recursive = !pages.recursive
+                    AppSettings.setValue("allPages/subfolders", pages.recursive)
+                }
             }
             BButton {
                 variant: "primary"
@@ -229,6 +251,42 @@ FocusScope {
             T.ScrollBar.vertical: BScrollBar {}
             Accessible.role: Accessible.List
             Accessible.name: qsTr("Pages")
+
+            // The folder's subfolders above its pages: a tap opens one (back returns).
+            header: Column {
+                width: list.width
+                visible: root.subfolders.length > 0
+                height: visible ? implicitHeight : 0
+                bottomPadding: Theme.space2
+                BText {
+                    x: root.rowMargin + Theme.space2
+                    text: qsTr("Folders")
+                    variant: "caption"
+                    color: Theme.fgFaint
+                }
+                Repeater {
+                    model: root.subfolders
+                    delegate: BListItem {
+                        id: folderRow
+                        required property var modelData
+                        objectName: "allPagesFolderRow"
+                        x: root.rowMargin
+                        width: list.width - 2 * root.rowMargin
+                        iconName: modelData.path === (Workspace.config.journalsFolder || "") ? "calendar-days" : "folder"
+                        text: modelData.name
+                        count: modelData.pages
+                        Accessible.description: qsTr("%n page(s)", "", modelData.pages)
+                        onClicked: AppController.navigate({ view: "allPages", path: modelData.path })
+                        onPressAndHold: folderMenu.openFor(modelData.path, folderRow)
+                        TapHandler {
+                            // Right-click only (a finger has no buttons: see the page rows).
+                            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                            acceptedButtons: Qt.RightButton
+                            onTapped: folderMenu.openFor(folderRow.modelData.path, folderRow)
+                        }
+                    }
+                }
+            }
 
             Keys.onReturnPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0)
             Keys.onEnterPressed: (event) => root.open(currentIndex, (event.modifiers & Qt.ControlModifier) !== 0)
@@ -385,7 +443,7 @@ FocusScope {
                 parent: list
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 2 * Theme.space6, implicitWidth)
-                visible: pages.count === 0 && Workspace.ready
+                visible: pages.count === 0 && Workspace.ready && root.subfolders.length === 0
                 iconName: filterField.text.trim() !== "" ? "search" : "files"
                 title: filterField.text.trim() !== "" ? qsTr("No page matches “%1”").arg(filterField.text.trim())
                                                       : root.folder !== "" ? qsTr("This folder has no pages") : qsTr("No pages yet")
@@ -457,6 +515,19 @@ FocusScope {
             onTriggered: root.open(rowMenu.row, true)
         }
         BMenuItem {
+            objectName: "allPagesMenuMove"
+            text: qsTr("Move to…")
+            iconName: "folder-input"
+            onTriggered: AppController.requestItemAction("move", rowMenu.page.path)
+        }
+        BMenuItem {
+            visible: rowMenu.page.journalDate === ""
+            height: visible ? implicitHeight : 0
+            text: qsTr("Rename…")
+            iconName: "pencil"
+            onTriggered: AppController.requestItemAction("rename", rowMenu.page.path)
+        }
+        BMenuItem {
             text: qsTr("Version history")
             iconName: "history"
             onTriggered: AppController.navigate({ view: "history", path: rowMenu.page.path })
@@ -467,6 +538,43 @@ FocusScope {
             iconName: "trash-2"
             danger: true
             onTriggered: deleteDialog.openFor(rowMenu.page.path)
+        }
+    }
+    // A subfolder row's menu: the folder's actions live in the shell (its dialogs).
+    BMenu {
+        id: folderMenu
+        objectName: "allPagesFolderMenu"
+        property string path
+        function openFor(p, item) {
+            path = p
+            popup(item, Math.min(item.width - width, item.width / 2), item.height / 2)
+        }
+        BMenuItem {
+            text: qsTr("Open")
+            iconName: "folder-open"
+            onTriggered: AppController.navigate({ view: "allPages", path: folderMenu.path })
+        }
+        BMenuItem {
+            text: qsTr("Move to…")
+            iconName: "folder-input"
+            onTriggered: AppController.requestItemAction("move", folderMenu.path)
+        }
+        BMenuItem {
+            text: qsTr("Rename…")
+            iconName: "pencil"
+            onTriggered: AppController.requestItemAction("rename", folderMenu.path)
+        }
+        BMenuItem {
+            text: qsTr("Show in tree")
+            iconName: "folder-tree"
+            onTriggered: AppController.requestItemAction("reveal", folderMenu.path)
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            text: qsTr("Move to trash")
+            iconName: "trash-2"
+            danger: true
+            onTriggered: AppController.requestItemAction("delete", folderMenu.path)
         }
     }
 

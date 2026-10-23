@@ -72,6 +72,15 @@ void PageListModel::setIncludeJournals(bool on)
     scheduleRefresh(0);
 }
 
+void PageListModel::setRecursive(bool on)
+{
+    if (m_recursive == on)
+        return;
+    m_recursive = on;
+    Q_EMIT recursiveChanged();
+    scheduleRefresh(0);
+}
+
 void PageListModel::setLocale(const QString &locale)
 {
     if (m_locale == locale)
@@ -147,6 +156,8 @@ void PageListModel::refresh()
             if (journal && !m_includeJournals)
                 continue;
             const QString folder = paths::dirname(path);
+            if (!m_recursive && folder != m_folder)
+                continue;
             if (!m_folder.isEmpty() && folder != m_folder && !folder.startsWith(m_folder + u'/'))
                 continue;
             ++total;

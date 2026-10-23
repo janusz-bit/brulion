@@ -68,6 +68,9 @@ public:
     Q_INVOKABLE void collapseAll();
     /// Row of `path`, -1 when not visible.
     Q_INVOKABLE int indexOf(const QString &path) const;
+    /// { path, isDir, expanded, depth } of `row` (empty when out of range): the drop target under
+    /// the pointer while dragging.
+    Q_INVOKABLE QVariantMap get(int row) const;
     /// Re-read the vault now (normally done shortly after every change).
     Q_INVOKABLE void refresh();
 
