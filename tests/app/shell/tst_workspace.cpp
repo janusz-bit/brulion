@@ -884,6 +884,11 @@ private Q_SLOTS:
         QCOMPARE(routeOf(u"Projekty/Remont.md"_s, u"konfl1"_s).value(u"path"_s).toString(), u"Projekty/Remont.md"_s);
         // A page not written yet keeps its route as well.
         QCOMPARE(routeOf(u"Nowa.md"_s, u"moved1"_s).value(u"path"_s).toString(), u"Nowa.md"_s);
+        // The label of [[Page#^id]]: the page's block, else the block where the id is now.
+        QCOMPARE(ws->linkedBlockText(u"Projekty/Remont.md"_s, u"budzet1"_s), u"Budżet"_s);
+        QCOMPARE(ws->linkedBlockText(u"Projekty/Remont.md"_s, u"moved1"_s), u"Przeniesiony blok z łazienką"_s);
+        QVERIFY(ws->linkedBlockText(u"Nowa.md"_s, u"moved1"_s).isEmpty());
+        QVERIFY(ws->linkedBlockText(u"Projekty/Remont.md"_s, u"nieznany"_s).isEmpty());
     }
 
     void blockIdsRightAfterOpening()

@@ -474,6 +474,17 @@ QString FakeEditorHost::blockText(const QString &blockId) const
     return {};
 }
 
+QString FakeEditorHost::linkedBlockText(const QString &path, const QString &blockId) const
+{
+    const auto it = m_files.constFind(path);
+    if (it == m_files.constEnd() || !paths::isMarkdown(path))
+        return {};
+    const ParsedNote note = markdown::parseNote(path, *it);
+    if (const auto found = note.blockIds.constFind(blockId); found != note.blockIds.constEnd())
+        return note.blocks.at(*found).text.simplified();
+    return blockText(blockId); // moved to another page
+}
+
 bool FakeEditorHost::blockIdTaken(const QString &blockId) const
 {
     if (blockId.isEmpty())

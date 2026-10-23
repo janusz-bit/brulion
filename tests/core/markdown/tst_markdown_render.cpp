@@ -46,8 +46,20 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
     c.blockText = [](const QString &id) -> std::optional<QString> {
         if (id == u"abc")
             return u"Treść <b>bloku</b>"_s;
+        return std::nullopt;
+    };
+    // The block a [[target#^id]] leads to: per page ("Inna" has its own ^abc).
+    c.linkedBlockText = [](const QString &target, const QString &id) -> std::optional<QString> {
+        if (target == u"Inna" && id == u"abc")
+            return u"Inny blok, to samo id"_s;
+        if (id == u"abc")
+            return u"Treść <b>bloku</b>"_s;
         if (id == u"dlugi")
             return u"Zażółć gęślą jaźń\n  i dalej: bardzo długi tekst bloku, który nie mieści się w odnośniku wcale"_s;
+        if (id == u"emoji") // 📅 (a surrogate pair) at UTF-16 58–59, across the cut
+            return QString(57, u'a') + u" 📅 i dalej tekst"_s;
+        if (id == u"akcent") // "é" as e + a combining acute accent at 58–59
+            return QString(58, u'b') + u"e\u0301 i dalej tekst"_s;
         return std::nullopt;
     };
     c.inlineCalc = [](const QString &expr) { return expr == u"2 + 2" ? u"4"_s : QString(); };
@@ -148,6 +160,16 @@ private Q_SLOTS:
                 << u"[[Strona#^dlugi]]"_s
                 << link(u"page:Strona#^dlugi"_s, u"L"_s,
                         u"Strona › Zażółć gęślą jaźń i dalej: bardzo długi tekst bloku, który…"_s);
+        // Cut at a whole character: never inside a surrogate pair or before a combining mark.
+        QTest::newRow("block link cut before an emoji")
+                << u"[[Strona#^emoji]]"_s
+                << link(u"page:Strona#^emoji"_s, u"L"_s, u"Strona › "_s + QString(57, u'a') + u"…"_s);
+        QTest::newRow("block link cut before an accent")
+                << u"[[Strona#^akcent]]"_s
+                << link(u"page:Strona#^akcent"_s, u"L"_s, u"Strona › "_s + QString(58, u'b') + u"…"_s);
+        // Another page's block with the same id is another block.
+        QTest::newRow("block link same id elsewhere")
+                << u"[[Inna#^abc]]"_s << link(u"page:Inna#^abc"_s, u"L"_s, u"Inna › Inny blok, to samo id"_s);
         QTest::newRow("same page block link")
                 << u"[[#^abc]]"_s << link(u"page:#^abc"_s, u"L"_s, u"Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
         QTest::newRow("block link alias")

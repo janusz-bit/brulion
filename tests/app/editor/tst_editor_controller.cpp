@@ -1114,6 +1114,35 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(fresh.finished, 1);
     }
 
+    void blockLinkLabels()
+    {
+        // [[Page#^id]] shows the text of that page's block: the same id on another page is another
+        // block (Obsidian ids are per page); a block of this page shows its live text; a block
+        // moved away the text where the link now leads.
+        FakeEditorHost host;
+        host.setFile(Page, u"- Moje podsumowanie ^summary\n- [[Inna#^summary]] i [[#^summary]]\n- ((summary))\n"
+                           u"- [[Strona#^przen]]\n"_s);
+        host.setFile(u"Inna.md"_s, u"- Podsumowanie innej strony ^summary\n"_s);
+        host.setFile(u"Archiwum.md"_s, u"- Blok przeniesiony do archiwum ^przen\n"_s);
+        PageController page;
+        page.setHost(&host);
+        page.setPath(Page);
+        const auto html = [&page](int row) {
+            const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+            return page.blocks()->data(page.blocks()->index(row), roles.key("html")).toString();
+        };
+        QVERIFY2(html(1).contains(u"Inna › Podsumowanie innej strony"_s), qPrintable(html(1)));
+        QVERIFY(html(1).contains(u">Moje podsumowanie<"_s));
+        QVERIFY(!html(1).contains(u"Inna › Moje"_s));
+        QVERIFY2(html(3).contains(u"Strona › Blok przeniesiony do archiwum"_s), qPrintable(html(3)));
+        // Editing the block re-renders the links to it (as ((id)) always did).
+        page.startEditing(0);
+        page.setEditText(0, u"Nowy tekst ^summary"_s);
+        QVERIFY2(html(1).contains(u"Nowy tekst"_s) && !html(1).contains(u"Moje podsumowanie"_s), qPrintable(html(1)));
+        QVERIFY(html(1).contains(u"Inna › Podsumowanie innej strony"_s));
+        QVERIFY(html(2).contains(u"Nowy tekst"_s));
+    }
+
     // --- completions and slash commands ------------------------------------------------------------
 
     void completions()

@@ -687,6 +687,16 @@ bool Workspace::blockIdTaken(const QString &blockId) const
     return m_index && !blockId.isEmpty() && m_index->blockById(blockId).has_value();
 }
 
+QString Workspace::linkedBlockText(const QString &path, const QString &blockId) const
+{
+    const ParsedNote *note = m_index ? m_index->note(path) : nullptr;
+    if (!note)
+        return {};
+    if (const int i = note->blockIds.value(blockId, -1); i >= 0 && i < note->blocks.size())
+        return note->blocks.at(i).text;
+    return blockText(blockId); // moved to another page (resolveRoute follows it there)
+}
+
 QString Workspace::ensureBlockId(const QString &path, int line)
 {
     if (!m_vault)

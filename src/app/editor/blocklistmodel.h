@@ -230,7 +230,7 @@ private:
         bool transclusionsValid = false;
         bool transclusionsLocal = false; ///< embeds this page: follows every change of it
         QVariantList transclusions;
-        bool dependsOnRefs = false; ///< own block refs `((id))`: re-render on any change of the page
+        bool dependsOnRefs = false; ///< `((id))`, `[[…#^id]]`: re-render on any change of the page
         bool dependsOnCalc = false; ///< inline calculations: re-render when the calc scope may change
         int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)

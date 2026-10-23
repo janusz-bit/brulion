@@ -13,6 +13,7 @@
 #include "markdown/tokens_p.h"
 
 #include <QStringList>
+#include <QTextBoundaryFinder>
 #include <QUrl>
 
 #include <algorithm>
@@ -31,6 +32,18 @@ constexpr int MaxDepth = 2;
 
 /// The block's text a `[[Page#^id]]` link shows after the page name, at most (… when cut).
 constexpr qsizetype MaxBlockLinkText = 60;
+
+/// `text` cut to at most `max` characters with "…" — never inside a character: not between a
+/// surrogate pair (📅), a letter and its combining mark, an emoji's ZWJ sequence.
+QString elided(const QString &text, qsizetype max)
+{
+    if (text.size() <= max)
+        return text;
+    QTextBoundaryFinder graphemes(QTextBoundaryFinder::Grapheme, text);
+    graphemes.setPosition(max - 1);
+    const qsizetype cut = graphemes.isAtBoundary() ? max - 1 : graphemes.toPreviousBoundary();
+    return text.first(std::max<qsizetype>(cut, 0)).trimmed() + u'…';
+}
 
 /// A rendered construct covering [from, to) of the text; an empty html hides the range.
 struct Atom {
@@ -562,14 +575,13 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                     QString frag = !w.heading.isEmpty()   ? w.heading
                                    : !w.blockId.isEmpty() ? u'^' + w.blockId
                                                           : QString();
-                    // [[Page#^id]] reads like ((id)): "Page › the block's text…".
-                    if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.blockText) {
-                        if (const auto blockText = m_ctx.blockText(w.blockId)) {
+                    // [[Page#^id]] reads like ((id)): "Page › the block's text…" — the block of
+                    // that page (ids are per page in Obsidian).
+                    if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.linkedBlockText) {
+                        if (const auto blockText = m_ctx.linkedBlockText(w.target, w.blockId)) {
                             const QString shown = blockText->simplified();
                             if (!shown.isEmpty())
-                                frag = shown.size() > MaxBlockLinkText
-                                               ? shown.first(MaxBlockLinkText - 1).trimmed() + u'…'
-                                               : shown;
+                                frag = elided(shown, MaxBlockLinkText);
                         }
                     }
                     const QString page = shownTarget(w.target);

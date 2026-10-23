@@ -860,6 +860,23 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
         }
         return std::nullopt;
     };
+    // [[Page#^id]]: the block of that page — this one's live text, another's from the index.
+    ctx.linkedBlockText = [this, host, path](const QString &target, const QString &id) -> std::optional<QString> {
+        const QString resolved = target.isEmpty() || !host ? QString() : host->resolveLink(target, path);
+        QString t;
+        if (target.isEmpty() || (!path.isEmpty() && resolved == path)) {
+            for (int k = 0; k < m_doc.count(); ++k) {
+                if (m_doc.at(k).blockId == id)
+                    return plainTextOf(m_doc.at(k), 120);
+            }
+            t = host ? host->blockText(id) : QString(); // moved to another page
+        } else if (!resolved.isEmpty()) {
+            t = host->linkedBlockText(resolved, id);
+        }
+        if (t.isEmpty())
+            return std::nullopt;
+        return t;
+    };
     // Inline calculations see the variables above the block (the context is used right away).
     const calc::CalcLocale locale = calcLocale();
     auto scope = std::make_shared<std::shared_ptr<const calc::Scope>>();
@@ -899,6 +916,13 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
                 return std::nullopt;
             return t.simplified();
         };
+        ctx.linkedBlockText = [host, path](const QString &target, const QString &id) -> std::optional<QString> {
+            const QString resolved = !host ? QString() : target.isEmpty() ? path : host->resolveLink(target, path);
+            const QString t = resolved.isEmpty() ? QString() : host->linkedBlockText(resolved, id);
+            if (t.isEmpty())
+                return std::nullopt;
+            return t.simplified();
+        };
     }
     const calc::CalcLocale locale = m_english ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     auto scope = std::make_shared<std::optional<calc::Scope>>();
@@ -926,7 +950,8 @@ QString BlockListModel::renderHtml(int i) const
     st.html = html;
     st.htmlValid = true;
     st.renderOffset = offset;
-    st.dependsOnRefs = e.body.contains(u"((");
+    // ((id)) and [[…#^id]] show the text of their block, which may be on this page.
+    st.dependsOnRefs = e.body.contains(u"((") || e.body.contains(u"#^");
     st.dependsOnCalc = e.body.contains(u"`=") || e.body.contains(u"` =");
     st.htmlCalcEpoch = m_calcEpoch;
     if (st.dependsOnCalc)

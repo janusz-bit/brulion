@@ -168,6 +168,7 @@ public:
     Q_INVOKABLE QString blockText(const QString &blockId) const override;
     /// The index knows a block with this id (blockById: `^id` or Logseq `id::`, any text).
     bool blockIdTaken(const QString &blockId) const override;
+    QString linkedBlockText(const QString &path, const QString &blockId) const override;
     Q_INVOKABLE QString ensureBlockId(const QString &path, int line) override;
     Q_INVOKABLE QVariantList templates() const override;
     Q_INVOKABLE QUrl assetUrl(const QString &path) const override;

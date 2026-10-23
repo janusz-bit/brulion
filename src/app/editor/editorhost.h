@@ -53,6 +53,14 @@ public:
     /// it, and a link to it is followed to wherever the block is. Default: blockText() is not "".
     /// Right after opening the index may be incomplete: finishIndexing() first.
     virtual bool blockIdTaken(const QString &blockId) const { return !blockText(blockId).isEmpty(); }
+    /// Text of the block a `[[Page#^id]]` link to the page at vault path `path` leads to: the
+    /// page's block with that id, else — moved to another page — the vault's block with it (where
+    /// the shell's route resolution opens it); "" when unknown. Default: blockText(blockId).
+    virtual QString linkedBlockText(const QString &path, const QString &blockId) const
+    {
+        Q_UNUSED(path)
+        return blockText(blockId);
+    }
     /// Complete the vault index now. Right after opening it is built in the background, and what
     /// is not indexed yet looks missing: called before deciding that a block id is free (a new
     /// one) or nowhere (a link to it). Default: nothing to do.

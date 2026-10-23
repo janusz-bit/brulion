@@ -96,6 +96,18 @@ QString renderInline(const VaultIndex *index, const QString &markdown, const Vau
                 return std::nullopt;
             return note->blocks.at(ref->blockIndex).text;
         };
+        // [[Page#^id]]: the block of that page, else (moved) the notebook's block with the id.
+        ctx.linkedBlockText = [index, fromPath, byId = ctx.blockText](const QString &target,
+                                                                      const QString &id) -> std::optional<QString> {
+            const std::optional<QString> path =
+                    target.isEmpty() ? std::optional<QString>(fromPath) : index->resolveLink(target, fromPath);
+            const ParsedNote *note = path ? index->note(*path) : nullptr;
+            if (!note)
+                return std::nullopt;
+            if (const int i = note->blockIds.value(id, -1); i >= 0 && i < note->blocks.size())
+                return note->blocks.at(i).text;
+            return byId(id);
+        };
     }
     ctx.today = today;
     ctx.locale = locale;

@@ -67,8 +67,9 @@
 //                  EditResult{changes (Removed/Moved/Inserted/Changed rows),
 //                  focus, cursor}; subtreeRange, parent, hasChildren, indexAtLine. Frontmatter /
 //                  page-property blocks at the top are pinned (never moved, nothing goes above).
-//   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, inlineCalc, today,
-//                  locale, palette, taskCheckbox}).render(body) / renderBlock(body, kind) ->
+//   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
+//                  inlineCalc, today, locale, palette, taskCheckbox}).render(body) /
+//                  renderBlock(body, kind) ->
 //                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder: links and
 //                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO is the
 //                  token's UTF-16 range in the text given to render() / the body given to
