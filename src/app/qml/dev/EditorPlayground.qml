@@ -2006,6 +2006,10 @@ ApplicationWindow {
     function blockMenuOpen() {
         return editor.blockMenu !== null && editor.blockMenu.opened
     }
+    /// Where `menu` begins in the window.
+    function menuTop(menu) {
+        return menu.background.mapToItem(null, 0, 0).y
+    }
     /// The block menu's entry of the "Kopiuj odnośnik" submenu, and the submenu.
     function copyEntry() {
         const menu = editor.blockMenu
@@ -2029,6 +2033,8 @@ ApplicationWindow {
                 tapItem(copyEntry())
             },
             waitStep(() => copySubmenu() !== null && copySubmenu().opened, "“Copy link” opens its submenu"),
+            () => check(menuTop(copySubmenu()) >= T.Overlay.overlay.SafeArea.margins.top,
+                        "the submenu begins below the window's status bar: " + menuTop(copySubmenu())),
             () => tapItem(menuItemNamed(copySubmenu(), name)),
             waitStep(() => !blockMenuOpen() && clipboardText() === expected(),
                      () => what + ": " + clipboardText() + " (" + expected() + ")"),
@@ -2225,6 +2231,13 @@ ApplicationWindow {
             },
             waitStep(() => editor.toolbarVisible && findItem(editor, "toolbarMore") !== null, "the touch toolbar has “More”"),
             () => {
+                // A phone's keyboard and the status bar over an edge-to-edge window's top (Android
+                // 11+): the menu, taller than the room above the toolbar, stays below the bar —
+                // a finger's tap there reached the status bar, not the menu (the emulator).
+                T.Overlay.overlay.SafeArea.additionalMargins.top = 48
+                KeyboardInsets.simulated = 336
+            },
+            () => {
                 const flick = findItem(editor, "editToolbarFlick")
                 flick.contentX = Math.max(0, flick.contentWidth - flick.width)
             },
@@ -2236,6 +2249,7 @@ ApplicationWindow {
                 const menuBottom = menu.contentItem.mapToItem(null, 0, menu.contentItem.height).y
                 const buttonTop = button.mapToItem(null, 0, 0).y
                 check(menuBottom <= buttonTop + 1, "the menu is above the toolbar: " + menuBottom + " ≤ " + buttonTop)
+                check(menuTop(menu) >= 48 + 8 - 1, "and below the status bar: " + menuTop(menu) + " ≥ 56")
                 check(editor.blockMenu.listItem && !editor.blockMenu.heading, "it is the edited block's menu")
             },
             ...copySteps("copyBlockLink", "“Link to block” copies [[Page#^id]]",
@@ -2244,6 +2258,8 @@ ApplicationWindow {
                 check(info(window.targetRow).blockId !== "" && page.editingRow === window.targetRow,
                       "the block got its id and is still being edited")
                 page.stopEditing()
+                T.Overlay.overlay.SafeArea.additionalMargins.top = 0
+                KeyboardInsets.simulated = -1
                 Theme.forceTouch = DevTools.touch
             },
             // ---- An outline: the bullet's menu; a calc block's (desktop) ------------------------------

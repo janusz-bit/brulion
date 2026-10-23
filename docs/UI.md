@@ -207,7 +207,10 @@ everything near the bottom, the same way on Android, in the browser and with a s
   likewise.
 * **Popups**: bottom sheets (`BDialog`) sit on the keyboard and centred dialogs stay above it;
   menus (`BMenu.bottomMargin`) stay above it, the editor's task status menu also above the
-  toolbar; autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
+  toolbar, and below the status bar of an edge-to-edge window (`BMenu.topMargin`, the window's
+  safe area: on Android a finger's tap there reaches the status bar, so a block menu opened
+  above the toolbar used to leave its first items untappable; one taller than the room left
+  scrolls); autocomplete is placed above the toolbar (`BlockEditor.visibleBottom()`); toasts above
   the keyboard and the toolbar (`AppShell.toastClearance`); the command palette ends at it.
 * **Tests**: `--keyboard <px>` simulates a keyboard, drawn as a grey `BKeyboardPlaceholder`:
   `tst_editor_qml_keyboard_touch` (the playground's `keyboard` script: a block in an outline and

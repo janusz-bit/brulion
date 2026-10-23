@@ -16,7 +16,9 @@ import Brulion
 // Keyboard: Up/Down (wrapping), Enter/Space activate, Right opens a submenu, Left/Escape
 // close. Opening by keyboard highlights the first item. Use `popup()` (at the pointer or
 // at an item) — never blocking; react in each item's triggered(). Menus stay above the on-screen
-// keyboard (bottomMargin; they flip above their item when there is no room below).
+// keyboard (bottomMargin; they flip above their item when there is no room below) and below the
+// system's status bar over an edge-to-edge window (topMargin, the window's safe area: a finger's
+// tap there goes to the status bar — a menu taller than the room left scrolls instead).
 // A submenu is a BMenu inside the menu (its `title` and `iconName` make its item); it opens beside
 // the menu with a mouse, in place of it on touch UIs (one menu at a time on a phone's width).
 //   BMenu { BMenu { title: qsTr("Kopiuj odnośnik"); iconName: "link"; BMenuItem { … } } }
@@ -25,12 +27,17 @@ T.Menu {
 
     /// The icon of this menu's item in its parent menu (a submenu).
     property string iconName
+    /// What the system's bars cover of the window's top (Android 11+ draws the window under the
+    /// status bar).
+    readonly property real safeTop: T.Overlay.overlay && T.Overlay.overlay.SafeArea
+                                    ? T.Overlay.overlay.SafeArea.margins.top : 0
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             contentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
                              contentHeight + topPadding + bottomPadding)
     margins: 8
+    topMargin: 8 + safeTop
     bottomMargin: 8 + KeyboardInsets.overlap
     padding: 4
     overlap: 4
