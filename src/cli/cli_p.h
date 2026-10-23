@@ -42,6 +42,14 @@ enum Exit : int {
 
 /// Human messages are English (translatable later): QCoreApplication::translate("brulion::cli").
 QString tr(const char *text);
+/// A registry text (Command::summary, Command::help, Arg::help) translated for the help printed
+/// for people; the registry keeps the English source.
+QString tr(const QString &source);
+/// The registry's English source of a text marked with QT_TRANSLATE_NOOP("brulion::cli", …).
+inline QString cliText(const char *source)
+{
+    return QString::fromUtf8(source);
+}
 
 struct Error {
     Error() = default;
@@ -89,6 +97,9 @@ class Context;
 class Call;
 using Handler = std::function<Result(Call &)>;
 
+/// Summaries and help (also Arg::help) are English texts marked with QT_TRANSLATE_NOOP(
+/// "brulion::cli", …): the help printed for people translates them (tr()); `schema`, `help
+/// --json` and the MCP tool descriptions keep the English source, stable for programs.
 struct Command {
     QString id;      ///< "page.read" — `page read` on the command line, brulion_page_read in MCP
     QString summary; ///< one line

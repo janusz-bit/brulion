@@ -9,10 +9,12 @@
 namespace brulion::cli {
 
 // ---- Building the registry
-Arg positional(const QString &name, ArgType type, const QString &help, bool required = true, bool rest = false);
-Arg option(const QString &name, ArgType type, const QString &help, bool required = false);
-Arg flag(const QString &name, const QString &help);
-Arg choice(const QString &name, const QStringList &values, const QString &help, bool positional = false,
+// Summaries and help are English texts marked for translation in the context "brulion::cli"
+// (QT_TRANSLATE_NOOP, cliText()); see Command.
+Arg positional(const QString &name, ArgType type, const char *help, bool required = true, bool rest = false);
+Arg option(const QString &name, ArgType type, const char *help, bool required = false);
+Arg flag(const QString &name, const char *help);
+Arg choice(const QString &name, const QStringList &values, const char *help, bool positional = false,
            bool required = false);
 /// `arg` that `--stdin` can provide.
 Arg stdinable(Arg arg);

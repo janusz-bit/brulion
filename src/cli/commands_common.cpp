@@ -16,34 +16,34 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::cli {
 
-Arg positional(const QString &name, ArgType type, const QString &help, bool required, bool rest)
+Arg positional(const QString &name, ArgType type, const char *help, bool required, bool rest)
 {
     Arg a;
     a.name = name;
     a.type = type;
-    a.help = help;
+    a.help = cliText(help);
     a.required = required;
     a.positional = true;
     a.rest = rest;
     return a;
 }
 
-Arg option(const QString &name, ArgType type, const QString &help, bool required)
+Arg option(const QString &name, ArgType type, const char *help, bool required)
 {
     Arg a;
     a.name = name;
     a.type = type;
-    a.help = help;
+    a.help = cliText(help);
     a.required = required;
     return a;
 }
 
-Arg flag(const QString &name, const QString &help)
+Arg flag(const QString &name, const char *help)
 {
     return option(name, ArgType::Bool, help);
 }
 
-Arg choice(const QString &name, const QStringList &values, const QString &help, bool isPositional, bool required)
+Arg choice(const QString &name, const QStringList &values, const char *help, bool isPositional, bool required)
 {
     Arg a = isPositional ? positional(name, ArgType::Enum, help, required)
                          : option(name, ArgType::Enum, help, required);

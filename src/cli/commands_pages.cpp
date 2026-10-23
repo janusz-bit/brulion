@@ -490,11 +490,11 @@ Result folderDelete(Call &call)
     return deletePath(call, *path);
 }
 
-Command command(const QString &id, const QString &summary, Handler run, QList<Arg> args = {})
+Command command(const QString &id, const char *summary, Handler run, QList<Arg> args = {})
 {
     Command c;
     c.id = id;
-    c.summary = summary;
+    c.summary = cliText(summary);
     c.run = std::move(run);
     c.args = std::move(args);
     return c;
@@ -504,75 +504,116 @@ Command command(const QString &id, const QString &summary, Handler run, QList<Ar
 
 void addPageCommands(QList<Command> &out)
 {
-    const Arg ref = positional(u"ref"_s, ArgType::Ref,
-                               u"The page: a path (Projekty/Dom.md), a name as [[links]] read it (Dom), a date "
-                               u"(today, wczoraj, 2026-10-15) or an item ref (Dom.md#L12@hash, ^id)"_s);
-    Command c = command(u"page.list"_s, u"List the pages (Markdown files) of the notebook"_s, pageList,
-                        {option(u"folder"_s, ArgType::Path, u"Only pages in this folder (and below)"_s),
-                         choice(u"sort"_s, {u"title"_s, u"path"_s, u"modified"_s}, u"Order (default: title)"_s),
-                         option(u"limit"_s, ArgType::Int, u"At most this many"_s)});
+    const Arg ref =
+            positional(u"ref"_s, ArgType::Ref,
+                       QT_TRANSLATE_NOOP("brulion::cli",
+                                         "The page: a path (Projekty/Dom.md), a name as [[links]] read it (Dom), a "
+                                         "date (today, wczoraj, 2026-10-15) or an item ref (Dom.md#L12@hash, ^id)"));
+    Command c = command(u"page.list"_s,
+                        QT_TRANSLATE_NOOP("brulion::cli", "List the pages (Markdown files) of the notebook"), pageList,
+                        {option(u"folder"_s, ArgType::Path,
+                                QT_TRANSLATE_NOOP("brulion::cli", "Only pages in this folder (and below)")),
+                         choice(u"sort"_s, {u"title"_s, u"path"_s, u"modified"_s},
+                                QT_TRANSLATE_NOOP("brulion::cli", "Order (default: title)")),
+                         option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many"))});
     out.append(c);
-    c = command(u"page.read"_s, u"Read a page: its text, hash, frontmatter, tags, mode"_s, pageRead,
-                {ref, flag(u"blocks"_s, u"Also every block with its ref"_s),
-                 flag(u"backlinks"_s, u"Also the links and tags naming the page"_s)});
-    c.help = u"The `hash` is what page write --expect-hash needs. A missing daily note reads as exists: false."_s;
+    c = command(u"page.read"_s,
+                QT_TRANSLATE_NOOP("brulion::cli", "Read a page: its text, hash, frontmatter, tags, mode"), pageRead,
+                {ref, flag(u"blocks"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also every block with its ref")),
+                 flag(u"backlinks"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also the links and tags naming the page"))});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The `hash` is what page write --expect-hash needs. A missing daily note reads as exists: false."));
+    out.append(c);
+    c = command(u"page.create"_s,
+                QT_TRANSLATE_NOOP("brulion::cli", "Create a page (a name differing only in letter case is that page)"),
+                pageCreate,
+                {positional(u"title"_s, ArgType::String,
+                            QT_TRANSLATE_NOOP("brulion::cli", "Title; \"Projekty/Dom\" creates folders"), true, true),
+                 option(u"folder"_s, ArgType::Path,
+                        QT_TRANSLATE_NOOP("brulion::cli",
+                                          "Folder (default: the notebook's folder for new pages; . = root)")),
+                 choice(u"mode"_s, {u"outline"_s, u"document"_s},
+                        QT_TRANSLATE_NOOP("brulion::cli", "Note mode (default: the notebook's)")),
+                 stdinable(option(u"content"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "Its text")))});
+    c.writes = true;
     out.append(c);
     c = command(
-            u"page.create"_s, u"Create a page (a name differing only in letter case is that page)"_s, pageCreate,
-            {positional(u"title"_s, ArgType::String, u"Title; \"Projekty/Dom\" creates folders"_s, true, true),
-             option(u"folder"_s, ArgType::Path, u"Folder (default: the notebook's folder for new pages; . = root)"_s),
-             choice(u"mode"_s, {u"outline"_s, u"document"_s}, u"Note mode (default: the notebook's)"_s),
-             stdinable(option(u"content"_s, ArgType::Text, u"Its text"_s))});
+            u"page.append"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Append a block to a page (a daily note is created from its template)"),
+            pageAppend,
+            {ref,
+             stdinable(positional(u"text"_s, ArgType::Text,
+                                  QT_TRANSLATE_NOOP("brulion::cli", "The block's text (more lines: continuation)"),
+                                  true, true)),
+             option(u"under"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Put it at the end of this heading's section (\"## Zakupy\") or "
+                                                      "as the last child of a block (^id)"))});
     c.writes = true;
     out.append(c);
-    c = command(u"page.append"_s, u"Append a block to a page (a daily note is created from its template)"_s, pageAppend,
-                {ref,
-                 stdinable(positional(u"text"_s, ArgType::Text, u"The block's text (more lines: continuation)"_s, false,
-                                      true)),
-                 option(u"under"_s, ArgType::String,
-                        u"Put it at the end of this heading's section (\"## Zakupy\") or as the last child of a "
-                        u"block (^id)"_s)});
-    c.writes = true;
-    out.append(c);
-    c = command(u"page.write"_s, u"Replace a page's whole text (needs its current hash)"_s, pageWrite,
-                {ref, stdinable(option(u"content"_s, ArgType::Text, u"The new text"_s)),
-                 option(u"expectHash"_s, ArgType::String, u"The hash page read gave: refused when the page changed"_s,
-                        true)});
+    c = command(
+            u"page.write"_s, QT_TRANSLATE_NOOP("brulion::cli", "Replace a page's whole text (needs its current hash)"),
+            pageWrite,
+            {ref,
+             stdinable(option(u"content"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The new text"), true)),
+             option(u"expectHash"_s, ArgType::String,
+                    QT_TRANSLATE_NOOP("brulion::cli", "The hash page read gave: refused when the page changed"),
+                    true)});
     c.writes = c.destructive = true;
     out.append(c);
-    c = command(u"page.rename"_s, u"Rename a page; every link and tag naming it follows"_s, pageRename,
+    c = command(u"page.rename"_s,
+                QT_TRANSLATE_NOOP("brulion::cli", "Rename a page; every link and tag naming it follows"), pageRename,
                 {ref, positional(u"title"_s, ArgType::String,
-                                 u"The new title (in the same folder; page move changes the folder)"_s, true, true)});
+                                 QT_TRANSLATE_NOOP("brulion::cli",
+                                                   "The new title (in the same folder; page move changes the folder)"),
+                                 true, true)});
     c.writes = c.destructive = true;
     out.append(c);
-    c = command(u"page.move"_s, u"Move a page to another folder; every link and tag naming it follows"_s, pageMove,
-                {ref, positional(u"folder"_s, ArgType::Path, u"The folder (. = the notebook root)"_s)});
+    c = command(
+            u"page.move"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Move a page to another folder; every link and tag naming it follows"),
+            pageMove,
+            {ref, positional(u"folder"_s, ArgType::Path,
+                             QT_TRANSLATE_NOOP("brulion::cli", "The folder (. = the notebook root)"))});
     c.writes = c.destructive = true;
     out.append(c);
-    c = command(u"page.delete"_s, u"Move a page to the trash (.trash/)"_s, pageDelete, {ref});
+    c = command(u"page.delete"_s, QT_TRANSLATE_NOOP("brulion::cli", "Move a page to the trash (.trash/)"), pageDelete,
+                {ref});
     c.writes = c.destructive = true;
     out.append(c);
 
-    c = command(u"folder.list"_s, u"List folders (with a folder: its subfolders) and what they hold"_s, folderList,
-                {positional(u"folder"_s, ArgType::Path, u"List the subfolders of this folder (. = root)"_s, false)});
+    c = command(
+            u"folder.list"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "List folders (with a folder: its subfolders) and what they hold"),
+            folderList,
+            {positional(u"folder"_s, ArgType::Path,
+                        QT_TRANSLATE_NOOP("brulion::cli", "List the subfolders of this folder (. = root)"), false)});
     out.append(c);
-    c = command(u"folder.create"_s, u"Create a folder (names sanitised, hidden names refused)"_s, folderCreate,
-                {positional(u"path"_s, ArgType::Path, u"The folder, e.g. Projekty/Dom"_s)});
+    c = command(
+            u"folder.create"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Create a folder (names sanitised, hidden names refused)"), folderCreate,
+            {positional(u"path"_s, ArgType::Path, QT_TRANSLATE_NOOP("brulion::cli", "The folder, e.g. Projekty/Dom"))});
     c.writes = true;
     out.append(c);
-    c = command(u"folder.move"_s, u"Move a folder; links and tags follow, special folders update the settings"_s,
+    c = command(u"folder.move"_s,
+                QT_TRANSLATE_NOOP("brulion::cli",
+                                  "Move a folder; links and tags follow, special folders update the settings"),
                 folderMove,
-                {positional(u"path"_s, ArgType::Path, u"The folder"_s),
-                 positional(u"target"_s, ArgType::Path, u"Into this folder (. = the notebook root)"_s)});
+                {positional(u"path"_s, ArgType::Path, QT_TRANSLATE_NOOP("brulion::cli", "The folder")),
+                 positional(u"target"_s, ArgType::Path,
+                            QT_TRANSLATE_NOOP("brulion::cli", "Into this folder (. = the notebook root)"))});
     c.writes = c.destructive = true;
     out.append(c);
-    c = command(u"folder.rename"_s, u"Rename a folder; links and tags follow"_s, folderRename,
-                {positional(u"path"_s, ArgType::Path, u"The folder"_s),
-                 positional(u"name"_s, ArgType::String, u"The new name"_s, true, true)});
+    c = command(
+            u"folder.rename"_s, QT_TRANSLATE_NOOP("brulion::cli", "Rename a folder; links and tags follow"),
+            folderRename,
+            {positional(u"path"_s, ArgType::Path, QT_TRANSLATE_NOOP("brulion::cli", "The folder")),
+             positional(u"name"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The new name"), true, true)});
     c.writes = c.destructive = true;
     out.append(c);
-    c = command(u"folder.delete"_s, u"Move a folder and everything in it to the trash"_s, folderDelete,
-                {positional(u"path"_s, ArgType::Path, u"The folder"_s)});
+    c = command(u"folder.delete"_s,
+                QT_TRANSLATE_NOOP("brulion::cli", "Move a folder and everything in it to the trash"), folderDelete,
+                {positional(u"path"_s, ArgType::Path, QT_TRANSLATE_NOOP("brulion::cli", "The folder"))});
     c.writes = c.destructive = true;
     out.append(c);
 }

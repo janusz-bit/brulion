@@ -1,14 +1,17 @@
 // brulion-cli in process: the argument parser (command words, options anywhere, `--`, global
 // options, errors), argument checking (the MCP path), the registry (unique ids and tool names,
-// destructive commands write), the JSON Schema, help and completion, unified diffs, and the
-// command table of docs/CLI.md against the registry.
+// destructive commands write), the JSON Schema (the main text required for MCP), help and
+// completion (help translatable, the schema English), unified diffs, and the command table of
+// docs/CLI.md against the registry.
 #include "cli_p.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
+#include <QTranslator>
 
 using namespace Qt::StringLiterals;
 using namespace brulion::cli;
@@ -250,6 +253,57 @@ private Q_SLOTS:
             // MCP adds dryRun to the tools that write.
             QCOMPARE(inputSchema(c, true).value(u"properties"_s).toObject().contains(u"dryRun"_s), c.writes);
         }
+        // The main text is needed (MCP has no --stdin); a new page's text is not.
+        const auto required = [](const QString &id) {
+            return inputSchema(*findCommand(id), true).value(u"required"_s).toArray();
+        };
+        for (const QString &id : {u"capture"_s, u"journal.append"_s, u"page.append"_s, u"task.add"_s, u"remind.add"_s})
+            QVERIFY2(required(id).contains(u"text"_s), qPrintable(id));
+        QVERIFY(required(u"calc"_s).contains(u"expression"_s));
+        QVERIFY(required(u"page.write"_s).contains(u"content"_s));
+        QVERIFY(required(u"page.write"_s).contains(u"expectHash"_s));
+        QVERIFY(!required(u"page.create"_s).contains(u"content"_s));
+    }
+
+    // The help printed for people is translatable (context "brulion::cli"); the schema, help
+    // --json and the MCP tools keep the English source.
+    void helpIsTranslatedSchemaStaysEnglish()
+    {
+        class Polish : public QTranslator {
+        public:
+            QString translate(const char *context, const char *source, const char *, int) const override
+            {
+                if (qstrcmp(context, "brulion::cli") != 0)
+                    return {};
+                const QByteArray s(source);
+                if (s == "Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅")
+                    return u"Szybka notatka do dzisiejszego dziennika"_s;
+                if (s == "What to capture (Polish or English)")
+                    return u"Co zanotować"_s;
+                if (s == "Arguments:")
+                    return u"Argumenty:"_s;
+                return {};
+            }
+            bool isEmpty() const override { return false; }
+        } polish;
+        QCoreApplication::installTranslator(&polish);
+        const Command *capture = findCommand(u"capture"_s);
+        const QString help = helpText(u"brulion-cli"_s, capture);
+        const QString all = helpText(u"brulion-cli"_s, nullptr);
+        const QJsonObject schema = schemaDocument().value(u"commands"_s).toObject().value(u"capture"_s).toObject();
+        QCoreApplication::removeTranslator(&polish);
+        QVERIFY2(help.contains(u"Szybka notatka do dzisiejszego dziennika"_s), qPrintable(help));
+        QVERIFY(help.contains(u"Co zanotować"_s));
+        QVERIFY(help.contains(u"Argumenty:"_s));
+        QVERIFY(all.contains(QRegularExpression(u"\n  capture +Szybka notatka do dzisiejszego dziennika\n"_s)));
+        QVERIFY(schema.value(u"description"_s).toString().startsWith(u"Quick capture into today's journal"_s));
+        QCOMPARE(
+                schema.value(u"properties"_s).toObject().value(u"text"_s).toObject().value(u"description"_s).toString(),
+                u"What to capture (Polish or English)"_s);
+        QCOMPARE(capture->summary,
+                 u"Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅"_s);
+        // Without a catalog: English.
+        QVERIFY(helpText(u"brulion-cli"_s, capture).contains(u"What to capture (Polish or English)"_s));
     }
 
     void helpAndCompletion()

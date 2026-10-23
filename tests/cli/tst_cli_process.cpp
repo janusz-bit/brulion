@@ -3,9 +3,11 @@
 // write byte for byte (line endings, BOM), refusals (read-only, destructive without
 // --allow-destructive, paths outside the notebook, a missing notebook — never created), the app's
 // settings file left byte-identical and no reminder state written, Polish argv under LANG=C and
-// text on stdin, two processes appending to one journal (nothing lost), dry runs, `app open`
-// against a stand-in app, and the MCP server (initialize, tools/list, tools/call, errors, the warm
-// index seeing a file written meanwhile).
+// text on stdin, two processes appending to one journal (nothing lost), dry runs showing what the
+// real run writes (a daily note's template, the notes a rename rewrites, what a delete trashes),
+// pages named like dates resolving as [[links]] do, the notebook and language taken as the app
+// takes them, `app open` against a stand-in app, and the MCP server (initialize, tools/list,
+// tools/call, errors, the warm index seeing a file written meanwhile).
 #include "appmessage.h"
 #include "notebook/session.h"
 #include "singleinstance.h"
@@ -895,8 +897,13 @@ private Q_SLOTS:
                 "\n");
         reply = request(R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})");
         QStringList names;
-        for (const QJsonValue &t : reply.value(u"result"_s).toObject().value(u"tools"_s).toArray())
-            names.append(t.toObject().value(u"name"_s).toString());
+        for (const QJsonValue &t : reply.value(u"result"_s).toObject().value(u"tools"_s).toArray()) {
+            const QJsonObject tool = t.toObject();
+            names.append(tool.value(u"name"_s).toString());
+            // The text has no --stdin in MCP: the schema says it is needed.
+            if (names.last() == u"brulion_capture" || names.last() == u"brulion_journal_append")
+                QVERIFY(tool.value(u"inputSchema"_s).toObject().value(u"required"_s).toArray().contains(u"text"_s));
+        }
         QVERIFY(names.contains(u"brulion_capture"_s));
         QVERIFY(names.contains(u"brulion_search"_s));
         QVERIFY(!names.contains(u"brulion_page_delete"_s)); // destructive: not without --allow-destructive

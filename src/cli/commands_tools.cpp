@@ -273,11 +273,11 @@ Result historyRestore(Call &call)
     return call.ok(o);
 }
 
-Command make(const QString &id, const QString &summary, Handler run, QList<Arg> args)
+Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
 {
     Command c;
     c.id = id;
-    c.summary = summary;
+    c.summary = cliText(summary);
     c.run = std::move(run);
     c.args = std::move(args);
     return c;
@@ -288,33 +288,56 @@ Command make(const QString &id, const QString &summary, Handler run, QList<Arg> 
 void addToolCommands(QList<Command> &out)
 {
     Command c =
-            make(u"date.parse"_s, u"Understand a date phrase (Polish or English) as Brulion does"_s, dateParse,
+            make(u"date.parse"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli", "Understand a date phrase (Polish or English) as Brulion does"),
+                 dateParse,
                  {positional(u"phrase"_s, ArgType::String,
-                             u"jutro o 9, w piątek 18:00, za 2 godziny, 15 października, next friday"_s, true, true)});
+                             QT_TRANSLATE_NOOP("brulion::cli",
+                                               "jutro o 9, w piątek 18:00, za 2 godziny, 15 października, next friday"),
+                             true, true)});
     c.needsVault = false;
-    c.help = u"Check \"jutro 9:00\" before writing it. Uses --now, --lang; without a notebook weeks start on Monday."_s;
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Check \"jutro 9:00\" before writing it. Uses --now, --lang; without a notebook weeks start on Monday."));
     out.append(c);
-    c = make(u"calc"_s, u"Calculate with Brulion's calculator (units, percent, Polish decimal comma)"_s, calcEval,
-             {stdinable(positional(u"expression"_s, ArgType::Text, u"One expression, or lines of a calc block"_s, false,
+    c = make(u"calc"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Calculate with Brulion's calculator (units, percent, Polish decimal comma)"),
+             calcEval,
+             {stdinable(positional(u"expression"_s, ArgType::Text,
+                                   QT_TRANSLATE_NOOP("brulion::cli", "One expression, or lines of a calc block"), true,
                                    true))});
     c.needsVault = false;
     out.append(c);
-    out.append(make(u"calc.page"_s, u"The results of a page's calc blocks and inline `= …` calculations"_s, calcPage,
-                    {positional(u"ref"_s, ArgType::Ref, u"The page"_s)}));
-    c = make(u"block.link"_s, u"The links to a block, adding its id when it has none (as the app's Kopiuj odnośnik)"_s,
+    out.append(
+            make(u"calc.page"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli", "The results of a page's calc blocks and inline `= …` calculations"),
+                 calcPage, {positional(u"ref"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page"))}));
+    c = make(u"block.link"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "The links to a block, adding its id when it has none (as the app's Kopiuj odnośnik)"),
              blockLink,
-             {positional(u"ref"_s, ArgType::Ref, u"The block: Dom.md#L12@hash (page read --blocks) or Dom.md#^id"_s)});
-    c.help = u"Returns {id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink [[Page#Heading]] for headings}."_s;
+             {positional(u"ref"_s, ArgType::Ref,
+                         QT_TRANSLATE_NOOP("brulion::cli",
+                                           "The block: Dom.md#L12@hash (page read --blocks) or Dom.md#^id"))});
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Returns {id, ref ((id)), wikiLink [[Page#^id]], embed, headingLink [[Page#Heading]] for headings}."));
     c.writes = true;
     out.append(c);
-    out.append(make(u"history.list"_s, u"The versions of a page kept on this device (also of a deleted page)"_s,
-                    historyList, {positional(u"ref"_s, ArgType::Ref, u"The page"_s)}));
-    out.append(make(u"history.show"_s, u"The text of a version"_s, historyShow,
-                    {positional(u"id"_s, ArgType::String, u"The version id (history list)"_s)}));
-    c = make(u"history.restore"_s, u"Write a version back (the current text is kept as a version first)"_s,
-             historyRestore,
-             {positional(u"ref"_s, ArgType::Ref, u"The page"_s),
-              positional(u"id"_s, ArgType::String, u"The version id (history list)"_s)});
+    out.append(make(
+            u"history.list"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "The versions of a page kept on this device (also of a deleted page)"),
+            historyList, {positional(u"ref"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page"))}));
+    out.append(make(u"history.show"_s, QT_TRANSLATE_NOOP("brulion::cli", "The text of a version"), historyShow,
+                    {positional(u"id"_s, ArgType::String,
+                                QT_TRANSLATE_NOOP("brulion::cli", "The version id (history list)"))}));
+    c = make(
+            u"history.restore"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Write a version back (the current text is kept as a version first)"),
+            historyRestore,
+            {positional(u"ref"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page")),
+             positional(u"id"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The version id (history list)"))});
     c.writes = c.destructive = true;
     out.append(c);
 }

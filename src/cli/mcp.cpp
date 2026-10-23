@@ -66,11 +66,11 @@ public:
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
         if (parseError.error != QJsonParseError::NoError) {
-            sendError(QJsonValue(), kParseError, u"Parse error: "_s + parseError.errorString());
+            sendError(QJsonValue(), kParseError, tr("Parse error: %1").arg(parseError.errorString()));
             return;
         }
         if (!doc.isObject()) {
-            sendError(QJsonValue(), kInvalidRequest, u"Expected one JSON-RPC request object"_s);
+            sendError(QJsonValue(), kInvalidRequest, tr("Expected one JSON-RPC request object"));
             return;
         }
         const QJsonObject request = doc.object();
@@ -79,7 +79,7 @@ public:
         const QString method = request.value(u"method"_s).toString();
         if (request.value(u"jsonrpc"_s).toString() != u"2.0" || method.isEmpty()) {
             if (!notification)
-                sendError(id, kInvalidRequest, u"Not a JSON-RPC 2.0 request"_s);
+                sendError(id, kInvalidRequest, tr("Not a JSON-RPC 2.0 request"));
             return;
         }
         const QJsonObject params = request.value(u"params"_s).toObject();
@@ -124,10 +124,12 @@ public:
             return;
         }
         if (!notification)
-            sendError(id, kMethodNotFound, u"Method not found: "_s + method);
+            sendError(id, kMethodNotFound, tr("Method not found: %1").arg(method));
     }
 
 private:
+    /// For the agent, English like the tool descriptions (the registry's source texts): stable
+    /// whatever the language of the help printed for people.
     QString instructions() const
     {
         QString text = u"Tools read and change the Brulion notebook (Markdown files)"_s;
@@ -151,12 +153,12 @@ private:
                 command = &c;
         }
         if (!command) {
-            sendError(id, kInvalidParams, u"Unknown tool: "_s + name);
+            sendError(id, kInvalidParams, tr("Unknown tool: %1").arg(name));
             return;
         }
         const QJsonValue rawArgs = params.value(u"arguments"_s);
         if (!rawArgs.isUndefined() && !rawArgs.isNull() && !rawArgs.isObject()) {
-            sendError(id, kInvalidParams, u"arguments must be an object"_s);
+            sendError(id, kInvalidParams, tr("arguments must be an object"));
             return;
         }
         QJsonObject args = rawArgs.toObject();

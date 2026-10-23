@@ -200,11 +200,11 @@ Result appCapture(Call &call)
     return sendToApp(call, ipc::encodeMessage("capture"), {{u"sent"_s, u"capture"_s}});
 }
 
-Command make(const QString &id, const QString &summary, Handler run, QList<Arg> args)
+Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
 {
     Command c;
     c.id = id;
-    c.summary = summary;
+    c.summary = cliText(summary);
     c.run = std::move(run);
     c.args = std::move(args);
     c.needsVault = false;
@@ -216,39 +216,62 @@ Command make(const QString &id, const QString &summary, Handler run, QList<Arg> 
 void addMetaCommands(QList<Command> &out)
 {
     Command c = make(
-            u"app.open"_s, u"Show the running app at a page, a daily note (today) or quick capture"_s, appOpen,
+            u"app.open"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Show the running app at a page, a daily note (today) or quick capture"),
+            appOpen,
             {positional(u"target"_s, ArgType::Ref,
-                        u"A page ref (Dom, Dom.md#L12@hash, ^id), a date (today, jutro), or capture"_s, false, true)});
-    c.help = u"Desktop only, the app of this user session (exit 5 with gui.running false when none runs). The app "
-             u"opens pages of the notebook it shows."_s;
+                        QT_TRANSLATE_NOOP("brulion::cli",
+                                          "A page ref (Dom, Dom.md#L12@hash, ^id), a date (today, jutro), or capture"),
+                        false, true)});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "Desktop only, the app of this user session (exit 5 with gui.running "
+                                       "false when none runs). The app opens pages of the notebook it shows."));
     out.append(c);
-    out.append(make(u"app.today"_s, u"Show the running app at today's daily note"_s, appToday, {}));
-    out.append(make(u"app.capture"_s, u"Open quick capture in the running app"_s, appCapture, {}));
-    c = make(u"init"_s, u"Create a notebook folder (the only command that creates one)"_s, init,
-             {positional(u"path"_s, ArgType::String, u"The folder"_s)});
+    out.append(make(u"app.today"_s, QT_TRANSLATE_NOOP("brulion::cli", "Show the running app at today's daily note"),
+                    appToday, {}));
+    out.append(make(u"app.capture"_s, QT_TRANSLATE_NOOP("brulion::cli", "Open quick capture in the running app"),
+                    appCapture, {}));
+    c = make(u"init"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "Create a notebook folder (the only command that creates one)"), init,
+             {positional(u"path"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The folder"))});
     c.writes = true;
     c.mcp = false;
     out.append(c);
-    c = make(u"version"_s, u"The version of brulion-cli (and of Qt, the MCP protocol)"_s, version, {});
+    c = make(u"version"_s,
+             QT_TRANSLATE_NOOP("brulion::cli", "The version of brulion-cli (and of Qt, the MCP protocol)"), version,
+             {});
     out.append(c);
-    c = make(u"help"_s, u"Help: all commands, or one (help page read); --json describes them for programs"_s, help,
-             {positional(u"topic"_s, ArgType::String, u"A command, e.g. \"task add\""_s, false, true),
-              flag(u"json"_s, u"The commands as JSON"_s)});
+    c = make(u"help"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Help: all commands, or one (help page read); --json describes them for programs"),
+             help,
+             {positional(u"topic"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "A command, e.g. \"task add\""),
+                         false, true),
+              flag(u"json"_s, QT_TRANSLATE_NOOP("brulion::cli", "The commands as JSON"))});
     c.mcp = false;
     out.append(c);
-    c = make(u"schema"_s, u"JSON Schema of the commands' arguments (all, or one)"_s, schema,
-             {positional(u"command"_s, ArgType::String, u"A command, e.g. \"task add\""_s, false, true)});
+    c = make(u"schema"_s, QT_TRANSLATE_NOOP("brulion::cli", "JSON Schema of the commands' arguments (all, or one)"),
+             schema,
+             {positional(u"command"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "A command, e.g. \"task add\""), false, true)});
     c.mcp = false;
     out.append(c);
-    c = make(u"completion"_s, u"A shell completion script"_s, completion,
-             {choice(u"shell"_s, {u"bash"_s, u"fish"_s, u"zsh"_s}, u"The shell"_s, true, true)});
+    c = make(u"completion"_s, QT_TRANSLATE_NOOP("brulion::cli", "A shell completion script"), completion,
+             {choice(u"shell"_s, {u"bash"_s, u"fish"_s, u"zsh"_s}, QT_TRANSLATE_NOOP("brulion::cli", "The shell"), true,
+                     true)});
     c.mcp = false;
     out.append(c);
-    c = make(u"mcp"_s, u"Serve the commands as MCP tools over standard input/output (for AI agents)"_s, mcpCommand,
-             {flag(u"readOnly"_s, u"Offer only the tools that read"_s),
-              flag(u"allowDestructive"_s, u"Also offer the destructive tools (page write, rename, move, delete …)"_s)});
-    c.help = u"JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so calls after the first "
-             u"are fast. Give the notebook with --vault."_s;
+    c = make(u"mcp"_s,
+             QT_TRANSLATE_NOOP("brulion::cli",
+                               "Serve the commands as MCP tools over standard input/output (for AI agents)"),
+             mcpCommand,
+             {flag(u"readOnly"_s, QT_TRANSLATE_NOOP("brulion::cli", "Offer only the tools that read")),
+              flag(u"allowDestructive"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "Also offer the destructive tools (page write, rename, move, delete …)"))});
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
+                                       "calls after the first are fast. Give the notebook with --vault."));
     c.mcp = false;
     out.append(c);
 }

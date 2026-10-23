@@ -296,11 +296,11 @@ Result calendar(Call &call)
                    text);
 }
 
-Command make(const QString &id, const QString &summary, Handler run, QList<Arg> args)
+Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
 {
     Command c;
     c.id = id;
-    c.summary = summary;
+    c.summary = cliText(summary);
     c.run = std::move(run);
     c.args = std::move(args);
     return c;
@@ -310,27 +310,52 @@ Command make(const QString &id, const QString &summary, Handler run, QList<Arg> 
 
 void addIndexCommands(QList<Command> &out)
 {
-    const Arg ref = positional(u"ref"_s, ArgType::Ref, u"The page: a path, a name, a date or an item ref"_s);
-    out.append(
-            make(u"info"_s, u"The notebook: folder, settings, counts, scan state, whether the app runs"_s, info, {}));
-    Command c = make(u"query"_s, u"Run a query (docs/SYNTAX.md §10), the same results as a ```query block"_s, query,
-                     {positional(u"query"_s, ArgType::String,
-                                 u"type:tasks status:open due:<=+7d sort:due — keys also in Polish"_s, true, true),
-                      option(u"page"_s, ArgType::Ref, u"The page page:this / ref:this mean"_s)});
+    const Arg ref = positional(u"ref"_s, ArgType::Ref,
+                               QT_TRANSLATE_NOOP("brulion::cli", "The page: a path, a name, a date or an item ref"));
+    out.append(make(u"info"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli",
+                                      "The notebook: folder, settings, counts, scan state, whether the app runs"),
+                    info, {}));
+    Command c = make(
+            u"query"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Run a query (docs/SYNTAX.md §10), the same results as a ```query block"),
+            query,
+            {positional(u"query"_s, ArgType::String,
+                        QT_TRANSLATE_NOOP("brulion::cli",
+                                          "type:tasks status:open due:<=+7d sort:due — keys also in Polish"),
+                        true, true),
+             option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "The page page:this / ref:this mean"))});
     out.append(c);
-    out.append(make(u"search"_s, u"Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"_s, search,
-                    {positional(u"text"_s, ArgType::String, u"Words to find"_s, true, true),
-                     option(u"limit"_s, ArgType::Int, u"At most this many hits (default 20)"_s)}));
-    out.append(make(u"tags"_s, u"Every tag, most used first, with the page it names"_s, tags,
-                    {option(u"prefix"_s, ArgType::String, u"Only tags starting with this"_s)}));
-    out.append(make(u"tag"_s, u"One tag: the page it names, its sub-tags and the blocks carrying it"_s, tag,
-                    {positional(u"name"_s, ArgType::String, u"The tag, with or without #"_s, true, true)}));
-    out.append(make(u"backlinks"_s, u"What names a page: links to it and tags naming it"_s, backlinks, {ref}));
-    out.append(make(u"links"_s, u"The links of a page and where they lead"_s, links, {ref}));
-    out.append(make(u"unlinked"_s, u"Plain-text mentions of a page's title in other notes"_s, unlinked, {ref}));
-    out.append(make(u"calendar"_s, u"Calendar entries: daily notes, task dates, reminders, done dates"_s, calendar,
-                    {option(u"from"_s, ArgType::Date, u"From this day (default today)"_s),
-                     option(u"to"_s, ArgType::Date, u"To this day (default: a week)"_s)}));
+    out.append(make(
+            u"search"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "Full-text search, diacritic-insensitive (\"zolw\" finds \"żółw\")"),
+            search,
+            {positional(u"text"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Words to find"), true, true),
+             option(u"limit"_s, ArgType::Int,
+                    QT_TRANSLATE_NOOP("brulion::cli", "At most this many hits (default 20)"))}));
+    out.append(make(
+            u"tags"_s, QT_TRANSLATE_NOOP("brulion::cli", "Every tag, most used first, with the page it names"), tags,
+            {option(u"prefix"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Only tags starting with this"))}));
+    out.append(make(
+            u"tag"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "One tag: the page it names, its sub-tags and the blocks carrying it"),
+            tag,
+            {positional(u"name"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The tag, with or without #"),
+                        true, true)}));
+    out.append(make(u"backlinks"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli", "What names a page: links to it and tags naming it"), backlinks,
+                    {ref}));
+    out.append(make(u"links"_s, QT_TRANSLATE_NOOP("brulion::cli", "The links of a page and where they lead"), links,
+                    {ref}));
+    out.append(make(u"unlinked"_s,
+                    QT_TRANSLATE_NOOP("brulion::cli", "Plain-text mentions of a page's title in other notes"), unlinked,
+                    {ref}));
+    out.append(
+            make(u"calendar"_s,
+                 QT_TRANSLATE_NOOP("brulion::cli", "Calendar entries: daily notes, task dates, reminders, done dates"),
+                 calendar,
+                 {option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day (default today)")),
+                  option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day (default: a week)"))}));
 }
 
 } // namespace brulion::cli

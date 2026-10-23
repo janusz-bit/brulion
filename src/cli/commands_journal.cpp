@@ -143,34 +143,46 @@ void addJournalCommands(QList<Command> &out)
 {
     const Arg date =
             positional(u"date"_s, ArgType::Date,
-                       u"The day: today (default), wczoraj, jutro, w piątek, 2026-10-15, last monday"_s, false, true);
+                       QT_TRANSLATE_NOOP("brulion::cli",
+                                         "The day: today (default), wczoraj, jutro, w piątek, 2026-10-15, last monday"),
+                       false, true);
     Command c;
     c.id = u"journal.read"_s;
-    c.summary = u"Read a daily note (`journal` alone: today's)"_s;
-    c.args = {date, flag(u"blocks"_s, u"Also every block with its ref"_s)};
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Read a daily note (`journal` alone: today's)"));
+    c.args = {date, flag(u"blocks"_s, QT_TRANSLATE_NOOP("brulion::cli", "Also every block with its ref"))};
     c.run = journalRead;
     out.append(c);
     c = Command();
     c.id = u"journal.path"_s;
-    c.summary = u"The path of a daily note (its existing file under any accepted name, else the configured one)"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The path of a daily note (its existing file under any accepted name, else the configured one)"));
     c.args = {date};
     c.run = journalPath;
     out.append(c);
     c = Command();
     c.id = u"journal.append"_s;
-    c.summary = u"Append a block to a daily note (created from the journal template)"_s;
-    c.help = u"A template's empty last bullet is filled; the note's line endings and BOM stay."_s;
-    c.args = {stdinable(positional(u"text"_s, ArgType::Text, u"The block's text"_s, false, true)),
-              option(u"date"_s, ArgType::Date, u"The day (default: today)"_s)};
+    c.summary = cliText(
+            QT_TRANSLATE_NOOP("brulion::cli", "Append a block to a daily note (created from the journal template)"));
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "A template's empty last bullet is filled; the note's line endings and BOM stay."));
+    c.args = {stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The block's text"),
+                                   true, true)),
+              option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "The day (default: today)"))};
     c.run = journalAppend;
     c.writes = true;
     out.append(c);
     c = Command();
     c.id = u"capture"_s;
-    c.summary = u"Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅"_s;
-    c.help = u"\"Kupić mleko jutro o 18\" becomes \"- [ ] Kupić mleko ⏰ 2026-10-15 18:00\"; without a time a due "
-             u"date 📅; dates in the past stay text."_s;
-    c.args = {stdinable(positional(u"text"_s, ArgType::Text, u"What to capture (Polish or English)"_s, false, true))};
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Quick capture into today's journal, as the app's: a date in it makes a task with ⏰ or 📅"));
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "\"Kupić mleko jutro o 18\" becomes \"- [ ] Kupić mleko ⏰ 2026-10-15 "
+                                       "18:00\"; without a time a due date 📅; dates in the past stay text."));
+    c.args = {stdinable(positional(u"text"_s, ArgType::Text,
+                                   QT_TRANSLATE_NOOP("brulion::cli", "What to capture (Polish or English)"), true,
+                                   true))};
     c.run = capture;
     c.writes = true;
     out.append(c);

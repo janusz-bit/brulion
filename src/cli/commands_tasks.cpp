@@ -439,49 +439,69 @@ Result remindSnooze(Call &call)
 
 void addTaskCommands(QList<Command> &out)
 {
-    const Arg ref = positional(u"ref"_s, ArgType::Ref,
-                               u"The task's line: the `ref` task list gives (Dom.md#L12@hash), or a block (^id)"_s);
+    const Arg ref = positional(
+            u"ref"_s, ArgType::Ref,
+            QT_TRANSLATE_NOOP("brulion::cli",
+                              "The task's line: the `ref` task list gives (Dom.md#L12@hash), or a block (^id)"));
     const auto placeArgs = [] {
-        return QList<Arg>{option(u"page"_s, ArgType::Ref, u"Into this page (default: today's daily note)"_s),
-                          option(u"date"_s, ArgType::Date, u"Into the daily note of this day"_s)};
+        return QList<Arg>{
+                option(u"page"_s, ArgType::Ref,
+                       QT_TRANSLATE_NOOP("brulion::cli", "Into this page (default: today's daily note)")),
+                option(u"date"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Into the daily note of this day"))};
     };
     Command c;
     c.id = u"task.list"_s;
-    c.summary = u"List tasks (default: open ones), or run a task query (docs/SYNTAX.md §10)"_s;
-    c.args = {
-            option(u"status"_s, ArgType::String,
-                   u"open (default), todo, doing, done, cancelled, deferred, closed, all — or Polish words"_s),
-            option(u"due"_s, ArgType::String, u"A due date expression: today, +7d, <=+7d, overdue, this-week, none"_s),
-            option(u"tag"_s, ArgType::String, u"With this tag (also its sub-tags)"_s),
-            option(u"page"_s, ArgType::Ref, u"In this page"_s),
-            option(u"limit"_s, ArgType::Int, u"At most this many (the total is still counted)"_s),
-            option(u"query"_s, ArgType::String,
-                   u"A whole query instead (\"status:open due:<=+7d sort:due\"; type:tasks unless given)"_s)};
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                          "List tasks (default: open ones), or run a task query (docs/SYNTAX.md §10)"));
+    c.args = {option(u"status"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP(
+                             "brulion::cli",
+                             "open (default), todo, doing, done, cancelled, deferred, closed, all — or Polish words")),
+              option(u"due"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli",
+                                       "A due date expression: today, +7d, <=+7d, overdue, this-week, none")),
+              option(u"tag"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "With this tag (also its sub-tags)")),
+              option(u"page"_s, ArgType::Ref, QT_TRANSLATE_NOOP("brulion::cli", "In this page")),
+              option(u"limit"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli", "At most this many (the total is still counted)")),
+              option(u"query"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP(
+                             "brulion::cli",
+                             "A whole query instead (\"status:open due:<=+7d sort:due\"; type:tasks unless given)"))};
     c.run = taskList;
     out.append(c);
     c = Command();
     c.id = u"task.add"_s;
-    c.summary = u"Add a task with canonical tokens (📅 ⏳ 🛫 ⏰ 🔁, priority)"_s;
-    c.help = u"Dates are phrases (jutro 9:00, w piątek, 2026-10-15) written as YYYY-MM-DD [HH:mm]; a date in "
-             u"the past gives a warning. The task goes to today's daily note unless --page or --date."_s;
-    c.args = QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text, u"The task"_s, false, true)),
-                        option(u"due"_s, ArgType::Date, u"Due date 📅"_s),
-                        option(u"scheduled"_s, ArgType::Date, u"Scheduled ⏳"_s),
-                        option(u"start"_s, ArgType::Date, u"Start 🛫"_s),
-                        option(u"remind"_s, ArgType::Date, u"Reminder ⏰ (a date and time)"_s),
-                        option(u"alarm"_s, ArgType::Date, u"Alarm ⏰! (loud, stays until dismissed)"_s),
-                        option(u"every"_s, ArgType::String, u"Recurrence 🔁 (co tydzień, every weekday, …)"_s),
-                        option(u"priority"_s, ArgType::String, u"highest, high, medium, low, lowest"_s)}
+    c.summary =
+            cliText(QT_TRANSLATE_NOOP("brulion::cli", "Add a task with canonical tokens (📅 ⏳ 🛫 ⏰ 🔁, priority)"));
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "Dates are phrases (jutro 9:00, w piątek, 2026-10-15) written as YYYY-MM-DD [HH:mm]; a date in the past "
+            "gives a warning. The task goes to today's daily note unless --page or --date."));
+    c.args = QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text, QT_TRANSLATE_NOOP("brulion::cli", "The task"),
+                                             true, true)),
+                        option(u"due"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Due date 📅")),
+                        option(u"scheduled"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Scheduled ⏳")),
+                        option(u"start"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "Start 🛫")),
+                        option(u"remind"_s, ArgType::Date,
+                               QT_TRANSLATE_NOOP("brulion::cli", "Reminder ⏰ (a date and time)")),
+                        option(u"alarm"_s, ArgType::Date,
+                               QT_TRANSLATE_NOOP("brulion::cli", "Alarm ⏰! (loud, stays until dismissed)")),
+                        option(u"every"_s, ArgType::String,
+                               QT_TRANSLATE_NOOP("brulion::cli", "Recurrence 🔁 (co tydzień, every weekday, …)")),
+                        option(u"priority"_s, ArgType::String,
+                               QT_TRANSLATE_NOOP("brulion::cli", "highest, high, medium, low, lowest"))}
              + placeArgs();
     c.run = taskAdd;
     c.writes = true;
     out.append(c);
     c = Command();
     c.id = u"task.set"_s;
-    c.summary = u"Set a task's status (completing a recurring task adds its next occurrence)"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "Set a task's status (completing a recurring task adds its next occurrence)"));
     c.args = {ref, positional(u"status"_s, ArgType::String,
-                              u"todo, doing, done, cancelled, deferred, none — or zrobione, w toku, anulowane, "
-                              u"odłożone, brak"_s)};
+                              QT_TRANSLATE_NOOP("brulion::cli", "todo, doing, done, cancelled, deferred, none — or "
+                                                                "zrobione, w toku, anulowane, odłożone, brak"))};
     c.run = taskSet;
     c.writes = true;
     out.append(c);
@@ -489,15 +509,15 @@ void addTaskCommands(QList<Command> &out)
         const char *word;
         const char *status;
         const char *summary;
-    } aliases[] = {{"done", "done", "Mark a task done (task set <ref> done)"},
-                   {"doing", "doing", "Mark a task in progress"},
-                   {"todo", "todo", "Mark a task to do (open again)"},
-                   {"cancel", "cancelled", "Cancel a task"},
-                   {"defer", "deferred", "Defer a task (waiting)"}};
+    } aliases[] = {{"done", "done", QT_TRANSLATE_NOOP("brulion::cli", "Mark a task done (task set <ref> done)")},
+                   {"doing", "doing", QT_TRANSLATE_NOOP("brulion::cli", "Mark a task in progress")},
+                   {"todo", "todo", QT_TRANSLATE_NOOP("brulion::cli", "Mark a task to do (open again)")},
+                   {"cancel", "cancelled", QT_TRANSLATE_NOOP("brulion::cli", "Cancel a task")},
+                   {"defer", "deferred", QT_TRANSLATE_NOOP("brulion::cli", "Defer a task (waiting)")}};
     for (const auto &a : aliases) {
         c = Command();
         c.id = u"task."_s + QString::fromLatin1(a.word);
-        c.summary = QString::fromLatin1(a.summary);
+        c.summary = cliText(a.summary);
         c.args = {ref};
         const QString status = QString::fromLatin1(a.status);
         c.run = [status](Call &call) { return taskStatusAlias(call, status); };
@@ -509,31 +529,40 @@ void addTaskCommands(QList<Command> &out)
 
     c = Command();
     c.id = u"remind.add"_s;
-    c.summary = u"Add a reminder ⏰ (or an alarm ⏰!) as a new block"_s;
-    c.help = u"Reminders fire where a Brulion app runs: the desktop app (in the tray) or the phone once the app "
-             u"has seen the change."_s;
-    c.args = QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text, u"What to be reminded of"_s, false, true)),
-                        option(u"at"_s, ArgType::Date, u"When: jutro 9:00, w piątek o 18, 2026-10-15 09:00"_s, true),
-                        flag(u"alarm"_s, u"An alarm ⏰!: loud, stays until dismissed"_s),
-                        option(u"every"_s, ArgType::String, u"Recurrence 🔁"_s),
-                        flag(u"task"_s, u"Make it a task (- [ ] …)"_s)}
-             + placeArgs();
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Add a reminder ⏰ (or an alarm ⏰!) as a new block"));
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Reminders fire where a Brulion app runs: the desktop app (in "
+                                                       "the tray) or the phone once the app has seen the change."));
+    c.args =
+            QList<Arg>{stdinable(positional(u"text"_s, ArgType::Text,
+                                            QT_TRANSLATE_NOOP("brulion::cli", "What to be reminded of"), true, true)),
+                       option(u"at"_s, ArgType::Date,
+                              QT_TRANSLATE_NOOP("brulion::cli", "When: jutro 9:00, w piątek o 18, 2026-10-15 09:00"),
+                              true),
+                       flag(u"alarm"_s, QT_TRANSLATE_NOOP("brulion::cli", "An alarm ⏰!: loud, stays until dismissed")),
+                       option(u"every"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "Recurrence 🔁")),
+                       flag(u"task"_s, QT_TRANSLATE_NOOP("brulion::cli", "Make it a task (- [ ] …)"))}
+            + placeArgs();
     c.run = remindAdd;
     c.writes = true;
     out.append(c);
     c = Command();
     c.id = u"remind.list"_s;
-    c.summary = u"Reminders due soon (or in a range), recurring ones expanded — read only, no state kept"_s;
-    c.args = {option(u"upcoming"_s, ArgType::Int, u"The next this many days (default 7)"_s),
-              option(u"from"_s, ArgType::Date, u"From this day"_s), option(u"to"_s, ArgType::Date, u"To this day"_s),
-              option(u"limit"_s, ArgType::Int, u"At most this many (default 200)"_s)};
+    c.summary = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli", "Reminders due soon (or in a range), recurring ones expanded — read only, no state kept"));
+    c.args = {option(u"upcoming"_s, ArgType::Int,
+                     QT_TRANSLATE_NOOP("brulion::cli", "The next this many days (default 7)")),
+              option(u"from"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "From this day")),
+              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this day")),
+              option(u"limit"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "At most this many (default 200)"))};
     c.run = remindList;
     out.append(c);
     c = Command();
     c.id = u"remind.snooze"_s;
-    c.summary = u"Move a reminder (a recurring one gets a one-off child reminder)"_s;
-    c.args = {ref, option(u"minutes"_s, ArgType::Int, u"By this many minutes from now"_s),
-              option(u"to"_s, ArgType::Date, u"To this time"_s)};
+    c.summary = cliText(
+            QT_TRANSLATE_NOOP("brulion::cli", "Move a reminder (a recurring one gets a one-off child reminder)"));
+    c.args = {ref,
+              option(u"minutes"_s, ArgType::Int, QT_TRANSLATE_NOOP("brulion::cli", "By this many minutes from now")),
+              option(u"to"_s, ArgType::Date, QT_TRANSLATE_NOOP("brulion::cli", "To this time"))};
     c.run = remindSnooze;
     c.writes = true;
     out.append(c);

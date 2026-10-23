@@ -281,5 +281,9 @@ latest read, and check dates with `date parse` before writing them.
 schema, completion), `args.cpp` (argv), `context.cpp` (the notebook, refs, dates, writes),
 `commands_*.cpp`, `output.cpp` (envelope, text, diff), `mcp.cpp`, `run.cpp`. Tests: `tests/cli`
 (`tst_cli_args` in process, `tst_cli_process` runs the binary on temporary notebooks, also the MCP
-server); the shared logic is tested in `tests/core/notebook`. Human messages are English, `tr()`
-wrapped (not in the Polish catalog yet); command names, JSON keys and error codes are stable.
+server); the shared logic is tested in `tests/core/notebook`. Human messages are English and
+translatable (context `brulion::cli`, not in the Polish catalog yet): error messages through
+`tr()`, the registry's summaries and argument help marked with `QT_TRANSLATE_NOOP` and translated in
+the help printed for people. `schema`, `help --json` and the MCP tool descriptions and server
+instructions keep the English text, stable for programs, as are command names, JSON keys and error
+codes.
