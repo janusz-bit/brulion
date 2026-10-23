@@ -129,6 +129,11 @@ class AppController : public QObject {
 
     /// --popup value for screenshots ("" normally).
     Q_PROPERTY(QString devPopup READ devPopup CONSTANT FINAL)
+    /// The remote control of the running app for AI agents (desktop: remotecontrol.h, set by
+    /// main()): { available (built and started for this run), setting (the device setting
+    /// devtools/remoteControl), active (listening), forced (--remote-control), socket, error };
+    /// { available: false } elsewhere. Settings → Application → "For developers".
+    Q_PROPERTY(QVariantMap remoteControl READ remoteControl NOTIFY remoteControlChanged FINAL)
 
 public:
     struct Options {
@@ -212,6 +217,8 @@ public:
     bool startHidden() const { return m_startHidden && m_trayAvailable; }
     bool quitting() const { return m_quitting; }
     QString devPopup() const { return m_devPopup; }
+    QVariantMap remoteControl() const { return m_remoteControl; }
+    void setRemoteControl(const QVariantMap &status);
 
     // ---- Vaults -------------------------------------------------------------------------
     QString defaultVaultPath() const;
@@ -329,6 +336,7 @@ Q_SIGNALS:
     void inDocsVaultChanged();
     void permissionsChanged();
     void syncStatusChanged();
+    void remoteControlChanged();
     /// The UI language setting changed ("pl" | "en"); main() swaps the translation.
     void languageChanged(const QString &language);
     void toastRequested(const QString &text, const QString &kind);
@@ -388,6 +396,7 @@ private:
     int m_pendingNoteLine = -1;
     bool m_syncAvailable = false;
     QVariantMap m_syncStatus;
+    QVariantMap m_remoteControl{{QStringLiteral("available"), false}};
     std::function<QDateTime()> m_clock;
     // Dev options.
     QString m_devVault;

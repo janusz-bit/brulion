@@ -109,6 +109,9 @@ struct Command {
     bool destructive = false; ///< needs --allow-destructive
     bool needsVault = true;
     bool mcp = true; ///< offered as an MCP tool
+    /// Drives the running app through its remote control (commands_app.cpp): an MCP tool only with
+    /// `mcp --app-control`.
+    bool appControl = false;
     QString aliasOf; ///< "task.set" for `task done`
     Handler run;
 
@@ -119,7 +122,8 @@ struct Command {
 /// Every command, in help order.
 const QList<Command> &commands();
 const Command *findCommand(const QString &id);
-/// The MCP tool name of a command: "brulion_" + id with '.' as '_' ("brulion_task_add").
+/// The MCP tool name of a command: "brulion_" + id with '.' and '-' as '_' ("brulion_task_add",
+/// "brulion_app_long_press").
 QString toolName(const Command &command);
 /// "expectHash" -> "--expect-hash".
 QString optionName(const QString &argName);
@@ -134,6 +138,7 @@ void addJournalCommands(QList<Command> &out);
 void addTaskCommands(QList<Command> &out);
 void addIndexCommands(QList<Command> &out);
 void addToolCommands(QList<Command> &out);
+void addAppCommands(QList<Command> &out);
 void addMetaCommands(QList<Command> &out);
 
 /// Options for the whole run (docs/CLI.md "Global options").
@@ -298,8 +303,9 @@ Result execute(Context &context, const Command &command, const QJsonObject &args
 /// Exit code of a result.
 int exitCode(const Result &result);
 
-/// The MCP server on standard input / output (`brulion-cli mcp`).
-int serveMcp(Context &context, bool readOnly, bool allowDestructive);
+/// The MCP server on standard input / output (`brulion-cli mcp`); `appControl`: also the tools
+/// that drive the running app.
+int serveMcp(Context &context, bool readOnly, bool allowDestructive, bool appControl = false);
 /// The MCP protocol version this server speaks (initialize).
 QString mcpProtocolVersion();
 

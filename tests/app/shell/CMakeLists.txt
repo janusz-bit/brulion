@@ -73,6 +73,20 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
+
+    # Remote control of the running app (src/app/shell/remotecontrol.h), end to end: the app
+    # offscreen on a small notebook in a private home, driven through `brulion-cli app …` and the
+    # control socket (off by default, 0600, state, navigate, open, find and click, Polish text typed
+    # into a block and saved, Ctrl+K, commands, capture, waitFor, screenshots, gestures, the MCP app
+    # tools, quit). The test sets the app's environment itself.
+    if(TARGET brulion-cli)
+        brulion_add_test(tst_remote_control_qml SOURCES tst_remote_control.cpp LIBS brulion_ipc)
+        target_compile_definitions(tst_remote_control_qml PRIVATE BRULION_APP="$<TARGET_FILE:brulion>"
+            BRULION_CLI="$<TARGET_FILE:brulion-cli>" BRULION_QML_ROOT="${_brulion_qt_qml_root}")
+        add_dependencies(tst_remote_control_qml brulion brulion-cli)
+        math(EXPR _remote_timeout "240 * ${BRULION_TEST_SLOWDOWN}")
+        set_tests_properties(tst_remote_control_qml PROPERTIES TIMEOUT ${_remote_timeout} RUN_SERIAL TRUE)
+    endif()
 endif()
 
 # The UI driver (src/app/shell/uidriver.h, shared by the self-test, the journey and the remote

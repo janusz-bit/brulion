@@ -13,7 +13,8 @@ import Brulion
 //
 // show(text, options) -> id. options: kind ("info" | "success" | "warning" | "error"),
 // actionText, onAction (function), timeout (ms; default 4 s, 7 s with an action, 0 = until
-// closed). Hovering a toast pauses its timer. dismiss(id), clear().
+// closed). Hovering a toast pauses its timer. dismiss(id), clear(). toastShown(id, text, kind)
+// tells about each one shown (the remote control's state.lastToasts).
 Item {
     id: host
 
@@ -22,6 +23,8 @@ Item {
     property real bottomMargin: Theme.space4
     property var _actions: ({})
     property int _nextId: 1
+
+    signal toastShown(int toastId, string text, string kind)
 
     function show(text, options) {
         const o = options || {}
@@ -39,6 +42,7 @@ Item {
         while (toastModel.count > maxVisible)
             _remove(toastModel.count - 1)
         _announce(text)
+        toastShown(id, String(text), o.kind || "info")
         return id
     }
 

@@ -28,6 +28,7 @@ const QList<Command> &commands()
         addTaskCommands(out);
         addIndexCommands(out);
         addToolCommands(out);
+        addAppCommands(out);
         addMetaCommands(out);
         return out;
     }();
@@ -45,7 +46,7 @@ const Command *findCommand(const QString &id)
 
 QString toolName(const Command &command)
 {
-    return u"brulion_"_s + QString(command.id).replace(u'.', u'_');
+    return u"brulion_"_s + QString(command.id).replace(u'.', u'_').replace(u'-', u'_');
 }
 
 QString optionName(const QString &argName)
@@ -149,6 +150,7 @@ QJsonObject schemaDocument()
         s.insert(u"x-brulion"_s, QJsonObject{{u"writes"_s, c.writes},
                                              {u"destructive"_s, c.destructive},
                                              {u"needsVault"_s, c.needsVault},
+                                             {u"appControl"_s, c.appControl},
                                              {u"mcpTool"_s, c.mcp ? toolName(c) : QString()}});
         all.insert(c.id, s);
     }

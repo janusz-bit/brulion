@@ -119,6 +119,7 @@ ApplicationWindow {
 
     BToastHost {
         id: toastHost
+        objectName: "toastHost" // the remote control reads the toasts shown (remotecontrol.h)
         parent: T.Overlay.overlay
         anchors.fill: parent
         z: 1000

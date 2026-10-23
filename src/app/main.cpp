@@ -30,9 +30,11 @@
 // Linux desktop: system tray (Qt Widgets, hence QApplication) and one instance per session.
 #include "appmessage.h"
 #include "cli.h" // `brulion cli …`: the command line (src/cli)
+#include "controlprotocol.h"
 #include "desktop/desktoptray.h"
 #include "ioselftest.h"
 #include "notifyselftest.h"
+#include "remotecontrol.h" // --remote-control: AI agents drive the running app (brulion-cli app …)
 #include "shelljourney.h"
 #include "shellselftest.h"
 #include "singleinstance.h"
@@ -228,6 +230,10 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
+#ifdef BRULION_DESKTOP_INTEGRATION
+    // After the engine: it drives the engine's window and goes before it.
+    std::unique_ptr<brulion::shell::RemoteControl> remoteControl;
+#endif
 
     // The shell's controller: settings, the vault, navigation (src/app/shell/appcontroller.h).
     const auto createController = [&](const QString &settingsFile) {
@@ -306,6 +312,17 @@ int main(int argc, char *argv[])
         // A first-time user's walk through the app with a screenshot per step (shelljourney.h).
         if (const QString journey = argValue(args, u"--journey"_s); mainUi && !journey.isEmpty())
             brulion::shell::startShellJourney(&engine, controller.get(), journey);
+        // AI agents and scripts drive the running app over a socket of its own (remotecontrol.h):
+        // with --remote-control, or while the device setting is on (Settings → Application). It
+        // listens only then; it exists for the settings page also in --screenshot runs.
+        if (mainUi) {
+            brulion::shell::RemoteControl::Options remote;
+            remote.key = brulion::ipc::controlKeyFor(brulion::ipc::SingleInstance::keyFor(
+                    QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
+            remote.forced = args.contains(u"--remote-control"_s);
+            remote.language = [&devTools] { return devTools.language(); };
+            remoteControl = std::make_unique<brulion::shell::RemoteControl>(&engine, controller.get(), remote);
+        }
 #endif
     };
 

@@ -15,8 +15,10 @@
 # qmlcachegen their full API).
 # Desktop Linux only: the system tray (QSystemTrayIcon needs Qt Widgets, so main.cpp creates a
 # QApplication there and BRULION_DESKTOP_INTEGRATION is defined for it), the QML self-test
-# (--selftest-shell, run by ctest as tst_shell_qml) and the user journey with screenshots
-# (--journey <dir>, shelljourney.h; ctest tst_shell_journey, tests/app/shell/journey.sh).
+# (--selftest-shell, run by ctest as tst_shell_qml), the user journey with screenshots
+# (--journey <dir>, shelljourney.h; ctest tst_shell_journey, tests/app/shell/journey.sh) and the
+# remote control of the running app for AI agents (--remote-control, remotecontrol.h; ctest
+# tst_remote_control_qml), all three on the UI driver (uidriver.h, library brulion_uidriver).
 # QML: qml/Main.qml (listed by src/app/CMakeLists.txt), qml/shell/*, and the views
 # (shell/views.cmake).
 
@@ -84,16 +86,18 @@ target_link_libraries(brulion PRIVATE brulion_shell)
 
 if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
-    # The UI driver (uidriver.h): real input and item finding for the self-test and the journey
-    # (tests/app/shell: tst_uidriver).
+    # The UI driver (uidriver.h): real input and item finding for the self-test, the journey and
+    # the remote control (tests/app/shell: tst_uidriver).
     qt_add_library(brulion_uidriver STATIC ${_brulion_shell_dir}/uidriver.h ${_brulion_shell_dir}/uidriver.cpp)
     target_include_directories(brulion_uidriver PUBLIC ${_brulion_shell_dir})
     target_link_libraries(brulion_uidriver PUBLIC Qt6::Core Qt6::Gui Qt6::Quick)
     brulion_set_warnings(brulion_uidriver)
     target_sources(brulion PRIVATE shell/desktop/desktoptray.h shell/desktop/desktoptray.cpp
-        shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp)
-    # One Brulion per session and the messages of brulion-cli (src/ipc); `brulion cli …` runs the
-    # command line (src/cli) inside the app's binary (the AppImage's one entry point).
+        shell/shellselftest.h shell/shellselftest.cpp shell/shelljourney.h shell/shelljourney.cpp
+        shell/remotecontrol.h shell/remotecontrol.cpp)
+    # One Brulion per session, the messages of brulion-cli and the remote control's socket
+    # (src/ipc); `brulion cli …` runs the command line (src/cli) inside the app's binary (the
+    # AppImage's one entry point).
     target_link_libraries(brulion PRIVATE Qt6::Widgets brulion_ipc brulion_cli brulion_uidriver)
     target_compile_definitions(brulion PRIVATE BRULION_DESKTOP_INTEGRATION=1)
 endif()

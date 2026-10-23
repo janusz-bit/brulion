@@ -702,7 +702,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="633"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="637"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>

@@ -1,11 +1,6 @@
-// About the command line itself and the running app: version, help, schema, completion, mcp,
-// init, app open/today/capture.
+// About the command line itself: version, help, schema, completion, mcp, init (the running app:
+// commands_app.cpp).
 #include "commands_p.h"
-
-#include "appmessage.h"
-#include "notebook/itemref.h"
-#include "singleinstance.h"
-#include "vault/vault.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -81,6 +76,7 @@ Result help(Call &call)
                        {u"writes"_s, c.writes},
                        {u"destructive"_s, c.destructive},
                        {u"needsVault"_s, c.needsVault},
+                       {u"appControl"_s, c.appControl},
                        {u"mcpTool"_s, c.mcp ? toolName(c) : QString()}};
         if (!c.help.isEmpty())
             co.insert(u"help"_s, c.help);
@@ -138,68 +134,6 @@ Result init(Call &call)
     return call.ok(QJsonObject{{u"path"_s, path}, {u"created"_s, !existed}}, path);
 }
 
-/// Send `message` to the running app; {sent, gui: {running}}.
-Result sendToApp(Call &call, const QByteArray &message, QJsonObject result)
-{
-    ipc::SingleInstance app(ipc::SingleInstance::keyFor(call.ctx.appDataDir()));
-    if (!app.isPrimaryRunning())
-        return call.fail(ExitUnavailable, u"app_not_running"_s,
-                         tr("Brulion is not running on this desktop (the app must run in this user session)"),
-                         {{u"gui"_s, QJsonObject{{u"running"_s, false}}}});
-    if (!app.sendToPrimary(message))
-        return call.fail(ExitUnavailable, u"app_not_reached"_s, tr("The running app did not take the message"),
-                         {{u"gui"_s, QJsonObject{{u"running"_s, true}}}});
-    result.insert(u"gui"_s, QJsonObject{{u"running"_s, true}});
-    return call.ok(result);
-}
-
-Result appOpen(Call &call)
-{
-    const QString target = call.str(u"target"_s).trimmed();
-    if (target.isEmpty() || target == u"today")
-        return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
-    if (target == u"capture")
-        return sendToApp(call, ipc::encodeMessage("capture"), {{u"sent"_s, u"capture"_s}});
-    if (auto e = call.ctx.resolveVault())
-        return failWith(*e);
-    const auto ref = call.page(target, false);
-    if (!ref)
-        return call.failed();
-    QJsonObject route;
-    if (ref->journal && !ref->item) {
-        route = {{u"view"_s, u"journal"_s}, {u"date"_s, ref->journal->toString(Qt::ISODate)}, {u"path"_s, ref->path}};
-    } else {
-        if (!ref->exists)
-            return call.fail(ExitNotFound, u"page_not_found"_s, tr("No page %1").arg(ref->path),
-                             {{u"path"_s, ref->path}});
-        route = {{u"view"_s, u"page"_s}, {u"path"_s, ref->path}};
-        if (ref->item && ref->item->hasBlock()) {
-            route.insert(u"blockId"_s, ref->item->blockId);
-        } else if (ref->item && ref->item->hasLine()) {
-            notebook::ItemRef item = *ref->item;
-            const notebook::ResolvedLine line =
-                    notebook::resolve(call.nb()->read(ref->path).text, item, call.vault()->config());
-            route.insert(u"line"_s, line.line >= 0 ? line.line : item.line);
-        }
-    }
-    const QString current = call.ctx.settingsValue(u"vaults/current"_s);
-    if (!current.isEmpty() && Vault::idForPath(current) != Vault::idForPath(call.ctx.vaultRoot()))
-        call.warn(u"other_notebook"_s,
-                  tr("The app's notebook is %1: it will not open a page of %2").arg(current, call.ctx.vaultRoot()));
-    return sendToApp(call, ipc::openMessage(route, call.ctx.vaultRoot()),
-                     {{u"sent"_s, u"open"_s}, {u"route"_s, route}});
-}
-
-Result appToday(Call &call)
-{
-    return sendToApp(call, ipc::encodeMessage("today"), {{u"sent"_s, u"today"_s}});
-}
-
-Result appCapture(Call &call)
-{
-    return sendToApp(call, ipc::encodeMessage("capture"), {{u"sent"_s, u"capture"_s}});
-}
-
 Command make(const QString &id, const char *summary, Handler run, QList<Arg> args)
 {
     Command c;
@@ -215,25 +149,9 @@ Command make(const QString &id, const char *summary, Handler run, QList<Arg> arg
 
 void addMetaCommands(QList<Command> &out)
 {
-    Command c = make(
-            u"app.open"_s,
-            QT_TRANSLATE_NOOP("brulion::cli", "Show the running app at a page, a daily note (today) or quick capture"),
-            appOpen,
-            {positional(u"target"_s, ArgType::Ref,
-                        QT_TRANSLATE_NOOP("brulion::cli",
-                                          "A page ref (Dom, Dom.md#L12@hash, ^id), a date (today, jutro), or capture"),
-                        false, true)});
-    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
-                                       "Desktop only, the app of this user session (exit 5 with gui.running "
-                                       "false when none runs). The app opens pages of the notebook it shows."));
-    out.append(c);
-    out.append(make(u"app.today"_s, QT_TRANSLATE_NOOP("brulion::cli", "Show the running app at today's daily note"),
-                    appToday, {}));
-    out.append(make(u"app.capture"_s, QT_TRANSLATE_NOOP("brulion::cli", "Open quick capture in the running app"),
-                    appCapture, {}));
-    c = make(u"init"_s,
-             QT_TRANSLATE_NOOP("brulion::cli", "Create a notebook folder (the only command that creates one)"), init,
-             {positional(u"path"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The folder"))});
+    Command c = make(u"init"_s,
+                     QT_TRANSLATE_NOOP("brulion::cli", "Create a notebook folder (the only command that creates one)"),
+                     init, {positional(u"path"_s, ArgType::String, QT_TRANSLATE_NOOP("brulion::cli", "The folder"))});
     c.writes = true;
     c.mcp = false;
     out.append(c);
@@ -268,7 +186,11 @@ void addMetaCommands(QList<Command> &out)
              {flag(u"readOnly"_s, QT_TRANSLATE_NOOP("brulion::cli", "Offer only the tools that read")),
               flag(u"allowDestructive"_s,
                    QT_TRANSLATE_NOOP("brulion::cli",
-                                     "Also offer the destructive tools (page write, rename, move, delete …)"))});
+                                     "Also offer the destructive tools (page write, rename, move, delete …)")),
+              flag(u"appControl"_s,
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "Also offer the tools that drive the running app (app state, click, type, "
+                                     "screenshot …; its remote control must be on)"))});
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "JSON-RPC 2.0 over stdio, tools only; the notebook stays open and watched, so "
                                        "calls after the first are fast. Give the notebook with --vault."));
