@@ -106,8 +106,9 @@ QString normalizeTag(const QString &tag);
 /// as canonical keys in the order written — not the tags of its blocks.
 QStringList pageTags(const ParsedNote &note);
 
-/// Locale-aware, case- and diacritic-insensitive comparison of names (Polish collation, then
-/// code units so the order is total).
+/// Case-insensitive comparison of names in Polish alphabetical order with digit runs by value,
+/// then code units so the order is total — text::compareNames(), the order of the sidebar's tree
+/// too (the same on every platform: no ICU).
 int compareNames(const QString &a, const QString &b);
 
 } // namespace brulion::content

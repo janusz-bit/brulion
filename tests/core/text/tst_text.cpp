@@ -5,6 +5,7 @@
 #include <QTest>
 #include <QThread>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -481,6 +482,58 @@ private Q_SLOTS:
         QCOMPARE(lines.size(), 100'001);
         QCOMPARE(text::joinLines(lines), big);
         QVERIFY(t.elapsed() < 5000);
+    }
+
+    // ---- names -------------------------------------------------------------------------
+    // The order of the sidebar's tree and of All pages (the same in the browser: no ICU).
+    void compareNames_data()
+    {
+        QTest::addColumn<QString>("a");
+        QTest::addColumn<QString>("b");
+        QTest::addColumn<int>("sign");
+        QTest::newRow("ć after c, before d") << u"Ćwiczenia"_s << u"Dom"_s << -1;
+        QTest::newRow("c before ć") << u"Cyrk"_s << u"Ćwiczenia"_s << -1;
+        QTest::newRow("ł before m") << u"Łódź"_s << u"Mama"_s << -1;
+        QTest::newRow("l before ł") << u"Lublin"_s << u"Łódź"_s << -1;
+        QTest::newRow("z before ż") << u"Zakupy"_s << u"Żagle"_s << -1;
+        QTest::newRow("ź before ż") << u"Źródła"_s << u"Żagle"_s << -1;
+        QTest::newRow("ś after s, before t") << u"Śląsk"_s << u"Tatry"_s << -1;
+        QTest::newRow("ś after every s") << u"Szczecin"_s << u"Śląsk"_s << -1;
+        QTest::newRow("ą after a") << u"Azja"_s << u"Ąb"_s << -1;
+        QTest::newRow("numbers by value") << u"Rozdział 2"_s << u"Rozdział 10"_s << -1;
+        QTest::newRow("leading zeros ignored") << u"Rozdział 007"_s << u"Rozdział 8"_s << -1;
+        QTest::newRow("numbers before letters") << u"2026"_s << u"Archiwum"_s << -1;
+        QTest::newRow("case-insensitive") << u"apple"_s << u"Banana"_s << -1;
+        QTest::newRow("case ties by code units") << u"Dom"_s << u"dom"_s << -1;
+        QTest::newRow("prefix first") << u"Dom"_s << u"Dom Jana"_s << -1;
+        QTest::newRow("space before letters") << u"Dom Jana"_s << u"Doma"_s << -1;
+        QTest::newRow("other accents like the base letter") << u"éclair"_s << u"ecz"_s << -1;
+        QTest::newRow("NFD like NFC") << u"Z\u0307agle"_s << u"Zakupy"_s << 1;
+        QTest::newRow("equal") << u"Żółw"_s << u"Żółw"_s << 0;
+        QTest::newRow("empty first") << QString() << u"a"_s << -1;
+        QTest::newRow("both empty") << QString() << QString() << 0;
+        QTest::newRow("emoji after letters") << u"😀"_s << u"Zebra"_s << 1;
+        QTest::newRow("lone surrogate") << QString(QChar(0xD83D)) << u"a"_s << 1;
+    }
+    void compareNames()
+    {
+        QFETCH(QString, a);
+        QFETCH(QString, b);
+        QFETCH(int, sign);
+        const int ab = text::compareNames(a, b);
+        const int ba = text::compareNames(b, a);
+        QCOMPARE(ab < 0 ? -1 : ab > 0 ? 1 : 0, sign);
+        QCOMPARE(ba, -ab);
+        QCOMPARE(text::compareNameKeys(text::nameSortKey(a), a, text::nameSortKey(b), b), ab);
+    }
+    void compareNamesSortsPolishList()
+    {
+        QStringList names{u"Żagle"_s,      u"Zakupy"_s, u"Łódź"_s, u"Śląsk"_s, u"Ćwiczenia"_s, u"Rozdział 10"_s,
+                          u"Rozdział 2"_s, u"ąb"_s,     u"Azja"_s, u"lody"_s,  u"Mama"_s};
+        std::sort(names.begin(), names.end(),
+                  [](const QString &a, const QString &b) { return text::compareNames(a, b) < 0; });
+        QCOMPARE(names, (QStringList{u"Azja"_s, u"ąb"_s, u"Ćwiczenia"_s, u"lody"_s, u"Łódź"_s, u"Mama"_s,
+                                     u"Rozdział 2"_s, u"Rozdział 10"_s, u"Śląsk"_s, u"Zakupy"_s, u"Żagle"_s}));
     }
 
     // ---- hashing -----------------------------------------------------------------------

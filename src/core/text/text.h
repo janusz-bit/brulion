@@ -19,6 +19,10 @@
 //     splitLines(content) -> QList<Line{text, eol, start}>, joinLines(lines) == content
 //     detectEol(content), preferredEol(lines, index)
 //
+//   Names (Polish alphabetical order, the same on every platform: no ICU)
+//     compareNames("Łódź", "Mława") < 0, compareNames("Rozdział 2", "Rozdział 10") < 0
+//     nameSortKey(name) + compareNameKeys(...)          the same order with keys computed once
+//
 //   Hashing
 //     fnv1a64(bytes), fnv1a64Hex(bytes) ("cbf29ce484222325" for empty input),
 //     contentHash(text) == fnv1a64Hex(text.toUtf8())
@@ -131,6 +135,23 @@ QString detectEol(QStringView content);
 /// Terminator for a line inserted next to line `index`: that line's own terminator, else the
 /// first terminator used in the document, else "\n".
 QString preferredEol(const QList<Line> &lines, qsizetype index);
+
+// ---------------------------------------------------------------------------------------------
+// Names
+// ---------------------------------------------------------------------------------------------
+
+/// Compare display names (page titles, folders, tags) in Polish alphabetical order, the same on
+/// every platform (no ICU, so also in the browser): case-insensitive, Polish letters after their
+/// base letter (l < ł < m, z < ź < ż), other accents ignored (é = e), digit runs by value
+/// ("Rozdział 2" < "Rozdział 10", leading zeros ignored), NFC; ties are broken by code units so
+/// the order is total. Returns <0, 0 or >0 (0 only for identical strings).
+int compareNames(const QString &a, const QString &b);
+
+/// The part of compareNames() that depends on one name only (NFC, lower case): sorts compute it
+/// once per name and compare with compareNameKeys().
+QString nameSortKey(const QString &name);
+/// compareNames(a, b) given keyA = nameSortKey(a) and keyB = nameSortKey(b).
+int compareNameKeys(const QString &keyA, const QString &a, const QString &keyB, const QString &b);
 
 // ---------------------------------------------------------------------------------------------
 // Hashing

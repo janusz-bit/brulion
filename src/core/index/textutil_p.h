@@ -2,6 +2,8 @@
 // whole-token search in folded text and excerpts. Not part of the public API.
 #pragma once
 
+#include "text/text.h"
+
 #include <QString>
 #include <QStringList>
 #include <QStringView>
@@ -51,17 +53,23 @@ bool forEachWord(QStringView folded, F &&f)
 /// Fold a user query for suggestions: trim, collapse whitespace, text::foldKey.
 QString foldQuery(QStringView query);
 
-/// Compare display names in Polish alphabetical order, the same on every platform (no ICU):
-/// case-insensitive, Polish letters after their base letter (l < ł < m, z < ź < ż), other
-/// accents ignored (é = e), digit runs by value ("Strona 2" < "Strona 10"); ties are broken by
-/// code units so the order is total. Returns <0, 0 or >0.
-int compareNames(const QString &a, const QString &b);
+/// Polish alphabetical order of display names (text::compareNames(): no ICU, digit runs by
+/// value, ties by code units).
+inline int compareNames(const QString &a, const QString &b)
+{
+    return text::compareNames(a, b);
+}
 
-/// The part of compareNames() that depends on one name only (NFC, lower case): sorts compute
-/// it once per name and compare with compareNameKeys().
-QString nameSortKey(const QString &name);
-/// compareNames(a, b) given keyA = nameSortKey(a) and keyB = nameSortKey(b).
-int compareNameKeys(const QString &keyA, const QString &a, const QString &keyB, const QString &b);
+/// text::nameSortKey(): the part of compareNames() that depends on one name only.
+inline QString nameSortKey(const QString &name)
+{
+    return text::nameSortKey(name);
+}
+/// text::compareNameKeys(): compareNames(a, b) given precomputed keys.
+inline int compareNameKeys(const QString &keyA, const QString &a, const QString &keyB, const QString &b)
+{
+    return text::compareNameKeys(keyA, a, keyB, b);
+}
 
 /// Index of `term` in folded `hay` as a whole token (no token character on either side), or -1.
 qsizetype indexOfToken(QStringView hay, QStringView term, qsizetype from = 0);
