@@ -664,8 +664,9 @@ private:
     /// Put `text` (and `html`) on the clipboard (ClipboardLimit, primary selection, read back).
     QVariantMap writeClipboard(const QString &text, const QString &html);
     /// `text` (pasted Markdown) without the block ids that already resolve elsewhere; ids in
-    /// `freed` (blocks cut or replaced) are kept unless this page still has them.
-    QString withoutTakenIds(const QString &text, const QSet<QString> &freed);
+    /// `freed` (blocks cut or replaced) are kept unless this page still has them. Completes the
+    /// host's index first unless `indexed` (it signals: not inside a command).
+    QString withoutTakenIds(const QString &text, const QSet<QString> &freed, bool indexed = false);
     /// The ids freed by the last cut when `text` is what it copied (a move), else none.
     QSet<QString> cutIdsFor(const QString &text) const;
     /// The selected visible rows that can have a task status (list items, paragraphs).

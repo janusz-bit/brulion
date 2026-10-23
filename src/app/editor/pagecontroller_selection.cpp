@@ -512,7 +512,7 @@ QSet<QString> PageController::cutIdsFor(const QString &text) const
     return cut.ids;
 }
 
-QString PageController::withoutTakenIds(const QString &text, const QSet<QString> &freed)
+QString PageController::withoutTakenIds(const QString &text, const QSet<QString> &freed, bool indexed)
 {
     if (!text.contains(u'^') && !text.contains(u"::"))
         return text;
@@ -526,7 +526,7 @@ QString PageController::withoutTakenIds(const QString &text, const QSet<QString>
             here.insert(doc.at(i).blockId);
     }
     const QPointer<EditorHost> host = m_host;
-    if (host)
+    if (host && !indexed)
         host->finishIndexing(); // every id of the vault known
     const QString out = markdown::withoutBlockIds(text, [&](const QString &id) {
         if (here.contains(id))
@@ -562,9 +562,12 @@ QVariantMap PageController::replaceSelection(const QString &pasted)
     const int baseDepth = firstEntry.depth;
     const bool intoList = firstEntry.kind == BlockKind::ListItem;
     const int prev = range.first - 1;
+    // Every id of the vault known before the command (completing the index signals).
+    if (m_host && (text.contains(u'^') || text.contains(u"::")))
+        m_host->finishIndexing();
     beginCommand();
     applyOp([&](BlockDocument &d) { return d.removeRange(range.first, range.last()); });
-    text = withoutTakenIds(text, freed);
+    text = withoutTakenIds(text, freed, true);
     const BlockDocument pasteDoc(text);
     int last = prev;
     quint64 firstUid = 0;
