@@ -4,8 +4,9 @@
 # page-suggest, page-reminder, …; with a simulated on-screen keyboard: page-editing-keyboard,
 # journals-editing-keyboard, capture-keyboard), settings, the command palette, the
 # quick switcher, quick capture, the phone drawer and folders (tree, drawer-tree, move,
-# newpage-folder, newfolder, allpages, allpages-folder) — × {desktop 1280×800, phone 412×915
-# --touch} × {light, dark} — into tests/screenshots/shell-<shot>-<size>-<theme>.png.
+# move-chosen, newpage-folder, newpage-root, newfolder, allpages, allpages-folder) — × {desktop
+# 1280×800, phone 412×915 --touch} × {light, dark} — into
+# tests/screenshots/shell-<shot>-<size>-<theme>.png.
 #
 # Every run gets a fresh, temporary XDG config/data home (settings, app data, the sample
 # notebook) and the fixed clock --now, so the images are reproducible and nothing of the
@@ -58,6 +59,10 @@ declare -A shot_args=(
   [drawer-tree]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup drawer"
   [move]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup move"
   [newpage-folder]="--demo --route {\"view\":\"page\",\"path\":\"Projekty/Remont\u0020mieszkania.md\"} --popup newPage"
+  # A page at the notebook's root: the new page goes to the root (its chip); the templates folder
+  # moved into the project folder, chosen: what changes, both settings that follow.
+  [newpage-root]="--demo --route {\"view\":\"page\",\"path\":\"Przepisy.md\"} --popup newPage"
+  [move-chosen]="--demo --route journals --popup move:templates>Projekty"
   [newfolder]="--demo --route journals --popup newFolder"
   [allpages]="--demo --route allPages"
   [allpages-folder]="--demo --route {\"view\":\"allPages\",\"path\":\"Projekty\"}"
@@ -120,7 +125,8 @@ all_shots=(onboarding journals page page-editing page-editing-keyboard journals-
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
-  palette switcher capture newpage about drawer tree drawer-tree move newpage-folder newfolder allpages allpages-folder)
+  palette switcher capture newpage about drawer tree drawer-tree move move-chosen newpage-folder newpage-root newfolder
+  allpages allpages-folder)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
 if [[ ! -x "$bin" ]]; then

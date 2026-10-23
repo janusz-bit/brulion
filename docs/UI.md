@@ -125,8 +125,9 @@ rename and move").
   names are refused. The page header's title edit renames in place: a "/" there is part of the
   title ("TCP/IP" -> "TCP IP.md"), and its confirmation counts the same way.
 * **New page** (Ctrl+N, the top bar, the sidebar's pencil): in the folder of the page shown, as a
-  removable chip "W folderze: Projekty ×" with "Zmień…"; without it the notebook's folder for new
-  pages. Pages created from `[[links]]` keep `newPagesFolder`. A new folder is shown in the tree.
+  removable chip "W folderze: Projekty ×" (a page at the root: "W głównym folderze notatnika ×")
+  with "Zmień…"; without it the notebook's folder for new pages. Pages created from `[[links]]`
+  keep `newPagesFolder`. A new folder is shown in the tree.
 * **All pages** with a folder: its subfolders as rows above its pages (at the root the top-level
   folders; a tap opens one, back returns), "Z podfolderami" (pages of subfolders too, on by
   default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
@@ -956,10 +957,10 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   / numbered item, a selected block, the header's mode toggle with its tooltip, the same note as an
   outline: `doc-long-*`) and in the journal stream (`doc-journal`: all days documents,
   `doc-journal-mixed`: one document day among outlines), settings, palette, switcher, new page
-  (with the mode choice), capture, drawer, folders (`tree`, `drawer-tree`, `move`, `newpage-folder`,
-  `newfolder`, `allpages`, `allpages-folder`); with a simulated keyboard (`--keyboard 300`) the guide
-  being edited (`page-editing-keyboard`), today in the journal stream
-  (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
+  (with the mode choice), capture, drawer, folders (`tree`, `drawer-tree`, `move`, `move-chosen`,
+  `newpage-folder`, `newpage-root`, `newfolder`, `allpages`, `allpages-folder`); with a simulated
+  keyboard (`--keyboard 300`) the guide being edited (`page-editing-keyboard`), today in the
+  journal stream (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks; the io script also seeds a sync history and an earlier

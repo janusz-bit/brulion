@@ -153,11 +153,13 @@ FocusScope {
             capture.open()
     }
     /// A new page: in `folder`, or — Ctrl+N, the top bar, the sidebar's pencil pass "" — in the
-    /// folder of the page shown (a removable chip in the dialog); else the notebook's folder for
-    /// new pages.
+    /// folder of the page shown, the root too (a removable chip in the dialog); else the
+    /// notebook's folder for new pages.
     function openNewPage(folder) {
-        if (!folder && route.view === "page" && route.path && Workspace.journalDate(route.path) === "")
-            folder = Workspace.folderOf(route.path)
+        if (!folder && route.view === "page" && route.path && Workspace.journalDate(route.path) === "") {
+            newPage.openFor(Workspace.folderOf(route.path), false, true)
+            return
+        }
         newPage.openFor(folder || "", false)
     }
     function openNewFolder(parentFolder) { newPage.openFor(parentFolder, true) }

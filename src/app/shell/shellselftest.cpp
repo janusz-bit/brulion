@@ -1672,6 +1672,20 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     check(ws->exists(remont), "the renamed page gets its name back");
     closeDrawer();
 
+    // ---- A new page (Ctrl+N) from a page at the notebook root is offered the root, as a chip.
+    app->openPage(recipes);
+    settle(200);
+    app->requestUiAction(u"newPage"_s);
+    QObject *newPageDialog = window->findChild<QObject *>(u"shellNewPage"_s);
+    check(newPageDialog && waitFor([&] { return newPageDialog->property("opened").toBool(); })
+                  && newPageDialog->property("folderChosen").toBool()
+                  && newPageDialog->property("folder").toString().isEmpty(),
+          "a new page from a page at the root is offered the root (“W głównym folderze notatnika ×”)");
+    if (newPageDialog) {
+        QMetaObject::invokeMethod(newPageDialog, "close");
+        waitFor([&] { return !newPageDialog->property("visible").toBool(); });
+    }
+
     // ---- All pages as a folder browser; the breadcrumb goes back.
     app->navigate({{u"view"_s, u"allPages"_s}});
     QQuickItem *folderRow = nullptr;

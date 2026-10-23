@@ -7,7 +7,7 @@ import Brulion
 // into the folder chosen — shown as a removable chip "W folderze: Projekty ×" with "Zmień…" (the
 // folder picker of ShellMoveDialog) —, else into the notebook's folder for new pages; a "/" in the
 // title creates folders ("Projekty/Dom"). AppShell.openNewPage() prefills the folder of the page
-// shown (Ctrl+N, the top bar, the sidebar's pencil). A page gets its note mode here
+// shown (Ctrl+N, the top bar, the sidebar's pencil) — the root too ("W głównym folderze notatnika"). A page gets its note mode here
 // (ContentNoteModeChoice: document like Obsidian / outline like Logseq, preselected from the last
 // choice or the notebook's default; Workspace.createPage writes the `brulion:` key only when
 // needed). A folder's name is sanitised and a hidden one refused (Workspace.createFolder says why);
@@ -22,9 +22,12 @@ BDialog {
     /// The new page's note mode: "document" | "outline".
     property string mode: "document"
 
-    function openFor(folderPath, makeFolder) {
+    /// A page (or with `makeFolder` a folder) in `folderPath`. A page goes there when the folder
+    /// is given or `chosen` (the root of a page shown at the root), else into the notebook's
+    /// folder for new pages.
+    function openFor(folderPath, makeFolder, chosen) {
         folder = folderPath || ""
-        folderChosen = folder !== ""
+        folderChosen = folder !== "" || chosen === true
         folderMode = makeFolder === true
         open()
     }
