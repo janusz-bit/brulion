@@ -29,7 +29,7 @@ Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz 
 - **Pusty folder** założony na jednym urządzeniu pojawia się na serwerze i na pozostałych urządzeniach.
 - **Usunięty folder** znika też po drugiej stronie, ale tylko wtedy, gdy nic w nim nie zostało. Folder, w którym jest notatka jeszcze niezsynchronizowana albo plik, którego Brulion nie synchronizuje (np. `.git`), zostaje na swoim miejscu.
 - **Przeniesienie i zmiana nazwy** (folderu albo strony) to dla synchronizacji przeniesienie, a nie usunięcie: nie pojawia się pytanie o masowe usuwanie, nawet gdy przenosisz folder z setkami notatek. Prawdziwe usunięcie wielu notatek dalej czeka na Twoje potwierdzenie.
-- Folder, któremu zmienisz nazwę albo który przeniesiesz w Brulionie, jest przenoszony na serwerze jednym poleceniem — pliki nie są wysyłane od nowa. Zmiany z innego urządzenia trafiają wtedy do folderu pod nową nazwą. Gdy serwer na to nie pozwala, pliki wędrują pojedynczo — z tym samym skutkiem.
+- Folder, któremu zmienisz nazwę albo który przeniesiesz w Brulionie, jest przenoszony na serwerze jednym poleceniem — pliki nie są wysyłane od nowa. Zmiany z innego urządzenia trafiają wtedy do folderu pod nową nazwą. Gdy serwer na to nie pozwala, pliki są wysyłane pod nową nazwą, a stare usuwane — nic nie ginie.
 - Na pozostałych urządzeniach stary folder znika, gdy były w nim tylko zsynchronizowane pliki (te trafiają do kosza, jak przy każdym usunięciu z serwera).
 - Gdy w tym czasie ktoś zmienił notatkę w przenoszonym folderze, żadna wersja nie ginie: zmiany są scalane, a gdy się nie da — zostają obie.
 - Syncthing przenosi i usuwa foldery sam, nic nie trzeba ustawiać.

@@ -191,7 +191,7 @@ kasowanie, jeśli synchronizacja miałaby usunąć dużą część notatek (pona
 się na drugim urządzeniu, a usunięty znika — ale tylko wtedy, gdy nie ma w nim nic, co nie
 dotarło jeszcze na drugą stronę (folder z nową notatką albo plikiem, którego Brulion nie
 synchronizuje, zostaje). Przeniesienie albo zmiana nazwy folderu czy strony to przeniesienie, nie
-usunięcie: ochrona przed masowym usuwaniem o nie nie pyta, a folder, którego nazwę zmienisz
+usunięcie — ochrona przed masowym usuwaniem wtedy nie pyta, a folder, którego nazwę zmienisz
 w Brulionie, przenosi się na serwerze jednym poleceniem (WebDAV MOVE), bez ponownego wysyłania
 plików. Syncthing synchronizuje foldery sam.
 
