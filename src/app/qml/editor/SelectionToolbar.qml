@@ -95,7 +95,7 @@ Row {
     Tool {
         objectName: bar.docked ? "selectionDone" : "selectionClear"
         iconName: bar.docked ? "check" : "x"
-        label: bar.docked ? qsTr("Done") : qsTr("Clear selection")
+        label: bar.docked ? qsTr("Done", "leave the selection mode") : qsTr("Clear selection")
         shortcut: bar.docked ? "" : "Esc"
         enabled: true
         onClicked: bar.editor.leaveSelectionMode()
@@ -204,7 +204,7 @@ Row {
                 iconName: "square-check-big"
                 BMenuItem { text: qsTr("To do"); onTriggered: bar.controller.setSelectionTaskStatus("todo") }
                 BMenuItem { text: qsTr("In progress"); onTriggered: bar.controller.setSelectionTaskStatus("doing") }
-                BMenuItem { text: qsTr("Done"); onTriggered: bar.controller.setSelectionTaskStatus("done") }
+                BMenuItem { text: qsTr("Done", "task status"); onTriggered: bar.controller.setSelectionTaskStatus("done") }
                 BMenuItem { text: qsTr("Waiting"); onTriggered: bar.controller.setSelectionTaskStatus("deferred") }
                 BMenuItem { text: qsTr("Cancelled"); onTriggered: bar.controller.setSelectionTaskStatus("cancelled") }
                 BMenuSeparator {}
