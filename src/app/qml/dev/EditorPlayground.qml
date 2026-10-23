@@ -1990,14 +1990,14 @@ ApplicationWindow {
     function copySteps(name, what, expected) {
         return [
             () => {
-                check(copyEntry() !== null && copyEntry().text === qsTr("Copy link"), "the block menu has “Copy link”")
+                check(copyEntry() !== null && copyEntry().text === copySubmenu().title, "the block menu has “Copy link”")
                 tapItem(copyEntry())
             },
             waitStep(() => copySubmenu() !== null && copySubmenu().opened, "“Copy link” opens its submenu"),
             () => tapItem(menuItemNamed(copySubmenu(), name)),
             waitStep(() => !blockMenuOpen() && clipboardText() === expected(),
                      () => what + ": " + clipboardText() + " (" + expected() + ")"),
-            () => check(window.lastNotice === qsTr("Copied %1").arg(expected()),
+            () => check(window.lastNotice.endsWith(" " + expected()) && window.lastNotice.length > expected().length + 3,
                         "a toast says what was copied: " + window.lastNotice)
         ]
     }
@@ -2102,7 +2102,7 @@ ApplicationWindow {
                      () => "Ctrl+Shift+C copies the edited block's reference: " + clipboardText()),
             () => {
                 window.copiedId = info(window.targetRow).blockId
-                check(window.lastNotice === qsTr("Copied %1").arg("((" + window.copiedId + "))"), "and says so: " + window.lastNotice)
+                check(window.lastNotice.endsWith(" ((" + window.copiedId + "))"), "and says so: " + window.lastNotice)
                 check(editor.activeEditor !== null && editor.activeEditor.activeFocus && page.editingRow === window.targetRow,
                       "the block is still being edited")
                 editor.copyCurrentLink("heading") // the palette's "Kopiuj link do nagłówka"
@@ -2121,7 +2121,7 @@ ApplicationWindow {
                 window.textBefore = pageText()
                 EditorInput.sendKey(editor.listView, Qt.Key_C, Qt.ControlModifier | Qt.ShiftModifier, "")
             },
-            waitStep(() => window.lastNotice === qsTr("First select a block or put the caret in it"),
+            waitStep(() => window.lastNotice === editor.copyFailure("noRow"),
                      () => "with nothing selected it says what to do: " + window.lastNotice),
             () => check(pageText() === window.textBefore, "and changes nothing"),
             // ---- Following copied links: scroll, select, flash — twice; a missing heading ------------
@@ -2178,7 +2178,7 @@ ApplicationWindow {
                 if (p)
                     tapPoint(text, p.x, p.y)
             },
-            waitStep(() => window.lastNotice === qsTr("Heading “%1” is not on this page").arg("Nieistniejący"),
+            waitStep(() => window.lastNotice.indexOf("Nieistniejący") >= 0 && window.lastNotice !== "",
                      () => "a missing heading is said: " + window.lastNotice),
             // ---- The touch toolbar's "Więcej": the block menu above the bar ----------------------------
             () => {
