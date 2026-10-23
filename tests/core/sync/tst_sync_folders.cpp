@@ -1166,6 +1166,34 @@ private Q_SLOTS:
         QVERIFY(listed.error.is(WebDavErrorCode::Parse));
         QVERIFY(listed.entries.isEmpty());
     }
+
+    void firstRunAfterAnUpgradeDeletesNoFolder()
+    {
+        // The store of a version without folder records: the folders one side lacks (leftovers of
+        // file deletions the old version did not follow with the folder) are made again, none is
+        // deleted, and the other device has nothing to do but take them.
+        Pair p(notesIn(u"Projekty"_s, 3) + notesIn(u""_s, 2, 10));
+        QVERIFY(p.a.vault->createFolder(u"Pusty wspólny"_s));
+        p.settle();
+        p.server.mkdir(u"Notatki/Stary na serwerze"_s);
+        QVERIFY(p.a.vault->createFolder(u"Stary tutaj/Głębiej"_s));
+        QVERIFY(p.a.vault->remove(u"Pusty wspólny"_s));
+        p.a.store->removePrefix(u"sync/folder/"_s);
+        p.b.store->removePrefix(u"sync/folder/"_s);
+        const SyncReport r = p.a.sync();
+        QVERIFY(!r.failed());
+        QCOMPARE(r.foldersDeleted, 0);
+        QCOMPARE(counts(r), Counts{});
+        QVERIFY(p.server.isDir(u"Notatki/Stary na serwerze"_s));
+        QVERIFY(p.server.isDir(u"Notatki/Stary tutaj/Głębiej"_s));
+        QVERIFY(p.server.isDir(u"Notatki/Pusty wspólny"_s));
+        QVERIFY(isLocalDir(p.a, u"Stary na serwerze"_s));
+        QVERIFY(isLocalDir(p.a, u"Pusty wspólny"_s));
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(rb.foldersDeleted, 0);
+        QCOMPARE(counts(rb), Counts{});
+        QVERIFY(isLocalDir(p.b, u"Stary tutaj/Głębiej"_s));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncFolders)
