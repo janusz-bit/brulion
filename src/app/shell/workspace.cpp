@@ -682,6 +682,11 @@ QString Workspace::blockText(const QString &blockId) const
     return note->blocks.at(ref->blockIndex).text;
 }
 
+bool Workspace::blockIdTaken(const QString &blockId) const
+{
+    return m_index && !blockId.isEmpty() && m_index->blockById(blockId).has_value();
+}
+
 QString Workspace::ensureBlockId(const QString &path, int line)
 {
     if (!m_vault)
@@ -690,7 +695,7 @@ QString Workspace::ensureBlockId(const QString &path, int line)
     const QString content = m_vault->readText(path, &ok);
     if (!ok)
         return {};
-    const auto taken = [this](const QString &id) { return m_index && m_index->blockById(id).has_value(); };
+    const auto taken = [this](const QString &id) { return blockIdTaken(id); };
     const markdown::EnsuredBlockId result = markdown::ensureBlockId(content, line, taken);
     if (result.id.isEmpty())
         return {};
@@ -889,10 +894,29 @@ QVariantMap Workspace::resolveRoute(const QVariantMap &route)
             return {{u"view"_s, u"page"_s}, {u"path"_s, path}};
         return route;
     }
-    // Only page routes the editor could not resolve itself: {view: "page", blockId} for a
-    // ((block)) of another page, {view: "page", target} for a link to a page that does not exist.
-    if (route.value(u"view"_s).toString() != u"page" || !route.value(u"path"_s).toString().isEmpty() || !m_vault)
+    if (route.value(u"view"_s).toString() != u"page" || !m_vault)
         return route;
+    // [[Page#^id]] whose block was moved to another page (cut and pasted, a block moved by hand):
+    // the index knows where the id is now. Only when the linked page is known and lacks the id.
+    if (const QString path = route.value(u"path"_s).toString(); !path.isEmpty()) {
+        const QString blockId = route.value(u"blockId"_s).toString();
+        if (blockId.isEmpty() || !m_index)
+            return route;
+        if (indexing())
+            finishIndexing();
+        const ParsedNote *note = m_index->note(path);
+        if (!note || note->blockIds.contains(blockId))
+            return route;
+        if (const auto ref = m_index->blockById(blockId); ref && ref->path != path) {
+            QVariantMap moved = route;
+            moved.insert(u"path"_s, ref->path);
+            moved.remove(u"target"_s);
+            return moved;
+        }
+        return route;
+    }
+    // Page routes the editor could not resolve itself: {view: "page", blockId} for a ((block)) of
+    // another page, {view: "page", target} for a link to a page that does not exist.
     QVariantMap out = route;
     // Right after opening the index is still being built: what looks unresolved may exist.
     if (indexing())

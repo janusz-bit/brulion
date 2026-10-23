@@ -6,6 +6,7 @@
 #include "blocktext.h"
 #include "dayclock.h"
 #include "fakeeditorhost.h"
+#include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "pagecontroller.h"
 
@@ -18,6 +19,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QMimeData>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -805,6 +807,269 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.copyBlockRef(0), id);
         QCOMPARE(QGuiApplication::clipboard()->text(), u"(("_s + id + u"))"_s);
         QCOMPARE(f.page.journalLink(u"2026-10-15"_s), u"[[2026-10-15]]"_s);
+    }
+
+    // --- copying links (docs/SYNTAX.md §2 "Copied links") ------------------------------------------
+
+    /// A page with every kind of block: rows 0 frontmatter, 1 "# Wyjazd", 2 a paragraph,
+    /// 3 "## Plan #praca", 4 a list item, 5 a task, 6 a Logseq heading item, 7 its child,
+    /// 8 code, 9 a table, 10 a block that has an id.
+    static QString linkPage()
+    {
+        return u"---\ntytuł: Wyjazd\n---\n# Wyjazd\n\nAkapit o wyjeździe\nw dwóch liniach.\n\n## Plan #praca\n\n"
+               "- Kupić bilety\n- [ ] Spakować się 📅 2026-10-20\n- ## Lista rzeczy\n\t- szczoteczka\n\n"
+               "```js\nconst a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nGotowy blok ^gotowy\n"_s;
+    }
+
+    void copyLinks_data()
+    {
+        QTest::addColumn<int>("row");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("pattern"); // the copied text; ID: the block's id
+        QTest::addColumn<bool>("writesId");
+        QTest::newRow("paragraph ref") << 2 << u"blockRef"_s << u"((ID))"_s << true;
+        QTest::newRow("paragraph link") << 2 << u"blockLink"_s << u"[[Strona#^ID]]"_s << true;
+        QTest::newRow("paragraph embed") << 2 << u"embed"_s << u"!((ID))"_s << true;
+        QTest::newRow("heading") << 3 << u"heading"_s << u"[[Strona#Plan praca]]"_s << false;
+        QTest::newRow("heading embed") << 3 << u"embed"_s << u"![[Strona#Plan praca]]"_s << false;
+        QTest::newRow("heading ref") << 3 << u"blockRef"_s << u"((ID))"_s << true;
+        QTest::newRow("heading block link") << 1 << u"blockLink"_s << u"[[Strona#^ID]]"_s << true;
+        QTest::newRow("list item") << 4 << u"blockRef"_s << u"((ID))"_s << true;
+        QTest::newRow("task") << 5 << u"blockLink"_s << u"[[Strona#^ID]]"_s << true;
+        QTest::newRow("logseq heading") << 6 << u"heading"_s << u"[[Strona#Lista rzeczy]]"_s << false;
+        QTest::newRow("child") << 7 << u"embed"_s << u"!((ID))"_s << true;
+        QTest::newRow("code") << 8 << u"blockLink"_s << u"[[Strona#^ID]]"_s << true;
+        QTest::newRow("table") << 9 << u"blockRef"_s << u"((ID))"_s << true;
+        QTest::newRow("existing id") << 10 << u"blockLink"_s << u"[[Strona#^gotowy]]"_s << false;
+        QTest::newRow("page") << -1 << u"page"_s << u"[[Strona]]"_s << false;
+        QTest::newRow("page from a row") << 4 << u"page"_s << u"[[Strona]]"_s << false;
+    }
+
+    void copyLinks()
+    {
+        QFETCH(int, row);
+        QFETCH(QString, kind);
+        QFETCH(QString, pattern);
+        QFETCH(bool, writesId);
+        Fixture f(linkPage());
+        const QString before = f.text();
+        const bool couldUndo = f.page.canUndo();
+        QGuiApplication::clipboard()->clear();
+        const QVariantMap r = f.page.copyLink(row, kind);
+        QVERIFY2(r.value(u"ok"_s).toBool(), qPrintable(r.value(u"reason"_s).toString()));
+        const QString id = row >= 0 ? f.model()->document().at(row).blockId : QString();
+        const QString expected = QString(pattern).replace(u"ID"_s, id);
+        QCOMPARE(r.value(u"text"_s).toString(), expected);
+        QCOMPARE(QGuiApplication::clipboard()->text(), expected);
+        if (writesId) {
+            // Only the id was added — one undo step takes it away again.
+            QVERIFY(id.size() == 6);
+            QCOMPARE(f.text().count(QString(u"^"_s + id)), 1);
+            QCOMPARE(QString(f.text()).remove(QRegularExpression(u"\\n?[ ]?\\^"_s + id)), before);
+            QVERIFY(f.page.canUndo());
+            f.page.undo();
+            QCOMPARE(f.text(), before);
+            f.page.redo();
+            // A second copy gives the same link and writes nothing.
+            const QString withId = f.text();
+            QCOMPARE(f.page.copyLink(row, kind).value(u"text"_s).toString(), expected);
+            QCOMPARE(f.text(), withId);
+        } else {
+            QCOMPARE(f.text(), before);
+            QCOMPARE(f.page.canUndo(), couldUndo);
+        }
+        // What was copied reads back as a link to that block / heading.
+        const markdown::InlineScan scan = markdown::extractInline(expected);
+        QCOMPARE(scan.links.size(), 1);
+        const Link &link = scan.links.first();
+        if (!link.heading.isEmpty())
+            QCOMPARE(f.page.rowOfHeading(link.heading), row);
+        else if (!link.blockId.isEmpty())
+            QCOMPARE(f.page.rowOfBlockId(link.blockId), row);
+        else if (link.kind == LinkKind::BlockRef || link.kind == LinkKind::BlockEmbed)
+            QCOMPARE(f.page.rowOfBlockId(link.target), row);
+    }
+
+    void copyLinkFailures()
+    {
+        Fixture f(linkPage());
+        const QString before = f.text();
+        const auto reason = [&f](int row, const QString &kind) {
+            const QVariantMap r = f.page.copyLink(row, kind);
+            return r.value(u"ok"_s).toBool() ? QString() : r.value(u"reason"_s).toString();
+        };
+        QCOMPARE(reason(-1, u"blockRef"_s), u"noRow"_s); // nothing edited or selected
+        QCOMPARE(reason(99, u"heading"_s), u"noRow"_s);
+        QCOMPARE(reason(2, u"heading"_s), u"notHeading"_s); // a paragraph has no heading link
+        QCOMPARE(reason(0, u"blockRef"_s), u"noId"_s);      // the frontmatter cannot carry an id
+        QCOMPARE(reason(2, u"nieznany"_s), u"noRow"_s);
+        QCOMPARE(f.text(), before);
+        // The documentation notebook: no new ids (its pages stay as shipped), other links work.
+        f.page.setAllowNewBlockIds(false);
+        QCOMPARE(reason(2, u"blockRef"_s), u"readOnly"_s);
+        QCOMPARE(reason(4, u"embed"_s), u"readOnly"_s);
+        QCOMPARE(reason(3, u"heading"_s), QString());
+        QCOMPARE(reason(10, u"blockRef"_s), QString()); // an id the block has
+        QCOMPARE(reason(-1, u"page"_s), QString());
+        QCOMPARE(f.text(), before);
+        QVERIFY(!f.page.canUndo());
+        f.page.setAllowNewBlockIds(true);
+        // Source mode: the blocks are not being edited.
+        f.page.setSourceMode(true);
+        QCOMPARE(reason(2, u"blockRef"_s), u"sourceMode"_s);
+        QCOMPARE(reason(-1, u"page"_s), QString());
+        f.page.setSourceMode(false);
+        // No page.
+        PageController empty;
+        QCOMPARE(empty.copyLink(-1, u"page"_s).value(u"reason"_s).toString(), u"noPage"_s);
+        QCOMPARE(empty.linkTarget(), QString());
+    }
+
+    void copyLinkTargets()
+    {
+        // The title, or the path when the title leads to another page; a daily note by its name.
+        Fixture f(u"- a\n"_s);
+        QCOMPARE(f.page.linkTarget(), u"Strona"_s);
+        f.host.setFile(u"Stare/Strona.md"_s, u"- stara\n"_s); // "Strona" now leads there (shorter path)
+        QCOMPARE(f.page.linkTarget(), u"Notatki/Strona"_s);
+        QCOMPARE(f.page.copyLink(0, u"blockLink"_s).value(u"text"_s).toString(),
+                 u"[[Notatki/Strona#^"_s + f.model()->document().at(0).blockId + u"]]"_s);
+        QCOMPARE(f.page.copyLink(-1, u"page"_s).value(u"text"_s).toString(), u"[[Notatki/Strona]]"_s);
+        // A page not written yet: its title.
+        PageController fresh;
+        fresh.setHost(&f.host);
+        fresh.setPath(u"Pomysły/Żółw.md"_s);
+        QCOMPARE(fresh.linkTarget(), u"Żółw"_s);
+        // A daily note, also before it exists.
+        PageController day;
+        day.setHost(&f.host);
+        day.setPath(u"journals/2026-10-22.md"_s);
+        QCOMPARE(day.linkTarget(), u"2026-10-22"_s);
+        const int row = day.startNewPage(QString());
+        day.setEditText(row, u"Spotkanie o 9"_s);
+        const QString text = day.copyLink(row, u"blockLink"_s).value(u"text"_s).toString();
+        QVERIFY2(QRegularExpression(u"^\\[\\[2026-10-22#\\^[a-z0-9]{6}\\]\\]$"_s).match(text).hasMatch(),
+                 qPrintable(text));
+    }
+
+    void copyDuplicateHeadings()
+    {
+        Fixture f(u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n## Plan\n"
+                  "# A\n## B\n# A\n## B\n"_s);
+        const auto copied = [&f](int row, const QString &kind = u"heading"_s) {
+            return f.page.copyLink(row, kind).value(u"text"_s).toString();
+        };
+        QCOMPARE(copied(0), u"[[Strona#Projekt]]"_s);
+        QCOMPARE(copied(1), u"[[Strona#Projekt#Plan]]"_s);
+        QCOMPARE(copied(2), u"[[Strona#Plan#Zadania]]"_s);
+        QCOMPARE(copied(4), u"[[Strona#Budżet#Zadania]]"_s);
+        QCOMPARE(copied(6), u"[[Strona#Archiwum#Plan]]"_s);
+        QCOMPARE(copied(4, u"embed"_s), u"![[Strona#Budżet#Zadania]]"_s);
+        QCOMPARE(f.page.rowOfHeading(u"Budżet#Zadania"_s), 4);
+        QCOMPARE(f.page.rowOfHeading(u"budzet#ZADANIA"_s), 4);
+        QCOMPARE(f.page.rowOfHeading(u"Archiwum#Plan"_s), 6);
+        QCOMPARE(f.page.rowOfHeading(u"Zadania"_s), 2);
+        QCOMPARE(f.page.rowOfHeading(u"Nieznany"_s), -1);
+        QVERIFY(!f.page.canUndo()); // nothing written so far
+        // The same path twice: a block link, the id written into the heading.
+        const QString link = copied(10);
+        const QString id = f.model()->document().at(10).blockId;
+        QCOMPARE(link, u"[[Strona#^"_s + id + u"]]"_s);
+        QVERIFY(f.text().endsWith(u"# A\n## B ^"_s + id + u"\n"_s));
+        QCOMPARE(copied(10, u"embed"_s), u"![[Strona#^"_s + id + u"]]"_s);
+    }
+
+    void headingSections()
+    {
+        Fixture f(u"Wstęp\n\n# Zażółć gęślą jaźń\n\nAkapit\n\n- punkt\n\t- głębiej\n## Podsekcja\n\nTekst\n"_s);
+        QCOMPARE(f.page.headingRowFor(0), -1); // above the first heading
+        QCOMPARE(f.page.headingRowFor(1), 1);
+        QCOMPARE(f.page.headingRowFor(3), 1);
+        QCOMPARE(f.page.headingRowFor(4), 1);
+        QCOMPARE(f.page.headingRowFor(5), 5);
+        QCOMPARE(f.page.headingRowFor(6), 5);
+        QCOMPARE(f.page.headingRowFor(-1), -1);
+        QVERIFY(f.page.isHeading(1));
+        QVERIFY(!f.page.isHeading(2));
+        QCOMPARE(f.page.rowOfHeading(u"zazolc gesla jazn"_s), 1);
+        QCOMPARE(f.page.rowOfHeading(u"Zażółć gęślą jaźń#Podsekcja"_s), 5);
+    }
+
+    void sameHostIdsAreAvoided()
+    {
+        // New ids avoid every id of the vault — also one whose block has no text (blockText()
+        // is "" for it, so the host is asked blockIdTaken()).
+        struct RefusingHost : FakeEditorHost {
+            mutable QStringList asked;
+            bool blockIdTaken(const QString &id) const override
+            {
+                asked.append(id);
+                return asked.size() < 3;
+            }
+        };
+        RefusingHost host;
+        host.setFile(Page, u"- nowy blok\n"_s);
+        PageController page;
+        page.setHost(&host);
+        page.setPath(Page);
+        const QString id = page.ensureBlockRef(0);
+        QCOMPARE(host.asked.size(), 3);
+        QCOMPARE(id, host.asked.last());
+        FakeEditorHost real;
+        real.setFile(u"Pusta.md"_s, u"- \n  id:: pusty1\n"_s);
+        QVERIFY(real.blockText(u"pusty1"_s).isEmpty());
+        QVERIFY(real.blockIdTaken(u"pusty1"_s));
+        QVERIFY(!real.blockIdTaken(u"brak"_s));
+    }
+
+    void sameAndMovedLinks()
+    {
+        // Links to this page scroll here every time (the route would not change); a block moved
+        // to another page is opened there; a missing target says so.
+        Fixture f(u"## Plan na wrzesień\n\n- blok ^abc\n- [[Strona#Plan na wrzesień]] [[#^abc]]\n"_s);
+        QSignalSpy nav(&f.host, &FakeEditorHost::navigated);
+        const auto activate = [&f](const QString &url) { return f.page.activateLink(2, url); };
+        const auto scrolledTo = [](const QVariantMap &r) {
+            return r.value(u"action"_s).toString() == u"scrollTo"_s ? r.value(u"row"_s).toInt() : -1;
+        };
+        for (int twice = 0; twice < 2; ++twice) {
+            QCOMPARE(scrolledTo(activate(u"page:Strona#Plan%20na%20wrzesie%C5%84"_s)), 0);
+            QCOMPARE(scrolledTo(activate(u"page:Strona#%5Eabc"_s)), 1);
+            QCOMPARE(scrolledTo(activate(u"page:#%5Eabc"_s)), 1);
+            QCOMPARE(scrolledTo(activate(u"page:Notatki%2FStrona#plan%20na%20wrzesien"_s)), 0);
+            QCOMPARE(scrolledTo(activate(u"page:#Plan%20na%20wrzesie%C5%84"_s)), 0);
+            QCOMPARE(scrolledTo(activate(u"page:Strona#Inna%20sekcja#Plan%20na%20wrzesie%C5%84"_s)), 0);
+            QCOMPARE(scrolledTo(activate(u"block:abc"_s)), 1);
+        }
+        QCOMPARE(nav.size(), 0);
+        // Missing here and anywhere: said, not navigated.
+        QVariantMap r = activate(u"page:Strona#Nieznany"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"notFound"_s);
+        QCOMPARE(r.value(u"kind"_s).toString(), u"heading"_s);
+        QCOMPARE(r.value(u"name"_s).toString(), u"Nieznany"_s);
+        r = activate(u"page:Strona#%5Ebrak"_s);
+        QCOMPARE(r.value(u"kind"_s).toString(), u"block"_s);
+        QCOMPARE(r.value(u"name"_s).toString(), u"brak"_s);
+        r = activate(u"block:brak"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"notFound"_s);
+        QCOMPARE(nav.size(), 0);
+        // The block is on another page now (Inna.md has ^inny1): the shell is asked to open it.
+        r = activate(u"page:Strona#%5Einny1"_s);
+        QVERIFY(r.isEmpty());
+        QCOMPARE(nav.size(), 1);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), Page);
+        QCOMPARE(f.host.lastRoute().value(u"blockId"_s).toString(), u"inny1"_s);
+        // In a new pane (the side panel) even this page is opened by the shell.
+        f.page.activateLink(2, u"page:Strona#Plan%20na%20wrzesie%C5%84"_s, true);
+        QCOMPARE(nav.size(), 2);
+        QCOMPARE(f.host.lastRoute().value(u"heading"_s).toString(), u"Plan na wrzesień"_s);
+        // Another page's heading: a route with the heading.
+        f.page.activateLink(2, u"page:Inna#Sekcja"_s);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Inna.md"_s);
+        QCOMPARE(f.host.lastRoute().value(u"heading"_s).toString(), u"Sekcja"_s);
+        // [[Inna#^inny1]] without an alias reads like the block.
+        Fixture other(u"- [[Inna#^inny1]]\n"_s);
+        QVERIFY(other.role(0, "html").toString().contains(u"Inna › Blok z innej strony"_s));
     }
 
     // --- completions and slash commands ------------------------------------------------------------

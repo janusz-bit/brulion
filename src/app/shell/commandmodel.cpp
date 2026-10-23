@@ -116,6 +116,35 @@ static QList<Command> buildCommands(const AppController *app)
     };
 }
 
+/// The commands that copy a link (docs/SYNTAX.md §2 "Copied links") to the page, the current block
+/// (the one being edited, else the selected one) and the heading of its section. The editor of
+/// the page or day on screen copies them: uiAction "copyLink:<kind>" (page | blockRef | blockLink
+/// | heading, BlockEditor.copyCurrentLink()); Ctrl+Shift+C copies the block reference there.
+static QList<Command> linkCommands(bool inEditor)
+{
+    return {
+            {u"page.copyLink"_s, CommandModel::tr("Copy link to page"), u"[[…]]"_s, u"link"_s, {}, inEditor},
+            {u"block.copyRef"_s, CommandModel::tr("Copy block reference"), u"((…))"_s, u"link"_s, u"Ctrl+Shift+C"_s,
+             inEditor},
+            {u"block.copyLink"_s, CommandModel::tr("Copy link to block"), u"[[…#^…]]"_s, u"link"_s, {}, inEditor},
+            {u"heading.copyLink"_s, CommandModel::tr("Copy link to heading"), u"[[…#…]]"_s, u"heading"_s, {}, inEditor},
+    };
+}
+
+/// The uiAction of a link command ("block.copyRef" -> "copyLink:blockRef"), "" for other ids.
+static QString linkAction(const QString &id)
+{
+    if (id == u"page.copyLink")
+        return u"copyLink:page"_s;
+    if (id == u"block.copyRef")
+        return u"copyLink:blockRef"_s;
+    if (id == u"block.copyLink")
+        return u"copyLink:blockLink"_s;
+    if (id == u"heading.copyLink")
+        return u"copyLink:heading"_s;
+    return {};
+}
+
 /// buildCommands() with the note mode command right after "Markdown source", available where that
 /// is (an editor shows a page or a day) except on a picture attachment, which is no note: document
 /// (Obsidian-like) / outline (Logseq-like), written into the note (docs/UI.md "Note modes"); and
@@ -135,6 +164,11 @@ static QList<Command> allCommands(const AppController *app)
                 u"file-text"_s,
                 {},
                 inEditor});
+    // Copying links, after the note mode: where it is available.
+    const auto mode = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.mode"; });
+    qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
+    for (const Command &c : linkCommands(inEditor))
+        out.insert(at++, c);
     // The event log ("Rejestr zdarzeń") right after the sync center; also found as logs, diagnostics.
     const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
     out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
@@ -193,6 +227,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"toggleSourceMode"_s);
     else if (id == u"page.mode")
         m_app->requestUiAction(u"toggleNoteMode"_s);
+    else if (const QString action = linkAction(id); !action.isEmpty())
+        m_app->requestUiAction(action);
     else if (id == u"nav.back")
         m_app->back();
     else if (id == u"nav.forward")

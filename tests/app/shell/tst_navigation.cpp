@@ -1024,9 +1024,31 @@ private Q_SLOTS:
         QVERIFY(model->run(u"page.mode"_s));
         QCOMPARE(sourceUi.size(), 2);
         QCOMPARE(sourceUi.last().first().toString(), u"toggleNoteMode"_s);
+        // Copying links (docs/SYNTAX.md §2): the editor of the page or day copies them.
+        for (const auto &[command, action] :
+             {std::pair{u"page.copyLink"_s, u"copyLink:page"_s}, std::pair{u"block.copyRef"_s, u"copyLink:blockRef"_s},
+              std::pair{u"block.copyLink"_s, u"copyLink:blockLink"_s},
+              std::pair{u"heading.copyLink"_s, u"copyLink:heading"_s}}) {
+            QVERIFY(ids.contains(command));
+            QVERIFY(model->run(command));
+            QCOMPARE(sourceUi.last().first().toString(), action);
+        }
+        const auto commandNamed = [model](const QString &id) {
+            for (const QVariant &v : model->commands()) {
+                if (v.toMap().value(u"id"_s).toString() == id)
+                    return v.toMap();
+            }
+            return QVariantMap();
+        };
+        QCOMPARE(commandNamed(u"block.copyRef"_s).value(u"shortcut"_s).toString(), u"Ctrl+Shift+C"_s);
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
         QVERIFY(!model->run(u"page.mode"_s));
+        for (const QString &command :
+             {u"page.copyLink"_s, u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
+            QVERIFY(!model->run(command));
+            QVERIFY(!commandNamed(command).value(u"enabled"_s).toBool());
+        }
         QVERIFY(model->run(u"nav.back"_s));
         QVERIFY(!model->run(u"sync.now"_s));     // no sync configured
         QVERIFY(!model->run(u"no.such"_s));
@@ -1060,6 +1082,7 @@ private Q_SLOTS:
             return true;
         };
         QVERIFY(!modeEnabled());
+        QVERIFY(!model->run(u"block.copyRef"_s)); // a picture has no blocks
         app->openPage(p);
         QVERIFY(modeEnabled());
 

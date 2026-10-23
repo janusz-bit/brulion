@@ -63,6 +63,7 @@ public:
     QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
     QString resolveLink(const QString &target, const QString &fromPath) const override;
     QString blockText(const QString &blockId) const override;
+    bool blockIdTaken(const QString &blockId) const override;
     QString ensureBlockId(const QString &path, int line) override;
     QVariantList templates() const override;
     QUrl assetUrl(const QString &path) const override;

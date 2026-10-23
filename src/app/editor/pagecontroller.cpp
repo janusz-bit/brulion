@@ -10,6 +10,7 @@
 #include "dates/recurrence.h"
 #include "markdown/inline.h"
 #include "markdown/journal.h"
+#include "markdown/linkformat.h"
 #include "markdown/notemode.h"
 #include "markdown/templates.h"
 #include "markdown/tokens.h"
@@ -426,6 +427,14 @@ void PageController::setSaveDelay(int ms)
         return;
     m_saveTimer.setInterval(ms);
     Q_EMIT saveDelayChanged();
+}
+
+void PageController::setAllowNewBlockIds(bool allow)
+{
+    if (allow == m_allowNewBlockIds)
+        return;
+    m_allowNewBlockIds = allow;
+    Q_EMIT allowNewBlockIdsChanged();
 }
 
 QVariantList PageController::foldState() const
@@ -1985,9 +1994,9 @@ QString PageController::ensureBlockRef(int row)
     QString id;
     beginCommand();
     applyOp([&](BlockDocument &d) {
-        const markdown::BlockIdResult res = d.ensureBlockId(row, [host](const QString &candidate) {
-            return host && !host->blockText(candidate).isEmpty();
-        });
+        // Any block of the vault with that id counts, also one without text (blockText() is "").
+        const markdown::BlockIdResult res = d.ensureBlockId(
+                row, [host](const QString &candidate) { return host && host->blockIdTaken(candidate); });
         id = res.id;
         return res.edit;
     });
@@ -1999,10 +2008,123 @@ QString PageController::ensureBlockRef(int row)
 
 QString PageController::copyBlockRef(int row)
 {
-    const QString id = ensureBlockRef(row);
-    if (!id.isEmpty() && qGuiApp && QGuiApplication::clipboard())
-        QGuiApplication::clipboard()->setText(u"(("_s + id + u"))"_s);
-    return id;
+    const QVariantMap copied = copyLink(row, u"blockRef"_s);
+    return copied.value(u"ok"_s).toBool() && validRow(row) ? m_model->document().at(row).blockId : QString();
+}
+
+// --- Links to this page, its headings and blocks -------------------------------------------------------
+
+bool PageController::isHeading(int row) const
+{
+    if (!validRow(row))
+        return false;
+    const BlockShape shape = m_model->shapeAt(row);
+    return shape.view == BlockView::Heading && shape.headingLevel > 0;
+}
+
+int PageController::rowOfHeading(const QString &fragment) const
+{
+    QList<int> rows;
+    const int index = markdown::findHeading(documentHeadings(m_model->document(), &rows), fragment);
+    return index >= 0 ? rows.at(index) : -1;
+}
+
+int PageController::headingRowFor(int row) const
+{
+    if (!validRow(row))
+        return -1;
+    // OutlineModel's rule: the last heading with text at or above the row.
+    for (int i = row; i >= 0; --i) {
+        if (isHeading(i) && !plainTextOf(m_model->document().at(i)).isEmpty())
+            return i;
+    }
+    return -1;
+}
+
+QString PageController::linkTarget() const
+{
+    if (m_path.isEmpty())
+        return {};
+    const QString title = paths::pageTitle(m_path);
+    // A daily note by its file name ([[2026-10-22]] reads as the date), also before it exists.
+    if (m_host && markdown::journalDateFromPath(m_path, vaultConfigFromMap(m_host->vaultConfig())))
+        return title;
+    // The title, unless it leads to another page (the same name in another folder): then the
+    // path. A title that leads nowhere yet (a new page) will lead here once the page is saved.
+    const QString resolved = m_host ? m_host->resolveLink(title, QString()) : QString();
+    if (resolved.isEmpty() || resolved == m_path)
+        return title;
+    return paths::stripMarkdownExtension(m_path);
+}
+
+QVariantMap PageController::linkText(int row, const QString &kind)
+{
+    const auto failed = [](const QString &reason) {
+        return QVariantMap{{u"ok"_s, false}, {u"text"_s, QString()}, {u"reason"_s, reason}};
+    };
+    const auto copied = [](const QString &text) {
+        return QVariantMap{
+                {u"ok"_s, !text.isEmpty()}, {u"text"_s, text}, {u"reason"_s, text.isEmpty() ? u"noPage"_s : QString()}};
+    };
+    using markdown::ReferenceKind;
+    const QString page = linkTarget();
+    if (page.isEmpty())
+        return failed(u"noPage"_s);
+    if (kind == u"page")
+        return copied(markdown::formatReference(ReferenceKind::PageLink, page));
+    if (!validRow(row))
+        return failed(u"noRow"_s);
+    if (m_sourceMode)
+        return failed(u"sourceMode"_s);
+    const bool heading = isHeading(row);
+    const bool headingKind = kind == u"heading" || (kind == u"embed" && heading);
+    if (kind == u"heading" && !heading)
+        return failed(u"notHeading"_s);
+    if (!headingKind && kind != u"blockRef" && kind != u"blockLink" && kind != u"embed")
+        return failed(u"noRow"_s);
+    if (headingKind) {
+        // The heading's name, or a heading path when another heading has that name too.
+        QList<int> rows;
+        const QList<Heading> all = documentHeadings(m_model->document(), &rows);
+        const QString fragment = markdown::uniqueHeadingFragment(all, int(rows.indexOf(row)));
+        if (!fragment.isEmpty())
+            return copied(markdown::formatReference(
+                    kind == u"embed" ? ReferenceKind::HeadingEmbed : ReferenceKind::HeadingLink, page, fragment));
+    }
+    // The block's id, added when it has none.
+    QString id = m_model->document().at(row).blockId;
+    if (id.isEmpty()) {
+        if (!m_allowNewBlockIds)
+            return failed(u"readOnly"_s);
+        id = ensureBlockRef(row);
+        if (id.isEmpty())
+            return failed(u"noId"_s);
+    }
+    ReferenceKind reference = ReferenceKind::BlockRef;
+    if (headingKind)
+        reference = kind == u"embed" ? ReferenceKind::BlockLinkEmbed : ReferenceKind::BlockLink;
+    else if (kind == u"blockLink")
+        reference = ReferenceKind::BlockLink;
+    else if (kind == u"embed")
+        reference = ReferenceKind::BlockEmbed;
+    return copied(markdown::formatReference(reference, page, {}, id));
+}
+
+QVariantMap PageController::copyLink(int row, const QString &kind)
+{
+    QVariantMap result = linkText(row, kind);
+    if (!result.value(u"ok"_s).toBool())
+        return result;
+    const QString text = result.value(u"text"_s).toString();
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    if (clipboard)
+        clipboard->setText(text);
+    // Read back: a platform without a clipboard (or one that refused) must not be told "copied".
+    if (!clipboard || clipboard->text() != text) {
+        result.insert(u"ok"_s, false);
+        result.insert(u"reason"_s, u"noClipboard"_s);
+    }
+    return result;
 }
 
 void PageController::setReminder(int row, const QString &at, bool alarm, const QString &recurrence, int from, int to)
@@ -2488,15 +2610,15 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
             m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}}, newPane);
         return out;
     }
+    const auto notFound = [](const QString &kind, const QString &name) {
+        return QVariantMap{{u"action"_s, u"notFound"_s}, {u"kind"_s, kind}, {u"name"_s, name}};
+    };
+    const auto scrollTo = [](int target) { return QVariantMap{{u"action"_s, u"scrollTo"_s}, {u"row"_s, target}}; };
     if (scheme == u"block") {
-        const BlockDocument &doc = m_model->document();
-        for (int i = 0; i < doc.count(); ++i) {
-            if (doc.at(i).blockId == rest) {
-                out[u"action"_s] = u"scrollTo"_s;
-                out[u"row"_s] = i;
-                return out;
-            }
-        }
+        if (const int found = rowOfBlockId(rest); found >= 0 && !newPane)
+            return scrollTo(found);
+        if (m_host && !m_host->blockIdTaken(rest))
+            return notFound(u"block"_s, rest);
         if (m_host)
             m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
         return out;
@@ -2511,25 +2633,33 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         }
         target = QUrl::fromPercentEncoding(target.toUtf8());
         QVariantMap route{{u"view"_s, u"page"_s}};
+        QString resolved = m_path;
         if (target.isEmpty()) {
             route[u"path"_s] = m_path;
         } else {
-            const QString resolved = m_host ? m_host->resolveLink(target, m_path) : QString();
+            resolved = m_host ? m_host->resolveLink(target, m_path) : QString();
             route[u"path"_s] = resolved;
             route[u"target"_s] = target;
         }
+        // A block or heading of this page — `[[#^id]]`, or a link naming this page as a copied one
+        // does — scrolls here every time: the route would not change, so the shell would ignore it.
+        const bool here = !newPane && !m_path.isEmpty() && resolved == m_path;
         if (fragment.startsWith(u'^')) {
             const QString id = fragment.mid(1);
             route[u"blockId"_s] = id;
-            if (target.isEmpty()) {
-                const BlockDocument &doc = m_model->document();
-                for (int i = 0; i < doc.count(); ++i) {
-                    if (doc.at(i).blockId == id)
-                        return {{u"action"_s, u"scrollTo"_s}, {u"row"_s, i}};
-                }
+            if (here) {
+                if (const int found = rowOfBlockId(id); found >= 0)
+                    return scrollTo(found);
+                // Moved to another page: the shell opens it there (Workspace::resolveRoute).
+                if (!m_host || !m_host->blockIdTaken(id))
+                    return notFound(u"block"_s, id);
             }
         } else if (!fragment.isEmpty()) {
             route[u"heading"_s] = fragment;
+            if (here) {
+                const int found = rowOfHeading(fragment);
+                return found >= 0 ? scrollTo(found) : notFound(u"heading"_s, fragment);
+            }
         }
         if (m_host)
             m_host->navigate(route, newPane);

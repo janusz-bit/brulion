@@ -49,6 +49,9 @@ public:
     virtual QString resolveLink(const QString &target, const QString &fromPath) const = 0;
     /// Text of the block with this id (for ((id)) rendering); "" when unknown.
     virtual QString blockText(const QString &blockId) const = 0;
+    /// A block somewhere in the vault has this id (also one whose text is empty): new ids avoid
+    /// it, and a link to it is followed to wherever the block is. Default: blockText() is not "".
+    virtual bool blockIdTaken(const QString &blockId) const { return !blockText(blockId).isEmpty(); }
     /// Id of the block at `line` of `path`, writing ` ^id` into that file when missing.
     virtual QString ensureBlockId(const QString &path, int line) = 0;
     /// Templates: list of { path, title }.

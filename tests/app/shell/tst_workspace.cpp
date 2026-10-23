@@ -851,6 +851,41 @@ private Q_SLOTS:
         QCOMPARE(routeOf({{u"view"_s, u"tags"_s}}).value(u"view"_s).toString(), u"tags"_s);
     }
 
+    // [[Page#^id]] after the block was moved to another page: the route follows the id (the
+    // index knows where it is now); ids the linked page has, unknown ids and conflict copies do not
+    // move it.
+    void movedBlocksAreFollowed()
+    {
+        auto ws =
+                open({{u"Projekty/Remont.md"_s, u"- Budżet ^budzet1\n"_s},
+                      {u"Archiwum/Stary remont.md"_s, u"- Przeniesiony blok z łazienką ^moved1\n- \n  id:: pusty1\n"_s},
+                      {u"Notatki.sync-conflict-20261014-101010-ABCDEFG.md"_s, u"- kopia ^konfl1\n"_s}});
+        QSignalSpy nav(ws.get(), &Workspace::navigationRequested);
+        const auto routeOf = [&](const QString &path, const QString &id) {
+            nav.clear();
+            ws->navigate({{u"view"_s, u"page"_s}, {u"path"_s, path}, {u"target"_s, u"Remont"_s}, {u"blockId"_s, id}});
+            return nav.size() == 1 ? nav.first().at(0).toMap() : QVariantMap();
+        };
+        const QVariantMap moved = routeOf(u"Projekty/Remont.md"_s, u"moved1"_s);
+        QCOMPARE(moved.value(u"path"_s).toString(), u"Archiwum/Stary remont.md"_s);
+        QCOMPARE(moved.value(u"blockId"_s).toString(), u"moved1"_s);
+        QVERIFY(!moved.contains(u"target"_s));
+        // A block without text is found too (blockIdTaken: the index, not the block's text).
+        QCOMPARE(routeOf(u"Projekty/Remont.md"_s, u"pusty1"_s).value(u"path"_s).toString(),
+                 u"Archiwum/Stary remont.md"_s);
+        QVERIFY(ws->blockIdTaken(u"pusty1"_s));
+        QVERIFY(ws->blockText(u"pusty1"_s).isEmpty());
+        QVERIFY(ws->blockIdTaken(u"budzet1"_s));
+        QVERIFY(!ws->blockIdTaken(u"konfl1"_s)); // conflict copies are no pages
+        QVERIFY(!ws->blockIdTaken(QString()));
+        // Still on the linked page, unknown, or only in a conflict copy: the route is unchanged.
+        QCOMPARE(routeOf(u"Projekty/Remont.md"_s, u"budzet1"_s).value(u"path"_s).toString(), u"Projekty/Remont.md"_s);
+        QCOMPARE(routeOf(u"Projekty/Remont.md"_s, u"nieznany"_s).value(u"path"_s).toString(), u"Projekty/Remont.md"_s);
+        QCOMPARE(routeOf(u"Projekty/Remont.md"_s, u"konfl1"_s).value(u"path"_s).toString(), u"Projekty/Remont.md"_s);
+        // A page not written yet keeps its route as well.
+        QCOMPARE(routeOf(u"Nowa.md"_s, u"moved1"_s).value(u"path"_s).toString(), u"Nowa.md"_s);
+    }
+
     // A tag names a page (docs/SYNTAX.md §3): like [[tag]] written at the vault root; a missing
     // page goes where a link's would (nested tags: folders; a date: the journal page).
     void tagRoutesOpenPages()
