@@ -181,9 +181,8 @@ Item {
             objectName: "blockFlash"
             radius: Theme.radiusSm
             color: Theme.mark
-            opacity: 0
             SequentialAnimation on opacity {
-                NumberAnimation { to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
+                NumberAnimation { from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
                 PauseAnimation { duration: 700 }
                 NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
                 ScriptAction { script: block.flashing = false }

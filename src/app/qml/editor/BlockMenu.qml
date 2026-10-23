@@ -52,7 +52,8 @@ BMenu {
         let h = topPadding + bottomPadding
         for (let i = 0; i < count; ++i) {
             const entry = itemAt(i)
-            if (entry && entry.shown !== false)
+            const optional = entry as OptionalItem
+            if (entry && (!optional || optional.shown))
                 h += entry.implicitHeight
         }
         return h
