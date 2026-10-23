@@ -2838,18 +2838,30 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                     // (A tap on a moving list only stops it.)
                     waitFor([&] { return !sourceView->property("moving").toBool(); });
                     const int cursorBefore = sourceEdit->property("cursorPosition").toInt();
-                    const QPointF at = pointIn(sourceView, 0.5, 0.5);
-                    // The text under the finger before the tap: the tap brings up the touch
-                    // toolbar, the view shrinks and keeps the cursor above it, so the same scene
-                    // point may lie over another line afterwards.
+                    // The finger lands in the middle of the line at the view's centre, on a whole
+                    // pixel as touch points are (a point near a line's edge would be rounded onto
+                    // the next line). The text under it is read before the tap: the tap brings up
+                    // the touch toolbar, and the view keeps the cursor above it.
+                    QPointF at = pointIn(sourceView, 0.5, 0.5);
+                    {
+                        const QPointF centre = sourceEdit->mapFromScene(at);
+                        int pos = -1;
+                        QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(pos), centre.x(), centre.y());
+                        QRectF lineRect;
+                        QMetaObject::invokeMethod(sourceEdit, "positionToRectangle", qReturnArg(lineRect), pos);
+                        at = QPointF(sourceEdit->mapToScene(QPointF(centre.x(), lineRect.center().y())).toPoint());
+                    }
                     const QPointF local = sourceEdit->mapFromScene(at);
                     int expected = -1;
                     QMetaObject::invokeMethod(sourceEdit, "positionAt", qReturnArg(expected), local.x(), local.y());
+                    const qreal contentBefore = sourceView->property("contentY").toReal();
                     touchTap(window, at);
                     const int cursor = sourceEdit->property("cursorPosition").toInt();
                     std::fprintf(stderr,
-                                 "selftest: the tap in the source: cursor %d (before %d, under the finger %d)\n",
-                                 cursor, cursorBefore, expected);
+                                 "selftest: the tap in the source at (%.1f, %.1f): cursor %d (before %d, under the "
+                                 "finger %d), contentY %.1f -> %.1f\n",
+                                 at.x(), at.y(), cursor, cursorBefore, expected, contentBefore,
+                                 sourceView->property("contentY").toReal());
                     check(cursor != cursorBefore && qAbs(cursor - expected) <= 1
                                   && sourceEdit->property("selectedText").toString().isEmpty(),
                           "a tap in the Markdown source puts the cursor there");
