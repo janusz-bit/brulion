@@ -291,6 +291,17 @@ they go through its single-instance socket (`src/ipc/appmessage.h`, one-way): th
 here and the app opens pages of the notebook it shows (a ref of another notebook gives the app a
 notice and the command a warning). Without a running app: exit 5 with `{"gui": {"running": false}}`.
 
+The single-instance socket (`$XDG_RUNTIME_DIR/brulion-<hash>`, owner-only) is, like the remote
+control's, only ever in a folder of the user's own that nobody else can change: without a private
+runtime folder (no `$XDG_RUNTIME_DIR`, and Qt's `/tmp/runtime-<user>` taken by someone else) the
+app runs without it — a second launch starts a second Brulion, `app open`, `app today` and
+`app capture` find no app (exit 5 `app_not_running`), and the event log says why — rather than in
+the shared temporary folder, where another user could take the name first, keeping Brulion from
+starting or receiving what is sent. Both ends check who is at the other one (Linux: the peer's
+credentials): the app drops other users' connections, and `brulion-cli` (and a second launch)
+sends nothing to a socket another user listens on (exit 5 `app_not_reached` with
+`{"reason": "foreign_socket"}`).
+
 ## Remote control
 
 AI agents and scripts can drive the running app itself: see what it shows, navigate, click, type,

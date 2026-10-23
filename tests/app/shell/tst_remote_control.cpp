@@ -10,8 +10,9 @@
 // (run, unknown, disabled); quick capture with a date; waitFor (a timeout, idle); screenshots (a
 // PNG of the window's size, where asked, relative paths, the runtime folder by default, a refused
 // path); scroll, long press, double click and drag; the MCP server's app tools (--app-control),
-// a screenshot as an image; quit, after which nothing listens any more. The app's log must hold
-// no QML TypeError, ReferenceError or binding loop.
+// a screenshot as an image; quit, after which nothing listens any more. Without a private runtime
+// folder the app still starts, with neither socket in the shared temp folder. The app's log must
+// hold no QML TypeError, ReferenceError or binding loop.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"
@@ -27,12 +28,15 @@
 #include <QProcess>
 #include <QSaveFile>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QtEndian>
 
 #include <functional>
+#include <pwd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 using namespace Qt::StringLiterals;
 
@@ -705,6 +709,65 @@ private Q_SLOTS:
                     .toString();
         };
         QTRY_COMPARE_WITH_TIMEOUT(stored(), u"false"_s, 10000 * kSlowdown);
+        stopApp();
+    }
+
+    // No private runtime folder ($XDG_RUNTIME_DIR unset, Qt's <temp>/runtime-<user> not to be
+    // had): the single-instance and the control socket would be bare names in the shared temp
+    // folder, where another user could block the start or read what is sent. The app starts
+    // without both (the event log says why), creates nothing there, and the command line finds no
+    // app to send to.
+    void withoutARuntimeFolder()
+    {
+        const QString shared = m_tmp.filePath(u"wspolny-tmp"_s);
+        QVERIFY(QDir().mkpath(shared));
+        QCOMPARE(::chmod(QFile::encodeName(shared).constData(), 01777), 0);
+        // Qt's fallback runtime folder cannot be made there: a file has its name.
+        const passwd *pw = ::getpwuid(::geteuid());
+        writeFile(shared + u"/runtime-"_s + (pw ? QString::fromLocal8Bit(pw->pw_name) : QString()), "zajęte");
+        QProcessEnvironment env = environment();
+        env.remove(u"XDG_RUNTIME_DIR"_s);
+        env.insert(u"TMPDIR"_s, shared);
+        {
+            // The same environment here: no runtime folder indeed.
+            const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+            const QByteArray tmpDir = qgetenv("TMPDIR");
+            qunsetenv("XDG_RUNTIME_DIR");
+            qputenv("TMPDIR", QFile::encodeName(shared));
+            const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+            qputenv("XDG_RUNTIME_DIR", runtimeDir);
+            if (tmpDir.isNull())
+                qunsetenv("TMPDIR");
+            else
+                qputenv("TMPDIR", tmpDir);
+            if (!runtime.isEmpty())
+                QSKIP(qPrintable(u"Qt still finds a runtime folder: "_s + runtime));
+        }
+        const qint64 logStart = QFileInfo(m_log).size();
+        m_app.setProcessEnvironment(env);
+        m_app.setStandardOutputFile(m_log, QIODevice::Append);
+        m_app.setStandardErrorFile(m_log, QIODevice::Append);
+        m_app.start(QStringLiteral(BRULION_APP), {u"--vault"_s, m_vault, u"--size"_s, u"800x600"_s, u"--now"_s,
+                                                  u"2026-10-14 10:00"_s, u"--remote-control"_s});
+        QVERIFY(m_app.waitForStarted(kStartMs));
+        const auto log = [this, logStart] { return QString::fromUtf8(readFile(m_log).mid(logStart)); };
+        // Up to the UI: the remote control was asked for and says why it does not listen.
+        QTRY_VERIFY2_WITH_TIMEOUT(log().contains(u"Remote control could not start"_s), qPrintable(log().right(3000)),
+                                  kStartMs);
+        QVERIFY2(log().contains(u"No single instance: There is no private runtime folder"_s),
+                 qPrintable(log().right(3000)));
+        QCOMPARE(m_app.state(), QProcess::Running);
+        for (const QString &name : QDir(shared).entryList(QDir::AllEntries | QDir::System | QDir::NoDotAndDotDot))
+            QVERIFY2(!name.startsWith(u"brulion"_s), qPrintable(name));
+        // brulion-cli with the same environment: no app to send to (and nothing sent anywhere).
+        QProcess cli;
+        cli.setProcessEnvironment(env);
+        cli.start(QStringLiteral(BRULION_CLI), {u"app"_s, u"today"_s});
+        QVERIFY(cli.waitForFinished(kCallMs));
+        const QJsonObject json = QJsonDocument::fromJson(cli.readAllStandardOutput()).object();
+        QCOMPARE(cli.exitCode(), 5);
+        QCOMPARE(json.value(u"error"_s).toObject().value(u"code"_s).toString(), u"app_not_running"_s);
+        QCOMPARE(m_app.state(), QProcess::Running);
         stopApp();
     }
 };

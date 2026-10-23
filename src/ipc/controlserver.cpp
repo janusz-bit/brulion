@@ -109,14 +109,7 @@ void ControlServer::accept(QLocalSocket *socket)
 {
     // Linux tells who connected: anyone else, or someone it cannot tell, is refused. (Elsewhere the
     // socket file's permissions decide.)
-    const qint64 uid = peerUid(socket->socketDescriptor());
-    const qint64 own = ownUid();
-#ifdef Q_OS_LINUX
-    const bool foreign = uid < 0 || uid != own;
-#else
-    const bool foreign = uid >= 0 && own >= 0 && uid != own;
-#endif
-    if (foreign) {
+    if (const qint64 uid = peerUid(socket->socketDescriptor()); !trustedPeer(uid, ownUid())) {
         Q_EMIT refused(uid);
         socket->abort();
         socket->deleteLater();

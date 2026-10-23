@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocalServer>
 #include <QLocalSocket>
 #include <QSemaphore>
 #include <QSignalSpy>
@@ -579,6 +580,34 @@ private Q_SLOTS:
         QVERIFY(client.connect());
         QVERIFY(client.errorString().isEmpty());
         server.close();
+    }
+
+    // Who may talk with whom (trustedPeer(), the control and the single-instance sockets alike):
+    // on Linux only this user, never a process whose credentials cannot be read.
+    void peersOfThisUserOnly()
+    {
+        const qint64 own = ownUid();
+        QVERIFY(trustedPeer(own, own));
+        QVERIFY(listenerProblem(own, u"/run/user/1000/brulion-x"_s).isEmpty());
+#ifdef Q_OS_LINUX
+        QVERIFY(own >= 0);
+        QVERIFY(!trustedPeer(own + 1, own));
+        QVERIFY(!trustedPeer(-1, own));
+        QVERIFY(listenerProblem(own + 1, u"/tmp/brulion-x"_s).contains(u"Another user"_s));
+        QVERIFY(listenerProblem(-1, u"/tmp/brulion-x"_s).contains(u"/tmp/brulion-x"_s));
+        QCOMPARE(peerUid(-1), -1);
+        // A real connection: each end sees this user at the other.
+        QLocalServer server;
+        QVERIFY(server.listen(key(u"rozmówca"_s)));
+        QLocalSocket client;
+        client.connectToServer(key(u"rozmówca"_s));
+        QVERIFY(client.waitForConnected(1000));
+        QVERIFY(server.waitForNewConnection(1000));
+        QLocalSocket *accepted = server.nextPendingConnection();
+        QVERIFY(accepted);
+        QCOMPARE(peerUid(accepted->socketDescriptor()), own);
+        QCOMPARE(peerUid(client.socketDescriptor()), own);
+#endif
     }
 };
 

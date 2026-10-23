@@ -165,13 +165,25 @@ void pointerOptions(Call &call, QJsonObject &params)
 Result sendToApp(Call &call, const QByteArray &message, QJsonObject result)
 {
     ipc::SingleInstance app(singleInstanceKey(call));
-    if (!app.isPrimaryRunning())
+    // Another user's socket at the app's name: nothing was sent to it.
+    const auto foreign = [&call, &app] {
+        return call.fail(ExitUnavailable, u"app_not_reached"_s,
+                         tr("The running app did not answer: %1").arg(app.errorString()),
+                         {{u"reason"_s, u"foreign_socket"_s}});
+    };
+    if (!app.isPrimaryRunning()) {
+        if (!app.errorString().isEmpty())
+            return foreign();
         return call.fail(ExitUnavailable, u"app_not_running"_s,
                          tr("Brulion is not running on this desktop (the app must run in this user session)"),
                          {{u"gui"_s, QJsonObject{{u"running"_s, false}}}});
-    if (!app.sendToPrimary(message))
+    }
+    if (!app.sendToPrimary(message)) {
+        if (!app.errorString().isEmpty())
+            return foreign();
         return call.fail(ExitUnavailable, u"app_not_reached"_s, tr("The running app did not take the message"),
                          {{u"gui"_s, QJsonObject{{u"running"_s, true}}}});
+    }
     result.insert(u"gui"_s, QJsonObject{{u"running"_s, true}});
     result.insert(u"via"_s, u"message"_s);
     return call.ok(result);

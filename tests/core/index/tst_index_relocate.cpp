@@ -352,10 +352,11 @@ private Q_SLOTS:
                 << u"Projekty/Dom.md"_s << u"Projekty/Chata.md"_s
                 << u"ref:Dom tag:dom ref:Projekty/Dom tag:Projekty/Dom page:Projekty/Dom"_s
                 << u"ref:Dom tag:dom ref:Projekty/Chata tag:Projekty/Chata page:Projekty/Chata"_s << 2 << 2 << 3;
+        // (`page:Dom` matched both pages titled Dom: one value cannot name the two, it stays.)
         QTest::newRow("the shorter of two Doms renamed: the other would take its name")
                 << QStringList{u"Dom.md=- root"_s, u"Projekty/Dom.md=- x"_s, u"Notatka.md=- #dom #Projekty/Dom"_s}
                 << u"Dom.md"_s << u"Mieszkanie.md"_s << u"ref:Dom tag:dom page:Dom ref:Projekty/Dom tag:Projekty/Dom"_s
-                << u"ref:Mieszkanie tag:Mieszkanie page:Mieszkanie ref:Projekty/Dom tag:Projekty/Dom"_s << 2 << 2 << 3;
+                << u"ref:Mieszkanie tag:Mieszkanie page:Dom ref:Projekty/Dom tag:Projekty/Dom"_s << 1 << 2 << 2;
         QTest::newRow("a missing page stays missing")
                 << dom << u"Dom.md"_s << u"Mieszkanie.md"_s << u"ref:Nieistniejąca tag:nieistniejący"_s << QString()
                 << 0 << 1 << 0; // (only Notatka's #dom)
@@ -414,6 +415,131 @@ private Q_SLOTS:
         if (!expected.isEmpty())
             QCOMPARE(plan.rewrite(u"Q.md"_s, u"```query\n"_s + query + u"\n```"_s),
                      u"```query\n"_s + expected + u"\n```"_s);
+    }
+
+    // `page:` matches a page's title, aliases, path or link target (runQuery): after a move it
+    // matches exactly the pages it matched, at their new paths (SYNTAX §2). The moved page's value
+    // is written as a link to it would be, or — when that name is another page's too — as the
+    // shortest form naming only it; a value naming a page that stays is qualified when a moved
+    // page would share it. A value that matched several pages or none stays, and so do `*` and
+    // `this`.
+    void pageFiltersKeepTheirPages_data()
+    {
+        QTest::addColumn<QStringList>("files"); // "path=content"; the query note is Q.md
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("to");
+        QTest::addColumn<QString>("query");     // Q.md's filters (type:pages)
+        QTest::addColumn<QString>("expected");  // … after the move ("" = Q.md is not rewritten)
+        QTest::addColumn<int>("rewritten");     // values rewritten (counted as links)
+        QTest::addColumn<QStringList>("pages"); // what it matches before the move
+        QTest::addColumn<bool>("kept");         // … and after it, at their new paths
+        const QStringList mieszkanie{u"Dom.md=- x"_s, u"Archiwum/Mieszkanie.md=- y"_s};
+        QTest::newRow("renamed to another page's title: its path with .md")
+                << mieszkanie << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:Dom"_s << u"page:Mieszkanie.md"_s << 1
+                << QStringList{u"Dom.md"_s} << true;
+        QTest::newRow("another page renamed to its title: qualified")
+                << mieszkanie << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:Mieszkanie"_s
+                << u"page:Archiwum/Mieszkanie"_s << 1 << QStringList{u"Archiwum/Mieszkanie.md"_s} << true;
+        QTest::newRow("both, case variants, a list, negated, the Polish key")
+                << mieszkanie << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:dom,MIESZKANIE -strona:mieszkanie"_s
+                << u"page:Mieszkanie.md,Archiwum/Mieszkanie -strona:Archiwum/Mieszkanie"_s << 3
+                << QStringList{u"Dom.md"_s} << true;
+        QTest::newRow("the extension as written") << mieszkanie << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:dom.MD"_s
+                                                  << u"page:Mieszkanie.MD"_s << 1 << QStringList{u"Dom.md"_s} << true;
+        QTest::newRow("renamed in place: the folder as written")
+                << QStringList{u"Projekty/Dom.md=- x"_s, u"Archiwum/Mieszkanie.md=- y"_s} << u"Projekty/Dom.md"_s
+                << u"Projekty/Mieszkanie.md"_s << u"page:PROJEKTY/dom,Mieszkanie"_s
+                << u"page:PROJEKTY/Mieszkanie,Archiwum/Mieszkanie"_s << 2
+                << QStringList{u"Projekty/Dom.md"_s, u"Archiwum/Mieszkanie.md"_s} << true;
+        QTest::newRow("a name without diacritics another page takes")
+                << QStringList{u"Zwierzęta/Żółw.md=- x"_s, u"Szkic.md=- y"_s} << u"Szkic.md"_s << u"Zolw.md"_s
+                << u"page:zolw"_s << u"page:Zwierzęta/Żółw"_s << 1 << QStringList{u"Zwierzęta/Żółw.md"_s} << true;
+        QTest::newRow("an alias another page takes as its title: the title")
+                << QStringList{u"Ludzie/Jan Kowalski.md=---\naliases: [Janek]\n---\n- x"_s, u"Szkic.md=- y"_s}
+                << u"Szkic.md"_s << u"Janek.md"_s << u"page:Janek"_s << u"page:[[Jan Kowalski]]"_s << 1
+                << QStringList{u"Ludzie/Jan Kowalski.md"_s} << true;
+        QTest::newRow("a moved page keeps its alias")
+                << QStringList{u"Ludzie/Jan Kowalski.md=---\naliases: [Janek]\n---\n- x"_s}
+                << u"Ludzie/Jan Kowalski.md"_s << u"Ludzie/Jan Nowak.md"_s << u"page:Janek page:[[Jan Kowalski]]"_s
+                << u"page:Janek page:[[Jan Nowak]]"_s << 1 << QStringList{u"Ludzie/Jan Kowalski.md"_s} << true;
+        QTest::newRow("journals: a page renamed to a day")
+                << QStringList{u"journals/2026-10-13.md=- x"_s, u"Szkic.md=- y"_s} << u"Szkic.md"_s
+                << u"2026-10-13.md"_s << u"page:2026-10-13"_s << u"page:journals/2026-10-13"_s << 1
+                << QStringList{u"journals/2026-10-13.md"_s} << true;
+        QTest::newRow("journals: a day moved to a name another page has")
+                << QStringList{u"journals/2026-10-13.md=- x"_s, u"Archiwum/2026-10-14.md=- y"_s}
+                << u"journals/2026-10-13.md"_s << u"journals/2026-10-14.md"_s << u"page:2026-10-13"_s
+                << u"page:journals/2026-10-14"_s << 1 << QStringList{u"journals/2026-10-13.md"_s} << true;
+        QTest::newRow("the query's note moves: a relative value")
+                << QStringList{u"Mieszkanie.md=- x"_s, u"Archiwum/Mieszkanie.md=- y"_s} << u"Q.md"_s
+                << u"Archiwum/Q.md"_s << u"page:./Mieszkanie"_s << u"page:Mieszkanie.md"_s << 1
+                << QStringList{u"Mieszkanie.md"_s} << true;
+        QTest::newRow("a page moved, its title kept: nothing to do")
+                << QStringList{u"Skrzynka/Żółw.md=- x"_s, u"Archiwum/Łoś.md=- y"_s} << u"Skrzynka/Żółw.md"_s
+                << u"Archiwum/Żółw.md"_s << u"page:żółw"_s << QString() << 0 << QStringList{u"Skrzynka/Żółw.md"_s}
+                << true;
+        // What one value cannot keep stays as written.
+        QTest::newRow("several pages of that title: stays")
+                << QStringList{u"Dom.md=- x"_s, u"Projekty/Dom.md=- y"_s} << u"Dom.md"_s << u"Mieszkanie.md"_s
+                << u"page:Dom"_s << QString() << 0 << QStringList{u"Dom.md"_s, u"Projekty/Dom.md"_s} << false;
+        QTest::newRow("a missing page a renamed page takes: stays")
+                << QStringList{u"Dom.md=- x"_s} << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:Mieszkanie"_s
+                << QString() << 0 << QStringList() << false;
+        QTest::newRow("a wildcard: stays") << mieszkanie << u"Dom.md"_s << u"Mieszkanie.md"_s << u"page:Mieszk*"_s
+                                           << QString() << 0 << QStringList{u"Archiwum/Mieszkanie.md"_s} << false;
+    }
+    void pageFiltersKeepTheirPages()
+    {
+        QFETCH(QStringList, files);
+        QFETCH(QString, from);
+        QFETCH(QString, to);
+        QFETCH(QString, query);
+        QFETCH(QString, expected);
+        QFETCH(int, rewritten);
+        QFETCH(QStringList, pages);
+        QFETCH(bool, kept);
+        VaultIndex index;
+        for (const QString &f : std::as_const(files))
+            index.update(f.section(u'=', 0, 0), f.section(u'=', 1));
+        const QString note = u"# Zapytanie\r\n\r\n```query\r\ntype:pages "_s + query + u"\r\n```\r\n- koniec\r\n"_s;
+        index.update(u"Q.md"_s, note);
+        // The pages the query finds (runQuery from its note at `at`).
+        const auto found = [&index](const QString &filters, const QString &at) {
+            const auto parsed = parseQuery(u"type:pages "_s + filters);
+            if (!std::holds_alternative<Query>(parsed))
+                return QStringList{u"error: "_s + std::get<QString>(parsed)};
+            QueryOptions options;
+            options.currentPath = at;
+            QStringList out;
+            const QueryResult result =
+                    runQuery(std::get<Query>(parsed), index, QDate(2026, 10, 14), Qt::Monday, options);
+            for (const QueryItem &item : result.items)
+                out.append(item.path);
+            out.sort();
+            return out;
+        };
+        pages.sort();
+        QCOMPARE(found(query, u"Q.md"_s), pages);
+
+        const RelocationPlan plan = index.planRelocation({{from, to}});
+        if (expected.isEmpty())
+            QCOMPARE(planned(plan, u"Q.md"_s), QString());
+        else
+            QCOMPARE(planned(plan, u"Q.md"_s), QString(note).replace(query, expected)); // CRLF, byte for byte
+        QCOMPARE(plan.queries(), rewritten);
+        QCOMPARE(plan.links(), rewritten);
+        checkPlanOfTheText(index, plan);
+
+        apply(index, plan);
+        QStringList movedPages;
+        for (const QString &p : std::as_const(pages))
+            movedPages.append(p == from ? to : p);
+        movedPages.sort();
+        const QStringList now = found(expected.isEmpty() ? query : expected, from == u"Q.md" ? to : u"Q.md"_s);
+        if (kept)
+            QCOMPARE(now, movedPages);
+        else
+            QVERIFY(now != movedPages);
     }
 
     // A `path:` prefix keeps its meaning only when the new one matches exactly the files the old
