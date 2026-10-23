@@ -1620,6 +1620,13 @@ FocusScope {
             drag.speed = Math.min(40, (y - (bottom - zone)) / 2 + 2)
         else
             drag.speed = 0
+        // A day of the journal stream: the selection stays in it, so the stream scrolls only while
+        // the day goes on beyond the edge (scrolled further, the day would be destroyed).
+        if (scroller && host !== editor) {
+            const dayTop = editor.mapToItem(host, 0, 0).y
+            if ((drag.speed > 0 && dayTop + editor.height <= bottom) || (drag.speed < 0 && dayTop >= top))
+                drag.speed = 0
+        }
     }
     /// Scroll the editor (or the journal stream it is part of) by `dy`, within its content.
     function scrollBy(dy) {
