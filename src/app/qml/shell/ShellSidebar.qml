@@ -20,8 +20,8 @@ import Brulion
 // press-and-hold stay as they are) a row is dragged onto a folder (a closed one opens after
 // 600 ms; the list scrolls near its edges) or onto the "Strony" header (the notebook's root) to
 // move it there (`dropMoveRequested()`); the ghost names the target and what the move rewrites
-// (or why it cannot move); Escape cancels the drag. Daily notes (named by their date) are neither
-// dragged nor offered Przenieś do… or Zmień nazwę… — the journals folder itself is.
+// (or why it cannot move); Escape cancels the drag. Daily notes are files here like any other:
+// they can be renamed, moved and dragged (a misfiled day can be put right).
 Rectangle {
     id: sidebar
 
@@ -574,8 +574,6 @@ Rectangle {
                 // list and holds for the menu (the drawer's edge swipe too). It takes the pointer
                 // from the list (no flick) and keeps it.
                 DragHandler {
-                    // (Not a daily note: it stays in the journals folder.)
-                    enabled: row.journalDate === ""
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                     acceptedButtons: Qt.LeftButton
                     target: null
@@ -766,8 +764,6 @@ Rectangle {
         property bool isDir: false
         readonly property bool favorite: !isDir && Workspace.favorites.some(f => f.path === contextMenu.path)
         readonly property bool page: !isDir && contextMenu.path.toLowerCase().endsWith(".md")
-        /// A daily note: named by its date, kept in the journals folder (no Move, no Rename).
-        readonly property bool daily: page && Workspace.journalDate(contextMenu.path) !== ""
 
         BMenuItem {
             objectName: "treeMenuNewPage"
@@ -821,8 +817,6 @@ Rectangle {
         }
         BMenuItem {
             objectName: "treeMenuMove"
-            visible: !contextMenu.daily
-            height: visible ? implicitHeight : 0
             text: qsTr("Move to…")
             iconName: "folder-input"
             onTriggered: sidebar.moveRequested(contextMenu.path, contextMenu.isDir)
@@ -845,8 +839,6 @@ Rectangle {
         }
         BMenuItem {
             objectName: "treeMenuRename"
-            visible: !contextMenu.daily
-            height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
             onTriggered: sidebar.renameRequested(contextMenu.path, contextMenu.isDir)

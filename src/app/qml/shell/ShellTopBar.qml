@@ -35,8 +35,7 @@ Rectangle {
 
     readonly property var route: AppController.currentRoute
     /// A daily note opened as a page ("journal" route) whose file exists: it gets the page
-    /// actions too (favorite, history, side panel, trash, show in tree), but not Rename or Move
-    /// (its name is its date, its place the journals folder).
+    /// actions too (favorite, history, side panel, trash), but not Rename (its name is its date).
     readonly property string journalPagePath: {
         void Workspace.revision
         if (route.view !== "journal" || !route.date)
@@ -49,8 +48,6 @@ Rectangle {
     readonly property bool inEditor: onPage || route.view === "journal" || route.view === "journals"
     readonly property string pagePath: route.view === "page" ? route.path : journalPagePath
     readonly property bool favorite: onPage && Workspace.favorites.some(f => f.path === bar.pagePath)
-    /// A page Rename and Move apply to: not a daily note (also one opened through a "page" route).
-    readonly property bool renamable: route.view === "page" && Workspace.journalDate(route.path || "") === ""
 
     implicitHeight: topInset + (Theme.touchUi ? 56 : 46)
     color: Theme.bg
@@ -177,7 +174,7 @@ Rectangle {
             onTriggered: Workspace.toggleFavorite(bar.pagePath)
         }
         BMenuItem {
-            visible: bar.renamable
+            visible: bar.onPage && bar.route.view === "page"
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
@@ -186,7 +183,7 @@ Rectangle {
         }
         BMenuItem {
             objectName: "menuMovePage"
-            visible: bar.renamable
+            visible: bar.onPage && bar.route.view === "page"
             height: visible ? implicitHeight : 0
             text: qsTr("Move to…")
             iconName: "folder-input"

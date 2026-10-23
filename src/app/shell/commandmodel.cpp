@@ -126,12 +126,12 @@ static QList<Command> folderCommands(const AppController *app)
     const bool ready = app->status() == u"ready";
     const QVariantMap route = app->currentRoute();
     const QString view = route.value(u"view"_s).toString();
-    // A daily note is no page to move (its name is its date, its folder the journals folder);
-    // shown in the tree it is, also from a journal route — which may carry only its date.
+    // Shown in the tree, also from a journal route, which may carry only its date. A daily note
+    // opened as a page moves like any page (a misfiled day can be put right); the journal view
+    // by date offers no move.
     const Workspace *ws = app->workspace();
     const QString path = route.value(u"path"_s).toString();
     const bool onPage = ready && view == u"page";
-    const bool movable = onPage && ws->journalDate(path).isEmpty();
     const bool onFile =
             onPage
             || (ready && view == u"journal"
@@ -148,7 +148,7 @@ static QList<Command> folderCommands(const AppController *app)
              CommandModel::tr("Move the page to another folder"),
              u"folder-input"_s,
              {},
-             movable},
+             onPage},
             {u"page.reveal"_s,
              CommandModel::tr("Show in tree"),
              CommandModel::tr("The page in the sidebar's folders"),

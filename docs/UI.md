@@ -105,11 +105,11 @@ rename and move").
   folder… (the export tab, folder scope), Zmień nazwę…, Przenieś do kosza (the confirmation
   counts its pages and warns for the notebook's special folders). A page: Otwórz w panelu
   bocznym (wide), ulubione, Przenieś do…, Kopiuj link (`[[…]]` with the shortest target:
-  `Workspace.linkTarget`), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note
-  (named by its date) has neither Przenieś do… nor Zmień nazwę… — here, in the Więcej menu, the
-  page's menu, All pages and the palette alike — and is not dragged; the journals folder itself
-  moves (the settings follow). The "Strony" header's "+": Nowa strona, Nowy folder (at the
-  root), Zwiń wszystkie, Pokaż załączniki, Pokazuj otwartą stronę.
+  `Workspace.linkTarget`), Zmień nazwę…, Historia strony, Przenieś do kosza. A daily note is a
+  file here like any other — renamed, moved and dragged (a misfiled day can be put right) — also
+  in All pages, F2 and the Więcej menu of a daily note opened as a page; only the journal view
+  (by date) and the page's own menu there offer neither. The "Strony" header's "+": Nowa strona,
+  Nowy folder (at the root), Zwiń wszystkie, Pokaż załączniki, Pokazuj otwartą stronę.
 * **Drag and drop** (mouse and touchpad only — a finger keeps the list's flick, press-and-hold
   and the drawer's edge swipe): a row dragged onto a folder (a closed one opens after 600 ms; the
   list scrolls near its edges, the target following the rows that pass under the pointer) or a
