@@ -1297,7 +1297,8 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
 
 /// 5g. Links to blocks and headings (docs/SYNTAX.md §2 "Copied links"), with real input: a link
 ///     to a block of this page whose block was moved to another page opens that page with the
-///     block selected; a heading the page lacks is said (followed from the text and as a route);
+///     block selected; a heading the page lacks is said (followed from the text and as a route),
+///     its name as plain text in the toast even when written with tags;
 ///     the palette's "Kopiuj odwołanie do bloku" copies the edited block's ((id)) — read back from
 ///     the clipboard — and says so; on the desktop a right-click on a paragraph's text opens the
 ///     block menu.
@@ -1310,7 +1311,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     const QString newPage = u"Linki/Nowa strona.md"_s;
     ws->write(newPage, u"- Wstęp\n- Przeniesiony blok z łazienką ^przen1\n"_s);
     ws->write(oldPage, u"# Stara strona\n\nZobacz [[Stara strona#^przen1]] i [[Stara strona#Brakujący nagłówek]].\n\n"
-                       "Akapit do skopiowania.\n"_s);
+                       "Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
     QString lastToast;
     const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
                                                             [&lastToast](const QString &text) { lastToast = text; });
@@ -1353,6 +1354,27 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
         check(waitFor([&] { return lastToast == missing; })
                       && app->currentRoute().value(u"path"_s).toString() == oldPage,
               "a link to a heading the page lacks says so and stays");
+    }
+    // A heading named with markup: the toast quotes it as text (BToast shows plain text — note text
+    // must never be rendered as markup, nor load images).
+    text = page ? renderedTextContaining(window->contentItem(), u"Pogrubiony"_s) : nullptr;
+    const QPointF markupAt = text ? linkPoint(text, u"Pogrubiony"_s) : QPointF(-1, -1);
+    check(markupAt.x() >= 0, "the page shows its link to a heading written with markup");
+    if (markupAt.x() >= 0) {
+        lastToast.clear();
+        tapOrClick(window, markupAt, touch);
+        const QString quoted = QCoreApplication::translate("BlockEditor", "Heading “%1” is not on this page")
+                                       .arg(u"<b>Pogrubiony</b> nagłówek"_s);
+        QQuickItem *message = nullptr;
+        check(waitFor([&] {
+                  message = findShown(window->contentItem(), [&](QQuickItem *item) {
+                      const QQuickItem *toast = item->parentItem() ? item->parentItem()->parentItem() : nullptr;
+                      return toast && isA(toast, "BToast_") && item->property("text").toString() == quoted
+                             && item->metaObject()->indexOfProperty("textFormat") >= 0;
+                  });
+                  return lastToast == quoted && message != nullptr;
+              }) && message->property("textFormat").toInt() == Qt::PlainText,
+              "a toast quoting note text shows it as plain text, tags and all");
     }
     lastToast.clear();
     app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, newPage}, {u"heading"_s, u"Brakujący nagłówek"_s}});
