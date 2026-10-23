@@ -487,7 +487,7 @@ QList<Arg> targetArgs()
             flag(u"exact"_s, QT_TRANSLATE_NOOP("brulion::cli", "The text exactly, not a part of it"))};
 }
 
-QList<Arg> pointerArgs(bool button)
+QList<Arg> pointerArgs(bool button, bool scroll = false)
 {
     QList<Arg> out;
     if (button) {
@@ -496,8 +496,10 @@ QList<Arg> pointerArgs(bool button)
         out.append(option(u"modifiers"_s, ArgType::String,
                           QT_TRANSLATE_NOOP("brulion::cli", "Keys held: ctrl, shift, alt, meta (ctrl+shift)")));
     }
-    out.append(choice(u"device"_s, {u"mouse"_s, u"touch"_s},
-                      QT_TRANSLATE_NOOP("brulion::cli", "Mouse or finger (default: the app's: touch with --touch)")));
+    out.append(choice(
+            u"device"_s, {u"mouse"_s, u"touch"_s},
+            scroll ? QT_TRANSLATE_NOOP("brulion::cli", "The mouse wheel (default) or a finger")
+                   : QT_TRANSLATE_NOOP("brulion::cli", "Mouse or finger (default: the app's: touch with --touch)")));
     return out;
 }
 
@@ -626,7 +628,7 @@ void addAppCommands(QList<Command> &out)
                                                 QT_TRANSLATE_NOOP("brulion::cli", "Pixels down (negative: up)")),
                                          option(u"dx"_s, ArgType::Int,
                                                 QT_TRANSLATE_NOOP("brulion::cli", "Pixels right (negative: left)"))}
-                            + pointerArgs(false)));
+                            + pointerArgs(false, true)));
     c = make(
             u"app.type"_s,
             QT_TRANSLATE_NOOP("brulion::cli", "Type text into the app's focused item, key by key (Polish letters too)"),

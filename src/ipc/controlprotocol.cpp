@@ -354,6 +354,8 @@ std::optional<ControlFailure> checkRequest(const ControlRequest &request)
         if (params.value(u"sequence"_s).toString().trimmed().isEmpty())
             return badParams(request, u"sequence names keys, e.g. \"Ctrl+K\" or \"Escape\""_s, u"sequence"_s);
     }
+    if (spec->name == u"scroll" && params.value(u"dx"_s).toDouble() == 0 && params.value(u"dy"_s).toDouble() == 0)
+        return badParams(request, u"scroll needs dx or dy: pixels, not 0 (positive: down, right)"_s, u"dy"_s);
     if (spec->name == u"type" && params.value(u"text"_s).toString().size() > 20000)
         return badParams(request, u"type takes at most 20000 characters at once"_s, u"text"_s);
     return std::nullopt;

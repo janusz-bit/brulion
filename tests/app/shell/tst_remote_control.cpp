@@ -658,6 +658,13 @@ private Q_SLOTS:
         r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool());
+        // A finger scrolling a little over it scrolls the page (it travels the drag threshold
+        // first): it is no tap.
+        r = app({u"scroll"_s, u"--object-name"_s, u"settingsRemoteControl"_s, u"--dy"_s, u"1"_s, u"--device"_s,
+                 u"touch"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        r = app({u"find"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
+        QVERIFY(r.result().value(u"items"_s).toArray().first().toObject().value(u"checked"_s).toBool());
         // Switched off by its own click: the connection that asked is closed with the socket.
         r = app({u"click"_s, u"--object-name"_s, u"settingsRemoteControl"_s});
         QCOMPARE(r.code, 5);

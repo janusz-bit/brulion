@@ -258,6 +258,8 @@ private Q_SLOTS:
         QTest::newRow("scroll the middle") << u"scroll"_s << obj(R"({"dy":300})") << QString() << QString();
         QTest::newRow("scroll a target") << u"scroll"_s << obj(R"({"type":"ListView","dy":-120.5,"dx":0})") << QString()
                                          << QString();
+        QTest::newRow("scroll by nothing") << u"scroll"_s << obj(R"({"dy":0})") << bad << u"dy"_s;
+        QTest::newRow("scroll without a distance") << u"scroll"_s << obj(R"({"text":"Żółw"})") << bad << u"dy"_s;
         QTest::newRow("type") << u"type"_s << obj(R"({"text":"Zażółć gęślą jaźń\n"})") << QString() << QString();
         QTest::newRow("type nothing") << u"type"_s << QJsonObject() << bad << u"text"_s;
         QTest::newRow("type too much") << u"type"_s << QJsonObject{{u"text"_s, QString(20001, u'ż')}} << bad

@@ -339,8 +339,10 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
 * **Real input.** Mouse and touch events go through Qt like a device's (pointer handlers see
   whole clicks and long presses), keys like a keyboard's (shortcuts first, so `Ctrl+K` opens the
   palette as it does for a user — and a text field keeps the keys it handles). `--device touch`
-  taps, holds and drags with a finger (default: a finger when the app runs with `--touch`). Input
-  needs a shown, active window: it is shown and asked to be active first.
+  taps, holds and drags with a finger (default: a finger when the app runs with `--touch`, except
+  for `scroll`, which turns the wheel unless asked for a finger: like a real one, a finger where
+  nothing can scroll that way presses what it is on). Input needs a shown, active window: it is
+  shown and asked to be active first.
 * **One at a time, settled.** Gestures are played on the app's event loop, one after another
   (nothing nested: the app stays in real use), started and answered once the window has stopped
   changing (no new frame for 100 ms and no popup opening or closing, at most 2 s) — so the next

@@ -19,6 +19,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -28,6 +29,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QStyleHints>
 
 #include <cmath>
 
@@ -848,7 +850,9 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
         target.point = QPointF(current->width() / 2.0, current->height() / 2.0);
     else if (!resolveTarget(current, params, &target, reply))
         return;
-    const bool touchDefault = QCoreApplication::arguments().contains(u"--touch"_s);
+    // A finger with --touch (the phone's UI), except for scrolling: the wheel scrolls whatever is
+    // under it, a finger where nothing can scroll that way presses what it is on (as a real one).
+    const bool touchDefault = method != u"scroll" && QCoreApplication::arguments().contains(u"--touch"_s);
     const bool touch = params.contains(u"device"_s) ? params.value(u"device"_s).toString() == u"touch" : touchDefault;
     const Qt::MouseButton button = ipc::parseMouseButton(params.value(u"button"_s).toString()).value_or(Qt::LeftButton);
     const Qt::KeyboardModifiers modifiers = ipc::parseModifiers(params.value(u"modifiers"_s)).value_or(Qt::NoModifier);
@@ -897,8 +901,12 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                     if (touch) {
                         // The content follows the finger: a finger moving up scrolls down. Held still
                         // before lifting, so it does not fling on.
+                        // The finger first travels the drag threshold: Flickable moves the content
+                        // only past it, and a shorter move would be a tap on the item there.
                         const qreal length = std::hypot(delta.x(), delta.y());
-                        gesture = uidriver::touchDrag(reached, point, -delta, qMax(6, int(length / 12)), 16, 120, 300);
+                        const qreal travel = length + QGuiApplication::styleHints()->startDragDistance() + 2;
+                        gesture = uidriver::touchDrag(reached, point, -delta * (travel / length),
+                                                      qMax(6, int(travel / 12)), 16, 120, 300);
                     } else {
                         gesture = uidriver::wheel(reached, point, delta, modifiers);
                     }
