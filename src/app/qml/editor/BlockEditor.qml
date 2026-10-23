@@ -330,12 +330,16 @@ FocusScope {
         // The header (page title) settling its height must not scroll back to the top.
         list.userMoved = true
         later(() => {
+            // (autoHeight: the list never scrolls — the journal stream does, below.)
             list.positionViewAtIndex(row, ListView.Center)
             // The row's delegate exists once the list has been laid out there.
             list.forceLayout()
             const item = list.itemAtIndex(row) as BlockDelegate
-            if (item)
-                item.flash()
+            if (!item)
+                return
+            if (editor.scroller)
+                editor.scroller.ensureVisible(item, Qt.rect(0, 0, item.width, item.height))
+            item.flash()
         })
         list.forceActiveFocus()
     }
