@@ -578,7 +578,8 @@ Item {
     Loader {
         active: block.bandStart && block.editor.selectionMode && block.editor.touch
         z: 5
-        x: block.bandX - Theme.touchTarget / 2
+        // (Inside the window: a document's band starts near the screen's edge on a phone.)
+        x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
         y: block.bandTop + 9 - Theme.touchTarget / 2
         sourceComponent: Grip { atStart: true }
     }
