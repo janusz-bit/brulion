@@ -2242,6 +2242,28 @@ ApplicationWindow {
                 waitStep(() => blockMenuOpen() && page.editingRow < 0, "a right-click on a calc block opens the block menu (no editing)"),
                 () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
                 waitStep(() => !blockMenuOpen(), "Escape closes it"),
+                // ---- The title drawn above the properties: the menu of the block drawn there ---------
+                () => { page.path = host.recipePath },
+                waitStep(() => page.loaded && page.titleRow > 0 && editor.titleFirst && renderedOf(page.titleRow) !== null,
+                         "the recipe (properties, then its title) is open"),
+                () => editor.listView.positionViewAtBeginning(),
+                () => {
+                    const text = renderedOf(page.titleRow)
+                    check(text !== null && text.mapToItem(null, 0, 0).y < delegateAt(page.titleRow - 1).mapToItem(null, 0, 0).y,
+                          "the title is drawn above the properties")
+                    if (text)
+                        rightClick(text, text.width / 4, text.height / 2)
+                },
+                waitStep(() => blockMenuOpen() && editor.blockMenu.heading && editor.blockMenu.row() === page.titleRow,
+                         "a right-click on that title opens the title's block menu"),
+                () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
+                waitStep(() => !blockMenuOpen(), "Escape closes it"),
+                () => {
+                    const properties = delegateAt(page.titleRow - 1)
+                    rightClick(properties, properties.width - 8, properties.height - 4)
+                },
+                () => {}, () => {},
+                () => check(!blockMenuOpen(), "a right-click on the properties drawn below it opens no block menu"),
             ])
         }
         steps = s

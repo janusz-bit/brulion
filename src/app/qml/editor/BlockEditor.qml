@@ -411,6 +411,20 @@ FocusScope {
         return copyLink(heading, "heading")
     }
 
+    /// The row drawn at (x, y) of the list's content item; -1 when none (the header, the footer, a
+    /// gap). Not ListView.indexAt(): it goes by the rows' layout and ignores the Translate that
+    /// draws the page's title above its properties (titleFirst); mapping into each delegate goes
+    /// through it. (Nor contentItem.childAt(): the list's own highlight item covers the current row.)
+    function rowAt(x, y) {
+        const children = list.contentItem.children
+        for (let i = children.length - 1; i >= 0; --i) {
+            const item = children[i] as BlockDelegate
+            if (item && item.visible && item.contains(item.mapFromItem(list.contentItem, x, y)))
+                return item.index
+        }
+        return -1
+    }
+
     /// A click on the rendered text of `row` at (x, y) in that text's coordinates.
     function editAt(row, x, y) {
         pendingClickRow = row
@@ -1133,7 +1147,7 @@ FocusScope {
                     return
                 const scene = eventPoint.scenePosition
                 const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
-                const row = list.indexAt(p.x, p.y)
+                const row = editor.rowAt(p.x, p.y)
                 if (row < 0 || editor.controller.blocks.get(row).view === "frontmatter")
                     return
                 const at = list.mapFromItem(null, scene.x, scene.y)
@@ -1165,7 +1179,7 @@ FocusScope {
             if (!drop.hasUrls || !editor.controller)
                 return
             const p = list.contentItem.mapFromItem(fileDrop, drop.x, drop.y)
-            const row = list.indexAt(editor.contentX + 1, p.y)
+            const row = editor.rowAt(editor.contentX + 1, p.y)
             const c = editor.controller
             if (row >= 0 && row === c.editingRow && editor.activeEditor && editor.activeEditor.row === row)
                 c.insertFiles(row, editor.activeEditor.selectionStart, editor.activeEditor.selectionEnd, drop.urls)
