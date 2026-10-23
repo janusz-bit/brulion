@@ -25,7 +25,7 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 - Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy), podpowiedzi przy pisaniu i pola formularzy (np. w ustawieniach) też zawsze leżą nad klawiaturą.
 
 ## Nowa strona
-- **Ctrl+N**, przycisk z ołówkiem obok nazwy notatnika albo „+” przy sekcji **Strony** w pasku bocznym. Nazwa może zawierać `/`, wtedy strona trafi do folderu: `Projekty/Dom`.
+- **Ctrl+N**, przycisk z ołówkiem obok nazwy notatnika albo „+” przy sekcji **Strony** w pasku bocznym (→ „Nowa strona”). Gdy jesteś na stronie w folderze, nowa strona trafi do tego samego folderu — widać to w oknie jako „W folderze: Projekty”; krzyżyk przy nim albo „Zmień…” wybiera inne miejsce. Nazwa może też zawierać `/`, wtedy strona trafi do folderu: `Projekty/Dom`.
 - W oknie wybierasz tryb: dokument albo konspekt (zobacz [[Dokument i konspekt|Dokument i konspekt]]).
 - Skrót: wpisz w dowolnej notatce `[[Nazwa nowej strony]]` i kliknij link — strona powstanie.
 
@@ -40,6 +40,15 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 
 ## Pasek boczny
 Dziennik, Kalendarz, Zadania, Wszystkie strony, Tagi, Graf i Szukaj. Niżej ulubione strony, ostatnio otwarte oraz drzewo folderów. Na telefonie pasek boczny otwiera przycisk ☰ lub „Menu” w dolnej nawigacji.
+
+## Foldery
+Foldery porządkują strony jak katalogi na dysku: strona `Projekty/Dom` to plik `Dom.md` w folderze `Projekty`.
+- **Nowy folder**: „+” przy sekcji **Strony** → „Nowy folder” (w głównym folderze notatnika) albo menu folderu → „Nowy folder…” (w nim). Nazwy z niedozwolonymi znakami są poprawiane, a ukryte (z kropką na początku, np. `.prywatne`) odrzucane.
+- **Menu** strony lub folderu w drzewie otwiera prawy przycisk myszy albo przytrzymanie palcem; na telefonie także przycisk „⋯” przy każdym wierszu. Folder ma tam m.in. „Pokaż strony folderu”, „Szukaj w folderze” i „Eksportuj folder…”, strona — „Kopiuj link”.
+- **Przenoszenie**: „Przenieś do…” (w menu drzewa, w menu **Więcej** strony, na liście **Wszystkie strony** i w palecie poleceń) pokazuje foldery z wyszukiwaniem, a ostatni wiersz „Nowy folder „…”” od razu zakłada folder o wpisanej nazwie. Przed przeniesieniem widać, ile linków się zmieni. Na komputerze stronę lub folder możesz też przeciągnąć myszą na inny folder (zamknięty otworzy się po chwili) albo na nagłówek **Strony** — do głównego folderu; Esc przerywa przeciąganie. Ukośnik w oknie zmiany nazwy (F2) też przenosi: „Archiwum/Dom” (w tytule edytowanym w nagłówku strony ukośnik jest zwykłym znakiem tytułu).
+- Linki i tagi zawsze prowadzą dalej do tej samej strony (zobacz [[Linki i odnośniki zwrotne#Zmiana nazwy i przenoszenie|Zmiana nazwy i przenoszenie]]). Przeniesienie folderu dziennika, szablonów albo załączników poprawia też ustawienia notatnika.
+- Drzewo samo pokazuje i podświetla otwartą stronę (wyłączysz to w menu „+” → „Pokazuj otwartą stronę”), a „Zwiń wszystkie” zamyka wszystkie foldery. Folder dziennika jest na górze, dni od najnowszego.
+- **Wszystkie strony** w folderze („Pokaż strony folderu” albo okruszki nad stroną) pokazują jego podfoldery nad stronami — tak przeglądasz notatnik folder po folderze także na telefonie. „Z podfolderami” decyduje, czy lista obejmuje też strony podfolderów.
 
 Widoki bez własnego przycisku — centrum synchronizacji, import i eksport, kosz, ustawienia — znajdziesz w menu **Więcej** (⋮) oraz w palecie poleceń. Rejestr zdarzeń jest w *Ustawienia → Aplikacja* i w palecie.
 

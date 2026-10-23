@@ -366,6 +366,97 @@ QString preferredEol(const QList<Line> &lines, qsizetype index)
 }
 
 // ---------------------------------------------------------------------------------------------
+// Names
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+bool isAsciiDigit(QChar c)
+{
+    return c >= u'0' && c <= u'9';
+}
+
+/// Primary weight of a lower-case code point in Polish alphabetical order: a < ą < b < c < ć …
+/// l < ł … z < ź < ż; other accented letters weigh like their base letter (é = e).
+quint32 collationWeight(char32_t cp)
+{
+    switch (cp) {
+    case U'ą': return (U'a' << 2) | 1;
+    case U'ć': return (U'c' << 2) | 1;
+    case U'ę': return (U'e' << 2) | 1;
+    case U'ł': return (U'l' << 2) | 1;
+    case U'ń': return (U'n' << 2) | 1;
+    case U'ó': return (U'o' << 2) | 1;
+    case U'ś': return (U's' << 2) | 1;
+    case U'ź': return (U'z' << 2) | 1;
+    case U'ż': return (U'z' << 2) | 2;
+    default: break;
+    }
+    if (cp < 0x80 || QChar::isSurrogate(cp))
+        return quint32(cp) << 2;
+    const QString decomposed = QString::fromUcs4(&cp, 1).normalized(QString::NormalizationForm_D);
+    const char32_t base = decomposed.isEmpty() || decomposed[0].isSurrogate() ? cp : decomposed[0].unicode();
+    return quint32(base) << 2;
+}
+
+} // namespace
+
+int compareNames(const QString &a, const QString &b)
+{
+    return compareNameKeys(nameSortKey(a), a, nameSortKey(b), b);
+}
+
+QString nameSortKey(const QString &name)
+{
+    return (isAscii(name) ? name : name.normalized(QString::NormalizationForm_C)).toLower();
+}
+
+int compareNameKeys(const QString &la, const QString &a, const QString &lb, const QString &b)
+{
+    qsizetype i = 0;
+    qsizetype j = 0;
+    while (i < la.size() && j < lb.size()) {
+        if (isAsciiDigit(la[i]) && isAsciiDigit(lb[j])) {
+            // Digit runs compare by value ("2" < "10"), leading zeros ignored.
+            qsizetype ie = i;
+            while (ie < la.size() && isAsciiDigit(la[ie]))
+                ++ie;
+            qsizetype je = j;
+            while (je < lb.size() && isAsciiDigit(lb[je]))
+                ++je;
+            qsizetype is = i;
+            while (is + 1 < ie && la[is] == u'0')
+                ++is;
+            qsizetype js = j;
+            while (js + 1 < je && lb[js] == u'0')
+                ++js;
+            if (ie - is != je - js)
+                return ie - is < je - js ? -1 : 1;
+            const int c = QStringView(la).sliced(is, ie - is).compare(QStringView(lb).sliced(js, je - js));
+            if (c != 0)
+                return c < 0 ? -1 : 1;
+            i = ie;
+            j = je;
+            continue;
+        }
+        const auto [ca, na] = codePointAt(la, i);
+        const auto [cb, nb] = codePointAt(lb, j);
+        const quint32 wa = collationWeight(ca);
+        const quint32 wb = collationWeight(cb);
+        if (wa != wb)
+            return wa < wb ? -1 : 1;
+        i += na;
+        j += nb;
+    }
+    if (i < la.size())
+        return 1;
+    if (j < lb.size())
+        return -1;
+    const int c = QString::compare(a, b, Qt::CaseSensitive);
+    return c < 0 ? -1 : (c > 0 ? 1 : 0);
+}
+
+// ---------------------------------------------------------------------------------------------
 // Hashing
 // ---------------------------------------------------------------------------------------------
 

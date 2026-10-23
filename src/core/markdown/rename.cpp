@@ -241,20 +241,15 @@ struct TagRenamePlan {
     int unplacedFrontmatter = 0;   ///< matching names the scan could not place
 };
 
-TagRenamePlan planTagRename(const QString &content, const QString &oldName, const QString &newName,
-                            const VaultPath &oldPath, const VaultPath &newPath, const TagFilter &naming)
+/// The new name of a tag as written (`written`: NFC, without '#'), or a null QString.
+using TagRenamer = std::function<QString(const QString &written)>;
+
+/// Plan the rename of the tags `rename` gives a new name.
+TagRenamePlan planTags(const QString &content, const TagRenamer &rename)
 {
     TagRenamePlan plan;
-    const QString oldTrimmed = oldName.trimmed();
-    const QString newTrimmed = newName.trimmed();
-    if (newTrimmed.isEmpty() || (oldTrimmed.isEmpty() && oldPath.isEmpty()))
-        return plan;
-    RenameSpec spec = makeSpec(oldTrimmed, newTrimmed, oldPath, newPath);
-    if (oldTrimmed.isEmpty())
-        spec.oldName = newTrimmed; // only path-qualified tags (no base-name match below)
-    const QString oldKey = oldTrimmed.isEmpty() ? QString() : key(oldTrimmed);
     const auto plan1 = [&](const NoteTag &t) {
-        const QString name = renamedTagName(t.name, spec, oldKey, naming);
+        const QString name = rename(t.name);
         if (name.isNull() || name == t.name)
             return;
         const QString replacement = tagReplacement(t, name, content);
@@ -275,7 +270,7 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
         // The items are namesFrom()'s names one to one.
         for (qsizetype i = 0; i < plan.frontmatter.items.size(); ++i) {
             const FrontmatterTagItem &item = plan.frontmatter.items[i];
-            const QString name = renamedTagName(item.tag.name, spec, oldKey, naming);
+            const QString name = rename(item.tag.name);
             if (item.link || name.isNull() || name == item.tag.name)
                 continue;
             const qsizetype before = plan.edits.size();
@@ -285,7 +280,7 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
         }
     } else {
         for (QString &n : plan.frontmatterAfter) {
-            const QString name = renamedTagName(n.normalized(QString::NormalizationForm_C), spec, oldKey, naming);
+            const QString name = rename(n.normalized(QString::NormalizationForm_C));
             if (!name.isNull() && name != n && !tagSyntax(name).isEmpty()) {
                 n = name;
                 ++plan.unplacedFrontmatter;
@@ -297,12 +292,24 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
     return plan;
 }
 
-} // namespace
-
-QString renameTags(const QString &content, const QString &oldName, const QString &newName, const VaultPath &oldPath,
-                   const VaultPath &newPath, const TagFilter &naming)
+TagRenamePlan planTagRename(const QString &content, const QString &oldName, const QString &newName,
+                            const VaultPath &oldPath, const VaultPath &newPath, const TagFilter &naming)
 {
-    const TagRenamePlan plan = planTagRename(content, oldName, newName, oldPath, newPath, naming);
+    const QString oldTrimmed = oldName.trimmed();
+    const QString newTrimmed = newName.trimmed();
+    if (newTrimmed.isEmpty() || (oldTrimmed.isEmpty() && oldPath.isEmpty()))
+        return {};
+    RenameSpec spec = makeSpec(oldTrimmed, newTrimmed, oldPath, newPath);
+    if (oldTrimmed.isEmpty())
+        spec.oldName = newTrimmed; // only path-qualified tags (no base-name match below)
+    const QString oldKey = oldTrimmed.isEmpty() ? QString() : key(oldTrimmed);
+    return planTags(content, [&](const QString &written) { return renamedTagName(written, spec, oldKey, naming); });
+}
+
+/// The text of the planned tag edits applied to `content` (and the frontmatter key rewritten
+/// when its items cannot say the new names).
+QString applyTagPlan(const QString &content, const TagRenamePlan &plan)
+{
     QString out;
     qsizetype last = 0;
     for (const TagEdit &e : plan.edits) {
@@ -321,6 +328,27 @@ QString renameTags(const QString &content, const QString &oldName, const QString
             out = setFrontmatterValue(out, plan.frontmatter.key, plan.frontmatterAfter);
     }
     return out == content ? content : out;
+}
+
+} // namespace
+
+QString renameTags(const QString &content, const QString &oldName, const QString &newName, const VaultPath &oldPath,
+                   const VaultPath &newPath, const TagFilter &naming)
+{
+    return applyTagPlan(content, planTagRename(content, oldName, newName, oldPath, newPath, naming));
+}
+
+QString retargetTags(const QString &content, const QHash<QString, QString> &names)
+{
+    if (names.isEmpty())
+        return content;
+    return applyTagPlan(content, planTags(content, [&names](const QString &written) {
+                            QString k = key(written);
+                            while (k.endsWith(u'/'))
+                                k.chop(1);
+                            const auto it = names.constFind(k);
+                            return it == names.cend() ? QString() : it->trimmed();
+                        }));
 }
 
 QList<NoteTag> tagsToRename(const QString &content, const QString &oldName, const QString &newName,
@@ -358,6 +386,79 @@ QString renameLinks(const QString &content, const QString &oldName, const QStrin
         else if (link.kind == LinkKind::Markdown)
             rewritten = rewriteMarkdown(src, link, spec);
         if (rewritten.isNull() || rewritten == src)
+            continue;
+        out += QStringView(content).sliced(last, link.from - last);
+        out += rewritten;
+        last = link.to;
+        changed = true;
+    }
+    if (!changed)
+        return content;
+    out += QStringView(content).sliced(last);
+    return out;
+}
+
+QString retargetLinks(const QString &content, const QList<LinkEdit> &edits)
+{
+    if (edits.isEmpty())
+        return content;
+    // The edits by range; only ranges of links the parser reports are rewritten.
+    QHash<qsizetype, const LinkEdit *> byStart;
+    for (const LinkEdit &e : edits) {
+        if (e.from >= 0 && e.to > e.from && e.to <= content.size())
+            byStart.insert(e.from, &e);
+    }
+    const auto validWiki = [](const QString &t) {
+        return !t.trimmed().isEmpty() && !t.contains(u"[["_s) && !t.contains(u"]]"_s) && !t.contains(u'|')
+               && !t.contains(u'#') && !t.contains(u'\n') && !t.contains(u'\r');
+    };
+    const ParsedNote note = parseNote(QString(), content);
+    QString out;
+    qsizetype last = 0;
+    bool changed = false;
+    for (const Link &link : note.links) {
+        const LinkEdit *edit = byStart.value(link.from);
+        if (!edit || edit->to != link.to || link.from < last)
+            continue;
+        const QStringView src = QStringView(content).sliced(link.from, link.to - link.from);
+        QString rewritten;
+        if (link.kind == LinkKind::Wiki || link.kind == LinkKind::Embed) {
+            if (!validWiki(edit->newTarget))
+                continue;
+            const qsizetype open = src.startsWith(u'!') ? 3 : 2;
+            const QStringView inner = src.sliced(open, src.size() - open - 2);
+            qsizetype end = inner.size();
+            const qsizetype hash = inner.indexOf(u'#');
+            const qsizetype pipe = inner.indexOf(u'|');
+            if (hash >= 0)
+                end = hash;
+            if (pipe >= 0 && pipe < end)
+                end = pipe > 0 && inner[pipe - 1] == u'\\' ? pipe - 1 : pipe;
+            const QStringView targetPart = inner.first(end);
+            qsizetype lead = 0;
+            while (lead < targetPart.size() && targetPart[lead].isSpace())
+                ++lead;
+            qsizetype trail = 0;
+            while (trail < targetPart.size() - lead && targetPart[targetPart.size() - 1 - trail].isSpace())
+                ++trail;
+            rewritten = src.first(open).toString() + targetPart.first(lead) + edit->newTarget + targetPart.last(trail)
+                        + inner.sliced(end) + u"]]"_s;
+        } else if (link.kind == LinkKind::Markdown) {
+            const QString target = edit->newTarget.trimmed();
+            if (target.isEmpty() || target.contains(u'\n') || target.contains(u'\r') || hasUrlScheme(link.target))
+                continue;
+            const auto parts = parseMdLink(src, src.startsWith(u'!') ? 1 : 0);
+            if (!parts)
+                continue;
+            const QStringView dest = src.sliced(parts->destFrom, parts->destTo - parts->destFrom);
+            const qsizetype hash = dest.indexOf(u'#');
+            const QStringView fragment = hash < 0 ? QStringView() : dest.sliced(hash);
+            rewritten = src.first(parts->destFrom).toString() + encodeDest(target, parts->angle) + fragment
+                        + src.sliced(parts->destTo);
+        } else {
+            continue;
+        }
+        if (rewritten == src)
             continue;
         out += QStringView(content).sliced(last, link.from - last);
         out += rewritten;

@@ -287,6 +287,10 @@ public:
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
     /// "about", "toggleTheme", "toggleSidePanel".
     Q_INVOKABLE void requestUiAction(const QString &action);
+    /// Ask the shell to act on a page or folder of the tree from any view (its dialogs live in
+    /// the shell): "move" (Przenieś do…), "rename", "delete" (the confirmation), "newPage" /
+    /// "newFolder" (in that folder), "reveal" (show it in the sidebar's tree).
+    Q_INVOKABLE void requestItemAction(const QString &action, const QString &path);
 
     // ---- Sync seam ----------------------------------------------------------------------
     bool syncAvailable() const { return m_syncAvailable; }
@@ -319,6 +323,7 @@ Q_SIGNALS:
     void toastRequested(const QString &text, const QString &kind);
     void showWindowRequested();
     void uiActionRequested(const QString &action);
+    void itemActionRequested(const QString &action, const QString &path);
     void syncRequested();
     /// Desktop: the tray shows it (the reminders integration may take over).
     void notificationRequested(const QString &title, const QString &body);
@@ -336,6 +341,8 @@ private:
     void finishOpening(const QString &path, bool seedDemo);
     void routeChanged();
     void onPathRenamed(const QString &oldPath, const QString &newPath);
+    /// A folder moved: folder routes (All pages, search in a folder, a folder export) follow.
+    void onFolderRenamed(const QString &oldPath, const QString &newPath);
     void onPathRemoved(const QString &path);
     void applyPendingNotification();
     QVariantMap initialRoute() const;

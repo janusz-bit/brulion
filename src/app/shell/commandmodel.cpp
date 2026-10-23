@@ -116,6 +116,62 @@ static QList<Command> buildCommands(const AppController *app)
     };
 }
 
+// ---- Folders (Przenieś do…, Nowy folder…, Pokaż w drzewie) -----------------------------------
+// One block: the commands, where they go in the list, and what they do.
+
+/// The folder commands, after "New page": a new folder at the root, moving the page shown, showing
+/// it in the sidebar's tree (the shell opens the dialogs: AppController::uiActionRequested).
+static QList<Command> folderCommands(const AppController *app)
+{
+    const bool ready = app->status() == u"ready";
+    const QVariantMap route = app->currentRoute();
+    const QString view = route.value(u"view"_s).toString();
+    // A daily note is no page to move (its name is its date, its folder the journals folder);
+    // shown in the tree it is, also from a journal route — which may carry only its date.
+    const Workspace *ws = app->workspace();
+    const QString path = route.value(u"path"_s).toString();
+    const bool onPage = ready && view == u"page";
+    const bool movable = onPage && ws->journalDate(path).isEmpty();
+    const bool onFile =
+            onPage
+            || (ready && view == u"journal"
+                && ws->exists(!path.isEmpty() ? path : ws->journalFileFor(route.value(u"date"_s).toString())));
+    return {
+            {u"folder.new"_s,
+             CommandModel::tr("New folder…"),
+             CommandModel::tr("At the notebook root"),
+             u"folder-plus"_s,
+             {},
+             ready},
+            {u"page.move"_s,
+             CommandModel::tr("Move to…"),
+             CommandModel::tr("Move the page to another folder"),
+             u"folder-input"_s,
+             {},
+             movable},
+            {u"page.reveal"_s,
+             CommandModel::tr("Show in tree"),
+             CommandModel::tr("The page in the sidebar's folders"),
+             u"folder-tree"_s,
+             {},
+             onFile},
+    };
+}
+
+/// Run a folder command; false when `id` is none.
+static bool runFolderCommand(AppController *app, const QString &id)
+{
+    if (id == u"folder.new")
+        app->requestUiAction(u"newFolder"_s);
+    else if (id == u"page.move")
+        app->requestUiAction(u"movePage"_s);
+    else if (id == u"page.reveal")
+        app->requestUiAction(u"revealInTree"_s);
+    else
+        return false;
+    return true;
+}
+
 /// buildCommands() with the note mode command right after "Markdown source", available where that
 /// is (an editor shows a page or a day) except on a picture attachment, which is no note: document
 /// (Obsidian-like) / outline (Logseq-like), written into the note (docs/UI.md "Note modes"); and
@@ -144,6 +200,12 @@ static QList<Command> allCommands(const AppController *app)
                 u"scroll-text"_s,
                 {},
                 app->status() == u"ready"});
+    // The folder commands after "New page".
+    const auto newPage = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"page.new"; });
+    const qsizetype at = newPage == out.cend() ? out.size() : std::distance(out.cbegin(), newPage) + 1;
+    const QList<Command> folders = folderCommands(app);
+    for (qsizetype i = 0; i < folders.size(); ++i)
+        out.insert(at + i, folders.at(i));
     return out;
 }
 
@@ -211,7 +273,7 @@ bool CommandModel::run(const QString &id)
         m_app->closeVault();
     else if (id == u"about")
         m_app->requestUiAction(u"about"_s);
-    else
+    else if (!runFolderCommand(m_app, id))
         return false;
     return true;
 }

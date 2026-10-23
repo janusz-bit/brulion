@@ -7,7 +7,8 @@
 // sortKey: "title" (default, Polish collation) | "folder" | "modified" | "backlinks" | "tags";
 // descending reverses it (ties are always by title). filter: words that must all occur in the
 // title, an alias or the folder (case- and diacritic-insensitive). folder: only pages in this
-// folder and below. includeJournals: daily notes too (default false).
+// folder and below — or only in it, without `recursive` (default true: subfolders too).
+// includeJournals: daily notes too (default false).
 //
 // Roles: path, title, folder, aliases (list), modified (ms since epoch), modifiedLabel ("dziś
 // 09:12"), size, backlinks (pages linking here or carrying a tag that names the page), tags
@@ -30,6 +31,8 @@ class PageListModel : public WorkspaceListModel {
     Q_PROPERTY(QString sortKey READ sortKey WRITE setSortKey NOTIFY sortChanged FINAL)
     Q_PROPERTY(bool descending READ descending WRITE setDescending NOTIFY sortChanged FINAL)
     Q_PROPERTY(bool includeJournals READ includeJournals WRITE setIncludeJournals NOTIFY includeJournalsChanged FINAL)
+    /// With `folder` (or at the root): the pages of subfolders too (default) or only its own.
+    Q_PROPERTY(bool recursive READ recursive WRITE setRecursive NOTIFY recursiveChanged FINAL)
     Q_PROPERTY(QString locale READ locale WRITE setLocale NOTIFY localeChanged FINAL)
     /// "YYYY-MM-DD" for "dziś"/"wczoraj"; "" = the workspace clock.
     Q_PROPERTY(QString today READ today WRITE setToday NOTIFY todayChanged FINAL)
@@ -65,6 +68,8 @@ public:
     void setDescending(bool on);
     bool includeJournals() const { return m_includeJournals; }
     void setIncludeJournals(bool on);
+    bool recursive() const { return m_recursive; }
+    void setRecursive(bool on);
     QString locale() const { return m_locale; }
     void setLocale(const QString &locale);
     QString today() const { return m_today; }
@@ -82,6 +87,7 @@ Q_SIGNALS:
     void folderChanged();
     void sortChanged();
     void includeJournalsChanged();
+    void recursiveChanged();
     void localeChanged();
     void todayChanged();
     void totalCountChanged();
@@ -113,6 +119,7 @@ private:
     QString m_sortKey = QStringLiteral("title");
     bool m_descending = false;
     bool m_includeJournals = false;
+    bool m_recursive = true;
     QString m_locale = QStringLiteral("pl");
     QString m_today;
     int m_total = 0;

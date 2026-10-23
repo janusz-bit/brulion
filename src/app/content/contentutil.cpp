@@ -7,7 +7,6 @@
 #include "text/text.h"
 #include "util/paths.h"
 
-#include <QCollator>
 #include <QColor>
 #include <QDateTime>
 #include <QLocale>
@@ -437,16 +436,7 @@ QStringList pageTags(const ParsedNote &note)
 
 int compareNames(const QString &a, const QString &b)
 {
-    static const QCollator collator = [] {
-        QCollator c{ QLocale(QLocale::Polish, QLocale::Poland) };
-        c.setCaseSensitivity(Qt::CaseInsensitive);
-        c.setNumericMode(true);
-        return c;
-    }();
-    const int r = collator.compare(a, b);
-    if (r != 0)
-        return r;
-    return a.compare(b);
+    return text::compareNames(a, b);
 }
 
 } // namespace brulion::content

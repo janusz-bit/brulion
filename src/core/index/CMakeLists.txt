@@ -8,6 +8,7 @@ brulion_add_core_module(index
         vaultindex.h vaultindex_p.h vaultindex.cpp vaultindex_views.cpp
         searchindex.h searchindex.cpp
         query.h queryparse.cpp queryrun.cpp querymessages_p.h querymessages.cpp
+        relocate.cpp
         resolve_p.h resolve.cpp
         suggest_p.h suggest.cpp
         textutil_p.h textutil.cpp

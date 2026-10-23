@@ -164,6 +164,38 @@ void mouseClick(QQuickWindow *window, QPointF scenePos, Qt::MouseButton button =
     settle(100);
 }
 
+/// A left-button drag with the mouse from `from` to `to` (scene coordinates) in small steps; held
+/// there `holdMs`, then — unless `escape` (Escape pressed first, the drag cancelled) — released.
+void mouseDrag(QQuickWindow *window, QPointF from, QPointF to, int holdMs = 0, bool escape = false)
+{
+    int &timestamp = mouseTimestamp;
+    timestamp += 1000;
+    const auto global = [window](QPointF p) { return window->mapToGlobal(p); };
+    qt_handleMouseEvent(window, from, global(from), Qt::NoButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
+                        timestamp);
+    qt_handleMouseEvent(window, from, global(from), Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonPress,
+                        Qt::NoModifier, timestamp += 20);
+    settle(40);
+    constexpr int steps = 16;
+    for (int step = 1; step <= steps; ++step) {
+        const QPointF p = from + (to - from) * step / double(steps);
+        qt_handleMouseEvent(window, p, global(p), Qt::LeftButton, Qt::NoButton, QEvent::MouseMove, Qt::NoModifier,
+                            timestamp += 16);
+        settle(16);
+    }
+    settle(holdMs);
+    if (escape) {
+        QKeyEvent press(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &press);
+        QKeyEvent release(QEvent::KeyRelease, Qt::Key_Escape, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &release);
+        settle(50);
+    }
+    qt_handleMouseEvent(window, to, global(to), Qt::NoButton, Qt::LeftButton, QEvent::MouseButtonRelease,
+                        Qt::NoModifier, timestamp += 20);
+    settle(200);
+}
+
 void tapOrClick(QQuickWindow *window, QPointF scenePos, bool touch)
 {
     if (touch)
@@ -1116,7 +1148,7 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
                       && r->property("subtitle").toString() == emptyText && openMenus(window) == 0,
               "an empty folder opens and says it is empty");
     };
-    check(app->workspace()->createFolder(empty), "an empty folder is created");
+    check(!app->workspace()->createFolder(empty).isEmpty(), "an empty folder is created");
     app->goHome();
     pause(200);
 
@@ -1283,6 +1315,407 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
               "a tap or click on a bullet zooms into the block, without a menu");
         QMetaObject::invokeMethod(controller, "zoomOut");
     }
+}
+
+/// 3e. Folders, with real input: the page opened is revealed and highlighted in the tree; a row's
+///     menu (the "⋯" button on touch screens, a right-click on desktops) has "Przenieś do…", whose
+///     dialog moves the page into the folder chosen; the "Strony" header's "+" menu creates a root
+///     folder (named in the dialog, typed with real keys) and a deleted empty folder leaves the
+///     tree; on desktops a page dragged with the mouse onto a folder moves into it, onto the
+///     "Strony" header back to the root, a closed folder hovered over opens and Escape cancels
+///     the drag, the target follows the rows the list scrolls under a still pointer and the
+///     header scrolled out of the list is none; a collapsed "Strony" stays collapsed when another
+///     page opens, "Pokaż w drzewie" opens it; a "/" typed into the page header's title stays in
+///     the title (the page keeps its folder); All pages lists folders as rows (a tap opens one)
+///     and the top bar's breadcrumb goes back. The sample notebook is put back afterwards.
+void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const bool narrow = window->width() < 900;
+    Workspace *ws = app->workspace();
+    const QString recipes = u"Przepisy.md"_s;
+    const QString remont = u"Projekty/Remont mieszkania.md"_s;
+    QObject *drawer = window->findChild<QObject *>(u"shellDrawer"_s);
+    const auto named = [window](const QString &name) {
+        QQuickItem *found = nullptr;
+        waitFor([&] {
+            found = findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
+            return found != nullptr;
+        });
+        return found;
+    };
+    const auto openDrawer = [&] {
+        if (!narrow || !drawer || drawer->property("opened").toBool())
+            return;
+        QMetaObject::invokeMethod(drawer, "open");
+        waitFor([&] { return drawer->property("opened").toBool(); });
+        settle(200);
+    };
+    const auto closeDrawer = [&] {
+        if (!drawer || !drawer->property("visible").toBool())
+            return;
+        QMetaObject::invokeMethod(drawer, "close");
+        waitFor([&] { return !drawer->property("visible").toBool(); });
+    };
+    const auto treeList = [window]() -> QQuickItem * {
+        return findShown(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"sidebarTree"; });
+    };
+    // The sidebar's (or the drawer's) row of `path`, scrolled into view.
+    const auto treeRow = [&](const QString &path) -> QQuickItem * {
+        QQuickItem *list = treeList();
+        if (!list)
+            return nullptr;
+        if (auto *model = list->property("model").value<QObject *>()) {
+            int row = -1;
+            QMetaObject::invokeMethod(model, "indexOf", qReturnArg(row), path);
+            if (row < 0)
+                return nullptr;
+            QMetaObject::invokeMethod(list, "positionViewAtIndex", row, 4 /* ListView.Contain */);
+        }
+        settle(60);
+        return findShown(list, [&](QQuickItem *item) {
+            return item->objectName() == u"treeRow" && item->property("path").toString() == path;
+        });
+    };
+    const auto treeModel = [&]() -> QObject * {
+        QQuickItem *list = treeList();
+        return list ? list->property("model").value<QObject *>() : nullptr;
+    };
+    const auto expanded = [&](const QString &folder) {
+        QObject *model = treeModel();
+        bool open = false;
+        if (model)
+            QMetaObject::invokeMethod(model, "isExpanded", qReturnArg(open), folder);
+        return open;
+    };
+    const auto sidebarItem = [&]() -> QQuickItem * {
+        QQuickItem *sidebar = treeList();
+        while (sidebar && !isA(sidebar, "ShellSidebar"))
+            sidebar = sidebar->parentItem();
+        return sidebar;
+    };
+    const auto treeMenu = [&]() -> QObject * {
+        QQuickItem *sidebar = sidebarItem();
+        return sidebar ? sidebar->findChild<QObject *>(u"sidebarContextMenu"_s) : nullptr;
+    };
+    const auto tap = [&](QQuickItem *item) {
+        if (item)
+            tapOrClick(window, pointIn(item), touch);
+    };
+    const auto restore = [&] {
+        closeMenus(window);
+        for (const QString &moved : {u"Projekty/Przepisy.md"_s, u"templates/Przepisy.md"_s}) {
+            if (ws->exists(moved))
+                ws->movePath(moved, QString());
+        }
+        for (const QString &folder : {u"Zażółć"_s, u"Przewijanie"_s}) {
+            if (ws->exists(folder))
+                ws->deletePage(folder);
+        }
+        if (ws->exists(u"Projekty/TCP IP.md"_s))
+            ws->renamePage(u"Projekty/TCP IP.md"_s, u"Remont mieszkania"_s);
+        settle(200);
+    };
+
+    // ---- The page opened elsewhere (a link, search, the switcher) shows in the tree.
+    app->goHome();
+    settle(200);
+    app->openPage(remont);
+    openDrawer();
+    QQuickItem *row = nullptr;
+    check(waitFor([&] { return (row = treeRow(remont)) && row->property("selected").toBool(); }),
+          "the page opened is revealed and highlighted in the tree");
+
+    // ---- A row's menu: the "⋯" button (touch) or a right-click; "Przenieś do…".
+    row = treeRow(recipes);
+    QObject *menu = treeMenu();
+    check(row && menu, "the tree lists a page and has its menu");
+    if (!row || !menu) {
+        restore();
+        return;
+    }
+    if (touch) {
+        QQuickItem *more = findShown(row, [](QQuickItem *item) { return item->objectName() == u"treeRowMore"; });
+        check(more != nullptr && more->height() >= 44, "touch screens show a “⋯” button on each row (44 px)");
+        tap(more);
+    } else {
+        mouseClick(window, pointIn(row), Qt::RightButton);
+    }
+    check(waitFor([&] { return menu->property("visible").toBool() && menu->property("path").toString() == recipes; }),
+          touch ? "the row's “⋯” opens its menu" : "a right-click on a row opens its menu");
+    tap(named(u"treeMenuMove"_s));
+    QObject *moveDialog = window->findChild<QObject *>(u"shellMoveDialog"_s);
+    check(moveDialog && waitFor([&] { return moveDialog->property("opened").toBool(); }),
+          "“Przenieś do…” opens the move dialog");
+    if (moveDialog && moveDialog->property("opened").toBool()) {
+        QQuickItem *target = nullptr;
+        waitFor([&] {
+            target = findShown(window->contentItem(), [](QQuickItem *item) {
+                return item->objectName() == u"moveDialogRow" && item->property("text").toString() == u"Projekty";
+            });
+            return target != nullptr;
+        });
+        tap(target);
+        check(waitFor([&] { return moveDialog->property("acceptEnabled").toBool(); }),
+              "choosing a folder in the move dialog shows what changes and allows moving");
+        const QString moveHere = QCoreApplication::translate("ShellMoveDialog", "Move here");
+        QQuickItem *accept = findShown(window->contentItem(), [&](QQuickItem *item) {
+            return isA(item, "BButton") && item->property("text").toString() == moveHere;
+        });
+        tap(accept);
+        check(waitFor([&] { return ws->exists(u"Projekty/Przepisy.md"_s) && !ws->exists(recipes); }),
+              "“Przenieś tutaj” moves the page into the folder");
+        check(ws->resolveLink(u"Przepisy"_s, u"Witaj w Brulionie.md"_s) == u"Projekty/Przepisy.md"_s,
+              "links to the moved page still reach it");
+        openDrawer();
+        check(waitFor([&] { return treeRow(u"Projekty/Przepisy.md"_s) != nullptr; }),
+              "the tree shows the page in its new folder");
+        QMetaObject::invokeMethod(moveDialog, "close");
+    }
+    restore();
+
+    // ---- A root folder from the "Strony" header's "+" menu.
+    openDrawer();
+    QQuickItem *header = named(u"sidebarPagesHeader"_s);
+    QQuickItem *plus = header ? findShown(header, [](QQuickItem *item) { return isA(item, "BIconButton"); }) : nullptr;
+    check(plus != nullptr, "the “Strony” header has its “+” button");
+    tap(plus);
+    QQuickItem *newFolder = named(u"pagesMenuNewFolder"_s);
+    check(newFolder != nullptr, "the “+” menu offers a new folder");
+    tap(newFolder);
+    QObject *newPage = window->findChild<QObject *>(u"shellNewPage"_s);
+    check(newPage && waitFor([&] {
+              return newPage->property("opened").toBool() && newPage->property("folderMode").toBool();
+          }),
+          "“Nowy folder” opens the dialog for a folder at the root");
+    if (newPage && newPage->property("opened").toBool()) {
+        waitFor([window] {
+            const QQuickItem *f = window->activeFocusItem();
+            return f && f->inherits("QQuickTextInput");
+        });
+        for (const QChar ch : u"Zażółć"_s)
+            sendKey(window, 0, Qt::NoModifier, QString(ch));
+        sendKey(window, Qt::Key_Return);
+        check(waitFor([&] { return ws->exists(u"Zażółć"_s); }), "the typed folder is created at the root");
+        openDrawer();
+        check(waitFor([&] { return treeRow(u"Zażółć"_s) != nullptr; }), "the new folder shows in the tree");
+        // An empty folder deleted leaves the tree at once (folders have no file changes).
+        check(!ws->deletePage(u"Zażółć"_s).isEmpty() && waitFor([&] { return treeRow(u"Zażółć"_s) == nullptr; }),
+              "a deleted empty folder leaves the tree");
+    }
+    restore();
+
+    // ---- Dragging rows with the mouse (desktop): onto a folder, onto the header, cancelled.
+    if (!touch) {
+        if (!expanded(u"Projekty"_s))
+            tap(treeRow(u"Projekty"_s));
+        QQuickItem *from = treeRow(recipes);
+        QQuickItem *onto = treeRow(u"Projekty"_s);
+        if (from && onto)
+            mouseDrag(window, pointIn(from, 0.3), pointIn(onto, 0.3));
+        check(waitFor([&] { return ws->exists(u"Projekty/Przepisy.md"_s); }),
+              "a page dragged onto a folder with the mouse moves into it");
+        from = treeRow(u"Projekty/Przepisy.md"_s);
+        header = named(u"sidebarPagesHeader"_s);
+        if (from && header)
+            mouseDrag(window, pointIn(from, 0.3), pointIn(header, 0.3));
+        check(waitFor([&] { return ws->exists(recipes); }), "dragged onto the “Strony” header it goes to the root");
+        // A closed folder hovered over opens; Escape cancels: nothing moves.
+        if (expanded(u"templates"_s))
+            tap(treeRow(u"templates"_s));
+        waitFor([&] { return !expanded(u"templates"_s); });
+        from = treeRow(recipes);
+        onto = treeRow(u"templates"_s);
+        if (from && onto)
+            mouseDrag(window, pointIn(from, 0.3), pointIn(onto, 0.3), 900, true);
+        settle(300);
+        check(expanded(u"templates"_s), "a closed folder opens while a row is held over it");
+        check(ws->exists(recipes) && !ws->exists(u"templates/Przepisy.md"_s), "Escape cancels the drag");
+        // A plain click still opens the page (no drag).
+        tap(treeRow(recipes));
+        check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == recipes; }),
+              "a click on a row still opens the page");
+    }
+    restore();
+
+    // ---- The drop target follows the rows that scroll under a pointer held at the list's edge;
+    //      the "Strony" header scrolled out above the list is no target (desktop drags, driven
+    //      through the sidebar's own drag functions).
+    if (!touch) {
+        QQuickItem *sidebar = sidebarItem();
+        QQuickItem *list = treeList();
+        QObject *model = treeModel();
+        for (int i = 1; i <= 40; ++i)
+            ws->createFolder(u"Przewijanie/Folder %1"_s.arg(i, 2, 10, QChar(u'0')));
+        if (model)
+            QMetaObject::invokeMethod(model, "setExpanded", u"Przewijanie"_s, true);
+        settle(200);
+        auto *pagesHeader = sidebar ? sidebar->property("pagesHeader").value<QQuickItem *>() : nullptr;
+        auto *content = list ? list->property("contentItem").value<QQuickItem *>() : nullptr;
+        check(sidebar && list && model && pagesHeader && content && expanded(u"Przewijanie"_s),
+              "the tree shows a folder of 40 subfolders to scroll through");
+        if (sidebar && list && model && pagesHeader && content) {
+            const auto folderAt = [&](QPointF scene) {
+                const QPointF p = list->mapFromScene(scene);
+                int index = -1;
+                QMetaObject::invokeMethod(list, "indexAt", qReturnArg(index),
+                                          p.x() + list->property("contentX").toReal(),
+                                          p.y() + list->property("contentY").toReal());
+                QVariantMap entry;
+                if (index >= 0)
+                    QMetaObject::invokeMethod(model, "get", qReturnArg(entry), index);
+                const QString path = entry.value(u"path"_s).toString();
+                return entry.value(u"isDir"_s).toBool() ? path : ws->folderOf(path);
+            };
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+            const qreal top = list->property("contentY").toReal();
+            QMetaObject::invokeMethod(sidebar, "beginDrag", QVariant(remont), QVariant(false),
+                                      QVariant(u"Remont mieszkania"_s));
+            const QPointF still = list->mapToScene(QPointF(list->width() / 2, list->height() - 12));
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(still));
+            const QString first = sidebar->property("dropFolder").toString();
+            settle(700);
+            const QString now = folderAt(still);
+            std::fprintf(stderr, "selftest: drag scroll: %.0f -> %.0f px, target %s -> %s (under the pointer: %s)\n",
+                         top, list->property("contentY").toReal(), qPrintable(first),
+                         qPrintable(sidebar->property("dropFolder").toString()), qPrintable(now));
+            check(list->property("contentY").toReal() > top + 100 && now != first
+                          && sidebar->property("dropFolder").toString() == now,
+                  "while the list scrolls under a still pointer the drop target follows the rows");
+            // The header in view is the root; scrolled just above the list's top edge it is not.
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(pointIn(pagesHeader, 0.5)));
+            const bool rootShown = sidebar->property("dropOnRoot").toBool() && sidebar->property("dropValid").toBool();
+            // A moment later the ghost says what the move would rewrite.
+            QQuickItem *impactLine = sidebar->findChild<QQuickItem *>(u"treeDragImpact"_s);
+            check(impactLine && waitFor([&] {
+                      return impactLine->isVisible() && !impactLine->property("text").toString().isEmpty()
+                             && sidebar->property("dropValid").toBool();
+                  }),
+                  "the drag's ghost says what the move rewrites before the drop");
+            const qreal headerBottom = pagesHeader->mapToItem(content, QPointF(0, pagesHeader->height())).y();
+            list->setProperty("contentY", headerBottom + 4);
+            settle(100);
+            const QPointF above = list->mapToScene(QPointF(list->width() / 2, -10));
+            const bool overHeader = pagesHeader->contains(pagesHeader->mapFromScene(above));
+            QMetaObject::invokeMethod(sidebar, "dragTo", QVariant(above));
+            check(rootShown && overHeader && !sidebar->property("dropOnRoot").toBool()
+                          && !sidebar->property("dropValid").toBool(),
+                  "the “Strony” header is a drop target while it shows, not once scrolled out of the list");
+            QMetaObject::invokeMethod(sidebar, "cancelDrag");
+        }
+    }
+    restore();
+
+    // ---- A collapsed "Strony" stays collapsed (the setting too) when another page opens;
+    //      "Pokaż w drzewie" opens it and shows the page.
+    openDrawer();
+    if (QQuickItem *sidebar = sidebarItem(); sidebar && (header = named(u"sidebarPagesHeader"_s))) {
+        if (sidebar->property("pagesOpen").toBool())
+            tapOrClick(window, pointIn(header, 0.15), touch);
+        check(waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
+                      && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "a tap on “Strony” collapses the section");
+        app->openPage(recipes);
+        settle(300);
+        check(!sidebar->property("pagesOpen").toBool() && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "a page opened leaves a collapsed “Strony” collapsed");
+        // (On desktops the rows of the folder removed above were pooled: opened again, the tree
+        // shows its own rows, not those.)
+        app->requestUiAction(u"revealInTree"_s);
+        check(waitFor([&] {
+                  QQuickItem *r = sidebar->property("pagesOpen").toBool() ? treeRow(recipes) : nullptr;
+                  return r && r->property("selected").toBool();
+              }) && app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "“Pokaż w drzewie” opens the section and shows the page");
+    } else {
+        check(false, "the sidebar has its “Strony” header");
+    }
+    closeDrawer();
+
+    // ---- A "/" typed into the page header's title is part of the title: the page stays in its
+    //      folder ("TCP/IP" -> "Projekty/TCP IP.md"), the confirmation names the new title.
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, remont}, {u"open"_s, u"rename"_s}});
+    check(waitFor([window] {
+              const QQuickItem *f = window->activeFocusItem();
+              return f && f->inherits("QQuickTextInput")
+                     && f->property("selectedText").toString() == u"Remont mieszkania";
+          }),
+          "the page header's title edit starts with the title selected");
+    for (const QChar ch : u"TCP/IP"_s)
+        sendKey(window, 0, Qt::NoModifier, QString(ch));
+    sendKey(window, Qt::Key_Return);
+    // (Every page view has its dialog: the one that opened.)
+    QObject *confirm = nullptr;
+    waitFor([&] {
+        for (QObject *d : window->findChildren<QObject *>(u"pageRenameDialog"_s)) {
+            if (d->property("opened").toBool())
+                confirm = d;
+        }
+        return confirm != nullptr;
+    });
+    if (confirm)
+        std::fprintf(stderr, "selftest: title rename asks: %s -> %s, %d link(s), %d tag(s)\n",
+                     qPrintable(confirm->property("path").toString()),
+                     qPrintable(confirm->property("newName").toString()), confirm->property("links").toInt(),
+                     confirm->property("tags").toInt());
+    check(confirm && confirm->property("newName").toString() == u"TCP IP" && confirm->property("links").toInt() > 0,
+          "renaming a linked page asks first, naming the title it gets");
+    if (confirm && confirm->property("opened").toBool())
+        QMetaObject::invokeMethod(confirm, "tryAccept");
+    check(waitFor([&] { return ws->exists(u"Projekty/TCP IP.md"_s); }) && !ws->exists(u"TCP/IP.md"_s)
+                  && !ws->exists(remont),
+          "a “/” in the page header's title keeps the page in its folder");
+    restore();
+    check(ws->exists(remont), "the renamed page gets its name back");
+    closeDrawer();
+
+    // ---- A new page (Ctrl+N) from a page at the notebook root is offered the root, as a chip.
+    app->openPage(recipes);
+    settle(200);
+    app->requestUiAction(u"newPage"_s);
+    QObject *newPageDialog = window->findChild<QObject *>(u"shellNewPage"_s);
+    check(newPageDialog && waitFor([&] { return newPageDialog->property("opened").toBool(); })
+                  && newPageDialog->property("folderChosen").toBool()
+                  && newPageDialog->property("folder").toString().isEmpty(),
+          "a new page from a page at the root is offered the root (“W głównym folderze notatnika ×”)");
+    if (newPageDialog) {
+        QMetaObject::invokeMethod(newPageDialog, "close");
+        waitFor([&] { return !newPageDialog->property("visible").toBool(); });
+    }
+
+    // ---- All pages as a folder browser; the breadcrumb goes back.
+    app->navigate({{u"view"_s, u"allPages"_s}});
+    QQuickItem *folderRow = nullptr;
+    waitFor([&] {
+        folderRow = findShown(window->contentItem(), [](QQuickItem *item) {
+            return item->objectName() == u"allPagesFolderRow" && item->property("text").toString() == u"Projekty";
+        });
+        return folderRow != nullptr;
+    });
+    check(folderRow != nullptr, "All pages lists the notebook's folders as rows");
+    tap(folderRow);
+    check(waitFor([&] { return app->currentRoute().value(u"path"_s).toString() == u"Projekty"; }),
+          "a folder row opens the folder in All pages");
+    const QString allPages = QCoreApplication::translate("AppShell", "All pages");
+    QQuickItem *bar = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "ShellTopBar"); });
+    QQuickItem *crumb = bar ? findShown(bar,
+                                        [&](QQuickItem *item) {
+                                            return item->inherits("QQuickAbstractButton")
+                                                   && item->property("text").toString() == allPages;
+                                        })
+                            : nullptr;
+    check(crumb != nullptr, "the top bar shows a breadcrumb for a folder in All pages");
+    tap(crumb);
+    check(waitFor([&] {
+              return app->currentView() == u"allPages" && app->currentRoute().value(u"path"_s).toString().isEmpty();
+          }),
+          "the breadcrumb goes back to all pages");
+    restore();
+    app->goHome();
+    settle(200);
 }
 
 /// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
@@ -2020,6 +2453,10 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 3d. Tags name pages: a tag opens its page (journal, Tasks with Ctrl+click / long press, the
     //     tag list), the tag overview stays a tap away.
     checkTagLinks(window, app, check);
+    closeMenus(window);
+    // 3e. Folders: reveal, the row menu's "Przenieś do…", a root folder, drag and drop (desktop),
+    //     All pages as a folder browser.
+    checkFolders(window, app, check);
     closeMenus(window);
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");

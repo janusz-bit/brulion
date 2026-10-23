@@ -102,6 +102,33 @@ private Q_SLOTS:
         QCOMPARE(m.count(), 2);
     }
 
+    // Two pages called "Dom": the one the bare title does not reach is linked by its path (the
+    // folder is shown as the subtitle), from wherever the link is written.
+    void pagesWithTheSameName()
+    {
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, u"# Dom\n"_s);
+        host.setFile(u"Projekty/Dom.md"_s, u"---\naliases: [Chata]\n---\n"_s);
+        host.setFile(u"Notatka.md"_s, QString());
+        SuggestionModel m;
+        m.setHost(&host);
+        m.setMode(u"pages"_s);
+        m.setCurrentPath(u"Notatka.md"_s);
+        m.setFilter(u"dom"_s);
+        QHash<QString, QString> inserted;
+        QHash<QString, QString> subtitles;
+        for (int i = 0; i < m.count(); ++i) {
+            inserted.insert(m.get(i).value(u"path"_s).toString(), m.get(i).value(u"insertText"_s).toString());
+            subtitles.insert(m.get(i).value(u"path"_s).toString(), m.get(i).value(u"subtitle"_s).toString());
+        }
+        QCOMPARE(inserted.value(u"Dom.md"_s), u"Dom"_s);
+        QCOMPARE(inserted.value(u"Projekty/Dom.md"_s), u"Projekty/Dom"_s);
+        QCOMPARE(subtitles.value(u"Projekty/Dom.md"_s), u"Projekty"_s);
+        // An alias keeps its text, the target names the page.
+        m.setFilter(u"chata"_s);
+        QCOMPARE(m.get(0).value(u"insertText"_s).toString(), u"Projekty/Dom|Chata"_s);
+    }
+
     void blocksAndTags()
     {
         SuggestionModel m;

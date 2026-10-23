@@ -4,8 +4,9 @@ import QtQuick.Layouts
 import Brulion
 
 // ShellTopBar — the bar above the current view: sidebar/drawer button, back/forward, the title
-// (a breadcrumb for pages in folders), search, command palette, quick capture, side panel toggle
-// and the "more" menu with page actions. On narrow windows it keeps only what fits a phone.
+// (a breadcrumb for pages in folders and for All pages in a folder), search, command palette,
+// quick capture, side panel toggle and the "more" menu with page actions (Przenieś do…, Pokaż w
+// drzewie among them). On narrow windows it keeps only what fits a phone.
 // On a picture attachment (`picture`) the menu's "Markdown source" is the picture bar's "Show as
 // text" / "Show picture" (Ctrl+E there too), and the note mode is not offered (no note to switch).
 // `topInset` extends the bar under the Android status bar (edge-to-edge).
@@ -28,11 +29,14 @@ Rectangle {
     signal newPageRequested()
     signal renameRequested(string path)
     signal deleteRequested(string path)
+    signal moveRequested(string path)
+    signal revealRequested(string path)
     signal aboutRequested()
 
     readonly property var route: AppController.currentRoute
     /// A daily note opened as a page ("journal" route) whose file exists: it gets the page
-    /// actions too (favorite, history, side panel, trash), but not Rename (its name is its date).
+    /// actions too (favorite, history, side panel, trash, show in tree), but not Rename or Move
+    /// (its name is its date, its place the journals folder).
     readonly property string journalPagePath: {
         void Workspace.revision
         if (route.view !== "journal" || !route.date)
@@ -45,6 +49,8 @@ Rectangle {
     readonly property bool inEditor: onPage || route.view === "journal" || route.view === "journals"
     readonly property string pagePath: route.view === "page" ? route.path : journalPagePath
     readonly property bool favorite: onPage && Workspace.favorites.some(f => f.path === bar.pagePath)
+    /// A page Rename and Move apply to: not a daily note (also one opened through a "page" route).
+    readonly property bool renamable: route.view === "page" && Workspace.journalDate(route.path || "") === ""
 
     implicitHeight: topInset + (Theme.touchUi ? 56 : 46)
     color: Theme.bg
@@ -118,7 +124,7 @@ Rectangle {
                 onActivated: (index) => {
                     const crumb = bar.crumbs[index]
                     if (crumb)
-                        AppController.navigate({ view: "allPages", path: crumb.path })
+                        AppController.navigate(crumb.path !== "" ? { view: "allPages", path: crumb.path } : { view: "allPages" })
                 }
             }
         }
@@ -171,12 +177,28 @@ Rectangle {
             onTriggered: Workspace.toggleFavorite(bar.pagePath)
         }
         BMenuItem {
-            visible: bar.onPage && bar.route.view === "page"
+            visible: bar.renamable
             height: visible ? implicitHeight : 0
             text: qsTr("Rename…")
             iconName: "pencil"
             shortcut: "F2"
             onTriggered: bar.renameRequested(bar.pagePath)
+        }
+        BMenuItem {
+            objectName: "menuMovePage"
+            visible: bar.renamable
+            height: visible ? implicitHeight : 0
+            text: qsTr("Move to…")
+            iconName: "folder-input"
+            onTriggered: bar.moveRequested(bar.pagePath)
+        }
+        BMenuItem {
+            objectName: "menuRevealPage"
+            visible: bar.onPage
+            height: visible ? implicitHeight : 0
+            text: qsTr("Show in tree")
+            iconName: "folder-tree"
+            onTriggered: bar.revealRequested(bar.pagePath)
         }
         BMenuItem {
             visible: bar.onPage

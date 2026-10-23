@@ -233,11 +233,6 @@ bool Workspace::isSyncthingFolder() const
     return m_vault && QFileInfo::exists(m_vault->rootPath() + u"/.stfolder"_s);
 }
 
-int Workspace::pageCount() const
-{
-    return m_vault ? int(m_vault->markdownFiles().size()) : 0;
-}
-
 void Workspace::setClock(std::function<QDateTime()> clock)
 {
     m_clock = std::move(clock);
@@ -1028,136 +1023,6 @@ QString Workspace::createPage(const QString &title, const QString &folder, const
     return path;
 }
 
-bool Workspace::createFolder(const QString &path)
-{
-    const QString folder = paths::normalize(path);
-    if (!m_vault || folder.isEmpty() || !m_vault->createFolder(folder))
-        return false;
-    // Folders produce no Vault change of their own (only files do): tell the lists.
-    ++m_revision;
-    Q_EMIT revisionChanged();
-    Q_EMIT filesChanged({ folder });
-    return true;
-}
-
-QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
-{
-    if (!m_vault)
-        return {};
-    const QString path = paths::normalize(rawPath);
-    const QString ext = paths::extension(path).isEmpty() ? u".md"_s : paths::extension(path);
-    const QString title = paths::isMarkdown(path) ? withoutMdExtension(newTitle).trimmed() : newTitle.trimmed();
-    if (!m_vault->exists(path) || title.isEmpty())
-        return {};
-    // Every file that links to the page must be in the index before it is asked (right after
-    // opening, the index is still being built in the background).
-    finishIndexing();
-    const QString oldTitle = paths::pageTitle(path);
-    const QString newName = paths::sanitizeFileName(title);
-    const QString folder = paths::dirname(path);
-    const QString newPath = folder.isEmpty() ? newName + ext : paths::join(folder, newName + ext);
-    if (newPath == path)
-        return path;
-    const bool caseOnly = newPath.compare(path, Qt::CaseInsensitive) == 0;
-    if (!caseOnly && m_vault->exists(newPath)) {
-        Q_EMIT errorOccurred(tr("A page named “%1” already exists here.").arg(newName));
-        return {};
-    }
-    // A name differing only in case from another page ("dom" next to "Dom"): one file on
-    // Android's shared storage and other case-insensitive folders a synced vault may land in, and
-    // links do not tell them apart (the in-page rename refuses it too: PageTools.validateTitle).
-    if (!caseOnly && m_index) {
-        for (const VaultPath &other : m_index->paths()) {
-            if (other.compare(newPath, Qt::CaseInsensitive) == 0 && other.compare(path, Qt::CaseInsensitive) != 0) {
-                Q_EMIT errorOccurred(tr("A page named “%1” already exists here.").arg(paths::pageTitle(other)));
-                return {};
-            }
-        }
-    }
-    // Files to rewrite, asked before the index learns about the rename: the links to the page and
-    // the tags that name it (docs/SYNTAX.md §3) — only those: with a duplicate base name `#dom`
-    // or a path suffix `#Stare/Dom` may name the other page.
-    const QList<VaultPath> linking = m_index ? m_index->linksTo(path) : QList<VaultPath>();
-    const QList<VaultPath> tagging = m_index ? m_index->tagsTo(path) : QList<VaultPath>();
-    const QStringList tagKeys = m_index ? m_index->tagsNaming(path) : QStringList();
-    if (!m_vault->rename(path, newPath, ChangeSource::User)) {
-        Q_EMIT errorOccurred(tr("Could not rename the page: %1").arg(m_vault->errorString()));
-        return {};
-    }
-    if (paths::isMarkdown(newPath)) {
-        const auto moved = [&](const VaultPath &file) { return file == path ? newPath : file; };
-        rewriteReferences(linking, tagging, moved, {oldTitle, newName, path, newPath, tagKeys});
-    }
-    return newPath;
-}
-
-void Workspace::rewriteReferences(const QList<VaultPath> &linking, const QList<VaultPath> &tagging,
-                                  const std::function<VaultPath(const VaultPath &)> &moved, const PageRename &rename)
-{
-    QList<VaultPath> files = linking + tagging;
-    std::sort(files.begin(), files.end());
-    files.erase(std::unique(files.begin(), files.end()), files.end());
-    for (const VaultPath &file : std::as_const(files)) {
-        const VaultPath target = moved(file);
-        bool ok = false;
-        const QString content = m_vault->readText(target, &ok);
-        if (!ok)
-            continue;
-        QString rewritten = content;
-        if (linking.contains(file))
-            rewritten =
-                    markdown::renameLinks(rewritten, rename.oldName, rename.newName, rename.oldPath, rename.newPath);
-        if (tagging.contains(file))
-            rewritten = markdown::renameTags(rewritten, rename.oldName, rename.newName, rename.oldPath, rename.newPath,
-                                             [&rename](const QString &key) { return rename.tagKeys.contains(key); });
-        if (rewritten != content)
-            m_vault->writeText(target, rewritten, ChangeSource::User); // one write, one history step
-    }
-}
-
-QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
-{
-    if (!m_vault)
-        return {};
-    const QString path = paths::normalize(rawPath);
-    const QString name = paths::sanitizeFileName(newName.trimmed());
-    if (path.isEmpty() || newName.trimmed().isEmpty())
-        return {};
-    const QString parent = paths::dirname(path);
-    const QString newPath = parent.isEmpty() ? name : paths::join(parent, name);
-    if (newPath == path)
-        return path;
-    finishIndexing(); // every linking file must be known (see renamePage)
-    // Path-qualified links ([[Projekty/Dom]]) and tags (#Projekty/Dom) to pages inside the
-    // folder must follow the move.
-    struct Rewrite {
-        VaultPath oldPath;
-        QList<VaultPath> linking;
-        QList<VaultPath> tagging;
-        QStringList tagKeys;
-    };
-    QList<Rewrite> rewrites;
-    const QString prefix = path + u'/';
-    if (m_index) {
-        for (const FileStat &f : m_vault->markdownFiles()) {
-            if (f.path.startsWith(prefix))
-                rewrites.append(
-                        {f.path, m_index->linksTo(f.path), m_index->tagsTo(f.path), m_index->tagsNaming(f.path)});
-        }
-    }
-    if (!m_vault->rename(path, newPath, ChangeSource::User)) {
-        Q_EMIT errorOccurred(tr("Could not rename the folder: %1").arg(m_vault->errorString()));
-        return {};
-    }
-    const auto moved = [&](const VaultPath &p) { return p.startsWith(prefix) ? newPath + u'/' + p.mid(prefix.size()) : p; };
-    for (const Rewrite &r : std::as_const(rewrites)) {
-        // The pages keep their names: only what names them with their folder changes.
-        const QString title = paths::pageTitle(r.oldPath);
-        rewriteReferences(r.linking, r.tagging, moved, {title, title, r.oldPath, moved(r.oldPath), r.tagKeys});
-    }
-    return newPath;
-}
-
 QString Workspace::deletePage(const QString &rawPath)
 {
     if (!m_vault)
@@ -1168,11 +1033,15 @@ QString Workspace::deletePage(const QString &rawPath)
     QSet<QString> before;
     for (const FileStat &f : m_vault->trash())
         before.insert(f.path);
+    const auto stat = m_vault->stat(path);
+    const bool folder = stat && stat->isDir;
     if (!m_vault->remove(path, ChangeSource::User)) {
         Q_EMIT errorOccurred(tr("Could not move “%1” to the trash: %2").arg(paths::pageTitle(path), m_vault->errorString()));
         return {};
     }
     forgetPath(path);
+    if (folder)
+        notifyFolderChange({path}); // an empty folder (or one of folders only) has no file changes
     // The new entry in the trash: ".trash/<path with a time stamp>" (a folder: its top entry).
     const int depth = int(path.count(u'/')) + 2; // ".trash" + the path's segments
     for (const FileStat &f : m_vault->trash()) {
@@ -1190,6 +1059,8 @@ QString Workspace::restore(const QString &trashPath)
     const VaultPath path = m_vault->restore(trashPath, ChangeSource::User);
     if (path.isEmpty())
         Q_EMIT errorOccurred(tr("Could not restore the file: %1").arg(m_vault->errorString()));
+    else if (const auto stat = m_vault->stat(path); stat && stat->isDir)
+        notifyFolderChange({path});
     return path;
 }
 

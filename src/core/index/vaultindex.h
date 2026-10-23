@@ -131,6 +131,60 @@ struct GraphData {
     QList<GraphEdge> edges;
 };
 
+/// A file moved or renamed (VaultIndex::planRelocation()).
+struct FileMove {
+    VaultPath from;
+    VaultPath to;
+
+    friend bool operator==(const FileMove &, const FileMove &) = default;
+};
+
+/// What moving or renaming files changes in the notes, planned before the move by
+/// VaultIndex::planRelocation() (docs/SYNTAX.md §2 "Rewriting on rename and move"): the notes to
+/// rewrite so that every link and every tag keeps naming the file it named before. A link to a
+/// moved file follows it as renameLinks() would write it (a bare name keeps the new base name, a
+/// path-qualified link gets the new path, a rename in place keeps the written folder prefix); a
+/// link the move would turn to another file — a bare [[Dom]] that a shorter Dom.md now takes, a
+/// relative link of a moved note — gets the shortest target that still reaches its file
+/// (VaultIndex::linkTarget(): [[Projekty/Dom]]); tags the same way (VaultIndex::tagTarget():
+/// #Projekty/Dom). Links that could not be kept (no written form reaches the file) stay as they
+/// are. A plan stays valid after the index changed: it keeps the lookup tables of before and
+/// after the move.
+class RelocationPlan {
+public:
+    struct File {
+        VaultPath path;    ///< the note, where it is before the move
+        VaultPath newPath; ///< where it is after the move (path unless it moves itself)
+        QString before;    ///< its content the plan was made from
+        QString after;     ///< ... and with the links and tags rewritten
+        int links = 0;     ///< links rewritten
+        int tags = 0;      ///< tag occurrences rewritten
+    };
+
+    RelocationPlan();
+    ~RelocationPlan();
+    RelocationPlan(const RelocationPlan &);
+    RelocationPlan &operator=(const RelocationPlan &);
+
+    /// The moves planned (files the index knows; no-ops dropped).
+    QList<FileMove> moves() const;
+    /// The notes to rewrite, by path.
+    const QList<File> &files() const;
+    /// Links / tag occurrences rewritten in all notes.
+    int links() const;
+    int tags() const;
+    /// The plan for note `path` (its path before the move) applied to `content` — the note as
+    /// read after the move, when it no longer equals File::before (an edit saved meanwhile).
+    /// Notes outside the plan get their links checked too. Returns `content` when nothing changes.
+    QString rewrite(const VaultPath &path, const QString &content) const;
+
+private:
+    friend class VaultIndex;
+    struct Private;
+    std::shared_ptr<const Private> d;
+    QList<File> m_files;
+};
+
 /// Incremental in-memory index of a vault's notes.
 ///
 /// Feed it with update() / remove() / rename() (e.g. from Vault change signals). Markdown files
@@ -244,6 +298,20 @@ public:
     QList<UnlinkedRef> unlinkedReferences(const VaultPath &path) const;
     /// Link targets that do not exist (pages only, not missing attachments), most linked first.
     QList<MissingPage> missingPages() const;
+    /// The shortest wiki-link target that resolves to `path` when written in note `from` (SYNTAX
+    /// §2): the title ("Dom", an attachment's file name "plan.png"), else a longer path suffix
+    /// ("Projekty/Dom", "A/Projekty/Dom"), else the vault path without `.md` (with it as the last
+    /// resort). What `[[` completion and "Kopiuj link" write. nullopt when `path` is not indexed
+    /// or no wiki link can name it (a '#', '|', `[[` or `]]` in its name).
+    std::optional<QString> linkTarget(const VaultPath &path, const VaultPath &from = {}) const;
+    /// The shortest tag name that names note `path` (resolveTag(): "Dom", else "Projekty/Dom", …,
+    /// the vault path without `.md`); write it with markdown::tagSyntax(). nullopt for an
+    /// attachment, an unknown path or a name no tag can hold.
+    std::optional<QString> tagTarget(const VaultPath &path) const;
+    /// Plan moving or renaming files (notes and attachments; a folder is all the files in it)
+    /// so that links and tags keep their targets: see RelocationPlan. Files the index does not
+    /// know are left out. Nothing is changed: apply the plan after the files moved.
+    RelocationPlan planRelocation(const QList<FileMove> &moves) const;
 
     // ---- blocks, tags, tasks, reminders, journals ---------------------------------------------
 

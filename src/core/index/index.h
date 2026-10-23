@@ -21,7 +21,12 @@
 //                           to blocks of the page; self excluded; for a page not written yet the
 //                           links that will resolve to it), linksTo(path) (files to rewrite on
 //                           rename), unlinkedReferences(path) -> UnlinkedRef{path, line,
-//                           excerpt} (title/aliases as whole words, ≤ 200), missingPages()
+//                           excerpt} (title/aliases as whole words, ≤ 200), missingPages(),
+//                           linkTarget(path, from) (the shortest [[target]] reaching `path`)
+//                  moves:   planRelocation([FileMove{from, to}]) -> RelocationPlan{files{path,
+//                           newPath, before, after, links, tags}, rewrite(path, content)} —
+//                           the notes to rewrite so every link and tag keeps its target
+//                           (relocate.cpp; SYNTAX §2), tagTarget(path) (the shortest tag naming it)
 //                  tags as page links (SYNTAX §3): resolveTag(tag) -> optional<VaultPath> (like
 //                           [[tag]] at the vault root, notes only), tagsNaming(path) (the tag
 //                           keys naming it; for a missing page those that would), tagReferences(path) ->

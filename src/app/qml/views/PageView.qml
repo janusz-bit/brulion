@@ -253,21 +253,17 @@ FocusScope {
         return -1
     }
 
-    /// The title was edited: rename, confirming first when other notes link here or carry a tag
-    /// that names the page (both follow the new name).
+    /// The title was edited: rename the page in its folder (a "/" stays part of the title),
+    /// confirming first when that rewrites other notes — the links and tags naming the page, and
+    /// links to another page the new name would take over (Workspace.renameImpact, exact).
     function rename(newTitle) {
         page.save()
-        const impact = tools.renameImpact(page.path)
-        if (impact.links + impact.tags > 0) {
-            renameDialog.openFor(page.path, newTitle, impact)
-        } else {
-            renameDialog.path = page.path
-            renameDialog.newTitle = newTitle
-            renameDialog.notes = 0
-            renameDialog.links = 0
-            renameDialog.tags = 0
+        const impact = Workspace.renameImpact(page.path, newTitle, false)
+        renameDialog.openFor(page.path, newTitle, impact, false)
+        if ((impact.links || 0) + (impact.tags || 0) > 0)
+            renameDialog.open()
+        else
             renameDialog.rename()
-        }
     }
 
     /// Switch between document and outline (the header's toggle, the menu, the palette).
@@ -459,6 +455,14 @@ FocusScope {
             onTriggered: if (root.pageHeader) root.pageHeader.startTitleEdit()
         }
         BMenuItem {
+            objectName: "pageMenuMove"
+            visible: root.journalDate === "" && page.exists
+            height: visible ? implicitHeight : 0
+            text: qsTr("Move to…")
+            iconName: "folder-input"
+            onTriggered: AppController.requestItemAction("move", page.path)
+        }
+        BMenuItem {
             visible: !Theme.narrow && !root.inSidePanel
             height: visible ? implicitHeight : 0
             text: qsTr("Open in side panel")
@@ -489,6 +493,7 @@ FocusScope {
 
     ContentRenameDialog {
         id: renameDialog
+        objectName: "pageRenameDialog"
         parent: T.Overlay.overlay
     }
     ContentExportDialog {

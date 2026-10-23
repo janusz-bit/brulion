@@ -2,6 +2,8 @@
 
 #include "workspace.h"
 
+#include "markdown/journal.h"
+#include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
 
@@ -42,6 +44,8 @@ void FolderTreeModel::setWorkspace(Workspace *workspace)
             refresh();
         });
         connect(m_workspace, &Workspace::filesChanged, this, [this] { m_refreshTimer.start(); });
+        connect(m_workspace, &Workspace::configChanged, this, [this] { m_refreshTimer.start(); });
+        connect(m_workspace, &Workspace::folderRenamed, this, &FolderTreeModel::onFolderRenamed);
     }
     loadExpanded();
     refresh();
@@ -85,11 +89,17 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
     case HasChildrenRole:
         return e.isDir && !m_children.value(e.path).isEmpty();
     case IconRole:
+        if (e.isDir && e.path == m_journalsFolder)
+            return u"calendar-days"_s;
         if (e.isDir)
             return m_expanded.contains(e.path) ? u"folder-open"_s : u"folder"_s;
+        if (!e.journalDate.isEmpty())
+            return u"calendar"_s;
         if (paths::isMarkdown(e.path))
             return u"file-text"_s;
         return paths::isPicturePath(e.path) ? u"image"_s : u"file"_s;
+    case SpecialRole: return e.isDir && e.path == m_journalsFolder ? u"journals"_s : QString();
+    case JournalDateRole: return e.journalDate;
     default:
         return {};
     }
@@ -98,9 +108,16 @@ QVariant FolderTreeModel::data(const QModelIndex &index, int role) const
 QHash<int, QByteArray> FolderTreeModel::roleNames() const
 {
     return {
-        { NameRole, "name" },       { TitleRole, "title" },       { PathRole, "path" },
-        { IsDirRole, "isDir" },     { DepthRole, "depth" },       { ExpandedRole, "expanded" },
-        { HasChildrenRole, "hasChildren" }, { IconRole, "fileIcon" },
+            {NameRole, "name"},
+            {TitleRole, "title"},
+            {PathRole, "path"},
+            {IsDirRole, "isDir"},
+            {DepthRole, "depth"},
+            {ExpandedRole, "expanded"},
+            {HasChildrenRole, "hasChildren"},
+            {IconRole, "fileIcon"},
+            {SpecialRole, "special"},
+            {JournalDateRole, "journalDate"},
     };
 }
 
@@ -110,6 +127,8 @@ void FolderTreeModel::rebuildChildren()
     const Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
     if (!vault)
         return;
+    const VaultConfig config = vault->config();
+    m_journalsFolder = paths::normalize(config.journalsFolder);
     // Folders that hold only attachments ("assets") are noise in a page tree; empty folders
     // stay (the user just created them).
     QSet<QString> withPages;
@@ -124,21 +143,41 @@ void FolderTreeModel::rebuildChildren()
     for (const FileStat &f : vault->folders()) {
         if (!m_showAttachments && withAttachments.contains(f.path) && !withPages.contains(f.path))
             continue;
-        m_children[paths::dirname(f.path)].append({ paths::basename(f.path), f.path, true });
+        m_children[paths::dirname(f.path)].append({paths::basename(f.path), f.path, true, {}});
     }
     for (const FileStat &f : vault->files()) {
         if (!m_showAttachments && !paths::isMarkdown(f.path))
             continue;
         if (paths::isConflictCopy(f.path))
             continue; // surfaced in the sync center, not as pages
-        m_children[paths::dirname(f.path)].append({ paths::basename(f.path), f.path, false });
+        Entry e{paths::basename(f.path), f.path, false, {}};
+        // Daily notes only in the journals folder (no date parsing for other pages).
+        if (!m_journalsFolder.isEmpty() && f.path.startsWith(m_journalsFolder + u'/') && paths::isMarkdown(f.path)) {
+            if (const auto date = markdown::journalDateFromPath(f.path, config))
+                e.journalDate = date->toString(Qt::ISODate);
+        }
+        m_children[paths::dirname(f.path)].append(e);
     }
+    const QString journals = m_journalsFolder;
     for (auto it = m_children.begin(); it != m_children.end(); ++it) {
-        std::sort(it->begin(), it->end(), [](const Entry &a, const Entry &b) {
+        // In the journals folder: the newest first (years and months as folders too).
+        const bool inJournals = !journals.isEmpty() && (it.key() == journals || it.key().startsWith(journals + u'/'));
+        std::sort(it->begin(), it->end(), [&](const Entry &a, const Entry &b) {
             if (a.isDir != b.isDir)
                 return a.isDir;
-            const int c = QString::compare(a.name, b.name, Qt::CaseInsensitive);
-            return c != 0 ? c < 0 : a.name < b.name;
+            // The journals folder first among its siblings.
+            const bool ja = a.isDir && a.path == journals;
+            const bool jb = b.isDir && b.path == journals;
+            if (ja != jb)
+                return ja;
+            if (!a.journalDate.isEmpty() || !b.journalDate.isEmpty()) {
+                if (a.journalDate.isEmpty() != b.journalDate.isEmpty())
+                    return !a.journalDate.isEmpty();
+                if (a.journalDate != b.journalDate)
+                    return a.journalDate > b.journalDate;
+            }
+            const int c = text::compareNames(a.name, b.name);
+            return inJournals && a.isDir ? c > 0 : c < 0;
         });
     }
 }
@@ -158,21 +197,78 @@ void FolderTreeModel::refresh()
 {
     m_refreshTimer.stop();
     rebuildChildren();
-    const QList<Row> rows = rowsUnder(QString(), 0);
-    // Same shape (a file's content changed, or nothing visible changed): no reset needed.
-    const bool same = rows.size() == m_rows.size()
-                      && std::equal(rows.cbegin(), rows.cend(), m_rows.cbegin(), [](const Row &a, const Row &b) {
-                             return a.depth == b.depth && a.entry.path == b.entry.path && a.entry.isDir == b.entry.isDir;
-                         });
-    if (same) {
-        if (!m_rows.isEmpty())
-            Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1), { HasChildrenRole });
+    pruneExpanded();
+    applyRows(rowsUnder(QString(), 0));
+}
+
+void FolderTreeModel::applyRows(QList<Row> next)
+{
+    const auto key = [](const Row &r) { return (r.entry.isDir ? u"d:"_s : u"f:"_s) + r.entry.path; };
+    const qsizetype before = m_rows.size();
+    if (m_rows.isEmpty() || next.isEmpty()) {
+        if (m_rows.isEmpty() && next.isEmpty())
+            return;
+        beginResetModel();
+        m_rows = std::move(next);
+        endResetModel();
+        Q_EMIT countChanged();
         return;
     }
-    beginResetModel();
-    m_rows = rows;
-    endResetModel();
-    Q_EMIT countChanged();
+    QHash<QString, qsizetype> wanted;
+    wanted.reserve(next.size());
+    for (qsizetype i = 0; i < next.size(); ++i)
+        wanted.insert(key(next.at(i)), i);
+    // The rows kept must keep their order (they do: one sort order); otherwise start anew.
+    qsizetype lastPos = -1;
+    for (const Row &r : std::as_const(m_rows)) {
+        const auto it = wanted.constFind(key(r));
+        if (it == wanted.cend())
+            continue;
+        if (*it <= lastPos) {
+            beginResetModel();
+            m_rows = std::move(next);
+            endResetModel();
+            Q_EMIT countChanged();
+            return;
+        }
+        lastPos = *it;
+    }
+    // Removals, in contiguous runs from the end.
+    for (qsizetype i = m_rows.size() - 1; i >= 0; --i) {
+        if (wanted.contains(key(m_rows.at(i))))
+            continue;
+        qsizetype first = i;
+        while (first > 0 && !wanted.contains(key(m_rows.at(first - 1))))
+            --first;
+        beginRemoveRows({}, int(first), int(i));
+        m_rows.remove(first, i - first + 1);
+        endRemoveRows();
+        i = first;
+    }
+    // The rows left are in `next`'s order: insert the runs of new ones between them.
+    QSet<QString> kept;
+    kept.reserve(m_rows.size());
+    for (const Row &r : std::as_const(m_rows))
+        kept.insert(key(r));
+    for (qsizetype i = 0; i < next.size(); ++i) {
+        if (i < m_rows.size() && key(m_rows.at(i)) == key(next.at(i))) {
+            m_rows[i] = next.at(i); // same path: the entry's data may have changed
+            continue;
+        }
+        qsizetype last = i;
+        while (last + 1 < next.size() && !kept.contains(key(next.at(last + 1))))
+            ++last;
+        beginInsertRows({}, int(i), int(last));
+        for (qsizetype n = i; n <= last; ++n)
+            m_rows.insert(n, next.at(n));
+        endInsertRows();
+        i = last;
+    }
+    if (!m_rows.isEmpty())
+        Q_EMIT dataChanged(index(0), index(int(m_rows.size()) - 1),
+                           {HasChildrenRole, ExpandedRole, IconRole, SpecialRole, JournalDateRole, TitleRole});
+    if (m_rows.size() != before)
+        Q_EMIT countChanged();
 }
 
 void FolderTreeModel::toggle(int row)
@@ -220,6 +316,8 @@ void FolderTreeModel::setExpanded(const QString &folder, bool expanded)
 
 int FolderTreeModel::reveal(const QString &path)
 {
+    if (m_refreshTimer.isActive())
+        refresh();
     QString folder = paths::dirname(path);
     QStringList chain;
     while (!folder.isEmpty()) {
@@ -237,10 +335,7 @@ void FolderTreeModel::collapseAll()
         return;
     m_expanded.clear();
     saveExpanded();
-    beginResetModel();
-    m_rows = rowsUnder(QString(), 0);
-    endResetModel();
-    Q_EMIT countChanged();
+    applyRows(rowsUnder(QString(), 0));
 }
 
 int FolderTreeModel::indexOf(const QString &path) const
@@ -250,6 +345,17 @@ int FolderTreeModel::indexOf(const QString &path) const
             return int(i);
     }
     return -1;
+}
+
+QVariantMap FolderTreeModel::get(int row) const
+{
+    if (row < 0 || row >= m_rows.size())
+        return {};
+    const Row &r = m_rows.at(row);
+    return {{u"path"_s, r.entry.path},
+            {u"isDir"_s, r.entry.isDir},
+            {u"expanded"_s, r.entry.isDir && m_expanded.contains(r.entry.path)},
+            {u"depth"_s, r.depth}};
 }
 
 void FolderTreeModel::loadExpanded()
@@ -263,6 +369,39 @@ void FolderTreeModel::loadExpanded()
         if (v.isString())
             m_expanded.insert(v.toString());
     }
+}
+
+void FolderTreeModel::pruneExpanded()
+{
+    const Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+    if (!vault || m_expanded.isEmpty())
+        return;
+    QSet<QString> folders;
+    for (const FileStat &f : vault->folders())
+        folders.insert(f.path);
+    const qsizetype before = m_expanded.size();
+    m_expanded.removeIf([&folders](const QString &f) { return !folders.contains(f); });
+    if (m_expanded.size() != before)
+        saveExpanded();
+}
+
+void FolderTreeModel::onFolderRenamed(const QString &oldPath, const QString &newPath)
+{
+    QSet<QString> rebased;
+    bool changed = false;
+    for (const QString &f : std::as_const(m_expanded)) {
+        if (f == oldPath || f.startsWith(oldPath + u'/')) {
+            rebased.insert(newPath + f.mid(oldPath.size()));
+            changed = true;
+        } else {
+            rebased.insert(f);
+        }
+    }
+    if (!changed)
+        return;
+    m_expanded = rebased;
+    saveExpanded();
+    m_refreshTimer.start();
 }
 
 void FolderTreeModel::saveExpanded()
