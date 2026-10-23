@@ -169,6 +169,9 @@ public:
     // ---- EditorHost -----------------------------------------------------------------------
     QString read(const QString &path, bool *ok = nullptr) override;
     bool write(const QString &path, const QString &content) override;
+    /// Vault::writeTextIfUnchanged(): a change of another program is taken in (fileChanged) instead
+    /// of overwritten.
+    WriteResult writeIfUnchanged(const QString &path, const QString &content, const QString &expected) override;
     /// Pages shown by editors are watched themselves (Vault::watchFile()), counted per page.
     void editorOpened(const QString &path) override;
     void editorClosed(const QString &path) override;

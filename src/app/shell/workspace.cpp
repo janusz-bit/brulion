@@ -423,6 +423,22 @@ bool Workspace::write(const QString &path, const QString &content)
     return ok;
 }
 
+EditorHost::WriteResult Workspace::writeIfUnchanged(const QString &path, const QString &content,
+                                                    const QString &expected)
+{
+    if (!m_vault)
+        return WriteResult::Failed;
+    // A change found on disk is reported by the vault right away (onVaultChanged: fileChanged),
+    // so the editor merges it before it saves again.
+    switch (m_vault->writeTextIfUnchanged(path, content, expected, ChangeSource::User)) {
+    case WriteOutcome::Written: return WriteResult::Written;
+    case WriteOutcome::Changed: return WriteResult::Changed;
+    case WriteOutcome::Failed: break;
+    }
+    Q_EMIT errorOccurred(tr("Could not save %1: %2").arg(path, m_vault->errorString()));
+    return WriteResult::Failed;
+}
+
 void Workspace::editorOpened(const QString &rawPath)
 {
     // The pages editors show are watched themselves, so another program that rewrites one in

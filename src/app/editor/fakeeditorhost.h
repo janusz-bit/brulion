@@ -58,6 +58,11 @@ public:
     // EditorHost
     QString read(const QString &path, bool *ok = nullptr) override;
     bool write(const QString &path, const QString &content) override;
+    /// Compare-and-swap against the in-memory file (setFile() changes it without a signal: another
+    /// program's write the editor has not heard of yet); counts the refusals (casRefusals).
+    WriteResult writeIfUnchanged(const QString &path, const QString &content, const QString &expected) override;
+    /// Number of writeIfUnchanged() calls refused because the file held other text (tests).
+    int casRefusals() const { return m_casRefusals; }
     QVariantList suggestPages(const QString &prefix, int limit = 20) const override;
     QVariantList suggestBlocks(const QString &text, int limit = 20) const override;
     QVariantList suggestTags(const QString &prefix, int limit = 20) const override;
@@ -137,6 +142,7 @@ private:
     mutable QHash<QString, QUrl> m_assetUrls;
     mutable std::unique_ptr<QTemporaryDir> m_assetDir;
     int m_writeCount = 0;
+    int m_casRefusals = 0;
     bool m_failWrites = false;
     QVariantMap m_lastRoute;
     QString m_now;

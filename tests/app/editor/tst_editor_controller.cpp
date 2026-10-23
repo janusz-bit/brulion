@@ -2767,6 +2767,62 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 #endif
     }
 
+    // An agent (brulion-cli) or Syncthing writes the page while an edit waits for its debounced
+    // save, and the host has not reported that write yet: the save never overwrites it.
+    void saveKeepsAnUnreportedExternalAppend()
+    {
+        Fixture f(u"- a\n- b\n"_s, 10000);
+        f.page.setMergeFunction([](const QString &base, const QString &local, const QString &remote) {
+            // Test merge: the remote appended a line, the local edited the first one.
+            if (remote == base + u"- od agenta: żółw\n"_s)
+                return MergeOutcome{local + u"- od agenta: żółw\n"_s, true};
+            return MergeOutcome{local, false};
+        });
+        f.page.setEditText(0, u"a lokalnie"_s, 10);
+        QVERIFY(f.page.dirty());
+        f.host.setFile(Page, u"- a\n- b\n- od agenta: żółw\n"_s); // no signal: not reported yet
+        QSignalSpy merged(&f.page, &PageController::externallyChanged);
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.casRefusals(), 1);
+        QCOMPARE(merged.size(), 1);
+        QCOMPARE(f.host.file(Page), u"- a lokalnie\n- b\n- od agenta: żółw\n"_s);
+        QCOMPARE(f.text(), f.host.file(Page));
+        QVERIFY(!f.page.dirty());
+        // The file reported afterwards changes nothing.
+        f.host.externalWrite(Page, f.host.file(Page));
+        QCOMPARE(merged.size(), 1);
+    }
+
+    void saveWithAnUnreportedConflictWritesNothing()
+    {
+        Fixture f(u"- a\n"_s, 10000);
+        f.page.setMergeFunction(
+                [](const QString &, const QString &local, const QString &) { return MergeOutcome{local, false}; });
+        f.page.setEditText(0, u"lokalnie"_s, 8);
+        f.host.setFile(Page, u"- zdalnie\n"_s);
+        QVERIFY(!f.page.save());
+        QVERIFY(f.page.conflict());
+        QCOMPARE(f.host.file(Page), u"- zdalnie\n"_s);
+        QCOMPARE(f.page.conflictText(), u"- zdalnie\n"_s);
+        // The user decides; then it is saved.
+        f.page.keepLocal();
+        QCOMPARE(f.host.file(Page), u"- lokalnie\n"_s);
+    }
+
+    void saveOfACleanPageAfterAnUnreportedChangeReloads()
+    {
+        // Typed back to the saved text while the file changed: nothing to save, nothing written
+        // (the other version arrives with the host's report, as for any clean page).
+        Fixture f(u"- a\n"_s, 10000);
+        f.page.setEditText(0, u"a2"_s, 2);
+        f.host.setFile(Page, u"- a\n- b z Syncthinga\n"_s);
+        f.page.setEditText(0, u"a"_s, 1); // as saved: clean again
+        QVERIFY(!f.page.dirty());
+        QVERIFY(f.page.save());
+        QCOMPARE(f.host.file(Page), u"- a\n- b z Syncthinga\n"_s);
+        QCOMPARE(f.host.casRefusals(), 0);
+    }
+
     void conflictCopyOnDestruction()
     {
         FakeEditorHost host;

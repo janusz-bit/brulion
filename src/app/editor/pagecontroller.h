@@ -5,7 +5,9 @@
 // app suspend / quit / path change / destruction (an unresolved conflict goes to a conflict copy
 // instead, never over the other version), and handles changes made outside the editor (reload
 // when clean, three-way merge when dirty, a conflict that follows later changes; renames via
-// followRename()).
+// followRename()). Saves are compare-and-swap (EditorHost::writeIfUnchanged): a change another
+// program wrote a moment before a save — an agent's brulion-cli, Syncthing — is merged first,
+// never overwritten.
 //
 // Rows are BlockListModel rows (= document block indices). Cursor positions given to and
 // returned by the controller are positions in the row's *edit text* (BlockListModel role
@@ -214,7 +216,10 @@ public:
     Q_INVOKABLE void refreshToday();
     /// (Re)load the page from the host (discards unsaved changes: save() first).
     Q_INVOKABLE void load();
-    /// Write now when dirty (also flushes a pending debounced save). False when the write failed.
+    /// Write now when dirty (also flushes a pending debounced save). False when the write failed
+    /// or a conflict with another program's change waits for the user. The write only replaces
+    /// the text this editor last read or wrote; a newer one on disk is taken in first (reload or
+    /// three-way merge) and the result saved.
     Q_INVOKABLE bool save();
     /// The file was renamed/moved (the shell's rename, sync): connect the host's rename signal
     /// here (Workspace.pathRenamed). The page follows to `newPath` keeping edits, undo and the
@@ -580,6 +585,7 @@ private:
     BlockListModel *m_model = nullptr;
     QUndoStack *m_undo = nullptr;
     QTimer m_saveTimer;
+    bool m_saving = false; ///< save() is inside the host's compare-and-swap write
     QString m_savedText;
     bool m_dirty = false;
     bool m_loading = false;
