@@ -256,6 +256,14 @@ private:
     QHash<QString, int> m_downloadedNew;
     QList<QStringList> m_laterGroups;  ///< groups with a deletion: after the mass-deletion guard
     bool m_recheckRemoteEmpty = false; ///< guardEmptySides() waits for the first pass's downloads
+    /// The side had none of the files synced before under their names and passed guardEmptySides()
+    /// only because most of them were found under new paths (a renamed folder holding every note,
+    /// or an older copy put back after the storage was lost): on that side nothing but proven
+    /// moves passes without the user — every other deletion waits for confirmation, and a folder
+    /// rename is moved on the server only when none of its files changed (an older copy must not
+    /// overwrite newer notes as if they had been edited).
+    bool m_localLookedEmpty = false;
+    bool m_remoteLookedEmpty = false;
     std::shared_ptr<detail::JobPool> m_pool;
     int m_done = 0;
     int m_total = 0;

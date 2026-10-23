@@ -229,7 +229,10 @@ app; these guards keep data from being lost:
   by a version a server-side move kept, or as the same name in another letter case) counts for
   neither guard — moving a big folder never asks, a real mass deletion still does. A side that
   lost every synced file passes only when more than half of them are found under new paths (a
-  notebook kept in one renamed folder). Folders are deleted only when they hold nothing: a local
+  notebook kept in one renamed folder); on that side any other deletion waits for confirmation,
+  however few, and a folder is moved only when none of its files changed — an older copy put back
+  after the storage was lost never overwrites or deletes the newer notes without the user. Folders
+  are deleted only when they hold nothing: a local
   one with `rmdir()` after an empty-on-disk check (ignored and hidden files count; never while the
   server's folder of another letter case is the same folder on disk — `std::filesystem::equivalent`,
   case-insensitive storage), a server one

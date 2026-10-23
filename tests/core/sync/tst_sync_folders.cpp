@@ -1050,6 +1050,99 @@ private Q_SLOTS:
         QVERIFY2(all.contains(u"folder Projekty renamed here: moved to Projekty 2 on the server"_s), qPrintable(all));
         QVERIFY2(all.contains(u"folders: 1 created, 0 deleted, 1 moved"_s), qPrintable(all));
     }
+
+    // ---- An older copy on a side that lost everything ---------------------------------------
+
+    void anOlderCopyOnAnEmptiedSideAsks_data()
+    {
+        QTest::addColumn<QString>("folder");
+        QTest::addColumn<bool>("onServer");
+        QTest::newRow("vault, notes in a folder") << u"Wszystko"_s << false;
+        QTest::newRow("vault, notes at the root") << QString() << false;
+        QTest::newRow("server, notes in a folder") << u"Wszystko"_s << true;
+        QTest::newRow("server, notes at the root") << QString() << true;
+    }
+
+    void anOlderCopyOnAnEmptiedSideAsks()
+    {
+        // One side lost every note and an older backup was put back below "Kopia/": most notes
+        // are found unchanged (moved), so the side passes the empty-side guard — but the notes
+        // edited since the backup must neither be overwritten with their old text (as if the
+        // folder had been renamed and edited) nor deleted without the user's say, however few.
+        QFETCH(QString, folder);
+        QFETCH(bool, onServer);
+        const auto at = [&](int i) { return folder.isEmpty() ? noteName(i) : folder + u'/' + noteName(i); };
+        Pair p(notesIn(folder, 20));
+        p.settle();
+        QMap<QString, QString> backup;
+        for (int i = 0; i < 20; ++i)
+            backup.insert(at(i), p.a.read(at(i)));
+        QStringList newer;
+        for (int i = 0; i < 6; ++i) {
+            const QString text = p.a.read(at(i)) + u"Nowsza wersja — zażółć\n"_s;
+            QVERIFY(p.a.write(at(i), text));
+            newer.append(text);
+        }
+        QCOMPARE(counts(p.a.sync()), Counts{.up = 6});
+        QCOMPARE(counts(p.b.sync()), Counts{.down = 6});
+        if (onServer) {
+            for (int i = 0; i < 20; ++i)
+                p.server.remove(kFolder + u'/' + at(i));
+            if (!folder.isEmpty())
+                p.server.remove(kFolder + u'/' + folder);
+            for (const auto &[path, text] : backup.asKeyValueRange())
+                p.server.putText(kFolder + u"/Kopia/"_s + path, text);
+        } else {
+            for (int i = 0; i < 20; ++i)
+                QVERIFY(QFile::remove(p.a.root + u'/' + at(i)));
+            if (!folder.isEmpty())
+                QVERIFY(QDir(p.a.root + u'/' + folder).removeRecursively());
+            for (const auto &[path, text] : backup.asKeyValueRange())
+                QVERIFY(writeFileBehind(p.a.root, u"Kopia/"_s + path, text.toUtf8()));
+            p.a.vault->rescan();
+        }
+        const SyncReport r = p.a.sync();
+        QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
+        QVERIFY(r.needsConfirmation);
+        QCOMPARE(r.foldersMoved, 0);
+        QCOMPARE(r.deletedLocal + r.deletedRemote, 0);
+        // The side that kept the newer notes still has them where they were, and the older copy
+        // has arrived next to them; the other device keeps them too.
+        const auto kept = [&](const QString &path) {
+            return onServer ? p.a.read(path) : p.server.text(kFolder + u'/' + path).value_or(QString());
+        };
+        for (int i = 0; i < 6; ++i) {
+            QCOMPARE(kept(at(i)), newer.at(i));
+            QCOMPARE(kept(u"Kopia/"_s + at(i)), backup.value(at(i)));
+        }
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(rb.deletedLocal + rb.deletedRemote, 0);
+        QCOMPARE(rb.needsConfirmation, onServer);
+        for (int i = 0; i < 6; ++i)
+            QCOMPARE(p.b.read(at(i)), newer.at(i));
+        // The question stays until the user decides.
+        QVERIFY(p.a.sync().needsConfirmation);
+    }
+
+    void aRenamedNotebookFolderWithANoteDeletedAsks()
+    {
+        // The whole notebook in one folder, renamed and one note deleted before the sync: the
+        // folder is moved, the deletion is not proven to be a move — it waits for the user.
+        Pair p(notesIn(u"Wszystko"_s, 12));
+        p.settle();
+        QVERIFY(p.a.vault->rename(u"Wszystko"_s, u"Wszystko 2026"_s));
+        QVERIFY(p.a.remove(u"Wszystko 2026/"_s + noteName(3)));
+        const SyncReport r = p.a.sync();
+        QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
+        QCOMPARE(r.foldersMoved, 1);
+        QVERIFY(r.needsConfirmation);
+        QCOMPARE(r.pendingDeletions,
+                 (QList<SyncChange>{{u"Wszystko 2026/"_s + noteName(3), SyncAction::DeleteRemote}}));
+        SyncRunOptions confirm;
+        confirm.confirmDeletions = true;
+        QCOMPARE(counts(p.a.sync(confirm)), Counts{.delR = 1});
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncFolders)

@@ -243,17 +243,24 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
         // unchanged; the others may have been edited (compared as usual at the new path) or
         // deleted (deleted on the server as usual) since the rename. A file the server no longer
         // has stays out of it: moved, it would be taken for deleted there, while the rename of a
-        // file wins over its deletion on the other side (it is uploaded again).
+        // file wins over its deletion on the other side (it is uploaded again). When this device
+        // had none of its synced files under their names (m_localLookedEmpty), every file found
+        // must be unchanged: an older copy put back after the storage was lost would otherwise
+        // overwrite the newer notes on the server as if they had been edited here.
         int unchanged = 0;
+        int found = 0;
         for (const VaultPath &file : std::as_const(files)) {
             const VaultPath target = to + file.mid(from.size());
             if (!m_local.contains(target))
                 continue;
             if (!m_remote.contains(file))
                 return false;
+            ++found;
             if (sameContent(target, m_states.value(file)))
                 ++unchanged;
         }
+        if (m_localLookedEmpty && unchanged != found)
+            return false;
         return unchanged > 0 && unchanged * 2 >= files.size();
     };
     QSet<VaultPath> tried;

@@ -474,11 +474,12 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         finish();
         return;
     }
-    m_moves = findFolderMoves();
+    // The guard first: a side that looked empty makes the folder renames stricter.
     if (!m_options.allowEmptySide && !guardEmptySides()) {
         finish();
         return;
     }
+    m_moves = findFolderMoves();
     endPhase(int(m_states.size()));
     startTransfer();
 }
@@ -555,6 +556,7 @@ bool SyncRun::guardEmptySides()
                                         u"of them under new ones: moved, not lost"_s.arg(tag())
                                                 .arg(tracked)
                                                 .arg(moved);
+            m_localLookedEmpty = true;
             return true;
         }
         m_report.syncError = SyncError{
@@ -565,8 +567,10 @@ bool SyncRun::guardEmptySides()
     if (!remoteHas && localHas) {
         QHash<QString, int> none;
         const int moved = countMoved(onlyLocal, false, none);
-        if (moved * 2 > onlyLocal.size())
+        if (moved * 2 > onlyLocal.size()) {
+            m_remoteLookedEmpty = true;
             return true;
+        }
         // New files of the same sizes on the server may be the moved ones: decided by their
         // content after the first pass (which downloads new files and deletes nothing).
         QHash<qint64, int> sizes;
@@ -584,6 +588,7 @@ bool SyncRun::guardEmptySides()
         }
         if (plausible * 2 > onlyLocal.size()) {
             m_recheckRemoteEmpty = true;
+            m_remoteLookedEmpty = true;
             return true;
         }
         m_report.syncError = SyncError{
@@ -654,9 +659,18 @@ void SyncRun::guardMassDeletion()
     const int movedThere = countMoved(localDeletions, false, downloaded);
     const int local = int(localDeletions.size()) - movedThere;
     const int remote = int(remoteDeletions.size()) - movedHere;
+    // A side that looked empty passed guardEmptySides() thanks to moved content only: whatever is
+    // not proven moved there (a note missing, or found only in an older version) waits for the
+    // user, however few.
+    const bool unprovenOnEmptySide = (m_localLookedEmpty && remote > 0) || (m_remoteLookedEmpty && local > 0);
     m_holdDeletions = tripsMassDeletionGuard(local, countWithoutConfig(m_local))
-                      || tripsMassDeletionGuard(remote, countWithoutConfig(m_remote));
-    if (m_holdDeletions) {
+                      || tripsMassDeletionGuard(remote, countWithoutConfig(m_remote)) || unprovenOnEmptySide;
+    if (unprovenOnEmptySide) {
+        qCInfo(lcSync).noquote() << u"%1 %2 had none of the files synced before under their names: %3 deletion(s) "
+                                    u"not proven to be moves held back for confirmation"_s.arg(tag())
+                                            .arg(m_localLookedEmpty ? u"this device"_s : u"the server"_s)
+                                            .arg(m_localLookedEmpty ? remote : local);
+    } else if (m_holdDeletions) {
         qCInfo(lcSync).noquote()
                 << u"%1 mass deletion held back for confirmation: %2 local and %3 remote file(s) would be deleted"_s
                            .arg(tag())

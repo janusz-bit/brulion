@@ -97,7 +97,10 @@ QList<QStringList> groupByCase(const QStringList &sortedPaths, const std::functi
 /// on one side whose content arrived under a new path in that pass (one to one by content hash,
 /// or by the version a server-side move kept, or the same name in another letter case) counts
 /// neither for this guard nor for the empty-side one (which also lets a side pass whose files
-/// are, more than half of them, found under new paths: a notebook kept in one renamed folder).
+/// are, more than half of them, found under new paths: a notebook kept in one renamed folder; on
+/// such a side every deletion not proven to be a move waits for confirmation, however few, and a
+/// folder rename is moved only when none of its files changed — an older copy put back after the
+/// storage was lost never overwrites or deletes the newer notes on its own).
 /// Folders (syncfolders.cpp): an empty folder is created on the other side (MKCOL / a vault
 /// folder; not when that side has the name in another letter case); a folder deleted on one side
 /// is deleted on the other only when it holds nothing there (locally: empty on disk, rmdir();
