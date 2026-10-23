@@ -38,7 +38,8 @@ components — no Material/Fusion look, so all targets look identical.
     in folders), Szukaj, Paleta poleceń, Szybka notatka, side panel toggle and **Więcej** (⋮).
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
     context — for pages and journals the tabs **Linki** (linked references and unlinked
-    mentions), **Konspekt** (headings), **Kalendarz** (month with journal days).
+    mentions), **Konspekt** (headings: a click scrolls to one, a right-click / long press copies
+    its link `[[Strona#Nagłówek]]` or its embed), **Kalendarz** (month with journal days).
 * **Narrow (< 900 px, phones):** the sidebar becomes a `Drawer` (the ☰ button, the bottom bar's
   Menu, or a swipe from the left edge — on Android with gesture navigation that edge swipe is the
   system's back gesture, so there the buttons open it); the top bar keeps ☰, back (when there is history), title, Szukaj and Więcej;
@@ -70,7 +71,11 @@ components — no Material/Fusion look, so all targets look identical.
   capture and reminder taps from it go back to the user's notebook, and its Nextcloud switch
   is its own (off; it never takes over the user notebook's server folder).
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
-  new page, capture, theme, language, sync, panels, settings, about), quick switcher
+  new page, capture, theme, language, sync, panels, settings, about; the editor's commands —
+  Markdown source, note mode, "Kopiuj link do strony", "Kopiuj odwołanie do bloku", "Kopiuj link
+  do bloku", "Kopiuj link do nagłówka": the current block is the one being edited, else the
+  selected one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok
+  lub umieść w nim kursor"), quick switcher
   (`BQuickSwitcher`, fuzzy page search), quick capture (one line → today's journal; dates in
   the text become ⏰ / 📅), new page / folder, rename, delete confirmation, about; toasts.
 
@@ -178,6 +183,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | Ctrl+Enter | cycle the task status (none → todo → doing → done → none) | same |
 | Ctrl+Shift+Enter | the task status menu at the caret (any status, or none; list items and paragraphs only) | the same menu under the block |
 | Ctrl+. | fold / unfold | same |
+| Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Kopiuj odwołanie do bloku" then) | same; nothing selected: a toast says what to do |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same |
 | Ctrl+V | a copied picture or files become attachments `![[…]]` | — |
 | Esc | close the suggestions, else stop editing and select the block | deselect |
@@ -192,7 +198,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 |---|---|---|
 | `journals` (home) | `JournalsView` — the stream of daily notes, "Przejdź do dnia…", missed reminders banner | `date?` |
 | `journal` | `JournalsView`, one day (opened "jako strona") | `date`, `path?` |
-| `page` | `PageView` — page header (tags, properties, note mode toggle, favourite, page menu; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions | `path`, `line?`, `blockId?`, `open?` |
+| `page` | `PageView` — page header (tags, properties, note mode toggle, favourite, page menu; for a page named by a tag in use the tag strip: "Widok tagu", "Zadania z tym tagiem", its sub-tags as chips), the block editor (outline or document), linked references (links and the blocks / pages tagged with a tag naming the page — "cała strona" for a page tagged as a whole —; a page not written yet lists what already names it), unlinked mentions. `line` / `blockId` / `heading` scroll to that block, select it and flash it (a heading by `PageController.rowOfHeading`, docs/SYNTAX.md §2; one that is not there: a toast, the page at its top); `Workspace::resolveRoute` sends a `blockId` the page no longer has to the page holding it | `path`, `line?`, `blockId?`, `heading?`, `open?` |
 | `calendar` | `CalendarView` — Miesiąc / Tydzień / Agenda, the day panel, add dialog | `date?`, `mode?` |
 | `tasks` | `TasksView` — quick add, filters, sections (Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione), "Pokaż jako zapytanie"; a click on a task's `#tag` filters the list, Ctrl+click or a long press opens the tag's page | `query?` |
 | `graph` | `GraphView` — whole / local graph (depth 1–2), toggles for tags (the "#tag" nodes of tags that name no page; a tag naming a page is an edge to it), missing pages, journals, templates | `path?`, `depth?`, `select?` |
@@ -267,6 +273,30 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   "/command": a block that is no task becomes one (a paragraph a list item), Logseq keywords keep
   their workflow (TODO → DOING, LATER → NOW), "bez statusu" removes the checkbox and its ✅ / ❌
   date, and the caret stays in the words around the command.
+* **Block menu** (`BlockMenu`, `qml/editor`; one per editor, made when first opened, the block
+  tracked while it is open): Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
+  Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
+  nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
+  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Zwiększ / Zmniejsz wcięcie
+  (outline, list items in a document), Przenieś w górę / w dół, Usuń blok. It opens for every
+  block in both note modes: a right-click anywhere on a block — text, heading, a code, calc, table,
+  query or callout frame, an embed — with a mouse, touchpad or stylus, never a finger (one
+  `TapHandler` on the editor's list, not one per block; the page properties have none), the
+  bullet or an ordered item's number (a right-click — their press is theirs, the list's handler
+  does not open it twice — or a long press), and on touch UIs the editing toolbar's **Więcej**
+  (the menu right above the bar). A long press on text opens nothing: it is left for selecting
+  text. The submenu opens beside the menu with a mouse, in place of it on touch UIs (`BMenu`:
+  `cascade` off). Every copy says "Skopiowano …", or why nothing was copied — no clipboard (the
+  text read back differs: never "copied" then), a block that cannot carry an id (the page
+  properties), Markdown source mode, the documentation notebook (no new block ids there:
+  `PageController.allowNewBlockIds`, so its pages keep being updated).
+* **Following a link** to a block or a heading (`((id))`, `[[Strona#^id]]`, `[[Strona#Nagłówek]]`,
+  Obsidian heading paths, also on the page already shown and on every click —
+  `PageController.activateLink` scrolls there itself instead of asking for an unchanged route):
+  `BlockEditor.revealRow` unfolds and leaves a zoom as needed, scrolls the block to the middle,
+  selects it and flashes it (`BlockDelegate.flash()`: `Theme.mark` over the selection and under
+  the text, ~1.2 s, created only while it shows, no height change); a heading or block that is
+  nowhere is said ("Nagłówka „…” nie ma na tej stronie").
 * **Task status menu** (`TaskStatusMenu`, `qml/editor`): Do zrobienia, W toku, Zrobione,
   Oczekujące, Anulowane, Bez statusu, the current one checked. It opens with a right-click (mouse,
   touchpad, stylus) or a long press on any task checkbox (`TaskBox`) — in the editor, query
@@ -335,7 +365,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
   do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów,
-  Ukryj klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Ukryj klawiaturę; in source
+  Więcej (the block menu of the edited block, above the toolbar: copying links to it, …), Ukryj
+  klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Ukryj klawiaturę; in source
   mode Link do strony, Tag, Polecenia, Cofnij, Ponów, Ukryj klawiaturę.
 
 ## Scrolling performance
@@ -863,7 +894,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout and a calc block, a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar), no menu from a finger's long press on text, each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `about`, `drawer` |
@@ -872,7 +903,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze") (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |

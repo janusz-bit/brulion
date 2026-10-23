@@ -12,6 +12,7 @@ Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (zakład
 | `[[Strona]]` | link do strony |
 | `[[Strona\|podpis]]` | link z własnym tekstem |
 | `[[Strona#Nagłówek]]` | link do nagłówka |
+| `[[Strona#Rozdział#Nagłówek]]` | link do nagłówka „Nagłówek” w rozdziale „Rozdział” (gdy nazwa się powtarza) |
 | `[[#Nagłówek]]` | link do nagłówka na tej samej stronie |
 | `[[Strona#^id]]` | link do bloku o identyfikatorze `id` |
 | `((id))` | odwołanie do bloku z dowolnej strony — pokazuje jego tekst |
@@ -32,7 +33,25 @@ Wykrzyknik przed linkiem wstawia treść zamiast odnośnika:
 Osadzony fragment pokazuje bieżący tekst źródła; zmieniasz go u źródła.
 
 ## Odwołania do bloków
-Żeby odwołać się do bloku, wpisz `((` i zacznij pisać jego treść — Brulion doda blokowi identyfikator, czyli końcówkę ` ^abc123`. Odwołanie `((abc123))` działa w całym notatniku, więc przeniesienie bloku na inną stronę niczego nie psuje.
+Żeby odwołać się do bloku, wpisz `((` i zacznij pisać jego treść — Brulion doda blokowi identyfikator, czyli końcówkę ` ^abc123`. Odwołanie `((abc123))` działa w całym notatniku, więc przeniesienie bloku na inną stronę niczego nie psuje. Link `[[Strona#^abc123]]` pokazuje nazwę strony i początek tekstu bloku.
+
+## Kopiowanie odnośnika do bloku lub nagłówka
+Menu bloku ma pozycję **Kopiuj odnośnik**, która kładzie odnośnik w schowku — wklejasz go potem w dowolnej notatce:
+- **Odwołanie do bloku** — `((abc123))`: działa w całym notatniku i pokazuje tekst bloku,
+- **Link do bloku** — `[[Strona#^abc123]]`: rozumie go też Obsidian,
+- **Link do nagłówka** (tylko na nagłówkach) — `[[Strona#Nagłówek]]`: nie zmienia pliku,
+- **Osadzenie** — `!((abc123))`, a dla nagłówka `![[Strona#Nagłówek]]`, czyli cała sekcja.
+
+Menu bloku otwierasz prawym przyciskiem myszy na dowolnym bloku (tekst, nagłówek, kod, tabela, cytat), przytrzymaniem kropki albo numeru punktu, a na telefonie przyciskiem **Więcej** (⋯) na pasku nad klawiaturą, gdy edytujesz blok. Z klawiatury **Ctrl+Shift+C** kopiuje odwołanie do edytowanego albo zaznaczonego bloku. W palecie poleceń (Ctrl+K) są „Kopiuj link do strony”, „Kopiuj odwołanie do bloku”, „Kopiuj link do bloku” i „Kopiuj link do nagłówka” — tego, pod którym stoi kursor. W panelu bocznym, w zakładce **Konspekt**, prawy przycisk albo przytrzymanie nagłówka kopiuje link do niego lub jego osadzenie. Po każdym kopiowaniu Brulion pokazuje, co skopiował.
+
+- Odwołanie, link do bloku i osadzenie bloku dopisują mu identyfikator (` ^abc123`), jeśli go nie miał — to jedna zmiana, którą cofa Ctrl+Z. Identyfikator Logseqa (`id::`) zostaje użyty bez zmian.
+- Link do nagłówka niczego nie dopisuje, ale przestaje prowadzić do celu, gdy zmienisz treść nagłówka. Odwołanie do bloku przetrwa i zmianę nagłówka, i przeniesienie bloku.
+- W linku do nagłówka znikają formatowanie, krzyżyki tagów i znaki, które psują linki (`#`, `|`, `^`, `:`, nawiasy kwadratowe): z „Plan: **wrzesień** #praca” powstaje `[[Strona#Plan wrzesień praca]]`. Wielkość liter i polskie znaki nie mają znaczenia przy wyszukiwaniu nagłówka.
+- Gdy dwa nagłówki na stronie mają tę samą treść, Brulion kopiuje ścieżkę jak Obsidian: `[[Strona#Rozdział#Nagłówek]]`; jeśli i ona się powtarza — link do bloku.
+- Nazwa strony w odnośniku to jej tytuł, a gdy kilka stron ma ten sam tytuł — ścieżka (`[[Projekty/Dom#^abc123]]`). Dzień dziennika ma nazwę pliku: `[[2026-10-22#^abc123]]`.
+- W tej dokumentacji odnośniki do bloków nie są tworzone, bo zmieniłyby jej strony; linki do nagłówków i stron działają.
+
+Kliknięcie odnośnika do bloku lub nagłówka przewija stronę do celu, zaznacza go i na chwilę podświetla — także gdy cel jest na tej samej stronie. Gdy celu nie ma, Brulion o tym mówi. Link do bloku, który przeniesiono na inną stronę, otwiera stronę, na której blok jest teraz.
 
 ## Zmiana nazwy
 Zmiana nazwy strony (F2) aktualizuje linki do niej i tagi, które ją nazywają, w pozostałych notatkach. Historia strony i kosz pozwalają cofnąć pomyłki.

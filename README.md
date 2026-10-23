@@ -76,7 +76,10 @@
   zwijanie, przybliżanie bloku, przenoszenie bloków z dziećmi, odwołania do bloków
   `((…))`, linki `[[…]]`, tagi `#…`, odnośniki zwrotne. Tagi działają jak linki do stron, jak
   w Logseq: `#praca` otwiera stronę „praca” (tworzoną przy pierwszym wpisie), jej odnośniki
-  pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi.
+  pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia też tagi. Odnośnik do każdego
+  bloku i nagłówka skopiujesz z menu bloku (prawy przycisk myszy, na telefonie „Więcej” nad
+  klawiaturą) albo `Ctrl+Shift+C`: `((…))`, `[[Strona#^…]]`, `[[Strona#Nagłówek]]`; kliknięty
+  przewija do celu i go podświetla.
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -216,6 +219,7 @@ usuwa go w całości.
 | `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |
 | `Ctrl+Shift+Enter` | menu statusu zadania (dowolny status albo bez statusu) |
 | `Ctrl+.` | zwiń / rozwiń |
+| `Ctrl+Shift+C` | skopiuj odwołanie do bloku `((…))` |
 | `Ctrl+Z` / `Ctrl+Y` | cofnij / ponów |
 | `Ctrl+E` | tryb źródła Markdown |
 | `F2` / `Ctrl+,` | zmiana nazwy strony / ustawienia |
@@ -294,6 +298,9 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   without it.
 * Tags are links to pages, as in Logseq: `#work` opens the page "work" (created by its first
   content), whose linked references list the tagged blocks; renaming a page renames its tags.
+* Copy a link to any block or heading from the block menu (a right-click, or "More" on the
+  phone's editing toolbar) or with `Ctrl+Shift+C`: `((id))`, `[[Page#^id]]`, `[[Page#Heading]]`
+  or an embed; following one scrolls to it and highlights it.
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.
