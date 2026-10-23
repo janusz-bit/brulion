@@ -25,6 +25,7 @@
 #include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QThread>
@@ -1575,10 +1576,33 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     app->goHome();
 }
 
+/// The page editor shown under `root` with its controller (a loaded page), else {nullptr, nullptr}.
+std::pair<QQuickItem *, QObject *> shownPageEditor(QQuickWindow *window, QQuickItem *root, const QString &path)
+{
+    for (QQuickItem *e : window->findChildren<QQuickItem *>(u"pageEditor"_s)) {
+        auto *c = e->property("controller").value<QObject *>();
+        if (c && c->property("path").toString() == path && c->property("loaded").toBool() && shown(e)
+            && (!root || root->isAncestorOf(e)))
+            return {e, c};
+    }
+    return {nullptr, nullptr};
+}
+
+/// The editing toolbar's slot of `editor` (docked on another item in the journal stream), if shown.
+QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
+{
+    for (QQuickItem *candidate : window->findChildren<QQuickItem *>(u"editToolbarSlot"_s)) {
+        if (candidate->isVisible() && editor->isAncestorOf(candidate))
+            return candidate;
+    }
+    return nullptr;
+}
+
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
-///     keeps the navigation away until the editing stops.
+///     keeps the navigation away until the editing stops, above the system's navigation bar; on
+///     a wide touch window a page in the side panel docks its toolbar on the keyboard too.
 void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
 {
     auto *insets = engine->singletonInstance<QObject *>("Brulion", "KeyboardInsets");
@@ -1649,18 +1673,74 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
               "editing with the keyboard hidden: the toolbar is docked and the bottom navigation stays away");
         // (No keyboard and no navigation bar here: the view, and the toolbar, end at the window's
         // bottom.)
-        QQuickItem *slot = nullptr;
-        for (QQuickItem *candidate : window->findChildren<QQuickItem *>(u"editToolbarSlot"_s)) {
-            if (candidate->isVisible() && editor->isAncestorOf(candidate))
-                slot = candidate;
-        }
+        QQuickItem *slot = toolbarSlotOf(window, editor);
         // (Laid out with the shell's next polish.)
         check(waitFor([&] { return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); }),
               "the docked toolbar sits on the bottom edge of the view");
+        // A system navigation bar under the window's bottom edge (a phone's SafeArea margin, here
+        // added to the shell's): the docked toolbar sits right above it.
+        QQuickItem *shellItem =
+                findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+        const auto setSafeBottom = [&](int px) {
+            QQmlExpression set(qmlContext(shellItem), shellItem, u"SafeArea.additionalMargins.bottom = %1"_s.arg(px));
+            set.evaluate();
+            if (set.hasError())
+                std::fprintf(stderr, "selftest: %s\n", qPrintable(set.error().toString()));
+            return !set.hasError();
+        };
+        if (shellItem && slot && setSafeBottom(48)) {
+            check(waitFor([&] {
+                      return near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height() - 48)
+                             && near(room->height(), 48) && room->isVisible() && !nav->isVisible();
+                  }),
+                  "with the keyboard hidden the docked toolbar sits right above the system's navigation bar");
+            setSafeBottom(0);
+            waitFor([&] { return near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height()); });
+        } else {
+            check(false, "the shell's SafeArea margins can be set");
+        }
         QMetaObject::invokeMethod(page, "stopEditing");
         check(waitFor([&] { return nav->isVisible(); }), "editing stops: the bottom navigation is back");
     }
+
+    // A wide touch window (a tablet, a phone in landscape): the side panel ends at the keyboard
+    // too, so an editor in it docks its toolbar on the keyboard.
+    const QSize phone = window->size();
+    window->resize(1280, 800);
+    check(waitFor([&] { return app->sidePanelAllowed() && !nav->isVisible(); }),
+          "a wide window has room for the side panel");
+    const QString recipes = u"Przepisy.md"_s;
+    app->openPage(recipes, -1, true);
+    QQuickItem *panel = nullptr;
+    std::pair<QQuickItem *, QObject *> side{nullptr, nullptr};
+    check(waitFor([&] {
+              panel = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "ShellSidePanel"); });
+              side = panel ? shownPageEditor(window, panel, recipes) : std::pair<QQuickItem *, QObject *>{};
+              return side.first != nullptr;
+          }),
+          "a wide window shows a page in the side panel");
+    if (side.first) {
+        insets->setProperty("simulated", keyboard);
+        int row = -1;
+        QMetaObject::invokeMethod(side.second, "lastVisibleRow", qReturnArg(row));
+        QMetaObject::invokeMethod(side.first, "startEditing", QVariant(row), QVariant(-1));
+        QQuickItem *slot = nullptr;
+        check(waitFor([&] {
+                  slot = toolbarSlotOf(window, side.first);
+                  return slot && near(slot->mapToScene(QPointF(0, slot->height())).y(), window->height() - keyboard)
+                         && near(panel->mapToScene(QPointF(0, panel->height())).y(), window->height() - keyboard);
+              }),
+              "the side panel ends at the keyboard: its editor's toolbar sits on the keyboard");
+        if (slot)
+            std::fprintf(stderr, "selftest: the side panel's toolbar ends at %.0f (keyboard's top %.0f)\n",
+                         slot->mapToScene(QPointF(0, slot->height())).y(), window->height() - keyboard);
+        QMetaObject::invokeMethod(side.second, "stopEditing");
+    }
     insets->setProperty("simulated", -1);
+    app->clearSidePanelRoute();
+    app->setSidePanelVisible(false);
+    window->resize(phone);
+    waitFor([&] { return nav->isVisible(); });
     app->goHome();
 }
 
