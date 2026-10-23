@@ -1,10 +1,13 @@
-// Link and tag rewriting when a page is renamed or moved (docs/SYNTAX.md §2, §3). Part of the
-// markdown module — see markdown/markdown.h for the module overview.
+// Link and tag rewriting when a page is renamed or moved (docs/SYNTAX.md §2, §3): by name
+// (renameLinks(), renameTags()) or link by link (retargetLinks(), retargetTags() — what
+// VaultIndex::planRelocation() writes so every link keeps its target). Part of the markdown
+// module — see markdown/markdown.h for the module overview.
 #pragma once
 
 #include "markdown/parse.h"
 #include "types.h"
 
+#include <QHash>
 #include <QList>
 #include <QString>
 
@@ -58,5 +61,37 @@ QString renameTags(const QString &content, const QString &oldName, const QString
 /// come last, without a range (from = to = -1).
 QList<NoteTag> tagsToRename(const QString &content, const QString &oldName, const QString &newName,
                             const VaultPath &oldPath = {}, const VaultPath &newPath = {}, const TagFilter &naming = {});
+
+/// One link to point at another target (retargetLinks()).
+struct LinkEdit {
+    /// The link's document range as parseNote() reports it (Link::from, Link::to).
+    qsizetype from = 0;
+    qsizetype to = 0;
+    /// The target to write: for wiki links and embeds as written between `[[` and `#` / `|`
+    /// ("Projekty/Dom", "plan.png"); for Markdown links the destination's path, decoded
+    /// ("Projekty/Mój dom.md") — it is percent-encoded here.
+    QString newTarget;
+
+    friend bool operator==(const LinkEdit &, const LinkEdit &) = default;
+};
+
+/// Point links at other targets (content in → content out). Each edit names a link by its range
+/// — a wiki link, an embed or a Markdown link to a file that parseNote() reports at exactly that
+/// range (so never in code, comments or HTML blocks) — and only the link's target is replaced:
+/// `|alias`, `#Heading`, `#^id`, the `!` of embeds, blanks inside `[[ ]]`, a Markdown link's
+/// text, fragment and angle brackets stay. Markdown destinations are percent-encoded ('%' and
+/// '#' always; spaces and parentheses in a plain destination, '<' and '>' in an angle one).
+/// Edits that match no link, overlap an earlier one or have a target no link can hold (empty, a
+/// line break, `[[`, `]]`, '|' or '#' in a wiki target) are ignored; every other byte — line
+/// endings, a BOM — is preserved, and content without changes is returned as is.
+QString retargetLinks(const QString &content, const QList<LinkEdit> &edits);
+
+/// Rename tags by key (content in → content out): every occurrence of findNoteTags() — `#tag`,
+/// `#[[tag]]`, `tags::` items, the frontmatter's `tags:` items — whose key (lower-case NFC,
+/// without '#'; trailing '/' ignored) `names` maps is written as the mapped name, in its own form
+/// as renameTags() writes a new name (`#Projekty/Dom`, `#[[Projekty/Mój dom]]`, a property or
+/// YAML item; a frontmatter value the items cannot express is rewritten as a list). Names no tag
+/// can hold leave their tags as they are; everything else is preserved byte for byte.
+QString retargetTags(const QString &content, const QHash<QString, QString> &names);
 
 } // namespace brulion::markdown

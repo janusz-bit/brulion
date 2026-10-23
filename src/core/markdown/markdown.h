@@ -40,7 +40,11 @@
 //   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath]),
 //                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
 //                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`
-//                  keeps those of other pages with that name), tagsToRename(...)
+//                  keeps those of other pages with that name), tagsToRename(...);
+//                  retargetLinks(content, [LinkEdit{from, to, newTarget}]) (links by their range:
+//                  only the target changes, alias / heading / block id / '!' kept) and
+//                  retargetTags(content, {key: newName}) — what a move writes
+//                  (VaultIndex::planRelocation())
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}

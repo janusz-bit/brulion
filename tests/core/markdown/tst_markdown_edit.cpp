@@ -825,6 +825,149 @@ private Q_SLOTS:
         QCOMPARE(parseNote(u"a.md"_s, renamed).tags, QStringList({u"mój dom"_s, u"domek"_s}));
     }
 
+    // --- retargetLinks / retargetTags (what a move writes, VaultIndex::planRelocation()) ---------
+
+    /// Edits for the links of `content` (parseNote() order) numbered in `targets`.
+    static QList<LinkEdit> editsFor(const QString &content, const QHash<int, QString> &targets)
+    {
+        QList<LinkEdit> edits;
+        const ParsedNote note = parseNote(QString(), content);
+        for (auto it = targets.cbegin(); it != targets.cend(); ++it) {
+            if (it.key() < note.links.size())
+                edits.append({note.links[it.key()].from, note.links[it.key()].to, it.value()});
+        }
+        return edits;
+    }
+
+    void retargetLinks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("targets"); // "n=target" for the n-th link
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("bare to path") << u"- [[Dom]] i [[Ogród]]"_s << QStringList{u"0=Projekty/Dom"_s}
+                                      << u"- [[Projekty/Dom]] i [[Ogród]]"_s;
+        QTest::newRow("alias, heading, block, embed kept")
+                << u"[[Dom|mój dom]] [[Dom#Kuchnia]] [[Dom#^abc123]] ![[Dom#^abc123|x]] ![[plan.png]]"_s
+                << QStringList{u"0=Projekty/Dom"_s, u"1=Projekty/Dom"_s, u"2=Projekty/Dom"_s, u"3=Projekty/Dom"_s,
+                               u"4=Archiwum/plan.png"_s}
+                << u"[[Projekty/Dom|mój dom]] [[Projekty/Dom#Kuchnia]] [[Projekty/Dom#^abc123]] ![[Projekty/Dom#^abc123|x]] ![[Archiwum/plan.png]]"_s;
+        QTest::newRow("blanks and table pipe kept")
+                << u"| [[ Dom ]] | [[Dom\\|alias]] |"_s << QStringList{u"0=Projekty/Dom"_s, u"1=Projekty/Dom"_s}
+                << u"| [[ Projekty/Dom ]] | [[Projekty/Dom\\|alias]] |"_s;
+        QTest::newRow("polish names") << u"[[Żółw]] [[łąka]]"_s << QStringList{u"0=Zwierzęta/Żółw"_s, u"1=Łąki/Łąka"_s}
+                                      << u"[[Zwierzęta/Żółw]] [[Łąki/Łąka]]"_s;
+        QTest::newRow("markdown plain dest encoded")
+                << u"[a](Mój%20dom.md) ![b](plan.png) [c](Dom.md#Sekcja%201)"_s
+                << QStringList{u"0=Projekty/Mój dom.md"_s, u"1=Archiwum (stare)/plan.png"_s, u"2=Projekty/Dom.md"_s}
+                << u"[a](Projekty/Mój%20dom.md) ![b](Archiwum%20%28stare%29/plan.png) [c](Projekty/Dom.md#Sekcja%201)"_s;
+        QTest::newRow("markdown angle dest") << u"[a](<Mój dom.md>) [b](<x.md#H>)"_s
+                                             << QStringList{u"0=Projekty/Mój dom.md"_s, u"1=a<b>/C# 100%.md"_s}
+                                             << u"[a](<Projekty/Mój dom.md>) [b](<a%3Cb%3E/C%23 100%25.md#H>)"_s;
+        QTest::newRow("markdown relative") << u"[a](../Dom.md) [b](./Dom.md \"tytuł\")"_s
+                                           << QStringList{u"0=Archiwum/Dom.md"_s, u"1=Archiwum/Dom.md"_s}
+                                           << u"[a](Archiwum/Dom.md) [b](Archiwum/Dom.md \"tytuł\")"_s;
+        QTest::newRow("same target unchanged")
+                << u"[[Dom]] [x](Dom.md)"_s << QStringList{u"0=Dom"_s, u"1=Dom.md"_s} << u"[[Dom]] [x](Dom.md)"_s;
+        QTest::newRow("crlf and bom kept")
+                << u"\uFEFF---\r\nup: \"[[Dom]]\"\r\n---\r\n- [[Dom]]\r\n- tekst\r\n"_s
+                << QStringList{u"0=Projekty/Dom"_s, u"1=Projekty/Dom"_s}
+                << u"\uFEFF---\r\nup: \"[[Projekty/Dom]]\"\r\n---\r\n- [[Projekty/Dom]]\r\n- tekst\r\n"_s;
+        QTest::newRow("invalid targets ignored")
+                << u"[[a]] [[b]] [[c]] [[d]] [[e]] [x](f.md)"_s
+                << QStringList{u"0="_s, u"1=x|y"_s, u"2=x#y"_s, u"3=x]]y"_s, u"4=x\ny"_s, u"5=  "_s}
+                << u"[[a]] [[b]] [[c]] [[d]] [[e]] [x](f.md)"_s;
+        QTest::newRow("urls and block refs untouched") << u"[a](https://x.pl/Dom.md) ((abc123)) <https://x.pl>"_s
+                                                       << QStringList{u"0=Projekty/Dom.md"_s, u"1=x"_s, u"2=x"_s}
+                                                       << u"[a](https://x.pl/Dom.md) ((abc123)) <https://x.pl>"_s;
+    }
+
+    void retargetLinks()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, targets);
+        QFETCH(QString, expected);
+        QHash<int, QString> byLink;
+        for (const QString &t : std::as_const(targets))
+            byLink.insert(t.section(u'=', 0, 0).toInt(), t.section(u'=', 1));
+        const QString out = markdown::retargetLinks(content, editsFor(content, byLink));
+        QCOMPARE(out, expected);
+        // The links still parse, with their alias / heading / block id.
+        const ParsedNote before = parseNote(QString(), content);
+        const ParsedNote after = parseNote(QString(), out);
+        QCOMPARE(after.links.size(), before.links.size());
+        for (qsizetype i = 0; i < after.links.size(); ++i) {
+            QCOMPARE(after.links[i].kind, before.links[i].kind);
+            QCOMPARE(after.links[i].display, before.links[i].display);
+            QCOMPARE(after.links[i].heading, before.links[i].heading);
+            QCOMPARE(after.links[i].blockId, before.links[i].blockId);
+            const QString wanted = byLink.value(int(i));
+            if (out != content && !wanted.trimmed().isEmpty() && after.links[i].kind != LinkKind::Url)
+                QCOMPARE(after.links[i].target.trimmed(), wanted);
+        }
+    }
+
+    // Edits must name a link exactly: ranges in code, comments, overlapping or out of range do
+    // nothing.
+    void retargetLinksOnlyLinks()
+    {
+        const QString content = u"`[[Dom]]` %% [[Dom]] %%\n```\n[[Dom]]\n```\n- [[Dom]] [[Inny]]"_s;
+        const qsizetype code = content.indexOf(u"[[Dom]]"_s);
+        const qsizetype comment = content.indexOf(u"[[Dom]]"_s, code + 1);
+        const qsizetype fence = content.indexOf(u"[[Dom]]"_s, comment + 1);
+        const qsizetype real = content.lastIndexOf(u"[[Dom]]"_s);
+        const QList<LinkEdit> nothing{{code, code + 7, u"X"_s},           {comment, comment + 7, u"X"_s},
+                                      {fence, fence + 7, u"X"_s},         {real, real + 6, u"X"_s},
+                                      {real + 1, real + 7, u"X"_s},       {-5, 3, u"X"_s},
+                                      {real, content.size() + 10, u"X"_s}};
+        QCOMPARE(markdown::retargetLinks(content, nothing), content);
+        QCOMPARE(markdown::retargetLinks(content, {}), content);
+        QString expected = content;
+        expected.replace(real, 7, u"[[Projekty/Dom]]"_s);
+        QCOMPARE(markdown::retargetLinks(content, nothing + QList<LinkEdit>{{real, real + 7, u"Projekty/Dom"_s}}),
+                 expected);
+        // Two edits for one link: the first wins.
+        QCOMPARE(markdown::retargetLinks(content, {{real, real + 7, u"Projekty/Dom"_s}, {real, real + 7, u"Y"_s}})
+                         .count(u"[["_s),
+                 content.count(u"[["_s));
+    }
+
+    void retargetTags_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("names"); // "key=new name"
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("bare to path") << u"- #dom i #Dom, #domek #dom/kuchnia"_s << QStringList{u"dom=Projekty/Dom"_s}
+                                      << u"- #Projekty/Dom i #Projekty/Dom, #domek #dom/kuchnia"_s;
+        QTest::newRow("path to path") << u"#Projekty/Dom #projekty/dom #[[Projekty/Dom]]"_s
+                                      << QStringList{u"projekty/dom=Archiwum/Dom"_s}
+                                      << u"#Archiwum/Dom #Archiwum/Dom #[[Archiwum/Dom]]"_s;
+        QTest::newRow("to words") << u"#dom"_s << QStringList{u"dom=Projekty/Mój dom"_s} << u"#[[Projekty/Mój dom]]"_s;
+        QTest::newRow("polish") << u"#żółw #ŻÓŁW #zolw"_s << QStringList{u"żółw=Zwierzęta/Żółw"_s}
+                                << u"#Zwierzęta/Żółw #Zwierzęta/Żółw #zolw"_s;
+        QTest::newRow("properties and frontmatter")
+                << u"---\r\ntags: [dom, praca]\r\n---\r\n- x\r\n  tags:: dom, praca\r\n"_s
+                << QStringList{u"dom=Projekty/Dom"_s}
+                << u"---\r\ntags: [Projekty/Dom, praca]\r\n---\r\n- x\r\n  tags:: Projekty/Dom, praca\r\n"_s;
+        QTest::newRow("several") << u"#a #b #c"_s << QStringList{u"a=X/A"_s, u"c=Y/C"_s} << u"#X/A #b #Y/C"_s;
+        QTest::newRow("never in code") << u"`#dom` %% #dom %%\n```\n#dom\n```"_s << QStringList{u"dom=X/Dom"_s}
+                                       << u"`#dom` %% #dom %%\n```\n#dom\n```"_s;
+        QTest::newRow("no tag can hold it") << u"#dom"_s << QStringList{u"dom=a|b"_s} << u"#dom"_s;
+        QTest::newRow("nothing to do") << u"#dom"_s << QStringList() << u"#dom"_s;
+    }
+
+    void retargetTags()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, names);
+        QFETCH(QString, expected);
+        QHash<QString, QString> map;
+        for (const QString &n : std::as_const(names))
+            map.insert(n.section(u'=', 0, 0), n.section(u'=', 1));
+        const QString out = markdown::retargetTags(content, map);
+        QCOMPARE(out, expected);
+        QCOMPARE(markdown::retargetTags(out, map), out); // idempotent
+    }
+
     // --- journals --------------------------------------------------------------------------------
 
     void journalPaths()
