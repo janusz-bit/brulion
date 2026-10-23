@@ -9,9 +9,11 @@ import Brulion
 // whole blocks. The text is PageController.readingHtml(): the editor's escaping renderer, never
 // a note's own HTML; bullets, numbers and checkboxes are characters, so a copy keeps them.
 //   * desktops: the mouse selects by dragging (Shift+click extends), Shift+arrows, Ctrl+A;
-//   * touch UIs: a finger scrolls; a long press selects the word under it and two handles (44 px
-//     targets) move the ends — a read-only TextEdit gets none from the system (Android shows its
-//     selection handles and popup only for editable text); a tap elsewhere clears it;
+//   * touch UIs: a finger scrolls; a long press selects the word under it. Android shows its own
+//     selection handles and Copy / Select all popup for it (Qt 6.11 gives them to read-only text;
+//     the popup's Copy arrives as Ctrl+C, the exact copy below); elsewhere — the browser on a
+//     phone, a desktop's touch UI — two handles of the view's own (44 px targets) move the ends;
+//     a tap elsewhere clears it;
 //   * "Kopiuj" / Ctrl+C copy the selection as plain text with every character (no-break spaces
 //     too), the whole page when nothing is selected; "Zamknij", Esc and Back close the view.
 // BlockEditor.openSelectText() shows it over the editor (a day: over the journal stream's frame).
@@ -228,9 +230,10 @@ FocusScope {
             }
         }
 
-        // The handles of a touch selection: the start's and the end's, dragged with a finger.
+        // The handles of a touch selection: the start's and the end's, dragged with a finger
+        // (not on Android: the system's are there).
         Repeater {
-            model: Theme.touchUi && view.hasSelection ? 2 : 0
+            model: Theme.touchUi && view.hasSelection && DeviceInfo.platform !== "android" ? 2 : 0
             delegate: Item {
                 id: handle
                 required property int index

@@ -21,8 +21,9 @@
 # With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
 # and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
 # stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
-# Kopiuj, Back; then "Zaznacz tekst" on the guide page: a long press selects a word with the
-# view's own handles (the system shows none for read-only text), a handle dragged, Kopiuj, Back.
+# Kopiuj, Back; then "Zaznacz tekst" on a page: a long press selects a word with the system's
+# handles and popup (Qt gives them to read-only text on Android), the popup's Copy, a handle
+# dragged, Kopiuj, Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
@@ -356,13 +357,20 @@ if ((SELECTION)); then
   long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
   sleep 2
   app_shot sel-7-word
-  # The end handle (under the word's end) dragged down two lines.
-  adb shell input swipe $((SCREEN_W * 40 / 100)) $((SCREEN_H * 22 / 100 + $(dp 22))) \
-    $((SCREEN_W * 60 / 100)) $((SCREEN_H * 22 / 100 + $(dp 70))) 900
+  # The system's popup over the selection (Android shows its handles and Copy / Select all for
+  # read-only text too): its Copy goes through the app's Ctrl+C (the exact text, a toast).
+  adb shell input tap $((SCREEN_W * 10 / 100)) $((SCREEN_H * 163 / 1000))
+  sleep 2
+  app_shot sel-7b-system-copy
+  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  sleep 2
+  # The system's end handle (under the word's end) dragged down two lines.
+  adb shell input swipe $((SCREEN_W * 36 / 100)) $((SCREEN_H * 25 / 100)) \
+    $((SCREEN_W * 60 / 100)) $((SCREEN_H * 25 / 100 + $(dp 70))) 900
   sleep 2
   app_shot sel-8-handle
-  # Kopiuj: the bar's button at the top right.
-  adb shell input tap $((SCREEN_W - $(dp 60))) $(($(dp 24) + $(dp 30)))
+  # Kopiuj: the view's button at the right of its bar, under the app's top bar.
+  adb shell input tap $((SCREEN_W * 887 / 1000)) $((SCREEN_H * 143 / 1000))
   sleep 2
   app_shot sel-9-copied
   adb shell input keyevent 4
