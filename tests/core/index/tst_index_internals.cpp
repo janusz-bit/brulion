@@ -369,6 +369,31 @@ private Q_SLOTS:
         }
     }
 
+    // lower(): QString::toLower() with an ASCII fast path — the same result for any text.
+    void lowerMatchesToLower_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::newRow("empty") << QString();
+        QTest::newRow("lower already") << u"projekty/dom.md"_s;
+        QTest::newRow("upper ASCII") << u"Projekty/DOM Jana.MD"_s;
+        QTest::newRow("brackets and digits around A and Z") << u"@[`{AZaz09"_s;
+        QTest::newRow("Polish") << u"Zażółć GĘŚLĄ Jaźń"_s;
+        QTest::newRow("ASCII, then Polish") << u"ABC/Łąka"_s;
+        QTest::newRow("Greek and German") << u"ΣΊΣΥΦΟΣ Straße"_s;
+    }
+    void lowerMatchesToLower()
+    {
+        QFETCH(QString, text);
+        QCOMPARE(brulion::index_detail::lower(text), text.toLower());
+        QRandomGenerator r(23);
+        for (int n = 0; n < 2000; ++n) {
+            QString s;
+            for (int i = r.bounded(12); i > 0; --i)
+                s += QChar(char16_t(r.bounded(3) == 0 ? 0xA0 + r.bounded(0x200) : 0x20 + r.bounded(0x5F)));
+            QCOMPARE(brulion::index_detail::lower(s), s.toLower());
+        }
+    }
+
     void cleanTarget_data()
     {
         QTest::addColumn<QString>("target");

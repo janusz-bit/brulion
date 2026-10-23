@@ -2,6 +2,7 @@
 #include "fixture.h"
 
 #include "index/textutil_p.h"
+#include "markdown/parse.h"
 
 #include <QElapsedTimer>
 #include <QTest>
@@ -620,6 +621,8 @@ private Q_SLOTS:
         QTest::newRow("blanks inside brackets")
                 << q(u"ref:[[ Dom ]] tag:[[ x ]]"_s) << QStringList{u"ref Dom"_s, u"tag x"_s};
         QTest::newRow("no query") << u"- zwykła notatka #tag [[Link]]\n"_s << QStringList();
+        QTest::newRow("the word query without a fence")
+                << u"- query tag:x ref:[[Dom]]\n- `query` i ``query``\n"_s << QStringList();
         QTest::newRow("empty values") << q(u"tag: ref:[[]] page:\"\""_s) << QStringList();
     }
     void findQueryNames()
@@ -636,6 +639,9 @@ private Q_SLOTS:
             QCOMPARE(content.sliced(n.from, n.to - n.from), n.value);
         }
         QCOMPARE(got, names);
+        // The same with the caller's parse of the note (the index's, with a path).
+        const ParsedNote parsed = markdown::parseNote(u"Zapytania/Łąka.md"_s, content);
+        QCOMPARE(brulion::findQueryNames(content, &parsed), brulion::findQueryNames(content));
     }
 
     // formatQueryName(): the new value in the old one's form, or in [[ ]] when bare cannot hold it.

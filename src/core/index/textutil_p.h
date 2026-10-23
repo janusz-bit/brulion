@@ -17,6 +17,9 @@ inline constexpr qsizetype ExcerptLength = 120;
 
 /// NFC form of `s` (ASCII fast path).
 QString nfc(QStringView s);
+/// `s`.toLower() with a fast path for ASCII text (most names and paths; Qt converts every
+/// character after the first upper-case one through the Unicode tables).
+QString lower(const QString &s);
 
 /// Code point starting at `i` and its length in UTF-16 units (a lone surrogate is itself).
 std::pair<char32_t, qsizetype> codePointAt(QStringView s, qsizetype i);

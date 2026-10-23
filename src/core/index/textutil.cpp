@@ -114,6 +114,27 @@ QString nfc(QStringView s)
     return isAscii(s) ? s.toString() : s.toString().normalized(QString::NormalizationForm_C);
 }
 
+QString lower(const QString &s)
+{
+    qsizetype firstUpper = -1;
+    for (qsizetype i = 0; i < s.size(); ++i) {
+        const char16_t c = s[i].unicode();
+        if (c >= 0x80)
+            return s.toLower();
+        if (firstUpper < 0 && c >= u'A' && c <= u'Z')
+            firstUpper = i;
+    }
+    if (firstUpper < 0)
+        return s;
+    QString out = s;
+    for (qsizetype i = firstUpper; i < out.size(); ++i) {
+        const char16_t c = out[i].unicode();
+        if (c >= u'A' && c <= u'Z')
+            out[i] = QChar(char16_t(c + (u'a' - u'A')));
+    }
+    return out;
+}
+
 std::pair<char32_t, qsizetype> codePointAt(QStringView s, qsizetype i)
 {
     const QChar c = s[i];

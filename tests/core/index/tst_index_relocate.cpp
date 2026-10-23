@@ -48,6 +48,19 @@ void apply(VaultIndex &index, const RelocationPlan &plan)
         index.update(f.newPath, f.after);
 }
 
+/// The plan made from the index (its parsed links; only notes with a ```query block or a renamed
+/// tag looked into for those) equals the plan of each note's text read anew: rewrite() of the
+/// text with a block added at its end.
+void checkPlanOfTheText(const VaultIndex &index, const RelocationPlan &plan)
+{
+    const QString tail = u"\n- dopisane po planie\n"_s;
+    for (const VaultPath &p : index.paths()) {
+        const QString content = index.content(p);
+        const QString after = planned(plan, p);
+        QCOMPARE(plan.rewrite(p, content + tail), (after.isNull() ? content : after) + tail);
+    }
+}
+
 /// Every resolved link of every note: "note: target -> file".
 QStringList resolutions(const VaultIndex &index, const QHash<QString, QString> &moved = {})
 {
@@ -458,6 +471,7 @@ private Q_SLOTS:
         QVERIFY(!moves.isEmpty());
         const QStringList before = resolutions(index, moved);
         const RelocationPlan plan = index.planRelocation(moves);
+        checkPlanOfTheText(index, plan);
         apply(index, plan);
         QCOMPARE(resolutions(index), before);
     }
@@ -485,10 +499,15 @@ private Q_SLOTS:
                 for (int l = 0; l < 4; ++l) {
                     const QString other = notes.at(rng.bounded(int(notes.size())));
                     const QString stem = paths::stripMarkdownExtension(other);
-                    switch (rng.bounded(4)) {
+                    switch (rng.bounded(6)) {
                     case 0: text += u"- [["_s + paths::pageTitle(other) + u"]]\n"_s; break;
                     case 1: text += u"- [["_s + stem + u"#Nagłówek|x]]\n"_s; break;
                     case 2: text += u"- [x]("_s + QString(stem).replace(u' ', u"%20"_s) + u".md)\n"_s; break;
+                    case 3:
+                        text += u"- ```query\n  tag:"_s + paths::pageTitle(other) + u" ref:[["_s + stem + u"]] path:"_s
+                                + paths::dirname(other) + u"/\n  ```\n"_s;
+                        break;
+                    case 4: text += u"- #[["_s + stem + u"]]\n"_s; break;
                     default: text += u"- #"_s + paths::pageTitle(other) + u"\n"_s; break;
                     }
                 }
@@ -517,6 +536,7 @@ private Q_SLOTS:
             const QStringList before = resolutions(index, moved);
             const QStringList tagsBefore = tagResolutions(index, moved);
             const RelocationPlan plan = index.planRelocation(moves);
+            checkPlanOfTheText(index, plan);
             apply(index, plan);
             QCOMPARE(resolutions(index), before);
             QCOMPARE(tagResolutions(index), tagsBefore);

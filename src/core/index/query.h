@@ -173,8 +173,9 @@ struct QueryNameRef {
 
 /// Every QueryNameRef of the ```query blocks of a note, in document order — read as parseQuery()
 /// reads the block (comments, quotes and `[[…]]` with spaces; a `//` value is text). Never outside
-/// a ```query fence (its own lines; the fence lines and other code are not looked at).
-QList<QueryNameRef> findQueryNames(const QString &content);
+/// a ```query fence (its own lines; the fence lines and other code are not looked at). `parsed`:
+/// markdown::parseNote() of `content` when the caller has it (else it is parsed when needed).
+QList<QueryNameRef> findQueryNames(const QString &content, const ParsedNote *parsed = nullptr);
 
 /// How `value` is written in place of `name.value` (the text for [from, to)), in the name's own
 /// form: inside its `[[ ]]` or quotes, or bare — in `[[ ]]` when it holds a blank, a comma, a

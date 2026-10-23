@@ -7,8 +7,21 @@ namespace brulion::paths {
 
 VaultPath normalize(const QString &path)
 {
-    QStringList parts;
     const QString unified = path.normalized(QString::NormalizationForm_C).replace(QLatin1Char('\\'), QLatin1Char('/'));
+    // Most paths are clean already (no empty, "." or ".." segment): as they are, without
+    // splitting and joining (resolving links normalizes several paths per link).
+    bool clean = !unified.isEmpty();
+    for (qsizetype start = 0; clean && start <= unified.size();) {
+        qsizetype end = unified.indexOf(QLatin1Char('/'), start);
+        if (end < 0)
+            end = unified.size();
+        const QStringView segment = QStringView(unified).sliced(start, end - start);
+        clean = !segment.isEmpty() && segment != QLatin1String(".") && segment != QLatin1String("..");
+        start = end + 1;
+    }
+    if (clean)
+        return unified;
+    QStringList parts;
     for (const QString &seg : unified.split(QLatin1Char('/'))) {
         if (seg.isEmpty() || seg == QLatin1String("."))
             continue;

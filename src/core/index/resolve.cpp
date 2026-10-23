@@ -46,22 +46,22 @@ const QSet<VaultPath> *lookup(const QHash<QString, QSet<VaultPath>> &map, const 
 
 QString pathKey(const QString &path)
 {
-    return nfc(path).toLower();
+    return lower(nfc(path));
 }
 
 QString noteNameKey(const VaultPath &path)
 {
-    return paths::basename(paths::stripMarkdownExtension(nfc(path))).toLower();
+    return lower(paths::basename(paths::stripMarkdownExtension(nfc(path))));
 }
 
 QString fileNameKey(const VaultPath &path)
 {
-    return paths::basename(nfc(path)).toLower();
+    return lower(paths::basename(nfc(path)));
 }
 
 QString aliasKey(const QString &alias)
 {
-    return nfc(alias).trimmed().toLower();
+    return lower(nfc(alias).trimmed());
 }
 
 QString cleanTarget(const QString &target, TargetForm form)
@@ -87,7 +87,7 @@ QString cleanTarget(const QString &target, TargetForm form)
 
 QString linkKey(const QString &target, TargetForm form)
 {
-    return paths::basename(paths::stripMarkdownExtension(paths::normalize(cleanTarget(target, form)))).toLower();
+    return lower(paths::basename(paths::stripMarkdownExtension(paths::normalize(cleanTarget(target, form)))));
 }
 
 QStringList aliasLinkKeys(const QString &alias)
@@ -214,7 +214,7 @@ VaultPath NameTable::resolve(const QString &target, const VaultPath &from, Targe
         if (!hit.isEmpty())
             return hit;
     }
-    if (const VaultPath byName = lookupName(norm.toLower()); !byName.isEmpty())
+    if (const VaultPath byName = lookupName(lower(norm)); !byName.isEmpty())
         return byName;
     return lookupAlias(t);
 }
@@ -225,7 +225,7 @@ VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
     const QString spelled = nfc(paths::normalize(t));
     if (spelled.isEmpty())
         return {};
-    const QString key = spelled.toLower();
+    const QString key = lower(spelled);
     const bool md = key.endsWith(u".md") || key.endsWith(u".markdown");
     // 1) the note at exactly that vault path.
     VaultPath hit = md ? lookupExact(key, spelled) : lookupExact(key + u".md"_s, spelled + u".md"_s);
@@ -248,8 +248,8 @@ VaultPath NameTable::resolveNote(const QString &target, TargetForm form) const
 
 VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) const
 {
-    const QString lower = nfc(target).toLower();
-    const QString ext = paths::extension(lower);
+    const QString lowered = lower(nfc(target));
+    const QString ext = paths::extension(lowered);
     const bool attachmentFirst = isAttachmentExtension(ext);
     // 1) the file at the vault root, 2) the file in the linking file's folder.
     if (const VaultPath hit = lookupPath(target, attachmentFirst); !hit.isEmpty())
@@ -260,8 +260,8 @@ VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) c
     }
     // 3) base name (shortest path, then alphabetical).
     const bool md = isMarkdownExtension(ext);
-    const QSet<VaultPath> *notes = lookup(m_noteNames, md ? paths::stripMarkdownExtension(lower) : lower);
-    const QSet<VaultPath> *files = md ? nullptr : lookup(m_fileNames, lower);
+    const QSet<VaultPath> *notes = lookup(m_noteNames, md ? paths::stripMarkdownExtension(lowered) : lowered);
+    const QSet<VaultPath> *files = md ? nullptr : lookup(m_fileNames, lowered);
     const VaultPath bestNote = notes ? pickBest(*notes) : VaultPath();
     const VaultPath bestFile = files ? pickBest(*files) : VaultPath();
     const VaultPath best =
@@ -275,7 +275,7 @@ VaultPath NameTable::resolveBare(const QString &target, const VaultPath &from) c
 VaultPath NameTable::lookupPath(const QString &path, bool attachmentFirst) const
 {
     const QString spelled = nfc(path);
-    const QString key = spelled.toLower();
+    const QString key = lower(spelled);
     if (key.endsWith(u".md") || key.endsWith(u".markdown"))
         return lookupExact(key, spelled);
     auto asNote = [&] {

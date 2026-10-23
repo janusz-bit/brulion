@@ -14,6 +14,7 @@
 #include "markdown/inline.h"
 #include "markdown/parse.h"
 #include "markdown/rename.h"
+#include "text/text.h"
 #include "util/paths.h"
 
 #include <algorithm>
@@ -109,6 +110,28 @@ struct RelocationPlan::Private {
     /// Every file before the move (notes, then attachments): what a query's `path:` matches. Only
     /// filled when some note has a ```query block.
     QList<VaultPath> allPaths;
+    /// The notes with a ```query block (VaultIndex::notesWithQueries()): only their filters are
+    /// looked for when the index's own content is planned.
+    QSet<VaultPath> queryNotes;
+    /// The notes carrying a tag of tagNames (also one written with a backslash for '/'): only they
+    /// are looked into for tags when the index's own content is planned.
+    QSet<VaultPath> taggedNotes;
+    /// allPaths by text::foldKey(), sorted: the files a `path:` prefix matches are one range
+    /// (built on the first `path:` filter).
+    mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedPaths;
+
+    const QList<std::pair<QString, VaultPath>> &pathsByFoldedKey() const
+    {
+        if (!foldedPaths) {
+            QList<std::pair<QString, VaultPath>> list;
+            list.reserve(allPaths.size());
+            for (const VaultPath &file : allPaths)
+                list.append({text::foldKey(file), file});
+            std::sort(list.begin(), list.end());
+            foldedPaths = std::move(list);
+        }
+        return *foldedPaths;
+    }
 
     /// The name a tag (`name`: tagName() of its key) is written with after the move — its page
     /// moved, or a moved page takes the name over —; "" when it keeps naming its page.
@@ -211,9 +234,13 @@ struct RelocationPlan::Private {
         const QString folded = text::foldKey(prefix);
         QString newPrefix;
         bool any = false;
-        for (const VaultPath &file : allPaths) {
-            if (!text::foldKey(file).startsWith(folded))
-                continue; // not matched (runQuery's pathMatches)
+        // The files matched (runQuery's pathMatches: the folded path starts with the folded prefix).
+        const QList<std::pair<QString, VaultPath>> &byKey = pathsByFoldedKey();
+        auto it = std::lower_bound(
+                byKey.cbegin(), byKey.cend(), folded,
+                [](const std::pair<QString, VaultPath> &e, const QString &key) { return e.first < key; });
+        for (; it != byKey.cend() && it->first.startsWith(folded); ++it) {
+            const VaultPath &file = it->second;
             const auto to = moved.constFind(file);
             if (to == moved.cend() || !file.startsWith(prefix, Qt::CaseInsensitive))
                 return {}; // a file that stays (or matched only without its diacritics)
@@ -280,8 +307,10 @@ struct RelocationPlan::Private {
         return target == written ? QString() : target;
     }
 
-    /// `parsed`: parseNote() of `content` when the caller has it (the index's own).
-    File planFile(const VaultPath &path, const QString &content, const ParsedNote *parsed = nullptr) const
+    /// `entry`: the index's record of the note when `content` is its content — its links with
+    /// their keys and resolutions (no parse, no lookup of before), and only a note of queryNotes
+    /// has ```query filters, only one of taggedNotes a tag to rewrite.
+    File planFile(const VaultPath &path, const QString &content, const Entry *entry = nullptr) const
     {
         File file;
         file.path = path;
@@ -289,34 +318,41 @@ struct RelocationPlan::Private {
         file.before = content;
         const bool movedSource = moved.contains(path);
         QList<markdown::LinkEdit> edits;
-        std::optional<ParsedNote> own;
-        if (!parsed)
-            own = markdown::parseNote(QString(), content);
-        const ParsedNote &note = parsed ? *parsed : *own;
-        for (const Link &link : note.links) {
-            if (link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed && link.kind != LinkKind::Markdown)
-                continue;
-            if (link.kind == LinkKind::Markdown && isExternalTarget(link.target))
-                continue;
-            if (link.target.trimmed().isEmpty())
-                continue; // [[#Heading]]: this note, wherever it is
-            if (!movedSource && !keys.contains(linkKey(link.target, TargetForm::Parsed)))
-                continue;
-            const VaultPath named = before.resolve(link.target, path, TargetForm::Parsed);
+        // A path-based link (`named`: the file it reaches before the move).
+        const auto planLink = [&](const Link &link, const VaultPath &named) {
             if (named.isEmpty())
-                continue; // a missing page stays missing
+                return; // a missing page stays missing
             const VaultPath wanted = moved.value(named, named);
             if (after.resolve(link.target, file.newPath, TargetForm::Parsed) == wanted)
-                continue;
+                return;
             const QString target = newTarget(link, named, wanted, file.newPath);
-            if (target.isEmpty())
-                continue;
-            edits.append({link.from, link.to, target});
+            if (!target.isEmpty())
+                edits.append({link.from, link.to, target});
+        };
+        if (entry) {
+            for (const PathLink &l : entry->links) {
+                if (l.key.isEmpty())
+                    continue; // [[#Heading]]: this note, wherever it is
+                if (movedSource || keys.contains(l.key))
+                    planLink(entry->note.links.at(l.link), l.target);
+            }
+        } else {
+            const ParsedNote note = markdown::parseNote(QString(), content);
+            for (const Link &link : note.links) {
+                if (link.kind != LinkKind::Wiki && link.kind != LinkKind::Embed && link.kind != LinkKind::Markdown)
+                    continue;
+                if (link.kind == LinkKind::Markdown && isExternalTarget(link.target))
+                    continue;
+                if (link.target.trimmed().isEmpty())
+                    continue; // [[#Heading]]: this note, wherever it is
+                if (movedSource || keys.contains(linkKey(link.target, TargetForm::Parsed)))
+                    planLink(link, before.resolve(link.target, path, TargetForm::Parsed));
+            }
         }
-        QString text = markdown::retargetLinks(content, edits);
+        QString text = markdown::retargetLinks(content, edits, entry ? &entry->note.links : nullptr);
         if (text != content)
             file.links = int(edits.size());
-        if (!tagNames.isEmpty()) {
+        if (!tagNames.isEmpty() && (!entry || taggedNotes.contains(path))) {
             const QString tagged = markdown::retargetTags(text, tagNames);
             if (tagged != text) {
                 for (const markdown::NoteTag &t : markdown::findNoteTags(text)) {
@@ -331,7 +367,12 @@ struct RelocationPlan::Private {
         // touched them).
         QList<QueryNameEdit> queryEdits;
         int queryTags = 0;
-        for (const QueryNameRef &q : findQueryNames(text)) {
+        QList<QueryNameRef> queryNames;
+        if (!entry)
+            queryNames = findQueryNames(text);
+        else if (queryNotes.contains(path))
+            queryNames = findQueryNames(text, text == content ? &entry->note : nullptr);
+        for (const QueryNameRef &q : queryNames) {
             const QString value = newQueryValue(q, path, file.newPath, movedSource);
             if (value.isEmpty() || value == q.value || formatQueryName(q, value).isEmpty())
                 continue;
@@ -490,13 +531,29 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
         for (auto n = it->cbegin(); n != it->cend(); ++n)
             sources.insert(n.key());
     }
+    // The notes retargetTags() changes: those with a tag whose key, read as it reads one (a
+    // backslash as '/'), is renamed.
+    if (!p->tagNames.isEmpty()) {
+        for (auto it = d->tagIndex.cbegin(); it != d->tagIndex.cend(); ++it) {
+            QString key = it.key();
+            key.replace(u'\\', u'/');
+            while (key.endsWith(u'/'))
+                key.chop(1);
+            if (!p->tagNames.contains(key))
+                continue;
+            for (auto n = it->cbegin(); n != it->cend(); ++n)
+                p->taggedNotes.insert(n.key());
+        }
+    }
     // The notes with ```query blocks: their filters may name a moved file or a renamed tag.
     const QList<VaultPath> &queryNotes = d->queryNotes();
     if (!queryNotes.isEmpty()) {
         p->allPaths = paths();
         p->allPaths.append(attachments());
-        for (const VaultPath &q : queryNotes)
+        for (const VaultPath &q : queryNotes) {
             sources.insert(q);
+            p->queryNotes.insert(q);
+        }
     }
 
     // The notes to look at: those with links filed under the keys, and the moved notes (their
@@ -517,7 +574,7 @@ RelocationPlan VaultIndex::planRelocation(const QList<FileMove> &moves) const
         const Private::Entry *e = d->entry(source);
         if (!e)
             continue;
-        RelocationPlan::File f = p->planFile(source, e->content, &e->note);
+        RelocationPlan::File f = p->planFile(source, e->content, e);
         if (f.after != f.before)
             plan.m_files.append(std::move(f));
     }

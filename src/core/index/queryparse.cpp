@@ -889,7 +889,9 @@ QStringView afterListMarker(QStringView line)
 QList<std::pair<qsizetype, qsizetype>> queryBodies(const QString &content, const ParsedNote *parsed = nullptr)
 {
     QList<std::pair<qsizetype, qsizetype>> out;
-    if (!content.contains(u"query", Qt::CaseInsensitive))
+    // Most notes have no fence at all: the (fast) case-sensitive search for one first, the
+    // case-insensitive search (slow: case folding per character) only then.
+    if ((!content.contains(u"```") && !content.contains(u"~~~")) || !content.contains(u"query", Qt::CaseInsensitive))
         return out;
     std::optional<ParsedNote> own;
     if (!parsed)
@@ -1031,10 +1033,10 @@ bool index_detail::hasQueryBlocks(const QString &content, const ParsedNote &note
     return !queryBodies(content, &note).isEmpty();
 }
 
-QList<QueryNameRef> findQueryNames(const QString &content)
+QList<QueryNameRef> findQueryNames(const QString &content, const ParsedNote *parsed)
 {
     QList<QueryNameRef> out;
-    for (const auto &[from, to] : queryBodies(content)) {
+    for (const auto &[from, to] : queryBodies(content, parsed)) {
         const QStringView body = QStringView(content).sliced(from, to - from);
         QList<Token> tokens;
         if (!tokenize(body, tokens)) {
