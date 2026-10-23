@@ -3,9 +3,11 @@
 // key strokes of Polish text, typing into a text field through the keyboard's way (shortcuts first)
 // and straight to the focused item, a window Shortcut reached only the keyboard's way, mouse
 // clicks, double clicks, long presses and drags, finger taps and long presses, touchpad scrolling
-// of a Flickable, the same gestures played from timers (play(): no nested event loop) and stopped
-// when the window goes away, and finding items (type names, labels, shown, on screen, topmost
-// first, scrolled into view).
+// of a Flickable, a finger scrolling content by exactly the distance asked and only where a
+// Flickable under it can move that way (the item a press reaches, canScroll(): at the end of a
+// page a finger's drag over a switch would tap it), the same gestures played from timers (play():
+// no nested event loop) and stopped when the window goes away, and finding items (type names,
+// labels, shown, on screen, topmost first, scrolled into view).
 #include "uidriver.h"
 
 #include <QElapsedTimer>

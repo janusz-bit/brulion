@@ -389,7 +389,9 @@ bool takesPresses(const QQuickItem *item)
 
 QQuickItem *pressTargetUnder(QQuickItem *item, QPointF scenePos)
 {
-    if (!item->isVisible() || !item->isEnabled() || item->opacity() <= 0.01)
+    // As Qt Quick delivers a press: visible, enabled items (opacity does not matter), in a
+    // clipping item only where it is, the children painted last first.
+    if (!item->isVisible() || !item->isEnabled())
         return nullptr;
     const QPointF local = item->mapFromScene(scenePos);
     if (item->clip() && !QRectF(0, 0, item->width(), item->height()).contains(local))

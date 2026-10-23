@@ -12,9 +12,9 @@
 // path); scroll, long press, double click and drag; a page with a conflict (in state, never
 // idle until the user decides); the MCP server's app tools (--app-control), a screenshot as an
 // image; quit, after which nothing listens any more. The settings switch turns it off, in a
-// window where the page fits and in a low one (a finger scrolling over the switch never taps it). Without a private
-// runtime folder the app still starts, with neither socket in the shared temp folder. The app's log must hold no QML
-// TypeError, ReferenceError or binding loop.
+// window where the page fits and in a low one (a finger scrolling over the switch never taps
+// it). Without a private runtime folder the app still starts, with neither socket in the shared
+// temp folder. The app's log must hold no QML TypeError, ReferenceError or binding loop.
 #include "controlclient.h"
 #include "controlprotocol.h"
 #include "singleinstance.h"

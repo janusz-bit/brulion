@@ -398,9 +398,9 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   commands that can change notes (click, type, key, command, capture, quit …) and a screenshot
   path (it could replace a picture of the notebook; without one the screenshot goes to the
   runtime folder).
-* Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3, `stale_handle`
-  and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a disabled command, the
-  documentation notebook for capture) 7, `failed` 1.
+* Exit codes of the app's errors: `bad_params` 2, `not_found`, `off_screen` and `timeout` 3,
+  `stale_handle` and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a
+  disabled command, the documentation notebook for capture) 7, `failed` 1.
 
 ### Protocol
 
@@ -423,7 +423,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `find` | `text`, `objectName`, `type`, `exact`, `visibleOnly` (true), `within` (a handle), `limit` (50) | `{items, total}` |
 | `click`, `doubleClick` | a target (`handle` \| `x`, `y` \| `text`, `objectName`, `type`, `exact`), `button`, `modifiers`, `device` | `{x, y, device, item?, windowActive}`; `off_screen` |
 | `longPress` | a target, `ms` (800), `device` | the same |
-| `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}` |
+| `drag` | `from`, `to` (target objects), `holdMs`, `button`, `modifiers`, `device` | `{from, to, device}`; `off_screen` with `param` |
 | `scroll` | a target (optional), `dx`, `dy`, `device` | the same as click and `scrolled: {dx, dy}`; with a finger `touched` |
 | `type` | `text` (at most 20000 characters) | `{keys, focusedItem}` |
 | `key` | `sequence`, `count` (at most 1000 keys in all) | `{keys, handled: [bool…], focusedItem}` |
