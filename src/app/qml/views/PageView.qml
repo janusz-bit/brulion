@@ -39,7 +39,8 @@ import Brulion
 // through the editor (BlockEditor.copyCurrentLink); the documentation notebook writes no block ids
 // (PageController.allowNewBlockIds).
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
-// dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
+// dialog), "menu" (the page menu), "selectText" (the "Zaznacz tekst" view), "unlinked" (the
+// unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
 // A picture takes "links" | "outline" | "calendar" and "text" (its text view).
 //
@@ -227,6 +228,9 @@ FocusScope {
             break
         case "menu":
             menuTimer.restart()
+            break
+        case "selectText":
+            editor.later(() => editor.openSelectText())
             break
         case "unlinked":
             refsSection.unlinkedOpen = true

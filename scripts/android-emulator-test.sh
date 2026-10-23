@@ -18,9 +18,16 @@
 # a last screenshot in the dark theme (the system bars' icons). Needs a DEBUGGABLE APK (Qt passes
 # app arguments and environment only to those):
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_BUILD_TYPE=Debug scripts/android-build.sh
+# With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
+# and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
+# stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
+# Kopiuj, Back; then "Zaznacz tekst" on the guide page: a long press selects a word with the
+# view's own handles (the system shows none for read-only text), a handle dragged, Kopiuj, Back.
+# Screenshots of each step (sel-*.png); the same debuggable APK.
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -57,14 +64,18 @@ fi
 
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
 KEYBOARD=0
+SELECTION=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
+  shift
+elif [[ ${1:-} == --selection ]]; then
+  SELECTION=1
   shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -297,6 +308,68 @@ if ((KEYBOARD)); then
   grep -E 'On-screen keyboard|BrulionIme|brulion.platform' "$OUT/keyboard-logcat.txt" >"$OUT/keyboard-summary.txt" || true
   info "Result"
   cat "$OUT/keyboard-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- selecting and copying with a finger (--selection) -------------------------------------------
+
+dp() { echo $(($1 * DENSITY / 160)); } # logical px -> physical px
+long_press() { adb shell input swipe "$1" "$2" "$1" "$2" 1400; } # <x> <y>
+
+if ((SELECTION)); then
+  info "Selection: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  app_shot sel-1-journal
+  # Today's first block (the sample notebook on a Pixel 6: a quarter down the screen).
+  long_press $((SCREEN_W * 24 / 100)) $((SCREEN_H * 25 / 100))
+  sleep 2
+  app_shot sel-2-long-press
+  check "a long press on a block's text brings up no keyboard (the selection mode)" ime_hidden
+  # The next block a few lines down: a tap extends the selection.
+  adb shell input tap $((SCREEN_W * 30 / 100)) $((SCREEN_H * 31 / 100))
+  sleep 2
+  app_shot sel-3-extended
+  check "a tap in the selection mode edits nothing (no keyboard)" ime_hidden
+  # Kopiuj: the docked tools' first button after "Zaznaczono …", above the navigation bar.
+  bottom=$(adb shell dumpsys window windows | sed -nE 's/.*mStableInsets=\[[0-9]+,[0-9]+\]\[[0-9]+,([0-9]+)\].*/\1/p' | head -n 1)
+  nav=${bottom:-$(dp 48)}
+  adb shell input tap "$(dp 160)" $((SCREEN_H - nav - $(dp 27)))
+  sleep 2
+  app_shot sel-4-copied
+  adb shell input keyevent 4
+  sleep 2
+  app_shot sel-5-back
+  check "the app is still running" running
+  # "Zaznacz tekst" on the guide page (route.open): a long press on a word of its first paragraph.
+  start_app '--demo --locale pl --route {"view":"page","path":"Witaj w Brulionie.md","open":"selectText"}'
+  app_shot sel-6-select-text
+  long_press $((SCREEN_W * 30 / 100)) $((SCREEN_H * 22 / 100))
+  sleep 2
+  app_shot sel-7-word
+  # The end handle (under the word's end) dragged down two lines.
+  adb shell input swipe $((SCREEN_W * 40 / 100)) $((SCREEN_H * 22 / 100 + $(dp 22))) \
+    $((SCREEN_W * 60 / 100)) $((SCREEN_H * 22 / 100 + $(dp 70))) 900
+  sleep 2
+  app_shot sel-8-handle
+  # Kopiuj: the bar's button at the top right.
+  adb shell input tap $((SCREEN_W - $(dp 60))) $(($(dp 24) + $(dp 30)))
+  sleep 2
+  app_shot sel-9-copied
+  adb shell input keyevent 4
+  sleep 2
+  app_shot sel-10-closed
+  adb logcat -d >"$OUT/selection-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selection-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/selection-logcat.txt'"
+  grep -E 'qml|Skopiowano|brulion' "$OUT/selection-logcat.txt" | tail -n 40 >"$OUT/selection-summary.txt" || true
+  info "Result"
+  cat "$OUT/selection-summary.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"
