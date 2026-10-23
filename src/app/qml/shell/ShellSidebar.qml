@@ -90,12 +90,15 @@ Rectangle {
         const step = Theme.touchUi ? 18 : 14
         return depth <= 4 ? depth * step : 4 * step + (depth - 4) * 8
     }
-    /// Show `path` in the tree: the Pages section and the folders above it open, the row
-    /// scrolled into view.
-    function reveal(path) {
+    /// Show `path` in the tree: the folders above it open, the row scrolled into view. A
+    /// collapsed "Strony" section is opened only when `force` ("Pokaż w drzewie", a new folder);
+    /// the reveal on every route change leaves it collapsed.
+    function reveal(path, force) {
         if (!path)
             return
         if (!pagesOpen) {
+            if (force !== true)
+                return
             pagesOpen = true
             AppSettings.setValue("ui/sidebar/pages", true)
         }
@@ -111,7 +114,7 @@ Rectangle {
     }
     function revealRoute() {
         if (currentPath !== "")
-            reveal(currentPath)
+            reveal(currentPath, false)
     }
     function copyLink(path) {
         const target = Workspace.linkTarget(path, "")
@@ -297,7 +300,11 @@ Rectangle {
             leftMargin: Theme.space1
             rightMargin: Theme.space1
             keyNavigationEnabled: true
-            reuseItems: true
+            // Off while "Strony" is collapsed, which destroys the pooled rows: rows pooled before
+            // the model went away (a folder moved out, rows scrolled off) were handed back after
+            // it returned with their old required properties — the tree showed folders that were
+            // gone instead of its rows.
+            reuseItems: sidebar.pagesOpen
             T.ScrollBar.vertical: BScrollBar {}
             /// The user scrolled down into the list (a flick or drag that did not end at the top).
             property bool userScrolled: false
@@ -453,6 +460,9 @@ Rectangle {
                     onExpandedToggled: (open) => {
                         sidebar.pagesOpen = open
                         AppSettings.setValue("ui/sidebar/pages", open)
+                        // Opened again: the open page shows (it was not revealed while collapsed).
+                        if (open && sidebar.revealCurrent)
+                            Qt.callLater(sidebar.revealRoute)
                     }
                     // A row dragged here goes to the notebook's root.
                     Rectangle {

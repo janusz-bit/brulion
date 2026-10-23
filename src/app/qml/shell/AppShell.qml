@@ -187,7 +187,8 @@ FocusScope {
             shell.toasts.show(text, { kind: "success", actionText: qsTr("Undo"), onAction: () => Workspace.movePath(moved, back) })
         return true
     }
-    /// "Pokaż w drzewie": the sidebar (the drawer on phones) shows `path`.
+    /// "Pokaż w drzewie": the sidebar (the drawer on phones) shows `path`, its "Strony" section
+    /// opened if it was collapsed.
     function revealInTree(path) {
         if (!path)
             return
@@ -195,13 +196,13 @@ FocusScope {
             drawer.open()
             const sidebar = drawerSidebar.item as ShellSidebar
             if (sidebar)
-                sidebar.reveal(path)
+                sidebar.reveal(path, true)
         } else {
             if (!sidebarVisible)
                 toggleSidebar()
             const sidebar = sidebarLoader.item as ShellSidebar
             if (sidebar)
-                sidebar.reveal(path)
+                sidebar.reveal(path, true)
         }
     }
     function openAbout() { about.open() }

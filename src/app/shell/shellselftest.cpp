@@ -1385,10 +1385,14 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
             QMetaObject::invokeMethod(model, "isExpanded", qReturnArg(open), folder);
         return open;
     };
-    const auto treeMenu = [&]() -> QObject * {
+    const auto sidebarItem = [&]() -> QQuickItem * {
         QQuickItem *sidebar = treeList();
         while (sidebar && !isA(sidebar, "ShellSidebar"))
             sidebar = sidebar->parentItem();
+        return sidebar;
+    };
+    const auto treeMenu = [&]() -> QObject * {
+        QQuickItem *sidebar = sidebarItem();
         return sidebar ? sidebar->findChild<QObject *>(u"sidebarContextMenu"_s) : nullptr;
     };
     const auto tap = [&](QQuickItem *item) {
@@ -1530,6 +1534,32 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
               "a click on a row still opens the page");
     }
     restore();
+
+    // ---- A collapsed "Strony" stays collapsed (the setting too) when another page opens;
+    //      "Pokaż w drzewie" opens it and shows the page.
+    openDrawer();
+    if (QQuickItem *sidebar = sidebarItem(); sidebar && (header = named(u"sidebarPagesHeader"_s))) {
+        if (sidebar->property("pagesOpen").toBool())
+            tapOrClick(window, pointIn(header, 0.15), touch);
+        check(waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
+                      && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "a tap on “Strony” collapses the section");
+        app->openPage(recipes);
+        settle(300);
+        check(!sidebar->property("pagesOpen").toBool() && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "a page opened leaves a collapsed “Strony” collapsed");
+        // (On desktops the rows of the folder removed above were pooled: opened again, the tree
+        // shows its own rows, not those.)
+        app->requestUiAction(u"revealInTree"_s);
+        check(waitFor([&] {
+                  QQuickItem *r = sidebar->property("pagesOpen").toBool() ? treeRow(recipes) : nullptr;
+                  return r && r->property("selected").toBool();
+              }) && app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
+              "“Pokaż w drzewie” opens the section and shows the page");
+    } else {
+        check(false, "the sidebar has its “Strony” header");
+    }
+    closeDrawer();
 
     // ---- A "/" typed into the page header's title is part of the title: the page stays in its
     //      folder ("TCP/IP" -> "Projekty/TCP IP.md"), the confirmation names the new title.

@@ -91,7 +91,8 @@ rename and move").
   with deleted ones. A tap opens or closes a folder and opens a page; the open page or daily
   note is revealed (its folders opened, scrolled into view) and highlighted on every route
   change — the "+" menu's "Pokazuj otwartą stronę" (`ui/sidebar/revealCurrent`, on by default)
-  turns that off. "Strony" counts pages without the daily notes.
+  turns that off; a collapsed "Strony" stays collapsed (revealed when opened again), only "Pokaż
+  w drzewie" opens it. "Strony" counts pages without the daily notes.
 * **Menus**: right-click, press-and-hold, the Menu key, and on touch screens a "⋯" button on
   every row (44 px; press-and-hold stays). A folder: Nowa strona tutaj, Nowy folder…, Pokaż
   strony folderu (All pages in it), Szukaj w folderze (search in it), Przenieś do…, Eksportuj
