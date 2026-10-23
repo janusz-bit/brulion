@@ -126,6 +126,9 @@ struct RelocationPlan::Private {
     /// allPaths by text::foldKey(), sorted: the files a `path:` prefix matches are one range
     /// (built on the first `path:` filter).
     mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedPaths;
+    /// The new paths of the moved files by text::foldKey() (-> their old paths), sorted (built on
+    /// the first `path:` filter that changes).
+    mutable std::optional<QList<std::pair<QString, VaultPath>>> foldedTargets;
 
     const QList<std::pair<QString, VaultPath>> &pathsByFoldedKey() const
     {
@@ -138,6 +141,34 @@ struct RelocationPlan::Private {
             foldedPaths = std::move(list);
         }
         return *foldedPaths;
+    }
+
+    const QList<std::pair<QString, VaultPath>> &targetsByFoldedKey() const
+    {
+        if (!foldedTargets) {
+            QList<std::pair<QString, VaultPath>> list;
+            list.reserve(moved.size());
+            for (auto it = moved.cbegin(); it != moved.cend(); ++it)
+                list.append({text::foldKey(it.value()), it.key()});
+            std::sort(list.begin(), list.end());
+            foldedTargets = std::move(list);
+        }
+        return *foldedTargets;
+    }
+
+    /// The entries of `byKey` (sorted by folded key) whose key starts with `folded`: what a
+    /// `path:` prefix matches (runQuery's pathMatches).
+    static std::pair<QList<std::pair<QString, VaultPath>>::const_iterator,
+                     QList<std::pair<QString, VaultPath>>::const_iterator>
+    prefixRange(const QList<std::pair<QString, VaultPath>> &byKey, const QString &folded)
+    {
+        const auto begin = std::lower_bound(
+                byKey.cbegin(), byKey.cend(), folded,
+                [](const std::pair<QString, VaultPath> &e, const QString &key) { return e.first < key; });
+        auto end = begin;
+        while (end != byKey.cend() && end->first.startsWith(folded))
+            ++end;
+        return {begin, end};
     }
 
     /// The name a tag (`name`: tagName() of its key) is written with after the move — its page
@@ -227,7 +258,9 @@ struct RelocationPlan::Private {
 
     /// A `path:` prefix every file of which moved by one folder change ("Projekty/" ->
     /// "Archiwum/Projekty/", "Projekty/Dom" -> "Archiwum/Dom" for the one page it matched): the new
-    /// prefix; "" when a matched file stays, the files went different ways or nothing matched.
+    /// prefix; "" when a matched file stays, the files went different ways, nothing matched, or
+    /// the new prefix would match other files too (a page moved into a folder with other pages:
+    /// `path:Skrzynka/` must not become `path:Archiwum/`).
     QString newPathValue(const QString &value) const
     {
         qsizetype skip = 0; // "./" and "/" as written stay
@@ -235,18 +268,16 @@ struct RelocationPlan::Private {
             skip += 2;
         while (value.sliced(skip).startsWith(u'/'))
             ++skip;
-        const QString prefix = value.mid(skip);
+        // Compared with the vault's (NFC) paths: a note written elsewhere may hold NFD.
+        const QString prefix = nfc(value.sliced(skip));
         if (prefix.isEmpty() || prefix.contains(u'*'))
             return {};
         const QString folded = text::foldKey(prefix);
         QString newPrefix;
-        bool any = false;
+        QSet<VaultPath> matched;
         // The files matched (runQuery's pathMatches: the folded path starts with the folded prefix).
-        const QList<std::pair<QString, VaultPath>> &byKey = pathsByFoldedKey();
-        auto it = std::lower_bound(
-                byKey.cbegin(), byKey.cend(), folded,
-                [](const std::pair<QString, VaultPath> &e, const QString &key) { return e.first < key; });
-        for (; it != byKey.cend() && it->first.startsWith(folded); ++it) {
+        const auto [first, last] = prefixRange(pathsByFoldedKey(), folded);
+        for (auto it = first; it != last; ++it) {
             const VaultPath &file = it->second;
             const auto to = moved.constFind(file);
             if (to == moved.cend() || !file.startsWith(prefix, Qt::CaseInsensitive))
@@ -255,13 +286,26 @@ struct RelocationPlan::Private {
             if (!to->endsWith(rest))
                 return {};
             const QString candidate = to->left(to->size() - rest.size());
-            if (any && candidate != newPrefix)
+            if (!matched.isEmpty() && candidate != newPrefix)
                 return {};
             newPrefix = candidate;
-            any = true;
+            matched.insert(file);
         }
-        if (!any || newPrefix.isEmpty() || newPrefix == prefix)
+        if (matched.isEmpty() || newPrefix.isEmpty() || newPrefix == prefix)
             return {};
+        // After the move the new prefix matches exactly those files: none that stays where it
+        // matches, none moved there from elsewhere.
+        const QString newFolded = text::foldKey(newPrefix);
+        const auto [staysFirst, staysLast] = prefixRange(pathsByFoldedKey(), newFolded);
+        for (auto it = staysFirst; it != staysLast; ++it) {
+            if (!moved.contains(it->second))
+                return {};
+        }
+        const auto [movedFirst, movedLast] = prefixRange(targetsByFoldedKey(), newFolded);
+        for (auto it = movedFirst; it != movedLast; ++it) {
+            if (!matched.contains(it->second))
+                return {};
+        }
         return value.left(skip) + newPrefix;
     }
 

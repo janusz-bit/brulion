@@ -363,6 +363,18 @@ private Q_SLOTS:
                 << QStringList{u"Zwierzęta/Żółw.md=- x"_s} << u"Zwierzęta/Żółw.md"_s << u"Gady/Żółw.md"_s
                 << u"ref:Zwierzęta/Żółw path:Zwierzęta/Żółw page:Żółw"_s << u"ref:Gady/Żółw path:Gady/Żółw page:Żółw"_s
                 << 2 << 0 << 2;
+        // The new prefix would match more than the files the old one did: the query would widen.
+        QTest::newRow("a page moved into a folder with other pages: its folder prefix stays")
+                << QStringList{u"Skrzynka/Dom.md=- x"_s, u"Archiwum/Stare.md=- y"_s} << u"Skrzynka/Dom.md"_s
+                << u"Archiwum/Dom.md"_s << u"path:Skrzynka/ path:Skrzynka/Dom"_s
+                << u"path:Skrzynka/ path:Archiwum/Dom"_s << 1 << 0 << 1;
+        QTest::newRow("a page renamed to the start of another page's name: path: stays")
+                << QStringList{u"Dom.md=- x"_s, u"Mieszkanie stare.md=- y"_s} << u"Dom.md"_s << u"Mieszkanie.md"_s
+                << u"path:Dom"_s << QString() << 0 << 0 << 0;
+        // A note written on another system (NFD) names the folder as runQuery reads it.
+        QTest::newRow("a prefix written in NFD")
+                << QStringList{u"Zwierzęta/Żółw.md=- x"_s, u"Zwierzęta/Łoś.md=- y"_s} << u"Zwierzęta/"_s << u"Gady/"_s
+                << u"path:Zwierzęta/"_s.normalized(QString::NormalizationForm_D) << u"path:Gady/"_s << 1 << 0 << 1;
     }
     void queriesFollow()
     {
@@ -402,6 +414,22 @@ private Q_SLOTS:
         if (!expected.isEmpty())
             QCOMPARE(plan.rewrite(u"Q.md"_s, u"```query\n"_s + query + u"\n```"_s),
                      u"```query\n"_s + expected + u"\n```"_s);
+    }
+
+    // A `path:` prefix keeps its meaning only when the new one matches exactly the files the old
+    // one did: not one that was moved there from elsewhere.
+    void pathPrefixDoesNotWiden()
+    {
+        VaultIndex index;
+        const QString note = u"```query\npath:A/\n```\n"_s;
+        build(index, {{u"A/x.md"_s, u"- x\n"_s}, {u"C/y.md"_s, u"- y\n"_s}, {u"Q.md"_s, note}});
+        const RelocationPlan both = index.planRelocation({{u"A/x.md"_s, u"B/x.md"_s}, {u"C/y.md"_s, u"B/y.md"_s}});
+        QCOMPARE(planned(both, u"Q.md"_s), QString());
+        QCOMPARE(both.queries(), 0);
+        QCOMPARE(both.rewrite(u"Q.md"_s, note), note);
+        // Alone, x moves as the whole of A/.
+        const RelocationPlan one = index.planRelocation({{u"A/x.md"_s, u"B/x.md"_s}});
+        QCOMPARE(planned(one, u"Q.md"_s), u"```query\npath:B/\n```\n"_s);
     }
 
     // A rename of a page with a duplicate name elsewhere: only what named this page changes.

@@ -120,7 +120,9 @@ naming the same file; only its target changes (`|alias`, `#Heading`, `#^id`, `!`
   tag as tags are (sub-tags stay); `ref:` / `[[…]]` like a link written in the query's note;
   `page:` (no `*`, not `this`) when it named the moved page and no longer matches it; `path:` (no
   `*`) when every file it matched moved by one folder change (`path:Projekty/` →
-  `path:Archiwum/Projekty/`; a prefix that also matches a file that stays is left). The new value
+  `path:Archiwum/Projekty/`; a prefix that also matches a file that stays is left, and so is one
+  whose new prefix would match other files too — a page moved into a folder with other pages
+  keeps `path:Skrzynka/`). The new value
   keeps the written form (`[[…]]`, quotes) or goes into `[[…]]` when it holds a blank or a comma
   (`tag:[[Mój dom]]`). They count as links (`ref:`, `page:`, `path:`) and tags (`tag:`) in the
   rename and move dialogs.

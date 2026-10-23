@@ -157,9 +157,10 @@ struct FileMove {
 /// (VaultIndex::linkTarget(): [[Projekty/Dom]]); tags the same way (VaultIndex::tagTarget():
 /// #Projekty/Dom). The filters of ```query blocks that name them follow too (findQueryNames()):
 /// `tag:` / `#tag` exactly that tag (not its sub-tags) as the tags, `ref:` / `[[…]]` and `page:` a
-/// moved page as links, `path:` a prefix whose every file moved by one folder change. Links that
-/// could not be kept (no written form reaches the file) stay as they are. A plan stays valid after
-/// the index changed: it keeps the lookup tables of before and after the move.
+/// moved page as links, `path:` a prefix whose every file moved by one folder change (and whose
+/// new prefix matches no other file). Links that could not be kept (no written form reaches the
+/// file) stay as they are. A plan stays valid after the index changed: it keeps the lookup tables
+/// of before and after the move.
 class RelocationPlan {
 public:
     struct File {
