@@ -30,7 +30,7 @@ BDialog {
     }
 
     title: folderMode ? qsTr("New folder") : qsTr("New page")
-    subtitle: folderMode && folder !== "" ? qsTr("In %1").arg(folder) : ""
+    subtitle: !folderMode ? "" : folder !== "" ? qsTr("In %1").arg(folder) : qsTr("In the notebook root")
     iconName: folderMode ? "folder-plus" : "square-pen"
     acceptText: qsTr("Create")
     acceptEnabled: nameField.text.replace(/[\/\\\s]/g, "") !== ""
