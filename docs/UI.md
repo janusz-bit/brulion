@@ -514,8 +514,10 @@ items). Any characters across blocks are selected in the read-only **"Zaznacz te
   "Cofnij": the editor's `message(text, kind, action)` carries `{text, run}`
   (`BlockEditor.undoAction()`), the page views pass it to `AppController.toastAction` and the
   shell's toast shows the button; it runs `PageController.undoStep(token)`, which undoes that edit
-  only while it is still the page's last step (`undoToken()` taken right after it) — after other
-  edits, on another page or once undone it says "Nie cofnięto: strona zmieniła się od tego czasu".
+  only while it is still the page's last step (`undoToken()` taken right after it names the
+  history, the position and the step there) — after other edits (one made in its place after
+  Ctrl+Z too), on another page or once undone it says "Nie cofnięto: strona zmieniła się od tego
+  czasu".
   A toast's button takes no focus when pressed: the editor keeps the keys.
 * **Acting on it**: Tab / Shift+Tab, Alt+↑/↓, Ctrl+Enter, Ctrl+Shift+Enter (the status menu) and
   the toolbar's Status zadania act on the range from one end to the other; a block selected alone

@@ -326,6 +326,21 @@ private Q_SLOTS:
         QVERIFY(f.page.undoStep(token));
         QCOMPARE(f.text(), content);
 
+        // Undone with Ctrl+Z, then another edit in its place: the toast's Cofnij undoes nothing.
+        f.page.selectRange(0, 2);
+        f.page.deleteSelection();
+        const QString replaced = f.page.undoToken();
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+        f.page.setEditText(3, u"łódka"_s);
+        const QString retyped = f.text();
+        QVERIFY(retyped != content);
+        QVERIFY(f.page.undoToken() != replaced);
+        QVERIFY(!f.page.undoStep(replaced));
+        QCOMPARE(f.text(), retyped);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+
         // Another edit after it: the toast's Cofnij undoes nothing (not even that edit).
         f.page.selectRange(0, 2);
         f.page.deleteSelection();

@@ -103,8 +103,13 @@ public:
     void setMergeable(bool mergeable) { m_mergeable = mergeable; }
     /// Characters held by the step.
     qsizetype size() const { return m_delta.size(); }
+    /// Unique among the steps of the app's run (PageController::undoToken(): an edit undone and
+    /// replaced by another at the same place in the history is another step).
+    quint64 serial() const { return m_serial; }
 
 private:
+    static inline quint64 s_serials = 0;
+    const quint64 m_serial = ++s_serials;
     PageController *m_controller;
     TextDelta m_delta;
     PageController::Focus m_focusBefore;
@@ -3055,7 +3060,11 @@ void PageController::undo()
 
 QString PageController::undoToken() const
 {
-    return u"%1:%2"_s.arg(m_undoGeneration).arg(m_undo->index());
+    // The history's generation, the position in it and the step there: after an undo, a new
+    // edit takes the same position but is another step.
+    const int index = m_undo->index();
+    const auto *last = index > 0 ? static_cast<const EditCommand *>(m_undo->command(index - 1)) : nullptr;
+    return u"%1:%2:%3"_s.arg(m_undoGeneration).arg(index).arg(last ? last->serial() : 0);
 }
 
 bool PageController::undoStep(const QString &token)
