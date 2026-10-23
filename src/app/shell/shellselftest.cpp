@@ -11,6 +11,7 @@
 #include "log/logger.h"
 #include "log/redact.h"
 #include "sync/synchistory.h"
+#include "util/paths.h"
 #include "vault/vault.h"
 
 #include <QBuffer>
@@ -1418,6 +1419,45 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
             closeMenus(window);
         }
         app->setSidePanelVisible(false);
+    }
+    // The journal stream: the palette copies from the day being written in (today); its page link
+    // writes nothing into the day.
+    app->goHome();
+    const QString today = ws->journalPath(app->today(0));
+    QObject *day = nullptr;
+    std::function<QQuickItem *(QQuickItem *)> dayEditorIn = [&](QQuickItem *item) -> QQuickItem * {
+        const auto *c = item->objectName() == u"journalDayEditor" ? item->property("controller").value<QObject *>() : nullptr;
+        if (c && c->property("path").toString() == today && c->property("loaded").toBool())
+            return item;
+        const QList<QQuickItem *> children = item->childItems();
+        for (QQuickItem *child : children) {
+            if (QQuickItem *found = dayEditorIn(child))
+                return found;
+        }
+        return nullptr;
+    };
+    waitFor([&] {
+        QQuickItem *dayEditor = dayEditorIn(window->contentItem());
+        day = dayEditor ? dayEditor->property("controller").value<QObject *>() : nullptr;
+        return day != nullptr;
+    });
+    check(day != nullptr, "today's journal day is shown");
+    if (day) {
+        const QString before = ws->readFile(today);
+        QMetaObject::invokeMethod(day, "startEditing", 0, -1);
+        waitFor([&] { return day->property("editingRow").toInt() == 0; });
+        if (QClipboard *clipboard = QGuiApplication::clipboard())
+            clipboard->clear();
+        check(app->commands()->run(u"page.copyLink"_s)
+                      && waitFor([&] {
+                             return QGuiApplication::clipboard()
+                                    && QGuiApplication::clipboard()->text() == u"[["_s + paths::pageTitle(today) + u"]]"_s;
+                         }),
+              "in the journal the palette's “Copy link to page” copies the day's link by its file name");
+        QMetaObject::invokeMethod(day, "stopEditing");
+        bool saved = false;
+        QMetaObject::invokeMethod(day, "save", qReturnArg(saved));
+        check(ws->readFile(today) == before, "copying the day's link writes nothing");
     }
     QObject::disconnect(toasts);
 }
