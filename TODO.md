@@ -39,6 +39,9 @@ kolejki to, co ma być zrobione, w wybranej kolejności.
 * **Synchronizacja Nextcloud**: zmiana nazwy folderu zrobiona na serwerze dociera do innych
   urządzeń jako pobranie i kosz, więc historia wersji, ulubione i zwinięcia nie idą za stroną.
 * **brulion-cli po polsku** — komunikaty wiersza poleceń mają dziś tylko wersję angielską.
+* **Menu statusu na wyniku zapytania znika**, gdy wyniki odświeżą się z zewnątrz (synchronizacja,
+  zmiana w innej notatce), bo wiersze są tworzone od nowa — nic złego się nie zapisuje; można
+  wstrzymać odświeżenie, póki menu jest otwarte.
 * **Stare błędy do sprawdzenia** (mogły zniknąć przy innych zmianach): obliczenie w komórce
   tabeli nieodświeżane po zmianie, kod `` `…` `` z `=` w nowej linii nieprzerysowany, zły wiersz po
   cofnięciu wstawienia na początku strony, „/” zaraz po tokenie przypomnienia, wielkie litery
