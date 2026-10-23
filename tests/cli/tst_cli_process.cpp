@@ -608,6 +608,12 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"hits"_s).toArray().size(), 1);
         r = run(dir, {u"search"_s, u"x"_s, u"--limit"_s, u"dużo"_s});
         QCOMPARE(r.code, 2);
+        // Under a block: its last child, indented like its children.
+        writeFile(dir + u"/Lista.md"_s, "- rodzic ^p1\n  - dziecko\n- inny\n");
+        r = run(dir, {u"page"_s, u"append"_s, u"Lista"_s, u"nowe"_s, u"--under"_s, u"^p1"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/Lista.md"_s), "- rodzic ^p1\n  - dziecko\n  - nowe\n- inny\n"_ba);
+        QVERIFY(r.result().value(u"ref"_s).toString().startsWith(u"Lista.md#L3@"_s));
     }
 
     void polishArgvAndStdin()

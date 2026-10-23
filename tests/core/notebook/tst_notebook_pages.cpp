@@ -336,6 +336,10 @@ private Q_SLOTS:
                  u"missing:Brak"_s);
         QCOMPARE(problemString(renamePage(*env->vault, env->index.get(), u"A/a.md"_s, u"   "_s, false).problem),
                  u"noName"_s);
+        // A rename that changes only the letter case is fine (one file on case-insensitive storage).
+        const Relocation caseOnly = renamePage(*env->vault, env->index.get(), u"A/a.md"_s, u"A"_s, false);
+        QCOMPARE(caseOnly.path, u"A/A.md"_s);
+        QVERIFY(QFile::exists(env->root + u"/A/A.md"_s));
         // Without a "/" moving, the name is one folder name.
         QCOMPARE(renameFolder(*env->vault, env->index.get(), u"A"_s, u"Ok/node_modules"_s, false).path,
                  u"Ok node_modules"_s);
