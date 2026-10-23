@@ -78,10 +78,29 @@ Window {
         x: 220; y: 100; width: 170; height: 150
         clip: true
         contentHeight: 2000
+        contentWidth: 400 // wider rows, but it flicks only up and down
+        flickableDirection: Flickable.VerticalFlick
         Column {
             Repeater {
                 model: 50
                 Text { required property int index; height: 40; text: "Wiersz " + index }
+            }
+            // Beyond the view's width: no flicking sideways reaches it.
+            Text { x: 230; height: 40; text: "Poza zasięgiem" }
+        }
+    }
+    // A row of tools wider than the window, scrolled sideways (the phone's editing toolbar).
+    Flickable {
+        id: tools; objectName: "tools"
+        x: 10; y: 255; width: 200; height: 40
+        clip: true
+        contentWidth: toolRow.width
+        flickableDirection: Flickable.HorizontalFlick
+        Row {
+            id: toolRow
+            Repeater {
+                model: 30
+                Text { required property int index; width: 44; height: 40; text: "Narzędzie " + index }
             }
         }
     }
@@ -381,6 +400,29 @@ private Q_SLOTS:
         QCOMPARE(ud::enclosingFlickable(far), flick);
         QVERIFY(ud::scrollIntoView(m_window, far));
         QVERIFY(ud::onScreen(m_window, far));
+        // A flickable that only flicks up and down is never moved sideways, even for an item
+        // beyond its width (a user could not scroll to it either).
+        QQuickItem *beyond = nullptr;
+        for (QQuickItem *item : ud::allItems(flick)) {
+            if (ud::labelOf(item) == u"Poza zasięgiem")
+                beyond = item;
+        }
+        QVERIFY(beyond);
+        QVERIFY(!ud::scrollIntoView(m_window, beyond));
+        QCOMPARE(flick->property("contentX").toReal(), 0.0);
+        // A tool far to the right of a row that scrolls sideways (remote control: `app click` on
+        // the phone toolbar's "Więcej" clicked beside the window and said it had clicked).
+        QQuickItem *tools = named(u"tools"_s);
+        QQuickItem *tool = nullptr;
+        for (QQuickItem *item : ud::allItems(tools)) {
+            if (ud::labelOf(item) == u"Narzędzie 25")
+                tool = item;
+        }
+        QVERIFY(tool);
+        QVERIFY(!ud::onScreen(m_window, tool));
+        QVERIFY(ud::scrollIntoView(m_window, tool));
+        QVERIFY(ud::onScreen(m_window, tool));
+        QCOMPARE(tools->property("contentY").toReal(), 0.0);
     }
 };
 

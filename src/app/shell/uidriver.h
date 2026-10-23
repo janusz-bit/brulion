@@ -89,8 +89,9 @@ int openMenus(QQuickWindow *window);
 void closeMenus(QQuickWindow *window);
 /// The popups shown in the window (QQuickPopup objects: drawer, dialogs, menus, the palette).
 QList<QObject *> openPopups(QQuickWindow *window);
-/// Scroll the nearest flickables around `item` until it is on screen; `afterEach` runs after each
-/// flickable moved (the journey lets it settle). True when it is on screen afterwards.
+/// Scroll the nearest flickables around `item` until it is on screen (down / up, and sideways when
+/// a flickable is wider than its view); `afterEach` runs after each flickable moved (the journey
+/// lets it settle). True when it is on screen afterwards.
 bool scrollIntoView(QQuickWindow *window, QQuickItem *item, const std::function<void()> &afterEach = {});
 
 // ---- Input ------------------------------------------------------------------------------------
