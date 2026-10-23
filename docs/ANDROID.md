@@ -624,6 +624,13 @@ Zmierzone 2026-10-17 na laptopie x86_64 (16 rdzeni):
 
 ## Dla programistów
 
+Sterowania działającą aplikacją przez agentów AI (`brulion --remote-control`, `brulion-cli app …`,
+docs/CLI.md „Remote control”) na Androidzie nie ma. Aplikację na telefonie albo emulatorze
+prowadzi się narzędziami Androida: APK debuggable przyjmuje opcje wiersza poleceń przez
+`adb shell am start -n io.github.januszbit.brulion/.android.BrulionActivity --es
+applicationArguments '…'` (docs/UI.md, wiersz `--scroll-probe`), `adb shell input tap|swipe|text`
+klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ekranu.
+
 ### Pliki
 
 | Ścieżka | Zawartość |

@@ -126,8 +126,9 @@
   „Rozdział 10”), a „Wszystkie strony” przeglądasz folder po folderze.
 * **Wiersz poleceń i agenci AI.** `brulion-cli` dopisuje do dziennika, dodaje zadania
   i przypomnienia, szuka i przenosi strony z terminala albo skryptu — dokładnie tak jak
-  aplikacja — a `brulion-cli mcp` udostępnia to samo agentom AI (MCP). Więcej niżej
-  i w [docs/CLI.md](docs/CLI.md).
+  aplikacja — a `brulion-cli mcp` udostępnia to samo agentom AI (MCP). Na komputerze agent może
+  też — gdy mu na to pozwolisz w ustawieniach — sterować działającą aplikacją: zobaczyć, co
+  pokazuje, kliknąć, pisać i zrobić zrzut ekranu. Więcej niżej i w [docs/CLI.md](docs/CLI.md).
 * **Kompatybilność.** Składnia zadań zgodna z wtyczką Obsidian Tasks, właściwości `klucz::
   wartość` jak w Logseq/Dataview — szczegóły w [docs/SYNTAX.md](docs/SYNTAX.md).
 * **Historia wersji i kosz.** Zanim notatka zostanie nadpisana, jej poprzednia wersja trafia
@@ -223,7 +224,11 @@ wymagają `--allow-destructive`, a usunięte strony trafiają do kosza.
 np. Raspberry Pi, pracuje na folderze notatek udostępnionym przez Syncthing albo klienta Nextcloud;
 na serwer wystarczy lekki pakiet `nix build github:janusz-bit/brulion#brulion-cli`. Treść notatek
 to dla agenta dane, nie polecenia. `brulion-cli app open <strona>` pokazuje stronę w działającej
-aplikacji. Szczegóły: [docs/CLI.md](docs/CLI.md), konfiguracja Hermesa:
+aplikacji. **Sterowanie aplikacją** (domyślnie wyłączone: *Ustawienia → Aplikacja → Dla
+programistów* albo `brulion --remote-control`): `brulion-cli app state | find | click | type | key
+| wait | screenshot …` i narzędzia `brulion-cli mcp --app-control` — dopóki jest włączone, każdy
+program Twojego konta może sterować oknem i czytać pokazywane notatki. Szczegóły:
+[docs/CLI.md](docs/CLI.md#remote-control), konfiguracja Hermesa:
 [docs/NIXOS.md](docs/NIXOS.md#agent-ai-hermes-i-wiersz-poleceń), poradnik dla agentów:
 [packaging/agent/brulion/SKILL.md](packaging/agent/brulion/SKILL.md).
 
@@ -372,7 +377,10 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
   stable exit codes, every change in the version history, destructive commands behind
   `--allow-destructive`), and `brulion-cli mcp` serves the same commands as MCP tools; see
-  [docs/CLI.md](docs/CLI.md).
+  [docs/CLI.md](docs/CLI.md). With remote control allowed (off by default: Settings → Application
+  → For developers, or `brulion --remote-control`), agents can also drive the running desktop
+  app — its state, clicks, typing, shortcuts, screenshots (`brulion-cli app …`,
+  `brulion-cli mcp --app-control`).
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
