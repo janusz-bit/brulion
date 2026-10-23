@@ -35,13 +35,34 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 | Ctrl+. | zwiń / rozwiń |
 | Ctrl+Shift+C | skopiuj odwołanie do bloku `((…))` |
 | Ctrl+Z, Ctrl+Y | cofnij / ponów |
-| Ctrl+V | wklejenie obrazu lub plików jako załączników |
+| Ctrl+C / Ctrl+X | kopiuj / wytnij zaznaczony tekst bloku (dokładnie, z twardymi spacjami) |
+| Ctrl+V | wklej: Markdown z kilkoma blokami staje się blokami, tekst ze strony WWW przychodzi z listami i nagłówkami; obraz lub pliki jako załączniki |
+| Ctrl+A | zaznacz tekst bloku; drugi raz: wszystkie bloki strony |
+| Shift+↑ / Shift+↓ | zaznacz tekst; na pierwszej / ostatniej linii, gdy zaznaczenie dojdzie do brzegu bloku: zaznacz ten blok i poprzedni / następny |
 | Esc | zamknij podpowiedzi, potem zakończ edycję i zaznacz blok |
 | / | menu poleceń |
 
-Zaznaczony blok (po Esc): Enter edytuje, Backspace lub Delete usuwa, strzałki przechodzą dalej, Tab, Alt+strzałki, Ctrl+Enter, Ctrl+Shift+Enter i Ctrl+Shift+C działają jak podczas edycji.
+## Zaznaczone bloki
+Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu myszą z bloku na blok zaznaczone są całe bloki razem z dziećmi (także zwiniętymi). Zaznaczenie widać jako jeden pasek.
 
-Prawy przycisk myszy na bloku otwiera menu bloku (Kopiuj odnośnik, wcięcia, przenoszenie, usuwanie). W przeglądarce Ctrl+Shift+C może otwierać narzędzia przeglądarki — wtedy odwołanie skopiujesz z menu bloku albo z palety poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”). Więcej: [[Linki i odnośniki zwrotne#Kopiowanie odnośnika do bloku lub nagłówka|Kopiowanie odnośnika]].
+| Skrót | Działanie |
+|---|---|
+| Shift+↑ / Shift+↓ | powiększ albo zmniejsz zaznaczenie |
+| Ctrl+A | zaznacz wszystkie bloki |
+| Ctrl+C | kopiuj (Markdown; w poczcie i edytorach dokumentów wkleja się sformatowane) |
+| Ctrl+X | wytnij (kopiuj i usuń jednym krokiem cofania) |
+| Ctrl+V | zastąp zaznaczone bloki tym, co jest w schowku |
+| Delete / Backspace | usuń zaznaczone bloki (Ctrl+Z przywraca je zaznaczone) |
+| Tab / Shift+Tab | wcięcie / wysunięcie wszystkich (wcięcie tylko, gdy da się wciąć każdy) |
+| Alt+↑ / Alt+↓ | przeniesienie wszystkich razem |
+| Ctrl+Enter | następny status zadania dla wszystkich |
+| Enter | edytuj blok |
+| ↑ / ↓ | zaznacz sam poprzedni / następny blok |
+| Esc | odznacz |
+
+Gdy zaznaczone są co najmniej dwa bloki, u góry pojawia się pasek: Kopiuj, Wytnij, Usuń, Zaznacz wszystko i Więcej (Kopiuj jako tekst — zwykły tekst z punktorami, wcięcia, przenoszenie, status zadania, Zaznacz tekst). Fragmenty kilku akapitów zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej* ⋮, menu strony, Ctrl+K → „Zaznacz tekst”). Więcej: [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
+
+Prawy przycisk myszy na bloku otwiera menu bloku (Kopiuj, Wytnij, Kopiuj jako tekst, Zaznacz, Kopiuj odnośnik, wcięcia, przenoszenie, usuwanie) — na bloku z zaznaczenia działa na całe zaznaczenie. Prawy przycisk w edytowanym tekście: Wytnij, Kopiuj, Wklej, Zaznacz wszystko. W przeglądarce Ctrl+Shift+C może otwierać narzędzia przeglądarki — wtedy odwołanie skopiujesz z menu bloku albo z palety poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”). Więcej: [[Linki i odnośniki zwrotne#Kopiowanie odnośnika do bloku lub nagłówka|Kopiowanie odnośnika]].
 
 Menu statusu zadania otwiera też prawy przycisk myszy na polu wyboru (na telefonie: przytrzymanie). Więcej: [[Zadania|Zadania]].
 

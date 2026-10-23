@@ -49,7 +49,8 @@ components — no Material/Fusion look, so all targets look identical.
   **Importuj notatki** under the navigation (the import tab of `ImportExportView`).
 * **Więcej menu** (top bar ⋮): on a page or daily note — Dodaj do ulubionych / Usuń z
   ulubionych, Zmień nazwę… (F2, pages only), Przenieś do… (pages only), Pokaż w drzewie (the
-  sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Przełącz
+  sidebar, the drawer on phones), Historia strony, Źródło Markdown (Ctrl+E), Zaznacz tekst (the
+  page or day as one text, "Selecting and copying"), Przełącz
   tryb notatki, Otwórz w panelu bocznym (wide only), Przenieś do kosza — on a picture attachment
   Źródło Markdown is the picture bar's Pokaż jako tekst / Pokaż obraz and the note mode is not
   offered (nor in the palette: a picture is no note); always — Nowa strona (Ctrl+N), Paleta
@@ -72,7 +73,7 @@ components — no Material/Fusion look, so all targets look identical.
 * Shell popups: command palette (`BCommandPalette` over `CommandModel`: navigation, journals,
   new page, Nowy folder…, Przenieś do…, Pokaż w drzewie, capture, theme, language, sync, panels,
   settings, about; the editor's commands —
-  Markdown source, note mode, "Kopiuj link do strony", "Kopiuj odwołanie do bloku", "Kopiuj link
+  Markdown source, note mode, "Zaznacz tekst", "Kopiuj link do strony", "Kopiuj odwołanie do bloku", "Kopiuj link
   do bloku", "Kopiuj link do nagłówka": the current block is the one being edited (a table whose
   cell is edited too; a cell left for the palette leaves its table selected), else the selected
   one, the heading that of its section; nothing current: a toast "Najpierw zaznacz blok lub umieść
@@ -178,11 +179,13 @@ everything near the bottom, the same way on Android, in the browser and with a s
   `BlockEditor.toolbarMode`: `block`, `cell` (a table cell — Cofnij, Ponów, Następna komórka,
   Ukryj klawiaturę; `BlockEditor.editingTable`; after Cofnij / Ponów the same cell goes on being
   edited, and every cell tool first commits the word the keyboard is still composing),
-  `source` (source mode — `[[`, `#`, `/`, the source's own Cofnij / Ponów, Ukryj klawiaturę).
+  `source` (source mode — `[[`, `#`, `/`, the source's own Cofnij / Ponów, Ukryj klawiaturę),
+  `selection` (the touch selection mode: `SelectionToolbar`, "Selecting and copying" — no keyboard,
+  the tools at the bottom above the navigation bar).
   Taps beside the buttons stay on the bar. The slot is one Loader per editor (`editToolbarSlot`,
-  created on the first edit) and each mode's row is made the first time it is used, then kept
-  (hidden between edits, where it was scrolled): another tool set — a selection's — docks the
-  same way as another mode with its own row, a new button goes into its mode's row.
+  created on the first use) and each mode's row is made the first time it is used, then kept
+  (hidden between edits, where it was scrolled): another tool set docks the same way as another
+  mode with its own row, a new button goes into its mode's row.
 * **Form fields** (single-line fields and text areas: settings, sync and import forms,
   onboarding, dialogs) have no toolbar; nothing pans the window to them any more (Android:
   `adjustResize`), so `BKeyboardFocusKeeper` (once in `Main.qml`) scrolls the Flickables around
@@ -231,22 +234,25 @@ everything near the bottom, the same way on Android, in the browser and with a s
 
 Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageController`):
 
-| Keys | Editing a block | A block selected (Esc) |
+| Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
 |---|---|---|
-| Enter | split the block at the cursor (task checkboxes continue); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block |
+| Enter | split the block at the cursor (task checkboxes continue); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
 | Shift+Enter | soft line break | — |
-| Backspace at the start | remove the task marker, else merge with the previous block | delete the block |
-| Delete at the end | merge the next block into this one | delete the block |
-| Tab / Shift+Tab | indent / outdent with children (Tab in a multi-line block: a tab character) | indent / outdent |
-| Alt+↑ / Alt+↓ | move the block with its children | move |
-| ↑ / ↓ | on the first / last line: to the previous / next block | select previous / next |
-| Ctrl+Enter | cycle the task status (none → todo → doing → done → none) | same |
+| Shift+↑ / Shift+↓ | select text; on the first / last line once the text selection reaches the block's start / end: select this block and the previous / next one | extend or shrink the selection (the end moves over whole subtrees) |
+| Ctrl+A | select the block's text; again (all of it selected, or an empty block): every block | every block (in a zoom the zoomed subtree) |
+| Ctrl+C / Ctrl+X | copy / cut the selected text exactly (no-break spaces kept) | copy / cut the blocks (Markdown with HTML; "Copying" below) |
+| Ctrl+V | a copied picture or files become attachments `![[…]]`; text: Markdown splits into blocks, HTML from other apps comes as Markdown | the clipboard replaces the selected blocks |
+| Backspace at the start | remove the task marker, else merge with the previous block | delete the blocks |
+| Delete at the end | merge the next block into this one | delete the blocks |
+| Tab / Shift+Tab | indent / outdent with children (Tab in a multi-line block: a tab character) | indent / outdent (a range all or nothing) |
+| Alt+↑ / Alt+↓ | move the block with its children | move (a run of sibling blocks) |
+| ↑ / ↓ | on the first / last line: to the previous / next block | select the previous / next block alone |
+| Ctrl+Enter | cycle the task status (none → todo → doing → done → none) | same (every block gets the next status of the first one) |
 | Ctrl+Shift+Enter | the task status menu at the caret (any status, or none; list items and paragraphs only) | the same menu under the block |
 | Ctrl+. | fold / unfold | same |
-| Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Kopiuj odwołanie do bloku" then) | same; nothing selected: a toast says what to do |
-| Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same |
-| Ctrl+V | a copied picture or files become attachments `![[…]]` | — |
-| Esc | close the suggestions, else stop editing and select the block | deselect |
+| Ctrl+Shift+C | copy the block reference `((id))` (an id is added when missing; the browser may keep the keys for its own tools: the palette's "Kopiuj odwołanie do bloku" then) | same (the focus end); nothing selected: a toast says what to do |
+| Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (per page) | same (undoing a deletion selects the blocks again) |
+| Esc | close the suggestions, else stop editing and select the block | deselect (also Android's Back in the touch selection mode) |
 
 ## Navigation
 
@@ -334,7 +340,11 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   their workflow (TODO → DOING, LATER → NOW), "bez statusu" removes the checkbox and its ✅ / ❌
   date, and the caret stays in the words around the command.
 * **Block menu** (`BlockMenu`, `qml/editor`; one per editor, made when first opened, the block
-  tracked while it is open): Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
+  tracked while it is open): **Kopiuj**, **Wytnij**, **Kopiuj jako tekst** (the block with its
+  children, which becomes the selection — or, for a block that is part of a selection of several,
+  "Kopiuj 3 bloki", "Wytnij 3 bloki": the whole selection; indenting, moving and "Usuń 3 bloki"
+  then act on all of it too), **Zaznacz** (the block becomes the selection; on touch UIs the
+  selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
   Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
   nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
   docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Zwiększ / Zmniejsz wcięcie
@@ -347,7 +357,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   list's handler does not open it twice — or a long press), and on touch UIs the editing
   toolbar's **Więcej** (the menu right above the bar; in a table cell the cell tools' Więcej ends
   the cell's editing, selects the table and opens its menu at it). A long press on text opens
-  nothing: it is left for selecting text. The submenu opens beside the menu with a mouse, in place of it on touch UIs (`BMenu`:
+  no menu: it selects the block (the touch selection mode, "Selecting and copying"). The submenu opens beside the menu with a mouse, in place of it on touch UIs (`BMenu`:
   `cascade` off). Every copy says "Skopiowano …", or why nothing was copied — no clipboard (the
   text read back differs: never "copied" then), a block that cannot carry an id (the page
   properties), Markdown source mode, the documentation notebook (no new block ids there:
@@ -391,7 +401,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (edit / snooze / delete). "dziś"/"jutro" and overdue colours of open pages move on at
   midnight (`DayClock`). Links to daily notes read as dates (`[[2026-10-13]]` → "wt 13 paź").
 * Source mode (Ctrl+E, Więcej → Źródło Markdown): one text area with the whole file and
-  highlighting. A mouse selects by dragging; on touch UIs a finger scrolls it (a TextEdit that
+  highlighting (selecting parts of several blocks as rendered text: "Zaznacz tekst", "Selecting
+  and copying"). A mouse selects by dragging; on touch UIs a finger scrolls it (a TextEdit that
   selects by dragging keeps the finger: the source could not be scrolled at all), a tap places
   the cursor and a long press selects the word under the finger (a TapHandler on an item above
   the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
@@ -430,10 +441,92 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
   do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów,
-  Więcej (the block menu of the edited block, above the toolbar: copying links to it, …), Ukryj
+  Zaznacz (the edited block becomes the selection: the touch selection mode), Więcej (the block
+  menu of the edited block, above the toolbar: copying links to it, …), Ukryj
   klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Więcej (the table's block menu: the
   cell's editing ends, the table is selected), Ukryj klawiaturę; in source
-  mode Link do strony, Tag, Polecenia, Cofnij, Ponów, Ukryj klawiaturę.
+  mode Link do strony, Tag, Polecenia, Cofnij, Ponów, Ukryj klawiaturę; in the touch selection
+  mode the selection's tools (`SelectionToolbar`, "Selecting and copying").
+
+### Selecting and copying
+
+One block is edited at a time (its `InlineEditor` selects characters inside it); a selection that
+crosses blocks is a **block selection** (Logseq / Notion): whole blocks, each with its subtree —
+folded children too —, the same in both note modes (a document's paragraphs, headings and list
+items). Any characters across blocks are selected in the read-only **"Zaznacz tekst"** view.
+
+* **Model** (`PageController`, docs/ARCHITECTURE.md): two uids, the anchor (`selectionAnchorRow`)
+  and the focus end (`selectedRow`); the selection is the visible rows between them with every
+  subtree — a set of uids in `BlockListModel` (`isSelected`, `selectionEdge`: `single` | `first` |
+  `middle` | `last` over the visible rows), so picking single blocks could come later. The ends
+  follow edits, undo / redo (each step restores the selection it had: an undone deletion selects
+  its blocks again) and changes from other devices; a zoom ends it; editing ends it; the page's
+  properties are never part of a range. `selectionCount` counts the visible rows (folded children
+  come along unseen).
+* **Ways in**: Esc in an edited block; Shift+↑ / Shift+↓ (from an edited block once its text
+  selection reaches its start / end); Ctrl+A twice (Notion); Shift+click on a block's text; a drag
+  with a mouse, touchpad or stylus from one block into another (`BlockEditor`'s tracker — a
+  passive `PointHandler` over the list, the state in the editor because delegates may be destroyed
+  meanwhile — scrolls near the view's edges; a left drag no longer scrolls the list on non-touch
+  UIs, the wheel and the touchpad do — also in the journal stream); the block menu's "Zaznacz".
+  Touch UIs: a **long press on a block's text** (not the block being edited: there the system's word
+  selection and handles stay) enters the **selection mode** — the keyboard goes, the selection's
+  tools dock where the editing toolbar is; moving the finger without lifting it extends the
+  selection (the list holds still, scrolls at its edges); taps on blocks move the selection's end
+  there instead of editing; two round **grips** (44 px) at the band's start and end move its
+  ends; "Gotowe" and Back leave it. The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
+  enter it too. The journal stream: one selection per day (selecting in another day ends it); while
+  a finger or the mouse selects, the stream scrolls only as long as the day goes on beyond the edge.
+* **The band**: one band over the range from the editor's left edge (a block alone keeps its
+  outline: from its own level, framed), rounded at its ends, a line down its left edge; made only
+  for selected blocks (a `Loader`: "Scrolling performance").
+* **Tools**: `SelectionToolbar` — "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Więcej
+  (Kopiuj jako tekst, "Kopiuj odnośnik" for one block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę /
+  w dół, Status zadania, Zaznacz tekst…), Gotowe. Docked in the editing toolbar's slot on touch
+  UIs (the `selection` mode of `BlockEditor.toolbarMode`; the bottom navigation makes way), a
+  compact bar floating at the top of the view on desktops while two or more blocks are selected
+  (its × clears the selection).
+* **Copying**: `copySelection()` puts the blocks' **Markdown** on the clipboard as text/plain — as
+  written, each top block re-based to column 0 (visual columns: tabs and spaces keep their
+  nesting), LF line breaks, no BOM, no page properties (`markdown::blocksMarkdown`) — and, from the
+  host, escaped semantic **HTML** as text/html (`io::clipboardHtml`: lists, headings, checkboxes,
+  tables; links to notes as their text, pictures as links to their files, never data: URLs), so a
+  paste into mail or an office app is formatted and one into Obsidian, a plain field or Brulion
+  is Markdown. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
+  numbers, ☐ / ☑ / ☒, no markup, `((id))` as its block's text). A copy is read back (never
+  "Skopiowano" for a clipboard that did not take it) and refuses more than 800 KB (Android's
+  clipboard takes about 1 MB per transaction) with a toast — never cut short. Cut = copy, then
+  delete as one undo step.
+* **Pasting**: Ctrl+V in an edited block splits Markdown into blocks (`pasteText`, relative nesting
+  kept); HTML from other apps (a browser, an office suite) whose text does not look like Markdown
+  comes as Markdown (`EditorHost::htmlToMarkdown`, io's converter); this app's own copies paste as
+  their Markdown. With blocks selected the paste replaces them (the pasted blocks are selected,
+  one undo step). Block ids (`^id`, `id::`) that already resolve elsewhere are dropped from what is
+  pasted — `((id))` is vault-wide —, except right after a cut (in any page of the app: a move) and
+  for the replaced blocks' own ids.
+* **Inside an edited block**: Ctrl+C / Ctrl+X and the text menu copy the exact characters
+  (`PageController.copyEditText`; TextEdit's own copy turns no-break spaces into spaces), the
+  selection stays shown while a menu or dialog has the keyboard (`persistentSelection`), and a
+  right-click opens Wytnij, Kopiuj, Wklej, Zaznacz wszystko and Blok… (desktops; touch UIs have the
+  system's handles and popup).
+* **"Zaznacz tekst"** (`SelectTextView`; the page menu, the top bar's Więcej, the palette, the
+  selection's Więcej; route `open: "selectText"`): the whole page — or the journal's day — in one
+  read-only rich-text `TextEdit` (`PageController.readingHtml()`: the editor's escaping renderer,
+  never a note's own HTML; bullets, numbers and checkboxes as characters, chips without their
+  padding), over the editor (a day: over the stream's frame), readable at the editor's text width
+  in both themes. Desktops: the mouse selects across paragraphs (Shift+click extends),
+  Shift+arrows, Ctrl+A, Ctrl+C. Touch UIs: a finger scrolls, a long press selects a word and two
+  handles move its ends (a read-only TextEdit gets no handles or popup from Android: those come
+  only for editable text — checked on the emulator, docs/ANDROID.md); a tap clears. "Kopiuj"
+  copies the selection — the whole page when nothing is selected — as plain text with every
+  character (no-break spaces too, also the renderer's after one-letter Polish words);
+  "Zamknij", Esc and Back close it.
+* **Browser**: docs/WEB.md "Schowek".
+* **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
+  controller `tst_editor_selection` (the real clipboard read back); the playground's
+  `selectiontest` with real keys, mouse and touch (`tst_editor_qml_selection`, `_touch`); the
+  journal stream's self-test; the shell's self-test (the palette's "Zaznacz tekst");
+  `scripts/android-emulator-test.sh --selection`.
 
 ## Scrolling performance
 
@@ -961,7 +1054,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | Option | Effect |
 |---|---|
 | `--gallery [--section <id>]` | the component gallery (`qml/dev/Gallery.qml`) instead of the app; popups of the section open by themselves |
-| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), no menu from a finger's long press on text, each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
+| `--editor [--editor-script <state>]` | the block editor playground (`qml/dev/EditorPlayground.qml`, in-memory `FakeEditorHost`) in a scripted state: `editing`, `suggest`, `tags`, `tag-pages` (the `#` popup offering pages), `slash`, `date`, `zoom`, `source`, `reminder`, `table`, `calc`, `query`, …; the document mode on a sample trip plan: `document`, `document-paragraph`, `document-list`, `document-heading`, `document-task`, `document-outline`; self-tests that exit: `selftest` (ctest `tst_editor_qml`; also names with markup in menus and breadcrumbs), `blocklinks` — links to blocks and headings with real input: the block menu from right-clicks on a heading's text, a paragraph, a callout, a calc block and a page title drawn above the page's properties (none from the properties), a bullet's right-click / long press and the touch toolbar's "Więcej" (above the bar; a table cell's too), no menu from a finger's long press on text, each "Kopiuj odnośnik" item read back from the clipboard with its toast, Ctrl+Shift+C editing / selected / nothing selected / in a table cell, the palette after a cell lost the keyboard, copied links followed (scrolled, selected, flashed — again after scrolling away), a missing heading (ctest `tst_editor_qml_blocklinks`, `_touch`); states `copylink`, `copylink-document` (the menu with its submenu open on a heading), `copylink-toolbar`, `copylink-table` (with `--touch`: the menu from the toolbar's "Więcej" of a block, of a table cell), `clock` — the round clock with real mouse / touch input (numbers that never overlap and stay legible, down to the smallest dial, with larger text too), its dialog, the clock buttons of the date picker and the calendar's add dialog (ctest `tst_editor_qml_clock`, `_phone`, `_landscape`), `taskstatus` — the task status menu with real right-clicks / long presses on the editor's, a query result's and an embed's checkbox, Ctrl+Shift+Enter and the menu's keys (none on a heading), the "/" status commands typed with real keys, the touch toolbar's task button held down (ctest `tst_editor_qml_taskstatus`, `_touch`), `selectiontest` — selecting and copying blocks with real input (`qml/dev/SelectionSelfTest.qml`): Esc and Shift+↓ then Ctrl+C, Shift+↑ / Shift+↓ from an edited block, Ctrl+A twice, Shift+click, Delete and Ctrl+Z, Alt+↓ and Tab on a range, Ctrl+V over a selection, in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block menu of a selected and another block, the floating tools, a mouse drag over a document's paragraphs (no scrolling) and to the view's edge (autoscroll), the band after scrolling away, "Zaznacz tekst" with the mouse; with `--touch` a long press, taps, the end grip, a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz", "Zaznacz tekst" with a long press and a handle — the clipboard read back (ctest `tst_editor_qml_selection`, `_touch`); states `selection` (a range; desktop: the floating tools, `--touch`: the docked tools and grips), `selection-document`, `selection-menu` (the block menu of a selected block), `text-menu` (the edited text's menu), `select-text`, `select-text-selected`, `keyboard` — the touch toolbar docked on a simulated keyboard (with `--touch --keyboard 0`; ctest `tst_editor_qml_keyboard_touch`) |
 | `--demo` / `--vault <path>` / `--onboarding` | seed and open the sample notebook (in `--vault`, else "Przykładowy brulion") / open this folder / start on onboarding |
 | `--route <view or JSON>` | initial route, e.g. `settings` or `'{"view":"page","path":"Projekty/Remont mieszkania.md","open":"links"}'` |
 | `--popup <name[:query]>` | open a shell popup: `palette`, `switcher`, `capture`, `newPage`, `newFolder`, `move[:<path>[><folder>]]` (else the page shown; with `>` that folder chosen), `about`, `drawer` |
@@ -970,7 +1063,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--size <WxH>`, `--scale <f>`, `--touch`, `--theme light\|dark`, `--locale pl\|en`, `--reduced-motion`, `--now "<date> <time>"` | window size, device pixel ratio, touch UI, theme, language, motion, fixed clock |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); the palette's "Zaznacz tekst" (the page as one text, Esc closes it); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click or a long press opens the tag's page; a row of the tag list opens the page, its button the overview); a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |

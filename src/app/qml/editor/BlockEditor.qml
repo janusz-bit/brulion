@@ -2104,6 +2104,9 @@ FocusScope {
             }
             BMenuItem {
                 objectName: "editTextPaste"
+                // Not in the browser: a page reads the clipboard only from a paste event (Ctrl+V).
+                visible: DeviceInfo.platform !== "wasm"
+                height: visible ? implicitHeight : 0
                 text: qsTr("Paste")
                 iconName: "clipboard-paste"
                 shortcut: "Ctrl+V"
