@@ -11,8 +11,10 @@ import Brulion
 //     names the page (tag overview, its tasks, sub-tags), favourite star, page menu (Historia wersji, Kopiuj odnośnik, Eksportuj stronę,
 //     panel boczny, tekst źródłowy, Przenieś do kosza), previous / next day for daily notes and the
 //     page's properties (aliases, tags, frontmatter values) as chips;
-//   * the blocks (route line / blockId / heading scroll there and select the block; the zoom
-//     breadcrumb is the editor's), fold state kept per device (Workspace.foldState);
+//   * the blocks (route line / blockId / heading scroll there, select the block and flash it —
+//     a heading by PageController.rowOfHeading, Obsidian heading paths too; a block or heading
+//     that is not there is said, the page stays at its top; the zoom breadcrumb is the editor's),
+//     fold state kept per device (Workspace.foldState);
 //   * the references below the blocks (ContentBacklinks: linked references — links and tags
 //     naming the page — grouped by page, unlinked mentions with "Połącz"), scrolling with the
 //     page; a page opened from a #tag or a [[link]] before it exists lists them too;
@@ -32,7 +34,10 @@ import Brulion
 // The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Przełącz na
 // dokument / konspekt" and the palette's "Przełącz tryb notatki" (uiAction "toggleNoteMode")
 // switch it (PageController.toggleMode writes the `brulion:` key); a change of the notebook's
-// default modes re-resolves pages that have no key.
+// default modes re-resolves pages that have no key. The palette's "Kopiuj link do strony / …
+// odwołanie do bloku / … link do bloku / … link do nagłówka" (uiAction "copyLink:<kind>") copy
+// through the editor (BlockEditor.copyCurrentLink); the documentation notebook writes no block ids
+// (PageController.allowNewBlockIds).
 // route.open (screenshots, smoke tests): "rename" (the title field), "export" (the export
 // dialog), "menu" (the page menu), "unlinked" (the unlinked mentions, scrolled to), "links" |
 // "outline" | "calendar" (the side panel on that tab). route.source opens in source mode.
@@ -192,9 +197,11 @@ FocusScope {
         else if (route.line !== undefined)
             row = page.rowOfLine(route.line)
         else if (route.heading)
-            row = headingRow(route.heading)
+            row = page.rowOfHeading(route.heading)
         if (row >= 0)
             editor.later(() => editor.revealRow(row))
+        else if (route.blockId || route.heading)
+            editor.noticeMissing(route.blockId || "", route.blockId ? "" : route.heading)
     }
 
     /// route.open: a dialog or section opened right away (screenshots, smoke tests).
@@ -242,17 +249,6 @@ FocusScope {
         }
     }
 
-    /// Row of the heading `name` ([[Page#Heading]]), -1 when there is none.
-    function headingRow(name) {
-        const wanted = TextHelper.fold(String(name).trim())
-        for (let i = 0; i < page.blocks.count; ++i) {
-            const b = page.blocks.get(i)
-            if (b.headingLevel > 0 && TextHelper.fold(b.plainText.trim()) === wanted)
-                return i
-        }
-        return -1
-    }
-
     /// The title was edited: rename, confirming first when other notes link here or carry a tag
     /// that names the page (both follow the new name).
     function rename(newTitle) {
@@ -288,6 +284,8 @@ FocusScope {
         id: page
         objectName: "pageController" // the shell's self-test finds the editor by it
         host: Workspace
+        // The documentation's pages stay as shipped (they are brought up to date on every open).
+        allowNewBlockIds: !AppController.inDocsVault
         // A page opened before it existed (a link to a missing page) joins the recent pages
         // once its first content created it.
         onExistsChanged: {
@@ -541,8 +539,11 @@ FocusScope {
                     root.togglePictureText()
                 else
                     editor.toggleSourceMode()
-            } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel)
+            } else if (action === "toggleNoteMode" && root.visible && !root.inSidePanel) {
                 root.toggleNoteMode()
+            } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute) {
+                editor.copyCurrentLink(action.slice(9))
+            }
         }
     }
 

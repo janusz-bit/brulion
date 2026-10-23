@@ -8,7 +8,8 @@ import Brulion
 // "On-screen keyboard"); it stays there when the system hides the keyboard while editing goes on.
 // The tools follow `mode` (BlockEditor.toolbarMode):
 //   "block"   outdent, indent, move up/down, task (a tap cycles the status, a long press opens the
-//             status menu), [[, #, /, date, reminder, picture, undo, redo, hide keyboard. In the
+//             status menu), [[, #, /, date, reminder, picture, undo, redo, "Więcej" (the block
+//             menu above the bar: copying a link to the block or heading, …), hide keyboard. In the
 //             document mode the writing tools come first — a list button (paragraph ↔ list
 //             item), task, [[, #, / — then outdent / indent (list items only) and move up/down, so
 //             a phone's first screen of buttons holds no outline tools that are disabled in a
@@ -284,6 +285,15 @@ Rectangle {
                 label: qsTr("Redo")
                 enabled: bar.controller !== null && bar.controller.canRedo
                 onClicked: { bar.commitComposition(); bar.controller.redo() }
+            }
+            ToolButton {
+                id: moreButton
+                objectName: "toolbarMore"
+                iconName: "ellipsis"
+                // The block menu of the block being edited (BlockMenu: "Kopiuj odnośnik", …), above
+                // the bar — what a bullet's long press opens, for every block in both note modes.
+                label: qsTr("More")
+                onClicked: { bar.commitComposition(); bar.editor.openBlockMenuAbove(bar.row, moreButton) }
             }
             ToolButton {
                 objectName: "toolbarHideKeyboard"

@@ -87,6 +87,7 @@ FocusScope {
         objectName: "journalDayController"
         host: Workspace
         path: day.path
+        allowNewBlockIds: !AppController.inDocsVault // the documentation's pages stay as shipped
         onLoadingChanged: if (page.loaded && !page.loading) day.restoreFolds()
         onFoldStateChanged: {
             if (day._foldsRestored && page.loaded && !page.loading)

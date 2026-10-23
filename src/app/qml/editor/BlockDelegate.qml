@@ -5,7 +5,8 @@ import Brulion
 // BlockDelegate — one block of the BlockEditor (one row of BlockListModel): indentation with
 // thin vertical guide lines (one per ancestor level, continuous across rows), the fold arrow
 // (on hover; always shown when folded or on touch), the round bullet of list items (click:
-// zoom into the block; right click / long press: block menu), the task checkbox (click: toggle;
+// zoom into the block; right click / long press: the editor's block menu — a right-click
+// anywhere else on a block opens it too, BlockEditor), the task checkbox (click: toggle;
 // right click / long press: the editor's status menu), and the content for the block's `view`
 // (rendered text / inline editor, code, calc, math, table, query, callout, quote, rule,
 // frontmatter) with image embeds and embedded pages / sections / blocks (TransclusionView) below.
@@ -16,7 +17,8 @@ import Brulion
 // tight list items, air above headings.
 //
 // Hidden rows (zoom, folds) stay in the model with `visible` false: the delegate collapses to
-// zero height.
+// zero height. flash() highlights the block for a moment (a link to it was followed: Theme.mark
+// fading out in about 1.2 s, drawn over the selection and under the text, no height change).
 // A leading "# Title" repeating the page title right after the page properties
 // (PageController.titleRow) trades places with the properties panel on screen — the title
 // first, the panel under it — through a vertical translation of both delegates; the file and
@@ -161,6 +163,34 @@ Item {
         border.color: Theme.alpha(Theme.focusRing, 0.35)
     }
 
+    // ---- Flash (a link to the block was followed) ------------------------------------------------
+    /// The highlight is showing (BlockEditor.revealRow); it ends by itself.
+    property bool flashing: false
+    function flash() {
+        flashing = false // again from the start when it is still showing
+        flashing = true
+    }
+    Loader {
+        active: block.flashing && block.shown
+        x: block.doc ? (block.listItem ? block.levelX - block.editor.listIndent : block.levelX) - Theme.space2
+                     : block.bulletX - block.editor.bulletColumn / 2 - 2
+        y: 1
+        width: block.contentRight - x + Theme.space2
+        height: Math.max(0, block.height - 2)
+        sourceComponent: Rectangle {
+            objectName: "blockFlash"
+            radius: Theme.radiusSm
+            color: Theme.mark
+            opacity: 0
+            SequentialAnimation on opacity {
+                NumberAnimation { to: 1; duration: Theme.reducedMotion ? 0 : 150; easing.type: Theme.easing }
+                PauseAnimation { duration: 700 }
+                NumberAnimation { to: 0; duration: Theme.reducedMotion ? 0 : 350; easing.type: Theme.easing }
+                ScriptAction { script: block.flashing = false }
+            }
+        }
+    }
+
     // ---- Guide lines -------------------------------------------------------------------------
     Repeater {
         model: block.shown && !block.doc ? block.depth : 0
@@ -273,8 +303,11 @@ Item {
             TapHandler {
                 // Right-click only: Qt gives a finger (no buttons) to every TapHandler, so a tap on
                 // a phone zoomed in and opened the menu at once. Touch: the long press above.
+                // WithinBounds: the press is the bullet's, the editor's right-click on the block
+                // (menu at the pointer) does not open it a second time.
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
                 acceptedButtons: Qt.RightButton
+                gesturePolicy: TapHandler.WithinBounds
                 onTapped: block.openMenu(bullet, bullet.width / 2, bullet.height)
             }
         }
@@ -306,6 +339,7 @@ Item {
             TapHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus // not a finger
                 acceptedButtons: Qt.RightButton
+                gesturePolicy: TapHandler.WithinBounds // the number's press (as the bullet's)
                 onTapped: block.openMenu(number, 0, number.height)
             }
         }
@@ -478,79 +512,8 @@ Item {
     }
 
     // ---- Block menu ----------------------------------------------------------------------------
-    /// The block menu (right click / long press on the bullet or number), created when it is first
-    /// opened: built with every block, it was most of a block's cost (~240 objects).
-    property BMenu blockMenu: null
+    /// The editor's block menu for this block (BlockMenu, one per editor, made when first opened).
     function openMenu(item: Item, x: real, y: real) {
-        if (!blockMenu)
-            blockMenu = blockMenuComponent.createObject(block) as BMenu
-        blockMenu.popup(item, x, y)
-    }
-
-    Component {
-        id: blockMenuComponent
-        BMenu {
-            BMenuItem {
-                visible: !block.doc
-                height: visible ? implicitHeight : 0
-                text: qsTr("Zoom in")
-                iconName: "search"
-                onTriggered: block.controller.zoomInto(block.index)
-            }
-            BMenuItem {
-                visible: block.model.hasChildren && !block.doc
-                height: visible ? implicitHeight : 0
-                text: block.model.collapsed ? qsTr("Expand") : qsTr("Collapse")
-                iconName: block.model.collapsed ? "chevrons-up-down" : "chevrons-down-up"
-                shortcut: "Ctrl+."
-                onTriggered: block.controller.toggleFold(block.index)
-            }
-            BMenuItem {
-                text: qsTr("Copy block reference")
-                iconName: "link"
-                onTriggered: block.controller.copyBlockRef(block.index)
-            }
-            BMenuItem {
-                text: qsTr("Insert picture…")
-                iconName: "image"
-                onTriggered: block.editor.dialogs.pickImage(block.index, -1)
-            }
-            BMenuSeparator {}
-            BMenuItem {
-                visible: !block.doc || block.listItem
-                height: visible ? implicitHeight : 0
-                text: qsTr("Indent")
-                iconName: "list-indent-increase"
-                shortcut: "Tab"
-                onTriggered: block.controller.indent(block.index)
-            }
-            BMenuItem {
-                visible: !block.doc || block.listItem
-                height: visible ? implicitHeight : 0
-                text: qsTr("Outdent")
-                iconName: "list-indent-decrease"
-                shortcut: "Shift+Tab"
-                onTriggered: block.controller.outdent(block.index)
-            }
-            BMenuItem {
-                text: qsTr("Move up")
-                iconName: "move-up"
-                shortcut: "Alt+Up"
-                onTriggered: block.controller.moveUp(block.index)
-            }
-            BMenuItem {
-                text: qsTr("Move down")
-                iconName: "move-down"
-                shortcut: "Alt+Down"
-                onTriggered: block.controller.moveDown(block.index)
-            }
-            BMenuSeparator {}
-            BMenuItem {
-                text: qsTr("Delete block")
-                iconName: "trash-2"
-                danger: true
-                onTriggered: block.controller.deleteBlock(block.index)
-            }
-        }
+        block.editor.openBlockMenu(block.index, item, x, y)
     }
 }

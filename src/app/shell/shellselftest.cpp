@@ -2,6 +2,7 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "commandmodel.h"
 #include "demovault.h"
 #include "workspace.h"
 #include "workspacesync.h"
@@ -28,6 +29,7 @@
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QRegularExpression>
 #include <QThread>
 #include <QTimer>
 #include <QWheelEvent>
@@ -1277,12 +1279,147 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         openMenuOn(dot);
         check(waitFor([&] { return openMenus(window) == 1; }) && controller->property("zoomBlock").toInt() < 0,
               "a long press or right-click on a bullet opens the block menu (and does not zoom)");
+        check(findShown(window->contentItem(),
+                        [](QQuickItem *item) {
+                            const auto *sub = item->property("subMenu").value<QObject *>();
+                            return sub && sub->objectName() == u"copyLinkMenu";
+                        })
+                      != nullptr,
+              "the block menu offers “Copy link” (links to the block)");
         check(closeMenu(), "Escape closes the block menu");
         activate(bullet());
         check(waitFor([&] { return controller->property("zoomBlock").toInt() >= 0; }) && openMenus(window) == 0,
               "a tap or click on a bullet zooms into the block, without a menu");
         QMetaObject::invokeMethod(controller, "zoomOut");
     }
+}
+
+/// 5g. Links to blocks and headings (docs/SYNTAX.md §2 "Copied links"), with real input: a link
+///     to a block of this page whose block was moved to another page opens that page with the
+///     block selected; a heading the page lacks is said (followed from the text and as a route);
+///     the palette's "Kopiuj odwołanie do bloku" copies the edited block's ((id)) — read back from
+///     the clipboard — and says so; on the desktop a right-click on a paragraph's text opens the
+///     block menu.
+void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &check,
+                     const std::function<QObject *(const QString &)> &controllerFor)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *ws = app->workspace();
+    const QString oldPage = u"Linki/Stara strona.md"_s;
+    const QString newPage = u"Linki/Nowa strona.md"_s;
+    ws->write(newPage, u"- Wstęp\n- Przeniesiony blok z łazienką ^przen1\n"_s);
+    ws->write(oldPage, u"# Stara strona\n\nZobacz [[Stara strona#^przen1]] i [[Stara strona#Brakujący nagłówek]].\n\n"
+                       "Akapit do skopiowania.\n"_s);
+    QString lastToast;
+    const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
+                                                            [&lastToast](const QString &text) { lastToast = text; });
+    const auto loaded = [&](const QString &path) -> QObject * {
+        QObject *page = nullptr;
+        waitFor([&] {
+            page = controllerFor(path);
+            return page && page->property("loaded").toBool() && app->currentRoute().value(u"path"_s).toString() == path;
+        });
+        return page;
+    };
+    app->openPage(oldPage);
+    QObject *page = loaded(oldPage);
+    check(page != nullptr, "the page with links opens");
+    if (!page)
+        return;
+    settle(300);
+    // [[Stara strona#^przen1]]: the block lives on another page now.
+    QQuickItem *text = renderedTextContaining(window->contentItem(), u"#^przen1"_s);
+    const QPointF at = text ? linkPoint(text, u"#^przen1"_s) : QPointF(-1, -1);
+    check(at.x() >= 0, "the page shows its link to the moved block");
+    if (at.x() >= 0) {
+        tapOrClick(window, at, touch);
+        QObject *target = loaded(newPage);
+        check(target && waitFor([&] { return target->property("selectedRow").toInt() == 1; }),
+              "a link to a block moved to another page opens that page, the block selected");
+        app->back();
+        page = loaded(oldPage);
+        settle(300);
+    }
+    // [[Stara strona#Brakujący nagłówek]]: said, not opened.
+    const QString missing =
+            QCoreApplication::translate("BlockEditor", "Heading “%1” is not on this page").arg(u"Brakujący nagłówek"_s);
+    text = page ? renderedTextContaining(window->contentItem(), u"Brakuj"_s) : nullptr;
+    const QPointF headingAt = text ? linkPoint(text, u"#Brakuj"_s) : QPointF(-1, -1);
+    check(headingAt.x() >= 0, "the page shows its link to a missing heading");
+    if (headingAt.x() >= 0) {
+        lastToast.clear();
+        tapOrClick(window, headingAt, touch);
+        check(waitFor([&] { return lastToast == missing; })
+                      && app->currentRoute().value(u"path"_s).toString() == oldPage,
+              "a link to a heading the page lacks says so and stays");
+    }
+    lastToast.clear();
+    app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, newPage}, {u"heading"_s, u"Brakujący nagłówek"_s}});
+    check(waitFor([&] { return lastToast == missing; }), "a route to a missing heading opens the page and says so");
+    app->back();
+    page = loaded(oldPage);
+    if (!page)
+        return;
+    // The palette's "Kopiuj odwołanie do bloku" on the edited block.
+    int row = -1;
+    QMetaObject::invokeMethod(page, "rowOfLine", qReturnArg(row), 4);
+    QMetaObject::invokeMethod(page, "startEditing", row, -1);
+    check(waitFor([&] { return page->property("editingRow").toInt() == row; }), "the paragraph is edited");
+    if (QClipboard *clipboard = QGuiApplication::clipboard())
+        clipboard->clear();
+    lastToast.clear();
+    check(app->commands()->run(u"block.copyRef"_s), "the palette runs “Copy block reference”");
+    const QString copied = QGuiApplication::clipboard() ? QGuiApplication::clipboard()->text() : QString();
+    static const QRegularExpression reference(u"^\\(\\(([a-z0-9]{6})\\)\\)$"_s);
+    const QRegularExpressionMatch m = reference.match(copied);
+    check(m.hasMatch() && page->property("sourceText").toString().contains(u"skopiowania. ^"_s + m.captured(1)),
+          "the edited block's ((id)) is on the clipboard and the id in the page");
+    check(lastToast == QCoreApplication::translate("BlockEditor", "Copied %1").arg(copied), "a toast says so");
+    QMetaObject::invokeMethod(page, "stopEditing");
+    // Desktop: a right-click on a paragraph's text opens the block menu; the side panel's outline
+    // copies a heading's link from its menu.
+    if (!touch) {
+        if (QQuickItem *paragraph = renderedTextContaining(window->contentItem(), u"Akapit do skopiowania"_s)) {
+            mouseClick(window, pointIn(paragraph, 0.2, 0.5), Qt::RightButton);
+            check(waitFor([&] { return openMenus(window) == 1; }), "a right-click on a paragraph opens the block menu");
+            closeMenus(window);
+        } else {
+            check(false, "the paragraph is shown");
+        }
+        app->navigate({{u"view"_s, u"page"_s}, {u"path"_s, oldPage}, {u"open"_s, u"outline"_s}});
+        QQuickItem *heading = nullptr;
+        check(waitFor([&] {
+                  QQuickItem *outline = findShown(window->contentItem(),
+                                                  [](QQuickItem *item) { return isA(item, "ContentOutline"); });
+                  heading = findShown(outline, [](QQuickItem *item) {
+                      return isA(item, "BListItem") && item->property("text").toString() == u"Stara strona";
+                  });
+                  return heading != nullptr;
+              }),
+              "the side panel's outline lists the page's heading");
+        if (heading) {
+            mouseClick(window, pointIn(heading), Qt::RightButton);
+            QQuickItem *copyHeading = nullptr;
+            check(waitFor([&] {
+                      copyHeading = findShown(window->contentItem(), [](QQuickItem *item) {
+                          return item->objectName() == u"outlineCopyHeadingLink";
+                      });
+                      return copyHeading != nullptr;
+                  }),
+                  "a right-click on an outline heading opens its menu");
+            if (copyHeading) {
+                mouseClick(window, pointIn(copyHeading));
+                check(waitFor([] {
+                          return QGuiApplication::clipboard()
+                                 && QGuiApplication::clipboard()->text() == u"[[Stara strona#Stara strona]]";
+                      }),
+                      "“Copy link to heading” in the outline copies [[Page#Heading]]");
+            }
+            closeMenus(window);
+        }
+        app->setSidePanelVisible(false);
+    }
+    QObject::disconnect(toasts);
 }
 
 /// 5b. A picture attachment opens as a picture (ContentPictureView): its bytes are not a note and
@@ -2349,6 +2486,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       "the text typed before the rename is saved under the new name");
             }
 
+            // 5g. Links to blocks and headings: followed, missing, copied from the palette.
+            checkBlockLinks(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
             // 5e. The default reminder time set on a clock in the settings.

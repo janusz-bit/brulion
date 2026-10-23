@@ -22,10 +22,15 @@ import Brulion
 // Keys (inline editor): Enter split · Shift+Enter line break · Backspace at start merge (a task
 // first loses its checkbox) · Delete at end merge next · Tab / Shift+Tab indent / outdent ·
 // Alt+Up/Down move · Up/Down at the first/last line go to the previous/next block · Ctrl+Enter
-// cycle task · Ctrl+Shift+Enter the task's status menu · Ctrl+. fold · Esc stop editing (select
-// block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo/redo · Ctrl+E source mode. Selected block (after
-// Esc): Up/Down select, Enter edit, Delete remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter,
-// Ctrl+Shift+Enter, Ctrl+., Esc clear.
+// cycle task · Ctrl+Shift+Enter the task's status menu · Ctrl+. fold · Ctrl+Shift+C copy the
+// block reference ((id)) · Esc stop editing (select block) · Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y
+// undo/redo · Ctrl+E source mode. Selected block (after Esc): Up/Down select, Enter edit, Delete
+// remove, Tab/Shift+Tab, Alt+Up/Down, Ctrl+Enter, Ctrl+Shift+Enter, Ctrl+., Ctrl+Shift+C, Esc clear.
+// The block menu (BlockMenu: zoom, fold, "Kopiuj odnośnik" — links to the block or heading —,
+// picture, indent, move, delete) opens with a right-click anywhere on a block (mouse, touchpad,
+// stylus), from a bullet or number (also a long press) and from the touch toolbar's "Więcej".
+// copyLink() / copyCurrentLink() copy links and say so (notice); a link to a block or heading of
+// the page scrolls there, selects it and flashes it (revealRow()); a missing one is said.
 // Autocomplete (`[[`, `((`, `#`, `/`, dates after ⏰/📅/@) in SuggestionPopup; slash commands
 // that need input open EditorDialogs; on touch UIs MobileEditToolbar is docked on the keyboard:
 // at the bottom edge of `toolbarHost` (default: the editor), which the shell keeps on the
@@ -133,7 +138,7 @@ FocusScope {
         return Math.max(Theme.space2, win.height - editor.mapToItem(null, 0, visibleBottom()).y + Theme.space2)
     }
 
-    /// Something to tell the user (a toast): kind "error" | "info".
+    /// Something to tell the user (a toast): kind "error" | "info" | "success".
     signal notice(string text, string kind)
 
     // The title above the properties panel (BlockDelegate trades their places on screen): set by
@@ -313,8 +318,9 @@ FocusScope {
         ensureRowVisible(row)
     }
 
-    /// Scroll to `row` (unfolding / leaving a zoom as needed) and select it — for routes with
-    /// `line` / `blockId`: revealRow(controller.rowOfBlockId(route.blockId)).
+    /// Scroll to `row` (unfolding / leaving a zoom as needed), select it and flash it — for routes
+    /// with `line` / `blockId` / `heading` (revealRow(controller.rowOfBlockId(route.blockId))), links
+    /// to a block or heading of the page, the side panel's outline.
     function revealRow(row) {
         if (!controller || row < 0)
             return
@@ -323,8 +329,86 @@ FocusScope {
         controller.selectedRow = row
         // The header (page title) settling its height must not scroll back to the top.
         list.userMoved = true
-        later(() => list.positionViewAtIndex(row, ListView.Center))
+        later(() => {
+            list.positionViewAtIndex(row, ListView.Center)
+            // The row's delegate exists once the list has been laid out there.
+            list.forceLayout()
+            const item = list.itemAtIndex(row) as BlockDelegate
+            if (item)
+                item.flash()
+        })
         list.forceActiveFocus()
+    }
+    /// A link's block (`blockId`) or heading is not on this page (nor anywhere): say so.
+    function noticeMissing(blockId, heading) {
+        if (blockId)
+            notice(qsTr("Block ^%1 is not on this page").arg(blockId), "info")
+        else if (heading)
+            notice(qsTr("Heading “%1” is not on this page").arg(heading), "info")
+    }
+
+    // ---- Copying links (docs/SYNTAX.md §2 "Copied links") -----------------------------------------
+
+    /// Copy a link to `row` — kind "blockRef" ((id)), "blockLink" [[Page#^id]], "heading"
+    /// [[Page#Heading]], "embed", "page" [[Page]] (PageController.copyLink) — and say so: "Skopiowano
+    /// …", or why nothing was copied. True when copied.
+    function copyLink(row, kind) {
+        if (!controller)
+            return false
+        // A word the keyboard is still composing becomes text first (an id resets the text).
+        if (activeEditor && activeEditor.row === row)
+            EditorInput.commitPreedit(activeEditor)
+        const r = controller.copyLink(row, kind)
+        if (r.ok)
+            notice(qsTr("Copied %1").arg(r.text), "success")
+        else
+            notice(copyFailure(r.reason), r.reason === "noClipboard" || r.reason === "noId" ? "error" : "info")
+        return r.ok
+    }
+    /// Why copyLink() copied nothing (PageController.copyLink's reason).
+    function copyFailure(reason) {
+        switch (reason) {
+        case "readOnly":
+            return qsTr("Links to blocks are not made in the documentation notebook: they would change its pages. Copy a link to a heading or to the page instead.")
+        case "noId":
+            return qsTr("This block cannot have a link of its own. Copy a link to the page instead.")
+        case "notHeading":
+            return qsTr("This block is not a heading")
+        case "sourceMode":
+            return qsTr("Switch back to blocks (Ctrl+E) to copy a link to a block")
+        case "noClipboard":
+            return qsTr("Could not copy: the clipboard is not available")
+        case "noPage":
+            return qsTr("Could not copy: the page has no file yet")
+        default:
+            return qsTr("First select a block or put the caret in it")
+        }
+    }
+    /// The command palette and Ctrl+Shift+C: a link to the page ("page"), to the current block —
+    /// the one being edited, else the selected one — ("blockRef", "blockLink") or to the heading of
+    /// its section ("heading": the last heading at or above it, as the side panel's outline marks).
+    function copyCurrentLink(kind) {
+        if (!controller)
+            return false
+        if (kind === "page")
+            return copyLink(-1, "page")
+        if (controller.sourceMode) {
+            notice(copyFailure("sourceMode"), "info")
+            return false
+        }
+        const current = controller.editingRow >= 0 ? controller.editingRow : controller.selectedRow
+        if (current < 0) {
+            notice(copyFailure("noRow"), "info")
+            return false
+        }
+        if (kind !== "heading")
+            return copyLink(current, kind)
+        const heading = controller.headingRowFor(current)
+        if (heading < 0) {
+            notice(qsTr("There is no heading above this block"), "info")
+            return false
+        }
+        return copyLink(heading, "heading")
     }
 
     /// A click on the rendered text of `row` at (x, y) in that text's coordinates.
@@ -439,6 +523,8 @@ FocusScope {
             dialogs.editReminder(row, r.from, r.to)
         } else if (r.action === "scrollTo") {
             revealRow(r.row)
+        } else if (r.action === "notFound") {
+            noticeMissing(r.kind === "block" ? r.name : "", r.kind === "heading" ? r.name : "")
         }
     }
 
@@ -598,6 +684,12 @@ FocusScope {
                 else
                     controller.cycleTask(row)
                 return true
+            case Qt.Key_C:
+                // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text.
+                if (!shift)
+                    return false
+                copyCurrentLink("blockRef")
+                return true
             }
             return false
         }
@@ -737,6 +829,11 @@ FocusScope {
                     openTaskStatusMenuFor(row)
                 else if (row >= 0)
                     controller.cycleTask(row)
+                return true
+            case Qt.Key_C:
+                if (!shift)
+                    return false
+                copyCurrentLink("blockRef") // nothing selected: says what to do
                 return true
             }
             return false
@@ -1022,6 +1119,28 @@ FocusScope {
                 event.accepted = true
         }
 
+        // The block menu at the pointer: a right-click anywhere on a block — its text, a heading,
+        // a code, table or query frame, an embed — with a mouse, touchpad or stylus, never a finger
+        // (Qt hands touch points to a TapHandler whatever its buttons; a long press on text is left
+        // for selecting it). One handler for the list, not one per block. Bullets, numbers and
+        // checkboxes take their own right-click (their menu at them); the page properties have none.
+        // (Declared in the list, the handler belongs to its content item: scene coordinates.)
+        TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+            acceptedButtons: Qt.RightButton
+            onTapped: (eventPoint) => {
+                if (!editor.controller)
+                    return
+                const scene = eventPoint.scenePosition
+                const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
+                const row = list.indexAt(p.x, p.y)
+                if (row < 0 || editor.controller.blocks.get(row).view === "frontmatter")
+                    return
+                const at = list.mapFromItem(null, scene.x, scene.y)
+                editor.openBlockMenu(row, list, at.x, at.y)
+            }
+        }
+
         // The header (page title) gets its height after the first layout: start at the top.
         // (autoHeight: no scroll bar, the list never scrolls.)
         Component.onCompleted: {
@@ -1133,6 +1252,43 @@ FocusScope {
             editor: editor
             model: suggestionModel
             onActivated: (index) => editor.acceptSuggestion(index)
+        }
+    }
+
+    // ---- The block menu --------------------------------------------------------------------------
+    /// BlockMenu for a block (made when first opened, one per editor; tests read it): a bullet's or
+    /// number's right-click / long press, a right-click on a block, the touch toolbar's "Więcej".
+    property BlockMenu blockMenu: null
+    function openBlockMenu(row, item, x, y) {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        if (!blockMenu)
+            blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
+        closeSuggestions()
+        // A word the keyboard is still composing becomes text before anything acts on the block.
+        if (activeEditor)
+            EditorInput.commitPreedit(activeEditor)
+        blockMenu.openFor(row)
+        // Above the docked toolbar and the keyboard (it flips above its item when needed).
+        blockMenu.bottomMargin = menuBottomMargin()
+        if (item)
+            blockMenu.popup(item, x, y)
+        else
+            blockMenu.popup()
+    }
+    /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
+    function openBlockMenuAbove(row, item) {
+        if (!controller || row < 0)
+            return
+        if (!blockMenu)
+            blockMenu = blockMenuComponent.createObject(editor) as BlockMenu
+        blockMenu.openFor(row)
+        openBlockMenu(row, item, 0, -blockMenu.openHeight() - Theme.space1)
+    }
+    Component {
+        id: blockMenuComponent
+        BlockMenu {
+            editor: editor
         }
     }
 
