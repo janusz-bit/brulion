@@ -331,6 +331,12 @@ Result appScreenshot(Call &call)
 {
     QJsonObject params;
     if (const QString path = call.str(u"path"_s).trimmed(); !path.isEmpty()) {
+        // --read-only (an agent's `mcp --read-only --app-control`): only the runtime folder — a path
+        // could replace any .png, a picture in the notebook too.
+        if (call.ctx.globals.readOnly)
+            return call.fail(ExitRefused, u"read_only"_s,
+                             tr("A screenshot path writes a file there: refused in read-only mode (without a path the "
+                                "screenshot goes to the runtime folder)"));
         // Relative to where the command runs (the app's own folder is somewhere else).
         const QString expanded = path.startsWith(u"~/"_s) ? QDir::homePath() + path.mid(1) : path;
         params.insert(u"path"_s, QDir::cleanPath(QFileInfo(expanded).absoluteFilePath()));

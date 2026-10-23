@@ -363,7 +363,9 @@ brulion-cli app wait --idle                      # nothing moving, nothing index
   `suggestions`, `ambiguous_ref` with `candidates`). With `--vault` (or `BRULION_VAULT`) naming
   another notebook than the app shows: exit 4 `other_notebook`.
 * `--dry-run` prints the request it would send (`{method, params}`), `--read-only` refuses the
-  commands that can change notes (click, type, key, command, capture, quit …).
+  commands that can change notes (click, type, key, command, capture, quit …) and a screenshot
+  path (it could replace a picture of the notebook; without one the screenshot goes to the
+  runtime folder).
 * Exit codes of the app's errors: `bad_params` 2, `not_found` and `timeout` 3, `stale_handle`
   and `ambiguous_ref` 4, `not_ready` (no notebook open yet) 5, `refused` (a disabled command, the
   documentation notebook for capture) 7, `failed` 1.

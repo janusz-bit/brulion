@@ -968,6 +968,10 @@ private Q_SLOTS:
                  (QJsonObject{{u"handle"_s, u"h3"_s}, {u"button"_s, u"right"_s}}));
         r = cli({u"--read-only"_s, u"app"_s, u"type"_s, u"żółw"_s});
         QCOMPARE(r.code, 7);
+        // A screenshot path could replace any .png (a picture in the notebook too): not when read-only.
+        r = cli({u"--read-only"_s, u"app"_s, u"screenshot"_s, m_tmp.filePath(u"zdjęcie.png"_s)});
+        QCOMPARE(r.code, 7);
+        QCOMPARE(r.errorCode(), u"read_only"_s);
 
         // An app without remote control: refused, with the way to allow it.
         const QString key = brulion::ipc::SingleInstance::keyFor(m_home + u"/data/Brulion/Brulion"_s);
