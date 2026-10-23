@@ -1119,14 +1119,14 @@
         <translation>Bloku ^%1 nie ma na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="376"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="409"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1572"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1591"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="398"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="431"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1625"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
@@ -4399,7 +4399,7 @@
         <translation>Spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/Main.qml" line="170"/>
+        <location filename="../src/app/qml/Main.qml" line="175"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
@@ -6866,7 +6866,7 @@
         <translation>Nowa strona lub folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="543"/>
+        <location filename="../src/app/qml/shell/ShellSidebar.qml" line="556"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="936"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
@@ -11026,12 +11026,12 @@
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1142"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1150"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1143"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1151"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
