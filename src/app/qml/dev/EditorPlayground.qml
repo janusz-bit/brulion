@@ -21,7 +21,9 @@ import Brulion
 // (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `copylink` /
-// `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document). The in-memory vault runs
+// `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
+// `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `link-flash` a
+// copied block link followed (the block selected and flashing). The in-memory vault runs
 // ```query blocks on the real index (FakeEditorHost). Like the app's shell, the editor ends at
 // the on-screen keyboard (KeyboardInsets.overlap); a simulated one is drawn grey.
 ApplicationWindow {
@@ -86,6 +88,7 @@ ApplicationWindow {
         page.path = DevTools.editorScript === "empty" ? "Nowa strona.md"
                   : DevTools.editorScript === "title" ? host.recipePath
                   : DevTools.editorScript.startsWith("document") || DevTools.editorScript === "copylink-document"
+                    || DevTools.editorScript === "link-flash"
                     ? host.documentPath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
@@ -2563,6 +2566,32 @@ ApplicationWindow {
         case "blocklinks":
             blockLinksTest()
             break
+        case "link-flash": {
+            // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
+            // selected and flashing (screenshots; --delay 1600 lands in the flash).
+            const target = rowOf("Piątek")
+            const id = page.ensureBlockRef(target)
+            const after = page.insertBlockAfter(rowOf("Niedziela"), "")
+            page.setBody(after, "Zobacz [[Wyjazd w Tatry#^" + id + "]] i [[Wyjazd w Tatry#Plan]].")
+            page.stopEditing()
+            scriptLater.run(() => editor.activateLink(after, "page:Wyjazd%20w%20Tatry#%5E" + id))
+            break
+        }
+        case "copylink-toolbar": {
+            // Touch: the editing toolbar's "Więcej" — the block menu above the bar (screenshots).
+            const row = rowOf("Kolejność")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            editor.startEditing(row, -1)
+            scriptLater.run(() => {
+                const flick = window.findItem(editor, "editToolbarFlick")
+                const more = window.findItem(editor, "toolbarMore")
+                if (!flick || !more)
+                    return
+                flick.contentX = Math.max(0, flick.contentWidth - flick.width)
+                editor.openBlockMenuAbove(row, more)
+            })
+            break
+        }
         case "copylink":
         case "copylink-document": {
             // The block menu with "Kopiuj odnośnik" open on a heading (screenshots).
