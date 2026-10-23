@@ -46,6 +46,8 @@ RenderContext context(dates::UiLocale locale = dates::UiLocale::Polish)
     c.blockText = [](const QString &id) -> std::optional<QString> {
         if (id == u"abc")
             return u"Treść <b>bloku</b>"_s;
+        if (id == u"dlugi")
+            return u"Zażółć gęślą jaźń\n  i dalej: bardzo długi tekst bloku, który nie mieści się w odnośniku wcale"_s;
         return std::nullopt;
     };
     c.inlineCalc = [](const QString &expr) { return expr == u"2 + 2" ? u"4"_s : QString(); };
@@ -138,6 +140,18 @@ private Q_SLOTS:
                                        << link(u"page:Projekty%2FDom#Plan"_s, u"L"_s, u"dom"_s);
         QTest::newRow("block link") << u"[[Strona#^blok1]]"_s
                                     << link(u"page:Strona#^blok1"_s, u"L"_s, u"Strona › ^blok1"_s);
+        // A known block: its text (escaped), like ((id)); cut after 60 characters.
+        QTest::newRow("block link text") << u"[[Strona#^abc]]"_s
+                                         << link(u"page:Strona#^abc"_s, u"L"_s,
+                                                 u"Strona › Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("block link long text")
+                << u"[[Strona#^dlugi]]"_s
+                << link(u"page:Strona#^dlugi"_s, u"L"_s,
+                        u"Strona › Zażółć gęślą jaźń i dalej: bardzo długi tekst bloku, który…"_s);
+        QTest::newRow("same page block link")
+                << u"[[#^abc]]"_s << link(u"page:#^abc"_s, u"L"_s, u"Treść &lt;b&gt;bloku&lt;/b&gt;"_s);
+        QTest::newRow("block link alias")
+                << u"[[Strona#^abc|tutaj]]"_s << link(u"page:Strona#^abc"_s, u"L"_s, u"tutaj"_s);
         QTest::newRow("same page") << u"[[#Sekcja]]"_s << link(u"page:#Sekcja"_s, u"L"_s, u"Sekcja"_s);
         QTest::newRow("polish") << u"[[Żółw]]"_s << link(u"page:%C5%BB%C3%B3%C5%82w"_s, u"L"_s, u"Żółw"_s);
         QTest::newRow("embed file") << u"![[obraz.png]]"_s << link(u"page:obraz.png"_s, u"L"_s, u"📎 obraz.png"_s);

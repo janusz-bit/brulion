@@ -29,6 +29,9 @@ namespace {
 /// is shown as text.
 constexpr int MaxDepth = 2;
 
+/// The block's text a `[[Page#^id]]` link shows after the page name, at most (… when cut).
+constexpr qsizetype MaxBlockLinkText = 60;
+
 /// A rendered construct covering [from, to) of the text; an empty html hides the range.
 struct Atom {
     qsizetype from = 0;
@@ -556,9 +559,19 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
                 const WikiParts &w = item.wiki;
                 QString label = w.display;
                 if (label.isEmpty()) {
-                    const QString frag = !w.heading.isEmpty()   ? w.heading
-                                         : !w.blockId.isEmpty() ? u'^' + w.blockId
-                                                                : QString();
+                    QString frag = !w.heading.isEmpty()   ? w.heading
+                                   : !w.blockId.isEmpty() ? u'^' + w.blockId
+                                                          : QString();
+                    // [[Page#^id]] reads like ((id)): "Page › the block's text…".
+                    if (w.heading.isEmpty() && !w.blockId.isEmpty() && m_ctx.blockText) {
+                        if (const auto blockText = m_ctx.blockText(w.blockId)) {
+                            const QString shown = blockText->simplified();
+                            if (!shown.isEmpty())
+                                frag = shown.size() > MaxBlockLinkText
+                                               ? shown.first(MaxBlockLinkText - 1).trimmed() + u'…'
+                                               : shown;
+                        }
+                    }
                     const QString page = shownTarget(w.target);
                     label = page.isEmpty() ? frag : frag.isEmpty() ? page : page + u" › "_s + frag;
                 }

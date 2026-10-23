@@ -531,6 +531,49 @@ private Q_SLOTS:
         QVERIFY(isGeneratedId(avoided.id));
     }
 
+    void idsForCopiedLinks()
+    {
+        // "Kopiuj odwołanie do bloku" on every kind of block (docs/SYNTAX.md §2 "Copied links").
+        const auto tagged = ensureBlockId(u"## Plan #praca\n\nTekst"_s, 0);
+        QCOMPARE(tagged.content, u"## Plan #praca ^"_s + tagged.id + u"\n\nTekst"_s);
+        QVERIFY(resolves(tagged.content, tagged.id, 0));
+        // CRLF stays byte for byte; only the heading line gets the id.
+        const QString crlf = u"# Tytuł\r\n\r\n## Zażółć gęślą jaźń\r\n\r\nKoniec\r\n"_s;
+        const auto heading = ensureBlockId(crlf, 2);
+        QCOMPARE(heading.content, u"# Tytuł\r\n\r\n## Zażółć gęślą jaźń ^"_s + heading.id + u"\r\n\r\nKoniec\r\n"_s);
+        // A Logseq heading item.
+        const auto item = ensureBlockId(u"- ## Zakupy\n\t- chleb"_s, 0);
+        QCOMPARE(item.content, u"- ## Zakupy ^"_s + item.id + u"\n\t- chleb"_s);
+        QVERIFY(resolves(item.content, item.id, 0));
+        // A callout's title line, a multi-line Polish paragraph (the id on its last line).
+        const auto callout = ensureBlockId(u"> [!tip] Wskazówka\n> Pij wodę."_s, 0);
+        QCOMPARE(callout.content, u"> [!tip] Wskazówka ^"_s + callout.id + u"\n> Pij wodę."_s);
+        const auto para = ensureBlockId(u"Pierwsza linia akapitu,\ndruga ze źdźbłem.\n\nInny"_s, 0);
+        QCOMPARE(para.content, u"Pierwsza linia akapitu,\ndruga ze źdźbłem. ^"_s + para.id + u"\n\nInny"_s);
+        QVERIFY(resolves(para.content, para.id, 0));
+        // The first line of a quote with nested items.
+        const auto quote = ensureBlockId(u"> Cytat\n> - punkt\n\nDalej"_s, 0);
+        QVERIFY(resolves(quote.content, quote.id, 0));
+        QCOMPARE(quote.content, u"> Cytat ^"_s + quote.id + u"\n> - punkt\n\nDalej"_s);
+        // A Logseq UUID is the id as it is: nothing written.
+        const QString uuid = u"6f1c0e2a-1b2c-4d5e-8f90-a1b2c3d4e5f6"_s;
+        const QString logseq = u"- zadanie\n  id:: "_s + uuid + u"\n- inne"_s;
+        const auto existing = ensureBlockId(logseq, 0);
+        QCOMPARE(existing.id, uuid);
+        QCOMPARE(existing.content, logseq);
+        // Ids already used elsewhere (isTaken) are never given: the first candidates refused.
+        QSet<QString> refused;
+        const auto fresh = ensureBlockId(u"- nowy"_s, 0, [&refused](const QString &id) {
+            if (refused.size() < 5) {
+                refused.insert(id);
+                return true;
+            }
+            return false;
+        });
+        QVERIFY(isGeneratedId(fresh.id));
+        QVERIFY(!refused.contains(fresh.id));
+    }
+
     void itemOpeningFence()
     {
         const auto r = ensureBlockId(u"- ```\n  code\n  ```"_s, 0);

@@ -62,7 +62,8 @@ struct RenderContext {
     /// Page link target (as written, e.g. "Projekty/Dom") -> resolved vault path, or nullopt
     /// when the page does not exist (the link gets Palette::unresolved). Unset: all resolved.
     std::function<std::optional<QString>(const QString &target)> resolvePage;
-    /// Block id -> the referenced block's text (shown escaped), nullopt when unknown.
+    /// Block id -> the referenced block's text (shown escaped), nullopt when unknown: `((id))`
+    /// shows it, a `[[Page#^id]]` link without an alias "Page › " and its first 60 characters.
     std::function<std::optional<QString>(const QString &id)> blockText;
     /// Inline calculation `= expr` -> result text; an empty result shows the code as written.
     std::function<QString(const QString &expr)> inlineCalc;

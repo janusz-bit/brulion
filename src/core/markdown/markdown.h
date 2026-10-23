@@ -41,6 +41,13 @@
 //                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
 //                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`
 //                  keeps those of other pages with that name), tagsToRename(...)
+//   linkformat.h   links to pages, headings and blocks (SYNTAX §2 "Copied links"):
+//                  headingFragment(text) -> "Plan praca" (markup, tag hashes and characters that
+//                  break wiki links removed), headingKey(text), headingMatches(fragment, text),
+//                  findHeading(headings, fragment) (the one matcher of [[Page#Heading]] and
+//                  Obsidian heading paths [[Page#A#B]]: navigation, embeds, copying),
+//                  uniqueHeadingFragment(headings, i) (the heading's name, else a path, else ""),
+//                  formatReference(kind, page, fragment, id) -> "[[Page#^id]]", "((id))", …
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}
@@ -74,6 +81,7 @@
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
 #include "markdown/journal.h"
+#include "markdown/linkformat.h"
 #include "markdown/notemode.h"
 #include "markdown/parse.h"
 #include "markdown/properties.h"
