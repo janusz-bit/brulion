@@ -43,7 +43,7 @@
 <context>
     <name>BDatePicker</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/components/BDatePicker.qml" line="393"/>
+        <location filename="../src/app/qml/components/BDatePicker.qml" line="394"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n item</numerusform>
@@ -123,7 +123,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="623"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="629"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -131,7 +131,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="634"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="640"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -139,7 +139,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="650"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="656"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -177,7 +177,7 @@
 <context>
     <name>CalendarDayPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="158"/>
+        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="157"/>
         <source>All %n overdue in Tasks</source>
         <translation>
             <numerusform>%n overdue in Tasks</numerusform>
@@ -200,7 +200,7 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="163"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="164"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -208,7 +208,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="263"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="264"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -219,7 +219,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="201"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="203"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -653,7 +653,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="431"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="438"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -1085,7 +1085,7 @@
 <context>
     <name>TransclusionView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TransclusionView.qml" line="327"/>
+        <location filename="../src/app/qml/editor/TransclusionView.qml" line="330"/>
         <source>%n more block(s) — open the page</source>
         <translation>
             <numerusform>%n more block — open the page</numerusform>
