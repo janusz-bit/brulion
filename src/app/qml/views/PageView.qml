@@ -28,9 +28,11 @@ import Brulion
 // and "pageEditor"): the route's path is applied one event-loop turn late and
 // Workspace.pathRenamed goes to followRename(), so a rename never saves unsaved edits under the
 // old name; a page that does not exist yet (a link to a missing page) opens with an empty block
-// to type into (a day without a note: the journal template) and the editor creates the file with
-// its first change; settings (text width,
-// "open pages as source", Ctrl+E); merged external changes are told with a toast.
+// to type into (a day without a note: the journal template) — except for a page opened from a #tag
+// on a touch screen (route.fromTag: the keyboard would cover the tagged blocks listed below; the
+// header's "Zacznij pisać" or a tap under it starts it) — and the editor creates the file with its
+// first change; settings (text width, "open pages as source", Ctrl+E); merged external changes are
+// told with a toast.
 // The note mode (docs/UI.md "Note modes"): the header's toggle, the page menu's "Przełącz na
 // dokument / konspekt" and the palette's "Przełącz tryb notatki" (uiAction "toggleNoteMode")
 // switch it (PageController.toggleMode writes the `brulion:` key); a change of the notebook's
@@ -155,7 +157,10 @@ FocusScope {
             page.sourceMode = AppSettings.editorSourceMode || root.route.source === true
             // A page that does not exist yet: something to type into. A day without a note starts
             // from the journal template, like in the journal stream — written only once changed.
-            if (page.loaded && !page.exists && page.blocks.count === 0)
+            // A page opened from a #tag on a touch screen waits for a tap ("Zacznij pisać", the
+            // space under the header): the keyboard would cover the blocks with the tag it lists.
+            const waits = Theme.touchUi && !!root.route.fromTag && root.journalDate === ""
+            if (page.loaded && !page.exists && page.blocks.count === 0 && !waits)
                 editor.startEditing(page.startNewPage(root.journalDate !== "" ? (Workspace.config.journalTemplate || "") : ""), -1)
         }
         revealTarget()

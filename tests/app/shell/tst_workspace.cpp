@@ -807,7 +807,8 @@ private Q_SLOTS:
         // A tag opens the page it names (here one not written yet); the overview stays a tag route.
         ws->navigate({ { u"view"_s, u"tag"_s }, { u"tag"_s, u"kuchnia"_s } }, true);
         QCOMPARE(nav.size(), 1);
-        QCOMPARE(nav.first().at(0).toMap(), QVariantMap({{u"view"_s, u"page"_s}, {u"path"_s, u"kuchnia.md"_s}}));
+        QCOMPARE(nav.first().at(0).toMap(),
+                 QVariantMap({{u"view"_s, u"page"_s}, {u"path"_s, u"kuchnia.md"_s}, {u"fromTag"_s, u"kuchnia"_s}}));
         QCOMPARE(nav.first().at(1).toBool(), true);
         ws->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, u"kuchnia"_s}, {u"overview"_s, true}});
         QCOMPARE(nav.last().at(0).toMap().value(u"view"_s).toString(), u"tag"_s);

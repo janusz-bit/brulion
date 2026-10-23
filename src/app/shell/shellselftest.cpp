@@ -515,11 +515,13 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
 ///     opens a run's details, whose "Show in the event log" opens the page at the run's time.
 /// 3d. Tags name pages (docs/SYNTAX.md §3), with real input: a tap / click on a #tag in a journal
 ///     day opens the page the tag names — one not written yet opens empty, with the tagged blocks
-///     among its references and the tag strip in its header — and back returns; in Tasks a click
+///     among its references and the tag strip in its header, ready to type on a desktop, waiting
+///     for a tap on a touch screen — and back returns; in Tasks a click
 ///     on a tag filters the list while a Ctrl+click (desktop) or a long press (--touch) opens the
 ///     tag's page; a row of the tag list opens the tag's page, its trailing button the overview,
 ///     whose "Utwórz stronę" opens the page not written yet; the sidebar's rename dialog counts
-///     the links and tags it rewrites.
+///     the links and tags it rewrites, and a "/" in it moves a page (renamed too: the toast says
+///     both).
 void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -552,6 +554,38 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
                          != nullptr;
               }),
               "the page header has the tag strip (tag overview, tasks with the tag)");
+        // Not written yet: on a desktop it opens ready to type; on a touch screen it waits for a tap
+        // (the keyboard would cover the tagged blocks it lists), which starts typing.
+        QQuickItem *tagEditor = nullptr;
+        QObject *tagController = nullptr;
+        waitFor([&] {
+            tagEditor = findShown(window->contentItem(), [&](QQuickItem *item) {
+                auto *c =
+                        item->objectName() == u"pageEditor" ? item->property("controller").value<QObject *>() : nullptr;
+                return c && c->property("path").toString() == tagPage && c->property("loaded").toBool();
+            });
+            tagController = tagEditor ? tagEditor->property("controller").value<QObject *>() : nullptr;
+            return tagController != nullptr;
+        });
+        check(tagController != nullptr, "the tag's page is in the editor");
+        if (tagController) {
+            settle(200);
+            const int editing = tagController->property("editingRow").toInt();
+            if (touch) {
+                check(editing < 0, "on a touch screen the tag's page, not written yet, does not start typing");
+                const QString startText = QCoreApplication::translate("ContentPageHeader", "Start writing");
+                QQuickItem *start = findShown(window->contentItem(), [&](QQuickItem *item) {
+                    return isA(item, "BButton") && item->property("text").toString() == startText;
+                });
+                if (start)
+                    tapOrClick(window, start->mapToScene(QPointF(start->width() / 2, start->height() / 2)), true);
+                check(start && waitFor([&] { return tagController->property("editingRow").toInt() >= 0; }),
+                      "a tap on its “Zacznij pisać” starts typing");
+            } else {
+                check(editing >= 0, "on a desktop the tag's page, not written yet, opens ready to type");
+            }
+            QMetaObject::invokeMethod(tagController, "stopEditing");
+        }
         check(!app->workspace()->exists(tagPage), "looking at a tag's page does not create it");
         check(app->back() && view() == u"journals", "back returns from the tag's page");
     }
