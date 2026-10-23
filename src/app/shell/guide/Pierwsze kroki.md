@@ -22,7 +22,7 @@ Gdy piszesz, pasek narzędzi leży tuż nad klawiaturą — w dzienniku i na ka�
 - **Ukryj klawiaturę** (ostatni przycisk paska) kończy pisanie: chowa klawiaturę i pasek, a dolna nawigacja wraca.
 - Gdy klawiaturę schowasz przyciskiem Wstecz albo klawiszem na samej klawiaturze, pasek zostaje na dole ekranu z wszystkimi narzędziami — dotknij tekstu, a klawiatura wróci.
 - W komórce tabeli pasek ma Cofnij, Ponów, **Następna komórka** i Ukryj klawiaturę; w źródle Markdown (Więcej → Źródło Markdown) — `[[`, `#`, `/`, Cofnij, Ponów i Ukryj klawiaturę.
-- Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy) i podpowiedzi przy pisaniu też zawsze leżą nad klawiaturą.
+- Okna wyświetlane od dołu (szybka notatka, przypomnienie, zmiana nazwy), podpowiedzi przy pisaniu i pola formularzy (np. w ustawieniach) też zawsze leżą nad klawiaturą.
 
 ## Nowa strona
 - **Ctrl+N**, przycisk z ołówkiem obok nazwy notatnika albo „+” przy sekcji **Strony** w pasku bocznym. Nazwa może zawierać `/`, wtedy strona trafi do folderu: `Projekty/Dom`.

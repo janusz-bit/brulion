@@ -226,46 +226,58 @@ Pasek narzędzi edycji leży zawsze tuż nad klawiaturą ekranową — w dzienni
 gdy się przewija — a dolna nawigacja chowa się na czas pisania (docs/UI.md „On-screen
 keyboard”). Gdy klawiaturę schowa system (Wstecz, klawisz na samej klawiaturze), pasek zostaje
 na dole ekranu, nad paskiem nawigacji systemu, dopóki pisanie trwa; dotknięcie tekstu przywraca
-klawiaturę. Okna wysuwane od dołu, menu i komunikaty też zawsze leżą nad klawiaturą.
+klawiaturę. Okna wysuwane od dołu, menu i komunikaty też zawsze leżą nad klawiaturą, a pole
+formularza (ustawienia, wybór notatnika, okna) przewija się nad nią, gdy dostaje fokus.
 
 Jak to działa:
 
 * `BrulionActivity` ma w manifeście `android:windowSoftInputMode="adjustResize|stateUnchanged"`:
   okno nigdy nie jest przesuwane („pan”) — bez tego Qt wybierał przesuwanie albo zmianę rozmiaru
-  osobno dla każdego pola, a przesunięte okno odrywało pasek od klawiatury.
+  osobno dla każdego pola, a przesunięte okno odrywało pasek od klawiatury. Pól jednowierszowych
+  nikt więc nie przesuwa do widoku: robi to aplikacja (`BKeyboardFocusKeeper`, docs/UI.md).
+* Na Androidzie 11+ okno jest rysowane pod paskami systemu (edge-to-edge): na 15+ zawsze, na
+  11–14 dzięki `Qt::ExpandedClientAreaHint` ustawianemu przez `src/app/ui/keyboardsources.cpp`.
+  Takie okno nie zmienia rozmiaru przy klawiaturze i dostaje każdą klatkę jej wysuwania; paski
+  aplikacji odsuwają się od pasków systemu o marginesy `SafeArea`, a ikony pasków systemu
+  dopasowują się do koloru okna, czyli do motywu aplikacji (ciemne na jasnym, jasne na ciemnym;
+  `BrulionAndroid.setSystemBarsLight`, ponownie po zmianie konfiguracji, bo Qt ustawia je wtedy
+  według trybu dzień/noc systemu). Android 9–10 zostaje przy oknie wewnątrz pasków.
 * `ImeInsets.kt` (instalowany w `onCreate`) dokłada do okna niewidoczny widok 0×0 i z niego
   obserwuje wstawki klawiatury (`WindowInsets` typu `ime()`), nie ruszając słuchaczy Qt (`SafeArea`)
   i niczego nie konsumując: `OnApplyWindowInsetsListener` daje wartość końcową,
   `WindowInsetsAnimation.Callback` (Android 11+) — każdą klatkę wysuwania klawiatury, a słuchacz
   układu widoku dekoracji — stan na starszych systemach, gdzie wstawki mógł zatrzymać widok Qt.
   Liczy, ile pikseli widoku Qt zakrywa klawiatura **na ekranie**: dół widoku Qt minus górna
-  krawędź klawiatury. Gdy system zmniejszył okno nad klawiaturą (Android 9–14 bez trybu
-  edge-to-edge), wychodzi 0; przy oknie edge-to-edge (zawsze na Androidzie 15+, cel API 36) —
-  cała wysokość klawiatury. Raport idzie przez `BrulionAndroid.imeChanged` → natywne
+  krawędź klawiatury. Gdy system zmniejszył okno nad klawiaturą (Android 9–10), wychodzi 0; przy
+  oknie edge-to-edge (Android 11+) — cała wysokość klawiatury. Raport idzie przez `BrulionAndroid.imeChanged` → natywne
   `nativeImeChanged` (wątek główny Androida; C++ tylko kolejkuje sygnał
   `AndroidBridge::imeChanged` do wątku Qt), tylko gdy coś się zmieniło.
 * C++: `KeyboardInsets` (`src/app/ui/keyboardinsets.h`) przelicza piksele fizyczne na logiczne
   i od pierwszego raportu ignoruje prostokąt klawiatury Qt (`QInputMethod::keyboardRectangle`,
-  zostaje jako zapas, gdyby obserwator się nie zainstalował). W trakcie wysuwania pasek idzie za
-  klawiaturą klatka po klatce (bez własnej animacji), a kursor jest przewijany nad pasek dopiero,
-  gdy klawiatura się zatrzyma.
+  zostaje jako zapas, gdyby obserwator się nie zainstalował). W trakcie wysuwania (Android 11+)
+  pasek idzie za klawiaturą klatka po klatce (bez własnej animacji), a kursor jest przewijany nad
+  pasek dopiero, gdy klawiatura się zatrzyma; na Androidzie 9–10 okno zmienia rozmiar raz.
 * Diagnostyka: szczegółowy rejestr zdarzeń zapisuje ustaloną wartość („On-screen keyboard shown,
-  overlap 336 px (platform)”); `adb shell setprop log.tag.BrulionIme DEBUG` (przed startem
-  aplikacji) wypisuje w logcat każdy raport obserwatora, także klatki wysuwania.
+  overlap 336 px (platform)”) i to, gdzie po jej zatrzymaniu kończy się zawartość („Typing: the
+  content ends 48 px above the window's bottom (keyboard 0 px, navigation bar 48 px), editing
+  toolbar docked”); `adb shell setprop log.tag.BrulionIme DEBUG` (przed startem aplikacji)
+  wypisuje w logcat każdy raport obserwatora, także klatki wysuwania.
 
 Sprawdzone na emulatorze (`scripts/android-emulator-test.sh --keyboard`, niżej; profil Pixel 6,
 1080×2400, gęstość 420, klawiatura Gboard), w dzienniku i na stronie przewodnika:
 
-* Android 16 (API 36, okno edge-to-edge): górna krawędź klawiatury na 1517 px, widok Qt do
+* Android 16 (API 36, nawigacja gestami): górna krawędź klawiatury na 1517 px, widok Qt do
   2400 px, obserwator zgłasza 883 px, aplikacja 336 dp (= 883 · 160 / 420); wysuwanie przyszło
-  w 8–9 klatkach;
-* Android 11 (API 30, okno bez edge-to-edge): system zmniejsza okno nad klawiaturą — widok Qt
-  kończy się na 1533 px, dokładnie na górnej krawędzi klawiatury, obserwator i aplikacja
-  zgłaszają 0, bez klatek wysuwania.
+  w 8 klatkach; po Wstecz zawartość kończy się 24 dp nad dołem (pasek nawigacji gestami);
+* Android 11 (API 30, nawigacja trzema przyciskami): okno też edge-to-edge (0–2400 px, wcześniej
+  system zmniejszał je nad klawiaturą bez żadnych klatek): górna krawędź klawiatury na 1533 px,
+  obserwator zgłasza 867 px, aplikacja 330 dp; wysuwanie przyszło w 9 klatkach; po Wstecz
+  zawartość kończy się 48 dp nad dołem (pasek nawigacji); paski aplikacji leżą pod paskiem
+  stanu i nad paskiem nawigacji, ikony systemu ciemne w jasnym motywie i jasne w ciemnym.
 
 Na obu pasek leży dokładnie na klawiaturze, zostaje na niej przy przewijaniu dziennika palcem,
-a po Wstecz zostaje na dole nad paskiem nawigacji systemu (dolna nawigacja aplikacji wraca
-dopiero po zakończeniu pisania).
+a po Wstecz zostaje na dole tuż nad paskiem nawigacji systemu (dolna nawigacja aplikacji wraca
+dopiero po zakończeniu pisania). Android 9–10 i prawdziwe telefony nie były sprawdzane.
 
 ## Rejestr zdarzeń: udostępnianie
 
@@ -659,6 +671,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
+| `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
   ringMinutes: int (alarmy, 1–60, domyślnie 10), path: ścieżka notatki w notatniku, line: int}`.
@@ -734,9 +747,11 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   Otwiera przykładowy notatnik (`--demo`), stuka palcem w blok dzisiejszego dziennika, czeka na
   klawiaturę (`dumpsys input_method`) i porównuje górną krawędź klawiatury (źródło wstawek `ime`
   w `dumpsys window displays`) z wartością zgłoszoną przez aplikację (±2 dp); na Androidzie 11+
-  sprawdza, że wysuwanie przyszło klatka po klatce; przewija dziennik palcem, chowa klawiaturę
-  przyciskiem Wstecz, potem to samo na stronie przewodnika (otwartej jak ze stuknięcia w
-  powiadomienie). Zrzuty ekranu (`keyboard-*.png`) i logi w `dist-android/emulator-test/`.
+  sprawdza, że okno nie zmieniło rozmiaru, a wysuwanie przyszło klatka po klatce; przewija
+  dziennik palcem, chowa klawiaturę przyciskiem Wstecz i sprawdza w logu, że pasek został tuż nad
+  paskiem nawigacji systemu, potem to samo na stronie przewodnika (otwartej jak ze stuknięcia w
+  powiadomienie), na koniec zrzut w ciemnym motywie (ikony pasków systemu). Zrzuty ekranu
+  (`keyboard-*.png`) i logi w `dist-android/emulator-test/`.
 * Skrypt po zbudowaniu sprawdza: podpis (`apksigner verify`), pakiet i wszystkie wymagane
   uprawnienia (`aapt2 dump badging`), komponenty w scalonym manifeście (`aapt2 dump xmltree`),
   klasy Kotlina i Javy Qt (`QtNative`, `QtActivityBase`, `QtLoader`) oraz metody androidx

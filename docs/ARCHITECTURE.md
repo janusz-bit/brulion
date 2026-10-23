@@ -87,8 +87,9 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   system share sheet for a file below filesDir through Qt's FileProvider), picked documents
   for imports (`documentInfo` / `listDocuments`: DocumentsContract, callable from worker
   threads) and the on-screen keyboard (`imeChanged`: how much of Qt's view the IME covers, from
-  `ImeInsets.kt`, frame by frame while it slides; for `KeyboardInsets`). `android/selftest` builds
-  an APK exercising the bridge.
+  `ImeInsets.kt`, frame by frame while it slides on Android 11+, where the window is drawn behind
+  the system bars; for `KeyboardInsets`) with the system bars' icons over that window
+  (`setSystemBarsLight`). `android/selftest` builds an APK exercising the bridge.
 * **WebAssembly** (`wasm/`): `WasmStorage` mounts IDBFS on the vault and app-data folders,
   loads them before the app opens anything and writes changes back (debounced, on page hide);
   `WasmNotifier` (Notification API, service-worker fallback, clicks → `activated`);
