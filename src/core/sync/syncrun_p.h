@@ -185,8 +185,9 @@ private:
     /// one-to-one by content (`arrived`, consumed), by version (a server move keeps the ETag) or
     /// as the same name in another letter case. `here`: the paths vanished locally.
     int countMoved(const QList<VaultPath> &paths, bool here, QHash<QString, int> &arrived) const;
-    /// Folder renames in the vault: a folder of synced files missing here whose every synced file
-    /// exists, unchanged, below a new local folder unknown to the server.
+    /// Folder renames in the vault: a folder of synced files missing here (still on the server)
+    /// whose synced files are, at least half of them unchanged, at their places below a new local
+    /// folder the server does not have.
     QList<FolderMove> findFolderMoves();
     std::optional<VaultPath> renameTarget(const VaultPath &from, const QSet<VaultPath> &known,
                                           const QSet<VaultPath> &localFolders,

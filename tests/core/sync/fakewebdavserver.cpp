@@ -301,19 +301,35 @@ HttpResponse FakeWebDavServer::move(const HttpRequest &request, const QString &p
         m_nodes.removeIf([&](QMap<QString, Node>::iterator it) {
             return it.key() == target || it.key().startsWith(target + u'/');
         });
-    const QString prefix = path + u'/';
+    moveNodes(path, target);
+    return response(exists ? 204 : 201);
+}
+
+void FakeWebDavServer::moveNodes(const QString &fromAbs, const QString &toAbs)
+{
+    const QString prefix = fromAbs + u'/';
     QList<std::pair<QString, Node>> moved;
     for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
-        if (it.key() == path || it.key().startsWith(prefix))
-            moved.append({target + it.key().mid(path.size()), it.value()});
+        if (it.key() == fromAbs || it.key().startsWith(prefix))
+            moved.append({toAbs + it.key().mid(fromAbs.size()), it.value()});
     }
-    m_nodes.removeIf([&](QMap<QString, Node>::iterator it) { return it.key() == path || it.key().startsWith(prefix); });
+    m_nodes.removeIf([&](QMap<QString, Node>::iterator it) { return it.key() == fromAbs || it.key().startsWith(prefix); });
     for (auto &[key, node] : moved) {
         if (!m_options.moveKeepsEtags)
             node.etag = nextEtag();
         m_nodes.insert(key, node);
     }
-    return response(exists ? 204 : 201);
+}
+
+bool FakeWebDavServer::moveNode(const QString &fromRel, const QString &toRel)
+{
+    const QString from = abs(fromRel);
+    const QString to = abs(toRel);
+    if (!m_nodes.contains(from) || m_nodes.contains(to))
+        return false;
+    mkdirs(parentOf(to));
+    moveNodes(from, to);
+    return true;
 }
 
 QString FakeWebDavServer::nextEtag()

@@ -2,10 +2,12 @@
 //
 //  * Moves: a file whose content arrives under a new path in the same run (uploaded or
 //    downloaded by the first pass) was moved, not deleted — the guards do not count it. A folder
-//    renamed in the vault whose synced files all exist unchanged below the new name is moved on
-//    the server with one MOVE instead of a deletion and an upload per file; the sync states, merge
-//    bases and the listing follow it, so the files are then compared at their new paths (an edit
-//    made on the server meanwhile comes down into the renamed folder).
+//    renamed in the vault (its synced files found below the new name, at least half of them
+//    unchanged) is moved on the server with one MOVE instead of a deletion and an upload per
+//    file; the sync states, merge bases and the listing follow it, so the files are then compared
+//    at their new paths as usual: an edit made on the server meanwhile comes down into the renamed
+//    folder, edits on both sides merge, a file deleted since the rename is deleted on the server.
+//    Without MOVE (refused, or the new name taken meanwhile) the files travel one by one.
 //  * Folders: an empty folder travels both ways (MKCOL / a new local folder); a folder deleted on
 //    one side is deleted on the other once it holds nothing there — a local folder only when it is
 //    empty on disk (no file at all: ignored and hidden ones count), a server folder only when the
@@ -194,15 +196,10 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
     if (files.isEmpty())
         return std::nullopt;
     std::sort(files.begin(), files.end());
-    const VaultPath &first = files.first();
-    const QString rel = first.mid(from.size()); // "/sub/name.md"
-    for (const VaultPath &candidate : newByName.value(paths::basename(first))) {
-        if (!candidate.endsWith(rel) || candidate.size() == rel.size())
-            continue;
-        const VaultPath to = candidate.left(candidate.size() - rel.size());
+    const auto renamedTo = [&](const VaultPath &to) {
         if (taken.contains(to) || isWithin(to, from) || isWithin(from, to) || !isSyncablePath(to)
             || !localFolders.contains(to) || known.contains(to) || m_states.contains(to)) {
-            continue;
+            return false;
         }
         // Nothing on the server at or below the new name, in any letter case, but the old folder
         // itself (a case-only rename).
@@ -214,15 +211,33 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
             return l == lower || (l.startsWith(lower) && l.at(lower.size()) == u'/');
         });
         if (clash)
-            continue;
-        // Every synced file of the old folder, unchanged at its place in the new one.
-        const bool whole = std::all_of(files.cbegin(), files.cend(), [&](const VaultPath &file) {
+            return false;
+        // At least half of the synced files of the old folder are at their places in the new one,
+        // unchanged; the others may have been edited (compared as usual at the new path) or
+        // deleted (deleted on the server as usual) since the rename.
+        int unchanged = 0;
+        for (const VaultPath &file : std::as_const(files)) {
             const VaultPath target = to + file.mid(from.size());
-            return m_local.contains(target) && !m_states.contains(target) && !m_remote.contains(target)
-                   && sameContent(target, m_states.value(file));
-        });
-        if (whole)
-            return to;
+            if (m_states.contains(target) || m_remote.contains(target))
+                return false;
+            if (m_local.contains(target) && sameContent(target, m_states.value(file)))
+                ++unchanged;
+        }
+        return unchanged > 0 && unchanged * 2 >= files.size();
+    };
+    QSet<VaultPath> tried;
+    for (const VaultPath &file : std::as_const(files)) {
+        const QString rel = file.mid(from.size()); // "/sub/name.md"
+        for (const VaultPath &candidate : newByName.value(paths::basename(file))) {
+            if (!candidate.endsWith(rel) || candidate.size() == rel.size())
+                continue;
+            const VaultPath to = candidate.left(candidate.size() - rel.size());
+            if (tried.contains(to))
+                continue;
+            tried.insert(to);
+            if (renamedTo(to))
+                return to;
+        }
     }
     return std::nullopt;
 }

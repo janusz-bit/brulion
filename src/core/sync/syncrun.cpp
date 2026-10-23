@@ -231,6 +231,10 @@ QString SyncRun::summary() const
                          .arg(r.deletedRemote)
                          .arg(r.conflicts.size())
                          .arg(r.errors.size());
+        if (r.foldersCreated + r.foldersDeleted + r.foldersMoved > 0)
+            counts += u", folders: %1 created, %2 deleted, %3 moved"_s.arg(r.foldersCreated)
+                              .arg(r.foldersDeleted)
+                              .arg(r.foldersMoved);
         if (!r.skipped.isEmpty())
             counts += u", skipped %1"_s.arg(r.skipped.size());
         if (r.needsConfirmation)

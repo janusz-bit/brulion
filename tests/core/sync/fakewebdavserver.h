@@ -81,6 +81,9 @@ public:
     void mkdir(const QString &rel);
     /// Remove a file or folder directly on the server.
     void remove(const QString &rel);
+    /// Move a file or folder directly on the server (as another client's MOVE would; ETags kept
+    /// unless Options::moveKeepsEtags is off). False when the source is missing or the target taken.
+    bool moveNode(const QString &fromRel, const QString &toRel);
     std::optional<QString> text(const QString &rel) const;
     std::optional<QByteArray> bytes(const QString &rel) const;
     QString etag(const QString &rel) const;
@@ -109,6 +112,7 @@ private:
     HttpResponse del(const HttpRequest &request, const QString &path);
     HttpResponse mkcol(const QString &path);
     HttpResponse move(const HttpRequest &request, const QString &path);
+    void moveNodes(const QString &fromAbs, const QString &toAbs);
     QString nextEtag();
     void mkdirs(const QString &absPath);
     qint64 now() const;
