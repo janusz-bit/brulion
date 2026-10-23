@@ -4,6 +4,7 @@
 #include "dates/dates.h"
 #include "index/index.h"
 #include "markdown/markdown.h"
+#include "notebook/json.h"
 #include "reminders/calendar.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -17,18 +18,6 @@ using namespace Qt::StringLiterals;
 namespace brulion::shell {
 
 namespace {
-
-QString statusName(TaskStatus status)
-{
-    switch (status) {
-    case TaskStatus::Todo: return u"todo"_s;
-    case TaskStatus::Doing: return u"doing"_s;
-    case TaskStatus::Done: return u"done"_s;
-    case TaskStatus::Cancelled: return u"cancelled"_s;
-    case TaskStatus::Deferred: return u"deferred"_s;
-    }
-    return {};
-}
 
 std::optional<TaskStatus> statusFromName(const QString &name)
 {
@@ -44,64 +33,6 @@ std::optional<TaskStatus> statusFromName(const QString &name)
     if (n == u"deferred")
         return TaskStatus::Deferred;
     return std::nullopt;
-}
-
-QString priorityName(Priority priority)
-{
-    switch (priority) {
-    case Priority::None: return {};
-    case Priority::Lowest: return u"lowest"_s;
-    case Priority::Low: return u"low"_s;
-    case Priority::Medium: return u"medium"_s;
-    case Priority::High: return u"high"_s;
-    case Priority::Highest: return u"highest"_s;
-    }
-    return {};
-}
-
-QString queryTypeName(QueryType type)
-{
-    switch (type) {
-    case QueryType::Tasks: return u"tasks"_s;
-    case QueryType::Blocks: return u"blocks"_s;
-    case QueryType::Pages: return u"pages"_s;
-    case QueryType::Reminders: return u"reminders"_s;
-    }
-    return {};
-}
-
-QString calendarKindName(CalendarItem::Kind kind)
-{
-    switch (kind) {
-    case CalendarItem::Journal: return u"journal"_s;
-    case CalendarItem::Due: return u"due"_s;
-    case CalendarItem::Scheduled: return u"scheduled"_s;
-    case CalendarItem::Start: return u"start"_s;
-    case CalendarItem::Reminder: return u"reminder"_s;
-    case CalendarItem::Done: return u"done"_s;
-    }
-    return {};
-}
-
-QVariantMap taskMap(const Task &task)
-{
-    QVariantMap m{
-        { u"status"_s, statusName(task.status) },
-        { u"marker"_s, task.marker },
-        { u"text"_s, task.text },
-        { u"priority"_s, priorityName(task.priority) },
-    };
-    if (task.due)
-        m.insert(u"due"_s, task.due->toString());
-    if (task.scheduled)
-        m.insert(u"scheduled"_s, task.scheduled->toString());
-    if (task.start)
-        m.insert(u"start"_s, task.start->toString());
-    if (task.doneDate)
-        m.insert(u"done"_s, task.doneDate->toString(Qt::ISODate));
-    if (!task.recurrence.isEmpty())
-        m.insert(u"recurrence"_s, task.recurrence);
-    return m;
 }
 
 /// One line of plain text (lists show the start of long blocks).
@@ -160,15 +91,10 @@ QVariantList Workspace::search(const QString &query, int limit) const
     QVariantList out;
     if (!m_index || query.trimmed().isEmpty() || limit <= 0)
         return out;
-    for (const SearchHit &hit : m_index->search(query, limit)) {
-        out.append(QVariantMap{ { u"path"_s, hit.path },
-                                { u"title"_s, hit.title },
-                                { u"folder"_s, paths::dirname(hit.path) },
-                                { u"line"_s, hit.line },
-                                { u"excerpt"_s, hit.excerpt },
-                                { u"score"_s, hit.score },
-                                { u"journal"_s, journalDate(hit.path) } });
-    }
+    // The command line's JSON of a hit (notebook::searchHitJson): one serializer for both.
+    const VaultConfig config = m_vault ? m_vault->config() : VaultConfig();
+    for (const SearchHit &hit : m_index->search(query, limit))
+        out.append(notebook::searchHitJson(hit, config).toVariantMap());
     return out;
 }
 
@@ -230,17 +156,8 @@ QVariantList Workspace::calendarItems(const QString &from, const QString &to) co
     const QDate b = QDate::fromString(to, Qt::ISODate);
     if (!m_index || !a.isValid() || !b.isValid() || a > b || a.daysTo(b) > 400)
         return out;
-    for (const CalendarItem &item : brulion::calendarItems(*m_index, a, b)) {
-        out.append(QVariantMap{ { u"date"_s, item.date.toString(Qt::ISODate) },
-                                { u"time"_s, item.time ? item.time->toString(u"HH:mm"_s) : QString() },
-                                { u"kind"_s, calendarKindName(item.kind) },
-                                { u"title"_s, item.title },
-                                { u"path"_s, item.path },
-                                { u"line"_s, item.line },
-                                { u"status"_s, item.status ? statusName(*item.status) : QString() },
-                                { u"recurring"_s, item.recurring },
-                                { u"alarm"_s, item.alarm } });
-    }
+    for (const CalendarItem &item : brulion::calendarItems(*m_index, a, b))
+        out.append(notebook::calendarItemJson(item).toVariantMap());
     return out;
 }
 
@@ -248,37 +165,8 @@ QVariantList Workspace::calendarItems(const QString &from, const QString &to) co
 
 QVariantMap Workspace::queryItem(const QueryItem &item) const
 {
-    const ParsedNote *note = m_index ? m_index->note(item.path) : nullptr;
-    QVariantMap m{ { u"path"_s, item.path },
-                   { u"title"_s, note ? note->title : paths::pageTitle(item.path) },
-                   { u"folder"_s, paths::dirname(item.path) },
-                   { u"line"_s, 0 },
-                   { u"depth"_s, 0 } };
-    if (note && item.blockIndex >= 0 && item.blockIndex < note->blocks.size()) {
-        const Block &block = note->blocks.at(item.blockIndex);
-        m.insert(u"line"_s, block.line);
-        m.insert(u"text"_s, block.text);
-        m.insert(u"raw"_s, block.raw);
-        m.insert(u"depth"_s, block.depth);
-        if (!block.id.isEmpty())
-            m.insert(u"blockId"_s, block.id);
-    } else {
-        m.insert(u"text"_s, note ? note->title : paths::pageTitle(item.path));
-        m.insert(u"raw"_s, QString());
-    }
-    if (item.task) {
-        m.insert(u"task"_s, taskMap(*item.task));
-        if (item.blockIndex < 0)
-            m.insert(u"line"_s, item.task->line);
-    }
-    if (item.reminder) {
-        QVariantMap r{ { u"at"_s, item.reminder->at.toString() }, { u"alarm"_s, item.reminder->alarm } };
-        if (!item.reminder->recurrence.isEmpty())
-            r.insert(u"recurrence"_s, item.reminder->recurrence);
-        m.insert(u"reminder"_s, r);
-        m.insert(u"line"_s, item.reminder->line);
-    }
-    return m;
+    // The command line's JSON of an item (notebook::queryItemJson): one serializer for both.
+    return m_index ? notebook::queryItemJson(*m_index, item).toVariantMap() : QVariantMap();
 }
 
 QVariantMap Workspace::runQuery(const QString &source, const QString &currentPath)
@@ -314,7 +202,7 @@ QVariantMap Workspace::runQuery(const QString &source, const QString &currentPat
         groups.append(QVariantMap{ { u"key"_s, group.key }, { u"label"_s, group.label }, { u"items"_s, groupItems } });
     }
     out.insert(u"ok"_s, true);
-    out.insert(u"type"_s, queryTypeName(result.type));
+    out.insert(u"type"_s, notebook::queryTypeName(result.type));
     out.insert(u"total"_s, result.total);
     out.insert(u"items"_s, items);
     out.insert(u"groups"_s, groups);

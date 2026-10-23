@@ -20,6 +20,6 @@ target_include_directories(brulion_planning PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_planning
     PUBLIC Qt6::Core Qt6::Gui Qt6::Quick brulion_editorhost brulion_core_index brulion_core_reminders
            brulion_core_markdown brulion_core_dates
-    PRIVATE brulion_core_text brulion_core_util)
+    PRIVATE brulion_core_text brulion_core_util brulion_core_notebook)
 qt_extract_metatypes(brulion_planning)
 brulion_set_warnings(brulion_planning)

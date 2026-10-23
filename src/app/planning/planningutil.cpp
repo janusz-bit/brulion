@@ -4,6 +4,8 @@
 #include "dates/natural.h"
 #include "index/vaultindex.h"
 #include "markdown/tokens.h"
+#include "notebook/journals.h"
+#include "notebook/json.h"
 #include "text/text.h"
 
 #include <QCollator>
@@ -155,14 +157,7 @@ QString plainText(const QString &markdown)
 
 QString statusName(TaskStatus status)
 {
-    switch (status) {
-    case TaskStatus::Todo: return u"todo"_s;
-    case TaskStatus::Doing: return u"doing"_s;
-    case TaskStatus::Done: return u"done"_s;
-    case TaskStatus::Cancelled: return u"cancelled"_s;
-    case TaskStatus::Deferred: return u"deferred"_s;
-    }
-    return u"todo"_s;
+    return notebook::taskStatusName(status); // the names of the JSON (CLI, query results)
 }
 
 std::optional<TaskStatus> statusFromName(const QString &name)
@@ -187,15 +182,7 @@ bool isClosed(TaskStatus status)
 
 QString priorityName(Priority priority)
 {
-    switch (priority) {
-    case Priority::None: return {};
-    case Priority::Lowest: return u"lowest"_s;
-    case Priority::Low: return u"low"_s;
-    case Priority::Medium: return u"medium"_s;
-    case Priority::High: return u"high"_s;
-    case Priority::Highest: return u"highest"_s;
-    }
-    return {};
+    return notebook::priorityName(priority);
 }
 
 Priority priorityFromName(const QString &name)
@@ -259,7 +246,11 @@ QString reminderLine(const QString &text, const DateSpec &at, bool alarm, const 
 
 QString appendBlock(const QString &content, const QString &block)
 {
-    static const QRegularExpression emptyBullet(u"^\\s*[-*+]\\s*$"_s);
+    // The block as one item: blank lines around it dropped, each line trimmed, continuation lines
+    // of a list item indented under it (a paragraph stays a paragraph, unlike
+    // notebook::blockFromText(), which makes everything a list item); appended as the command
+    // line and quick capture append (notebook::appendBlock: line endings, a template's empty
+    // bullet, a BOM).
     static const QRegularExpression listMarker(u"^([-*+]|\\d+[.)])\\s"_s);
     QStringList lines = QString(block).remove(u'\r').split(u'\n');
     while (!lines.isEmpty() && lines.first().trimmed().isEmpty())
@@ -268,24 +259,12 @@ QString appendBlock(const QString &content, const QString &block)
         lines.removeLast();
     if (lines.isEmpty())
         return content;
-
-    const QString eol = text::detectEol(content);
-    QList<text::Line> existing = text::splitLines(content);
-    while (!existing.isEmpty() && existing.last().text.trimmed().isEmpty())
-        existing.removeLast();
-    if (!existing.isEmpty() && emptyBullet.match(existing.last().text).hasMatch())
-        existing.removeLast();
-    QString out = text::joinLines(existing);
-    if (!out.isEmpty() && !out.endsWith(u'\n') && !out.endsWith(u'\r'))
-        out += eol;
-
     const QString first = lines.first().trimmed();
     const bool listItem = listMarker.match(first).hasMatch();
-    out += first;
+    QString item = first;
     for (qsizetype i = 1; i < lines.size(); ++i)
-        out += eol + (listItem ? u"  "_s : QString()) + lines.at(i).trimmed();
-    out += eol;
-    return out;
+        item += u'\n' + (listItem ? u"  "_s : QString()) + lines.at(i).trimmed();
+    return notebook::appendBlock(content, item);
 }
 
 QuickAdd parseQuickAdd(const QString &input, const QDateTime &now, Qt::DayOfWeek weekStart, dates::UiLocale locale)

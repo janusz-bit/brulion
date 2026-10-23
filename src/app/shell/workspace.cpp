@@ -11,6 +11,7 @@
 #include "markdown/markdown.h"
 #include "notebook/capture.h"
 #include "notebook/journals.h"
+#include "notebook/json.h"
 #include "notebook/pages.h"
 #include "text/text.h"
 #include "util/paths.h"
@@ -821,19 +822,8 @@ QString Workspace::saveAttachment(const QString &fileName, const QByteArray &dat
 
 QVariantMap Workspace::vaultConfig() const
 {
-    const VaultConfig c = m_vault ? m_vault->config() : VaultConfig();
-    return {
-            {u"journalsFolder"_s, c.journalsFolder},
-            {u"journalFileFormat"_s, c.journalFileFormat},
-            {u"newPagesFolder"_s, c.newPagesFolder},
-            {u"attachmentsFolder"_s, c.attachmentsFolder},
-            {u"templatesFolder"_s, c.templatesFolder},
-            {u"journalTemplate"_s, c.journalTemplate},
-            {u"defaultReminderTime"_s, c.defaultReminderTime.toString(u"HH:mm"_s)},
-            {u"weekStartsOn"_s, int(c.weekStartsOn)},
-            {u"journalMode"_s, markdown::noteModeName(c.journalMode)},
-            {u"pageMode"_s, markdown::noteModeName(c.pageMode)},
-    };
+    // The command line's JSON of the settings (notebook::vaultConfigJson): one serializer for both.
+    return notebook::vaultConfigJson(m_vault ? m_vault->config() : VaultConfig()).toVariantMap();
 }
 
 bool Workspace::setConfig(const QVariantMap &map)
