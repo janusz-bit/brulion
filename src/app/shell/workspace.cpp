@@ -1065,18 +1065,18 @@ QString Workspace::renamePage(const QString &rawPath, const QString &newTitle)
         }
     }
     // Files to rewrite, asked before the index learns about the rename: the links to the page and
-    // the tags that name it (docs/SYNTAX.md §3). Tags of the old name are renamed only when they
-    // name this page (with a duplicate base name they may name the other one).
+    // the tags that name it (docs/SYNTAX.md §3) — only those: with a duplicate base name `#dom`
+    // or a path suffix `#Stare/Dom` may name the other page.
     const QList<VaultPath> linking = m_index ? m_index->linksTo(path) : QList<VaultPath>();
     const QList<VaultPath> tagging = m_index ? m_index->tagsTo(path) : QList<VaultPath>();
-    const bool namedByTitle = m_index && m_index->resolveTag(oldTitle) == path;
+    const QStringList tagKeys = m_index ? m_index->tagsNaming(path) : QStringList();
     if (!m_vault->rename(path, newPath, ChangeSource::User)) {
         Q_EMIT errorOccurred(tr("Could not rename the page: %1").arg(m_vault->errorString()));
         return {};
     }
     if (paths::isMarkdown(newPath)) {
         const auto moved = [&](const VaultPath &file) { return file == path ? newPath : file; };
-        rewriteReferences(linking, tagging, moved, {oldTitle, newName, path, newPath, namedByTitle});
+        rewriteReferences(linking, tagging, moved, {oldTitle, newName, path, newPath, tagKeys});
     }
     return newPath;
 }
@@ -1098,8 +1098,8 @@ void Workspace::rewriteReferences(const QList<VaultPath> &linking, const QList<V
             rewritten =
                     markdown::renameLinks(rewritten, rename.oldName, rename.newName, rename.oldPath, rename.newPath);
         if (tagging.contains(file))
-            rewritten = markdown::renameTags(rewritten, rename.tagsByName ? rename.oldName : QString(), rename.newName,
-                                             rename.oldPath, rename.newPath);
+            rewritten = markdown::renameTags(rewritten, rename.oldName, rename.newName, rename.oldPath, rename.newPath,
+                                             [&rename](const QString &key) { return rename.tagKeys.contains(key); });
         if (rewritten != content)
             m_vault->writeText(target, rewritten, ChangeSource::User); // one write, one history step
     }
@@ -1124,13 +1124,15 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
         VaultPath oldPath;
         QList<VaultPath> linking;
         QList<VaultPath> tagging;
+        QStringList tagKeys;
     };
     QList<Rewrite> rewrites;
     const QString prefix = path + u'/';
     if (m_index) {
         for (const FileStat &f : m_vault->markdownFiles()) {
             if (f.path.startsWith(prefix))
-                rewrites.append({f.path, m_index->linksTo(f.path), m_index->tagsTo(f.path)});
+                rewrites.append(
+                        {f.path, m_index->linksTo(f.path), m_index->tagsTo(f.path), m_index->tagsNaming(f.path)});
         }
     }
     if (!m_vault->rename(path, newPath, ChangeSource::User)) {
@@ -1141,7 +1143,7 @@ QString Workspace::renameFolder(const QString &rawPath, const QString &newName)
     for (const Rewrite &r : std::as_const(rewrites)) {
         // The pages keep their names: only what names them with their folder changes.
         const QString title = paths::pageTitle(r.oldPath);
-        rewriteReferences(r.linking, r.tagging, moved, {title, title, r.oldPath, moved(r.oldPath), false});
+        rewriteReferences(r.linking, r.tagging, moved, {title, title, r.oldPath, moved(r.oldPath), r.tagKeys});
     }
     return newPath;
 }

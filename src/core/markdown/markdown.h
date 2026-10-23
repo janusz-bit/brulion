@@ -38,8 +38,9 @@
 //                  ensureBlockId(content, line) -> {content, id},
 //                  generateBlockId(), listItemRange(content, line) -> {from, to}
 //   rename.h       renameLinks(content, oldName, newName[, oldPath, newPath]),
-//                  renameTags(...) (the tags naming the page: `#old`, `#[[old]]`, `tags::` and
-//                  frontmatter items; bracket form kept, sub-tags untouched), tagsToRename(...)
+//                  renameTags(...[, naming]) (the tags naming the page: `#old`, `#[[old]]`,
+//                  `tags::` and frontmatter items; bracket form kept, sub-tags untouched; `naming`
+//                  keeps those of other pages with that name), tagsToRename(...)
 //   journal.h      journalPathForDate(date, config) / journalDateFromPath(path, config)
 //                  (Qt QDate format strings from VaultConfig::journalFileFormat)
 //   templates.h    applyTemplate(template, {now, title, locale}) -> {text, cursor}

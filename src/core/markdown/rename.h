@@ -8,7 +8,14 @@
 #include <QList>
 #include <QString>
 
+#include <functional>
+
 namespace brulion::markdown {
+
+/// Which tags a rename may rewrite, asked with a tag's key (lower-case NFC, no '#'; the keys
+/// VaultIndex::tagsNaming() lists for the renamed page). An empty function accepts every tag
+/// the names match.
+using TagFilter = std::function<bool(const QString &key)>;
 
 /// Rewrite links to a renamed page (content in → content out). The links rewritten are exactly
 /// those parseNote() reports (never inside code, comments or HTML blocks): wiki links and embeds
@@ -39,14 +46,17 @@ QString renameLinks(const QString &content, const QString &oldName, const QStrin
 /// writes the new vault path without `.md`. A base-name tag is rewritten only when the name
 /// changes (a move keeps `#Dom`). Sub-tags (`#old/x`), longer tags (`#oldx`), code, comments and
 /// formulas are never touched; line endings and every other byte are preserved. A new name no tag
-/// can hold (`[`, `]`, `|`) leaves the tags as they are.
+/// can hold (`[`, `]`, `|`) leaves the tags as they are. With `naming`, only the tags it accepts
+/// are rewritten: the names alone cannot tell whether `#dom` or the path suffix `#Stare/Dom`
+/// names the renamed page or another one with that name (VaultIndex::tagsNaming() can). The
+/// `tag:` filters of ```query blocks are not tags and stay as they are.
 QString renameTags(const QString &content, const QString &oldName, const QString &newName,
-                   const VaultPath &oldPath = {}, const VaultPath &newPath = {});
+                   const VaultPath &oldPath = {}, const VaultPath &newPath = {}, const TagFilter &naming = {});
 
 /// The occurrences renameTags() would rewrite with the same arguments, in document order (e.g.
 /// to count them before asking). Frontmatter names in a YAML form findNoteTags() cannot place
 /// come last, without a range (from = to = -1).
 QList<NoteTag> tagsToRename(const QString &content, const QString &oldName, const QString &newName,
-                            const VaultPath &oldPath = {}, const VaultPath &newPath = {});
+                            const VaultPath &oldPath = {}, const VaultPath &newPath = {}, const TagFilter &naming = {});
 
 } // namespace brulion::markdown

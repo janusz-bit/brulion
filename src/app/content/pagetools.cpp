@@ -118,14 +118,16 @@ QVariantMap PageTools::renameImpact(const QString &rawPath) const
             }
         }
         // The tags that name the page (docs/SYNTAX.md §3) are renamed with it, as
-        // Workspace::renamePage() does: by name only when they name this page.
+        // Workspace::renamePage() does: only those (not another page's of the same name).
         const QString title = paths::pageTitle(path);
-        const QString byName = idx->resolveTag(title) == path ? title : QString();
+        const QStringList keys = idx->tagsNaming(path);
+        const auto naming = [&keys](const QString &key) { return keys.contains(key); };
         const QString placeholder = title + u" (2)"_s; // any other name: what changes is the same
         for (const VaultPath &source : idx->tagsTo(path)) {
             if (source == path)
                 continue;
-            const qsizetype here = markdown::tagsToRename(idx->content(source), byName, placeholder, path).size();
+            const qsizetype here =
+                    markdown::tagsToRename(idx->content(source), title, placeholder, path, {}, naming).size();
             if (here > 0) {
                 notes.insert(source);
                 tags += int(here);

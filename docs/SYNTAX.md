@@ -133,8 +133,11 @@ frontmatter's `tags:`.
 * **Rename** — renaming a page rewrites the tags that name it (counted in the confirmation):
   `#old` → `#New` or `#[[New name]]`, `#[[old]]` keeps the bracket form, `tags:: old` and
   frontmatter items in place (byte-preserving; a YAML value that would read differently is
-  rewritten as a list). Sub-tags are not renamed; an alias tag (`#Janek`) still names the page.
-  A folder rename rewrites path-qualified tags (`#Projekty/Dom` → `#Archiwum/Dom`).
+  rewritten as a list). Only tags that name this page change (with a duplicate name, `#dom` or
+  `#Stare/Dom` naming the other page stays). Sub-tags are not renamed; an alias tag (`#Janek`)
+  still names the page. A folder rename rewrites path-qualified tags (`#Projekty/Dom` →
+  `#Archiwum/Dom`). Queries are not rewritten: `tag:old` in a ```` ```query ```` block (like a
+  `[[link]]` there) keeps the old name and has to be changed by hand.
 * **Queries** — `tag:` stays tags-only; `ref:` also matches tags naming the page (§10).
 * **Graph** — a tag naming a page is an edge to it; "#tag" nodes remain only for tags that name
   no page. Unresolved tags are never "missing pages" (hex colours, issue numbers…).

@@ -186,10 +186,10 @@ struct TagEdit {
 };
 
 /// What a tag naming the renamed page is renamed to (the written name), or a null QString.
-QString renamedTagName(const QString &written, const RenameSpec &spec, const QString &oldKey)
+QString renamedTagName(const QString &written, const RenameSpec &spec, const QString &oldKey, const TagFilter &naming)
 {
     const QString k = key(written);
-    if (k.isEmpty())
+    if (k.isEmpty() || (naming && !naming(k)))
         return {};
     if (!oldKey.isEmpty() && k == oldKey)
         return spec.newName == spec.oldName ? QString() : spec.newName; // a move keeps #Dom
@@ -242,7 +242,7 @@ struct TagRenamePlan {
 };
 
 TagRenamePlan planTagRename(const QString &content, const QString &oldName, const QString &newName,
-                            const VaultPath &oldPath, const VaultPath &newPath)
+                            const VaultPath &oldPath, const VaultPath &newPath, const TagFilter &naming)
 {
     TagRenamePlan plan;
     const QString oldTrimmed = oldName.trimmed();
@@ -254,7 +254,7 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
         spec.oldName = newTrimmed; // only path-qualified tags (no base-name match below)
     const QString oldKey = oldTrimmed.isEmpty() ? QString() : key(oldTrimmed);
     const auto plan1 = [&](const NoteTag &t) {
-        const QString name = renamedTagName(t.name, spec, oldKey);
+        const QString name = renamedTagName(t.name, spec, oldKey, naming);
         if (name.isNull() || name == t.name)
             return;
         const QString replacement = tagReplacement(t, name, content);
@@ -275,7 +275,7 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
         // The items are namesFrom()'s names one to one.
         for (qsizetype i = 0; i < plan.frontmatter.items.size(); ++i) {
             const FrontmatterTagItem &item = plan.frontmatter.items[i];
-            const QString name = renamedTagName(item.tag.name, spec, oldKey);
+            const QString name = renamedTagName(item.tag.name, spec, oldKey, naming);
             if (item.link || name.isNull() || name == item.tag.name)
                 continue;
             const qsizetype before = plan.edits.size();
@@ -285,7 +285,7 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
         }
     } else {
         for (QString &n : plan.frontmatterAfter) {
-            const QString name = renamedTagName(n.normalized(QString::NormalizationForm_C), spec, oldKey);
+            const QString name = renamedTagName(n.normalized(QString::NormalizationForm_C), spec, oldKey, naming);
             if (!name.isNull() && name != n && !tagSyntax(name).isEmpty()) {
                 n = name;
                 ++plan.unplacedFrontmatter;
@@ -300,9 +300,9 @@ TagRenamePlan planTagRename(const QString &content, const QString &oldName, cons
 } // namespace
 
 QString renameTags(const QString &content, const QString &oldName, const QString &newName, const VaultPath &oldPath,
-                   const VaultPath &newPath)
+                   const VaultPath &newPath, const TagFilter &naming)
 {
-    const TagRenamePlan plan = planTagRename(content, oldName, newName, oldPath, newPath);
+    const TagRenamePlan plan = planTagRename(content, oldName, newName, oldPath, newPath, naming);
     QString out;
     qsizetype last = 0;
     for (const TagEdit &e : plan.edits) {
@@ -324,9 +324,9 @@ QString renameTags(const QString &content, const QString &oldName, const QString
 }
 
 QList<NoteTag> tagsToRename(const QString &content, const QString &oldName, const QString &newName,
-                            const VaultPath &oldPath, const VaultPath &newPath)
+                            const VaultPath &oldPath, const VaultPath &newPath, const TagFilter &naming)
 {
-    const TagRenamePlan plan = planTagRename(content, oldName, newName, oldPath, newPath);
+    const TagRenamePlan plan = planTagRename(content, oldName, newName, oldPath, newPath, naming);
     QList<NoteTag> out;
     for (const TagEdit &e : plan.edits)
         out.append(e.tag);

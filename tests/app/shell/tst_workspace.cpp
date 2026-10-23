@@ -914,6 +914,25 @@ private Q_SLOTS:
         QCOMPARE(ws->readFile(u"Notatki.md"_s), u"- #dom i #Archiwum/Stare/Stary oraz #Stare/Stary\n"_s);
     }
 
+    // A path-suffix tag names the shortest page ending so (#Stare/Dom: Inne/Stare/Dom.md, not
+    // Archiwum/Stare/Dom.md): renaming or moving the other page leaves it alone.
+    void renameKeepsSuffixTagsOfOtherPages()
+    {
+        const QHash<QString, QString> files{{u"Archiwum/Stare/Dom.md"_s, u"- a\n"_s},
+                                            {u"Inne/Stare/Dom.md"_s, u"- b\n"_s},
+                                            {u"Notatki.md"_s, u"- #Stare/Dom i #Archiwum/Stare/Dom\n"_s}};
+        auto ws = open(files);
+        QCOMPARE(ws->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+        QCOMPARE(ws->renamePage(u"Archiwum/Stare/Dom.md"_s, u"Stary"_s), u"Archiwum/Stare/Stary.md"_s);
+        QCOMPARE(ws->readFile(u"Notatki.md"_s), u"- #Stare/Dom i #Archiwum/Stare/Stary\n"_s);
+        QCOMPARE(ws->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+
+        auto moved = open(files);
+        QCOMPARE(moved->renameFolder(u"Archiwum"_s, u"Archiwa"_s), u"Archiwa"_s);
+        QCOMPARE(moved->readFile(u"Notatki.md"_s), u"- #Stare/Dom i #Archiwa/Stare/Dom\n"_s);
+        QCOMPARE(moved->tagPage(u"Stare/Dom"_s), u"Inne/Stare/Dom.md"_s);
+    }
+
     void renameFolderRewritesPathTags()
     {
         auto ws = open({{u"Projekty/Dom.md"_s, u"- x\n"_s},

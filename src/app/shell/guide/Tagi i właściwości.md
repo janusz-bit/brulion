@@ -14,7 +14,7 @@ Tag nazywa stronę, jak w Logseq: kliknięcie `#praca` otwiera stronę „praca�
 
 - **Odnośniki** pod stroną pokazują bloki z jej tagiem obok bloków, które do niej linkują, a strony oznaczone tagiem w całości (w nagłówku) jako „cała strona”. Podtagi (`#praca/raporty`) to osobne strony.
 - **Widok tagu** — wszystko, co ma tag razem z podtagami — jest pod nagłówkiem strony („Widok tagu”, obok „Zadania z tym tagiem” i podtagów) i w widoku **Tagi** (przycisk na końcu wiersza; sam wiersz otwiera stronę).
-- **Zmiana nazwy strony** poprawia też tagi, które ją nazywają (`#stara` → `#Nowa` albo `#[[Nowa nazwa]]`), także w `tags::` i w nagłówku strony; podtagi zostają bez zmian.
+- **Zmiana nazwy strony** poprawia też tagi, które ją nazywają (`#stara` → `#Nowa` albo `#[[Nowa nazwa]]`), także w `tags::` i w nagłówku strony; podtagi zostają bez zmian. Filtry `tag:stara` w [[Zapytania|zapytaniach]] trzeba poprawić samemu.
 - Po wpisaniu `#` podpowiedzi pokazują tagi i strony; nazwę ze spacją albo znakami spoza tagu Brulion zapisze jako `#[[Jan Kowalski]]`.
 - W widoku **Zadania** kliknięcie tagu filtruje listę; Ctrl+kliknięcie (na telefonie przytrzymanie) otwiera jego stronę.
 

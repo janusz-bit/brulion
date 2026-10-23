@@ -383,7 +383,9 @@ private:
         QString newName;
         QString oldPath;
         QString newPath;
-        bool tagsByName = true; ///< tags of the old name name this page (else only path tags change)
+        /// The tags naming the page before the rename (VaultIndex::tagsNaming()): only these are
+        /// rewritten — with a duplicate base name `#dom` or `#Stare/Dom` may name the other page.
+        QStringList tagKeys;
     };
     /// Rewrite the links (renameLinks()) in `linking` and the tags (renameTags()) in `tagging` of
     /// a renamed page, each file read at `moved(file)` and written once.

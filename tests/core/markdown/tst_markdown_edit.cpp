@@ -767,6 +767,33 @@ private Q_SLOTS:
         QCOMPARE(markdown::renameTags(renamed, oldName, newName, oldPath, newPath), renamed);
     }
 
+    // `naming` says which tags name the renamed page (VaultIndex::tagsNaming()): with
+    // Archiwum/Stare/Dom.md next to the shorter Inne/Stare/Dom.md, #dom and the path suffix
+    // #Stare/Dom name the other page and stay.
+    void renameTagsOnlyNaming()
+    {
+        const QString content =
+                u"---\ntags: [dom, Archiwum/Stare/Dom]\n---\n- #Stare/Dom i #Archiwum/Stare/Dom, #dom\n  tags:: dom, archiwum/stare/dom\n"_s;
+        const QStringList keys{u"archiwum/stare/dom"_s};
+        const TagFilter naming = [&keys](const QString &key) { return keys.contains(key); };
+        const QString oldPath = u"Archiwum/Stare/Dom.md"_s;
+        QCOMPARE(
+                markdown::renameTags(content, u"Dom"_s, u"Stary"_s, oldPath, {}, naming),
+                u"---\ntags: [dom, Archiwum/Stare/Stary]\n---\n- #Stare/Dom i #Archiwum/Stare/Stary, #dom\n  tags:: dom, archiwum/stare/Stary\n"_s);
+        QCOMPARE(tagsToRename(content, u"Dom"_s, u"Stary"_s, oldPath, {}, naming).size(), 3);
+        // Without it every tag the names match changes.
+        QCOMPARE(
+                markdown::renameTags(content, u"Dom"_s, u"Stary"_s, oldPath),
+                u"---\ntags: [Stary, Archiwum/Stare/Stary]\n---\n- #Stare/Stary i #Archiwum/Stare/Stary, #Stary\n  tags:: Stary, archiwum/stare/Stary\n"_s);
+        // A filter accepting nothing changes nothing.
+        QCOMPARE(
+                markdown::renameTags(content, u"Dom"_s, u"Stary"_s, oldPath, {}, [](const QString &) { return false; }),
+                content);
+        // A form the scan does not place goes through the filter too.
+        const QString nested = u"---\ntags: [dom, {a: 1}]\n---\n"_s;
+        QCOMPARE(markdown::renameTags(nested, u"dom"_s, u"Mieszkanie"_s, {}, {}, naming), nested);
+    }
+
     // A frontmatter value the items cannot express: the key is written anew (the page keeps its
     // tags, now with the new name).
     void renameTagsRewritesFrontmatterKey()
