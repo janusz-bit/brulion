@@ -352,6 +352,10 @@ private Q_SLOTS:
                 << u"Projekty/Dom.md"_s << u"Projekty/Chata.md"_s
                 << u"ref:Dom tag:dom ref:Projekty/Dom tag:Projekty/Dom page:Projekty/Dom"_s
                 << u"ref:Dom tag:dom ref:Projekty/Chata tag:Projekty/Chata page:Projekty/Chata"_s << 2 << 2 << 3;
+        QTest::newRow("the shorter of two Doms renamed: the other would take its name")
+                << QStringList{u"Dom.md=- root"_s, u"Projekty/Dom.md=- x"_s, u"Notatka.md=- #dom #Projekty/Dom"_s}
+                << u"Dom.md"_s << u"Mieszkanie.md"_s << u"ref:Dom tag:dom page:Dom ref:Projekty/Dom tag:Projekty/Dom"_s
+                << u"ref:Mieszkanie tag:Mieszkanie page:Mieszkanie ref:Projekty/Dom tag:Projekty/Dom"_s << 2 << 2 << 3;
         QTest::newRow("a missing page stays missing")
                 << dom << u"Dom.md"_s << u"Mieszkanie.md"_s << u"ref:Nieistniejąca tag:nieistniejący"_s << QString()
                 << 0 << 1 << 0; // (only Notatka's #dom)

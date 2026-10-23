@@ -621,6 +621,8 @@ private Q_SLOTS:
         QTest::newRow("blanks inside brackets")
                 << q(u"ref:[[ Dom ]] tag:[[ x ]]"_s) << QStringList{u"ref Dom"_s, u"tag x"_s};
         QTest::newRow("no query") << u"- zwykła notatka #tag [[Link]]\n"_s << QStringList();
+        QTest::newRow("two backticks or tildes are no fence")
+                << u"``query\ntag:a\n``\n~~query\nref:B\n~~\n"_s << QStringList();
         QTest::newRow("the word query without a fence")
                 << u"- query tag:x ref:[[Dom]]\n- `query` i ``query``\n"_s << QStringList();
         QTest::newRow("empty values") << q(u"tag: ref:[[]] page:\"\""_s) << QStringList();
