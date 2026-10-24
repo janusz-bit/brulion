@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.1 — 24 października 2026
+
+**Zmiany**
+- **Usunięty widok „Zaznacz tekst”** z wersji 0.4.0 — na telefonie nie działał dobrze. Do kopiowania zaznaczaj całe bloki: przytrzymaj tekst bloku na telefonie, a na komputerze użyj Shift+strzałek, przeciągnięcia myszą albo Ctrl+klik. Fragment kilku akapitów zaznaczysz znak po znaku w trybie źródła Markdown (`Ctrl+E` albo **Więcej → Źródło Markdown**). Zobacz [[Dokument i konspekt|Dokument i konspekt]].
+
 ## 0.4.0 — 24 października 2026
 
 **Uwaga**
