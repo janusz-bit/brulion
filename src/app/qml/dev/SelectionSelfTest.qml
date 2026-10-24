@@ -18,17 +18,15 @@ import Brulion
 //     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block
 //     menu of a selected and of another block, the floating tools, a mouse drag over three paragraphs
 //     of a document (the list does not scroll), a drag to the view's edge (the list scrolls, the
-//     selection follows), the band after scrolling far away and back, and "Zaznacz tekst" (wheel
-//     turns stay in it, a mouse selection across paragraphs, Ctrl+C, a theme change keeping the
-//     selection, "Kopiuj wszystko", Esc);
+//     selection follows), the band after scrolling far away and back, and the floating tools' Więcej
+//     with no indents for a document's paragraphs;
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
 //     it, Kopiuj, "Pojedynczo" (no grips; taps leave a block out and pick another one with a gap,
 //     Kopiuj; off again: a tap moves the end), the end grip dragged, Usuń (still in the selection
 //     mode), a tap on the toast's Cofnij,
 //     Usuń and Ctrl+Z, a long press
 //     dragged to the view's edge (autoscroll), Back, the editing toolbar's "Zaznacz", Esc and
-//     Shift+↓ from a keyboard, the bullet menu's "Zaznacz", and "Zaznacz tekst" (a long press on a
-//     word, its handles dragged — the start one past the end —, Kopiuj, Back).
+//     Shift+↓ from a keyboard, and the bullet menu's "Zaznacz".
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -44,8 +42,6 @@ QtObject {
     property int rowC: -1
     property real contentBefore: 0
     property string textBefore: ""
-    property int countBefore: 0
-    property string themeBefore: ""
     /// A toast's Cofnij kept after its edit was undone another way.
     property var staleUndo: null
 
@@ -70,15 +66,6 @@ QtObject {
     }
     /// The clipboard's text exactly (no-break spaces kept): this app's copies are read as written.
     function clip() { return page.clipboardText() }
-    /// `s` with every character outside printable ASCII as \uXXXX (failure messages).
-    function codes(s) {
-        let out = ""
-        for (let i = 0; i < s.length; ++i) {
-            const c = s.charCodeAt(i)
-            out += c < 32 || c > 126 ? "\\u" + c.toString(16).padStart(4, "0") : s.charAt(i)
-        }
-        return out
-    }
     function key(k, modifiers) { EditorInput.sendKey(list, k, modifiers || 0, "") }
     function editKey(k, modifiers) { window.realKey(k, modifiers || 0, "") }
     function edgeOf(row) {
@@ -154,7 +141,6 @@ QtObject {
         const x = button.mapToItem(flick.contentItem, 0, 0).x
         flick.contentX = Math.max(0, Math.min(x - Theme.space8, flick.contentWidth - flick.width))
     }
-    function selectTextView() { return window.findItem(editor.dockHost, "selectTextEdit") }
     /// The shown grip at the end of the selection's band, or null.
     function endGrip() { return window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") }
     /// The button of a toast ("Cofnij"), when one is shown (clearToasts() first: one at a time).
@@ -602,75 +588,6 @@ QtObject {
                       "paragraphs of a document: no Zwiększ / Zmniejsz wcięcie")
                 tools.menu.close()
             },
-            // ---- "Zaznacz tekst" -------------------------------------------------------------------------
-            () => editor.openSelectText(),
-            wait(() => selectTextView() !== null && selectTextView().activeFocus, "“Zaznacz tekst” opens with the page as text"),
-            // Wheel turns stay in the view: at the text's end and over its bar the page under it holds still.
-            () => {
-                test.contentBefore = list.contentY
-                const flick = window.findItem(editor.dockHost, "selectTextFlick")
-                flick.contentY = Math.max(0, flick.contentHeight - flick.height)
-                for (let i = 0; i < 5; ++i)
-                    events.mouseWheel(flick, flick.width / 2, flick.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
-                const close = window.findShown(editor.dockHost, "selectTextClose")
-                for (let i = 0; i < 3; ++i)
-                    events.mouseWheel(close, close.width / 2, close.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
-            },
-            () => {
-                check(Math.abs(list.contentY - test.contentBefore) < 1,
-                      "wheel turns over the view never scroll the page under it: " + list.contentY + " vs " + test.contentBefore)
-                window.findItem(editor.dockHost, "selectTextFlick").contentY = 0
-            },
-            () => {
-                const text = selectTextView()
-                const all = text.getText(0, text.length)
-                const a = text.positionToRectangle(all.indexOf("Budżet liczymy"))
-                const b = text.positionToRectangle(all.indexOf("Krupówki, Gubałówka"))
-                events.mousePress(text, a.x + 1, a.y + a.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
-                events.mouseMove(text, a.x + 30, a.y + a.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
-                events.mouseMove(text, b.x + 2, b.y + b.height / 2, -1, Qt.LeftButton, Qt.NoModifier)
-                events.mouseRelease(text, b.x + 2, b.y + b.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
-            },
-            () => {
-                const text = selectTextView()
-                check(text.selectedText.indexOf("Budżet liczymy") === 0 && text.selectedText.indexOf("Plan") > 0,
-                      "a mouse drag selects across paragraphs: " + JSON.stringify(text.selectedText.slice(0, 40)))
-                EditorInput.sendKey(text, Qt.Key_C, Qt.ControlModifier, "")
-            },
-            // (Exactly: no no-break space joins "w" to the next word — the note has a space there.)
-            // (A blank line between paragraphs and the heading: pasted into a note they stay apart.)
-            wait(() => clip().indexOf("Budżet liczymy w Budżet domowy. #podróże\n\nPlan\n\nPierwszego dnia") === 0
-                       && clip() === EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
-                                                           selectTextView().selectionEnd),
-                 () => "Ctrl+C copies the selected text as plain text: " + codes(clip()) + " vs "
-                       + codes(EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
-                                                     selectTextView().selectionEnd))),
-            // A theme change while it is open: the text in the new colours, the selection kept.
-            () => {
-                const view = window.findItem(editor.dockHost, "selectTextView").item
-                test.textBefore = view.html
-                test.rowA = selectTextView().selectionStart
-                test.rowB = selectTextView().selectionEnd
-                test.themeBefore = Theme.mode
-                Theme.mode = Theme.dark ? "light" : "dark"
-            },
-            () => {
-                const view = window.findItem(editor.dockHost, "selectTextView").item
-                check(view.html !== test.textBefore && selectTextView().selectionStart === test.rowA
-                      && selectTextView().selectionEnd === test.rowB && test.rowA !== test.rowB,
-                      "a theme change renders the text again in its colours, the selection kept")
-                Theme.mode = test.themeBefore
-            },
-            () => {
-                selectTextView().deselect()
-                tap(window.findShown(editor.dockHost, "selectTextCopy"))
-            },
-            wait(() => clip().indexOf("Wyjazd w Tatry") === 0 && clip().indexOf("\n• Piątek: Gubałówka i Krupówki\n") > 0
-                       && clip().indexOf("\n☑ Buty trekkingowe ✅ pn 12 paź\n") > 0 && clip().indexOf("\n1. Pociąg") > 0,
-                 () => "with nothing selected Kopiuj copies the whole page, bullets and checkboxes included: "
-                       + codes(clip().slice(0, 120)) + " … " + codes(clip().slice(clip().indexOf("Niedziela"), clip().indexOf("Niedziela") + 200))),
-            () => EditorInput.sendKey(selectTextView(), Qt.Key_Escape, 0, ""),
-            wait(() => !editor.selectTextOpen && list.activeFocus, "Esc closes it"),
         ]
     }
 
@@ -860,71 +777,6 @@ QtObject {
             () => tap(window.menuItemNamed(editor.blockMenu, "blockMenuSelect")),
             wait(() => editor.selectionMode && page.selectedRow === rowOf("Kolejność"), "its Zaznacz selects the block"),
             () => key(Qt.Key_Back),
-            // ---- "Zaznacz tekst" with a finger -------------------------------------------------------------
-            () => editor.openSelectText(),
-            wait(() => selectTextView() !== null, "“Zaznacz tekst” opens"),
-            ...longPress(() => selectTextView(), (t) => {
-                const r = t.positionToRectangle(t.getText(0, t.length).indexOf("Przygotowanie") + 3)
-                return r.x
-            }, (t) => {
-                const r = t.positionToRectangle(t.getText(0, t.length).indexOf("Przygotowanie") + 3)
-                return r.y + r.height / 2
-            }, () => selectTextView().selectedText !== ""),
-            wait(() => selectTextView().selectedText === "Przygotowanie", () => "a long press selects the word: " + selectTextView().selectedText),
-            wait(() => window.findShown(editor.dockHost, "selectTextHandleEnd") !== null
-                       && window.findShown(editor.dockHost, "selectTextHandleStart") !== null, "with two handles"),
-            // The end handle dragged down. (The second move is measured from where the handle is
-            // then: once the first one has moved it. A release delivers a move still pending first.)
-            () => {
-                test.countBefore = selectTextView().selectionEnd
-                const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
-                events.touchEvent(handle).press(0, handle, handle.width / 2, handle.height / 2).commit()
-                events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 30).commit()
-            },
-            hold(() => selectTextView().selectionEnd > test.countBefore),
-            () => {
-                const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
-                events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 60).commit()
-            },
-            () => {
-                const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
-                events.touchEvent(handle).release(0, handle, handle.width / 2, handle.height / 2).commit()
-            },
-            wait(() => selectTextView().selectedText.indexOf("Przygotowanie") === 0 && selectTextView().selectedText.length > 20,
-                 () => "dragging the end handle extends it: " + JSON.stringify(selectTextView().selectedText.slice(0, 40))),
-            // The start handle dragged past the end: the end stays where it was, the finger moves the other end.
-            () => {
-                test.countBefore = selectTextView().selectionEnd
-                const handle = window.findShown(editor.dockHost, "selectTextHandleStart")
-                events.touchEvent(handle).press(0, handle, handle.width / 2, handle.height / 2).commit()
-                events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 10).commit()
-            },
-            () => {
-                const t = selectTextView()
-                const r = t.positionToRectangle(test.countBefore)
-                events.touchEvent(t).move(0, t, 30, r.y + 2 * r.height + 24).commit()
-            },
-            () => {
-                const t = selectTextView()
-                const r = t.positionToRectangle(test.countBefore)
-                events.touchEvent(t).move(0, t, 60, r.y + 3 * r.height + 24).commit()
-            },
-            () => {
-                const t = selectTextView()
-                const r = t.positionToRectangle(test.countBefore)
-                events.touchEvent(t).release(0, t, 60, r.y + 3 * r.height + 24).commit()
-            },
-            wait(() => selectTextView().selectionStart === test.countBefore && selectTextView().selectionEnd > test.countBefore,
-                 () => "dragged past the end, the start handle keeps the old end fixed: " + selectTextView().selectionStart
-                       + "–" + selectTextView().selectionEnd + " (fixed " + test.countBefore + ")"),
-            () => {
-                test.textBefore = EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
-                                                        selectTextView().selectionEnd)
-                tap(window.findShown(editor.dockHost, "selectTextCopy"))
-            },
-            wait(() => clip() === test.textBefore && clip().indexOf("\n") > 0, "Kopiuj copies the selected text"),
-            () => EditorInput.sendKey(selectTextView(), Qt.Key_Back, 0, ""),
-            wait(() => !editor.selectTextOpen, "Back closes it"),
         ]
     }
 }

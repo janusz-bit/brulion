@@ -1,8 +1,5 @@
 #include "editorinput.h"
 
-#include "editorhost.h"
-#include "pagecontroller.h"
-
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -28,11 +25,6 @@ QString EditorInput::plainText(QQuickTextDocument *document) const
             c = u'\n';
     }
     return text;
-}
-
-QString EditorInput::textRange(QQuickTextDocument *document, int from, int to) const
-{
-    return document ? PageController::readingText(document->textDocument(), from, to) : QString();
 }
 
 bool EditorInput::commitPreedit(QQuickItem *item) const

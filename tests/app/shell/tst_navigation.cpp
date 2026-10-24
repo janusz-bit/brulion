@@ -1101,10 +1101,6 @@ private Q_SLOTS:
             QVERIFY(model->run(command));
             QCOMPARE(sourceUi.last().first().toString(), action);
         }
-        // "Zaznacz tekst": the page or day as one text (docs/UI.md "Selecting and copying").
-        QVERIFY(ids.contains(u"page.selectText"_s));
-        QVERIFY(model->run(u"page.selectText"_s));
-        QCOMPARE(sourceUi.last().first().toString(), u"selectText"_s);
         const auto commandNamed = [model](const QString &id) {
             for (const QVariant &v : model->commands()) {
                 if (v.toMap().value(u"id"_s).toString() == id)
@@ -1130,8 +1126,8 @@ private Q_SLOTS:
         QVERIFY(model->run(u"go.tasks"_s));
         QVERIFY(!model->run(u"page.source"_s)); // no editor there
         QVERIFY(!model->run(u"page.mode"_s));
-        for (const QString &command : {u"page.copyLink"_s, u"block.copyRef"_s, u"block.copyLink"_s,
-                                       u"heading.copyLink"_s, u"page.selectText"_s}) {
+        for (const QString &command :
+             {u"page.copyLink"_s, u"block.copyRef"_s, u"block.copyLink"_s, u"heading.copyLink"_s}) {
             QVERIFY(!model->run(command));
             QVERIFY(!commandNamed(command).value(u"enabled"_s).toBool());
         }
@@ -1169,7 +1165,6 @@ private Q_SLOTS:
         };
         QVERIFY(!modeEnabled());
         QVERIFY(!model->run(u"block.copyRef"_s)); // a picture has no blocks
-        QVERIFY(!model->run(u"page.selectText"_s)); // nor text to select
         app->openPage(p);
         QVERIFY(modeEnabled());
 

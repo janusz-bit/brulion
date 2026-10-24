@@ -32,12 +32,6 @@ public:
     /// The exact plain text of a TextEdit's document: paragraph separators become "\n", every
     /// other character (no-break spaces, U+2028) is kept. "" for null.
     Q_INVOKABLE QString plainText(QQuickTextDocument *document) const;
-    /// The text of positions [from, to) of the read-only "Zaznacz tekst" view's document as it is
-    /// copied (PageController::readingText(): paragraphs, headings and lists a blank line apart,
-    /// the lines of one block and the items of a list one line break apart, a table's cells a tab
-    /// apart), every other character kept (TextEdit's selectedText / copy() turn no-break spaces
-    /// into spaces).
-    Q_INVOKABLE QString textRange(QQuickTextDocument *document, int from, int to) const;
 
     /// Commit the input method's pending composition (preedit) of `item` (a TextEdit with the
     /// keyboard) into its text: asks the platform input context, and commits the preedit itself

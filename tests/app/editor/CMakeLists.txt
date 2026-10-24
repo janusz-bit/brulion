@@ -20,7 +20,7 @@ brulion_add_test(tst_editor_calc
     SOURCES tst_editor_calc.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
 # The block selection: ranges, Shift+arrows, copy / cut / paste with the real clipboard, range
-# operations and their undo steps, ids on paste, HTML from other apps, the "Zaznacz tekst" page.
+# operations and their undo steps, ids on paste, HTML from other apps.
 brulion_add_test(tst_editor_selection
     SOURCES tst_editor_selection.cpp
     LIBS brulion_editor brulion_core_markdown)
@@ -126,9 +126,9 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
         # keys (Esc, Shift+arrows also from an edited block, Ctrl+A twice, Ctrl+C / X / V, Delete,
         # Ctrl+Z, Alt+arrows, Tab), Shift+click, mouse drags (a document's paragraphs, the view's
         # edge scrolling), the block and text menus, the floating tools, in-block copies keeping
-        # no-break spaces, "Zaznacz tekst"; with a finger (--touch): a long press, taps, the grips,
-        # a long press dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz", and
-        # "Zaznacz tekst" with its handles. The clipboard is read back.
+        # no-break spaces; with a finger (--touch): a long press, taps, the grips, a long press
+        # dragged to the edge, Back, the toolbar's and the bullet menu's "Zaznacz". The clipboard is
+        # read back.
         foreach(_sel "tst_editor_qml_selection;1280x800;" "tst_editor_qml_selection_touch;412x915;--touch")
             list(GET _sel 0 _sel_test)
             list(GET _sel 1 _sel_size)
@@ -143,9 +143,9 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
         # Views following what they depend on (`--editor-script refreshtest`,
         # qml/dev/RefreshSelfTest.qml): a query's results replaced by as many rows of another
         # height, an embedded section changed in its own note, a date picker's today marker after
-        # midnight, the reminder dialog after a language change, a calculation's results and (touch)
-        # the text selection's handles after the window narrowed. Each binding once read what it
-        # follows with a bare `void x`, which qmlcachegen compiles away with the dependency.
+        # midnight, the reminder dialog after a language change, a calculation's results after the
+        # window narrowed (also in a phone's touch layout). Each binding once read what it follows
+        # with a bare `void x`, which qmlcachegen compiles away with the dependency.
         foreach(_refresh "tst_editor_qml_refresh;1280x800;" "tst_editor_qml_refresh_touch;412x915;--touch")
             list(GET _refresh 0 _refresh_test)
             list(GET _refresh 1 _refresh_size)

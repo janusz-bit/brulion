@@ -13,8 +13,7 @@ import Brulion
 //   a date picker's today marker after midnight (BDatePicker.cells);
 //   the reminder dialog's weekday buttons and repeat rule after a language change, and its date
 //     picker's weekday labels and month title;
-//   a calculation's results beside their lines after the window narrowed (the lines wrap again);
-//   (touch) the handles of a "Zaznacz tekst" selection after the window narrowed.
+//   a calculation's results beside their lines after the window narrowed (the lines wrap again).
 // The window narrows step by step until the text in question wraps again: which width does that
 // depends on the fonts. Then on until the page's header changes its height (smaller paddings in a
 // compact window, the title wrapping again): the view, moved down the page by the test as the
@@ -38,7 +37,6 @@ QtObject {
     property real calcLinesBefore: 0
     property Item calcDelegate: null
     property real headerBefore: 0
-    property var handlesBefore: null
 
     function check(ok, what) { window.check(ok, what) }
     function wait(ready, what) { return window.waitStep(ready, what) }
@@ -209,31 +207,10 @@ QtObject {
         }
     }
 
-    // ---- "Zaznacz tekst" (touch UIs: its handles) ----------------------------------------------
-    function selectText() { return window.findItem(editor.dockHost, "selectTextEdit") }
-    function handle(name) { return window.findItem(editor.dockHost, name) }
-    /// The selection's start is somewhere else than before (the text wrapped again).
-    function selectionMoved() {
-        const text = selectText()
-        const at = text ? text.positionToRectangle(text.selectionStart) : null
-        return at !== null && (!near(at.x, handlesBefore.x) || !near(at.y, handlesBefore.y))
-    }
-    /// Both handles where the selection's ends are, as computed now.
-    function handlesOnEnds() {
-        const text = selectText()
-        const start = handle("selectTextHandleStart")
-        const end = handle("selectTextHandleEnd")
-        if (!text || !start || !end)
-            return false
-        const a = text.positionToRectangle(text.selectionStart)
-        const b = text.positionToRectangle(text.selectionEnd)
-        return near(start.at.x, a.x) && near(start.at.y, a.y) && near(end.at.x, b.x) && near(end.at.y, b.y)
-    }
-
     Component.onCompleted: window.runSteps(steps())
 
     function steps() {
-        const out = [
+        return [
             wait(() => page.loaded && window.viewRow("query") > 0, "the sample page is open"),
 
             // ---- A query's results: as many rows again, one of them taller -----------------------------
@@ -336,30 +313,5 @@ QtObject {
             () => window.width = widthBefore,
             wait(() => near(headerHeight(), headerBefore) && !atTop(), "and back at the old width"),
         ]
-        if (Theme.touchUi) {
-            out.push(
-                () => editor.openSelectText(),
-                wait(() => selectText() !== null && selectText().visible, "“Zaznacz tekst” opens"),
-                () => {
-                    const text = selectText()
-                    const at = String(text.getText(0, text.length)).indexOf("inspiracje")
-                    text.select(at, at + 10)
-                },
-                wait(() => handle("selectTextHandleEnd") !== null && handle("selectTextHandleEnd").visible && handlesOnEnds(),
-                     "its handles sit on the selection's ends"),
-                () => {
-                    const text = selectText()
-                    handlesBefore = text.positionToRectangle(text.selectionStart)
-                    widthBefore = window.width
-                },
-                narrowWhile(() => !selectionMoved()),
-                wait(() => selectionMoved() && handlesOnEnds(),
-                     () => "the window narrowed to " + window.width + " px, the text wraps again: the handles follow "
-                           + "the selection (" + handle("selectTextHandleStart").at + ")"),
-                () => window.width = widthBefore,
-                wait(() => handlesOnEnds(), "and back at the old width"),
-                () => editor.closeSelectText())
-        }
-        return out
     }
 }

@@ -95,9 +95,9 @@
   stuknięciami po włączeniu „Pojedynczo” w narzędziach zaznaczenia. Zaznaczone bloki (z dziećmi)
   kopiujesz, wycinasz i usuwasz razem — wcinasz i przenosisz, gdy są zaznaczone bez przerw: w
   schowku są jako Markdown, a w poczcie czy edytorze dokumentów wklejają się sformatowane;
-  „Kopiuj jako tekst” daje zwykły tekst z punktorami. Dowolny fragment strony — także kawałki
-  kilku akapitów — zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej*, paleta poleceń); skopiowany
-  i wklejony do notatki zachowuje akapity.
+  „Kopiuj jako tekst” daje zwykły tekst z punktorami. Kawałki kilku akapitów (koniec jednego
+  i początek następnego) skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła
+  Markdown (`Ctrl+E`, *Więcej* → *Źródło Markdown*).
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
   (akapity, nagłówki i zwykłe listy, czytane jak tekst; klikasz i piszesz w miejscu) albo
   **konspekt** jak w Logseq (każdy punkt to blok). Tryb wybierasz przy tworzeniu strony
@@ -393,8 +393,8 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
   grips); pick single ones with gaps between them (bullets 1, 3 and 5) with Ctrl+click, or with
   taps after "One by one" on phones. Copy, cut or delete them together — indent or move them when
   there are no gaps: the clipboard gets Markdown plus formatted HTML for mail and office apps
-  ("Copy as plain text" too). Any part of a page, across paragraphs, is selected in the read-only
-  "Select text" view; pasted into a note, its copy keeps the paragraphs.
+  ("Copy as plain text" too). For part of several paragraphs, select the whole blocks, or select
+  exactly those characters in the Markdown source mode (`Ctrl+E`, More → Markdown source).
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
   wherever a task is shown — or a `/` command.

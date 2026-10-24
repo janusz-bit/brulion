@@ -87,9 +87,8 @@ declare -A shot_args=(
   [page-empty]="--demo --editor-script empty"
   [page-new]="--demo --route {\"view\":\"page\",\"path\":\"Prezenty.md\"}"
   # A tag's page not written yet, opened from the tag: on phones not typing yet (the tagged blocks
-  # listed below stay in view); "Zaznacz tekst" on the guide (no capture button over it).
+  # listed below stay in view).
   [page-tag-new]="--demo --route {\"view\":\"page\",\"path\":\"pomysł.md\",\"fromTag\":\"pomysł\"}"
-  [page-select-text]="--demo --route {\"view\":\"page\",\"path\":\"Witaj\u0020w\u0020Brulionie.md\",\"open\":\"selectText\"}"
   # Note modes: the guide is a document; editing it; switched to an outline; the page menu with
   # "Przełącz na konspekt"; the renovation project (an outline).
   [page-doc-paragraph]="--demo --editor-script doc-paragraph"
@@ -131,7 +130,7 @@ declare -A shot_notemode=(
   [doc-journal-mixed]=journal-mixed
 )
 all_shots=(onboarding journals page page-editing page-editing-keyboard journals-editing-keyboard capture-keyboard
-  page-editing-toast page-toolbar-menu page-tag-new page-select-text page-suggest page-tags page-slash page-date page-reminder
+  page-editing-toast page-toolbar-menu page-tag-new page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-selection page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
   doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app

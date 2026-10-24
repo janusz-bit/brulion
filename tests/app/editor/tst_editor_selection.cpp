@@ -3,9 +3,8 @@
 // following edits, undo / redo and external changes, copying (Markdown, the host's HTML, plain
 // text, the size limit, exact characters of an edited block), cut and delete as one undo step,
 // indenting, moving and task statuses of a range in both note modes, a paste over a selection,
-// block ids a paste must not duplicate (kept after a cut: a move), HTML pasted from other apps,
-// and the read-only page of the "Zaznacz tekst" view. Offscreen QGuiApplication: a real
-// clipboard in the process.
+// block ids a paste must not duplicate (kept after a cut: a move) and HTML pasted from other
+// apps. Offscreen QGuiApplication: a real clipboard in the process.
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
@@ -16,7 +15,6 @@
 #include <QMimeData>
 #include <QSignalSpy>
 #include <QTest>
-#include <QTextDocument>
 
 using namespace brulion;
 using namespace brulion::editor;
@@ -1001,82 +999,6 @@ private Q_SLOTS:
         QVERIFY(f.page.copyEditText(0, 18, 5).value(u"ok"_s).toBool()); // either order
         QCOMPARE(f.page.copyEditText(0, 3, 3).value(u"reason"_s).toString(), u"empty"_s);
         QCOMPARE(f.page.copyEditText(9, 0, 3).value(u"reason"_s).toString(), u"empty"_s);
-    }
-
-    void readingHtmlIsEscapedAndComplete()
-    {
-        Fixture f(
-                u"---\ntytuł: x\n---\n# Plan <b>wyjazdu</b>\n\n- [ ] Kupić bilety\n\t- [x] mapa\n1. pierwszy\n\n"
-                "```js\nif (a < b) {}\n```\n\n| a | b |\n|---|---|\n| 1 | **2** |\n\n> cytat\n\n---\n\nKoniec w\u00a0domu\n"_s);
-        const QString html = f.page.readingHtml();
-        QVERIFY(!html.contains(u"tytuł"_s));                                        // no frontmatter
-        QVERIFY2(html.contains(u"&lt;b&gt;wyjazdu&lt;/b&gt;"_s), qPrintable(html)); // never raw HTML
-        QVERIFY(html.contains(u"<h1"_s));
-        QVERIFY(html.contains(u"☐ Kupić bilety"_s));
-        QVERIFY(html.contains(u"☑ mapa"_s));
-        QVERIFY(html.contains(u"1. pierwszy"_s));
-        QVERIFY(html.contains(u"if (a &lt; b) {}"_s));
-        QVERIFY(html.contains(u"<table"_s) && html.contains(u"<td>1</td>"_s));
-        QVERIFY(html.contains(u"cytat"_s) && html.contains(u"<hr/>"_s));
-        QVERIFY(html.contains(u"Koniec w\u00a0domu"_s) || html.contains(u"Koniec w&nbsp;domu"_s));
-        QCOMPARE(PageController().readingHtml(), u"<html><body></body></html>"_s);
-    }
-
-    void readingHtmlHasTheNotesOwnSpaces()
-    {
-        // The editor joins one-letter words to the next one with no-break spaces (Polish
-        // typography); text selected and copied in "Zaznacz tekst" has the note's own spaces.
-        Fixture f(u"- Jadę w góry z Anią i\u00a0psem\n\n| a | b |\n|---|---|\n| w domu | 1 |\n"_s);
-        const QString html = f.page.readingHtml();
-        QVERIFY2(html.contains(u"Jadę w góry z Anią i\u00a0psem"_s)
-                         || html.contains(u"Jadę w góry z Anią i&nbsp;psem"_s),
-                 qPrintable(html));
-        QVERIFY2(html.contains(u">w domu<"_s), qPrintable(html));
-        // The editor itself still joins them.
-        QVERIFY(f.role(0, "html").toString().contains(u"w\u00a0góry"_s));
-    }
-
-    // "Zaznacz tekst" copies text that keeps its paragraphs when pasted into a note: blocks a
-    // blank line apart, one block's lines and a list's items one line break apart, table cells a
-    // tab apart (PageController::readingText of the view's QTextDocument).
-    void readingTextKeepsParagraphs()
-    {
-        Fixture f(
-                u"# Plan wyjazdu\n\nPierwszy akapit, w\u00a0nim\ndruga linia.\n\nDrugi akapit.\n\n- [ ] Kupić bilety\n"
-                "- mapa\n\t- [-] stara\n1. pierwszy\n\n```js\nlet a = 1;\nlet b = 2;\n```\n\n| a | b |\n|---|---|\n"
-                "| 1 | 2 |\n| 3 | |\n\n---\n\n> cytat\n\nKoniec\n"_s);
-        QTextDocument doc;
-        doc.setHtml(f.page.readingHtml());
-        const int end = doc.characterCount() - 1;
-        const QString all = PageController::readingText(&doc, 0, end);
-        QCOMPARE(all, u"Plan wyjazdu\n\nPierwszy akapit, w\u00a0nim\ndruga linia.\n\nDrugi akapit.\n\n"
-                      "☐ Kupić bilety\n• mapa\n☒ stara\n1. pierwszy\n\nlet a = 1;\nlet b = 2;\n\n"
-                      "a\tb\n1\t2\n3\t\n\ncytat\n\nKoniec"_s);
-        // Part of it: from inside a paragraph into a list.
-        const auto at = [&](const QString &needle) { return int(doc.toRawText().indexOf(needle)); };
-        QCOMPARE(PageController::readingText(&doc, at(u"akapit."_s) + 2, at(u"mapa"_s) + 2),
-                 u"apit.\n\n☐ Kupić bilety\n• ma"_s);
-        // Backwards is the same; from a paragraph's end the separator comes first.
-        QCOMPARE(PageController::readingText(&doc, at(u"mapa"_s) + 2, at(u"akapit."_s) + 2),
-                 u"apit.\n\n☐ Kupić bilety\n• ma"_s);
-        QCOMPARE(PageController::readingText(&doc, at(u"Drugi"_s) - 1, at(u"Drugi"_s) + 5), u"\n\nDrugi"_s);
-        // Inside one line; nothing; out of range; no document.
-        QCOMPARE(PageController::readingText(&doc, at(u"Kupić"_s), at(u"Kupić"_s) + 5), u"Kupić"_s);
-        QCOMPARE(PageController::readingText(&doc, 5, 5), QString());
-        QCOMPARE(PageController::readingText(&doc, -10, end + 100), all);
-        QCOMPARE(PageController::readingText(nullptr, 0, 10), QString());
-    }
-
-    void readingHtmlHasResults()
-    {
-        Fixture f(u"```calc\nbilety = 3 * 120\nsum\n```\n\n```query\ntype:tasks tag:zakupy\n```\n"_s);
-        f.host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko #zakupy\n- [x] Chleb #zakupy\n"_s);
-        const QString html = f.page.readingHtml();
-        QVERIFY2(html.contains(u"bilety = 3 * 120 = 360"_s), qPrintable(html));
-        QVERIFY2(html.contains(u"☐ Mleko"_s) && !html.contains(u"type:tasks"_s), qPrintable(html));
-        // A query without results (or a host without queries) shows the query.
-        f.host.setQueriesFail(true);
-        QVERIFY(f.page.readingHtml().contains(u"type:tasks tag:zakupy"_s));
     }
 };
 

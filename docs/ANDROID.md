@@ -753,15 +753,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   Przytrzymanie tekstu bloku w dzienniku — tryb zaznaczania (klawiatura się nie pokazuje, pasek z
   bloku, uchwyty, narzędzia zaznaczenia na dole), stuknięcie w kolejny blok rozszerza zaznaczenie,
   „Kopiuj” (komunikat „Skopiowano 2 bloki”, a Android 13+ pokazuje własny podgląd schowka z
-  Markdownem), Wstecz kończy zaznaczanie; potem „Zaznacz tekst” na stronie (`route.open`
-  `selectText`): przytrzymanie zaznacza słowo, a **Android sam pokazuje swoje uchwyty i menu
-  „Copy / Select all” także dla tekstu tylko do odczytu** (Qt 6.11; własne uchwyty widoku są więc
-  tylko w przeglądarce i w dotykowym interfejsie na komputerze) — „Copy” z menu systemu przychodzi
-  do aplikacji jako Ctrl+C (dokładny tekst, komunikat „Skopiowano zaznaczony tekst”), uchwyt
-  systemu przeciągnięty rozszerza zaznaczenie, „Kopiuj” w pasku widoku, Wstecz zamyka widok.
-  Bloki, przyciski i „Copy” systemu skrypt znajduje po nazwach (jak `--folders` niżej; wcześniej
-  — po ułamkach ekranu, które na Androidzie 11, z niższym paskiem stanu, trafiały w drugi blok
-  i obok menu systemu, a sprawdzenia i tak przechodziły). Zrzuty `sel-*.png`
+  Markdownem), Wstecz kończy zaznaczanie. Bloki i przyciski skrypt znajduje po nazwach (jak
+  `--folders` niżej; wcześniej — po ułamkach ekranu, które na Androidzie 11, z niższym paskiem
+  stanu, trafiały w drugi blok, a sprawdzenia i tak przechodziły). Zrzuty `sel-*.png`
   w `dist-android/emulator-test/`; sprawdzone 2026-10-23 (Android 16 i 11, Pixel 6).
 * Foldery, odnośniki i tagi prawdziwym palcem (ten sam APK debugowalny):
   ```sh

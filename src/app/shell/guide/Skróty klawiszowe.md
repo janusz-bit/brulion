@@ -63,7 +63,7 @@ Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu mysz�
 | ↑ / ↓ | zaznacz sam poprzedni / następny blok |
 | Esc | odznacz |
 
-Gdy zaznaczone są co najmniej dwa bloki, u góry pojawia się pasek: Kopiuj, Wytnij, Usuń, Zaznacz wszystko i Więcej (Kopiuj jako tekst — zwykły tekst z punktorami, wcięcia, przenoszenie, status zadania, Zaznacz tekst). Fragmenty kilku akapitów zaznaczysz w widoku „Zaznacz tekst” (menu *Więcej* ⋮, menu strony, Ctrl+K → „Zaznacz tekst”). Więcej: [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
+Gdy zaznaczone są co najmniej dwa bloki, u góry pojawia się pasek: Kopiuj, Wytnij, Usuń, Zaznacz wszystko i Więcej (Kopiuj jako tekst — zwykły tekst z punktorami, wcięcia, przenoszenie, status zadania). Fragmenty kilku akapitów skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła Markdown (Ctrl+E, *Więcej* ⋮ → „Źródło Markdown”). Więcej: [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
 
 Prawy przycisk myszy na bloku otwiera menu bloku (Kopiuj, Wytnij, Kopiuj jako tekst, Zaznacz, Kopiuj odnośnik, wcięcia, przenoszenie, usuwanie) — na bloku z zaznaczenia działa na całe zaznaczenie. Prawy przycisk w edytowanym tekście: Wytnij, Kopiuj, Wklej, Zaznacz wszystko. W przeglądarce Ctrl+Shift+C może otwierać narzędzia przeglądarki — wtedy odwołanie skopiujesz z menu bloku albo z palety poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”). Więcej: [[Linki i odnośniki zwrotne#Kopiowanie odnośnika do bloku lub nagłówka|Kopiowanie odnośnika]].
 

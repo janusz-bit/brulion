@@ -30,7 +30,6 @@ qt_target_qml_sources(brulion
         qml/editor/SourceEditor.qml
         qml/editor/ZoomBreadcrumb.qml
         qml/editor/SelectionToolbar.qml
-        qml/editor/SelectTextView.qml
 )
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
 if(BRULION_DEV_QML_ENABLED)

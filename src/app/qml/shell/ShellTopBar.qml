@@ -215,16 +215,6 @@ Rectangle {
             onTriggered: AppController.requestUiAction("toggleSourceMode")
         }
         BMenuItem {
-            // The whole page as one text to select any part of it (docs/UI.md "Selecting and
-            // copying"): the page shown, in the journal stream the day being written in.
-            objectName: "menuSelectText"
-            visible: bar.inEditor && !bar.picture
-            height: visible ? implicitHeight : 0
-            text: qsTr("Select text")
-            iconName: "text-select"
-            onTriggered: AppController.requestUiAction("selectText")
-        }
-        BMenuItem {
             // Document (like Obsidian) / outline (like Logseq): the page shown, in the journal
             // stream the day being written in (docs/UI.md "Note modes"). A picture is no note.
             visible: bar.inEditor && !bar.picture

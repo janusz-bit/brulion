@@ -88,10 +88,6 @@ struct RenderContext {
     /// syntax is hidden instead of rendered as a placeholder link. Attachment embeds
     /// (`![[photo.png]]`) still render as links.
     bool hideTransclusions = false;
-    /// Polish typography (render()): the space after a one-letter word becomes a no-break space.
-    /// Off for text that is selected and copied as the note says it (the "Zaznacz tekst" view):
-    /// only the note's own no-break spaces then.
-    bool joinShortWords = true;
 };
 
 /// A RenderContext::linkTitle for daily notes: a link naming a day (journalDateFromLinkTarget():

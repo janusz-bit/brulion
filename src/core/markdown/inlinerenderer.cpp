@@ -348,12 +348,12 @@ bool joinsNextWord(QStringView text, qsizetype i)
 }
 
 /// Text piece [from, to) of `text`: escaped, line breaks as <br/>, no-break spaces after
-/// one-letter words (joinsNextWord()) when `join`. `nextShown`: what follows the piece is visible
-/// (not hidden syntax such as an embed shown in a frame), so a space at its end may join it.
-QString textPiece(QStringView text, qsizetype from, qsizetype to, bool nextShown, bool join)
+/// one-letter words (joinsNextWord()). `nextShown`: what follows the piece is visible (not
+/// hidden syntax such as an embed shown in a frame), so a space at its end may join it.
+QString textPiece(QStringView text, qsizetype from, qsizetype to, bool nextShown)
 {
     const QStringView piece = text.sliced(from, to - from);
-    if (!join || !piece.contains(u' '))
+    if (!piece.contains(u' '))
         return escapeText(piece);
     QString joined = piece.toString();
     for (qsizetype i = from; i < to; ++i) {
@@ -363,7 +363,7 @@ QString textPiece(QStringView text, qsizetype from, qsizetype to, bool nextShown
     return escapeText(joined);
 }
 
-QString assemble(QStringView text, const QList<Piece> &pieces, bool join)
+QString assemble(QStringView text, const QList<Piece> &pieces)
 {
     QString out;
     for (qsizetype k = 0; k < pieces.size(); ++k) {
@@ -372,7 +372,7 @@ QString assemble(QStringView text, const QList<Piece> &pieces, bool join)
         case Piece::Type::Text: {
             const bool nextShown =
                     k + 1 < pieces.size() && !(pieces[k + 1].type == Piece::Type::Html && pieces[k + 1].html.isEmpty());
-            out += textPiece(text, p.from, p.to, nextShown, join);
+            out += textPiece(text, p.from, p.to, nextShown);
             break;
         }
         case Piece::Type::Html: out += p.html; break;
@@ -747,7 +747,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
     }
     QList<Piece> pieces = buildPieces(text, kept);
     processEmphasis(pieces, m_ctx.palette);
-    return assemble(text, pieces, m_ctx.joinShortWords);
+    return assemble(text, pieces);
 }
 
 QString InlineRenderer::renderBlock(QStringView body, BlockKind kind) const

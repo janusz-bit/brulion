@@ -32,9 +32,8 @@ FocusScope {
     property ContentJournalDay activeDay: null
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
-    /// A day is being edited or shown in "Zaznacz tekst" (the shell hides its capture button).
     readonly property bool editing: single ? (pageView !== null && pageView.editing)
-                                           : (activeDay !== null && (activeDay.editing || activeDay.editor.selectTextOpen))
+                                           : (activeDay !== null && activeDay.editing)
     /// A touch toolbar is docked at the bottom (the shell hides its bottom navigation).
     readonly property bool toolbarDocked: single ? (pageView !== null && pageView.toolbarDocked)
                                                  : (activeDay !== null && activeDay.editor.toolbarVisible)
@@ -56,10 +55,6 @@ FocusScope {
                 return
             if (action.startsWith("copyLink:")) {
                 root.activeDay.editor.copyCurrentLink(action.slice(9))
-                return
-            }
-            if (action === "selectText") {
-                root.activeDay.editor.openSelectText()
                 return
             }
             if (action !== "toggleNoteMode")

@@ -409,7 +409,7 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
   Firefoksie otwiera narzędzia deweloperskie, zanim strona dostanie klawisze — wtedy zostaje
   menu bloku albo paleta poleceń (Ctrl+K → „Kopiuj odwołanie do bloku”).
   Tak samo kopiowanie zaznaczonych bloków (docs/UI.md „Selecting and copying”: Ctrl+C / Ctrl+X,
-  „Kopiuj” w pasku zaznaczenia i w menu bloku, „Zaznacz tekst”): `QClipboard` dostaje Markdown
+  „Kopiuj” w pasku zaznaczenia i w menu bloku): `QClipboard` dostaje Markdown
   jako text/plain i — gdy przeglądarka przyjmie (Clipboard API z `ClipboardItem`; Firefox i Safari
   różnie) — HTML jako text/html; kopiowanie odbywa się w obsłudze klawisza albo kliknięcia, więc
   liczy się jako gest użytkownika. Odczyt kontrolny po kopiowaniu (na pulpicie i Androidzie

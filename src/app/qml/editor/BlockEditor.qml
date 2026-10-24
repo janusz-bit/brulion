@@ -53,8 +53,7 @@ import Brulion
 // Alt+↑/↓ on one without gaps (else a toast says why not); desktops show a
 // compact SelectionToolbar at the top when two or more blocks are selected. In an edited block
 // Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Wytnij / Kopiuj / Wklej / Zaznacz
-// wszystko. openSelectText() shows the whole page in the read-only "Zaznacz tekst" view
-// (SelectTextView) for a selection of any characters across blocks.
+// wszystko.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
 // counts for completions and is committed before Enter/Backspace/Tab/… are handled, before
 // toolbar actions and when the app is left. Keys typed while the edited block's delegate is
@@ -207,8 +206,6 @@ FocusScope {
     /// Why a selection with gaps between its blocks is not indented or moved (a toast, the tools'
     /// tooltips).
     readonly property string gapReason: qsTr("Only blocks selected without gaps can be indented or moved")
-    /// The "Zaznacz tekst" view is open (SelectTextView).
-    readonly property bool selectTextOpen: selectTextLoader.active
 
     // The title above the properties panel (BlockDelegate trades their places on screen): set by
     // those two delegates.
@@ -1833,7 +1830,7 @@ FocusScope {
         PointHandler {
             id: dragPointer
             target: null
-            enabled: editor.controller !== null && !editor.controller.sourceMode && !editor.selectTextOpen
+            enabled: editor.controller !== null && !editor.controller.sourceMode
             onActiveChanged: active ? editor.dragPressed(point) : editor.dragReleased()
             onPointChanged: if (active) editor.dragMoved(point)
         }
@@ -2200,7 +2197,7 @@ FocusScope {
         objectName: "floatingSelectionBar"
         parent: editor.dockHost
         active: !editor.touch && editor.controller !== null && editor.controller.multiSelection
-                && !editor.controller.sourceMode && !editor.selectTextOpen
+                && !editor.controller.sourceMode
         visible: active
         z: 11
         anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
@@ -2226,40 +2223,6 @@ FocusScope {
                     editor: editor
                 }
             }
-        }
-    }
-
-    // ---- "Zaznacz tekst": the whole page in one read-only text --------------------------------------
-    /// Show the page as one read-only rich text (SelectTextView) for selecting any characters across
-    /// blocks — the page menu's, the top bar's and the palette's "Zaznacz tekst", the selection
-    /// toolbar's "Więcej". Over the editor (a day of the journal stream: over the stream's frame).
-    function openSelectText() {
-        if (!controller)
-            return
-        if (activeEditor)
-            EditorInput.commitPreedit(activeEditor)
-        closeSuggestions()
-        if (controller.editingRow >= 0)
-            controller.stopEditing()
-        if (touch)
-            Qt.inputMethod.hide()
-        selectionMode = false
-        selectTextLoader.active = true
-    }
-    function closeSelectText() {
-        selectTextLoader.active = false
-        list.forceActiveFocus()
-    }
-    Loader {
-        id: selectTextLoader
-        objectName: "selectTextView"
-        parent: editor.dockHost
-        anchors.fill: parent
-        active: false
-        z: 30
-        sourceComponent: SelectTextView {
-            editor: editor
-            onClosed: editor.closeSelectText()
         }
     }
 

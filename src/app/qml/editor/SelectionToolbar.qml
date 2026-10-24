@@ -7,8 +7,8 @@ import Brulion
 // "Zaznaczono %n", Kopiuj, Wytnij, Usuń, Zaznacz wszystko, Pojedynczo (docked: taps pick single
 // blocks, BlockEditor.pickMode), Więcej (Kopiuj jako tekst, the block menu's "Kopiuj odnośnik" for a
 // single block, Zwiększ / Zmniejsz wcięcie, Przenieś w górę / w dół — for blocks picked with gaps
-// between them shown disabled, a tap says why —, the task status, Zaznacz tekst) and Gotowe
-// (docked, first: leaves the selection mode) or × (floating, last: clears the selection). Two places:
+// between them shown disabled, a tap says why —, the task status) and Gotowe (docked, first:
+// leaves the selection mode) or × (floating, last: clears the selection). Two places:
 //   * docked: the "selection" tool set of MobileEditToolbar on touch UIs — in the editing
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
@@ -267,13 +267,6 @@ Row {
                 BMenuItem { text: qsTr("Cancelled"); onTriggered: bar.controller.setSelectionTaskStatus("cancelled") }
                 BMenuSeparator {}
                 BMenuItem { text: qsTr("No status"); onTriggered: bar.controller.setSelectionTaskStatus("") }
-            }
-            BMenuSeparator {}
-            BMenuItem {
-                objectName: "selectionSelectText"
-                text: qsTr("Select text…")
-                iconName: "text-select"
-                onTriggered: bar.editor.openSelectText()
             }
         }
     }

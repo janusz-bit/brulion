@@ -21,9 +21,7 @@
 # With --selection instead: selecting and copying blocks with a real finger (docs/UI.md "Selecting
 # and copying") — a long press on a block's text in the journal (the selection mode: the keyboard
 # stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
-# Kopiuj ("Skopiowano 2 bloki"), Back; then "Zaznacz tekst" on a page: a long press selects a
-# word with the system's handles and popup (Qt gives them to read-only text on Android), the
-# popup's Copy, a handle dragged, Kopiuj, Back.
+# Kopiuj ("Skopiowano 2 bloki"), Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
 # journal opens its page (not created by looking at it) and Back returns; the editing toolbar's
@@ -35,7 +33,7 @@
 # files say so: the page in its new folder, the query filter naming its old folder rewritten.
 # Screenshots of each step (fl-*.png); the same debuggable APK.
 # --selection and --folders find what they tap by its accessible name (UiAutomator reads Qt's
-# accessibility tree; the keyboard's keys and the system's popups from its dump of every window),
+# accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
@@ -355,27 +353,6 @@ ui_find_all() {
 ui_has() { [[ -n $(ui_find_all "$1") ]]; }
 ui_lacks() { ! ui_has "$1"; }
 ui_y() { ui_find_all "$1" | head -n 1 | cut -d ' ' -f 2; } # <ERE>: the topmost one's centre
-ui_bottom() { # <ERE>: the bottom edge of the topmost one (a new dump)
-  ui_dump
-  sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep -E "(text|content-desc)=\"($1)\"" |
-    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\2 \4/p' |
-    awk '$2 > $1 { print $2 }' | sort -n | head -n 1
-}
-# A tap on a text of any window — the system's own popups over the app (its Copy / Select all of
-# selected text), which have a text, not an accessible name.
-window_text_tap() { # <ERE>
-  local xy
-  adb shell rm -f /sdcard/brulion-windows.xml
-  adb shell uiautomator dump --windows /sdcard/brulion-windows.xml >/dev/null 2>&1 || true
-  xy=$(adb exec-out cat /sdcard/brulion-windows.xml 2>/dev/null | sed 's/<node /\n<node /g' | grep -E "text=\"($1)\"" |
-    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' |
-    awk '$3 > $1 && $4 > $2 { print int(($1 + $3) / 2), int(($2 + $4) / 2); exit }' || true)
-  if [[ -z $xy ]]; then
-    echo "    no \"$1\" on screen"
-    return 1
-  fi
-  adb shell input tap "$xy"
-}
 ui_tap() { # <ERE> [first|last] [pause]: a tap on the item named so (the topmost or the bottommost;
   # a dump taken while something moves can fail: tried again), then a pause (2 s)
   local xy="" _
@@ -440,7 +417,6 @@ vault_name() { adb shell run-as "$PKG" ls "\"$VAULT\"" 2>/dev/null | tr -d '\r' 
 
 # --- selecting and copying with a finger (--selection) -------------------------------------------
 
-dp() { echo $(($1 * DENSITY / 160)); } # logical px -> physical px
 long_press() { adb shell input swipe "$1" "$2" "$1" "$2" 1400; } # <x> <y>
 
 if ((SELECTION)); then
@@ -472,38 +448,6 @@ if ((SELECTION)); then
   app_shot sel-5-back
   check "Back ends the selection mode" ui_lacks 'Kopiuj, Ctrl\+C'
   check "the app is still running" running
-  # "Zaznacz tekst" on a page of the sample notebook (route.open). Qt splits the arguments like
-  # QProcess::splitCommand: at spaces (a path without them), a quote written as three of them.
-  start_app '--demo --locale pl --route {"""view""":"""page""","""path""":"""Przepisy.md""","""open""":"""selectText"""}'
-  check "the view opens with its bar" wait_for 20 ui_has 'Zamknij.*'
-  app_shot sel-6-select-text
-  # The page's title: the view's first line, under its bar.
-  bar_bottom=$(ui_bottom 'Zamknij.*')
-  title_y=$((${bar_bottom:-$((SCREEN_H * 17 / 100))} + $(dp 48)))
-  long_press $((SCREEN_W * 30 / 100)) "$title_y"
-  sleep 2
-  app_shot sel-7-word
-  # The system's popup over the selection (Android shows its handles and Copy / Select all for
-  # read-only text too): its Copy goes through the app's Ctrl+C (the exact text, a toast).
-  check "the system's popup offers Copy" window_text_tap 'Copy|Kopiuj'
-  check "its Copy reaches the app (toast)" wait_for 6 ui_has 'Skopiowano zaznaczony tekst'
-  app_shot sel-7b-system-copy
-  sleep 4 # (the toast goes)
-  long_press $((SCREEN_W * 30 / 100)) "$title_y"
-  sleep 2
-  # The system's end handle (under the word's end) dragged down two lines.
-  adb shell input swipe $((SCREEN_W * 36 / 100)) $((title_y + $(dp 34))) \
-    $((SCREEN_W * 60 / 100)) $((title_y + $(dp 104))) 900
-  sleep 2
-  app_shot sel-8-handle
-  # Kopiuj: the view's button at the right of its bar ("Kopiuj wszystko" with nothing selected).
-  check "the view's Kopiuj copies the selection" ui_tap 'Kopiuj' last 0
-  check "the toast says so" wait_for 6 ui_has 'Skopiowano zaznaczony tekst'
-  app_shot sel-9-copied
-  adb shell input keyevent 4
-  sleep 2
-  app_shot sel-10-closed
-  check "Back closes the view" ui_lacks 'Zamknij.*'
   adb logcat -d >"$OUT/selection-logcat.txt"
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/selection-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/selection-logcat.txt'"

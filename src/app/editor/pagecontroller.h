@@ -34,7 +34,6 @@
 // it. Copies never claim success the clipboard did not take, and refuse more than
 // ClipboardLimit bytes (never cut short). A paste drops block ids (`^id`, `id::`) that already
 // resolve elsewhere — `((id))` is vault-wide —, except right after a cut (a move).
-// `readingHtml()` is the whole page as one rich text for the read-only "Zaznacz tekst" view.
 //
 // Beyond the page itself: tasks shown in ```query results and embeds are checked through
 // setTaskStatusAt() (this page: an undoable edit; other files: the host's QueryHost), pictures
@@ -71,7 +70,6 @@
 #include <memory>
 #include <optional>
 
-class QTextDocument;
 class QUndoStack;
 
 namespace brulion {
@@ -461,9 +459,6 @@ public:
     /// `cut`: the caller removes the text next (Ctrl+X) — its block ids go with it (a move, like
     /// cutSelection()).
     Q_INVOKABLE QVariantMap copyEditText(int row, int from, int to, bool cut = false);
-    /// Copy `text` as it is (the "Zaznacz tekst" view): the same limit, primary selection and read
-    /// back as copySelection(). { ok, reason }.
-    Q_INVOKABLE QVariantMap copyText(const QString &text);
     /// What a paste inserts: the clipboard's text, or — when the clipboard has HTML (a browser,
     /// an office app) and its text does not look like Markdown — that HTML as Markdown
     /// (EditorHost::htmlToMarkdown). This app's own copies (its last one, or HTML marked as made
@@ -473,23 +468,6 @@ public:
     /// In-block Ctrl+V: pasteText() of clipboardText() into [from, to). { row, cursor }, row -1
     /// when the clipboard has no text.
     Q_INVOKABLE QVariantMap pasteClipboard(int row, int from, int to);
-    /// The whole page (every block, folds and zoom ignored; no frontmatter) as one escaped rich
-    /// text for a read-only TextEdit — the "Zaznacz tekst" view: rendered text (InlineRenderer,
-    /// the note's own spaces: BlockListModel::readingHtmlAt), bullets, numbers and checkboxes as
-    /// characters (so a copy keeps them), headings, code, calculations with their results, tables
-    /// with their formulas' values, a query's results (the host's QueryHost; else the query),
-    /// quotes; embedded pictures and pages by name. Colours of the current palette. Every block
-    /// element carries `-qt-user-state: <n>` (QTextBlock::userState once in a QTextDocument): the
-    /// same n for one block's lines — its text, embeds, a query's results — and for the items of
-    /// one list, which readingText() keeps together.
-    Q_INVOKABLE QString readingHtml() const;
-    /// The text of positions [from, to) of readingHtml() in a QTextDocument (the "Zaznacz tekst"
-    /// view's TextEdit; EditorInput.textRange) as it is copied — pasted into a note it keeps its
-    /// paragraphs: one block's lines and the items of a list one line break apart, other blocks
-    /// (paragraphs, headings, code, a list and what follows it) a blank line apart; a table's
-    /// cells a tab apart, its rows a line break. Every other character is kept (no-break spaces
-    /// too: QTextCursor::selectedText() turns them into spaces). "" for no document.
-    static QString readingText(const QTextDocument *document, int from, int to);
 
     // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
     /// The text of a link of `kind` to `row`:
@@ -746,10 +724,6 @@ private:
     void recordCut(const QString &text, const QSet<QString> &ids);
     /// A block of this page has `id`.
     bool hasBlockId(const QString &id) const;
-    /// The results of the query `source` as readingHtml() lists them (indented by `indent` px, in
-    /// readingHtml()'s group `readingGroup`); "" without a QueryHost, on an error or with nothing
-    /// found.
-    QString queryReadingHtml(const QString &source, int indent, int readingGroup) const;
     /// The visible rows from one end of the selection to the other (the picked blocks of one with
     /// gaps) that can have a task status (list items, paragraphs).
     QList<quint64> selectedTaskUids() const;

@@ -91,7 +91,6 @@ ApplicationWindow {
                   : DevTools.editorScript === "title" ? host.recipePath
                   : DevTools.editorScript.startsWith("document") || DevTools.editorScript === "copylink-document"
                     || DevTools.editorScript === "link-flash" || DevTools.editorScript === "selection-document"
-                    || (DevTools.editorScript.startsWith("select-text") && DevTools.editorScript !== "select-text-results")
                     ? host.documentPath : host.samplePath
         if (DevTools.editorScript !== "")
             scriptTimer.start()
@@ -3024,33 +3023,6 @@ ApplicationWindow {
                 edit.select(0, 11)
                 editor.openTextMenu(edit, edit.cursorRectangle.x, edit.cursorRectangle.y + edit.cursorRectangle.height / 2)
             })
-            break
-        }
-        case "select-text":
-        case "select-text-selected":
-        case "select-text-results": {
-            // "Zaznacz tekst": the page as one text (with part of it selected; the sample page's
-            // calculation, table and query with their results) — screenshots.
-            editor.openSelectText()
-            if (name === "select-text-results") {
-                scriptLater.run(() => {
-                    const text = window.findItem(editor.dockHost, "selectTextEdit")
-                    const flick = window.findItem(editor.dockHost, "selectTextFlick")
-                    if (!text || !flick)
-                        return
-                    const at = text.positionToRectangle(String(text.getText(0, text.length)).indexOf("Koszty"))
-                    flick.contentY = Math.max(0, Math.min(text.y + at.y - Theme.space4, flick.contentHeight - flick.height))
-                })
-            }
-            if (name === "select-text-selected") {
-                scriptLater.run(() => {
-                    const text = window.findItem(editor.dockHost, "selectTextEdit")
-                    if (!text)
-                        return
-                    const start = String(text.getText(0, text.length)).indexOf("Pierwszego")
-                    text.select(start > 0 ? start - 40 : 10, start > 0 ? start + 60 : 120)
-                })
-            }
             break
         }
         case "source":
