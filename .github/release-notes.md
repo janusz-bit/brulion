@@ -2,9 +2,16 @@
 
 **Nowości w {{VERSION}}**
 
-* **Lista zmian w dokumentacji:** nowa strona „Lista zmian” w notatniku „Dokumentacja Brulionu” zbiera wszystkie zmiany od pierwszej wersji, od najnowszej — co nowego, co działa inaczej i co poprawiono, z uwagami, gdy trzeba coś zrobić samemu. Link do niej jest w „Spisie treści”; dokumentacja założona we wcześniejszej wersji dostanie ją przy najbliższym otwarciu.
+* **Foldery: przenoszenie i tworzenie** — „Przenieś do…” dla stron i folderów (menu, „⋯” na telefonie, paleta, przeciąganie myszą), a linki, tagi i filtry zapytań wskazujące na przeniesione pliki są poprawiane. „Nowy folder” także w głównym folderze notatnika; nowa strona trafia do folderu otwartej strony. Drzewo pokazuje otwartą stronę i sortuje po polsku. Nextcloud synchronizuje puste foldery i zmiany nazw folderów.
+* **Tagi jako linki do stron** — `#praca` otwiera stronę „praca”, jej odnośniki pokazują bloki z tym tagiem, a zmiana nazwy strony poprawia tagi.
+* **Odnośniki do punktów** — „Kopiuj odnośnik” w menu każdego bloku: `((id))`, `[[Strona#^id]]`, `[[Strona#Nagłówek]]`; `Ctrl+Shift+C`; kliknięty odnośnik przewija do celu i go podświetla.
+* **Zaznaczanie i kopiowanie grup bloków** — klawiaturą, myszą i palcem, także pojedyncze punkty (Ctrl+klik, „Pojedynczo”), oraz widok **„Zaznacz tekst”** do kopiowania dowolnego fragmentu strony przez akapity.
+* **Pasek narzędzi zawsze przy klawiaturze** na telefonie — w dzienniku, na stronie, w tabelach i w trybie źródła.
+* **Wiersz poleceń i agenci AI** — `brulion-cli` (notatki, dziennik, zadania, przypomnienia po polsku, zapytania; JSON), serwer MCP i — po włączeniu w ustawieniach — sterowanie otwartą aplikacją.
 
-Z wersji 0.3.6: wybór statusu zadania z menu i poleceniem „/”, emoji w przeglądarce zamiast pustych kwadratów oraz poprawki bezpieczeństwa i stabilności wzorów, bloków kodu, dokumentacji, Nextcloud i obrazów. Z wersji 0.3.5: wybór godziny na okrągłym zegarze. Z wersji 0.3.4: obrazy i załączniki pokazywane jako zdjęcia. Z wersji 0.3.3: wzory matematyczne rysowane od razu w notatkach. Z wersji 0.3.2: przełączanie notatników jednym kliknięciem. Z wersji 0.3.1: synchronizacja Nextcloud przypisana do notatnika. Z wersji 0.3.0: dokumentacja napisana w Brulionie i szybkie przełączanie notatników.
+**Uwaga:** tagi otwierają teraz strony (widok tagu jest pod „Widok tagu”), przeniesienie strony o nazwie takiej jak inna może zamienić `[[Dom]]` i `#dom` w innych notatkach na `[[Projekty/Dom]]` / `#Projekty/Dom`, a na komputerze przeciąganie myszą po tekście zaznacza bloki zamiast przewijać. Szczegóły: strona „Lista zmian” w dokumentacji.
+
+Z wersji 0.3.7: lista wszystkich zmian w dokumentacji. Z wersji 0.3.6: wybór statusu zadania z menu i poleceniem „/”, emoji w przeglądarce zamiast pustych kwadratów oraz poprawki bezpieczeństwa i stabilności wzorów, bloków kodu, dokumentacji, Nextcloud i obrazów. Z wersji 0.3.5: wybór godziny na okrągłym zegarze. Z wersji 0.3.4: obrazy i załączniki pokazywane jako zdjęcia. Z wersji 0.3.3: wzory matematyczne rysowane od razu w notatkach. Z wersji 0.3.2: przełączanie notatników jednym kliknięciem. Z wersji 0.3.1: synchronizacja Nextcloud przypisana do notatnika. Z wersji 0.3.0: dokumentacja napisana w Brulionie i szybkie przełączanie notatników.
 
 **Najważniejsze**
 
@@ -22,6 +29,7 @@ Z wersji 0.3.6: wybór statusu zadania z menu i poleceniem „/”, emoji w prze
 | Linux x86_64 | `Brulion-{{FILE_VERSION}}-x86_64.AppImage` — Ubuntu 22.04+, Debian 12+, Fedora 36+ (glibc ≥ 2.35) |
 | Linux aarch64 (np. Raspberry Pi 4/5 z 64-bitowym systemem) | `Brulion-{{FILE_VERSION}}-aarch64.AppImage` — Ubuntu 24.04+, Debian 13+, Fedora 40+ (glibc ≥ 2.39) |
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, pakiet `brulion` |
+| Wiersz poleceń (Linux) | `brulion-cli` — w AppImage jako `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, w Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …` |
 | Przeglądarka | {{PAGES_URL}} — albo `brulion-web-{{FILE_VERSION}}.zip` na własny serwer (dowolny katalog, HTTPS) |
 | Kod źródłowy | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 

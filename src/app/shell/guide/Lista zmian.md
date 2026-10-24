@@ -7,6 +7,40 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.0 — 24 października 2026
+
+**Uwaga**
+- **Tagi są teraz linkami do stron** (jak w Logseq): kliknięcie `#praca` otwiera stronę „praca”, a jej odnośniki pokazują bloki z tym tagiem. Dawny widok tagu (podtagi, zadania, strony oznaczone w całości) jest pod „Widok tagu” w nagłówku strony i na liście tagów. Zmiana nazwy strony poprawia też tagi, które ją nazywają. Zobacz [[Tagi i właściwości|Tagi i właściwości]].
+- **Przeniesienie albo zmiana nazwy strony może poprawić linki i tagi w innych notatkach**, żeby dalej prowadziły do tych samych plików: gdy dwie strony mają tę samą nazwę, `[[Dom]]` staje się `[[Projekty/Dom]]`, a `#dom` — `#Projekty/Dom`. Za stroną idą też filtry zapytań (`path:`, `page:`, `tag:`, `ref:`) i linki Markdown. Przed przeniesieniem widać, ile notatek się zmieni.
+- **Nextcloud synchronizuje teraz także foldery** — puste foldery w obie strony, a zmiana nazwy folderu idzie na serwer jedną operacją. Puste foldery, które zostały po zmianach nazw w starszych wersjach, pojawią się raz po drugiej stronie; usuń niepotrzebne, usunięcie też się zsynchronizuje. Gdy cały notatnik leży w jednym folderze, zmienisz jego nazwę i jeszcze przed synchronizacją usuniesz albo zmienisz w nim notatkę, Brulion zapyta o potwierdzenie usunięć. Zobacz [[Synchronizacja|Synchronizacja]].
+- **Na komputerze przeciąganie myszą po tekście zaznacza bloki** zamiast przewijać stronę — przewijasz kółkiem albo touchpadem (palcem na ekranie dotykowym jak dotąd).
+- **Na telefonie podczas pisania chowa się dolna nawigacja**, a pasek narzędzi siedzi na klawiaturze. Na Androidzie 11–14 okno sięga teraz pod paski systemowe, jak na 15 i nowszych.
+
+**Nowe**
+- **Przenoszenie stron i folderów** — „Przenieś do…” w menu strony i folderu w drzewie (prawy przycisk myszy albo „⋯” na telefonie), w menu **Więcej**, w menu strony, na liście stron i w palecie poleceń; na komputerze także przeciągnięcie myszą na folder albo na nagłówek „Strony” (główny folder notatnika). Linki, osadzenia, odwołania do nagłówków i bloków, tagi i filtry zapytań wskazujące na przeniesione pliki są poprawiane, a przeniesienie cofniesz z komunikatu. „/” w nowej nazwie przenosi stronę (np. `Archiwum/Dom`). Zobacz [[Pierwsze kroki|Pierwsze kroki]].
+- **Nowe foldery wszędzie** — „Nowy folder” w menu „+” przy nagłówku „Strony” (także w głównym folderze), w palecie poleceń i w oknie przenoszenia. Nowa strona trafia od razu do folderu otwartej strony; w oknie nowej strony możesz to zmienić.
+- **Drzewo folderów** pokazuje otwartą stronę, sortuje po polsku (liczby według wartości), ma folder dziennika na górze z czytelnymi datami i pamięta rozwinięte foldery także po zmianie nazwy. „Wszystkie strony” przeglądają foldery po kolei („Z podfolderami”).
+- **Kopiowanie odnośnika do punktu, nagłówka i strony** — menu bloku → „Kopiuj odnośnik”: `((id))`, `[[Strona#^id]]`, `[[Strona#Nagłówek]]` albo osadzenie. Menu bloku otworzysz prawym przyciskiem myszy na każdym bloku (także akapicie i nagłówku), a na telefonie przyciskiem „Więcej” na pasku nad klawiaturą; `Ctrl+Shift+C` kopiuje `((id))`, są też polecenia w palecie. Kliknięty odnośnik przewija do celu i go podświetla. Zobacz [[Linki i odnośniki zwrotne|Linki i odnośniki zwrotne]].
+- **Zaznaczanie i kopiowanie grup bloków** — Shift+strzałki, przeciągnięcie myszą, Shift+klik i Ctrl+klik (pojedyncze punkty), a na telefonie przytrzymanie tekstu bloku: uchwyty, tryb „Pojedynczo” i pasek zaznaczenia. Kopiuj, Wytnij, Usuń, Kopiuj jako tekst, wcięcia i przenoszenie całych bloków z ich punktami; tekst z innych aplikacji (HTML) wkleja się jako Markdown. Zobacz [[Dokument i konspekt|Dokument i konspekt]].
+- **„Zaznacz tekst”** — cała strona jako jeden tekst do zaznaczania znak po znaku przez akapity (na Androidzie systemowymi uchwytami); w menu strony, w **Więcej** i w palecie poleceń.
+- **Pasek narzędzi zawsze przy klawiaturze** (telefon) — w dzienniku, na stronie, w komórkach tabeli i w trybie źródła; podąża za wysuwaną klawiaturą. Okna, menu i komunikaty nie chowają się pod klawiaturą ani nie zasłaniają pisanej linii.
+- **Wiersz poleceń dla agentów AI** — `brulion-cli` czyta i zapisuje notatki, dziennik, zadania, przypomnienia z polskimi datami („jutro 9:00”), zapytania, tagi i odnośniki, przenosi strony; wyniki w JSON. `brulion-cli mcp` to serwer MCP dla agentów, a po włączeniu w ustawieniach (*Aplikacja → Dla programistów*) agent może też sterować otwartą aplikacją (`brulion-cli app …`). Zobacz [[Wiersz poleceń i agenci AI|Wiersz poleceń i agenci AI]].
+
+**Zmiany**
+- `#` podpowiada tagi i strony, a filtr `ref:` w zapytaniach obejmuje też tagi. Zobacz [[Zapytania|Zapytania]].
+- Odnośniki strony pokazują bloki z jej tagiem; strona, której jeszcze nie ma, pokazuje, co już do niej prowadzi.
+- Zmiana nazwy albo przeniesienie folderu dziennika, szablonów, załączników albo nowych stron aktualizuje ustawienia notatnika.
+- Linia dopisana przez inny program (np. agenta albo synchronizację) obok miejsca, w którym piszesz, scala się bez konfliktu.
+- Notatkę dziennika zmienisz albo przeniesiesz jak plik (w drzewie, na liście stron, `F2`); widok dziennika według daty tych poleceń nie ma.
+
+**Poprawki**
+- Edytor nie przeskakuje na górę strony, gdy nagłówek strony zmieni wysokość, np. po zwężeniu okna.
+- Wyniki zapytań nie nachodzą na tekst pod nimi, znacznik „dziś” w kalendarzach przechodzi o północy, okno przypomnienia zmienia język razem z aplikacją, a wyniki obliczeń idą za zawijanym tekstem.
+- Android: pierwsza pozycja wysokiego menu nie chowa się pod paskiem stanu, a słowo dopiero pisane na klawiaturze (Gboard) liczy się w oknach nowej strony, folderu, szybkiej notatki i zmiany nazwy.
+- Usunięty albo przemianowany pusty folder od razu znika z drzewa; nazwy nowych folderów są oczyszczane jak nazwy stron, a nazwa, przez którą folder byłby ukryty, jest odrzucana.
+- Pisanie nie gubi klawiatury, gdy plik zmieni się z zewnątrz.
+- Odnośnik do bloku, w którym jest Markdown, pokazuje sam tekst bloku.
+
 ## 0.3.7 — 22 października 2026
 
 **Nowe**
