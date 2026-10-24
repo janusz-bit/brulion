@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.2 — 24 października 2026
+
+**Nowe**
+- **Zmiana daty z menu** — kliknij znacznik daty (📅, ⏳, 🛫, ✅, ➕, ❌) prawym przyciskiem myszy albo przytrzymaj go palcem: „Zmień datę…” (kalendarz z godziną), „Dziś”, „Jutro”, „Dzień później”, „Tydzień później”, „Usuń datę”. Na przypomnieniu ⏰ menu ma „Zmień datę i godzinę…”, „Godzinę później”, „Jutro o tej porze”, „Tydzień później”, przełącznik „Alarm” i „Usuń przypomnienie”. Zmienia się tylko ta data — reszta wiersza zostaje bez zmian — a zmianę cofniesz `Ctrl+Z`. Zwykłe kliknięcie znacznika dalej zaczyna edycję. Działa w notatkach i w dzienniku. Zobacz [[Zadania|Zadania]] i [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
+
 ## 0.4.1 — 24 października 2026
 
 **Zmiany**
