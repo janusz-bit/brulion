@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Brulion
-    VERSION 0.4.0
+    VERSION 0.4.1
     DESCRIPTION "Offline-first Markdown notes: outliner + journals, calendar, reminders, calculations"
     HOMEPAGE_URL "https://github.com/janusz-bit/brulion"
     LANGUAGES CXX)
