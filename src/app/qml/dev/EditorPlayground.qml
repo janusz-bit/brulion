@@ -701,7 +701,7 @@ ApplicationWindow {
             () => {
                 const d = editor.dialogs.reminderDialog
                 // Opening takes its transition (it then focuses the dialog): wait for it.
-                if (!d.opened && window.waits++ < 50) {
+                if (!d.opened && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -736,7 +736,7 @@ ApplicationWindow {
             },
             () => { editor.dialogs.createReminder(window.realRow, false); window.waits = 0 },
             () => {
-                if (!editor.dialogs.reminderDialog.opened && window.waits++ < 50) {
+                if (!editor.dialogs.reminderDialog.opened && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -758,7 +758,7 @@ ApplicationWindow {
             // The due-date dialog: a typed date counts on Save.
             () => { editor.dialogs.pickDate(window.realRow, "due"); window.waits = 0 },
             () => {
-                if (!editor.dialogs.dateDialog.opened && window.waits++ < 50) {
+                if (!editor.dialogs.dateDialog.opened && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -880,8 +880,9 @@ ApplicationWindow {
                 const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
                 const w = item ? item.embedView.width : 0
                 const h = item ? item.embedView.height : 0
-                // The picture loads asynchronously: this step repeats until it has (or 6 s passed).
-                if ((!item || Math.abs(h - w / 4) > 2) && window.waits++ < 50) {
+                // The picture loads asynchronously: this step repeats until it has (at most
+                // 2 × waitLimit steps).
+                if ((!item || Math.abs(h - w / 4) > 2) && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -913,7 +914,7 @@ ApplicationWindow {
                 const img = item ? window.findItem(item.embedView, "embedImage") as Image : null
                 const ready = frame !== null && img !== null && img.status === Image.Ready && frame.height > 0
                               && img.implicitHeight > 0
-                if (!ready && window.waits++ < 50) {
+                if (!ready && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -967,8 +968,8 @@ ApplicationWindow {
                 const ordered = editor.toolbarVisible && list !== null && writing !== null && structure !== null
                       && list.visible && writing.visible && list.x < writing.x && writing.x < structure.x
                 // The toolbar is laid out asynchronously (slow under sanitizers): repeat this step
-                // until it is (or 6 s passed).
-                if (!ordered && window.waits++ < 50) {
+                // until it is (at most 2 × waitLimit steps).
+                if (!ordered && window.waits++ < 2 * window.waitLimit) {
                     window.stepIndex -= 1
                     return
                 }
@@ -1224,9 +1225,10 @@ ApplicationWindow {
         }
         return found.length
     }
-    /// Repeat the current step until `ready` (an asynchronous popup), at most 6 s.
+    /// Repeat the current step until `ready` (an asynchronous popup), at most 2 × waitLimit steps
+    /// (~6 s, times BRULION_TEST_SLOWDOWN).
     function waitUntil(ready) {
-        if (ready || window.waits++ >= 50) {
+        if (ready || window.waits++ >= 2 * window.waitLimit) {
             window.waits = 0
             return true
         }
@@ -1849,8 +1851,9 @@ ApplicationWindow {
                       "Ctrl+Shift+Enter on a selected heading opens no status menu")
                 editor.startEditing(window.taskRow, -1)
             },
+            waitStep(() => editor.activeEditor !== null && editor.activeEditor.activeFocus
+                     && editor.activeEditor.row === window.taskRow, "the heading is edited"),
             () => realKey(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier),
-            () => {},
             () => {
                 check(!editor.taskMenu.visible && pageText() === window.taskText && editor.activeEditor !== null
                       && editor.activeEditor.activeFocus, "Ctrl+Shift+Enter in a heading opens no status menu")
@@ -2007,14 +2010,15 @@ ApplicationWindow {
     }
     // ---- Links to blocks and headings (`--editor-script blocklinks`, tst_editor_qml_blocklinks*) --
     // "Kopiuj odnośnik" with real input: the block menu from a right-click on a heading's text, a
-    // paragraph, a callout and a calc block (desktop) — a finger's long press on text opens none
-    // (--touch) —, from a bullet (right-click / long press) and from the touch toolbar's "Więcej"
-    // (the menu above the bar); the submenu's items put the link on the clipboard (read back by
-    // pasting) and say so; Ctrl+Shift+C while editing, on a selected block and with nothing
-    // selected, the palette's heading link; a copied link followed by a click or tap scrolls to its
-    // block or heading, selects and flashes it — again after scrolling away —, a missing heading is
-    // said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the palette after the
-    // cell lost the keyboard; (desktop) a right-click on a title drawn above the page's properties.
+    // paragraph, a callout and a calc block (desktop) — a finger's long press on text selects the
+    // block, no menu (--touch) —, from a bullet (right-click / long press) and from the touch
+    // toolbar's "Więcej" (the menu above the bar); the submenu's items put the link on the
+    // clipboard (read back by pasting) and say so; Ctrl+Shift+C while editing, on a selected block
+    // and with nothing selected, the palette's heading link; a copied link followed by a click or
+    // tap scrolls to its block or heading, selects and flashes it — again after scrolling away —, a
+    // missing heading is said; a table: "Więcej" on the cell toolbar, Ctrl+Shift+C in a cell, the
+    // palette after the cell lost the keyboard; (desktop) a right-click on a title drawn above the
+    // page's properties.
     property string lastNotice: ""
     /// The last toast's button ({ text, run }), else null.
     property var lastNoticeAction: null
@@ -2130,15 +2134,16 @@ ApplicationWindow {
         ]
     }
     /// Steps of the menu gesture on point (x, y) of `target()`: a right-click, or a finger held
-    /// down for a second (a bullet's long press).
-    function holdOrRightClick(target, x, y) {
+    /// down until `shown()` (a bullet's long press opened the menu) and lifted. (A fixed hold could
+    /// be lifted too early in a slow sanitizer run: a tap, which zooms into the block.)
+    function holdOrRightClick(target, x, y, shown) {
         if (!Theme.touchUi)
             return [() => rightClick(target(), x(), y())]
-        const out = [() => taskEvents.touchEvent(target()).press(0, target(), x(), y()).commit()]
-        for (let i = 0; i < 9; ++i)
-            out.push(() => {})
-        out.push(() => taskEvents.touchEvent(target()).release(0, target(), x(), y()).commit())
-        return out
+        return [
+            () => taskEvents.touchEvent(target()).press(0, target(), x(), y()).commit(),
+            holdStep(shown),
+            () => taskEvents.touchEvent(target()).release(0, target(), x(), y()).commit()
+        ]
     }
 
     function blockLinksTest() {
@@ -2207,13 +2212,17 @@ ApplicationWindow {
                     const text = renderedOf(window.targetRow)
                     taskEvents.touchEvent(text).press(0, text, text.width / 2, text.height / 2).commit()
                 },
-                () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+                // Held until the long press took effect: it selects the block (the selection mode).
+                holdStep(() => editor.selectionMode && page.selectedRow === window.targetRow),
                 () => {
                     const text = renderedOf(window.targetRow)
                     if (text)
                         taskEvents.touchEvent(text).release(0, text, text.width / 2, text.height / 2).commit()
                 },
-                () => check(!blockMenuOpen(), "a finger's long press on text opens no block menu"),
+                () => check(editor.selectionMode && page.selectedRow === window.targetRow
+                            && (editor.blockMenu === null || !editor.blockMenu.visible),
+                            "a finger's long press on text selects the block and opens no block menu"),
+                () => editor.leaveSelectionMode(),
             ])
         }
         s = s.concat([
@@ -2395,7 +2404,7 @@ ApplicationWindow {
                 editor.listView.positionViewAtIndex(window.targetRow, ListView.Center)
             },
             ...holdOrRightClick(() => delegateAt(window.targetRow), () => delegateAt(window.targetRow).bulletX,
-                                () => delegateAt(window.targetRow).firstLineCenter),
+                                () => delegateAt(window.targetRow).firstLineCenter, blockMenuOpen),
             waitStep(() => blockMenuOpen(), gesture + " on a bullet opens the block menu"),
             () => check(menuItemNamed(editor.blockMenu, "blockMenuZoom").shown, "with zoom in an outline"),
             () => check(page.zoomBlock < 0, "and does not zoom"),
@@ -2495,13 +2504,13 @@ ApplicationWindow {
                 waitStep(() => blockMenuOpen() && editor.blockMenu.heading && editor.blockMenu.row() === page.titleRow,
                          "a right-click on that title opens the title's block menu"),
                 () => taskEvents.keyClick(Qt.Key_Escape, Qt.NoModifier, -1),
-                waitStep(() => !blockMenuOpen(), "Escape closes it"),
+                // Gone, its closing transition too: a menu the next click opened would be visible at once.
+                waitStep(() => !editor.blockMenu.visible, "Escape closes it"),
                 () => {
                     const properties = delegateAt(page.titleRow - 1)
                     rightClick(properties, properties.width - 8, properties.height - 4)
                 },
-                () => {}, () => {},
-                () => check(!blockMenuOpen(), "a right-click on the properties drawn below it opens no block menu"),
+                () => check(!editor.blockMenu.visible, "a right-click on the properties drawn below it opens no block menu"),
             ])
         }
         steps = s

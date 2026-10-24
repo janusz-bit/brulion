@@ -52,7 +52,12 @@ QtObject {
     // ---- Helpers ------------------------------------------------------------------------------------
     readonly property ListView list: editor.listView
     function check(ok, what) { window.check(ok, what) }
+    /// A step repeating until `ready()`, then checking it (at most window.waitLimit times: longer
+    /// in slow sanitizer builds). Gestures are followed by one: what they do may come a frame later.
     function wait(ready, what) { return window.waitStep(ready, what) }
+    /// A step repeating until `ready()` (at most window.waitLimit times), checking nothing: a finger
+    /// held down until its gesture took effect.
+    function hold(ready) { return window.holdStep(ready) }
     function rowOf(prefix) { return window.rowOf(prefix) }
     function info(row) { return page.blocks.get(row) }
     function textOf(row) { return window.renderedOf(row) }
@@ -93,16 +98,18 @@ QtObject {
         }
         return n
     }
-    /// A finger held on (x, y) of `target()` for about a second, then lifted: steps.
-    function longPress(target, x, y, then, releasedByThen) {
+    /// A finger put on (x, y) of `target()` and held there until `done()` — the long press took
+    /// effect (the selection mode, a menu, a selected word), as a user lifts it once that shows —,
+    /// then `then` (steps, the finger still down) and the release (unless `then` lifts it:
+    /// releasedByThen): steps. (Held for a fixed number of steps, it was lifted too early in slow
+    /// sanitizer runs now and then: a tap.)
+    function longPress(target, x, y, done, then, releasedByThen) {
         const out = [() => {
             const item = target()
             check(item !== null, "something to hold")
             if (item)
                 events.touchEvent(item).press(0, item, x(item), y(item)).commit()
-        }]
-        for (let i = 0; i < 9; ++i)
-            out.push(() => {})
+        }, hold(done)]
         if (then)
             out.push(...then)
         if (!releasedByThen) {
@@ -148,6 +155,8 @@ QtObject {
         flick.contentX = Math.max(0, Math.min(x - Theme.space8, flick.contentWidth - flick.width))
     }
     function selectTextView() { return window.findItem(editor.dockHost, "selectTextEdit") }
+    /// The shown grip at the end of the selection's band, or null.
+    function endGrip() { return window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") }
     /// The button of a toast ("Cofnij"), when one is shown (clearToasts() first: one at a time).
     function toastUndo() { return window.findShown(window.toastHost, "toastAction") }
     function clearToasts() { window.toastHost.clear() }
@@ -535,7 +544,8 @@ QtObject {
                 check(Math.abs(list.contentY - test.contentBefore) < 1, "a mouse drag does not scroll the list")
                 events.mouseMove(list, list.width / 2, list.height - 4, -1, Qt.LeftButton, Qt.NoModifier)
             },
-            () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+            // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
+            hold(() => list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Notatki z rozmowy")),
             () => {
                 check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
                 check(page.selectedRow > rowOf("Notatki z rozmowy"), "and the selection follows the pointer: " + page.selectedRow)
@@ -665,13 +675,16 @@ QtObject {
     }
 
     // ---- Touch --------------------------------------------------------------------------------------
+    // (Qt Quick hands a finger's moves over with the next frame, not when they are sent: whatever a
+    // gesture does is waited for, in slow sanitizer runs too.)
     function touchSteps() {
         const textAt = (row) => () => textOf(row())
         return [
             wait(() => page.loaded && rowOf("Przygotowanie") > 0, "the outline is open"),
             () => center(rowOf("Zadzwonić")),
             // ---- A long press on a block's text: the selection mode ----------------------------------------
-            ...longPress(textAt(() => rowOf("Zadzwonić")), (t) => t.width / 2, (t) => t.height / 2),
+            ...longPress(textAt(() => rowOf("Zadzwonić")), (t) => t.width / 2, (t) => t.height / 2,
+                         () => editor.selectionMode && page.selectedRow === rowOf("Zadzwonić")),
             wait(() => editor.selectionMode && editor.toolbarMode === "selection" && page.selectedRow === rowOf("Zadzwonić"),
                  "a long press on text selects the block (the selection mode)"),
             () => {
@@ -681,9 +694,9 @@ QtObject {
                 const text = textOf(rowOf("Położyć"))
                 fingerTap(text, text.width / 3, text.height / 2)
             },
-            () => check(page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Położyć")
-                        && page.editingRow < 0 && editor.selectionMode,
-                        "a tap on another block extends the selection (no editing)"),
+            wait(() => page.selectionAnchorRow === rowOf("Zadzwonić") && page.selectedRow === rowOf("Położyć")
+                       && page.editingRow < 0 && editor.selectionMode,
+                 "a tap on another block extends the selection (no editing)"),
             () => tap(shown(toolbar(), "selectionCopy")),
             wait(() => clip().indexOf("- [/] Zadzwonić do hydraulika") === 0 && clip().indexOf("- [ ] Położyć hydroizolację") > 0,
                  "Kopiuj copies it"),
@@ -694,65 +707,69 @@ QtObject {
                 revealTool(pick)
             },
             () => tap(shown(toolbar(), "selectionPickMode")),
+            wait(() => editor.pickMode && shown(toolbar(), "selectionPickMode").checked, "a tap turns it on"),
             () => {
-                check(editor.pickMode && shown(toolbar(), "selectionPickMode").checked, "a tap turns it on")
                 check(window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") === null, "no grips while picking")
                 const text = textOf(rowOf("Zadzwonić"))
                 fingerTap(text, text.width / 3, text.height / 2)
             },
-            () => {
-                check(page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
-                      && selected().indexOf(rowOf("Wywieźć")) >= 0,
-                      "a tap on a selected block leaves it out, the rest stays: " + JSON.stringify(selected()))
-                center(rowOf("Ekipa może"))
-            },
+            wait(() => page.selectionPicked && page.editingRow < 0 && selected().indexOf(rowOf("Zadzwonić")) < 0
+                       && selected().indexOf(rowOf("Wywieźć")) >= 0,
+                 () => "a tap on a selected block leaves it out, the rest stays: " + JSON.stringify(selected())),
+            () => center(rowOf("Ekipa może")),
             () => {
                 const text = textOf(rowOf("Ekipa może"))
                 fingerTap(text, text.width / 3, text.height / 2)
             },
-            () => {
-                check(!page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
-                      && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0,
-                      "a tap on another block picks it, with a gap: " + JSON.stringify(selected()))
-                tap(shown(toolbar(), "selectionCopy"))
-            },
+            wait(() => !page.selectionContiguous && page.selectedRow === rowOf("Ekipa może")
+                       && selected().indexOf(rowOf("Ekipa może")) >= 0 && selected().indexOf(rowOf("Notatki z rozmowy")) < 0,
+                 () => "a tap on another block picks it, with a gap: " + JSON.stringify(selected())),
+            () => tap(shown(toolbar(), "selectionCopy")),
             wait(() => clip().indexOf("- [ ] Wywieźć gruz") === 0 && clip().indexOf("\n- Prace\n\t- [ ] Skuć") > 0
                        && clip().endsWith("\n- Ekipa może zacząć 20 października, cena ==do negocjacji=="),
                  () => "Kopiuj copies the picked blocks: " + JSON.stringify(clip())),
             () => tap(shown(toolbar(), "selectionPickMode")),
-            () => {
-                check(!editor.pickMode, "a second tap turns Pojedynczo off")
-                center(rowOf("Położyć"))
-            },
+            wait(() => !editor.pickMode, "a second tap turns Pojedynczo off"),
+            () => center(rowOf("Położyć")),
             () => {
                 const text = textOf(rowOf("Położyć"))
                 fingerTap(text, text.width / 3, text.height / 2)
             },
-            () => check(!page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
-                        && window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd") !== null,
-                        "then a tap moves the selection's end again, from the block picked last (the grips are back): "
-                        + page.selectionAnchorRow + "–" + page.selectedRow),
+            wait(() => !page.selectionPicked && page.selectionAnchorRow === rowOf("Ekipa może") && page.selectedRow === rowOf("Położyć")
+                       && endGrip() !== null,
+                 () => "then a tap moves the selection's end again, from the block picked last (the grips are back): "
+                       + page.selectionAnchorRow + "–" + page.selectedRow),
+            // ---- The end grip -------------------------------------------------------------------------------
+            // The band ends below Prace's children (a selected parent brings them along). Położyć in
+            // the middle keeps its grip and Kolejność, where the finger goes, clear of the view's
+            // bottom edge, where a finger held on a grip scrolls the list: centred on Zadzwonić, the
+            // grip sat there, the list scrolled after the first move and the row the finger ended on
+            // depended on how far it had scrolled before Qt Quick handed the next move over.
             () => {
                 page.selectRange(rowOf("Zadzwonić"), rowOf("Położyć")) // as before, for the grip
-                center(rowOf("Zadzwonić"))
+                center(rowOf("Położyć"))
             },
-            // ---- The end grip -------------------------------------------------------------------------------
+            wait(() => endGrip() !== null, "the band's end has a grip"),
             () => {
-                const grip = window.findShown(delegateAt(page.selectionLastRow), "selectionGripEnd")
-                check(grip !== null, "the band's end has a grip")
+                test.contentBefore = list.contentY
+                const grip = endGrip()
                 events.touchEvent(grip).press(0, grip, grip.width / 2, grip.height / 2).commit()
-                events.touchEvent(grip).move(0, grip, grip.width / 2, grip.height / 2 + 12).commit()
             },
+            wait(() => editor.dragSelecting, "a finger on the grip drags the selection's end"),
             () => {
                 const text = textOf(rowOf("Kolejność"))
                 events.touchEvent(text).move(0, text, 30, text.height / 2).commit()
             },
+            hold(() => page.selectedRow === rowOf("Kolejność")),
             () => {
                 const text = textOf(rowOf("Kolejność"))
                 events.touchEvent(text).release(0, text, 30, text.height / 2).commit()
             },
-            () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić"),
-                        "dragging the end grip moves the selection's end: " + page.selectedRow),
+            wait(() => !editor.dragSelecting, "the lifted finger ends the drag"),
+            () => check(page.selectedRow === rowOf("Kolejność") && page.selectionAnchorRow === rowOf("Zadzwonić")
+                        && Math.abs(list.contentY - test.contentBefore) < 1,
+                        "dragging the end grip moves the selection's end: " + page.selectionAnchorRow + "–" + page.selectedRow
+                        + ", scrolled " + (list.contentY - test.contentBefore)),
             // ---- Usuń keeps the selection mode (the block before them selected); the toast's Cofnij, Ctrl+Z --
             () => clearToasts(),
             wait(() => toastUndo() === null, "no toast is left"),
@@ -780,29 +797,33 @@ QtObject {
                         "selected again, in the selection mode"),
             // ---- Back leaves the selection mode -----------------------------------------------------------
             () => key(Qt.Key_Back),
-            () => check(!editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "",
-                        "Back leaves the selection mode"),
+            wait(() => !editor.selectionMode && page.selectionCount === 0 && editor.toolbarMode === "",
+                 "Back leaves the selection mode"),
             // ---- A long press dragged to the view's edge: autoscroll ----------------------------------------
             () => list.positionViewAtBeginning(),
             () => { test.contentBefore = list.contentY },
-            ...longPress(textAt(() => rowOf("Zmierzyć")), (t) => t.width / 2, (t) => t.height / 2, [
-                () => check(editor.selectionMode, "the long press selected the block"),
+            ...longPress(textAt(() => rowOf("Zmierzyć")), (t) => t.width / 2, (t) => t.height / 2,
+                         () => editor.selectionMode && page.selectedRow === rowOf("Zmierzyć"), [
                 () => {
+                    check(editor.selectionMode, "the long press selected the block")
                     const text = textOf(rowOf("Kupić płytki"))
                     events.touchEvent(text).move(0, text, text.width / 2, text.height / 2).commit()
                 },
-                () => check(page.selectedRow === rowOf("Kupić płytki") && Math.abs(list.contentY - test.contentBefore) < 1,
-                            "moving the finger without lifting it extends the selection (no scrolling)"),
+                wait(() => page.selectedRow === rowOf("Kupić płytki") && Math.abs(list.contentY - test.contentBefore) < 1,
+                     () => "moving the finger without lifting it extends the selection (no scrolling): " + page.selectedRow
+                           + ", scrolled " + (list.contentY - test.contentBefore)),
                 () => events.touchEvent(list).move(0, list, list.width / 2, list.height - 6).commit(),
-                () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {}, () => {},
+                // Held at the edge until the list has scrolled (a frame at a time: slow in sanitizer builds).
+                hold(() => list.contentY > test.contentBefore + 100 && page.selectedRow > rowOf("Prace")),
                 () => {
                     check(list.contentY > test.contentBefore + 100, "at the view's bottom edge the list scrolls: " + list.contentY)
                     check(page.selectedRow > rowOf("Prace"), "the selection follows the finger: " + page.selectedRow)
                     events.touchEvent(list).release(0, list, list.width / 2, list.height - 6).commit()
                 },
             ], true),
-            () => check(editor.selectionMode && list.interactive && page.selectionAnchorRow === rowOf("Zmierzyć"),
-                        "the lifted finger leaves the selection in the selection mode"),
+            wait(() => !editor.dragSelecting && editor.selectionMode && list.interactive
+                       && page.selectionAnchorRow === rowOf("Zmierzyć"),
+                 "the lifted finger leaves the selection in the selection mode"),
             () => key(Qt.Key_Back),
             // ---- The editing toolbar's "Zaznacz" ------------------------------------------------------------
             () => {
@@ -820,22 +841,21 @@ QtObject {
                 check(done !== null && done.mapToItem(null, 0, 0).x < 60, "Gotowe is the bar's first tool")
                 tap(done)
             },
-            () => check(!editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode"),
+            wait(() => !editor.selectionMode && page.selectionCount === 0, "Gotowe leaves the selection mode"),
             // ---- A keyboard on a touch UI: Esc and Shift+↓ give the selection its tools -------------------
             () => editor.startEditing(rowOf("Skuć"), -1),
             wait(() => editor.activeEditor !== null && editor.activeEditor.activeFocus && editor.activeEditor.row === rowOf("Skuć"),
                  "Skuć is edited"),
             () => editKey(Qt.Key_Escape),
-            () => {
-                check(page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
-                      && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools")
-                key(Qt.Key_Down, Qt.ShiftModifier)
-            },
-            () => check(page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
-                        && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay"),
+            wait(() => page.selectedRow === rowOf("Skuć") && page.editingRow < 0 && editor.selectionMode
+                       && editor.toolbarMode === "selection", "Esc selects the block with the selection's tools"),
+            () => key(Qt.Key_Down, Qt.ShiftModifier),
+            wait(() => page.selectionAnchorRow === rowOf("Skuć") && page.selectedRow === rowOf("Położyć")
+                       && editor.toolbarMode === "selection", "Shift+↓ extends it, the tools stay"),
             () => key(Qt.Key_Back),
             // ---- The bullet's menu: Zaznacz -----------------------------------------------------------------
-            ...longPress(() => delegateAt(rowOf("Kolejność")), (d) => d.bulletX, (d) => d.firstLineCenter),
+            ...longPress(() => delegateAt(rowOf("Kolejność")), (d) => d.bulletX, (d) => d.firstLineCenter,
+                         () => editor.blockMenu !== null && editor.blockMenu.opened),
             wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a bullet's long press opens the block menu"),
             () => tap(window.menuItemNamed(editor.blockMenu, "blockMenuSelect")),
             wait(() => editor.selectionMode && page.selectedRow === rowOf("Kolejność"), "its Zaznacz selects the block"),
@@ -849,14 +869,19 @@ QtObject {
             }, (t) => {
                 const r = t.positionToRectangle(t.getText(0, t.length).indexOf("Przygotowanie") + 3)
                 return r.y + r.height / 2
-            }),
+            }, () => selectTextView().selectedText !== ""),
             wait(() => selectTextView().selectedText === "Przygotowanie", () => "a long press selects the word: " + selectTextView().selectedText),
+            wait(() => window.findShown(editor.dockHost, "selectTextHandleEnd") !== null
+                       && window.findShown(editor.dockHost, "selectTextHandleStart") !== null, "with two handles"),
+            // The end handle dragged down. (The second move is measured from where the handle is
+            // then: once the first one has moved it. A release delivers a move still pending first.)
             () => {
+                test.countBefore = selectTextView().selectionEnd
                 const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
-                check(handle !== null && window.findShown(editor.dockHost, "selectTextHandleStart") !== null, "with two handles")
                 events.touchEvent(handle).press(0, handle, handle.width / 2, handle.height / 2).commit()
                 events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 30).commit()
             },
+            hold(() => selectTextView().selectionEnd > test.countBefore),
             () => {
                 const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
                 events.touchEvent(handle).move(0, handle, handle.width / 2, handle.height / 2 + 60).commit()
@@ -865,8 +890,8 @@ QtObject {
                 const handle = window.findShown(editor.dockHost, "selectTextHandleEnd")
                 events.touchEvent(handle).release(0, handle, handle.width / 2, handle.height / 2).commit()
             },
-            () => check(selectTextView().selectedText.indexOf("Przygotowanie") === 0 && selectTextView().selectedText.length > 20,
-                        "dragging the end handle extends it: " + JSON.stringify(selectTextView().selectedText.slice(0, 40))),
+            wait(() => selectTextView().selectedText.indexOf("Przygotowanie") === 0 && selectTextView().selectedText.length > 20,
+                 () => "dragging the end handle extends it: " + JSON.stringify(selectTextView().selectedText.slice(0, 40))),
             // The start handle dragged past the end: the end stays where it was, the finger moves the other end.
             () => {
                 test.countBefore = selectTextView().selectionEnd
@@ -889,9 +914,9 @@ QtObject {
                 const r = t.positionToRectangle(test.countBefore)
                 events.touchEvent(t).release(0, t, 60, r.y + 3 * r.height + 24).commit()
             },
-            () => check(selectTextView().selectionStart === test.countBefore && selectTextView().selectionEnd > test.countBefore,
-                        "dragged past the end, the start handle keeps the old end fixed: " + selectTextView().selectionStart
-                        + "–" + selectTextView().selectionEnd + " (fixed " + test.countBefore + ")"),
+            wait(() => selectTextView().selectionStart === test.countBefore && selectTextView().selectionEnd > test.countBefore,
+                 () => "dragged past the end, the start handle keeps the old end fixed: " + selectTextView().selectionStart
+                       + "–" + selectTextView().selectionEnd + " (fixed " + test.countBefore + ")"),
             () => {
                 test.textBefore = EditorInput.textRange(selectTextView().textDocument, selectTextView().selectionStart,
                                                         selectTextView().selectionEnd)
