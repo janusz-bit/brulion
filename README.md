@@ -128,7 +128,8 @@
   zapisem; [docs/IMPORT.md](docs/IMPORT.md) — m.in. jak wyeksportować notatki z Trilium i co się
   z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)).
   Eksport do ZIP z Markdownem, formatu Obsidiana i Logseq, statycznej strony HTML lub jednego
-  pliku HTML, JSON, iCalendar, OPML i CSV zadań.
+  pliku HTML, Pandoc Markdown (jeden dokument do zamiany w Word, LibreOffice, PDF albo EPUB),
+  JSON, iCalendar, OPML i CSV zadań.
 * **Foldery bez psucia linków.** Strony, załączniki i całe foldery przenosisz poleceniem
   „Przenieś do…” (z drzewa, menu „Więcej”, listy stron albo palety; na telefonie przycisk „⋯”
   przy każdym wierszu), przeciągając myszą w drzewie albo wpisując „/” przy zmianie nazwy
@@ -361,7 +362,8 @@ daily journals and block outliner on top of plain Obsidian-compatible `.md` file
 either an Obsidian-like document or a Logseq-like outline, switchable at any time), with a
 calendar, reminders and real alarms, calculation blocks and spreadsheet-like table formulas,
 live queries, version history, and import/export for Obsidian, Logseq, Notion, Evernote,
-Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar.
+Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar (export also as one
+Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
   alarms that fire while the app is closed) and in the **browser** (Qt for WebAssembly,

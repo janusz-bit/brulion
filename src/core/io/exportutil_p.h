@@ -75,4 +75,20 @@ QString logseqUuid(const QString &id);
 /// "DD.MM.YYYY", "dddd") — Obsidian's daily notes settings.
 QString momentFormat(const QString &qtFormat);
 
+/// Text of a block for backlink excerpts and block references (its first line; the note's title
+/// when empty or out of range).
+QString blockText(const ParsedNote &note, int index);
+
+/// The block of the heading of `note` that the link fragment `fragment` names, or -1 — by
+/// markdown::findHeading, the one matcher of the app's links and embeds (markup and tag hashes
+/// ignored, Obsidian heading paths "Budżet#Zadania").
+int linkedHeading(const ParsedNote &note, const QString &fragment);
+
+/// Root blocks of a heading section ("[[Page#Heading]]" embeds): the heading and following roots
+/// up to the next heading of the same or a higher level.
+QList<int> sectionBlocks(const ParsedNote &note, const QString &heading);
+
+/// Notes of a one-document export: pages by path, then journals newest first.
+QList<const ExportVault::Note *> orderedNotes(const ExportVault &vault);
+
 } // namespace brulion::io::detail

@@ -2701,107 +2701,107 @@
 <context>
     <name>EditorPlayground</name>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="53"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="54"/>
         <source>(new page)</source>
         <translation>(nowa strona)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="54"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="55"/>
         <source>Open: %1</source>
         <translation>Otwórz: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="56"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="57"/>
         <source>Open in browser: %1</source>
         <translation>Otwórz w przeglądarce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="83"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="84"/>
         <source>Could not save the page</source>
         <translation>Nie udało się zapisać strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="84"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="85"/>
         <source>Merged changes made on another device</source>
         <translation>Scalono zmiany z innego urządzenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="85"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="86"/>
         <source>The page changed outside the editor</source>
         <translation>Strona zmieniła się poza edytorem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="137"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="138"/>
         <source>Conflict</source>
         <translation>Konflikt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="137"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="138"/>
         <source>Unsaved</source>
         <translation>Niezapisane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="137"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="138"/>
         <source>Saved</source>
         <translation>Zapisano</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="144"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="145"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="153"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="154"/>
         <source>Redo</source>
         <translation>Ponów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="163"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="164"/>
         <source>Document mode</source>
         <translation>Tryb dokumentu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="163"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="164"/>
         <source>Outline mode</source>
         <translation>Tryb konspektu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="169"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="170"/>
         <source>Source mode</source>
         <translation>Tryb źródła</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="178"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="179"/>
         <source>Simulate a change from another device</source>
         <translation>Symuluj zmianę z innego urządzenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="189"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="190"/>
         <source>Theme</source>
         <translation>Motyw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="191"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="192"/>
         <source>Light</source>
         <translation>Jasny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="192"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="193"/>
         <source>Dark</source>
         <translation>Ciemny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="200"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="201"/>
         <source>Language</source>
         <translation>Język</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="208"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="209"/>
         <source>Touch sizes</source>
         <translation>Rozmiary dotykowe</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="253"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="254"/>
         <source>Vault</source>
         <translation>Notatnik</translation>
     </message>
@@ -3980,47 +3980,47 @@
         <translation>Logseq (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="99"/>
+        <location filename="../src/core/io/export_html.cpp" line="97"/>
         <source>Exported from Brulion on %1</source>
         <translation>Wyeksportowano z Brulionu: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="100"/>
+        <location filename="../src/core/io/export_html.cpp" line="98"/>
         <source>Exported from Brulion</source>
         <translation>Wyeksportowano z Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="320"/>
+        <location filename="../src/core/io/export_html.cpp" line="260"/>
         <source>Linked references</source>
         <translation>Odnośniki</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="353"/>
+        <location filename="../src/core/io/export_html.cpp" line="293"/>
         <source>HTML website (ZIP)</source>
         <translation>Witryna HTML (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="444"/>
+        <location filename="../src/core/io/export_html.cpp" line="384"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="447"/>
+        <location filename="../src/core/io/export_html.cpp" line="387"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="453"/>
+        <location filename="../src/core/io/export_html.cpp" line="393"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="463"/>
+        <location filename="../src/core/io/export_html.cpp" line="403"/>
         <source>HTML document</source>
         <translation>Dokument HTML</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="500"/>
+        <location filename="../src/core/io/export_html.cpp" line="440"/>
         <source>Contents</source>
         <translation>Spis treści</translation>
     </message>
@@ -4116,6 +4116,96 @@
         <location filename="../src/core/io/import_trilium.cpp" line="1649"/>
         <source>This is no Trilium export: “!!!meta.json” is missing. Export the notes in Trilium with the format “HTML” or “Markdown” and choose the ZIP file.</source>
         <translation>To nie jest eksport z Trilium: brakuje pliku „!!!meta.json”. Wyeksportuj notatki w Trilium w formacie „HTML” albo „Markdown” i wybierz plik ZIP.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="153"/>
+        <source>highest</source>
+        <translation>najwyższy</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="154"/>
+        <source>high</source>
+        <translation>wysoki</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="155"/>
+        <source>medium</source>
+        <translation>średni</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="156"/>
+        <source>low</source>
+        <translation>niski</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="157"/>
+        <source>lowest</source>
+        <translation>najniższy</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="174"/>
+        <location filename="../src/core/io/pandocrender.cpp" line="180"/>
+        <source>due: %1</source>
+        <translation>termin: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="175"/>
+        <location filename="../src/core/io/pandocrender.cpp" line="181"/>
+        <source>scheduled: %1</source>
+        <translation>zaplanowane: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="176"/>
+        <source>starts: %1</source>
+        <translation>początek: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="177"/>
+        <source>done: %1</source>
+        <translation>zrobione: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="178"/>
+        <source>cancelled: %1</source>
+        <translation>anulowane: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="184"/>
+        <location filename="../src/core/io/pandocrender.cpp" line="444"/>
+        <source>repeats: %1</source>
+        <translation>powtarzanie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="190"/>
+        <source>priority: %1</source>
+        <translation>priorytet: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="193"/>
+        <location filename="../src/core/io/pandocrender.cpp" line="446"/>
+        <source>alarm: %1</source>
+        <translation>alarm: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="194"/>
+        <location filename="../src/core/io/pandocrender.cpp" line="447"/>
+        <source>reminder: %1</source>
+        <translation>przypomnienie: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="541"/>
+        <source>in progress</source>
+        <translation>w toku</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/pandocrender.cpp" line="545"/>
+        <source>deferred</source>
+        <translation>oczekujące</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/export_pandoc.cpp" line="215"/>
+        <source>Pandoc Markdown (ZIP)</source>
+        <translation>Pandoc Markdown (ZIP)</translation>
     </message>
 </context>
 <context>
@@ -10132,117 +10222,122 @@
     </message>
     <message>
         <location filename="../src/app/io/exportcontroller.cpp" line="180"/>
+        <source>One Markdown document for Pandoc, to turn into Word, LibreOffice, PDF or EPUB.</source>
+        <translation>Jeden dokument Markdown dla programu Pandoc – do zamiany w plik Worda, LibreOffice, PDF albo EPUB.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/exportcontroller.cpp" line="183"/>
         <source>Notes with their tasks, tags and links in one JSON file, for scripts and other tools.</source>
         <translation>Notatki z zadaniami, tagami i linkami w jednym pliku JSON, dla skryptów i innych narzędzi.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="183"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="186"/>
         <source>Dated tasks and reminders as a calendar file for Google Calendar, Outlook or a phone.</source>
         <translation>Zadania z datami i przypomnienia jako plik kalendarza dla Kalendarza Google, Outlooka lub telefonu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="186"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="189"/>
         <source>The outline of the pages for outliner and mind-mapping apps.</source>
         <translation>Konspekt stron dla aplikacji do konspektów i map myśli.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="188"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="191"/>
         <source>All tasks as a table for a spreadsheet (LibreOffice Calc, Excel).</source>
         <translation>Wszystkie zadania jako tabela do arkusza kalkulacyjnego (LibreOffice Calc, Excel).</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="282"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="285"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="284"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="287"/>
         <source>Choose a folder.</source>
         <translation>Wybierz folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="284"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="287"/>
         <source>The folder “%1” does not exist.</source>
         <translation>Folder „%1” nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="286"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="289"/>
         <source>Choose a page.</source>
         <translation>Wybierz stronę.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="286"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="289"/>
         <source>The page “%1” does not exist.</source>
         <translation>Strona „%1” nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="289"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="292"/>
         <source>There is nothing to export yet.</source>
         <translation>Na razie nie ma nic do wyeksportowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="393"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="396"/>
         <source>Reading the notes…</source>
         <translation>Wczytywanie notatek…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="411"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="414"/>
         <source>“%1” could not be read and is missing from the export.</source>
         <translation>Nie udało się odczytać „%1”, więc brakuje go w eksporcie.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="418"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="421"/>
         <source>Reading %1 of %2 files…</source>
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="430"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="433"/>
         <source>This format is not available.</source>
         <translation>Ten format jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="439"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="442"/>
         <source>Creating “%1”…</source>
         <translation>Tworzenie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="456"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="459"/>
         <source>Nothing was exported.</source>
         <translation>Nic nie wyeksportowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="471"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="474"/>
         <source>The file could not be saved: %1</source>
         <translation>Nie udało się zapisać pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="479"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="512"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="482"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="515"/>
         <source>“%1” could not be saved: %2</source>
         <translation>Nie udało się zapisać „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="484"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="487"/>
         <source>Saved “%1”.</source>
         <translation>Zapisano „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="504"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="507"/>
         <source>The file could not be saved in Downloads: %1</source>
         <translation>Nie udało się zapisać pliku w Pobranych: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="514"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="517"/>
         <source>Downloads/%1</source>
         <translation>Pobrane/%1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="516"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="519"/>
         <source>Saved “%1” in Downloads.</source>
         <translation>Zapisano „%1” w Pobranych.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="540"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="543"/>
         <source>“%1” is being downloaded.</source>
         <translation>Trwa pobieranie „%1”.</translation>
     </message>

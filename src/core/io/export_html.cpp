@@ -8,12 +8,9 @@
 #include "io/importutil_p.h"
 #include "io/links_p.h"
 #include "io/messages_p.h"
-#include "markdown/linkformat.h"
 #include "util/paths.h"
 
 #include <QSet>
-
-#include <algorithm>
 
 namespace brulion::io::detail {
 
@@ -98,64 +95,6 @@ QString footerText(const ExportInput &input)
     return esc(input.now.isValid()
                        ? IoMessages::tr("Exported from Brulion on %1").arg(input.now.toString(u"yyyy-MM-dd HH:mm"_s))
                        : IoMessages::tr("Exported from Brulion"));
-}
-
-/// Text of a block for backlink excerpts and block references.
-QString blockText(const ParsedNote &note, int index)
-{
-    if (index < 0 || index >= note.blocks.size())
-        return note.title;
-    const QString t = note.blocks[index].text.section(u'\n', 0, 0).trimmed();
-    return t.isEmpty() ? note.title : t;
-}
-
-/// The block of the heading of `note` that the link fragment `fragment` names, or -1 — by
-/// markdown::findHeading, the one matcher of the app's links and embeds (markup and tag hashes
-/// ignored, Obsidian heading paths "Budżet#Zadania").
-int linkedHeading(const ParsedNote &note, const QString &fragment)
-{
-    const int found = markdown::findHeading(note.headings, fragment);
-    if (found < 0)
-        return -1;
-    for (int i = 0; i < note.blocks.size(); ++i) {
-        const Block &b = note.blocks[i];
-        if (b.parent < 0 && b.kind == BlockKind::Heading && b.line == note.headings.at(found).line)
-            return i;
-    }
-    return -1;
-}
-
-/// Root blocks of a heading section ("[[Page#Heading]]" embeds): the heading and following roots
-/// up to the next heading of the same or a higher level.
-QList<int> sectionBlocks(const ParsedNote &note, const QString &heading)
-{
-    QList<int> out;
-    const int first = linkedHeading(note, heading);
-    if (first < 0)
-        return out;
-    const int level = note.blocks[first].headingLevel;
-    out.append(first);
-    for (int i = first + 1; i < note.blocks.size(); ++i) {
-        const Block &b = note.blocks[i];
-        if (b.parent >= 0)
-            continue;
-        if (b.kind == BlockKind::Heading && b.headingLevel <= level)
-            break;
-        out.append(i);
-    }
-    return out;
-}
-
-/// Ordered notes: pages by path, then journals newest first.
-QList<const ExportVault::Note *> orderedNotes(const ExportVault &vault)
-{
-    QList<const ExportVault::Note *> pages;
-    QList<const ExportVault::Note *> journals;
-    for (const ExportVault::Note &n : vault.notes())
-        (n.journal ? journals : pages).append(&n);
-    std::stable_sort(journals.begin(), journals.end(),
-                     [](const ExportVault::Note *a, const ExportVault::Note *b) { return *a->journal > *b->journal; });
-    return pages + journals;
 }
 
 /// Renders the notes of an export, building link callbacks for one output location.

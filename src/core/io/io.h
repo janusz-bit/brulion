@@ -33,7 +33,8 @@
 //                  struct ExportResult { QList<ExportedFile> files; QStringList warnings; }
 //                  class Exporter { id(), name(), fileExtension(), run(input) }
 //                  exporters()  — markdown-zip, obsidian-zip, logseq-zip, html-site,
-//                    html-single, json (brulion-export v1), ics, opml, tasks-csv
+//                    html-single, pandoc (one Pandoc Markdown document + linked attachments),
+//                    json (brulion-export v1), ics, opml, tasks-csv
 //                  exporterById(id), runExport(exporter, input) (input cleaned first)
 //
 //   zip.h          readZip(zip, &warnings, ZipReadOptions{expandNested, maxNestingDepth,

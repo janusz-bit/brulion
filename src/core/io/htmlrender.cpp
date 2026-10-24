@@ -1,6 +1,7 @@
 #include "io/htmlrender_p.h"
 
 #include "dates/recurrence.h"
+#include "io/rendercommon_p.h"
 #include "markdown/inline.h"
 #include "markdown/math.h"
 #include "markdown/tokens.h"
@@ -11,7 +12,6 @@
 #include <QScopeGuard>
 
 #include <algorithm>
-#include <array>
 
 namespace brulion::io::detail {
 
@@ -20,18 +20,6 @@ using namespace Qt::StringLiterals;
 namespace {
 
 constexpr int MaxInlineDepth = 2;
-
-struct Atom {
-    qsizetype from = 0;
-    qsizetype to = 0;
-    QString html;
-};
-
-bool isAsciiPunct(QChar c)
-{
-    const char16_t u = c.unicode();
-    return (u >= 0x21 && u <= 0x2F) || (u >= 0x3A && u <= 0x40) || (u >= 0x5B && u <= 0x60) || (u >= 0x7B && u <= 0x7E);
-}
 
 QString esc(QStringView s)
 {
@@ -45,21 +33,6 @@ QString escapeWithBreaks(QStringView s)
     return out.replace(u'\n', u"<br>"_s);
 }
 
-bool hasScheme(QStringView target)
-{
-    static const QRegularExpression re(u"^[A-Za-z][A-Za-z0-9+.-]{1,31}:"_s);
-    return re.matchView(target).hasMatch();
-}
-
-bool safeExternal(QStringView url)
-{
-    const qsizetype colon = url.indexOf(u':');
-    if (colon <= 0)
-        return false;
-    const QString scheme = url.first(colon).toString().toLower();
-    return scheme == u"http" || scheme == u"https" || scheme == u"mailto";
-}
-
 QString attr(const QString &value)
 {
     return u'"' + esc(value) + u'"';
@@ -68,46 +41,6 @@ QString attr(const QString &value)
 QString chip(const QString &cls, const QString &text)
 {
     return u"<span class=\"chip "_s + cls + u"\">"_s + esc(text) + u"</span>"_s;
-}
-
-enum class MediaKind { Image, Audio, Video, Other };
-
-MediaKind mediaKind(const QString &path)
-{
-    static const QStringList audio = {u".mp3"_s, u".m4a"_s, u".wav"_s, u".ogg"_s, u".opus"_s, u".flac"_s, u".aac"_s};
-    static const QStringList video = {u".mp4"_s, u".webm"_s, u".mov"_s, u".m4v"_s};
-    // The pictures the app shows as pictures (one list: paths::pictureExtensions()).
-    if (paths::isPicturePath(path))
-        return MediaKind::Image;
-    const QString ext = paths::extension(path);
-    if (audio.contains(ext))
-        return MediaKind::Audio;
-    if (video.contains(ext))
-        return MediaKind::Video;
-    return MediaKind::Other;
-}
-
-/// What a link shows when it cannot be one (inside another link): its label, else its target.
-QString visibleText(const Link &link, QStringView source)
-{
-    switch (link.kind) {
-    case LinkKind::Wiki:
-    case LinkKind::Embed:
-    case LinkKind::Markdown:
-        if (!link.display.isEmpty())
-            return link.display;
-        return link.target.isEmpty() ? source.toString() : link.target;
-    case LinkKind::BlockRef:
-    case LinkKind::BlockEmbed:
-    case LinkKind::Url: break;
-    }
-    return source.toString();
-}
-
-bool isAttachmentTarget(const QString &target)
-{
-    const QString ext = paths::extension(target);
-    return !ext.isEmpty() && ext != u".md" && ext != u".markdown";
 }
 
 /// An attachment as <img> / <audio> / <video> / link; the kind comes from `fileName`.
@@ -122,234 +55,13 @@ QString mediaHtml(const QString &url, const QString &label, const QString &fileN
     return u"<a class=\"attachment\" href="_s + attr(url) + u">"_s + esc(label) + u"</a>"_s;
 }
 
-// --- emphasis (CommonMark-like delimiter runs, as in markdown::InlineRenderer) -------------------
-
-struct Piece {
-    enum class Type { Text, Html, Delim };
-    Type type = Type::Text;
-    qsizetype from = 0;
-    qsizetype to = 0;
-    QString html;
-    QChar ch;
-    int remaining = 0;
-    bool canOpen = false;
-    bool canClose = false;
-    QString openTags;
-    QString closeTags;
-};
-
-bool isDelimChar(QChar c)
+std::pair<QString, QString> htmlMarks(QChar ch, int count)
 {
-    return c == u'*' || c == u'_' || c == u'~' || c == u'=';
-}
-
-bool isPunctuation(QChar c)
-{
-    return c.isPunct() || c.isSymbol();
-}
-
-Piece textPiece(qsizetype from, qsizetype to)
-{
-    Piece p;
-    p.from = from;
-    p.to = to;
-    return p;
-}
-
-QList<Piece> buildPieces(QStringView text, const QList<Atom> &atoms)
-{
-    QList<Piece> pieces;
-    const auto addGap = [&](qsizetype a, qsizetype b, QChar before, QChar after) {
-        qsizetype textStart = a;
-        qsizetype i = a;
-        while (i < b) {
-            const QChar c = text[i];
-            if (!isDelimChar(c)) {
-                ++i;
-                continue;
-            }
-            qsizetype j = i;
-            while (j < b && text[j] == c)
-                ++j;
-            const qsizetype len = j - i;
-            if ((c == u'~' || c == u'=') && len != 2) {
-                i = j;
-                continue;
-            }
-            if (i > textStart)
-                pieces.append(textPiece(textStart, i));
-            const QChar prev = i > a ? text[i - 1] : before;
-            const QChar next = j < b ? text[j] : after;
-            const bool prevSpace = prev.isSpace();
-            const bool nextSpace = next.isSpace();
-            const bool left = !nextSpace && (!isPunctuation(next) || prevSpace || isPunctuation(prev));
-            const bool right = !prevSpace && (!isPunctuation(prev) || nextSpace || isPunctuation(next));
-            Piece d;
-            d.type = Piece::Type::Delim;
-            d.from = i;
-            d.to = j;
-            d.ch = c;
-            d.remaining = int(len);
-            if (c == u'_') {
-                d.canOpen = left && (!right || isPunctuation(prev));
-                d.canClose = right && (!left || isPunctuation(next));
-            } else {
-                d.canOpen = left;
-                d.canClose = right;
-            }
-            pieces.append(d);
-            i = j;
-            textStart = j;
-        }
-        if (b > textStart)
-            pieces.append(textPiece(textStart, b));
-    };
-    const QChar space(u' ');
-    const QChar letter(u'a');
-    qsizetype pos = 0;
-    QChar before = space;
-    for (const Atom &atom : atoms) {
-        addGap(pos, atom.from, before, atom.html.isEmpty() ? space : letter);
-        Piece h;
-        h.type = Piece::Type::Html;
-        h.from = atom.from;
-        h.to = atom.to;
-        h.html = atom.html;
-        pieces.append(h);
-        pos = atom.to;
-        before = atom.html.isEmpty() ? space : letter;
-    }
-    addGap(pos, text.size(), before, space);
-    return pieces;
-}
-
-int delimSlot(QChar c)
-{
-    return c == u'*' ? 0 : c == u'_' ? 1 : c == u'~' ? 2 : 3;
-}
-
-void processEmphasis(QList<Piece> &pieces)
-{
-    QList<int> openers;
-    std::array<qsizetype, 4> bottom{0, 0, 0, 0};
-    const auto shrink = [&](qsizetype size) {
-        openers.resize(size);
-        for (qsizetype &b : bottom)
-            b = std::min(b, size);
-    };
-    for (int k = 0; k < pieces.size(); ++k) {
-        if (pieces[k].type != Piece::Type::Delim)
-            continue;
-        if (pieces[k].canClose) {
-            const int slot = delimSlot(pieces[k].ch);
-            while (pieces[k].remaining > 0) {
-                qsizetype found = -1;
-                for (qsizetype s = openers.size() - 1; s >= bottom[slot]; --s) {
-                    if (pieces[openers[s]].ch == pieces[k].ch) {
-                        found = s;
-                        break;
-                    }
-                }
-                if (found < 0) {
-                    bottom[slot] = openers.size();
-                    break;
-                }
-                Piece &o = pieces[openers[found]];
-                Piece &d = pieces[k];
-                const bool emphasis = d.ch == u'*' || d.ch == u'_';
-                const int use = emphasis ? (o.remaining >= 2 && d.remaining >= 2 ? 2 : 1) : 2;
-                QString open;
-                QString close;
-                if (emphasis) {
-                    open = use == 2 ? u"<strong>"_s : u"<em>"_s;
-                    close = use == 2 ? u"</strong>"_s : u"</em>"_s;
-                } else if (d.ch == u'~') {
-                    open = u"<del>"_s;
-                    close = u"</del>"_s;
-                } else {
-                    open = u"<mark>"_s;
-                    close = u"</mark>"_s;
-                }
-                o.openTags.prepend(open);
-                d.closeTags.append(close);
-                o.remaining -= use;
-                d.remaining -= use;
-                shrink(found + (o.remaining > 0 ? 1 : 0));
-            }
-        }
-        if (pieces[k].canOpen && pieces[k].remaining > 0)
-            openers.append(k);
-    }
-}
-
-QString assemble(QStringView text, const QList<Piece> &pieces)
-{
-    QString out;
-    for (const Piece &p : pieces) {
-        switch (p.type) {
-        case Piece::Type::Text: out += escapeWithBreaks(text.sliced(p.from, p.to - p.from)); break;
-        case Piece::Type::Html: out += p.html; break;
-        case Piece::Type::Delim: out += p.closeTags + QString(p.remaining, p.ch) + p.openTags; break;
-        }
-    }
-    while (out.endsWith(u"<br>"))
-        out.chop(4);
-    return out;
-}
-
-/// Code spans and comments (blanked by maskInlineCode): code -> <code>, comments hidden.
-void codeAndCommentAtoms(QStringView text, QStringView masked, QList<Atom> &atoms)
-{
-    for (qsizetype i = 0; i < text.size();) {
-        if (masked[i] != u' ' || text[i] == u' ') {
-            ++i;
-            continue;
-        }
-        if (text[i] == u'`') {
-            qsizetype n = 0;
-            while (i + n < text.size() && text[i + n] == u'`')
-                ++n;
-            qsizetype j = i + n;
-            qsizetype close = -1;
-            while (j < text.size()) {
-                if (text[j] == u'`') {
-                    qsizetype m = 0;
-                    while (j + m < text.size() && text[j + m] == u'`')
-                        ++m;
-                    if (m == n && masked[j] == u' ') {
-                        close = j;
-                        break;
-                    }
-                    j += m;
-                } else {
-                    ++j;
-                }
-            }
-            if (close < 0) {
-                i += n;
-                continue;
-            }
-            QString content = text.sliced(i + n, close - i - n).toString();
-            content.replace(u"\r\n"_s, u" "_s).replace(u'\n', u' ').replace(u'\r', u' ');
-            if (content.size() >= 2 && content.startsWith(u' ') && content.endsWith(u' ')
-                && !content.trimmed().isEmpty())
-                content = content.sliced(1, content.size() - 2);
-            atoms.append(Atom{i, close + n, u"<code>"_s + esc(content) + u"</code>"_s});
-            i = close + n;
-        } else if (text.sliced(i).startsWith(u"%%")) {
-            const qsizetype close = text.indexOf(u"%%", i + 2);
-            const qsizetype end = close < 0 ? text.size() : close + 2;
-            atoms.append(Atom{i, end, QString()});
-            i = end;
-        } else if (text.sliced(i).startsWith(u"<!--")) {
-            const qsizetype close = text.indexOf(u"-->", i + 4);
-            const qsizetype end = close < 0 ? text.size() : close + 3;
-            atoms.append(Atom{i, end, QString()});
-            i = end;
-        } else {
-            ++i;
-        }
-    }
+    if (ch == u'~')
+        return {u"<del>"_s, u"</del>"_s};
+    if (ch == u'=')
+        return {u"<mark>"_s, u"</mark>"_s};
+    return count == 2 ? std::pair{u"<strong>"_s, u"</strong>"_s} : std::pair{u"<em>"_s, u"</em>"_s};
 }
 
 QString priorityName(Priority p)
@@ -377,92 +89,14 @@ QString statusName(TaskStatus s)
     return u"todo"_s;
 }
 
-bool isOrderedItem(const Block &b)
-{
-    const QStringView first = QStringView(b.raw).trimmed();
-    qsizetype i = 0;
-    while (i < first.size() && first[i].isDigit())
-        ++i;
-    return i > 0 && i < first.size() && (first[i] == u'.' || first[i] == u')');
-}
-
-/// Split a GFM table row into cells (`\|` is not a separator).
-QStringList tableCells(QStringView row)
-{
-    QStringView r = row.trimmed();
-    if (r.startsWith(u'|'))
-        r = r.sliced(1);
-    if (r.endsWith(u'|') && !r.endsWith(u"\\|"))
-        r.chop(1);
-    QStringList cells;
-    QString cell;
-    for (qsizetype i = 0; i < r.size(); ++i) {
-        if (r[i] == u'\\' && i + 1 < r.size() && r[i + 1] == u'|') {
-            cell += u'|';
-            ++i;
-        } else if (r[i] == u'|') {
-            cells.append(cell.trimmed());
-            cell.clear();
-        } else {
-            cell += r[i];
-        }
-    }
-    cells.append(cell.trimmed());
-    return cells;
-}
-
-/// The callout title: the first text line without `[!type]±`.
-QString calloutTitle(const Block &b)
-{
-    static const QRegularExpression header(u"^\\s*>?\\s*\\[![^\\]]*\\][+-]?\\s*"_s);
-    QString first = b.text.section(u'\n', 0, 0);
-    first.remove(header);
-    if (first.trimmed().isEmpty()) {
-        const QString type = b.properties.value(u"callouttype"_s).toString();
-        return type.isEmpty() ? QString() : type.first(1).toUpper() + type.sliced(1);
-    }
-    return first.trimmed();
-}
-
 /// A fenced code block as HTML: fenced math (```math, latex, tex) is display-only, so the export
 /// shows the formula, not its LaTeX source (docs/SYNTAX.md §11). `id`: attribute text or empty.
 QString codeBlockHtml(const QString &lang, const QString &code, const QString &id)
 {
-    if (lang == u"math" || lang == u"latex" || lang == u"tex")
+    if (isMathFence(lang))
         return u"<div class=\"math\""_s + id + u'>' + markdown::renderMath(code, true) + u"</div>"_s;
     const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
     return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(code) + u"</code></pre>"_s;
-}
-
-/// A list item's text that is one fenced block, as the editor shows it (a code, calc, query or
-/// math block; editor/blocktext.h parseFence): the opening fence (``` or ~~~, 3 or more, any
-/// indentation, no backtick in a backtick fence's info), and the last line a closing fence of the
-/// same character at least as long — or more lines after an unclosed one. The language (the
-/// info string's first word, lower case) and the lines between.
-std::optional<std::pair<QString, QString>> itemFence(const QString &text)
-{
-    const QStringList lines = text.split(u'\n');
-    const QString first = lines.first().trimmed();
-    const QChar marker = first.isEmpty() ? QChar() : first.front();
-    if (marker != u'`' && marker != u'~')
-        return std::nullopt;
-    qsizetype length = 0;
-    while (length < first.size() && first[length] == marker)
-        ++length;
-    const QString info = first.sliced(length).trimmed();
-    if (length < 3 || (marker == u'`' && info.contains(u'`')))
-        return std::nullopt;
-    const QString last = lines.last().trimmed();
-    qsizetype closing = 0;
-    while (closing < last.size() && last[closing] == marker)
-        ++closing;
-    const bool closed = lines.size() >= 2 && closing >= length && closing == last.size();
-    if (!closed && lines.size() < 2)
-        return std::nullopt; // a lone opening fence is text
-    QString lang = info.section(u' ', 0, 0, QString::SectionSkipEmpty).toLower();
-    if (lang.startsWith(u'{'))
-        lang.clear();
-    return std::pair{lang, lines.mid(1, lines.size() - (closed ? 2 : 1)).join(u'\n')};
 }
 
 } // namespace
@@ -519,20 +153,21 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
     const auto restore = qScopeGuard([] { --depth; });
 
     const QString masked = markdown::maskInlineCode(text);
-    QList<Atom> atoms;
-    codeAndCommentAtoms(text, masked, atoms);
+    QList<InlineAtom> atoms;
+    codeAndCommentAtoms(text, masked, atoms,
+                        [](const QString &content) { return u"<code>"_s + esc(content) + u"</code>"_s; });
 
     // Formulas: $…$ and $$…$$ (docs/SYNTAX.md §11). The scan runs on the masked
     // text, so a formula inside code or a comment is not one; a link label gets one through
     // renderInline() of the label.
     for (const markdown::MathSpan &span : markdown::findMathSpans(masked)) {
         const QString cls = span.display ? u"math display"_s : u"math"_s;
-        atoms.append(
-                Atom{span.from, span.to,
-                     u"<span class=\""_s + cls + u"\">"_s
-                             + markdown::renderMath(text.sliced(span.contentFrom, span.contentTo - span.contentFrom),
-                                                    span.display)
-                             + u"</span>"_s});
+        atoms.append(InlineAtom{
+                span.from, span.to,
+                u"<span class=\""_s + cls + u"\">"_s
+                        + markdown::renderMath(text.sliced(span.contentFrom, span.contentTo - span.contentFrom),
+                                               span.display)
+                        + u"</span>"_s});
     }
 
     // Links, embeds, block references, URLs.
@@ -544,7 +179,7 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             continue;
         const QStringView source = text.sliced(from, to - from);
         if (insideLink) {
-            atoms.append(Atom{from, to, esc(visibleText(l, source))});
+            atoms.append(InlineAtom{from, to, esc(visibleText(l, source))});
             continue;
         }
         QString html;
@@ -637,16 +272,16 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         }
         }
-        atoms.append(Atom{from, to, html});
+        atoms.append(InlineAtom{from, to, html});
     }
 
     // Tags: exactly the ones the parser sees (SYNTAX §3); none inside link labels.
     for (const markdown::TagSpan &tag : insideLink ? QList<markdown::TagSpan>() : markdown::findTags(text)) {
         const QString href = m_links.tag ? m_links.tag(tag.name) : QString();
-        atoms.append(Atom{tag.from, tag.to,
-                          href.isEmpty() ? QString(u"<span class=\"tag\">#"_s + esc(tag.name) + u"</span>"_s)
-                                         : QString(u"<a class=\"tag\" href="_s + attr(href) + u">#"_s + esc(tag.name)
-                                                   + u"</a>"_s)});
+        atoms.append(InlineAtom{tag.from, tag.to,
+                                href.isEmpty() ? QString(u"<span class=\"tag\">#"_s + esc(tag.name) + u"</span>"_s)
+                                               : QString(u"<a class=\"tag\" href="_s + attr(href) + u">#"_s
+                                                         + esc(tag.name) + u"</a>"_s)});
     }
 
     // Metadata tokens as chips.
@@ -665,42 +300,33 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         default: html = chip(u"meta"_s, source); break;
         }
-        atoms.append(Atom{t.from, t.to, html});
+        atoms.append(InlineAtom{t.from, t.to, html});
     }
 
     // Block ids at line ends (hidden), footnote references, backslash escapes.
     for (const text::Line &line : text::splitLines(masked)) {
         if (const auto id = markdown::blockIdAtEnd(line.text))
-            atoms.append(Atom{line.start + id->from, line.start + id->to, QString()});
+            atoms.append(InlineAtom{line.start + id->from, line.start + id->to, QString()});
     }
     for (qsizetype i = masked.indexOf(u"[^"); i >= 0; i = masked.indexOf(u"[^", i + 2)) {
         qsizetype j = i + 2;
         while (j < masked.size() && masked[j] != u']' && !masked[j].isSpace())
             ++j;
         if (j > i + 2 && j < masked.size() && masked[j] == u']' && (j + 1 >= masked.size() || masked[j + 1] != u':'))
-            atoms.append(
-                    Atom{i, j + 1, u"<sup class=\"footnote\">"_s + esc(text.sliced(i + 2, j - i - 2)) + u"</sup>"_s});
+            atoms.append(InlineAtom{i, j + 1,
+                                    u"<sup class=\"footnote\">"_s + esc(text.sliced(i + 2, j - i - 2)) + u"</sup>"_s});
     }
     for (qsizetype i = 0; i + 1 < masked.size(); ++i) {
         if (masked[i] == u'\\' && isAsciiPunct(masked[i + 1])) {
-            atoms.append(Atom{i, i + 2, esc(text.sliced(i + 1, 1))});
+            atoms.append(InlineAtom{i, i + 2, esc(text.sliced(i + 1, 1))});
             ++i;
         }
     }
 
-    std::sort(atoms.begin(), atoms.end(),
-              [](const Atom &a, const Atom &b) { return a.from != b.from ? a.from < b.from : a.to > b.to; });
-    QList<Atom> kept;
-    qsizetype end = 0;
-    for (Atom &a : atoms) {
-        if (a.from >= end && a.to > a.from) {
-            end = a.to;
-            kept.append(std::move(a));
-        }
-    }
-    QList<Piece> pieces = buildPieces(text, kept);
-    processEmphasis(pieces);
-    return assemble(text, pieces);
+    QString out = renderAtoms(text, std::move(atoms), htmlMarks, escapeWithBreaks);
+    while (out.endsWith(u"<br>"))
+        out.chop(4);
+    return out;
 }
 
 QString HtmlRenderer::metaChips(const Block &block) const

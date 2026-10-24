@@ -176,6 +176,9 @@ QVariantList ExportController::formats() const
                      u"monitor"_s };
         if (id == u"html-single")
             return { tr("Everything in one HTML file – easy to print, send or archive."), u"file-text"_s };
+        if (id == u"pandoc")
+            return {tr("One Markdown document for Pandoc, to turn into Word, LibreOffice, PDF or EPUB."),
+                    u"book-open"_s};
         if (id == u"json")
             return { tr("Notes with their tasks, tags and links in one JSON file, for scripts and other tools."),
                      u"code"_s };

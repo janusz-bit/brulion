@@ -21,9 +21,9 @@ struct Registry {
 
     Registry()
     {
-        for (auto *make :
-             {makeMarkdownZipExporter, makeObsidianZipExporter, makeLogseqZipExporter, makeHtmlSiteExporter,
-              makeHtmlSingleExporter, makeJsonExporter, makeIcsExporter, makeOpmlExporter, makeTasksCsvExporter}) {
+        for (auto *make : {makeMarkdownZipExporter, makeObsidianZipExporter, makeLogseqZipExporter,
+                           makeHtmlSiteExporter, makeHtmlSingleExporter, makePandocExporter, makeJsonExporter,
+                           makeIcsExporter, makeOpmlExporter, makeTasksCsvExporter}) {
             owned.push_back(make());
             list.append(owned.back().get());
         }

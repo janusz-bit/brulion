@@ -7,6 +7,11 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.3 — 25 października 2026
+
+**Nowe**
+- **Eksport dla programu Pandoc** — format „Pandoc Markdown (ZIP)” w widoku **Import i eksport**: jeden dokument `.md` z całym notatnikiem, folderem albo stroną i załącznikami, do których prowadzą linki. `pandoc "Notatnik.md" -o "Notatnik.docx"` w rozpakowanym folderze zrobi z niego plik Worda (także LibreOffice, PDF albo EPUB). Linki `[[…]]` i odwołania do bloków prowadzą do miejsc w dokumencie, osadzenia są wstawione, a wzory, callouty, tabele, zadania i przypisy zostają wzorami, ramkami, tabelami, polami wyboru i przypisami. Daty i przypomnienia są zapisane słowami („termin: 2026-10-20”). Zobacz [[Import i eksport#Dokument dla programu Pandoc|Import i eksport]].
+
 ## 0.4.2 — 24 października 2026
 
 **Nowe**

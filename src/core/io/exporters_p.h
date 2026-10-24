@@ -12,6 +12,7 @@ std::unique_ptr<Exporter> makeObsidianZipExporter();
 std::unique_ptr<Exporter> makeLogseqZipExporter();
 std::unique_ptr<Exporter> makeHtmlSiteExporter();
 std::unique_ptr<Exporter> makeHtmlSingleExporter();
+std::unique_ptr<Exporter> makePandocExporter();
 std::unique_ptr<Exporter> makeJsonExporter();
 std::unique_ptr<Exporter> makeIcsExporter();
 std::unique_ptr<Exporter> makeOpmlExporter();

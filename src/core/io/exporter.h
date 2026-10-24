@@ -47,7 +47,7 @@ public:
     virtual ~Exporter() = default;
 
     /// Stable identifier: "markdown-zip", "obsidian-zip", "logseq-zip", "html-site", "html-single",
-    /// "json", "ics", "opml", "tasks-csv".
+    /// "pandoc", "json", "ics", "opml", "tasks-csv".
     virtual QString id() const = 0;
     /// Display name ("Obsidian (ZIP)", "iCalendar").
     virtual QString name() const = 0;

@@ -280,7 +280,8 @@ frontmatter's `tags:`.
   written `#[[C++]]`, `#[[Jan Kowalski]]` (`markdown::tagSyntax`).
 * **Other apps** — Logseq reads tags the same way (the Logseq export writes
   `#[[Projekty/Dom]]` when the page has another name there); Obsidian keeps tags and pages
-  separate (its export leaves tags unchanged).
+  separate (its export leaves tags unchanged). The HTML and Pandoc exports link a tag to the
+  page it names when that page is exported.
 
 ## 4. Blocks and outline
 

@@ -1,7 +1,7 @@
 # io — import from other apps and export to other formats (docs/ARCHITECTURE.md): importers
 # (Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear,
 # Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
-# HTML, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
+# HTML, Pandoc Markdown, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
 # HTML <-> Markdown, the clipboard's HTML of copied blocks.
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
 # QtGui is used for QTextDocument (HTML parsing).
@@ -36,11 +36,14 @@ brulion_add_core_module(io
         import_ics.cpp
         exporter.h exporter.cpp exporters_p.h
         exportutil_p.h exportutil.cpp
+        rendercommon_p.h rendercommon.cpp
         htmlrender_p.h htmlrender.cpp
+        pandocrender_p.h pandocrender.cpp
         clipboardhtml.h clipboardhtml.cpp
         export_markdown.cpp
         export_logseq.cpp
         export_html.cpp
+        export_pandoc.cpp
         export_data.cpp
     DEPS util text dates markdown index notebook
     QT Gui)

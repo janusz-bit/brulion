@@ -187,8 +187,8 @@ private Q_SLOTS:
             QVERIFY(!v.toMap().value(u"description"_s).toString().isEmpty());
             QVERIFY(v.toMap().value(u"ext"_s).toString().startsWith(u'.'));
         }
-        QCOMPARE(ids, QStringList({ u"markdown-zip"_s, u"obsidian-zip"_s, u"logseq-zip"_s, u"html-site"_s,
-                                    u"html-single"_s, u"json"_s, u"ics"_s, u"opml"_s, u"tasks-csv"_s }));
+        QCOMPARE(ids, QStringList({u"markdown-zip"_s, u"obsidian-zip"_s, u"logseq-zip"_s, u"html-site"_s,
+                                   u"html-single"_s, u"pandoc"_s, u"json"_s, u"ics"_s, u"opml"_s, u"tasks-csv"_s}));
         c.setFormat(u"nie-ma"_s);
         QCOMPARE(c.format(), u"markdown-zip"_s);
         c.setScope(u"cokolwiek"_s);
