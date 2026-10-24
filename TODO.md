@@ -7,21 +7,16 @@ do „Listy zmian” przy najbliższym wydaniu.
 
 ## Kolejka
 
-1. **Menu na przypomnieniach, alarmach i datach.** Prawy przycisk myszy (komputer) albo
-   przytrzymanie palcem (telefon) na znaczniku ⏰ przypomnienia lub alarmu otwiera menu do zmiany
-   daty i godziny bez szukania tokenu w tekście:
-   * „Zmień datę i godzinę…” (kalendarz i zegar, jak w dialogu przypomnienia), szybkie
-     przesunięcia (np. „+1 godz.”, „jutro o tej porze”, „za tydzień”), włączenie/wyłączenie
-     alarmu, powtarzanie, „Usuń przypomnienie”;
-   * to samo dla innych znaczników: 📅 termin, ⏳ zaplanowane, 🛫 początek, ✅ data wykonania,
-     ➕ data utworzenia, 🔁 powtarzanie (zmiana reguły), priorytet;
-   * podobnie dla innych elementów tekstu, gdzie menu ma sens: `#tag` i `[[link]]` (otwórz,
-     otwórz w panelu bocznym, kopiuj link), daty w tekście.
+1. **Menu na pozostałych znacznikach i elementach tekstu.** Menu dat jest już w edytorze
+   (prawy przycisk / przytrzymanie na 📅 ⏳ 🛫 ✅ ➕ ❌ i ⏰: `DateChipMenu`, docs/UI.md). Zostało:
+   * to samo menu dat w wynikach zapytań, osadzeniach, komórkach tabel, w widoku zadań i
+     w kalendarzu (zmiana idzie do pliku zadania, jak status: `QueryResultModel.setTaskStatus`);
+   * 🔁 powtarzanie (zmiana reguły), priorytet, powtarzanie w menu przypomnienia;
+   * `#tag` i `[[link]]` (otwórz, otwórz w panelu bocznym, kopiuj link), daty w tekście
+     (`[[2026-10-20]]`).
 
-   Dziś kliknięcie ⏰ otwiera dialog przypomnienia, a pozostałe znaczniki menu nie mają. Zmiana
-   zapisuje się w pliku jak edycja ręczna (bajt po bajcie poza zmienionym tokenem), daje się cofnąć
-   i działa w trybie konspektu i dokumentu, w strumieniu dziennika, w wynikach zapytań i w widoku
-   zadań oraz w przeglądarce.
+   Zmiana zapisuje się w pliku jak edycja ręczna (bajt po bajcie poza zmienionym tokenem) i daje
+   się cofnąć.
 
 ## Do decyzji
 

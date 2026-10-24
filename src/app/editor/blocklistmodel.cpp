@@ -828,6 +828,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
         if (!renderer) {
             markdown::RenderContext ctx = renderContext(i);
             ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
+            ctx.dateLinks = false;         // a chip's range would be the cell's, not the block's
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
@@ -885,6 +886,7 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "wt 13 paź"
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
+    ctx.dateLinks = true;         // date chips have a menu (PageController::dateChip)
     const QPointer<EditorHost> host = m_host;
     const QString path = m_path;
     if (host) {

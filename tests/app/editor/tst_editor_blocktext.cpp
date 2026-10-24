@@ -2,6 +2,7 @@
 // edit mapping, fences, token edits, completion triggers, slash commands, query/frontmatter data.
 #include "blocktext.h"
 
+#include "dates/local.h"
 #include "markdown/blockdocument.h"
 #include "markdown/parse.h"
 
@@ -676,6 +677,101 @@ private Q_SLOTS:
         QCOMPARE(replaceTokenRange(body, 2, 20, QString()), u"a b"_s);
         QCOMPARE(replaceTokenRange(body, 5, 2, u"x"_s), body);
         QCOMPARE(replaceTokenRange(body, 2, 999, u"x"_s), body);
+    }
+
+    void tokenDates_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("token"); // the token whose range is given ("" = a range with none)
+        QTest::addColumn<QString>("spec");
+        QTest::addColumn<QString>("expected");
+
+        QTest::newRow("due") << u"- [ ] Zapłacić 📅 2026-10-20 ^z1"_s << u"📅 2026-10-20"_s << u"2026-10-27"_s
+                             << u"- [ ] Zapłacić 📅 2026-10-27 ^z1"_s;
+        QTest::newRow("due gets a time") << u"x 📅 2026-10-20 y"_s << u"📅 2026-10-20"_s << u"2026-10-21 14:30"_s
+                                         << u"x 📅 2026-10-21 14:30 y"_s;
+        QTest::newRow("scheduled loses its time") << u"⏳ 2026-10-18 09:00 żółw"_s << u"⏳ 2026-10-18 09:00"_s
+                                                  << u"2026-10-19"_s << u"⏳ 2026-10-19 żółw"_s;
+        QTest::newRow("variant emoji kept") << u"a 📆 2026-10-20"_s << u"📆 2026-10-20"_s << u"2026-11-01"_s
+                                            << u"a 📆 2026-11-01"_s;
+        QTest::newRow("T separator") << u"🛫 2026-10-20T08:00 ą"_s << u"🛫 2026-10-20T08:00"_s << u"2026-10-21 08:00"_s
+                                     << u"🛫 2026-10-21 08:00 ą"_s;
+        QTest::newRow("done") << u"[x] ✅ 2026-10-15"_s << u"✅ 2026-10-15"_s << u"2026-10-14"_s << u"[x] ✅ 2026-10-14"_s;
+        QTest::newRow("alarm") << u"a ⏰! 2026-10-15 07:30 b"_s << u"⏰! 2026-10-15 07:30"_s << u"2026-10-16 08:00"_s
+                               << u"a ⏰! 2026-10-16 08:00 b"_s;
+        QTest::newRow("compat reminder") << u"x (@2026-10-15 09:00) y"_s << u"(@2026-10-15 09:00)"_s
+                                         << u"2026-10-16 10:15"_s << u"x (@2026-10-16 10:15) y"_s;
+        QTest::newRow("the second of two") << u"📅 2026-10-20 i 📅 2026-10-22"_s << u"📅 2026-10-22"_s << u"2026-10-23"_s
+                                           << u"📅 2026-10-20 i 📅 2026-10-23"_s;
+        QTest::newRow("CRLF and next line kept") << u"a ⏳ 2026-10-18\r\n  dalej"_s << u"⏳ 2026-10-18"_s
+                                                 << u"2026-10-19"_s << u"a ⏳ 2026-10-19\r\n  dalej"_s;
+        QTest::newRow("no token there") << u"📅 jutro"_s << QString() << u"2026-10-23"_s << u"📅 jutro"_s;
+        QTest::newRow("recurrence is no date") << u"🔁 every day"_s << QString() << u"2026-10-23"_s << u"🔁 every day"_s;
+        QTest::newRow("planning is not rewritten") << u"SCHEDULED: <2026-10-15 Thu>"_s << QString() << u"2026-10-23"_s
+                                                   << u"SCHEDULED: <2026-10-15 Thu>"_s;
+    }
+
+    void tokenDates()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, token);
+        QFETCH(QString, spec);
+        QFETCH(QString, expected);
+        const qsizetype from = token.isEmpty() ? 0 : body.indexOf(token);
+        const qsizetype to = token.isEmpty() ? body.size() : from + token.size();
+        QVERIFY(from >= 0);
+        QCOMPARE(dateTokenAt(body, from, to).has_value(), !token.isEmpty());
+        const auto parsed = dates::parseDateSpec(spec);
+        QVERIFY(parsed);
+        QCOMPARE(setTokenDate(body, from, to, *parsed), expected);
+    }
+
+    void tokenDatesOutOfRange()
+    {
+        const QString body = u"a 📅 2026-10-20"_s;
+        QVERIFY(!dateTokenAt(body, -1, 5));
+        QVERIFY(!dateTokenAt(body, 2, 999));
+        QVERIFY(!dateTokenAt(body, 5, 2));
+        QCOMPARE(setTokenDate(body, 2, int(body.size()), DateSpec{}), body); // an invalid date changes nothing
+    }
+
+    void reminderAlarms()
+    {
+        QCOMPARE(setReminderAlarm(u"a ⏰ 2026-10-15 09:00 b"_s, 2, 20, true), u"a ⏰! 2026-10-15 09:00 b"_s);
+        QCOMPARE(setReminderAlarm(u"a ⏰! 2026-10-15 09:00 b"_s, 2, 21, false), u"a ⏰ 2026-10-15 09:00 b"_s);
+        QCOMPARE(setReminderAlarm(u"a ⏰ 2026-10-15 09:00 b"_s, 2, 20, false), u"a ⏰ 2026-10-15 09:00 b"_s);
+        QCOMPARE(setReminderAlarm(u"x (@2026-10-15 09:00) y"_s, 2, 21, false), u"x ⏰ 2026-10-15 09:00 y"_s);
+        QCOMPARE(setReminderAlarm(u"x (@2026-10-15) y"_s, 2, 16, true), u"x ⏰! 2026-10-15 y"_s);
+        QCOMPARE(setReminderAlarm(u"a 📅 2026-10-15 b"_s, 2, 15, true), u"a 📅 2026-10-15 b"_s); // no reminder
+    }
+
+    void shiftedSpecs_data()
+    {
+        QTest::addColumn<QString>("spec");
+        QTest::addColumn<int>("days");
+        QTest::addColumn<int>("minutes");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("a day") << u"2026-10-20"_s << 1 << 0 << u"2026-10-21"_s;
+        QTest::newRow("a week over the month") << u"2026-10-28 09:00"_s << 7 << 0 << u"2026-11-04 09:00"_s;
+        QTest::newRow("an hour") << u"2026-10-20 09:00"_s << 0 << 60 << u"2026-10-20 10:00"_s;
+        QTest::newRow("an hour over midnight") << u"2026-10-20 23:30"_s << 0 << 60 << u"2026-10-21 00:30"_s;
+        QTest::newRow("back over midnight") << u"2026-10-20 00:15"_s << 0 << -30 << u"2026-10-19 23:45"_s;
+        QTest::newRow("over the year") << u"2026-12-31 23:00"_s << 0 << 120 << u"2027-01-01 01:00"_s;
+        QTest::newRow("no time: the default") << u"2026-10-20"_s << 0 << 60 << u"2026-10-20 10:00"_s;
+        // Wall-clock time: the night the clocks go back (25 October 2026 in Poland) is no different.
+        QTest::newRow("DST night") << u"2026-10-25 01:30"_s << 0 << 60 << u"2026-10-25 02:30"_s;
+        QTest::newRow("leap day") << u"2028-02-28"_s << 1 << 0 << u"2028-02-29"_s;
+    }
+
+    void shiftedSpecs()
+    {
+        QFETCH(QString, spec);
+        QFETCH(int, days);
+        QFETCH(int, minutes);
+        QFETCH(QString, expected);
+        const auto parsed = dates::parseDateSpec(spec);
+        QVERIFY(parsed);
+        QCOMPARE(shiftedSpec(*parsed, days, minutes, QTime(9, 0)).toString(), expected);
     }
 
     void insertTokens()

@@ -16,6 +16,7 @@ qt_target_qml_sources(brulion
         qml/editor/InlineEditor.qml
         qml/editor/TaskBox.qml
         qml/editor/TaskStatusMenu.qml
+        qml/editor/DateChipMenu.qml
         qml/editor/CodeBlockView.qml
         qml/editor/CalcBlockView.qml
         qml/editor/TableBlockView.qml
@@ -34,7 +35,7 @@ qt_target_qml_sources(brulion
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads a PageScript either way.
 if(BRULION_DEV_QML_ENABLED)
     qt_target_qml_sources(brulion QML_FILES qml/dev/EditorPlayground.qml qml/dev/PageScript.qml
-        qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml)
+        qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml)
 else()
     qt_target_qml_sources(brulion QML_FILES qml/stubs/PageScript.qml)
 endif()

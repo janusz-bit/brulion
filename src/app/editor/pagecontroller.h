@@ -517,6 +517,21 @@ public:
     /// The reminder at body range [from, to): { at, alarm, recurrence, context } for
     /// BReminderDialog.edit(); empty when there is no reminder there.
     Q_INVOKABLE QVariantMap reminderAt(int row, int from, int to) const;
+    /// The date chip a `date:FROM-TO` or `reminder:FROM-TO` link of the row's rendered text
+    /// names (its menu: a right-click or long press on it): { from, to } (body range), kind ("due"
+    /// | "scheduled" | "start" | "created" | "done" | "cancelled" | "reminder"), at ("YYYY-MM-DD
+    /// [HH:mm]"), date, time ("" without one), alarm; empty when the link names no date token.
+    Q_INVOKABLE QVariantMap dateChip(int row, const QString &url) const;
+    /// The date token at body range [from, to) gets `spec` ("YYYY-MM-DD [HH:mm]") — only its value
+    /// changes; an empty spec removes the token. One undo step.
+    Q_INVOKABLE void setDateTokenAt(int row, int from, int to, const QString &spec);
+    /// The date token at [from, to) moved by `days` and `minutes` from its own date (shiftedSpec;
+    /// a reminder without a time starts from the default reminder time).
+    Q_INVOKABLE void shiftDateTokenAt(int row, int from, int to, int days, int minutes = 0);
+    /// The date token at [from, to) moved to today + `days`, its time kept.
+    Q_INVOKABLE void moveDateTokenTo(int row, int from, int to, int days);
+    /// The reminder at [from, to) becomes an alarm (`⏰!`) or a plain reminder (`⏰`).
+    Q_INVOKABLE void setReminderAlarmAt(int row, int from, int to, bool alarm);
     /// Text of a row for dialog context (tokens and markers stripped).
     Q_INVOKABLE QString blockContext(int row) const;
     /// Current values of a row's date tokens: { due, scheduled, start, recurrence }.
@@ -545,7 +560,8 @@ public:
     Q_INVOKABLE void removeTableRow(int row, int tableRow);
 
     // --- Links ----------------------------------------------------------------------------------
-    /// A link of the rendered text was activated (page:, tag:, block:, ext:, task:, reminder:).
+    /// A link of the rendered text was activated (page:, tag:, block:, ext:, task:, reminder:;
+    /// date: chips do nothing here — a click on them edits the text, their menu is dateChip()).
     /// Returns {} when handled; { action: "reminder", from, to } for the reminder dialog;
     /// { action: "scrollTo", row } for a block or heading of this page — `((id))`, `[[#^id]]`,
     /// `[[#Heading]]` and links naming this page (`[[ThisPage#^id]]`, `[[ThisPage#A#B]]`), every

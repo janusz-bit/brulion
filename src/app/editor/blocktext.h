@@ -186,6 +186,23 @@ QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, con
 /// carry several). Tokens inside inline code are ignored.
 QString setFirstLineToken(const QString &body, markdown::TokenKind kind, const QString &token, bool append = false);
 
+/// The date token at body range [from, to) — a chip's range: 📅 ⏳ 🛫 ➕ ✅ ❌ or a reminder
+/// (⏰, ⏰!, `(@…)`), not a Logseq planning line —, its positions in `body`; nullopt when the
+/// range holds none (the text changed since the chip was drawn).
+std::optional<markdown::Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to);
+
+/// Give the date token at [from, to) another date (and time, or none): only its value is
+/// rewritten — the emoji and everything around it stay byte for byte. No token there: unchanged.
+QString setTokenDate(const QString &body, qsizetype from, qsizetype to, const DateSpec &spec);
+
+/// Turn the reminder at [from, to) into an alarm (`⏰!`) or back into a plain reminder (`⏰`); a
+/// `(@…)` reminder is written as `⏰` / `⏰!`. No reminder there: unchanged.
+QString setReminderAlarm(const QString &body, qsizetype from, qsizetype to, bool alarm);
+
+/// `spec` moved by `days` and `minutes` (wall-clock time, never through UTC): a date without a time
+/// moves by whole days only, unless `minutes` is non-zero — then it gets `defaultTime` first.
+DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultTime);
+
 /// Range [from, to) of the first token of `kind` on the first line, or nullopt.
 std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, markdown::TokenKind kind);
 

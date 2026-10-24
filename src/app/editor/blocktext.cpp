@@ -798,6 +798,54 @@ QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, con
     return body.left(a) + body.mid(b);
 }
 
+std::optional<markdown::Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to)
+{
+    if (from < 0 || to <= from || to > body.size())
+        return std::nullopt;
+    for (markdown::Token t : markdown::findTokens(QStringView(body).sliced(from, to - from))) {
+        if (!t.hasDate() || t.kind == markdown::TokenKind::Planning || t.valueFrom < 0)
+            continue;
+        t.from += from;
+        t.to += from;
+        t.valueFrom += from;
+        t.valueTo += from;
+        return t;
+    }
+    return std::nullopt;
+}
+
+QString setTokenDate(const QString &body, qsizetype from, qsizetype to, const DateSpec &spec)
+{
+    const auto t = dateTokenAt(body, from, to);
+    if (!t || !spec.isValid())
+        return body;
+    return body.left(t->valueFrom) + spec.toString() + body.mid(t->valueTo);
+}
+
+QString setReminderAlarm(const QString &body, qsizetype from, qsizetype to, bool alarm)
+{
+    const auto t = dateTokenAt(body, from, to);
+    if (!t || (t->kind != markdown::TokenKind::Reminder && t->kind != markdown::TokenKind::ReminderCompat)
+        || (t->kind == markdown::TokenKind::Reminder && t->alarm == alarm))
+        return body;
+    return replaceTokenRange(body, t->from, t->to, markdown::formatReminderToken(t->spec(), alarm));
+}
+
+DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultTime)
+{
+    DateSpec out = spec;
+    out.date = spec.date.addDays(days);
+    if (minutes != 0) {
+        const QTime time = spec.time.value_or(defaultTime);
+        const int total = time.hour() * 60 + time.minute() + minutes;
+        const int dayShift = total >= 0 ? total / 1440 : -((-total + 1439) / 1440);
+        const int inDay = total - dayShift * 1440;
+        out.date = out.date.addDays(dayShift);
+        out.time = QTime(inDay / 60, inDay % 60);
+    }
+    return out;
+}
+
 std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, markdown::TokenKind kind)
 {
     const QString first = firstLineOf(body).toString();

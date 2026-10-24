@@ -794,6 +794,89 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(g.text(), u"- [ ] Sprzedać ⏫ \n"_s);
     }
 
+    void dateChipMenu()
+    {
+        Fixture f(u"- [ ] Zapłacić za prąd 📅 2026-10-20 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+        const QString html = f.model()->data(f.model()->index(0), BlockListModel::HtmlRole).toString();
+        static const QRegularExpression links(u"href=\"((?:date|reminder):\\d+-\\d+)\""_s);
+        QStringList urls;
+        for (auto it = links.globalMatch(html); it.hasNext();)
+            urls.append(it.next().captured(1));
+        QCOMPARE(urls.size(), 3);
+        const auto chip = [&](int i) { return f.page.dateChip(0, urls.at(i)); };
+        QCOMPARE(chip(0).value(u"kind"_s).toString(), u"due"_s);
+        QCOMPARE(chip(0).value(u"at"_s).toString(), u"2026-10-20"_s);
+        QCOMPARE(chip(0).value(u"time"_s).toString(), QString());
+        QCOMPARE(chip(1).value(u"kind"_s).toString(), u"reminder"_s);
+        QCOMPARE(chip(1).value(u"time"_s).toString(), u"18:00"_s);
+        QCOMPARE(chip(1).value(u"alarm"_s).toBool(), false);
+        QCOMPARE(chip(2).value(u"kind"_s).toString(), u"done"_s);
+        QVERIFY(f.page.dateChip(0, u"page:x"_s).isEmpty());
+        QVERIFY(f.page.dateChip(0, u"date:0-3"_s).isEmpty()); // no date token there
+        QVERIFY(f.page.dateChip(5, urls.at(0)).isEmpty());
+
+        // A click on a date: link does nothing (the text is edited instead).
+        QVERIFY(f.page.activateLink(0, urls.at(0)).isEmpty());
+
+        const auto range = [&](int i) {
+            const QVariantMap c = chip(i);
+            return std::pair{c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt()};
+        };
+        auto [from, to] = range(0);
+        f.page.setDateTokenAt(0, from, to, u"2026-10-27"_s);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-10-27 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.setDateTokenAt(0, from, to, u"pojutrze"_s); // not a canonical spec: ignored
+        f.page.setDateTokenAt(0, 0, 3, u"2026-10-28"_s);   // no token there: ignored
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-10-27 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.shiftDateTokenAt(0, from, to, 7);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.moveDateTokenTo(0, from, to, 1); // tomorrow (Now: 2026-10-15)
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-10-16 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-16 18:00 ✅ 2026-10-14 ^p1\n"_s);
+
+        std::tie(from, to) = range(1);
+        f.page.shiftDateTokenAt(0, from, to, 0, 60);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-16 19:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.moveDateTokenTo(0, from, to, 1); // tomorrow at this time
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-16 19:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.moveDateTokenTo(0, from, to, 0);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ✅ 2026-10-14 ^p1\n"_s);
+        f.page.setReminderAlarmAt(0, from, to, true);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰! 2026-10-15 19:00 ✅ 2026-10-14 ^p1\n"_s);
+        QCOMPARE(chip(1).value(u"alarm"_s).toBool(), true);
+        std::tie(from, to) = range(1);
+        f.page.setReminderAlarmAt(0, from, to, false);
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ✅ 2026-10-14 ^p1\n"_s);
+
+        std::tie(from, to) = range(2);
+        f.page.setDateTokenAt(0, from, to, QString()); // removed with its space
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ^p1\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ✅ 2026-10-14 ^p1\n"_s);
+    }
+
+    void dateChipsInHeadingsAndReminderWithoutTime()
+    {
+        // The chip's range is the body's, after the "## " the renderer strips.
+        Fixture f(u"## Wyjazd ⏳ 2026-10-18\n\n- przypomnij ⏰ 2026-10-16\n"_s);
+        const auto firstLink = [&](int row) {
+            const QString html = f.model()->data(f.model()->index(row), BlockListModel::HtmlRole).toString();
+            static const QRegularExpression link(u"href=\"((?:date|reminder):\\d+-\\d+)\""_s);
+            return link.match(html).captured(1);
+        };
+        QVariantMap c = f.page.dateChip(0, firstLink(0));
+        QCOMPARE(c.value(u"kind"_s).toString(), u"scheduled"_s);
+        f.page.shiftDateTokenAt(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), 1);
+        QCOMPARE(f.text(), u"## Wyjazd ⏳ 2026-10-19\n\n- przypomnij ⏰ 2026-10-16\n"_s);
+        const int row = f.model()->rowCount() - 1;
+        c = f.page.dateChip(row, firstLink(row));
+        QCOMPARE(c.value(u"kind"_s).toString(), u"reminder"_s);
+        // An hour later than the default reminder time (09:00).
+        f.page.shiftDateTokenAt(row, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), 0, 60);
+        QCOMPARE(f.text(), u"## Wyjazd ⏳ 2026-10-19\n\n- przypomnij ⏰ 2026-10-16 10:00\n"_s);
+    }
+
     void reminderWithoutTimeUsesDefault()
     {
         Fixture f(u"- x ⏰ 2026-10-16\n"_s);

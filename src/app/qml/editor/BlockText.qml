@@ -11,7 +11,9 @@ import Brulion
 // Clicks on links are handled (page:, tag:, block:, ext:, task:,
 // reminder:); a click elsewhere starts editing with the caret at the clicked position. Shift+click
 // selects the blocks from the edited or selected one to this one; on touch UIs a long press selects
-// the block (the editor's selection mode, where a tap moves the selection's end instead).
+// the block (the editor's selection mode, where a tap moves the selection's end instead). A
+// right-click or a long press on a date chip (📅 ⏳ 🛫 ➕ ✅ ❌ ⏰) opens its menu (DateChipMenu); a
+// right-click elsewhere the block menu.
 Item {
     id: root
 
@@ -62,7 +64,11 @@ Item {
         HoverHandler {
             id: textHover
             enabled: !Theme.touchUi
-            cursorShape: rendered.linkAt(point.position.x, point.position.y) !== "" ? Qt.PointingHandCursor : Qt.IBeamCursor
+            // (A click on a date chip edits the text: its menu is the right button's.)
+            cursorShape: {
+                const link = rendered.linkAt(point.position.x, point.position.y)
+                return link !== "" && !link.startsWith("date:") ? Qt.PointingHandCursor : Qt.IBeamCursor
+            }
         }
     }
     // Clicks on the rendered text: on an item of their own above it, not on the Text itself. A
@@ -82,17 +88,37 @@ Item {
                     return
                 const p = eventPoint.position
                 const link = rendered.linkAt(p.x, p.y)
-                if (link !== "")
+                if (link !== "" && !link.startsWith("date:"))
                     root.editor.activateLink(root.block.index, link)
                 else
                     root.editor.editAt(root.block.index, p.x, p.y)
             }
         }
-        // A finger held on the text: the block selection (never a menu: that is the bullet's).
+        // A right-click: a date chip's menu, else the block menu (as the list's handler opens it;
+        // WithinBounds takes the press, so that one does not open it too).
         TapHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+            acceptedButtons: Qt.RightButton
+            gesturePolicy: TapHandler.WithinBounds
+            onTapped: (eventPoint) => {
+                const p = eventPoint.position
+                if (!root.editor.openDateMenu(root.block.index, rendered.linkAt(p.x, p.y), rendered, p.x, p.y))
+                    root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+            }
+        }
+        // A finger held on the text: the block selection (never the block menu: that is the
+        // bullet's) — on a date chip, outside the selection mode, the chip's menu.
+        TapHandler {
+            id: hold
             acceptedDevices: PointerDevice.TouchScreen
             enabled: Theme.touchUi
-            onLongPressed: root.editor.longPressText(root.block.index)
+            onLongPressed: {
+                const p = hold.point.position
+                if (!root.editor.selectionMode
+                        && root.editor.openDateMenu(root.block.index, rendered.linkAt(p.x, p.y), rendered, p.x, p.y))
+                    return
+                root.editor.longPressText(root.block.index)
+            }
         }
     }
 

@@ -17,6 +17,8 @@
 //   task:toggle                          the leading task checkbox (RenderContext::taskCheckbox)
 //   reminder:<from>-<to>                 a ⏰ / ⏰! / (@…) chip: UTF-16 range of the token in the text
 //                                        passed to render() / the body passed to renderBlock()
+//   date:<from>-<to>                     a 📅 ⏳ 🛫 ➕ ✅ ❌ chip, the same range (only with
+//                                        RenderContext::dateLinks)
 #pragma once
 
 #include "dates/names.h"
@@ -88,6 +90,10 @@ struct RenderContext {
     /// syntax is hidden instead of rendered as a placeholder link. Attachment embeds
     /// (`![[photo.png]]`) still render as links.
     bool hideTransclusions = false;
+    /// Date chips (📅 ⏳ 🛫 ➕ ✅ ❌, not Logseq planning lines) are `date:<from>-<to>` links naming
+    /// their token, as reminders are (the block editor: their menu changes the date); otherwise
+    /// plain chips.
+    bool dateLinks = false;
 };
 
 /// A RenderContext::linkTitle for daily notes: a link naming a day (journalDateFromLinkTarget():

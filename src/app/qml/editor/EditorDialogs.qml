@@ -9,6 +9,7 @@ import Brulion
 //   createReminder(row, alarm)      BReminderDialog → ⏰ / ⏰! token (+ 🔁) on the block
 //   editReminder(row, from, to)     a clicked reminder chip: edit / delete that token
 //   pickDate(row, field)            Termin (📅 due) / Zaplanuj (⏳ scheduled): BDatePicker
+//   pickDateAt(row, from, to, kind, at)  a date chip's "Zmień datę…" (DateChipMenu): that token
 //   pickRecurrence(row)             Powtarzaj (🔁): quick choices or a rule typed in Polish/English
 //   pickJournalDate(row, cursor)    Data…: a [[journal day]] link at the caret
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
@@ -71,7 +72,7 @@ Item {
     property int to: -1
     property string field: "due"
     property int cursor: -1
-    property string mode: ""   // date dialog: "token" | "journal"
+    property string mode: ""   // date dialog: "token" | "range" (from, to) | "journal"
 
     function remember(r) {
         row = r
@@ -132,6 +133,27 @@ Item {
         picker.timeRequired = false
         picker.showMonthOf(picker.selectedDate)
         dateDialog.removable = current !== ""
+        dateDialog.open()
+    }
+    function pickDateAt(r, f, t, kind, at) {
+        remember(r)
+        from = f
+        to = t
+        mode = "range"
+        const parts = DatesHelper.splitSpec(at)
+        const dateDialog = datePopup()
+        const picker = dateDialog.picker
+        picker.clearTyped()
+        dateDialog.title = kind === "scheduled" ? qsTr("Scheduled") : kind === "start" ? qsTr("Start date")
+                         : kind === "created" ? qsTr("Created") : kind === "done" ? qsTr("Done date")
+                         : kind === "cancelled" ? qsTr("Cancelled date") : qsTr("Due date")
+        dateDialog.iconName = kind === "scheduled" ? "hourglass" : kind === "done" ? "calendar-check" : "calendar"
+        picker.selectedDate = parts.ok ? parts.date : DatesHelper.today
+        picker.time = parts.ok ? parts.time : ""
+        picker.withTime = true
+        picker.timeRequired = false
+        picker.showMonthOf(picker.selectedDate)
+        dateDialog.removable = true
         dateDialog.open()
     }
     function pickJournalDate(r, c) {
@@ -231,7 +253,9 @@ Item {
                     variant: "ghost"
                     textColor: Theme.dangerText
                     onClicked: {
-                        if (root.blockRow() >= 0)
+                        if (root.blockRow() >= 0 && root.mode === "range")
+                            root.controller.removeToken(root.blockRow(), root.from, root.to)
+                        else if (root.blockRow() >= 0)
                             root.controller.setDateToken(root.blockRow(), root.field, "")
                         dateDialog.close()
                         root.refocus()
@@ -243,6 +267,8 @@ Item {
                 const r = root.blockRow()
                 if (r >= 0 && root.mode === "journal")
                     root.controller.insertToken(r, root.cursor, root.controller.journalLink(picker.selectedDate))
+                else if (r >= 0 && root.mode === "range")
+                    root.controller.setDateTokenAt(r, root.from, root.to, picker.value)
                 else if (r >= 0)
                     root.controller.setDateToken(r, root.field, picker.value)
                 root.refocus()

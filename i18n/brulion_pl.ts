@@ -1099,100 +1099,100 @@
 <context>
     <name>BlockEditor</name>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="177"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="176"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="183"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="182"/>
         <source>Not undone: the page has changed since</source>
         <translation>Nie cofnięto: strona zmieniła się od tego czasu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="209"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="208"/>
         <source>Only blocks selected without gaps can be indented or moved</source>
         <translation>Wcięcia i przenoszenie działają tylko dla bloków zaznaczonych bez przerw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="425"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="422"/>
         <source>No block in the notebook has the id %1</source>
         <translation>Żaden blok w notatniku nie ma identyfikatora %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="427"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="424"/>
         <source>Block ^%1 is not on this page</source>
         <translation>Bloku ^%1 nie ma na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="429"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="426"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1760"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1779"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="451"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="448"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="1813"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="460"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="457"/>
         <source>Links to blocks are not made in the documentation notebook: they would change its pages. Copy a link to a heading or to the page instead.</source>
         <translation>W dokumentacji Brulionu nie tworzy się odnośników do bloków — zmieniłyby jej strony. Skopiuj link do nagłówka albo do strony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="462"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="459"/>
         <source>This block cannot have a link of its own. Copy a link to the page instead.</source>
         <translation>Ten blok nie może mieć własnego odnośnika. Skopiuj link do strony.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="464"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="461"/>
         <source>This block is not a heading</source>
         <translation>Ten blok nie jest nagłówkiem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="466"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="463"/>
         <source>Switch back to blocks (Ctrl+E) to copy a link to a block</source>
         <translation>Wróć do bloków (Ctrl+E), aby skopiować odnośnik do bloku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="468"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="465"/>
         <source>Could not copy: the clipboard is not available</source>
         <translation>Nie udało się skopiować: schowek jest niedostępny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="470"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="467"/>
         <source>Could not copy: the page has no file yet</source>
         <translation>Nie udało się skopiować: strona nie ma jeszcze pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="472"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="469"/>
         <source>First select a block or put the caret in it</source>
         <translation>Najpierw zaznacz blok lub umieść w nim kursor</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="507"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="504"/>
         <source>There is no heading above this block</source>
         <translation>Nad tym blokiem nie ma nagłówka</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="580"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="577"/>
         <source>This block is selected with the block it belongs to</source>
         <translation>Ten blok jest zaznaczony razem z blokiem, do którego należy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="618"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="615"/>
         <source>The selection is too large to copy. Select fewer blocks.</source>
         <translation>Zaznaczenie jest za duże, żeby je skopiować. Zaznacz mniej bloków.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="619"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="616"/>
         <source>Nothing to copy</source>
         <translation>Nic do skopiowania</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="629"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="626"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Skopiowano %n blok</numerusform>
@@ -1201,7 +1201,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="640"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="637"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Wycięto %n blok</numerusform>
@@ -1210,7 +1210,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="656"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="653"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Usunięto %n blok</numerusform>
@@ -1219,82 +1219,82 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="666"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="663"/>
         <source>Nothing to paste</source>
         <translation>Nic do wklejenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1383"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1380"/>
         <source>Could not add “%1” to the notebook</source>
         <translation>Nie udało się dodać „%1” do notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1401"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1398"/>
         <source>Conflicting changes</source>
         <translation>Sprzeczne zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1410"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1407"/>
         <source>This page was also changed elsewhere and the changes could not be merged automatically. Your version is kept and not saved until you decide.</source>
         <translation>Ta strona zmieniła się też w innym miejscu i nie udało się automatycznie scalić zmian. Twoja wersja zostaje, ale nie zostanie zapisana, dopóki nie zdecydujesz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1424"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1421"/>
         <source>Compare and merge…</source>
         <translation>Porównaj i scal…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1429"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1426"/>
         <source>Keep mine</source>
         <translation>Zachowaj moją</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1434"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1431"/>
         <source>Use the other version</source>
         <translation>Użyj drugiej wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1455"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1452"/>
         <source>Merge changes</source>
         <translation>Scal zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1464"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1461"/>
         <source>This device</source>
         <translation>To urządzenie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1465"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1462"/>
         <source>Other version</source>
         <translation>Druga wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1900"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1893"/>
         <source>Drop to add to this page</source>
         <translation>Upuść, aby dodać do tej strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2294"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2322"/>
         <source>Cut</source>
         <translation>Wytnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2302"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2330"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2313"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2341"/>
         <source>Paste</source>
         <translation>Wklej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2326"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2354"/>
         <source>Select all</source>
         <translation>Zaznacz wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2332"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2360"/>
         <source>Block…</source>
         <translation>Blok…</translation>
     </message>
@@ -1422,7 +1422,7 @@
 <context>
     <name>BlockText</name>
     <message>
-        <location filename="../src/app/qml/editor/BlockText.qml" line="115"/>
+        <location filename="../src/app/qml/editor/BlockText.qml" line="141"/>
         <source>Type / for commands</source>
         <translation>Wpisz „/”, aby wybrać polecenie</translation>
     </message>
@@ -2463,125 +2463,237 @@
     </message>
 </context>
 <context>
-    <name>EditorDialogs</name>
+    <name>DateChipMenu</name>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="127"/>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="29"/>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="96"/>
+        <source>Alarm</source>
+        <translation>Alarm</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="29"/>
+        <source>Reminder</source>
+        <translation>Przypomnienie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="30"/>
         <source>Scheduled</source>
         <translation>Zaplanowane</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="127"/>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="31"/>
         <source>Start date</source>
         <translation>Data rozpoczęcia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="127"/>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="32"/>
+        <source>Created</source>
+        <translation>Data utworzenia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="33"/>
+        <source>Done date</source>
+        <translation>Data wykonania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="34"/>
+        <source>Cancelled date</source>
+        <translation>Data anulowania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="35"/>
         <source>Due date</source>
         <translation>Termin</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="144"/>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="46"/>
+        <source>Change date and time…</source>
+        <translation>Zmień datę i godzinę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="46"/>
+        <source>Change date…</source>
+        <translation>Zmień datę…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="53"/>
+        <source>Today</source>
+        <translation>Dziś</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="59"/>
+        <source>Tomorrow</source>
+        <translation>Jutro</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="65"/>
+        <source>A day later</source>
+        <translation>Dzień później</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="72"/>
+        <source>An hour later</source>
+        <translation>Godzinę później</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="79"/>
+        <source>Tomorrow at this time</source>
+        <translation>Jutro o tej porze</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="85"/>
+        <source>A week later</source>
+        <translation>Tydzień później</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="109"/>
+        <source>Delete reminder</source>
+        <translation>Usuń przypomnienie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/DateChipMenu.qml" line="109"/>
+        <source>Remove date</source>
+        <translation>Usuń datę</translation>
+    </message>
+</context>
+<context>
+    <name>EditorDialogs</name>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="128"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="147"/>
+        <source>Scheduled</source>
+        <translation>Zaplanowane</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="128"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="147"/>
+        <source>Start date</source>
+        <translation>Data rozpoczęcia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="128"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="149"/>
+        <source>Due date</source>
+        <translation>Termin</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="148"/>
+        <source>Created</source>
+        <translation>Data utworzenia</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="148"/>
+        <source>Done date</source>
+        <translation>Data wykonania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="149"/>
+        <source>Cancelled date</source>
+        <translation>Data anulowania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="166"/>
         <source>Link to a day</source>
         <translation>Link do dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="181"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="203"/>
         <source>Insert a picture</source>
         <translation>Wstaw obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="223"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="245"/>
         <source>Insert</source>
         <translation>Wstaw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="223"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="279"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="245"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="305"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="229"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="251"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="275"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="301"/>
         <source>Repeat</source>
         <translation>Powtarzanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="285"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="311"/>
         <source>Don&apos;t repeat</source>
         <translation>Nie powtarzaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="309"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="335"/>
         <source>Daily</source>
         <translation>Codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="310"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="336"/>
         <source>Weekdays</source>
         <translation>W dni robocze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="311"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="337"/>
         <source>Weekly</source>
         <translation>Co tydzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="312"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="338"/>
         <source>Every 2 weeks</source>
         <translation>Co 2 tygodnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="313"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="339"/>
         <source>Monthly</source>
         <translation>Co miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="314"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="340"/>
         <source>Yearly</source>
         <translation>Co roku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="330"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="356"/>
         <source>e.g. co tydzień w poniedziałek, every month on the 15th</source>
         <translation>np. co tydzień w poniedziałek, co miesiąc 15.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="331"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="357"/>
         <source>Not a recurrence rule</source>
         <translation>To nie jest reguła powtarzania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="345"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="371"/>
         <source>Written in the note as: %1</source>
         <translation>W notatce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="361"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="387"/>
         <source>Insert template</source>
         <translation>Wstaw szablon</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="365"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="391"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="378"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="404"/>
         <source>Search templates…</source>
         <translation>Szukaj szablonów…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="386"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="412"/>
         <source>No templates</source>
         <translation>Brak szablonów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="387"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="413"/>
         <source>Put Markdown files into the templates folder of the vault.</source>
         <translation>Umieść pliki Markdown w folderze szablonów notatnika.</translation>
     </message>
@@ -2589,32 +2701,32 @@
 <context>
     <name>EditorPlayground</name>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="52"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="53"/>
         <source>(new page)</source>
         <translation>(nowa strona)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="53"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="54"/>
         <source>Open: %1</source>
         <translation>Otwórz: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="55"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="56"/>
         <source>Open in browser: %1</source>
         <translation>Otwórz w przeglądarce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="82"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="83"/>
         <source>Could not save the page</source>
         <translation>Nie udało się zapisać strony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="83"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="84"/>
         <source>Merged changes made on another device</source>
         <translation>Scalono zmiany z innego urządzenia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="84"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="85"/>
         <source>The page changed outside the editor</source>
         <translation>Strona zmieniła się poza edytorem</translation>
     </message>
@@ -4042,17 +4154,17 @@
 <context>
     <name>JournalsView</name>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="68"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="63"/>
         <source>The note mode could not be changed: the page&apos;s properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E).</source>
         <translation>Nie udało się zmienić trybu notatki: właściwości strony mają postać, której Brulion nie potrafi bezpiecznie zmienić. Zmień je w źródle Markdown (Ctrl+E).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="228"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="223"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="257"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="252"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n dzień z notatkami</numerusform>
@@ -4061,37 +4173,37 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="258"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="253"/>
         <source>Reading the notebook…</source>
         <translation>Wczytywanie notatnika…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="267"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="262"/>
         <source>Go to day…</source>
         <translation>Przejdź do dnia…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="337"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="332"/>
         <source>Your journal starts today</source>
         <translation>Twój dziennik zaczyna się dziś</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="340"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="335"/>
         <source>Every day gets its own page. Write what happened, plans, tasks (-⁠&#xa0;[&#xa0;]&#xa0;…) and reminders (⏰&#xa0;tomorrow&#xa0;9:00); earlier days appear below.</source>
         <translation>Każdy dzień ma własną stronę. Zapisuj, co się wydarzyło, plany, zadania (-⁠&#xa0;[&#xa0;]&#xa0;…) i przypomnienia (⏰&#xa0;jutro&#xa0;9:00); wcześniejsze dni pojawiają się niżej.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="394"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="389"/>
         <source>Days with a dot have a journal. Type a date like “Tuesday” or “October 12”.</source>
         <translation>Dni z kropką mają wpis w dzienniku. Wpisz datę, np. „wtorek” albo „12 października”.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="362"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="357"/>
         <source>Go to day</source>
         <translation>Przejdź do dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/JournalsView.qml" line="342"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="337"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
@@ -4909,94 +5021,89 @@
 <context>
     <name>PageView</name>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="279"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="274"/>
         <source>The note mode could not be changed: the page&apos;s properties are not in a form Brulion can edit safely. Change them in the Markdown source (Ctrl+E).</source>
         <translation>Nie udało się zmienić trybu notatki: właściwości strony mają postać, której Brulion nie potrafi bezpiecznie zmienić. Zmień je w źródle Markdown (Ctrl+E).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="285"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="280"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
     <message>
         <location filename="../src/app/qml/dev/PageScript.qml" line="107"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="303"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="298"/>
         <source>Merged changes made elsewhere into this page</source>
         <translation>Scalono z tą stroną zmiany z innego miejsca</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="442"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="437"/>
         <source>Version history</source>
         <translation>Historia wersji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="448"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="443"/>
         <source>Copy link %1</source>
         <translation>Kopiuj link %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="453"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="448"/>
         <source>Export page…</source>
         <translation>Eksportuj stronę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="461"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="456"/>
         <source>Rename…</source>
         <translation>Zmień nazwę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="469"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="464"/>
         <source>Move to…</source>
         <translation>Przenieś do…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="476"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="471"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="481"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="476"/>
         <source>Switch to outline</source>
         <translation>Przełącz na konspekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="481"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="476"/>
         <source>Switch to document</source>
         <translation>Przełącz na dokument</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="490"/>
-        <source>Select text</source>
-        <translation>Zaznacz tekst</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="496"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="482"/>
         <source>Edit as blocks</source>
         <translation>Edytuj jako bloki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="496"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="482"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="503"/>
-        <location filename="../src/app/qml/views/PageView.qml" line="527"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="489"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="513"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="524"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="510"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="525"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="511"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/PageView.qml" line="532"/>
+        <location filename="../src/app/qml/views/PageView.qml" line="518"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
@@ -5490,59 +5597,6 @@
     </message>
 </context>
 <context>
-    <name>SelectTextView</name>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="60"/>
-        <source>Copied the whole page</source>
-        <translation>Skopiowano całą stronę</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="60"/>
-        <source>Copied the selected text</source>
-        <translation>Skopiowano zaznaczony tekst</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="98"/>
-        <source>Close</source>
-        <translation>Zamknij</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="111"/>
-        <source>Select text</source>
-        <translation>Zaznacz tekst</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="123"/>
-        <source>Hold a word, then drag the handles</source>
-        <translation>Przytrzymaj słowo, potem przeciągnij uchwyty</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="124"/>
-        <source>Drag over the text; Shift+arrows, Ctrl+A</source>
-        <translation>Przeciągnij po tekście; Shift+strzałki, Ctrl+A</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="142"/>
-        <source>Select all</source>
-        <translation>Zaznacz wszystko</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="153"/>
-        <source>Copy</source>
-        <translation>Kopiuj</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="153"/>
-        <source>Copy all</source>
-        <translation>Kopiuj wszystko</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectTextView.qml" line="201"/>
-        <source>The page as text</source>
-        <translation>Strona jako tekst</translation>
-    </message>
-</context>
-<context>
     <name>SelectionToolbar</name>
     <message>
         <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="48"/>
@@ -5685,11 +5739,6 @@
         <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="269"/>
         <source>No status</source>
         <translation>Bez statusu</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="274"/>
-        <source>Select text…</source>
-        <translation>Zaznacz tekst…</translation>
     </message>
 </context>
 <context>
@@ -7144,7 +7193,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="138"/>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="262"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="252"/>
         <source>Command palette</source>
         <translation>Paleta poleceń</translation>
     </message>
@@ -7217,63 +7266,58 @@
         <translation>Pokaż jako tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="223"/>
-        <source>Select text</source>
-        <translation>Zaznacz tekst</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="232"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
         <location filename="../src/app/shell/shellselftest.cpp" line="2014"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="239"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="229"/>
         <source>Open in side panel</source>
         <translation>Otwórz w panelu bocznym</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="246"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="236"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="256"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="246"/>
         <source>New page</source>
         <translation>Nowa strona</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="271"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="261"/>
         <source>Sync center</source>
         <translation>Centrum synchronizacji</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="283"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="273"/>
         <source>Import and export</source>
         <translation>Import i eksport</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="288"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="278"/>
         <source>Trash (%1)</source>
         <translation>Kosz (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="288"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="278"/>
         <source>Trash</source>
         <translation>Kosz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="293"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="283"/>
         <source>Settings</source>
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="299"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="289"/>
         <source>About Brulion</source>
         <translation>O Brulionie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="278"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="268"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
     </message>
@@ -9963,23 +10007,23 @@
 <context>
     <name>brulion::editor::PageController</name>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2917"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2995"/>
         <source>All files (*)</source>
         <translation>Wszystkie pliki (*)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2917"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="2995"/>
         <source>Pictures (%1)</source>
         <extracomment>%1: the file name patterns of pictures, e.g. &quot;*.png *.jpg *.jpeg&quot;</extracomment>
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="2970"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3048"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3034"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3112"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -11266,22 +11310,12 @@
         <translation>Kopiuj link do nagłówka</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="234"/>
-        <source>Select text</source>
-        <translation>Zaznacz tekst</translation>
-    </message>
-    <message>
         <location filename="../src/app/shell/commandmodel.cpp" line="235"/>
-        <source>The whole page as text: select and copy any part</source>
-        <translation>Cała strona jako tekst: zaznacz i skopiuj dowolny fragment</translation>
-    </message>
-    <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="243"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/commandmodel.cpp" line="244"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="236"/>
         <source>Logs, diagnostics, sync problems</source>
         <translation>Logi, diagnostyka, problemy z synchronizacją</translation>
     </message>

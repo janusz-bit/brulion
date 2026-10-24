@@ -12,7 +12,8 @@ import Brulion
 // `--editor-script <name>` puts the editor into a state for screenshots (see runScript()):
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
 // table, calc, query, embeds, title, empty, conflict, markup, task-menu (a checkbox's status
-// menu), task-menu-query (a query result's), task-slash (the status commands); the document
+// menu), task-menu-query (a query result's), task-slash (the status commands), date-menu /
+// date-menu-reminder (a 📅 / ⏰ chip's menu); the document
 // mode on the sample trip plan (FakeEditorHost.documentPath): document (reading),
 // document-paragraph, document-list, document-heading, document-task (editing one),
 // document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
@@ -21,7 +22,8 @@ import Brulion
 // (taskStatusTest()) and exits; `keyboard` checks the touch toolbar on a simulated on-screen
 // keyboard (keyboardTest(): KeyboardInsets.simulated) and exits; `blocklinks` checks copying links
 // to blocks and headings and following them (blockLinksTest()) and exits; `refreshtest` checks
-// that views follow what they depend on (RefreshSelfTest.qml) and exits; `copylink` /
+// that views follow what they depend on (RefreshSelfTest.qml) and exits; `datechips` checks the
+// menu of date chips with real input (DateChipSelfTest.qml) and exits; `copylink` /
 // `copylink-document` show the block menu's "Kopiuj odnośnik" (outline / document),
 // `copylink-toolbar` the menu from the touch toolbar's "Więcej" (--touch), `copylink-table` a
 // table's menu from its cell toolbar's "Więcej" (--touch), `link-flash` a
@@ -297,6 +299,17 @@ ApplicationWindow {
         id: refreshTestLoader
         active: false
         sourceComponent: RefreshSelfTest {
+            window: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
+    // ---- The menu of date chips (`--editor-script datechips`) ------------------------------------
+    Loader {
+        id: dateChipTestLoader
+        active: false
+        sourceComponent: DateChipSelfTest {
             window: window
             editor: editor
             page: page
@@ -2840,6 +2853,9 @@ ApplicationWindow {
         case "refreshtest":
             refreshTestLoader.active = true
             break
+        case "datechips":
+            dateChipTestLoader.active = true
+            break
         case "link-flash": {
             // A copied [[Page#^id]] (shown as the page and the block's text) followed: the block
             // selected and flashing (screenshots; --delay 1600 lands in the flash).
@@ -2906,6 +2922,19 @@ ApplicationWindow {
                 const box = blockTaskBox(row)
                 if (box)
                     editor.openTaskStatusMenu(row, box, 0, box.height)
+            })
+            break
+        }
+        case "date-menu":
+        case "date-menu-reminder": {
+            // The menu of a 📅 / ⏰ chip (screenshots).
+            const row = rowOf(name === "date-menu" ? "Kupić płytki" : "Zadzwonić do hydraulika")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            scriptLater.run(() => {
+                const text = renderedIn(delegateAt(row))
+                const p = text ? linkPointIn(text, name === "date-menu" ? "date:" : "reminder:") : null
+                if (p)
+                    editor.openDateMenu(row, text.linkAt(p.x, p.y), text, p.x, p.y)
             })
             break
         }

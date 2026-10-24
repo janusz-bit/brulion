@@ -78,12 +78,12 @@
 //                  blocksPlainText(doc, tops, {blockText}) ("• ", ☐/☑, no markup),
 //                  stripInlineMarkup(text), withoutBlockIds(markdown, drop), blockIdsOf(markdown)
 //   inlinerenderer.h  InlineRenderer(RenderContext{resolvePage, blockText, linkedBlockText,
-//                  inlineCalc, today, locale, palette, taskCheckbox}).render(body) /
+//                  inlineCalc, today, locale, palette, taskCheckbox, dateLinks}).render(body) /
 //                  renderBlock(body, kind) ->
-//                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder: links and
-//                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO is the
-//                  token's UTF-16 range in the text given to render() / the body given to
-//                  renderBlock())
+//                  escaped Qt rich text with page:/tag:/block:/ext:/task:/reminder:/date: links and
+//                  coloured chips for dates, reminders and recurrence (reminder:FROM-TO and
+//                  date:FROM-TO are the token's UTF-16 range in the text given to render() / the
+//                  body given to renderBlock())
 #pragma once
 
 #include "markdown/blockclipboard.h"

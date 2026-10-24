@@ -670,6 +670,58 @@ private Q_SLOTS:
         QCOMPARE(found, chips);
     }
 
+    void dateLinksPointIntoTheBody_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<QStringList>("kinds"); // the kinds of the date: links, in order
+
+        QTest::newRow("task fields") << u"[ ] Zapłacić za żółte światło 📅 2026-10-20 ⏳ 2026-10-18 09:00 🛫 2026-10-17 ➕ 2026-10-14"_s
+                                     << int(BlockKind::ListItem)
+                                     << QStringList{u"due"_s, u"scheduled"_s, u"start"_s, u"created"_s};
+        QTest::newRow("done and cancelled") << u"[x] gotowe ✅ 2026-10-15\n[-] nie ❌ 2026-10-16"_s
+                                            << int(BlockKind::ListItem) << QStringList{u"done"_s, u"cancelled"_s};
+        QTest::newRow("heading") << u"## Plan 📅 2026-10-20"_s << int(BlockKind::Heading) << QStringList{u"due"_s};
+        QTest::newRow("quote") << u"> cytat ⏳ 2026-10-18"_s << int(BlockKind::Quote) << QStringList{u"scheduled"_s};
+        QTest::newRow("reminder is no date: link") << u"tekst ⏰ 2026-10-16 09:00"_s << int(BlockKind::Paragraph) << QStringList{};
+        QTest::newRow("logseq planning is no date: link") << u"TODO zadanie\nSCHEDULED: <2026-10-15 Thu>"_s
+                                                          << int(BlockKind::ListItem) << QStringList{};
+        QTest::newRow("in code") << u"`📅 2026-10-20` poza kodem 📅 2026-10-21"_s << int(BlockKind::Paragraph)
+                                 << QStringList{u"due"_s};
+    }
+
+    void dateLinksPointIntoTheBody()
+    {
+        QFETCH(QString, body);
+        QFETCH(int, kind);
+        QFETCH(QStringList, kinds);
+        RenderContext ctx = context();
+        QVERIFY(!InlineRenderer(ctx).renderBlock(body, BlockKind(kind)).contains(u"date:"_s)); // off by default
+        ctx.dateLinks = true;
+        const QString out = InlineRenderer(ctx).renderBlock(body, BlockKind(kind));
+        static const QRegularExpression re(u"href=\"date:(\\d+)-(\\d+)\""_s);
+        QStringList found;
+        for (auto it = re.globalMatch(out); it.hasNext();) {
+            const auto m = it.next();
+            const qsizetype from = m.captured(1).toLongLong();
+            const qsizetype to = m.captured(2).toLongLong();
+            QVERIFY2(from >= 0 && from < to && to <= body.size(), qPrintable(out));
+            const QString token = body.sliced(from, to - from);
+            const QList<Token> tokens = findTokens(token);
+            QVERIFY2(tokens.size() == 1 && tokens.first().from == 0 && tokens.first().to == token.size(),
+                     qPrintable(token + u" in "_s + out));
+            const TokenKind k = tokens.first().kind;
+            found.append(k == TokenKind::Due         ? u"due"_s
+                         : k == TokenKind::Scheduled ? u"scheduled"_s
+                         : k == TokenKind::Start     ? u"start"_s
+                         : k == TokenKind::Created   ? u"created"_s
+                         : k == TokenKind::Done      ? u"done"_s
+                         : k == TokenKind::Cancelled ? u"cancelled"_s
+                                                     : u"?"_s);
+        }
+        QCOMPARE(found, kinds);
+    }
+
     void onlyWhitelistedTags()
     {
         const QStringList pieces{u"**"_s,

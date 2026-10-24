@@ -2328,6 +2328,82 @@ QVariantMap PageController::reminderAt(int row, int from, int to) const
     return {};
 }
 
+QVariantMap PageController::dateChip(int row, const QString &url) const
+{
+    static const QRegularExpression link(u"^(?:date|reminder):(\\d+)-(\\d+)$"_s);
+    const auto m = link.match(url);
+    if (!m.hasMatch() || !validRow(row))
+        return {};
+    const int offset = m_model->renderOffsetAt(row);
+    const QString body = m_model->document().at(row).body;
+    const auto t = dateTokenAt(body, m.captured(1).toInt() + offset, m.captured(2).toInt() + offset);
+    if (!t)
+        return {};
+    QString kind;
+    switch (t->kind) {
+    case markdown::TokenKind::Due: kind = u"due"_s; break;
+    case markdown::TokenKind::Scheduled: kind = u"scheduled"_s; break;
+    case markdown::TokenKind::Start: kind = u"start"_s; break;
+    case markdown::TokenKind::Created: kind = u"created"_s; break;
+    case markdown::TokenKind::Done: kind = u"done"_s; break;
+    case markdown::TokenKind::Cancelled: kind = u"cancelled"_s; break;
+    default: kind = u"reminder"_s; break;
+    }
+    return {{u"from"_s, int(t->from)},
+            {u"to"_s, int(t->to)},
+            {u"kind"_s, kind},
+            {u"at"_s, t->spec().toString()},
+            {u"date"_s, t->date.toString(u"yyyy-MM-dd"_s)},
+            {u"time"_s, t->time ? t->time->toString(u"HH:mm"_s) : QString()},
+            {u"alarm"_s, t->alarm}};
+}
+
+void PageController::setDateTokenAt(int row, int from, int to, const QString &spec)
+{
+    if (!validRow(row))
+        return;
+    const QString body = m_model->document().at(row).body;
+    if (!dateTokenAt(body, from, to))
+        return;
+    if (spec.trimmed().isEmpty()) {
+        editBody(row, replaceTokenRange(body, from, to, QString()));
+        return;
+    }
+    const auto parsed = dates::parseDateSpec(spec.trimmed());
+    if (parsed)
+        editBody(row, setTokenDate(body, from, to, *parsed));
+}
+
+void PageController::shiftDateTokenAt(int row, int from, int to, int days, int minutes)
+{
+    if (!validRow(row))
+        return;
+    const QString body = m_model->document().at(row).body;
+    const auto t = dateTokenAt(body, from, to);
+    if (!t)
+        return;
+    const VaultConfig config = vaultConfigFromMap(m_host ? m_host->vaultConfig() : QVariantMap());
+    editBody(row, setTokenDate(body, from, to, shiftedSpec(t->spec(), days, minutes, config.defaultReminderTime)));
+}
+
+void PageController::moveDateTokenTo(int row, int from, int to, int days)
+{
+    if (!validRow(row))
+        return;
+    const QString body = m_model->document().at(row).body;
+    const auto t = dateTokenAt(body, from, to);
+    if (!t)
+        return;
+    editBody(row, setTokenDate(body, from, to, DateSpec{today().addDays(days), t->time}));
+}
+
+void PageController::setReminderAlarmAt(int row, int from, int to, bool alarm)
+{
+    if (!validRow(row))
+        return;
+    editBody(row, setReminderAlarm(m_model->document().at(row).body, from, to, alarm));
+}
+
 QString PageController::blockContext(int row) const
 {
     return validRow(row) ? plainTextOf(m_model->document().at(row), 120) : QString();
@@ -2704,6 +2780,8 @@ QVariantMap PageController::activateLink(int row, const QString &url, bool newPa
         }
         return out;
     }
+    if (scheme == u"date")
+        return out;
     if (scheme == u"ext") {
         if (m_host)
             m_host->openUrl(QUrl(rest));

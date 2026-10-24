@@ -104,6 +104,19 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # The menu of date chips (`--editor-script datechips`): right-clicks with the mouse on a
+        # desktop, long presses with a finger on a phone on 📅 and ⏰ chips, its items tapped.
+        foreach(_chips "tst_editor_qml_datechips;1280x800;" "tst_editor_qml_datechips_touch;412x915;--touch")
+            list(GET _chips 0 _chips_test)
+            list(GET _chips 1 _chips_size)
+            list(GET _chips 2 _chips_touch)
+            add_test(NAME ${_chips_test}
+                COMMAND brulion --editor --editor-script datechips --no-single-instance
+                    --size ${_chips_size} ${_chips_touch} --now "2026-10-15 10:00" --locale pl)
+            set_tests_properties(${_chips_test} PROPERTIES
+                ENVIRONMENT "${_playground_env}"
+                TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+        endforeach()
         # Links to blocks and headings (`--editor-script blocklinks`): the block menu's "Kopiuj
         # odnośnik" from right-clicks on text and frames (desktop; also a title drawn above the
         # page's properties), a bullet's right-click / long press and the touch toolbar's "Więcej"

@@ -108,7 +108,9 @@
   ustawiony czas — na Androidzie także przy zamkniętej aplikacji i po restarcie telefonu),
   widok kalendarza i listy zadań. Status zadania (do zrobienia, w toku, zrobione, oczekujące,
   anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
-  przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku.
+  przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku. Tak samo
+  na znaczniku daty (📅 ⏳ 🛫 ✅ ➕ ❌) albo ⏰ otwiera się menu do zmiany daty: kalendarz, dziś,
+  jutro, dzień / tydzień później, godzinę później, alarm, usunięcie.
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,

@@ -15,7 +15,7 @@ import Brulion
 //   BlockEditor { anchors.fill: parent; controller: page; header: Component { PageTitle {} } }
 //
 // A ListView over controller.blocks (BlockListModel): unfocused blocks show rendered rich text
-// (core InlineRenderer, links page:/tag:/block:/ext:/task:/reminder:), the block being edited a
+// (core InlineRenderer, links page:/tag:/block:/ext:/task:/reminder:/date:), the block being edited a
 // TextEdit with the raw Markdown and MarkdownHighlighter. The editing row and caret live in the
 // controller, so delegates may be destroyed and recreated by the ListView at any time.
 //
@@ -1612,11 +1612,7 @@ FocusScope {
                     return
                 const scene = eventPoint.scenePosition
                 const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
-                const row = editor.rowAt(p.x, p.y)
-                if (row < 0 || editor.controller.blocks.get(row).view === "frontmatter")
-                    return
-                const at = list.mapFromItem(null, scene.x, scene.y)
-                editor.openBlockMenu(row, list, at.x, at.y)
+                editor.openBlockMenuAt(editor.rowAt(p.x, p.y), scene)
             }
         }
 
@@ -1970,6 +1966,14 @@ FocusScope {
         else
             blockMenu.popup()
     }
+    /// The block menu of a right-click at `scene` (scene coordinates) on `row`: the list's handler,
+    /// the rendered text's when the click was on no date chip. None for the page properties.
+    function openBlockMenuAt(row, scene) {
+        if (!controller || row < 0 || row >= controller.blocks.count || controller.blocks.get(row).view === "frontmatter")
+            return
+        const at = list.mapFromItem(null, scene.x, scene.y)
+        openBlockMenu(row, list, at.x, at.y)
+    }
     /// The touch toolbar's "Więcej": the menu of the block being edited, right above the button.
     /// The keyboard goes (the menu takes the keys, which hides it on Android anyway): the menu
     /// follows the toolbar down into the room it leaves (followToolbarWith), every item shown.
@@ -2006,6 +2010,67 @@ FocusScope {
         id: blockMenuComponent
         BlockMenu {
             editor: editor
+        }
+    }
+
+    // ---- The menu of a date chip ---------------------------------------------------------------
+    /// DateChipMenu for a 📅 ⏳ 🛫 ➕ ✅ ❌ or ⏰ chip of a block's rendered text (`link`: its date: /
+    /// reminder: link): a right-click or long press on it (BlockText). Created when first opened;
+    /// the block is tracked while the menu is open and the chip's range is used only while the
+    /// block is unchanged (PageController.trackedRow). Returns false when `link` names no date.
+    property DateChipMenu dateMenu: null
+    property int dateMenuBlock: -1
+    property var dateMenuChip: ({})
+    function isDateChipLink(link) {
+        return link.startsWith("date:") || link.startsWith("reminder:")
+    }
+    function openDateMenu(row, link, item, x, y) {
+        if (!controller || row < 0 || row >= controller.blocks.count || !isDateChipLink(link))
+            return false
+        const chip = controller.dateChip(row, link)
+        if (!chip.kind)
+            return false
+        if (!dateMenu)
+            dateMenu = dateMenuComponent.createObject(editor) as DateChipMenu
+        menuAbove = null
+        closeSuggestions()
+        if (dateMenuBlock >= 0)
+            controller.untrack(dateMenuBlock)
+        dateMenuBlock = controller.trackBlock(row)
+        dateMenuChip = chip
+        dateMenu.kind = chip.kind
+        dateMenu.alarm = chip.alarm
+        // Above the docked toolbar and the keyboard (it flips above its item when needed).
+        dateMenu.bottomMargin = menuBottomMargin()
+        dateMenu.popup(item, x, y)
+        return true
+    }
+    function chooseDateAction(action, a, b) {
+        if (!controller || dateMenuBlock < 0)
+            return
+        const row = controller.trackedRow(dateMenuBlock)
+        controller.untrack(dateMenuBlock)
+        dateMenuBlock = -1
+        const chip = dateMenuChip
+        if (row < 0)
+            return
+        switch (action) {
+        case "change":
+            if (chip.kind === "reminder")
+                dialogs.editReminder(row, chip.from, chip.to)
+            else
+                dialogs.pickDateAt(row, chip.from, chip.to, chip.kind, chip.at)
+            break
+        case "move": controller.moveDateTokenTo(row, chip.from, chip.to, a); break
+        case "shift": controller.shiftDateTokenAt(row, chip.from, chip.to, a, b); break
+        case "alarm": controller.setReminderAlarmAt(row, chip.from, chip.to, a); break
+        case "remove": controller.removeToken(row, chip.from, chip.to); break
+        }
+    }
+    Component {
+        id: dateMenuComponent
+        DateChipMenu {
+            onChosen: (action, a, b) => editor.chooseDateAction(action, a, b)
         }
     }
 

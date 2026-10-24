@@ -666,21 +666,33 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
         // Metadata tokens as chips.
         const auto human = [&](const DateSpec &spec) { return dates::formatHuman(spec, m_ctx.locale, m_ctx.today); };
         const bool open = taskStatus && isOpenStatus(*taskStatus);
+        const auto range = [&](const Token &tok) {
+            return QString::number(toBody(runs, tok.from)) + u'-' + QString::number(toBody(runs, tok.to));
+        };
         const auto dueChip = [&](const DateSpec &spec) {
             const bool overdue = open && m_ctx.today.isValid() && spec.date < m_ctx.today;
             return chip(overdue ? pal.overdue : pal.due, u"📅 "_s + human(spec));
+        };
+        // A date token's own chip: a date: link with RenderContext::dateLinks.
+        const auto dateChip = [&](const Token &tok, const ChipColors &c, QStringView emoji) {
+            const QString label = emoji.toString() + u' ' + human(tok.spec());
+            return m_ctx.dateLinks ? linkChip(u"date:"_s + range(tok), c, label) : chip(c, label);
         };
         for (const Token &tok : findTokens(masked)) {
             const QStringView source = text.sliced(tok.from, tok.to - tok.from);
             QString html;
             qsizetype to = tok.to;
             switch (tok.kind) {
-            case TokenKind::Due: html = dueChip(tok.spec()); break;
-            case TokenKind::Scheduled: html = chip(pal.scheduled, u"⏳ "_s + human(tok.spec())); break;
-            case TokenKind::Start: html = chip(pal.neutral, u"🛫 "_s + human(tok.spec())); break;
-            case TokenKind::Created: html = chip(pal.neutral, u"➕ "_s + human(tok.spec())); break;
-            case TokenKind::Done: html = chip(pal.done, u"✅ "_s + human(tok.spec())); break;
-            case TokenKind::Cancelled: html = chip(pal.done, u"❌ "_s + human(tok.spec())); break;
+            case TokenKind::Due: {
+                const bool overdue = open && m_ctx.today.isValid() && tok.date < m_ctx.today;
+                html = dateChip(tok, overdue ? pal.overdue : pal.due, u"📅");
+                break;
+            }
+            case TokenKind::Scheduled: html = dateChip(tok, pal.scheduled, u"⏳"); break;
+            case TokenKind::Start: html = dateChip(tok, pal.neutral, u"🛫"); break;
+            case TokenKind::Created: html = dateChip(tok, pal.neutral, u"➕"); break;
+            case TokenKind::Done: html = dateChip(tok, pal.done, u"✅"); break;
+            case TokenKind::Cancelled: html = dateChip(tok, pal.done, u"❌"); break;
             case TokenKind::Recurrence: {
                 // Only a rule that parses is a chip (the longest one at the start of the text
                 // after 🔁: "🔁 co tydzień kupić mleko" -> chip + text); anything else stays text.
@@ -694,9 +706,7 @@ QString InlineRenderer::renderInline(QStringView text, bool topLevel, int depth,
             case TokenKind::Reminder:
             case TokenKind::ReminderCompat:
                 // docs/UI.md: ⏰ reminders, a bell for alarms.
-                html = linkChip(u"reminder:"_s + QString::number(toBody(runs, tok.from)) + u'-'
-                                        + QString::number(toBody(runs, tok.to)),
-                                tok.alarm ? pal.alarm : pal.reminder,
+                html = linkChip(u"reminder:"_s + range(tok), tok.alarm ? pal.alarm : pal.reminder,
                                 (tok.alarm ? u"🔔 "_s : u"⏰ "_s) + human(tok.spec()));
                 break;
             case TokenKind::Priority: html = esc(source); break;

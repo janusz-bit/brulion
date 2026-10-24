@@ -18,6 +18,7 @@ Czas jest czasem lokalnym, zapisanym bez strefy; „9:00” znaczy 9:00 u Ciebie
 - Wpisz `⏰` i napisz po ludzku: „jutro o 7:30”, „za 2 godziny”, „w piątek 18:00”.
 - Albo użyj „Przypomnienie…” lub „Alarm…” z menu `/`: okno z szybkimi terminami, kalendarzem, godziną, przełącznikiem alarmu i powtarzaniem.
 - Kliknięcie znaczka ⏰ w notatce otwiera okno, w którym możesz je zmienić, odłożyć albo usunąć.
+- Prawy przycisk myszy na znaczku ⏰ (na telefonie przytrzymanie palcem) otwiera menu: „Zmień datę i godzinę…”, „Godzinę później”, „Jutro o tej porze”, „Tydzień później”, przełącznik „Alarm” i „Usuń przypomnienie”. Każdą zmianę cofniesz (`Ctrl+Z`).
 - W szybkiej notatce (Ctrl+Shift+N) wystarczy napisać datę w treści.
 
 ## Powtarzanie
