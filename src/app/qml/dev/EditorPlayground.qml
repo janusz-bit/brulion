@@ -406,6 +406,34 @@ ApplicationWindow {
     }
     function info(row) { return page.blocks.get(row) }
     /// The item named `name` under `item` (depth first), or null.
+    /// TestEvent for the pictures from the internet (null without QtTest).
+    property var webEvents: null
+    /// A picture from the internet's placeholder in `item` (BlockDelegate): inside its frame,
+    /// the site named on its own line, the alt text (or the failure) at most 2 (3) lines, the
+    /// buttons side by side when both fit.
+    function checkWebPlaceholder(item, failed) {
+        const frame = item ? findItem(item.embedView, "embedPicture") : null
+        const holder = item ? findItem(item.embedView, "webPicturePlaceholder") : null
+        const text = item ? findItem(item.embedView, "webPictureText") as Text : null
+        const site = item ? findItem(item.embedView, "webPictureHost") as Text : null
+        const show = item ? findItem(item.embedView, "webPictureShow") as BButton : null
+        const save = item ? findItem(item.embedView, "webPictureSave") : null
+        const embed = item && item.embeds.length > 0 ? item.embeds[0] : null
+        const what = failed ? "a failed picture from the internet: " : "a picture from the internet waiting: "
+        check(frame !== null && holder !== null && holder.visible && holder.y >= 0
+              && holder.y + holder.height <= frame.height,
+              what + "the placeholder fits its frame: " + (holder ? holder.y + "+" + holder.height : "-")
+              + " in " + (frame ? frame.width + "×" + frame.height : "-"))
+        check(site !== null && site.visible && embed !== null && embed.host !== ""
+              && site.text.indexOf(embed.host) >= 0 && site.lineCount === 1,
+              what + "its site is named: " + (site ? site.text : "-"))
+        check(text !== null && text.visible && text.lineCount <= (failed ? 3 : 2) && (failed || text.truncated),
+              what + "the text above it has its lines: " + (text ? text.lineCount : "-"))
+        check(show !== null && save !== null && show.visible
+              && (show.text === (failed ? qsTranslate("EmbedView", "Try again") : qsTranslate("EmbedView", "Show")))
+              && (show.width + save.width + Theme.space2 > holder.width || show.y === save.y),
+              what + "its buttons are side by side: " + (show && save ? show.y + " / " + save.y : "-"))
+    }
     function findItem(item, name) {
         if (!item)
             return null
@@ -937,13 +965,14 @@ ApplicationWindow {
                       + ", picture " + (img ? img.implicitWidth + "×" + img.implicitHeight : "-"))
             },
             // A picture from the internet: nothing loads until "Pokaż"; then it is shown from the
-            // cache with its own shape, a click opens its menu, and "Zapisz w notatniku" makes it
-            // an attachment of the notebook (one undo step).
+            // cache with its own shape (an SVG by its bytes, the URL has no .svg), a right-click
+            // opens its menu — naming the site, and only that menu —, and "Zapisz w notatniku"
+            // makes it an attachment of the notebook (one undo step).
             () => {
-                host.setWebPictureText("https://example.com/mapa.svg",
+                host.setWebPictureText("https://example.com/mapa",
                                        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"100\""
                                        + " viewBox=\"0 0 300 100\"><rect width=\"300\" height=\"100\" fill=\"#c3e69f\"/></svg>")
-                window.realRow = page.insertBlockAfter(rowOf("Akapit po liście"), "![Mapa trasy](https://example.com/mapa.svg)")
+                window.realRow = page.insertBlockAfter(rowOf("Akapit po liście"), "![Mapa trasy](https://example.com/mapa)")
                 page.stopEditing()
                 window.waits = 0
             },
@@ -969,13 +998,32 @@ ApplicationWindow {
                 }
                 check(ready && Math.abs(frame.width / frame.height - 3) < 0.1 && img.source.toString().startsWith("file:"),
                       "the picture is shown from the cache with its shape: " + (frame ? frame.width + "×" + frame.height : "-"))
-                if (item)
-                    item.embedView.webMenu("https://example.com/mapa.svg", "example.com", frame, 10, 10)
+                check(img !== null && img.sourceSize.width === 1024 && img.sourceSize.height === 420,
+                      "an SVG from the internet is drawn to fit, not at 2048 × 2048: "
+                      + (img ? img.sourceSize.width + "×" + img.sourceSize.height : "-"))
+                // A real right-click when QtTest is there (TestEvent), else the signal itself.
+                if (!window.webEvents) {
+                    try {
+                        window.webEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "webEvents")
+                    } catch (e) {
+                        window.webEvents = null
+                    }
+                }
+                if (frame && window.webEvents)
+                    window.webEvents.mouseClick(frame, frame.width / 2, frame.height / 2, Qt.RightButton, Qt.NoModifier, -1)
+                else if (item)
+                    item.embedView.webMenu("https://example.com/mapa", "example.com", frame, 10, 10)
             },
             () => {
-                check(editor.webPictureMenu !== null && editor.webPictureMenu.visible
-                      && editor.webPictureMenu.title.indexOf("example.com") >= 0,
-                      "a click on the picture opens its menu")
+                const menu = editor.webPictureMenu
+                check(menu !== null && menu.visible, "a right-click on the picture opens its menu")
+                check(editor.blockMenu === null || !editor.blockMenu.visible,
+                      "and not the block menu as well")
+                const first = menu ? menu.itemAt(0) as BMenuItem : null
+                check(first !== null && first.objectName === "webPictureHost" && !first.enabled && first.height > 0
+                      && first.text.indexOf("example.com") >= 0 && menu.itemAt(1) !== null
+                      && menu.itemAt(1).objectName === "webPictureHostLine",
+                      "the menu's first line names the site: " + (first ? first.text : "-"))
                 const save = editor.webPictureMenu ? window.findItem(editor.webPictureMenu.contentItem, "webPictureDownload") : null
                 if (save)
                     save.triggered()
@@ -991,7 +1039,64 @@ ApplicationWindow {
                       "“Zapisz w notatniku” points the picture at the attachment: " + (embed ? embed.target : "-"))
                 page.undo()
             },
-            () => check(page.webPictureUrls().indexOf("https://example.com/mapa.svg") >= 0, "undo brings the address back"),
+            () => check(page.webPictureUrls().indexOf("https://example.com/mapa") >= 0, "undo brings the address back"),
+            // Its placeholder: a long alt text takes at most two lines, the site's line is always
+            // there, both buttons side by side when they fit, and all of it inside the frame —
+            // also once the fetch failed.
+            () => {
+                window.farRow = page.insertBlockAfter(window.realRow,
+                    "![Zdjęcie z wycieczki: Morskie Oko o świcie, żółta łąka, ślady niedźwiedzia przy schronisku"
+                    + " i mgła nad Czarnym Stawem pod Rysami, zrobione z ostatniego zakrętu drogi](https://zdjęcia.example.org/brak.jpg)")
+                page.stopEditing()
+                window.waits = 0
+            },
+            () => editor.listView.positionViewAtIndex(window.farRow, ListView.Center),
+            () => {
+                const item = editor.listView.itemAtIndex(window.farRow) as BlockDelegate
+                window.checkWebPlaceholder(item, false)
+                const show = item ? window.findItem(item.embedView, "webPictureShow") : null
+                if (show)
+                    show.clicked()
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(window.farRow) as BlockDelegate
+                const embed = item && item.embeds.length > 0 ? item.embeds[0] : null
+                if ((!embed || embed.state !== "failed") && window.waits++ < 2 * window.waitLimit) {
+                    window.stepIndex -= 1
+                    return
+                }
+                window.waits = 0
+                check(embed !== null && embed.state === "failed", "a picture that cannot be fetched fails")
+                window.checkWebPlaceholder(item, true)
+                page.deleteBlock(window.farRow)
+            },
+            // "/Obraz z internetu…": "Zapisz w notatniku" checked each time it opens (the dialog
+            // is reused), an address without http:// or https:// refused with both named.
+            () => editor.dialogs.pickWebImage(window.realRow, -1),
+            waitStep(() => editor.dialogs.webImageDialog !== null && editor.dialogs.webImageDialog.opened,
+                     "“Obraz z internetu…” opens its dialog"),
+            () => {
+                const d = editor.dialogs.webImageDialog
+                check(d.saveBox.checked, "it opens with “Zapisz w notatniku” checked")
+                d.saveBox.checked = false
+                d.urlField.text = "www.example.com/żółw.jpg"
+            },
+            () => {
+                const d = editor.dialogs.webImageDialog
+                const error = d.urlField.errorText
+                check(!d.valid && !d.acceptEnabled && error.indexOf("http://") >= 0 && error.indexOf("https://") >= 0,
+                      "an address without its scheme is refused: " + error)
+                d.reject()
+            },
+            waitStep(() => !editor.dialogs.webImageDialog.visible, "Anuluj closes it"),
+            () => editor.dialogs.pickWebImage(window.realRow, -1),
+            waitStep(() => editor.dialogs.webImageDialog.opened, "it opens again"),
+            () => {
+                const d = editor.dialogs.webImageDialog
+                check(d.saveBox.checked && d.urlField.text === "", "again with “Zapisz w notatniku” checked and no address")
+                d.reject()
+            },
+            waitStep(() => !editor.dialogs.webImageDialog.visible, "and closes again"),
             // The journal stream caps document headings at the size of a day's date: smaller, in
             // the same order.
             () => {

@@ -20,7 +20,9 @@ import Brulion
 // (EditorHost::webPicture — QML loads nothing from the network): until it is there its frame
 // names the site with "Pokaż" (asking first is the default, AppSettings.webPicturesShown) and
 // "Zapisz w notatniku", a spinner while it loads, the reason when it failed; a click on the shown
-// picture opens its menu (webMenu: WebPictureMenu) instead of the picture view.
+// picture opens its menu (webMenu: WebPictureMenu) instead of the picture view. Its frame grows
+// to fit what it says (a phone's narrow column, a long alt text), and keeps that height while the
+// picture loads, so the row changes once: when the picture is there.
 Column {
     id: root
 
@@ -68,7 +70,10 @@ Column {
             /// A picture from the internet not shown (yet): the frame tells why and what to do.
             readonly property bool webPending: web && modelData.state !== "ready"
             readonly property bool decodable: modelData.decodable !== false
-            readonly property bool scalable: /\.svgz?$/i.test(modelData.name || "")
+            /// SVG: a local file by its name; a picture from the internet by the format the host
+            /// found in its bytes (its URL need not end with .svg, `name` is "host › segment").
+            readonly property bool scalable: web ? /^svgz?$/i.test(modelData.format || "")
+                                                 : /\.svgz?$/i.test(modelData.name || "")
             /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
             /// at most 2048 a side; an SVG fitted into 1024 × 420 (rendered at the screen's pixel
             /// ratio) — null when the model does not know the file's size (then: once loaded).
@@ -116,9 +121,11 @@ Column {
                                                      : loaded ? img.implicitWidth : 320
                 readonly property real naturalHeight: embed.knownSize && !otherShape ? embed.knownSize.height
                                                       : loaded ? img.implicitHeight : 180
-                // Natural size, at most the column width and 420 px high.
+                // Natural size, at most the column width and 420 px high; a picture from the
+                // internet not shown yet at least as high as its placeholder.
                 width: Math.min(root.width, naturalWidth, 420 * naturalWidth / Math.max(1, naturalHeight))
-                height: Math.round(width * naturalHeight / Math.max(1, naturalWidth))
+                height: Math.max(Math.round(width * naturalHeight / Math.max(1, naturalWidth)),
+                                 embed.webPending ? Math.ceil(placeholder.implicitHeight) + 2 * Theme.space3 : 0)
                 radius: Theme.radius
                 color: Theme.bgSunken
                 border.width: 1
@@ -151,45 +158,68 @@ Column {
                     visible: running
                 }
                 // A picture from the internet waiting to be shown (asking first) or that failed.
+                // While it loads only the spinner shows, but the placeholder keeps its place (a
+                // hidden Column would measure 0: the frame's height follows it).
                 Column {
+                    id: placeholder
                     objectName: "webPicturePlaceholder"
-                    visible: embed.webPending && embed.modelData.state !== "loading"
+                    readonly property bool failed: embed.modelData.state === "failed"
+                    visible: embed.webPending
+                    opacity: embed.modelData.state === "loading" ? 0 : 1
+                    enabled: opacity > 0
                     anchors.centerIn: parent
                     width: parent.width - 2 * Theme.space3
                     spacing: Theme.space2
                     BIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        name: embed.modelData.state === "failed" ? "triangle-alert" : "image"
+                        name: placeholder.failed ? "triangle-alert" : "image"
                         size: Theme.iconSize
                         color: Theme.fgMuted
                     }
+                    // The alt text, or why the picture could not be fetched.
                     Text {
+                        objectName: "webPictureText"
+                        visible: text !== ""
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
-                        maximumLineCount: 3
+                        maximumLineCount: placeholder.failed ? 3 : 2
                         elide: Text.ElideRight
-                        text: embed.modelData.state === "failed"
-                              ? embed.modelData.error
-                              : (embed.modelData.alt !== "" ? embed.modelData.alt + "\n" : "")
-                                + qsTr("Picture from %1").arg(embed.modelData.host)
+                        text: placeholder.failed ? embed.modelData.error || "" : embed.modelData.alt || ""
                         textFormat: Text.PlainText
                         font.family: Theme.fontUi
                         font.pixelSize: Theme.textSm
                         color: Theme.fgMuted
                     }
-                    Flow {
+                    // The site: what "Pokaż" would contact, never elided away by a long alt text.
+                    Text {
+                        objectName: "webPictureHost"
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideMiddle
+                        text: qsTr("Picture from %1").arg(embed.modelData.host)
+                        textFormat: Text.PlainText
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textSm
+                        color: Theme.fgMuted
+                    }
+                    // Side by side when both fit, else one under the other — centred either way.
+                    Grid {
+                        objectName: "webPictureButtons"
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.min(parent.width, implicitWidth)
+                        columns: showButton.implicitWidth + spacing + saveButton.implicitWidth <= parent.width ? 2 : 1
                         spacing: Theme.space2
+                        horizontalItemAlignment: Grid.AlignHCenter
                         BButton {
+                            id: showButton
                             objectName: "webPictureShow"
                             size: "small"
-                            iconName: embed.modelData.state === "failed" ? "refresh-cw" : "eye"
-                            text: embed.modelData.state === "failed" ? qsTr("Try again") : qsTr("Show")
+                            iconName: placeholder.failed ? "refresh-cw" : "eye"
+                            text: placeholder.failed ? qsTr("Try again") : qsTr("Show")
                             onClicked: root.showWeb(embed.modelData.target)
                         }
                         BButton {
+                            id: saveButton
                             objectName: "webPictureSave"
                             size: "small"
                             variant: "ghost"
@@ -219,7 +249,7 @@ Column {
                 }
                 TapHandler {
                     enabled: !embed.webPending
-                    acceptedButtons: embed.web ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
+                    acceptedButtons: Qt.LeftButton
                     onTapped: (point) => {
                         if (embed.web)
                             root.webMenu(embed.modelData.target, embed.modelData.host, picture, point.position.x, point.position.y)
@@ -228,6 +258,18 @@ Column {
                     }
                     onLongPressed: if (embed.web) root.webMenu(embed.modelData.target, embed.modelData.host, picture,
                                                                 point.position.x, point.position.y)
+                }
+                // A right-click on a shown picture from the internet: its menu. Not a finger (Qt
+                // gives one to every TapHandler; touch: the long press above). WithinBounds: the
+                // press is the picture's, the editor's right-click on the block does not open the
+                // block menu as well.
+                TapHandler {
+                    enabled: embed.web && !embed.webPending
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                    acceptedButtons: Qt.RightButton
+                    gesturePolicy: TapHandler.WithinBounds
+                    onTapped: (point) => root.webMenu(embed.modelData.target, embed.modelData.host, picture,
+                                                      point.position.x, point.position.y)
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi && !embed.webPending }
             }

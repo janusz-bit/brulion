@@ -486,20 +486,30 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `web`, `state` ("ask" | "loading" | "ready" | "failed"), `host`, `error` and, once ready, the
   cached file's `url`, `format` (the cached picture's as the host tells it, "PNG", "SVG" — not
   from the URL, a data: URL in the browser has no file name) and size (`EditorHost::webPicture`, the Workspace's
-  `workspacepictures.cpp`: fetched into the device's cache, never by QML). `EmbedView` gives a
-  picture not shown yet its frame (320 × 180) with the site's name and the alt text, **Pokaż**
-  (`PageController.showWebPicture`; **Spróbuj ponownie** with the reason after a failure) and
-  **Zapisz w notatniku**; a spinner while it loads. A click, right-click or long press on the
-  shown picture opens `WebPictureMenu` (Zapisz w notatniku, Otwórz w przeglądarce — the
-  platform's handler, Kopiuj adres obrazu) instead of the picture view. "Zapisz w notatniku"
+  `workspacepictures.cpp`: fetched into the device's cache, never by QML; an SVG is known by
+  that `format`, its URL need not end with `.svg`). `EmbedView` gives a picture not shown yet its
+  frame (320 × 180, higher when its text and buttons need it — a phone's narrow column, a nested
+  block —, and as high while it loads) with the alt text (at most 2 lines), "Obraz z <host>" on a
+  line of its own (never elided away by the alt text), **Pokaż** (`PageController.showWebPicture`;
+  **Spróbuj ponownie** with the reason after a failure) and **Zapisz w notatniku** side by side,
+  one under the other when they do not fit, centred; a spinner while it loads. A picture fetched
+  for the first time has no size until it is there: its row changes height when the fetch ends
+  (with the setting below on, also while the journal only scrolls — "Scrolling performance",
+  "Still there"); later the size comes from the cached file. A click,
+  right-click (its own `WithinBounds` handler: the block menu does not open as well) or long
+  press on the shown picture opens `WebPictureMenu` — its first, disabled line "Obraz z <host>"
+  (BMenu shows no title), then Zapisz w notatniku, Otwórz w przeglądarce (the platform's
+  handler), Kopiuj adres obrazu — instead of the picture view. "Zapisz w notatniku"
   (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
   shown —, stores the attachment and points every picture of that URL on the page at it, one undo
   step; a toast says how many were saved or which failed (a picture edited away meanwhile, or whose
   fetch ends while the page is shown as source, counts as failed, nothing is stored). Pictures in
   blocks that show no embeds (code, formulas, tables, HTML) are text: never fetched or rewritten. The palette's "Zapisz obrazy z internetu w notatniku" (uiAction
-  `saveWebPictures`, the page or the journal day on screen) does that for all of them. "/Obraz z
-  internetu…" (`EditorDialogs.pickWebImage`) asks for the address (Wstaw only for an http(s) URL)
-  with "Zapisz w notatniku" checked: `PageController.insertWebPicture` writes `![](url)` (between
+  `saveWebPictures`; the page, or in the journal stream the day being written in — today until
+  another day gets the caret, as the stream's other page commands) does that for all of them. "/Obraz z
+  internetu…" (`EditorDialogs.pickWebImage`) asks for the address (Wstaw only for an http(s) URL;
+  otherwise "Wpisz adres zaczynający się od http:// lub https://") with "Zapisz w notatniku"
+  checked, every time it opens: `PageController.insertWebPicture` writes `![](url)` (between
   `<…>` when it has blanks or parentheses) at the caret, or as a block of its own after a block that
   is not text. Settings → Edytor → "Pokazuj obrazy z internetu bez pytania"
   (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown` (not for
@@ -824,6 +834,12 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
   per block on a Raspberry Pi 4 (a day of 27–42 blocks: 0.25–0.28 s; with a query block in it
   more). See "a day of the journal stream is created whole" above for why it is not spread over
   frames.
+* **A picture from the internet fetched for the first time** has no known size: with
+  "Pokazuj obrazy z internetu bez pytania" on, its frame (320 × 180, or its placeholder's height)
+  takes the picture's size when the fetch ends, so a row can change height while the journal only
+  scrolls (an exception to rule 2). Later visits get the size from the cached file's header like
+  an attachment; keeping the placeholder until the picture is scrolled to, or anchoring the view
+  on a row above that changed, is not done.
 * **Creating a table or a query block is expensive on ARM**: one or two frames of 60–100 ms each
   on a Raspberry Pi 4 (20–30 ms on a laptop), so a slow phone drag over the guide page is not
   smoother there than before (frames over 50 ms per run 1–7 → 8–9, the longest ~100 ms in both);

@@ -198,6 +198,7 @@ Item {
         if (!webImageDialog)
             webImageDialog = webImageComponent.createObject(root)
         webImageDialog.urlField.text = ""
+        webImageDialog.saveBox.checked = true // (each time: the dialog is reused)
         webImageDialog.open()
     }
     function pickImage(r, c) {
@@ -235,6 +236,7 @@ Item {
         BDialog {
             id: webImageDialog
             readonly property alias urlField: urlField
+            readonly property alias saveBox: saveBox
             readonly property bool valid: root.controller !== null && root.controller.isWebPictureUrl(urlField.typedText)
             parent: T.Overlay.overlay
             title: qsTr("Picture from the internet")
@@ -258,7 +260,7 @@ Item {
                 placeholderText: "https://…"
                 accessibleName: qsTr("Picture address")
                 inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
-                errorText: typedText.trim() !== "" && !webImageDialog.valid ? qsTr("Enter an address starting with https://") : ""
+                errorText: typedText.trim() !== "" && !webImageDialog.valid ? qsTr("Enter an address starting with http:// or https://") : ""
                 onAccepted: if (webImageDialog.valid) webImageDialog.accept()
             }
             BCheckBox {

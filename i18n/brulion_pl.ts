@@ -2359,7 +2359,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="257"/>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="212"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="242"/>
         <source>Pictures in the %1 format cannot be shown on this device.</source>
         <translation>Obrazów w formacie %1 nie można wyświetlić na tym urządzeniu.</translation>
     </message>
@@ -2622,129 +2622,129 @@
         <translation>Link do dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="217"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="218"/>
         <source>Insert a picture</source>
         <translation>Wstaw obraz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="243"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="301"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="245"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="303"/>
         <source>Insert</source>
         <translation>Wstaw</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="301"/>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="361"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="263"/>
+        <source>Enter an address starting with http:// or https://</source>
+        <translation>Wpisz adres zaczynający się od http:// lub https://</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="303"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="363"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="307"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="309"/>
         <source>Remove</source>
         <translation>Usuń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="357"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="359"/>
         <source>Repeat</source>
         <translation>Powtarzanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="367"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="369"/>
         <source>Don&apos;t repeat</source>
         <translation>Nie powtarzaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="391"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="393"/>
         <source>Daily</source>
         <translation>Codziennie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="392"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="394"/>
         <source>Weekdays</source>
         <translation>W dni robocze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="393"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="395"/>
         <source>Weekly</source>
         <translation>Co tydzień</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="394"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="396"/>
         <source>Every 2 weeks</source>
         <translation>Co 2 tygodnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="395"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="397"/>
         <source>Monthly</source>
         <translation>Co miesiąc</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="396"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="398"/>
         <source>Yearly</source>
         <translation>Co roku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="412"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="414"/>
         <source>e.g. co tydzień w poniedziałek, every month on the 15th</source>
         <translation>np. co tydzień w poniedziałek, co miesiąc 15.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="413"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="415"/>
         <source>Not a recurrence rule</source>
         <translation>To nie jest reguła powtarzania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="427"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="429"/>
         <source>Written in the note as: %1</source>
         <translation>W notatce: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="443"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="445"/>
         <source>Insert template</source>
         <translation>Wstaw szablon</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="447"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="449"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="460"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="462"/>
         <source>Search templates…</source>
         <translation>Szukaj szablonów…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="468"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="470"/>
         <source>No templates</source>
         <translation>Brak szablonów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="469"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="471"/>
         <source>Put Markdown files into the templates folder of the vault.</source>
         <translation>Umieść pliki Markdown w folderze szablonów notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="240"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="242"/>
         <source>Picture from the internet</source>
         <translation>Obraz z internetu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="259"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="261"/>
         <source>Picture address</source>
         <translation>Adres obrazu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="261"/>
-        <source>Enter an address starting with https://</source>
-        <translation>Wpisz adres zaczynający się od https://</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="269"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="271"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="270"/>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="272"/>
         <source>A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.</source>
         <translation>Kopia w folderze załączników: widać ją bez sieci i synchronizuje się razem z notatkami. Bez niej obraz jest pobierany ze strony, gdy go pokazujesz.</translation>
     </message>
@@ -2860,27 +2860,29 @@
 <context>
     <name>EmbedView</name>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="214"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="244"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="175"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="200"/>
         <source>Picture from %1</source>
         <translation>Obraz z %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="189"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="218"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="433"/>
         <source>Try again</source>
         <translation>Spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="189"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="218"/>
+        <location filename="../src/app/qml/dev/EditorPlayground.qml" line="433"/>
         <source>Show</source>
         <translation>Pokaż</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/EmbedView.qml" line="197"/>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="227"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
@@ -9644,22 +9646,22 @@
 <context>
     <name>WebPictureMenu</name>
     <message>
-        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="19"/>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="22"/>
         <source>Picture from %1</source>
         <translation>Obraz z %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="23"/>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="28"/>
         <source>Save to notebook</source>
         <translation>Zapisz w notatniku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="29"/>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="34"/>
         <source>Open in browser</source>
         <translation>Otwórz w przeglądarce</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="35"/>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="40"/>
         <source>Copy picture address</source>
         <translation>Kopiuj adres obrazu</translation>
     </message>
@@ -10212,12 +10214,12 @@
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3196"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3210"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3260"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3274"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -11803,37 +11805,37 @@
         <translation>Nie udało się opróżnić kosza: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="60"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="79"/>
         <source>The picture could not be saved on this device.</source>
         <translation>Nie udało się zapisać obrazu na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="73"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="107"/>
         <source>No connection to %1.</source>
         <translation>Brak połączenia z %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="74"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="108"/>
         <source>%1 did not answer in time.</source>
         <translation>Serwer %1 nie odpowiedział na czas.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="75"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="109"/>
         <source>%1 answered with error %2.</source>
         <translation>Serwer %1 odpowiedział błędem %2.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="77"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="111"/>
         <source>The picture is larger than %1 MB.</source>
         <translation>Obraz jest większy niż %1 MB.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="80"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="114"/>
         <source>%1 sent no picture from this address.</source>
         <translation>Serwer %1 nie zwrócił obrazu spod tego adresu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacepictures.cpp" line="122"/>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="175"/>
         <source>This is no address of a picture.</source>
         <translation>To nie jest adres obrazu.</translation>
     </message>

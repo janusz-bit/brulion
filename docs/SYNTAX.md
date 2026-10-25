@@ -176,13 +176,18 @@ never https → http, never from a host of the internet to a private one), no co
 bytes must be a picture by their signature (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF, SVG —
 `webpicture::sniffFormat`); the cache keeps up to 200 MB, the least recently used dropped first
 (a file shown is marked used by its modification time, at most once an hour). In the browser the
-cache is in the tab's memory: up to 50 MB, gone with the tab (docs/WEB.md). **"Zapisz w notatniku"** stores the picture as an attachment
-(`attachmentsFolder`, named after the URL's last path segment with the extension of its real
+cache is in the tab's memory: up to 50 MB, gone with the tab (docs/WEB.md). Its format is the one
+found in the bytes (an SVG served from a URL without `.svg` is drawn as one).
+**"Zapisz w notatniku"** stores the picture as an attachment (`attachmentsFolder`, named after the URL's last path segment with the extension of its real
 format: `kot.png` for a PNG served as `kot.jpg`) and points every picture of that URL on the page
-at it (`retargetWebPicture`, one undo step): `![alt](assets/kot.png)` — the alt text, a title and
-`<…>` stay, blanks, parentheses, `%`, `#`, `<` and `>` of the path percent-encoded
-(`assets/Mój%20kot.png`, letters as they are); `![[https://…|alias]]` → `![[assets/kot.png|alias]]`. Links
-`[x](https://…)`, bare URLs and code are never touched. Exports keep the URL as written.
+at it (`retargetWebPicture`, one undo step): `![alt](assets/kot.png)` — exactly the destination the
+parser read is replaced (`markdown::markdownDestination`; one written with backslash escapes as a
+whole), the alt text, a title (also one naming the URL or holding `](`) and `<…>` stay, blanks,
+parentheses, `%`, `#`, `<` and `>` of the path percent-encoded (`assets/Mój%20kot.png`, letters as
+they are); `![[https://…|alias]]` → `![[assets/kot.png|alias]]`. A picture is counted as stored only
+when a note changed (nothing is left in the attachments folder otherwise). Links
+`[x](https://…)`, bare URLs, code and blocks that show no pictures (code fences, formulas, tables,
+HTML) are never fetched or touched. Exports keep the URL as written.
 
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;
