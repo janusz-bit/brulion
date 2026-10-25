@@ -117,8 +117,16 @@ if ($Steps -contains 'build') {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { Fail "$tool not found (Visual Studio's CMake tools bring both)" }
     }
     Info "Configuring ($BuildDir)"
-    Exec cmake @('-S', $Root, '-B', $BuildDir, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+    $configure = @('-S', $Root, '-B', $BuildDir, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
         "-DCMAKE_PREFIX_PATH=$QtDir", '-DBUILD_TESTING=ON')
+    # ccache (4.6 or newer knows cl.exe; Release has no /Zi, whose PDBs it cannot cache) when it is
+    # on PATH: CI restores its cache, a rebuild of the same sources takes minutes instead of 15.
+    $ccache = Get-Command ccache -ErrorAction SilentlyContinue
+    if ($ccache) {
+        Write-Host "Compiler cache: $($ccache.Source)"
+        $configure += @("-DCMAKE_C_COMPILER_LAUNCHER=$($ccache.Source)", "-DCMAKE_CXX_COMPILER_LAUNCHER=$($ccache.Source)")
+    }
+    Exec cmake $configure
     Info "Building (-j$Jobs)"
     # -k 0: every compile error in one run (the CI round trip is long), not only the first.
     Exec cmake @('--build', $BuildDir, '--parallel', "$Jobs", '--', '-k', '0')
