@@ -120,7 +120,8 @@ if ($Steps -contains 'build') {
     Exec cmake @('-S', $Root, '-B', $BuildDir, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
         "-DCMAKE_PREFIX_PATH=$QtDir", '-DBUILD_TESTING=ON')
     Info "Building (-j$Jobs)"
-    Exec cmake @('--build', $BuildDir, '--parallel', "$Jobs")
+    # -k 0: every compile error in one run (the CI round trip is long), not only the first.
+    Exec cmake @('--build', $BuildDir, '--parallel', "$Jobs", '--', '-k', '0')
 }
 
 # --- test ----------------------------------------------------------------------------------------
