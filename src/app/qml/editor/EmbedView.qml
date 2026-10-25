@@ -16,11 +16,20 @@ import Brulion
 // A picture whose format this device cannot decode (the model's `decodable`: WebP or AVIF without
 // Qt's image plugins, EditorHost::canDecodePicture) is not loaded: its frame names the file and
 // the format, like the picture view (ContentPictureView), instead of a load error.
+// A picture from the internet (`web`: `![alt](https://…)`) is shown only from the device's cache
+// (EditorHost::webPicture — QML loads nothing from the network): until it is there its frame
+// names the site with "Pokaż" (asking first is the default, AppSettings.webPicturesShown) and
+// "Zapisz w notatniku", a spinner while it loads, the reason when it failed; a click on the shown
+// picture opens its menu (webMenu: WebPictureMenu) instead of the picture view.
 Column {
     id: root
 
     property var embeds: []
     signal clicked(string target)
+    /// A picture from the internet: "Pokaż" / "Spróbuj ponownie", "Zapisz w notatniku", its menu.
+    signal showWeb(string url)
+    signal downloadWeb(string url)
+    signal webMenu(string url, string host, Item item, real x, real y)
     signal backgroundClicked()
     /// A finger held beside the picture / chip (touch UIs).
     signal backgroundLongPressed()
@@ -54,7 +63,10 @@ Column {
         delegate: Item {
             id: embed
             required property var modelData
-            readonly property bool image: modelData.image && modelData.url.toString() !== ""
+            readonly property bool web: modelData.web === true
+            readonly property bool image: modelData.image && (web || modelData.url.toString() !== "")
+            /// A picture from the internet not shown (yet): the frame tells why and what to do.
+            readonly property bool webPending: web && modelData.state !== "ready"
             readonly property bool decodable: modelData.decodable !== false
             readonly property bool scalable: /\.svgz?$/i.test(modelData.name || "")
             /// The picture's size as the Image below shows it once loaded: a raster picture's pixels,
@@ -123,7 +135,7 @@ Column {
                     objectName: "embedImage"
                     anchors.fill: parent
                     anchors.margins: 1
-                    source: embed.image && embed.decodable ? embed.modelData.url : ""
+                    source: embed.image && embed.decodable && !embed.webPending ? embed.modelData.url : ""
                     sourceSize: embed.scalable ? Qt.size(1024, 420) : Qt.size(2048, 2048)
                     fillMode: embed.scalable ? Image.PreserveAspectFit : Image.Stretch
                     asynchronous: true
@@ -135,12 +147,61 @@ Column {
                 BSpinner {
                     anchors.centerIn: parent
                     size: 20
-                    running: img.status === Image.Loading
+                    running: img.status === Image.Loading || (embed.web && embed.modelData.state === "loading")
                     visible: running
+                }
+                // A picture from the internet waiting to be shown (asking first) or that failed.
+                Column {
+                    objectName: "webPicturePlaceholder"
+                    visible: embed.webPending && embed.modelData.state !== "loading"
+                    anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.space3
+                    spacing: Theme.space2
+                    BIcon {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        name: embed.modelData.state === "failed" ? "triangle-alert" : "image"
+                        size: Theme.iconSize
+                        color: Theme.fgMuted
+                    }
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        text: embed.modelData.state === "failed"
+                              ? embed.modelData.error
+                              : (embed.modelData.alt !== "" ? embed.modelData.alt + "\n" : "")
+                                + qsTr("Picture from %1").arg(embed.modelData.host)
+                        textFormat: Text.PlainText
+                        font.family: Theme.fontUi
+                        font.pixelSize: Theme.textSm
+                        color: Theme.fgMuted
+                    }
+                    Flow {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.min(parent.width, implicitWidth)
+                        spacing: Theme.space2
+                        BButton {
+                            objectName: "webPictureShow"
+                            size: "small"
+                            iconName: embed.modelData.state === "failed" ? "refresh-cw" : "eye"
+                            text: embed.modelData.state === "failed" ? qsTr("Try again") : qsTr("Show")
+                            onClicked: root.showWeb(embed.modelData.target)
+                        }
+                        BButton {
+                            objectName: "webPictureSave"
+                            size: "small"
+                            variant: "ghost"
+                            iconName: "download"
+                            text: qsTr("Save to notebook")
+                            onClicked: root.downloadWeb(embed.modelData.target)
+                        }
+                    }
                 }
                 Text {
                     objectName: "embedMessage" // (the shell's self-test)
-                    visible: !embed.decodable || img.status === Image.Error
+                    visible: !embed.webPending && (!embed.decodable || img.status === Image.Error)
                     anchors.centerIn: parent
                     width: parent.width - 2 * Theme.space3
                     horizontalAlignment: Text.AlignHCenter
@@ -156,8 +217,19 @@ Column {
                     font.pixelSize: Theme.textSm
                     color: Theme.fgMuted
                 }
-                TapHandler { onTapped: root.clicked(embed.modelData.target) }
-                HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi }
+                TapHandler {
+                    enabled: !embed.webPending
+                    acceptedButtons: embed.web ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
+                    onTapped: (point) => {
+                        if (embed.web)
+                            root.webMenu(embed.modelData.target, embed.modelData.host, picture, point.position.x, point.position.y)
+                        else
+                            root.clicked(embed.modelData.target)
+                    }
+                    onLongPressed: if (embed.web) root.webMenu(embed.modelData.target, embed.modelData.host, picture,
+                                                                point.position.x, point.position.y)
+                }
+                HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi && !embed.webPending }
             }
 
             BChip {

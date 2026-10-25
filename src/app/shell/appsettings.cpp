@@ -32,6 +32,7 @@ constexpr auto kEditorFont = "editor/font";
 constexpr auto kEditorFontSize = "editor/fontSize";
 constexpr auto kEditorWidth = "editor/maxWidth";
 constexpr auto kEditorSource = "editor/sourceMode";
+constexpr auto kWebPictures = "editor/webPicturesShown";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
 constexpr auto kCloseToTray = "app/closeToTray";
@@ -262,6 +263,17 @@ void AppSettings::setEditorSourceMode(bool on)
 {
     if (store(key(kEditorSource), on, editorSourceMode()))
         Q_EMIT editorSourceModeChanged();
+}
+
+bool AppSettings::webPicturesShown() const
+{
+    return m_settings->value(key(kWebPictures), false).toBool();
+}
+
+void AppSettings::setWebPicturesShown(bool on)
+{
+    if (store(key(kWebPictures), on, webPicturesShown()))
+        Q_EMIT webPicturesShownChanged();
 }
 
 // ---- Vaults ---------------------------------------------------------------------------------

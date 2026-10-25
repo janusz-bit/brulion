@@ -10,6 +10,9 @@ brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp
 # The block editor's compare-and-swap saves on the real Workspace (an external append during a
 # debounced save is merged, never overwritten).
 brulion_add_test(tst_shell_workspace_editor SOURCES tst_workspace_editor.cpp LIBS brulion_shell brulion_editor)
+# Pictures from the internet on the real Workspace with the editor (a local HTTP server): fetched
+# only when allowed, cached on the device, stored in the vault on "Pobierz do notatnika".
+brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp LIBS brulion_shell brulion_editor Qt6::Network)
 
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the

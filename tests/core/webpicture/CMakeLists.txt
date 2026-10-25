@@ -1,0 +1,1 @@
+brulion_add_test(tst_webpicture SOURCES tst_webpicture.cpp LIBS brulion_core_webpicture)

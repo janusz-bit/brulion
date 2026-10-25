@@ -191,6 +191,9 @@ public:
 
     // --- Rendering context ----------------------------------------------------------------------
     void setHost(EditorHost *host);
+    /// The host's picture from the internet at `url` changed state ("" — all of them): the
+    /// embeds of the blocks naming it are computed again (EditorHost::webPictureChanged).
+    void webPictureChanged(const QString &url);
     EditorHost *host() const { return m_host; }
     void setPath(const QString &path) { m_path = path; }
     QString path() const { return m_path; }
@@ -270,6 +273,8 @@ private:
     QString renderHtml(int docIndex) const;
     markdown::RenderContext renderContext(int docIndex) const;
     void ensureEmbeds(int row) const;
+    /// The embeds role entry of a picture from the internet (EditorHost::webPicture).
+    QVariantMap webEmbed(const Embed &em) const;
     void ensureTransclusions(int row) const;
     void rebuildIndex();
     /// Replays the row changes; returns whether the edit was calc-neutral (see apply()).

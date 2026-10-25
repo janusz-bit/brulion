@@ -15,6 +15,8 @@ import Brulion
 //   pickTemplate(row)               Szablon…: insert a template from the templates folder
 //   pickImage(row, cursor)          Obraz…: pictures from the system's file picker (desktop,
 //                                   Android) or the browser's, stored as attachments, `![[…]]`
+//   pickWebImage(row, cursor)       Obraz z internetu…: a picture's address → `![](https://…)`,
+//                                   with "Zapisz w notatniku" stored as an attachment right away
 // The page may change while a dialog is open (sync, Syncthing): a dialog tracks its block
 // (PageController.trackBlock) and acts on wherever that block is then — never on whatever block
 // moved into its row (and on nothing when the block itself changed or is gone).
@@ -31,6 +33,7 @@ Item {
                                     || (recurrenceDialog !== null && recurrenceDialog.opened)
                                     || (templateDialog !== null && templateDialog.opened)
                                     || (imageDialog !== null && imageDialog.visible)
+                                    || (webImageDialog !== null && webImageDialog.opened)
 
     /// The dialogs, null until first used (see the file comment).
     property BReminderDialog reminderDialog: null
@@ -39,6 +42,7 @@ Item {
     property var recurrenceDialog: null
     property var templateDialog: null
     property FileDialog imageDialog: null
+    property var webImageDialog: null
     function reminderPopup(): BReminderDialog {
         if (!reminderDialog)
             reminderDialog = reminderComponent.createObject(root) as BReminderDialog
@@ -186,6 +190,16 @@ Item {
         templateDialog.templates.filter = ""
         templateDialog.open()
     }
+    function pickWebImage(r, c) {
+        if (!controller)
+            return
+        remember(r)
+        cursor = c
+        if (!webImageDialog)
+            webImageDialog = webImageComponent.createObject(root)
+        webImageDialog.urlField.text = ""
+        webImageDialog.open()
+    }
     function pickImage(r, c) {
         if (!controller)
             return
@@ -213,6 +227,48 @@ Item {
                 root.refocus()
             }
             onRejected: root.refocus()
+        }
+    }
+
+    Component {
+        id: webImageComponent
+        BDialog {
+            id: webImageDialog
+            readonly property alias urlField: urlField
+            readonly property bool valid: root.controller !== null && root.controller.isWebPictureUrl(urlField.typedText)
+            parent: T.Overlay.overlay
+            title: qsTr("Picture from the internet")
+            iconName: "image"
+            preferredWidth: Theme.dialogWidth
+            acceptText: qsTr("Insert")
+            acceptEnabled: valid
+            initialFocusItem: urlField
+            onAccepted: {
+                const r = root.blockRow()
+                const c = r >= 0 ? root.cursor : -1
+                root.controller.insertWebPicture(r, c, c, urlField.typedText, saveBox.checked)
+                root.refocus()
+            }
+            onRejected: root.refocus()
+
+            BTextField {
+                id: urlField
+                objectName: "webImageUrl"
+                Layout.fillWidth: true
+                placeholderText: "https://…"
+                accessibleName: qsTr("Picture address")
+                inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                errorText: typedText.trim() !== "" && !webImageDialog.valid ? qsTr("Enter an address starting with https://") : ""
+                onAccepted: if (webImageDialog.valid) webImageDialog.accept()
+            }
+            BCheckBox {
+                id: saveBox
+                objectName: "webImageSave"
+                Layout.fillWidth: true
+                checked: true
+                text: qsTr("Save to notebook")
+                description: qsTr("A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.")
+            }
         }
     }
 

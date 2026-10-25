@@ -346,6 +346,14 @@ Item {
                 checked: AppSettings.editorSourceMode
                 onToggled: AppSettings.editorSourceMode = checked
             }
+            BSwitch {
+                objectName: "settingsWebPictures"
+                Layout.fillWidth: true
+                text: qsTr("Show pictures from the internet without asking")
+                description: qsTr("Off: a picture with a web address waits for “Show”, so opening a synced or imported note tells no site that you read it. Pictures saved to the notebook are always shown.")
+                checked: AppSettings.webPicturesShown
+                onToggled: AppSettings.webPicturesShown = checked
+            }
             // Preview.
             Rectangle {
                 Layout.fillWidth: true

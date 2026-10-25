@@ -596,6 +596,82 @@ private Q_SLOTS:
         QVERIFY(!onlyEmbeds(u"((abc123))"_s, true));
     }
 
+    void webPictureEmbeds()
+    {
+        const QList<Embed> e = embedsOf(
+                u"Kot ![mój kot](https://example.com/kot.jpg) ![](HTTP://cdn.example.pl/img?id=3) "
+                "![ftp](ftp://example.com/a.png) ![d](data:image/png;base64,AAAA) [link](https://example.com/b.png) "
+                "`![kod](https://example.com/c.png)`"_s);
+        QCOMPARE(e.size(), 2);
+        QCOMPARE(e[0].target, u"https://example.com/kot.jpg"_s);
+        QCOMPARE(e[0].alt, u"mój kot"_s);
+        QVERIFY(e[0].image);
+        QVERIFY(e[0].web);
+        QCOMPARE(e[1].target, u"HTTP://cdn.example.pl/img?id=3"_s);
+        QVERIFY(e[1].image); // no extension: `![…](…)` says it is a picture
+        QVERIFY(e[1].web);
+        QVERIFY(!embedsOf(u"![[łazienka.png]]"_s).at(0).web);
+        // A wiki embed of a web address: a picture from the internet too, no transclusion.
+        const QList<Embed> wiki = embedsOf(u"![[https://example.com/obraz]]"_s);
+        QCOMPARE(wiki.size(), 1);
+        QVERIFY(wiki[0].web);
+        QVERIFY(onlyEmbeds(u"![[https://example.com/obraz]]"_s));
+        QVERIFY(onlyEmbeds(u"![[https://example.com/obraz]]"_s, true));
+        QVERIFY(transclusionsOf(u"![[https://example.com/obraz]]"_s).isEmpty());
+        QVERIFY(onlyEmbeds(u"![](https://example.com/a.png)"_s));
+        QVERIFY(onlyEmbeds(u" ![a](https://example.com/a.png) ![[b.png]]"_s));
+        QVERIFY(!onlyEmbeds(u"Zdjęcie: ![a](https://example.com/a.png)"_s));
+        // Another scheme is no embed — so the block keeps its text (it was blank before).
+        QVERIFY(!onlyEmbeds(u"![a](ftp://example.com/a.png)"_s));
+        QVERIFY(!onlyEmbeds(u"![a](data:image/png;base64,AAAA)"_s));
+    }
+
+    void retargetWebPictures_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<QString>("url");
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("expected");
+        const QString u = u"https://example.com/kot.jpg"_s;
+        QTest::newRow("plain") << u"![kot](https://example.com/kot.jpg)"_s << u << u"assets/kot.jpg"_s
+                               << u"![kot](assets/kot.jpg)"_s;
+        QTest::newRow("spaces polish") << u"Zobacz ![Mój kot](https://example.com/kot.jpg) tutaj"_s << u
+                                       << u"assets/Mój kot (2).jpg"_s
+                                       << u"Zobacz ![Mój kot](assets/Mój%20kot%20%282%29.jpg) tutaj"_s;
+        QTest::newRow("title kept") << u"![k](https://example.com/kot.jpg \"Tytuł\")"_s << u << u"assets/k.jpg"_s
+                                    << u"![k](assets/k.jpg \"Tytuł\")"_s;
+        QTest::newRow("angle kept") << u"![k](<https://example.com/kot.jpg>)"_s << u << u"assets/a b.jpg"_s
+                                    << u"![k](<assets/a%20b.jpg>)"_s;
+        QTest::newRow("alt naming the url") << u"![https://example.com/kot.jpg](https://example.com/kot.jpg)"_s << u
+                                            << u"assets/kot.jpg"_s
+                                            << u"![https://example.com/kot.jpg](assets/kot.jpg)"_s;
+        QTest::newRow("twice") << u"![a](https://example.com/kot.jpg)\r\n![b](https://example.com/kot.jpg)"_s << u
+                               << u"assets/kot.jpg"_s << u"![a](assets/kot.jpg)\r\n![b](assets/kot.jpg)"_s;
+        QTest::newRow("other url stays") << u"![a](https://example.com/pies.jpg)"_s << u << u"assets/kot.jpg"_s
+                                         << u"![a](https://example.com/pies.jpg)"_s;
+        QTest::newRow("link stays") << u"[a](https://example.com/kot.jpg) https://example.com/kot.jpg"_s << u
+                                    << u"assets/kot.jpg"_s
+                                    << u"[a](https://example.com/kot.jpg) https://example.com/kot.jpg"_s;
+        QTest::newRow("code stays") << u"`![a](https://example.com/kot.jpg)`"_s << u << u"assets/kot.jpg"_s
+                                    << u"`![a](https://example.com/kot.jpg)`"_s;
+        QTest::newRow("hash and percent") << u"![a](https://example.com/kot.jpg)"_s << u << u"assets/100% #1.jpg"_s
+                                          << u"![a](assets/100%25%20%231.jpg)"_s;
+        QTest::newRow("wiki embed") << u"![[https://example.com/kot.jpg|Mój kot]] ![[https://example.com/kot.jpg]]"_s << u
+                                    << u"assets/Mój kot.jpg"_s
+                                    << u"![[assets/Mój kot.jpg|Mój kot]] ![[assets/Mój kot.jpg]]"_s;
+        QTest::newRow("empty path") << u"![a](https://example.com/kot.jpg)"_s << u << QString()
+                                    << u"![a](https://example.com/kot.jpg)"_s;
+    }
+
+    void retargetWebPictures()
+    {
+        QFETCH(QString, body);
+        QFETCH(QString, url);
+        QFETCH(QString, path);
+        QFETCH(QString, expected);
+        QCOMPARE(retargetWebPicture(body, url, path), expected);
+    }
+
     void transclusions_data()
     {
         QTest::addColumn<QString>("body");

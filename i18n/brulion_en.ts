@@ -146,6 +146,14 @@
             <numerusform>Deleted %n blocks</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>%n picture(s) saved to the notebook</source>
+        <translation>
+            <numerusform>%n picture saved to the notebook</numerusform>
+            <numerusform>%n pictures saved to the notebook</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>BlockMenu</name>

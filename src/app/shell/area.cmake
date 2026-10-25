@@ -49,6 +49,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspacehistory.cpp
     ${_brulion_shell_dir}/workspacefolders.cpp
     ${_brulion_shell_dir}/workspaceclipboard.cpp
+    ${_brulion_shell_dir}/workspacepictures.cpp
     ${_brulion_shell_dir}/workspacereminders.h ${_brulion_shell_dir}/workspacereminders.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
@@ -69,7 +70,7 @@ target_include_directories(brulion_shell PUBLIC ${_brulion_shell_dir})
 target_link_libraries(brulion_shell
     PUBLIC Qt6::Core Qt6::Gui Qt6::Qml brulion_editorhost brulion_core_vault brulion_core_index brulion_core_markdown
            brulion_core_reminders brulion_core_dates brulion_core_log brulion_core_notebook
-    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_notify)
+    PRIVATE Qt6::Network brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture brulion_notify)
 if(ANDROID OR EMSCRIPTEN)
     # AndroidBridge (permissions, test notification) / WasmStorage + WasmNotifier.
     target_link_libraries(brulion_shell PRIVATE brulion_platform)

@@ -159,6 +159,24 @@ picture view, the file dialog and the HTML export share) is embedded as a pictur
 attachment as a file. Whether the app can draw it depends on the device's image decoders (WebP
 and AVIF are often missing): the picture view then names the format instead of a load error.
 
+**Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
+with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,
+also the embed `![[https://example.com/kot.jpg]]` (`webpicture::isWebUrl`) — is a picture whatever
+its URL ends with (`![…](…)` says so). Other schemes (`![x](ftp://…)`, `data:`) stay text. The file
+keeps the URL; nothing is written for showing it. The editor shows such a picture only from the
+device's cache, fetched when the user allows it — "Pokaż" on that picture, or the device setting
+"show pictures from the internet without asking" (off by default: opening a synced or imported
+note contacts no server). The fetch: http(s) only, redirects no less safe, no cookies, at most
+20 MB, a 30 s stall limit, and the bytes must be a picture by their signature (PNG, JPEG, GIF,
+WebP, BMP, ICO, AVIF, SVG — `webpicture::sniffFormat`); the cache keeps up to 200 MB, the least
+recently used dropped first. **"Zapisz w notatniku"** stores the picture as an attachment
+(`attachmentsFolder`, named after the URL's last path segment with the extension of its real
+format: `kot.png` for a PNG served as `kot.jpg`) and points every picture of that URL on the page
+at it (`retargetWebPicture`, one undo step): `![alt](assets/kot.png)` — the alt text, a title and
+`<…>` stay, blanks, parentheses, `%`, `#`, `<` and `>` of the path percent-encoded
+(`assets/Mój%20kot.png`, letters as they are); `![[https://…|alias]]` → `![[assets/kot.png|alias]]`. Links
+`[x](https://…)`, bare URLs and code are never touched. Exports keep the URL as written.
+
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;
 with the year when it is not the current one). The file keeps `[[2026-10-13]]`. A

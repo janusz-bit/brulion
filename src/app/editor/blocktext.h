@@ -143,18 +143,28 @@ QVariantList frontmatterProperties(const QString &body);
 /// visible) — a block the editor does not show (BlockListModel `noteModeOnly`).
 bool onlyNoteModeKey(const QString &body);
 
-/// One image or attachment embedded in a block body: `![[photo.png]]`, `![alt](assets/a.png)`.
+/// One image or attachment embedded in a block body: `![[photo.png]]`, `![alt](assets/a.png)`,
+/// or a picture from the internet `![alt](https://example.com/a.jpg)`, `![[https://…]]` (`web`).
 struct Embed {
     QString target;  ///< as written
     QString alt;     ///< alt text / alias
     bool image = false;
+    bool web = false; ///< an http(s) picture (webpicture::isWebUrl): always an image
     friend bool operator==(const Embed &, const Embed &) = default;
 };
-/// Attachment embeds of a body (embeds of pages and blocks are not included).
+/// Attachment embeds of a body (embeds of pages and blocks are not included); Markdown pictures
+/// with another URL scheme than http(s) (`![x](ftp://…)`, `data:`) are none — they stay text.
 QList<Embed> embedsOf(QStringView body);
 /// True when the body consists of nothing but attachment embeds (and whitespace); with
 /// `transclusions` also page, section and block embeds count (transclusionsOf()).
 bool onlyEmbeds(QStringView body, bool transclusions = false);
+/// The Markdown pictures `![alt](url)` of `body` whose destination is the web URL `url` (as
+/// written, webpicture::isWebUrl) pointed at the vault path `path` instead (a downloaded
+/// picture): `![alt](assets/Mój%20kot.jpg)` — the alt text, a title and `<…>` stay; spaces,
+/// parentheses, '%', '#', '<' and '>' of the path percent-encoded; an embed `![[url|alias]]`
+/// becomes `![[path|alias]]`. Pictures elsewhere (code, links) and every other byte stay; `body`
+/// unchanged when it has none.
+QString retargetWebPicture(const QString &body, const QString &url, const QString &path);
 
 /// A page, section or block embedded in a block body (docs/SYNTAX.md §2, "transclusion"):
 /// `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`, same-page `![[#Heading]]` / `![[#^id]]`

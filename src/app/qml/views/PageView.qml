@@ -553,6 +553,8 @@ FocusScope {
                 root.toggleNoteMode()
             } else if (action.startsWith("copyLink:") && root.visible && !root.inSidePanel && !root.pictureRoute) {
                 editor.copyCurrentLink(action.slice(9))
+            } else if (action === "saveWebPictures" && root.visible && !root.inSidePanel && !root.pictureRoute) {
+                editor.downloadWebPictures("")
             }
         }
     }

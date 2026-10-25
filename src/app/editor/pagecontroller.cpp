@@ -17,6 +17,7 @@
 #include "notebook/links.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "webpicture/webpicture.h"
 
 #ifdef BRULION_EDITOR_HAVE_SYNC_MERGE
 #include "sync/conflicts.h"
@@ -250,6 +251,7 @@ void PageController::setHost(EditorHost *host)
     if (m_host) {
         connect(m_host, &EditorHost::fileChanged, this, &PageController::onFileChanged);
         connect(m_host, &EditorHost::indexChanged, m_model, &BlockListModel::invalidateRendering);
+        connect(m_host, &EditorHost::webPictureChanged, this, &PageController::onWebPictureChanged);
         connect(m_host, &QObject::destroyed, this, [this] { m_host = nullptr; });
     }
     Q_EMIT hostChanged();
@@ -263,6 +265,9 @@ void PageController::setPath(const QString &path)
         return;
     flush();
     m_path = path;
+    m_webDownloads.clear(); // the pictures of the other page are not stored into this one
+    m_webStored = 0;
+    m_webFailed.clear();
     m_model->setPath(path);
     showFile(m_host, m_path);
     Q_EMIT pathChanged();
@@ -2560,7 +2565,7 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         const int r = currentRow();
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
-               || cmd == u"date" || cmd == u"template" || cmd == u"image") {
+               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3016,7 +3021,11 @@ QVariantMap PageController::insertEmbeds(int row, int from, int to, const QStrin
         embeds.append(embedFor(path));
     if (embeds.isEmpty())
         return {{u"row"_s, -1}, {u"cursor"_s, -1}};
-    const QString inserted = embeds.join(u' ');
+    return insertEmbedText(row, from, to, embeds.join(u' '), newBlock);
+}
+
+QVariantMap PageController::insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock)
+{
     const BlockView view = validRow(row) ? m_model->shapeAt(row).view : BlockView::Rule;
     if (!newBlock && (view == BlockView::Text || view == BlockView::Heading)) {
         const QString edit = m_model->editTextAt(row);
@@ -3041,6 +3050,145 @@ QVariantMap PageController::insertEmbeds(int row, int from, int to, const QStrin
     endCommand(Focus{-1, -1});
     stopEditing();
     return {{u"row"_s, target}, {u"cursor"_s, -1}};
+}
+
+bool PageController::isWebPictureUrl(const QString &url) const
+{
+    return webpicture::isWebUrl(url);
+}
+
+QVariantMap PageController::insertWebPicture(int row, int from, int to, const QString &url, bool download)
+{
+    const QString target = url.trimmed();
+    if (!webpicture::isWebUrl(target))
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    // A destination with blanks or parentheses goes between angle brackets (CommonMark).
+    const bool angle = target.contains(u' ') || target.contains(u'(') || target.contains(u')');
+    QString dest = target;
+    if (angle)
+        dest = u'<' + dest.replace(u'<', u"%3C"_s).replace(u'>', u"%3E"_s) + u'>';
+    const QVariantMap out = insertEmbedText(row, from, to, u"![]("_s + dest + u')', false);
+    if (download && out.value(u"row"_s).toInt() >= 0) {
+        for (const QString &onPage : webPictureUrls()) {
+            if (webpicture::webUrl(onPage) == webpicture::webUrl(target)) {
+                downloadWebPictures(onPage);
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+bool PageController::copyWebPictureUrl(const QString &url)
+{
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    if (!clipboard || url.isEmpty())
+        return false;
+    clipboard->setText(url);
+    return clipboard->text() == url; // a platform without a clipboard must not be told "copied"
+}
+
+void PageController::showWebPicture(const QString &url)
+{
+    if (m_host && webpicture::isWebUrl(url))
+        m_host->loadWebPicture(url);
+}
+
+QStringList PageController::webPictureUrls() const
+{
+    QStringList urls;
+    const markdown::BlockDocument &doc = m_model->document();
+    for (int i = 0; i < doc.count(); ++i) {
+        const QString &body = doc.at(i).body;
+        if (!body.contains(u"![") || !body.contains(u"://"))
+            continue;
+        for (const Embed &em : embedsOf(body))
+            if (em.web && !urls.contains(em.target))
+                urls.append(em.target);
+    }
+    return urls;
+}
+
+int PageController::downloadWebPictures(const QString &url)
+{
+    if (!m_host || m_sourceMode)
+        return 0;
+    const QStringList onPage = webPictureUrls();
+    QStringList wanted;
+    if (url.isEmpty())
+        wanted = onPage;
+    else if (onPage.contains(url))
+        wanted = {url};
+    int started = 0;
+    for (const QString &u : std::as_const(wanted)) {
+        if (m_webDownloads.contains(u))
+            continue;
+        m_webDownloads.append(u);
+        ++started;
+    }
+    // Cached ones are stored at once, the rest once fetched (onWebPictureChanged()).
+    for (const QString &u : std::as_const(wanted)) {
+        QString format;
+        if (!m_webDownloads.contains(u))
+            continue;
+        if (!m_host->webPictureData(u, &format).isEmpty())
+            finishWebDownload(u, true);
+        else
+            m_host->loadWebPicture(u, true);
+    }
+    return started;
+}
+
+void PageController::onWebPictureChanged(const QString &url)
+{
+    m_model->webPictureChanged(url);
+    if (!m_host)
+        return;
+    const QStringList pending = m_webDownloads;
+    for (const QString &u : pending) {
+        if (!url.isEmpty() && u != url)
+            continue;
+        const QString state = m_host->webPicture(u).value(u"state"_s).toString();
+        if (state == u"ready" || state == u"failed")
+            finishWebDownload(u, state == u"ready");
+    }
+}
+
+void PageController::finishWebDownload(const QString &url, bool ready)
+{
+    if (!m_webDownloads.removeOne(url))
+        return;
+    const QUrl web = webpicture::webUrl(url);
+    QString format;
+    const QByteArray data = ready && m_host ? m_host->webPictureData(url, &format) : QByteArray();
+    bool stored = false;
+    // Still on the page (an edit or a reload while it was fetched may have removed it)?
+    if (!data.isEmpty() && !format.isEmpty() && webPictureUrls().contains(url)) {
+        const QString path = m_host->saveAttachment(webpicture::attachmentName(web, format), data);
+        if (!path.isEmpty()) {
+            beginCommand();
+            const markdown::BlockDocument &doc = m_model->document();
+            for (int i = 0; i < doc.count(); ++i) {
+                const QString &body = doc.at(i).body;
+                const QString changed = retargetWebPicture(body, url, path);
+                if (changed != body)
+                    editBody(i, changed);
+            }
+            endCommand(currentFocus());
+            stored = true;
+        }
+    }
+    if (stored)
+        ++m_webStored;
+    else
+        m_webFailed.append(webpicture::displayName(web));
+    if (!m_webDownloads.isEmpty())
+        return;
+    const int count = m_webStored;
+    const QStringList failed = m_webFailed;
+    m_webStored = 0;
+    m_webFailed.clear();
+    Q_EMIT webPicturesDownloaded(count, failed);
 }
 
 QVariantMap PageController::insertAttachment(int row, int from, int to, const QString &fileName, const QByteArray &data)

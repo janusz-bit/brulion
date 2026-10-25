@@ -115,6 +115,34 @@ public:
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;
 
+    // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) -------------------
+    // The UI never loads them itself: the host fetches them (when the user allows it) into the
+    // device's cache and hands out the cached file. webPictureChanged() tells when one changed.
+    /// The picture at the web URL `url` as written: { state: "ask" (not loaded — the user did not
+    /// allow it yet), "loading", "ready" (url: a local URL of the cached picture, width, height
+    /// when known) or "failed" (error: a sentence for the user) }. In the "always show" setting a
+    /// picture not cached yet is fetched by asking ("loading"). Default: "ask" — nothing loads.
+    virtual QVariantMap webPicture(const QString &url) const
+    {
+        Q_UNUSED(url);
+        return {{QStringLiteral("state"), QStringLiteral("ask")}};
+    }
+    /// The user wants to see the picture (or store it: `forDownload`, also when pictures are not
+    /// shown): fetch it unless cached; webPictureChanged(url) when it is ready or failed.
+    virtual void loadWebPicture(const QString &url, bool forDownload = false)
+    {
+        Q_UNUSED(url);
+        Q_UNUSED(forDownload);
+    }
+    /// The cached bytes of a ready picture and its format ("png", webpicture::sniffFormat());
+    /// empty when not ready.
+    virtual QByteArray webPictureData(const QString &url, QString *format) const
+    {
+        Q_UNUSED(url);
+        Q_UNUSED(format);
+        return {};
+    }
+
     // --- Context -----------------------------------------------------------------------------
     /// Vault configuration as a map (journalsFolder, journalFileFormat, attachmentsFolder,
     /// templatesFolder, defaultReminderTime "HH:mm", weekStartsOn 1..7, journalMode / pageMode
@@ -155,6 +183,9 @@ Q_SIGNALS:
     void fileChanged(const QString &path);
     /// The index changed (link targets, block texts, tags may render differently).
     void indexChanged();
+    /// The picture from the internet at `url` (as written) changed state (webPicture()); "" —
+    /// all of them (the setting changed).
+    void webPictureChanged(const QString &url);
 };
 
 } // namespace brulion

@@ -1,0 +1,43 @@
+// Pictures from the internet in notes (docs/SYNTAX.md §2 "Pictures from the internet",
+// docs/ARCHITECTURE.md "Data safety"): `![alt](https://example.com/photo.jpg)`.
+//
+// The QML engine never loads from the network (src/app/ui/localnetwork.h). A picture from the
+// internet is fetched by the app itself (PictureFetcher: http(s) only, a size limit, a time limit,
+// the bytes checked to be a picture by their signature) into a cache on the device
+// (PictureCache), and the editor shows the cached file — when the user allowed it, once or for
+// every picture. "Pobierz do notatnika" stores the same bytes as an attachment of the notebook.
+#pragma once
+
+#include <QByteArray>
+#include <QString>
+#include <QStringView>
+#include <QUrl>
+
+namespace brulion::webpicture {
+
+/// Largest picture fetched (a bigger one fails with FetchError::TooLarge).
+inline constexpr qint64 MaxBytes = 20 * 1024 * 1024;
+/// A fetch without progress for this long fails (FetchError::Timeout).
+inline constexpr int TimeoutMs = 30 * 1000;
+
+/// `target` (a Markdown picture's destination as written) is an http: or https: URL with a host —
+/// a picture from the internet. Other schemes (ftp:, data:, file:, javascript:) are not.
+bool isWebUrl(QStringView target);
+/// The URL of a web target (isWebUrl()), invalid otherwise.
+QUrl webUrl(QStringView target);
+
+/// The picture format of `data` by its signature — "png", "jpg", "gif", "webp", "bmp", "ico",
+/// "avif", "svg" — or "" when the bytes are no picture (an HTML error page, a login form).
+QString sniffFormat(const QByteArray &data);
+
+/// The attachment's file name for a picture from `url` in `format` (sniffFormat()): the URL
+/// path's last segment, percent-decoded and made file-name-safe, with the format's extension
+/// (an existing picture extension of the same format is kept as written: ".jpeg", ".JPG");
+/// "<host> picture.<ext>" when the path names no file.
+QString attachmentName(const QUrl &url, const QString &format);
+
+/// How the UI names a picture from `url`: its host and the path's last segment, decoded
+/// ("example.com › zdjęcie.jpg"); just the host when the path names no file.
+QString displayName(const QUrl &url);
+
+} // namespace brulion::webpicture

@@ -1298,6 +1298,30 @@
         <source>Block…</source>
         <translation>Blok…</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>This page has no pictures from the internet</source>
+        <translation>Na tej stronie nie ma obrazów z internetu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Picture address copied</source>
+        <translation>Skopiowano adres obrazu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>Could not save to the notebook: %1</source>
+        <translation>Nie udało się zapisać w notatniku: %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1"/>
+        <source>%n picture(s) saved to the notebook</source>
+        <translation>
+            <numerusform>Zapisano %n obraz w notatniku</numerusform>
+            <numerusform>Zapisano %n obrazy w notatniku</numerusform>
+            <numerusform>Zapisano %n obrazów w notatniku</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>BlockMenu</name>
@@ -2697,6 +2721,31 @@
         <source>Put Markdown files into the templates folder of the vault.</source>
         <translation>Umieść pliki Markdown w folderze szablonów notatnika.</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="1"/>
+        <source>Picture from the internet</source>
+        <translation>Obraz z internetu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="1"/>
+        <source>Picture address</source>
+        <translation>Adres obrazu</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="1"/>
+        <source>Enter an address starting with https://</source>
+        <translation>Wpisz adres zaczynający się od https://</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="1"/>
+        <source>Save to notebook</source>
+        <translation>Zapisz w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorDialogs.qml" line="1"/>
+        <source>A copy in the attachments folder: shown offline and synced with the notes. Without it the picture is loaded from the site when it is shown.</source>
+        <translation>Kopia w folderze załączników: widać ją bez sieci i synchronizuje się razem z notatkami. Bez niej obraz jest pobierany ze strony, gdy go pokazujesz.</translation>
+    </message>
 </context>
 <context>
     <name>EditorPlayground</name>
@@ -2812,6 +2861,26 @@
         <location filename="../src/app/qml/editor/EmbedView.qml" line="153"/>
         <source>Cannot load %1</source>
         <translation>Nie można wczytać %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="1"/>
+        <source>Picture from %1</source>
+        <translation>Obraz z %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="1"/>
+        <source>Try again</source>
+        <translation>Spróbuj ponownie</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="1"/>
+        <source>Show</source>
+        <translation>Pokaż</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EmbedView.qml" line="1"/>
+        <source>Save to notebook</source>
+        <translation>Zapisz w notatniku</translation>
     </message>
 </context>
 <context>
@@ -6444,6 +6513,16 @@
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Show pictures from the internet without asking</source>
+        <translation>Pokazuj obrazy z internetu bez pytania</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1"/>
+        <source>Off: a picture with a web address waits for “Show”, so opening a synced or imported note tells no site that you read it. Pictures saved to the notebook are always shown.</source>
+        <translation>Wyłączone: obraz z adresem internetowym czeka na „Pokaż”, więc otwarcie zsynchronizowanej albo zaimportowanej notatki nie zdradza żadnej stronie, że ją czytasz. Obrazy zapisane w notatniku są widoczne zawsze.</translation>
+    </message>
 </context>
 <context>
     <name>ShellAboutDialog</name>
@@ -9561,6 +9640,29 @@
     </message>
 </context>
 <context>
+    <name>WebPictureMenu</name>
+    <message>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="1"/>
+        <source>Picture from %1</source>
+        <translation>Obraz z %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="1"/>
+        <source>Save to notebook</source>
+        <translation>Zapisz w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="1"/>
+        <source>Open in browser</source>
+        <translation>Otwórz w przeglądarce</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/WebPictureMenu.qml" line="1"/>
+        <source>Copy picture address</source>
+        <translation>Kopiuj adres obrazu</translation>
+    </message>
+</context>
+<context>
     <name>ZoomBreadcrumb</name>
     <message>
         <location filename="../src/app/qml/editor/ZoomBreadcrumb.qml" line="25"/>
@@ -11489,6 +11591,16 @@
         <source>About Brulion</source>
         <translation>O Brulionie</translation>
     </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Save pictures from the internet to notebook</source>
+        <translation>Zapisz obrazy z internetu w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/commandmodel.cpp" line="1"/>
+        <source>Copies in the attachments folder instead of web addresses</source>
+        <translation>Kopie w folderze załączników zamiast adresów internetowych</translation>
+    </message>
 </context>
 <context>
     <name>brulion::shell::DesktopTray</name>
@@ -11687,6 +11799,41 @@
         <location filename="../src/app/shell/workspacehistory.cpp" line="185"/>
         <source>Could not empty the trash: %1</source>
         <translation>Nie udało się opróżnić kosza: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>The picture could not be saved on this device.</source>
+        <translation>Nie udało się zapisać obrazu na tym urządzeniu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>No connection to %1.</source>
+        <translation>Brak połączenia z %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>%1 did not answer in time.</source>
+        <translation>Serwer %1 nie odpowiedział na czas.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>%1 answered with error %2.</source>
+        <translation>Serwer %1 odpowiedział błędem %2.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>The picture is larger than %1 MB.</source>
+        <translation>Obraz jest większy niż %1 MB.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>%1 sent no picture from this address.</source>
+        <translation>Serwer %1 nie zwrócił obrazu spod tego adresu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="1"/>
+        <source>This is no address of a picture.</source>
+        <translation>To nie jest adres obrazu.</translation>
     </message>
 </context>
 <context>

@@ -117,6 +117,9 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(QVariantList favorites READ favorites NOTIFY favoritesChanged FINAL)
     /// [{ path, title }] recently opened pages, newest first (at most 20).
     Q_PROPERTY(QVariantList recentPages READ recentPages NOTIFY recentPagesChanged FINAL)
+    /// Pictures from the internet in notes are shown without asking (AppSettings'
+    /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Pokaż".
+    Q_PROPERTY(bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
 
 public:
     static constexpr int MaxRecentPages = 20;
@@ -193,6 +196,17 @@ public:
     /// the local file's header itself).
     QSize assetPixelSize(const QString &path) const override;
     Q_INVOKABLE QString saveAttachment(const QString &fileName, const QByteArray &data) override;
+    /// Pictures from the internet (workspacepictures.cpp): fetched by webpicture::PictureFetcher
+    /// into the device's cache (<app cache>/web-pictures, webpicture::PictureCache), shown from
+    /// there — file: URLs, data: URLs in the browser. Not tied to the notebook: the cache is the
+    /// device's, and it survives switching notebooks.
+    QVariantMap webPicture(const QString &url) const override;
+    void loadWebPicture(const QString &url, bool forDownload = false) override;
+    QByteArray webPictureData(const QString &url, QString *format) const override;
+    bool webPicturesShown() const;
+    void setWebPicturesShown(bool shown);
+    /// The cache's folder (tests: a temporary one; "" — the default).
+    void setWebPictureCacheDir(const QString &dir);
     QVariantMap vaultConfig() const override;
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
@@ -420,6 +434,7 @@ Q_SIGNALS:
     void configChanged();
     void favoritesChanged();
     void recentPagesChanged();
+    void webPicturesShownChanged();
     /// Files changed (paths, in change order) — after the index was updated.
     void filesChanged(const QStringList &paths);
     /// A path was renamed or moved (pages: links were rewritten already).
@@ -495,6 +510,13 @@ private:
     std::function<QDateTime()> m_clock;
     QString m_language = QStringLiteral("pl");
     bool m_dataUrlAssets = false;
+    /// Pictures from the internet: the cache, the fetcher and their state (workspacepictures.cpp;
+    /// a child object, created on first use).
+    class WebPictures;
+    WebPictures *webPictures() const;
+    mutable WebPictures *m_webPictures = nullptr;
+    bool m_webPicturesShown = false;
+    QString m_webPictureCacheDir;
     bool m_remindersPaused = false;
     bool m_wasInactive = false; ///< the app left the foreground since the last rescan
     mutable QHash<QString, QUrl> m_dataUrls;

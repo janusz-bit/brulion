@@ -608,6 +608,30 @@ public:
     /// else "![[path]]".
     Q_INVOKABLE QString embedFor(const QString &path) const;
 
+    // --- Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2) --------------------
+    /// `url` is the address of a picture from the internet (http or https with a host).
+    Q_INVOKABLE bool isWebPictureUrl(const QString &url) const;
+    /// Insert the picture from the internet `url` as `![](url)` into [from, to) of the row's edit
+    /// text — or a block of its own after a block that is not text, like insertAttachment() — and,
+    /// with `download`, store it in the notebook right away (downloadWebPictures()). Returns
+    /// { row, cursor } (row -1: no web address).
+    Q_INVOKABLE QVariantMap insertWebPicture(int row, int from, int to, const QString &url, bool download);
+    /// Put a picture's address on the clipboard; false when the platform has none.
+    Q_INVOKABLE bool copyWebPictureUrl(const QString &url);
+    /// Show the picture from the internet `url` (as written): the user's "Pokaż" while pictures
+    /// from the internet are shown only when asked (EditorHost::loadWebPicture).
+    Q_INVOKABLE void showWebPicture(const QString &url);
+    /// Store pictures from the internet as attachments of the notebook and point the page's
+    /// `![alt](url)` at them (retargetWebPicture(), one undo step per picture): the picture
+    /// `url`, or — "" — every picture from the internet on the page. Fetched first when not
+    /// cached (also while pictures are not shown); webPicturesDownloaded() once all are done.
+    /// Returns how many pictures are being stored (0: none, or the page is in source mode).
+    Q_INVOKABLE int downloadWebPictures(const QString &url = QString());
+    /// The pictures from the internet on the page: their URLs as written, each once.
+    Q_INVOKABLE QStringList webPictureUrls() const;
+    /// Pictures being stored by downloadWebPictures().
+    Q_INVOKABLE int webPictureDownloads() const { return int(m_webDownloads.size()); }
+
     // --- Undo -------------------------------------------------------------------------------------
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
@@ -653,6 +677,9 @@ Q_SIGNALS:
     void allowNewBlockIdsChanged();
     /// An attachment could not be read or stored (file name for the message).
     void attachmentFailed(const QString &name);
+    /// downloadWebPictures() finished: `stored` pictures are attachments now, `failed` names the
+    /// ones that could not be fetched or stored (webpicture::displayName()).
+    void webPicturesDownloaded(int stored, const QStringList &failed);
     /// The edit text of `row` changed by something other than typing in it.
     void editTextReset(int row, const QString &text, int cursor);
     void saved();
@@ -821,6 +848,16 @@ private:
 
     // Command bookkeeping.
     int m_commandDepth = 0;
+    /// downloadWebPictures(): the URLs still to store, the results so far.
+    QStringList m_webDownloads;
+    int m_webStored = 0;
+    QStringList m_webFailed;
+    void onWebPictureChanged(const QString &url);
+    /// Insert `inserted` (embeds) into [from, to) of a text row with blanks around it, else as a
+    /// block of its own after the row (at the end for -1); { row, cursor }.
+    QVariantMap insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock);
+    /// Store the ready (or failed) picture `url` of m_webDownloads.
+    void finishWebDownload(const QString &url, bool ready);
     QString m_commandBefore;
     Focus m_commandFocusBefore;
     bool m_typingOpen = false;

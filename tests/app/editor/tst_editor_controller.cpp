@@ -2473,6 +2473,120 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.host.lastRoute().value(u"line"_s).toInt(), 0);
     }
 
+    void webPictures()
+    {
+        const QString kot = u"https://example.com/zdj%C4%99cia/kot.jpg"_s;
+        const QString pies = u"https://example.com/pies"_s;
+        const QString brak = u"https://example.com/brak.png"_s;
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        Fixture f(u"- ![Mój kot](%1)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](%1)\n"_s.arg(kot, pies, brak));
+        f.host.setWebPicture(kot, png);
+        f.host.setWebPicture(pies, png);
+        f.host.setWebPicture(brak, QByteArray("<html>404</html>"));
+        QCOMPARE(f.page.webPictureUrls(), (QStringList{kot, pies, brak}));
+        // Nothing is fetched by showing the page: each picture waits for "Pokaż".
+        QVariantMap e = f.role(0, "embeds").toList().value(0).toMap();
+        QCOMPARE(e.value(u"web"_s).toBool(), true);
+        QCOMPARE(e.value(u"state"_s).toString(), u"ask"_s);
+        QCOMPARE(e.value(u"host"_s).toString(), u"example.com"_s);
+        QCOMPARE(e.value(u"name"_s).toString(), u"example.com › kot.jpg"_s);
+        QCOMPARE(e.value(u"alt"_s).toString(), u"Mój kot"_s);
+        QVERIFY(e.value(u"url"_s).toUrl().isEmpty());
+        QCOMPARE(f.role(0, "onlyEmbeds").toBool(), true);
+        QCOMPARE(f.host.webFetches(), 0);
+        // "Pokaż": loading, then the cached file.
+        QSignalSpy changed(f.model(), &QAbstractItemModel::dataChanged);
+        f.page.showWebPicture(kot);
+        QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"loading"_s);
+        QTRY_COMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ready"_s);
+        e = f.role(0, "embeds").toList().value(0).toMap();
+        QVERIFY(e.value(u"url"_s).toUrl().isLocalFile());
+        QCOMPARE(e.value(u"width"_s).toInt(), 1);
+        QCOMPARE(e.value(u"height"_s).toInt(), 1);
+        QVERIFY(!changed.isEmpty());
+        QCOMPARE(f.host.webFetches(), 1);
+        QCOMPARE(f.role(1, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ask"_s);
+        // The "always" setting: the others load when asked for.
+        f.host.setWebPicturesShown(true);
+        QCOMPARE(f.role(1, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"loading"_s);
+        QTRY_COMPARE(f.role(1, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ready"_s);
+        QTRY_COMPARE(f.role(2, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"failed"_s);
+        f.host.setWebPicturesShown(false);
+        // Download one picture: an attachment, every picture of that URL points at it (not the
+        // one in code), one undo step.
+        const QString before = f.text();
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(kot), 1);
+        QCOMPARE(done.size(), 1); // cached: at once
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QVERIFY(done.at(0).at(1).toStringList().isEmpty());
+        QCOMPARE(f.text(), u"- ![Mój kot](assets/kot.png)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](assets/kot.png)\n"_s
+                                   .arg(kot, pies, brak));
+        QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"web"_s).toBool(), false);
+        f.page.undo();
+        QCOMPARE(f.text(), before);
+        f.page.redo();
+        QVERIFY(f.text().contains(u"assets/kot.png"_s));
+        // The rest of the page: the failing one is named, the others stored.
+        done.clear();
+        QCOMPARE(f.page.downloadWebPictures(), 2);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(done.at(0).at(1).toStringList(), QStringList{u"example.com › brak.png"_s});
+        QVERIFY(f.text().contains(u"- Pies: ![](assets/pies.png) i tekst"_s));
+        QVERIFY(f.text().contains(brak));
+        QCOMPARE(f.page.webPictureUrls(), QStringList{brak});
+        // A URL not on the page, or source mode: nothing.
+        QCOMPARE(f.page.downloadWebPictures(u"https://example.com/inny.png"_s), 0);
+        f.page.setSourceMode(true);
+        QCOMPARE(f.page.downloadWebPictures(), 0);
+    }
+
+    void insertWebPicture()
+    {
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        Fixture f(u"- Zdjęcie /obraz\n\n| a |\n| --- |\n| 1 |\n"_s);
+        QVariantMap r = f.page.applySlashCommand(0, 8, 14, u"webImage"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"webImage"_s);
+        QCOMPARE(f.edit(0), u"Zdjęcie "_s);
+        QVERIFY(f.page.isWebPictureUrl(u" https://example.com/a.png "_s));
+        QVERIFY(!f.page.isWebPictureUrl(u"example.com/a.png"_s));
+        // Not a web address: nothing.
+        QCOMPARE(f.page.insertWebPicture(0, 8, 8, u"assets/a.png"_s, false).value(u"row"_s).toInt(), -1);
+        // At the caret, as a picture to be shown when asked.
+        r = f.page.insertWebPicture(0, 8, 8, u" https://example.com/kot.jpg "_s, false);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.edit(0), u"Zdjęcie ![](https://example.com/kot.jpg)"_s);
+        QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ask"_s);
+        // Blanks and parentheses: between angle brackets; with the download right away.
+        const QString odd = u"https://example.com/mój kot (1).png"_s;
+        f.host.setWebPicture(odd, png);
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        r = f.page.insertWebPicture(1, 0, 0, odd, true); // a table: a block after it
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(f.edit(2), u"![](<https://example.com/mój kot (1).png>)"_s);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(f.edit(2), u"![](<assets/mój%20kot%20%281%29.png>)"_s);
+    }
+
+    void webPictureRemovedWhileFetched()
+    {
+        const QString url = u"https://example.com/a.png"_s;
+        Fixture f(u"- ![a](%1)\n- tekst\n"_s.arg(url));
+        f.host.setWebPicture(url, QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII="));
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(), 1);
+        QCOMPARE(f.host.webFetches(), 1); // fetched even though pictures are not shown
+        f.page.setBody(0, u"już bez zdjęcia"_s);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 0);
+        QCOMPARE(done.at(0).at(1).toStringList().size(), 1);
+    }
+
     void attachments()
     {
         Fixture f(u"- Szkic łazienki\n\n| a |\n| --- |\n| 1 |\n"_s);

@@ -482,6 +482,25 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `decodable` and `format` from `EditorHost::canDecodePicture`, one helper with the picture
   view: `canDecodePictureFormat`, picturesize.h). `route.open` on a picture: `text`, `links` | `outline` |
   `calendar`.
+* Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2): the embeds' entry has
+  `web`, `state` ("ask" | "loading" | "ready" | "failed"), `host`, `error` and, once ready, the
+  cached file's `url` and size (`EditorHost::webPicture`, the Workspace's
+  `workspacepictures.cpp`: fetched into the device's cache, never by QML). `EmbedView` gives a
+  picture not shown yet its frame (320 × 180) with the site's name and the alt text, **Pokaż**
+  (`PageController.showWebPicture`; **Spróbuj ponownie** with the reason after a failure) and
+  **Zapisz w notatniku**; a spinner while it loads. A click, right-click or long press on the
+  shown picture opens `WebPictureMenu` (Zapisz w notatniku, Otwórz w przeglądarce — the
+  platform's handler, Kopiuj adres obrazu) instead of the picture view. "Zapisz w notatniku"
+  (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
+  shown —, stores the attachment and points every picture of that URL on the page at it, one undo
+  step; a toast says how many were saved or which failed (a picture edited away meanwhile counts as
+  failed, nothing is stored). The palette's "Zapisz obrazy z internetu w notatniku" (uiAction
+  `saveWebPictures`, the page or the journal day on screen) does that for all of them. "/Obraz z
+  internetu…" (`EditorDialogs.pickWebImage`) asks for the address (Wstaw only for an http(s) URL)
+  with "Zapisz w notatniku" checked: `PageController.insertWebPicture` writes `![](url)` (between
+  `<…>` when it has blanks or parentheses) at the caret, or as a block of its own after a block that
+  is not text. Settings → Edytor → "Pokazuj obrazy z internetu bez pytania"
+  (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown`.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link

@@ -228,6 +228,14 @@ static QList<Command> allCommands(const AppController *app)
     qsizetype at = mode == out.cend() ? out.size() : std::distance(out.cbegin(), mode) + 1;
     for (const Command &c : linkCommands(inEditor, app->sourceModeShown()))
         out.insert(at++, c);
+    // Pictures from the internet on the page into the notebook (uiAction "saveWebPictures": the
+    // editor on screen, BlockEditor.downloadWebPictures("")).
+    out.insert(at++, {u"page.saveWebPictures"_s,
+                      CommandModel::tr("Save pictures from the internet to notebook"),
+                      CommandModel::tr("Copies in the attachments folder instead of web addresses"),
+                      u"download"_s,
+                      {},
+                      inEditor && !app->sourceModeShown()});
     // The event log ("Rejestr zdarzeń") right after the sync center; also found as logs, diagnostics.
     const auto sync = std::find_if(out.cbegin(), out.cend(), [](const Command &c) { return c.id == u"go.sync"; });
     out.insert(sync == out.cend() ? out.size() : std::distance(out.cbegin(), sync) + 1,
@@ -292,6 +300,8 @@ bool CommandModel::run(const QString &id)
         m_app->requestUiAction(u"toggleSourceMode"_s);
     else if (id == u"page.mode")
         m_app->requestUiAction(u"toggleNoteMode"_s);
+    else if (id == u"page.saveWebPictures")
+        m_app->requestUiAction(u"saveWebPictures"_s);
     else if (const QString action = linkAction(id); !action.isEmpty())
         m_app->requestUiAction(action);
     else if (id == u"nav.back")

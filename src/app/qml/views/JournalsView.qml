@@ -57,6 +57,10 @@ FocusScope {
                 root.activeDay.editor.copyCurrentLink(action.slice(9))
                 return
             }
+            if (action === "saveWebPictures") {
+                root.activeDay.editor.downloadWebPictures("")
+                return
+            }
             if (action !== "toggleNoteMode")
                 return
             if (!root.activeDay.controller.toggleMode())

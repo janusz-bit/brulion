@@ -209,6 +209,12 @@ void integrateWorkspace(AppController *app)
 {
     wireReminders(app);
     wireSync(app);
+    // Pictures from the internet: shown without asking only when the device's setting says so.
+    AppSettings *settings = app->settings();
+    Workspace *ws = app->workspace();
+    ws->setWebPicturesShown(settings->webPicturesShown());
+    QObject::connect(settings, &AppSettings::webPicturesShownChanged, ws,
+                     [settings, ws] { ws->setWebPicturesShown(settings->webPicturesShown()); });
 }
 
 QString syncthingApiKey(AppSettings *settings)

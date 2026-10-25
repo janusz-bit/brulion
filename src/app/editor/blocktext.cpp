@@ -9,6 +9,7 @@
 #include "markdown/tasks.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "webpicture/webpicture.h"
 
 #include <QRegularExpression>
 
@@ -78,6 +79,20 @@ bool isImageExtension(QStringView target)
 {
     // The same pictures paths::isPicturePath opens as a picture (PageView).
     return paths::isPicturePath(target.toString());
+}
+
+/// A Markdown picture `![x](target)` the editor shows as an embed: a path (no URL scheme) or a
+/// picture from the internet; other URLs (ftp:, data:) stay text.
+bool shownPictureTarget(QStringView target)
+{
+    if (webpicture::isWebUrl(target))
+        return true;
+    // A URL scheme ("ftp:", "data:", "mailto:") — not a Windows drive ("C:\").
+    qsizetype i = 0;
+    while (i < target.size() && (target[i].isLetterOrNumber() || target[i] == u'+' || target[i] == u'-' || target[i] == u'.')
+           && target[i].unicode() < 128)
+        ++i;
+    return !(i > 1 && i < target.size() && target[i] == u':' && target[0].isLetter());
 }
 
 bool isAttachmentTarget(QStringView target)
@@ -706,16 +721,65 @@ bool onlyNoteModeKey(const QString &body)
     return keys == QStringList{markdown::NoteModeKey.toString()};
 }
 
+QString retargetWebPicture(const QString &body, const QString &url, const QString &path)
+{
+    if (url.isEmpty() || path.isEmpty() || !body.contains(url))
+        return body;
+    QString encoded;
+    for (const QChar c : path) {
+        switch (c.unicode()) {
+        case ' ': encoded += u"%20"_s; break;
+        case '(': encoded += u"%28"_s; break;
+        case ')': encoded += u"%29"_s; break;
+        case '%': encoded += u"%25"_s; break;
+        case '#': encoded += u"%23"_s; break;
+        case '<': encoded += u"%3C"_s; break;
+        case '>': encoded += u"%3E"_s; break;
+        default: encoded += c;
+        }
+    }
+    const markdown::InlineScan scan = markdown::extractInline(body);
+    QList<Link> links = scan.links;
+    std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
+    QString out = body;
+    for (const Link &link : std::as_const(links)) {
+        if (link.from < 0 || link.to > body.size() || link.target.trimmed() != url)
+            continue;
+        if (link.kind == LinkKind::Embed) {
+            // `![[https://…|alias]]`: the vault path as written in wiki links (not encoded).
+            const QStringView token = QStringView(body).sliced(link.from, link.to - link.from);
+            const qsizetype at = token.indexOf(url);
+            if (at >= 3)
+                out.replace(link.from + at, url.size(), path);
+            continue;
+        }
+        if (link.kind != LinkKind::Markdown || body[link.from] != u'!')
+            continue;
+        // The destination is the URL as written (a URL is not unescaped): its last occurrence
+        // in the token, after the alt text's "](".
+        const QStringView token = QStringView(body).sliced(link.from, link.to - link.from);
+        const qsizetype open = token.lastIndexOf(u"](");
+        const qsizetype at = token.lastIndexOf(url);
+        if (open < 0 || at < open + 2)
+            continue;
+        out.replace(link.from + at, url.size(), encoded);
+    }
+    return out;
+}
+
 QList<Embed> embedsOf(QStringView body)
 {
     QList<Embed> out;
     const markdown::InlineScan scan = markdown::extractInline(body);
     for (const Link &link : scan.links) {
-        if (link.kind == LinkKind::Embed && isAttachmentTarget(link.target)) {
+        if (link.kind == LinkKind::Embed && webpicture::isWebUrl(link.target)) {
+            out.append({link.target, link.display, true, true}); // `![[https://…]]` (Obsidian has none)
+        } else if (link.kind == LinkKind::Embed && isAttachmentTarget(link.target)) {
             out.append({link.target, link.display, isImageExtension(link.target)});
         } else if (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < body.size()
-                   && body[link.from] == u'!' && !link.target.contains(u"://")) {
-            out.append({link.target, link.display, isImageExtension(link.target)});
+                   && body[link.from] == u'!' && shownPictureTarget(link.target)) {
+            const bool web = webpicture::isWebUrl(link.target);
+            out.append({link.target, link.display, web || isImageExtension(link.target), web});
         }
     }
     return out;
@@ -735,7 +799,7 @@ QList<Transclusion> transclusionsOf(QStringView body)
             t.kind = Transclusion::Kind::Block;
             t.blockId = link.blockId;
             t.blockRef = true;
-        } else if (link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)) {
+        } else if (link.kind == LinkKind::Embed && !isAttachmentTarget(link.target) && !webpicture::isWebUrl(link.target)) {
             t.target = link.target;
             t.display = link.display;
             if (!link.blockId.isEmpty()) {
@@ -766,10 +830,13 @@ bool onlyEmbeds(QStringView body, bool transclusions)
     QList<Link> links = scan.links;
     std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
     for (const Link &link : std::as_const(links)) {
-        const bool attachment = (link.kind == LinkKind::Embed && isAttachmentTarget(link.target))
-                                || (link.kind == LinkKind::Markdown && link.from < body.size() && body[link.from] == u'!');
+        const bool attachment = (link.kind == LinkKind::Embed
+                                 && (isAttachmentTarget(link.target) || webpicture::isWebUrl(link.target)))
+                                || (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < body.size()
+                                    && body[link.from] == u'!' && shownPictureTarget(link.target));
         const bool transclusion = transclusions
                                   && ((link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)
+                                       && !webpicture::isWebUrl(link.target)
                                        && (!link.target.isEmpty() || !link.heading.isEmpty() || !link.blockId.isEmpty()))
                                       || link.kind == LinkKind::BlockEmbed);
         if ((!attachment && !transclusion) || link.from < 0 || link.to > rest.size())
@@ -1141,6 +1208,10 @@ const QList<SlashCommand> &slashCommands()
             {u"image"_s, u"Obraz…"_s, u"Image…"_s, u"image"_s, u"![[…]]"_s, u"![[obraz.png]]"_s, u"![[image.png]]"_s,
              {u"zdjęcie"_s, u"obrazek"_s, u"foto"_s, u"grafika"_s, u"załącznik"_s, u"plik"_s, u"picture"_s,
               u"photo"_s, u"attachment"_s, u"file"_s}},
+            {u"webImage"_s, u"Obraz z internetu…"_s, u"Picture from the internet…"_s, u"image"_s, u"![](https://…)"_s,
+             u"![](adres zdjęcia)"_s, u"![](picture address)"_s,
+             {u"zdjęcie"_s, u"obrazek"_s, u"internet"_s, u"sieć"_s, u"www"_s, u"adres"_s, u"url"_s, u"link"_s, u"web"_s,
+              u"picture"_s, u"photo"_s, u"online"_s}},
             {u"embed"_s, u"Osadź"_s, u"Embed"_s, u"copy"_s, u"![[ ]]"_s, u"![[Strona]]"_s, u"![[Page]]"_s,
              {u"osadź stronę"_s, u"sekcja"_s, u"transkluzja"_s, u"transclude"_s, u"section"_s, u"page"_s}},
             {u"blockRef"_s, u"Odwołanie do bloku"_s, u"Block reference"_s, u"link"_s, u"(( ))"_s,

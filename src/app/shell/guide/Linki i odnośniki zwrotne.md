@@ -32,6 +32,16 @@ Wykrzyknik przed linkiem wstawia treść zamiast odnośnika:
 
 Osadzony fragment pokazuje bieżący tekst źródła; zmieniasz go u źródła.
 
+## Zdjęcia z internetu
+Zdjęcie spod adresu internetowego wstawisz jak w każdym Markdownie: `![opis](https://example.com/kot.jpg)` (działa też `![[https://example.com/kot.jpg]]`). Najprościej zrobić to poleceniem `/` → **Obraz z internetu…**: wklej adres, a opcja **Zapisz w notatniku** od razu pobierze kopię.
+
+- **Najpierw pytanie.** Zwykle w miejscu zdjęcia widać nazwę strony, z której pochodzi, i przycisk **Pokaż**. Brulion niczego nie pobiera, dopóki go nie klikniesz, więc samo otwarcie notatki z importu albo z synchronizacji nie zdradza żadnej stronie, że ją czytasz. W **Ustawieniach → Edytor** włączysz **Pokazuj obrazy z internetu bez pytania**.
+- **Pamięć podręczna.** Raz pobrane zdjęcie zostaje na tym urządzeniu (do 200 MB, najdawniej oglądane znikają pierwsze) i pokazuje się także bez sieci. Do pliku notatki nic się nie dopisuje.
+- **Zapisz w notatniku** — przycisk przy zdjęciu, albo pozycja w menu, które otworzysz kliknięciem pokazanego zdjęcia. Kopia trafia do folderu załączników, a link zmienia się na nią: `![opis](assets/kot.jpg)`. Taki obraz działa offline, synchronizuje się z notatkami i nie zniknie, gdy strona go usunie. Zmianę cofniesz `Ctrl+Z`. W palecie poleceń (Ctrl+K) jest **Zapisz obrazy z internetu w notatniku**, czyli wszystkie zdjęcia z bieżącej strony naraz.
+- Menu zdjęcia ma też **Otwórz w przeglądarce** i **Kopiuj adres obrazu**.
+- Brulion pobiera tylko adresy `http://` i `https://`, najwyżej 20 MB, i sprawdza, czy to naprawdę obraz (strona logowania albo błąd się nie pokaże). Nie wysyła ciasteczek. Gdy się nie uda, w miejscu zdjęcia widać powód i przycisk **Spróbuj ponownie**.
+- W wersji w przeglądarce wiele stron nie pozwala innym witrynom pobierać swoich obrazów (CORS) — wtedy pobierz zdjęcie na komputerze albo telefonie, a do notatnika trafi kopia.
+
 ## Odwołania do bloków
 Żeby odwołać się do bloku, wpisz `((` i zacznij pisać jego treść — Brulion doda blokowi identyfikator, czyli końcówkę ` ^abc123`. Odwołanie `((abc123))` działa w całym notatniku, więc przeniesienie bloku na inną stronę niczego nie psuje. Link `[[Strona#^abc123]]` pokazuje nazwę strony i początek tekstu bloku.
 

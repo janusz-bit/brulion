@@ -53,6 +53,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(int editorWidth READ editorWidth WRITE setEditorWidth NOTIFY editorWidthChanged FINAL)
     /// Show the whole file as Markdown source by default (Ctrl+E switches per page).
     Q_PROPERTY(bool editorSourceMode READ editorSourceMode WRITE setEditorSourceMode NOTIFY editorSourceModeChanged FINAL)
+    /// Show pictures from the internet in notes without asking (`![x](https://…)`; off: each
+    /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
+    Q_PROPERTY(bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
 
     // ---- Vaults -------------------------------------------------------------------------
     /// Absolute path of the vault opened last ("" before the first one).
@@ -117,6 +120,8 @@ public:
     void setEditorWidth(int px);
     bool editorSourceMode() const;
     void setEditorSourceMode(bool on);
+    bool webPicturesShown() const;
+    void setWebPicturesShown(bool on);
 
     QString currentVault() const;
     void setCurrentVault(const QString &path);
@@ -211,6 +216,7 @@ Q_SIGNALS:
     void editorFontSizeChanged();
     void editorWidthChanged();
     void editorSourceModeChanged();
+    void webPicturesShownChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();

@@ -15,6 +15,8 @@
 //               owner-only file, syncthingApiKey() below) configure Workspace.sync; its status feeds the
 //               AppController's sync seam (syncAvailable, syncStatus, requestSync()); new
 //               conflicts are announced with a toast
+//   pictures    pictures from the internet are shown without asking as AppSettings'
+//               webPicturesShown says
 #pragma once
 
 #include <QString>

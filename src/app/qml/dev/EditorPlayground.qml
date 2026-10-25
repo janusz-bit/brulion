@@ -936,6 +936,61 @@ ApplicationWindow {
                       "a replaced picture is not stretched: frame " + (frame ? frame.width + "×" + frame.height : "-")
                       + ", picture " + (img ? img.implicitWidth + "×" + img.implicitHeight : "-"))
             },
+            // A picture from the internet: nothing loads until "Pokaż"; then it is shown from the
+            // cache with its own shape, a click opens its menu, and "Zapisz w notatniku" makes it
+            // an attachment of the notebook (one undo step).
+            () => {
+                host.setWebPictureText("https://example.com/mapa.svg",
+                                       "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"100\""
+                                       + " viewBox=\"0 0 300 100\"><rect width=\"300\" height=\"100\" fill=\"#c3e69f\"/></svg>")
+                window.realRow = page.insertBlockAfter(rowOf("Akapit po liście"), "![Mapa trasy](https://example.com/mapa.svg)")
+                page.stopEditing()
+                window.waits = 0
+            },
+            () => editor.listView.positionViewAtIndex(window.realRow, ListView.Center),
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const holder = item ? window.findItem(item.embedView, "webPicturePlaceholder") : null
+                const show = item ? window.findItem(item.embedView, "webPictureShow") : null
+                check(holder !== null && holder.visible && show !== null && show.visible,
+                      "a picture from the internet waits for “Pokaż”")
+                check(host.webFetchCount() === 0, "nothing is fetched before “Pokaż”")
+                if (show)
+                    show.clicked()
+            },
+            () => {
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const frame = item ? window.findItem(item.embedView, "embedPicture") : null
+                const img = item ? window.findItem(item.embedView, "embedImage") as Image : null
+                const ready = frame !== null && img !== null && img.status === Image.Ready && frame.height > 0
+                if (!ready && window.waits++ < 2 * window.waitLimit) {
+                    window.stepIndex -= 1
+                    return
+                }
+                check(ready && Math.abs(frame.width / frame.height - 3) < 0.1 && img.source.toString().startsWith("file:"),
+                      "the picture is shown from the cache with its shape: " + (frame ? frame.width + "×" + frame.height : "-"))
+                if (item)
+                    item.embedView.webMenu("https://example.com/mapa.svg", "example.com", frame, 10, 10)
+            },
+            () => {
+                check(editor.webPictureMenu !== null && editor.webPictureMenu.visible
+                      && editor.webPictureMenu.title.indexOf("example.com") >= 0,
+                      "a click on the picture opens its menu")
+                const save = editor.webPictureMenu ? window.findItem(editor.webPictureMenu.contentItem, "webPictureDownload") : null
+                if (save)
+                    save.triggered()
+                else if (editor.webPictureMenu)
+                    editor.webPictureMenu.chosen("download")
+                if (editor.webPictureMenu)
+                    editor.webPictureMenu.close()
+            },
+            () => {
+                const body = info(window.realRow).editText
+                check(body === "![Mapa trasy](assets/mapa.svg)", "“Zapisz w notatniku” points the picture at the attachment: " + body)
+                page.undo()
+            },
+            () => check(info(window.realRow).editText === "![Mapa trasy](https://example.com/mapa.svg)",
+                        "undo brings the address back"),
             // The journal stream caps document headings at the size of a day's date: smaller, in
             // the same order.
             () => {

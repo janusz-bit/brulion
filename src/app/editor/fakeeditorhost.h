@@ -19,6 +19,7 @@
 
 #include <QHash>
 #include <QStringList>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QUrl>
 
@@ -78,6 +79,11 @@ public:
     QUrl assetUrl(const QString &path) const override;
     bool canDecodePicture(const QString &path) const override;
     QString saveAttachment(const QString &fileName, const QByteArray &data) override;
+    /// Pictures from the internet from an in-memory "internet" (setWebPicture()): fetched on the
+    /// event loop, in the "always" setting (setWebPicturesShown()) by asking.
+    QVariantMap webPicture(const QString &url) const override;
+    void loadWebPicture(const QString &url, bool forDownload = false) override;
+    QByteArray webPictureData(const QString &url, QString *format) const override;
     QVariantMap vaultConfig() const override;
     void navigate(const QVariantMap &route, bool newPane = false) override;
     void openUrl(const QUrl &url) override;
@@ -94,6 +100,17 @@ public:
     /// Picture formats ("WEBP") canDecodePicture() says no to whatever Qt can decode, like a
     /// device without Qt's image plugins (tests).
     Q_INVOKABLE void setUndecodablePictureFormats(const QStringList &formats) { m_undecodable = formats; }
+
+    /// What the "internet" answers for `url`: the bytes of a picture, or — empty — a failure.
+    Q_INVOKABLE void setWebPicture(const QString &url, const QByteArray &data);
+    /// The same with a picture given as text (an SVG, from QML).
+    Q_INVOKABLE void setWebPictureText(const QString &url, const QString &text) { setWebPicture(url, text.toUtf8()); }
+    /// Pictures from the internet are shown without asking (the app's setting); emits
+    /// webPictureChanged("").
+    Q_INVOKABLE void setWebPicturesShown(bool shown);
+    /// Fetches made so far (tests: nothing loads without being allowed).
+    Q_INVOKABLE int webFetchCount() const { return m_webFetches; }
+    int webFetches() const { return m_webFetches; }
 
     QString now() const { return m_now; }
     void setNow(const QString &now);
@@ -148,6 +165,13 @@ private:
     QHash<QString, QByteArray> m_assets;
     mutable QHash<QString, QUrl> m_assetUrls;
     mutable std::unique_ptr<QTemporaryDir> m_assetDir;
+    QHash<QString, QByteArray> m_webSources;
+    /// url → "loading" | "ready" | "failed"; missing: not fetched.
+    mutable QHash<QString, QString> m_webStates;
+    QHash<QString, QUrl> m_webFiles;
+    QSet<QString> m_webInFlight;
+    bool m_webShown = false;
+    int m_webFetches = 0;
     int m_writeCount = 0;
     int m_casRefusals = 0;
     bool m_failWrites = false;

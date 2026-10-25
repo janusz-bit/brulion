@@ -859,6 +859,7 @@ FocusScope {
         case "date": dialogs.pickJournalDate(row, result.cursor); break
         case "template": dialogs.pickTemplate(row); break
         case "image": dialogs.pickImage(row, result.cursor); break
+        case "webImage": dialogs.pickWebImage(row, result.cursor); break
         case "table":
             list.forceActiveFocus()
             break
@@ -1378,6 +1379,12 @@ FocusScope {
         }
         function onAttachmentFailed(name) {
             editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error")
+        }
+        function onWebPicturesDownloaded(stored, failed) {
+            if (failed.length > 0)
+                editor.notice(qsTr("Could not save to the notebook: %1").arg(failed.join(", ")), "error")
+            else if (stored > 0)
+                editor.notice(qsTr("%n picture(s) saved to the notebook", "", stored), "success")
         }
     }
 
@@ -2010,6 +2017,55 @@ FocusScope {
         id: blockMenuComponent
         BlockMenu {
             editor: editor
+        }
+    }
+
+    // ---- Pictures from the internet ------------------------------------------------------------
+    /// Store the picture from the internet `url` — "" every one on the page — in the notebook
+    /// (PageController.downloadWebPictures; the toast comes with webPicturesDownloaded).
+    function downloadWebPictures(url) {
+        if (!controller)
+            return
+        if (controller.downloadWebPictures(url || "") === 0 && !url)
+            notice(qsTr("This page has no pictures from the internet"), "info")
+    }
+    /// WebPictureMenu for a shown picture from the internet (EmbedView: a click, right-click or
+    /// long press on it). Created when first opened.
+    property WebPictureMenu webPictureMenu: null
+    property string webPictureMenuUrl: ""
+    property int webPictureMenuRow: -1
+    function openWebPictureMenu(row, url, host, item, x, y) {
+        if (!controller)
+            return
+        if (!webPictureMenu)
+            webPictureMenu = webPictureMenuComponent.createObject(editor) as WebPictureMenu
+        menuAbove = null
+        closeSuggestions()
+        webPictureMenuUrl = url
+        webPictureMenuRow = row
+        webPictureMenu.host = host
+        webPictureMenu.bottomMargin = menuBottomMargin()
+        webPictureMenu.popup(item, x, y)
+    }
+    function chooseWebPictureAction(action) {
+        const url = webPictureMenuUrl
+        if (!controller || url === "")
+            return
+        switch (action) {
+        case "download": downloadWebPictures(url); break
+        case "open": controller.activateLink(webPictureMenuRow, "ext:" + url, false); break
+        case "copy":
+            if (controller.copyWebPictureUrl(url))
+                notice(qsTr("Picture address copied"), "success")
+            else
+                notice(qsTr("Could not copy: the clipboard is not available"), "error")
+            break
+        }
+    }
+    Component {
+        id: webPictureMenuComponent
+        WebPictureMenu {
+            onChosen: (action) => editor.chooseWebPictureAction(action)
         }
     }
 

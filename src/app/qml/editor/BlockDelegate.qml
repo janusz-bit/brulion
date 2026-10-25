@@ -446,6 +446,9 @@ Item {
         onClicked: (target) => block.controller.activateLink(block.index, "page:" + encodeURIComponent(target), false)
         onBackgroundClicked: if (!block.editor.blockTapped(block.index)) block.editor.startEditing(block.index, -1)
         onBackgroundLongPressed: block.editor.longPressText(block.index)
+        onShowWeb: (url) => block.controller.showWebPicture(url)
+        onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
+        onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
     }
 
     TransclusionView {
