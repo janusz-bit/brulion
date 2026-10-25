@@ -11,6 +11,7 @@
 #include "io/io.h"
 #include "reminders/reminders.h"
 #include "synctest.h"
+#include "centraleuropeantime.h"
 
 #include <QRegularExpression>
 #include <QSet>
@@ -230,7 +231,7 @@ class TestIntegration : public QObject {
     Q_OBJECT
 
 public:
-    static void initMain() { qputenv("TZ", "Europe/Warsaw"); }
+    static void initMain() { brulion::test::useCentralEuropeanTime(); }
 
 private Q_SLOTS:
     void openIndexAndQuery()

@@ -4,6 +4,7 @@
 #include "reminders/reminders_p.h"
 #include "reminderstest.h"
 #include "text/text.h"
+#include "centraleuropeantime.h"
 
 #include <QElapsedTimer>
 #include <QScopeGuard>
@@ -647,8 +648,7 @@ private Q_SLOTS:
     {
         // Central European rules as a POSIX TZ string (no time zone database needed).
         const QByteArray oldTz = qgetenv("TZ");
-        qputenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3");
-        tzset();
+        brulion::test::useCentralEuropeanTime("CET-1CEST,M3.5.0,M10.5.0/3");
         const auto restore = qScopeGuard([&oldTz] {
             if (oldTz.isNull())
                 qunsetenv("TZ");
@@ -656,6 +656,8 @@ private Q_SLOTS:
                 qputenv("TZ", oldTz);
             tzset();
         });
+        if (const QString problem = brulion::test::centralEuropeanTimeProblem(); !problem.isEmpty())
+            QSKIP(qPrintable(problem));
 
         // Spring forward (2027-03-28 02:00 -> 03:00): the 02:30 occurrence in the gap still
         // fires once, at the end of the gap, between its neighbours.

@@ -11,6 +11,7 @@
 #include "sync/syncengine.h"
 #include "util/paths.h"
 #include "vault/vault.h"
+#include "centraleuropeantime.h"
 
 #include <QDir>
 #include <QFile>
@@ -190,7 +191,7 @@ class TestIntegrationConsistency : public QObject {
     Q_OBJECT
 
 public:
-    static void initMain() { qputenv("TZ", "Europe/Warsaw"); }
+    static void initMain() { brulion::test::useCentralEuropeanTime(); }
 
 private Q_SLOTS:
     // ---- tags (SYNTAX §3) ----------------------------------------------------------------------

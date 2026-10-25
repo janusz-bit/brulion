@@ -13,6 +13,8 @@ function(brulion_add_test name)
     cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
     qt_add_executable(${name} ${ARG_SOURCES})
     target_link_libraries(${name} PRIVATE Qt6::Test ${ARG_LIBS})
+    # Helpers shared by tests (tests/common: centraleuropeantime.h).
+    target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/common)
     target_compile_definitions(${name} PRIVATE BRULION_TEST_DATA="${PROJECT_SOURCE_DIR}/tests/data"
                                                 BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN})
     brulion_set_warnings(${name})

@@ -89,8 +89,13 @@ jobs:
       - name: Build (CMake, Ninja, Release)
         run: scripts/windows-build.ps1 -Steps build
 
+      # The tests' local time is Central European: on Linux they set TZ, which the Windows C
+      # runtime (and Qt's local time through it) does not take in that form
+      # (tests/common/centraleuropeantime.h).
       - name: Unit tests (ctest, offscreen)
-        run: scripts/windows-build.ps1 -Steps test
+        run: |
+          tzutil /s "Central European Standard Time"
+          scripts/windows-build.ps1 -Steps test
 
       - id: package
         name: Package (windeployqt, ZIP, installer)

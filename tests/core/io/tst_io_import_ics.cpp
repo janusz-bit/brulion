@@ -2,6 +2,7 @@
 #include "iotest.h"
 
 #include "io/importer.h"
+#include "centraleuropeantime.h"
 
 #include <QTest>
 
@@ -21,29 +22,29 @@ QByteArray calendar(const QString &body)
 
 const QString Events =
         u"X-WR-CALNAME:Praca\n"
-        "BEGIN:VTIMEZONE\nTZID:Europe/Warsaw\nEND:VTIMEZONE\n"
-        "BEGIN:VEVENT\nUID:e1\nSUMMARY:Spotkanie zespołu\n"
-        "DTSTART;TZID=Europe/Warsaw:20261014T100000\nDTEND;TZID=Europe/Warsaw:20261014T113000\n"
-        "RRULE:FREQ=WEEKLY;BYDAY=WE\nLOCATION:Sala 5\\, piętro 2\n"
-        "DESCRIPTION:Agenda:\\n- budżet\\n# nie nagłówek\n"
-        "BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT15M\nEND:VALARM\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Lot do Krakowa\nDTSTART:20261014T060000Z\nDURATION:PT1H30M\n"
-        "BEGIN:VALARM\nACTION:AUDIO\nTRIGGER;VALUE=DATE-TIME:20261014T040000Z\nEND:VALARM\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Urlop\nDTSTART;VALUE=DATE:20261020\nDTEND;VALUE=DATE:20261023\n"
-        "BEGIN:VALARM\nTRIGGER:-PT15H\nACTION:DISPLAY\nEND:VALARM\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Odwołane\nSTATUS:CANCELLED\nDTSTART:20261014T120000Z\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Wyjątek serii\nRECURRENCE-ID;TZID=Europe/Warsaw:20261021T100000\n"
-        "DTSTART;TZID=Europe/Warsaw:20261021T110000\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Bez daty\nEND:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Co drugi wtorek\nDTSTART;VALUE=DATE:20261013\nRRULE:FREQ=MONTHLY;BYDAY=2TU\n"
-        "END:VEVENT\n"
-        "BEGIN:VEVENT\nSUMMARY:Z końcem\nDTSTART:20261014T150000\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\n"
-        "BEGIN:VTODO\nSUMMARY:Raport kwartalny\nDUE;VALUE=DATE:20261031\nDTSTART;VALUE=DATE:20261025\n"
-        "PRIORITY:1\nCATEGORIES:praca,Finanse firmy\nSTATUS:NEEDS-ACTION\nRRULE:FREQ=MONTHLY;BYMONTHDAY=-1\n"
-        "BEGIN:VALARM\nTRIGGER;RELATED=END:-PT2H\nACTION:DISPLAY\nEND:VALARM\nEND:VTODO\n"
-        "BEGIN:VTODO\nSUMMARY:Zrobione\nSTATUS:COMPLETED\nCOMPLETED:20261010T120000Z\n"
-        "DUE:20261009T080000Z\nBEGIN:VALARM\nTRIGGER:-PT1H\nEND:VALARM\nEND:VTODO\n"
-        "BEGIN:VTODO\nSUMMARY:W toku\nSTATUS:IN-PROCESS\nPRIORITY:5\nEND:VTODO\n"_s;
+        u"BEGIN:VTIMEZONE\nTZID:Europe/Warsaw\nEND:VTIMEZONE\n"
+        u"BEGIN:VEVENT\nUID:e1\nSUMMARY:Spotkanie zespołu\n"
+        u"DTSTART;TZID=Europe/Warsaw:20261014T100000\nDTEND;TZID=Europe/Warsaw:20261014T113000\n"
+        u"RRULE:FREQ=WEEKLY;BYDAY=WE\nLOCATION:Sala 5\\, piętro 2\n"
+        u"DESCRIPTION:Agenda:\\n- budżet\\n# nie nagłówek\n"
+        u"BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT15M\nEND:VALARM\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Lot do Krakowa\nDTSTART:20261014T060000Z\nDURATION:PT1H30M\n"
+        u"BEGIN:VALARM\nACTION:AUDIO\nTRIGGER;VALUE=DATE-TIME:20261014T040000Z\nEND:VALARM\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Urlop\nDTSTART;VALUE=DATE:20261020\nDTEND;VALUE=DATE:20261023\n"
+        u"BEGIN:VALARM\nTRIGGER:-PT15H\nACTION:DISPLAY\nEND:VALARM\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Odwołane\nSTATUS:CANCELLED\nDTSTART:20261014T120000Z\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Wyjątek serii\nRECURRENCE-ID;TZID=Europe/Warsaw:20261021T100000\n"
+        u"DTSTART;TZID=Europe/Warsaw:20261021T110000\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Bez daty\nEND:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Co drugi wtorek\nDTSTART;VALUE=DATE:20261013\nRRULE:FREQ=MONTHLY;BYDAY=2TU\n"
+        u"END:VEVENT\n"
+        u"BEGIN:VEVENT\nSUMMARY:Z końcem\nDTSTART:20261014T150000\nRRULE:FREQ=DAILY;COUNT=3\nEND:VEVENT\n"
+        u"BEGIN:VTODO\nSUMMARY:Raport kwartalny\nDUE;VALUE=DATE:20261031\nDTSTART;VALUE=DATE:20261025\n"
+        u"PRIORITY:1\nCATEGORIES:praca,Finanse firmy\nSTATUS:NEEDS-ACTION\nRRULE:FREQ=MONTHLY;BYMONTHDAY=-1\n"
+        u"BEGIN:VALARM\nTRIGGER;RELATED=END:-PT2H\nACTION:DISPLAY\nEND:VALARM\nEND:VTODO\n"
+        u"BEGIN:VTODO\nSUMMARY:Zrobione\nSTATUS:COMPLETED\nCOMPLETED:20261010T120000Z\n"
+        u"DUE:20261009T080000Z\nBEGIN:VALARM\nTRIGGER:-PT1H\nEND:VALARM\nEND:VTODO\n"
+        u"BEGIN:VTODO\nSUMMARY:W toku\nSTATUS:IN-PROCESS\nPRIORITY:5\nEND:VTODO\n"_s;
 
 } // namespace
 
@@ -53,7 +54,7 @@ class TestIoImportIcs : public QObject {
 public:
     /// A system zone with DST, so tests catch date arithmetic done in the system zone instead of
     /// ImportOptions::timeZone.
-    static void initMain() { qputenv("TZ", "Europe/Warsaw"); }
+    static void initMain() { brulion::test::useCentralEuropeanTime(); }
 
 private Q_SLOTS:
     void eventsAndTodos()
@@ -64,16 +65,16 @@ private Q_SLOTS:
                                                   u"journals/2026-10-14.md"_s, u"journals/2026-10-20.md"_s}));
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-14.md"_s),
                  u"- 08:00–09:30 Lot do Krakowa ⏰! 2026-10-14 06:00\n"
-                 "- 10:00–11:30 Spotkanie zespołu 🔁 every week on Wednesday ⏰ 2026-10-14 09:45\n"
-                 "  location:: Sala 5, piętro 2\n  Agenda:\n  \\- budżet\n  \\# nie nagłówek\n"
-                 "- 15:00 Z końcem 🔁 every day\n"_s);
+                 u"- 10:00–11:30 Spotkanie zespołu 🔁 every week on Wednesday ⏰ 2026-10-14 09:45\n"
+                 u"  location:: Sala 5, piętro 2\n  Agenda:\n  \\- budżet\n  \\# nie nagłówek\n"
+                 u"- 15:00 Z końcem 🔁 every day\n"_s);
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-20.md"_s), u"- Urlop (→ 2026-10-22) ⏰ 2026-10-19 09:00\n"_s);
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-13.md"_s), u"- Co drugi wtorek\n"_s);
         QCOMPARE(iotest::textAt(r, u"Praca.md"_s), u"- [ ] Raport kwartalny #praca #Finanse-firmy ⏫ ⏳ 2026-10-25 📅 "
                                                    u"2026-10-31 🔁 every month on the last "
-                                                   "⏰ 2026-10-30 22:00\n"
-                                                   "- [x] Zrobione 📅 2026-10-09 10:00 ✅ 2026-10-10\n"
-                                                   "- [/] W toku 🔼\n"_s);
+                                                   u"⏰ 2026-10-30 22:00\n"
+                                                   u"- [x] Zrobione 📅 2026-10-09 10:00 ✅ 2026-10-10\n"
+                                                   u"- [/] W toku 🔼\n"_s);
         for (const ImportedFile &f : r.files)
             QCOMPARE(f.append, f.path.startsWith(u"journals/"_s));
         QCOMPARE(r.warnings.size(), 3); // no start date, simplified rule, unsupported rule
@@ -85,8 +86,8 @@ private Q_SLOTS:
         o.config.journalsFolder = u"Dziennik"_s;
         o.config.journalFileFormat = u"dd.MM.yyyy"_s;
         const QByteArray data = calendar(u"BEGIN:VEVENT\nSUMMARY:A\nDTSTART;VALUE=DATE:20261014\nEND:VEVENT\n"
-                                         "BEGIN:VEVENT\nSUMMARY:B\nDTSTART;VALUE=DATE:20261014\nEND:VEVENT\n"
-                                         "BEGIN:VTODO\nSUMMARY:Zadanie\nEND:VTODO\n"_s);
+                                         u"BEGIN:VEVENT\nSUMMARY:B\nDTSTART;VALUE=DATE:20261014\nEND:VEVENT\n"
+                                         u"BEGIN:VTODO\nSUMMARY:Zadanie\nEND:VTODO\n"_s);
         const ImportResult r = runImport(*importerById(u"ics"), {iotest::bytes(u"dom.ics"_s, data)}, o);
         QCOMPARE(iotest::pathsOf(r), QStringList({u"Dziennik/14.10.2026.md"_s, u"Kalendarze/dom.md"_s}));
         QCOMPARE(iotest::textAt(r, u"Dziennik/14.10.2026.md"_s), u"- A\n- B\n"_s);
@@ -97,8 +98,8 @@ private Q_SLOTS:
     {
         const QByteArray data =
                 calendar(u"garbage line without colon\n"
-                         "BEGIN:VEVENT\nSUMMARY:Mars\nDTSTART;TZID=Mars/Olympus:20261014T100000\nEND:VEVENT\n"
-                         "BEGIN:VEVENT\nSUMMARY:Zła data\nDTSTART:2026-13-45\nEND:VEVENT\n"_s);
+                         u"BEGIN:VEVENT\nSUMMARY:Mars\nDTSTART;TZID=Mars/Olympus:20261014T100000\nEND:VEVENT\n"
+                         u"BEGIN:VEVENT\nSUMMARY:Zła data\nDTSTART:2026-13-45\nEND:VEVENT\n"_s);
         const ImportResult r = runImport(*importerById(u"ics"), {iotest::bytes(u"x.ics"_s, data)}, iotest::options());
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-14.md"_s), u"- 10:00 Mars\n"_s);
         QCOMPARE(r.warnings.size(), 3); // malformed line, missing start, unknown zone
@@ -119,8 +120,8 @@ private Q_SLOTS:
         // A calendar's texts hold no formulas: their dollars that would pair (also across the
         // description's lines) are escaped, the others stay as written (SYNTAX §11).
         const QByteArray data = calendar(u"BEGIN:VEVENT\nSUMMARY:Kino $x$\nDTSTART;VALUE=DATE:20261014\n"
-                                         "LOCATION:Sala $5\nDESCRIPTION:Bilet $10\\nparking 5$\\n$3 i $4\nEND:VEVENT\n"
-                                         "BEGIN:VTODO\nSUMMARY:Zapłacić $5\\, nie 10$\nEND:VTODO\n"_s);
+                                         u"LOCATION:Sala $5\nDESCRIPTION:Bilet $10\\nparking 5$\\n$3 i $4\nEND:VEVENT\n"
+                                         u"BEGIN:VTODO\nSUMMARY:Zapłacić $5\\, nie 10$\nEND:VTODO\n"_s);
         const ImportResult r =
                 runImport(*importerById(u"ics"), {iotest::bytes(u"kino.ics"_s, data)}, iotest::options());
         const QString day = iotest::textAt(r, u"journals/2026-10-14.md"_s);
@@ -139,13 +140,13 @@ private Q_SLOTS:
     void summaryEscaping()
     {
         const QByteArray data = calendar(u"BEGIN:VEVENT\nSUMMARY:# [[Nie link]] *gwiazdki*\\nDruga linia\n"
-                                         "DTSTART;VALUE=DATE:20261014\nEND:VEVENT\n"_s);
+                                         u"DTSTART;VALUE=DATE:20261014\nEND:VEVENT\n"_s);
         const ImportResult r = runImport(*importerById(u"ics"), {iotest::bytes(u"x.ics"_s, data)}, iotest::options());
         // The summary starts the bullet's content: block syntax there is escaped too.
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-14.md"_s),
                  u"- \\# \\[\\[Nie link\\]\\] \\*gwiazdki\\* Druga linia\n"_s);
         const QByteArray list = calendar(u"BEGIN:VEVENT\nSUMMARY:- nie lista\nDTSTART;VALUE=DATE:20261015\nEND:VEVENT\n"
-                                         "BEGIN:VEVENT\nSUMMARY:1. nie numer\nDTSTART:20261015T080000\nEND:VEVENT\n"_s);
+                                         u"BEGIN:VEVENT\nSUMMARY:1. nie numer\nDTSTART:20261015T080000\nEND:VEVENT\n"_s);
         const ImportResult l = runImport(*importerById(u"ics"), {iotest::bytes(u"l.ics"_s, list)}, iotest::options());
         QCOMPARE(iotest::textAt(l, u"journals/2026-10-15.md"_s), u"- \\- nie lista\n- 08:00 1. nie numer\n"_s);
     }
@@ -169,9 +170,9 @@ private Q_SLOTS:
         // nominal (-P1D: same time the day before), hours exact (RFC 5545 3.3.6).
         const QByteArray data =
                 calendar(u"BEGIN:VEVENT\nSUMMARY:Dyżur\nDTSTART:20260329T003000Z\nDURATION:PT2H\nEND:VEVENT\n"
-                         "BEGIN:VEVENT\nSUMMARY:Wizyta\nDTSTART;TZID=Europe/Warsaw:20260329T100000\n"
-                         "BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-P1D\nEND:VALARM\n"
-                         "BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT24H\nEND:VALARM\nEND:VEVENT\n"_s);
+                         u"BEGIN:VEVENT\nSUMMARY:Wizyta\nDTSTART;TZID=Europe/Warsaw:20260329T100000\n"
+                         u"BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-P1D\nEND:VALARM\n"
+                         u"BEGIN:VALARM\nACTION:DISPLAY\nTRIGGER:-PT24H\nEND:VALARM\nEND:VEVENT\n"_s);
         ImportOptions utc = iotest::options();
         utc.timeZone = QTimeZone(QTimeZone::UTC);
         const ImportResult a = runImport(*importerById(u"ics"), {iotest::bytes(u"d.ics"_s, data)}, utc);
