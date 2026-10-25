@@ -167,6 +167,8 @@ public:
     // --- moving and trash (vaultmove.cpp)
     bool renameTargetFree(const VaultPath &from, const VaultPath &to);
     bool moveOnDisk(const VaultPath &from, const VaultPath &to);
+    /// Stops watching an absolute folder and everything in it; returns the paths it watched.
+    QStringList releaseWatches(const QString &absoluteDir);
     void moveFileState(const VaultPath &from, const FileStat &to);
     QList<VaultChange> relocate(const VaultPath &from, const VaultPath &to, bool isDir, ChangeSource source);
     VaultPath trashTarget(const VaultPath &path, bool isDir) const;
