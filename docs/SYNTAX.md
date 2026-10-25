@@ -166,10 +166,17 @@ its URL ends with (`![…](…)` says so). Other schemes (`![x](ftp://…)`, `da
 keeps the URL; nothing is written for showing it. The editor shows such a picture only from the
 device's cache, fetched when the user allows it — "Pokaż" on that picture, or the device setting
 "show pictures from the internet without asking" (off by default: opening a synced or imported
-note contacts no server). The fetch: http(s) only, redirects no less safe, no cookies, at most
-20 MB, a 30 s stall limit, and the bytes must be a picture by their signature (PNG, JPEG, GIF,
-WebP, BMP, ICO, AVIF, SVG — `webpicture::sniffFormat`); the cache keeps up to 200 MB, the least
-recently used dropped first. **"Zapisz w notatniku"** stores the picture as an attachment
+note contacts no server). Without asking, a picture is fetched only from a host of the internet:
+`localhost`, loopback, private-use, link-local and unspecified IP addresses
+(`webpicture::isPrivateHost`; names are not resolved) wait for "Pokaż", as does a picture fetched
+so already this session and dropped from the cache since; turning the setting off cancels the
+fetches it started. The fetch: http(s) only, every redirect checked (`webpicture::redirectAllowed`:
+never https → http, never from a host of the internet to a private one), no cookies, a generic
+`User-Agent: Mozilla/5.0` and `Accept-Language: *`, at most 20 MB, a 30 s stall limit, and the
+bytes must be a picture by their signature (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF, SVG —
+`webpicture::sniffFormat`); the cache keeps up to 200 MB, the least recently used dropped first
+(a file shown is marked used by its modification time, at most once an hour). In the browser the
+cache is in the tab's memory: up to 50 MB, gone with the tab (docs/WEB.md). **"Zapisz w notatniku"** stores the picture as an attachment
 (`attachmentsFolder`, named after the URL's last path segment with the extension of its real
 format: `kot.png` for a PNG served as `kot.jpg`) and points every picture of that URL on the page
 at it (`retargetWebPicture`, one undo step): `![alt](assets/kot.png)` — the alt text, a title and

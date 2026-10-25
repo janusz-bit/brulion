@@ -1,11 +1,16 @@
 // PictureFetcher — downloads pictures from the internet for the editor (webpicture.h).
 //
-// Only http(s); redirects followed only as safe as the request (an https picture never comes
-// over http) and at most 5 times; no cookies sent or kept, no referrer; at most MaxBytes (also
-// when the server announces more, it is aborted at once); a stall of TimeoutMs fails; the bytes
-// must be a picture by their signature (an HTML page that answers with 200 is no picture). One
-// request per URL at a time (a second fetch() of a URL in flight waits for the first), at most
-// MaxParallel at once, the rest queued.
+// Only http(s); redirects followed at most 5 times and each checked (redirectAllowed(): an https
+// picture never comes over http, a picture of a host of the internet never from this device or
+// its private network — a refused one fails with Network); no cookies sent or kept, no referrer;
+// at most MaxBytes (also when the server announces more, it is aborted at once); a stall of
+// TimeoutMs fails; the bytes must be a picture by their signature (an HTML page that answers with
+// 200 is no picture). One request per URL at a time (a second fetch() of a URL in flight waits
+// for the first), at most MaxParallel at once, the rest queued.
+//
+// A request tells the server no more than needed: `Accept` (picture formats), a generic
+// `User-Agent: Mozilla/5.0` (not the app's name) and `Accept-Language: *` (Qt would otherwise
+// send the device's language).
 #pragma once
 
 #include "webpicture.h"
@@ -23,7 +28,7 @@ class QNetworkReply;
 namespace brulion::webpicture {
 
 enum class FetchError {
-    Network,    ///< no connection, DNS, TLS, refused
+    Network,    ///< no connection, DNS, TLS, refused, a redirect refused or too many
     Timeout,    ///< no progress for TimeoutMs
     Http,       ///< the server answered with an error status (404, 403, …)
     TooLarge,   ///< more than the size limit
@@ -45,8 +50,12 @@ public:
     void fetch(const QUrl &url);
     /// `url` is being fetched or waits for its turn.
     bool isFetching(const QUrl &url) const;
+    /// Forget `url`: taken from the queue or its request aborted (no signal for it).
+    void cancel(const QUrl &url);
     /// Abort everything (no signals for the aborted fetches).
     void cancelAll();
+    /// Which hosts are private for redirectAllowed() (tests; isPrivateHost() by default).
+    void setPrivateHostCheck(HostCheck check) { m_isPrivate = std::move(check); }
 
     void setMaxBytes(qint64 bytes) { m_maxBytes = bytes; }
     qint64 maxBytes() const { return m_maxBytes; }
@@ -67,8 +76,14 @@ private:
     QPointer<QNetworkAccessManager> m_manager;
     QList<QUrl> m_queue;
     QHash<QNetworkReply *, QUrl> m_running;
-    /// Replies aborted by us for their size (finished() then reports TooLarge, not Network).
-    QHash<QNetworkReply *, bool> m_tooLarge;
+    /// Replies aborted by us — for their size, or a redirect refused — with what finish() reports
+    /// (not the abort's OperationCanceledError).
+    struct Abort {
+        FetchError error;
+        QString detail;
+    };
+    QHash<QNetworkReply *, Abort> m_aborted;
+    HostCheck m_isPrivate = isPrivateHost;
     qint64 m_maxBytes = MaxBytes;
     int m_timeoutMs = TimeoutMs;
 };

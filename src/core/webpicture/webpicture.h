@@ -13,6 +13,8 @@
 #include <QStringView>
 #include <QUrl>
 
+#include <functional>
+
 namespace brulion::webpicture {
 
 /// Largest picture fetched (a bigger one fails with FetchError::TooLarge).
@@ -25,6 +27,21 @@ inline constexpr int TimeoutMs = 30 * 1000;
 bool isWebUrl(QStringView target);
 /// The URL of a web target (isWebUrl()), invalid otherwise.
 QUrl webUrl(QStringView target);
+
+/// Tells whether a host is on this device or its private network (isPrivateHost(); tests swap
+/// it to treat 127.0.0.1 as a host of the internet).
+using HostCheck = std::function<bool(const QString &host)>;
+
+/// `host` (a URL's host as QUrl gives it) is this device or a private network: "localhost" and
+/// "*.localhost", and the IP addresses that are loopback, private-use (10/8, 172.16/12,
+/// 192.168/16, fc00::/7), link-local (169.254/16, fe80::/10) or unspecified (0.0.0.0/8, ::),
+/// also IPv4-mapped. A name is not resolved: "nas.example" is not private, whatever the DNS says.
+/// Such a host is never fetched without asking, and no redirect leads to it from another host.
+bool isPrivateHost(const QString &host);
+/// A redirect of a picture request first sent to `from` may be followed to `to`: http(s), never
+/// from https to http, never from a host of the internet to a private one (`isPrivate`). A
+/// private `from` (a picture the user asked for on a home server) may lead to any host.
+bool redirectAllowed(const QUrl &from, const QUrl &to, const HostCheck &isPrivate = isPrivateHost);
 
 /// The picture format of `data` by its signature — "png", "jpg", "gif", "webp", "bmp", "ico",
 /// "avif", "svg" — or "" when the bytes are no picture (an HTML error page, a login form).

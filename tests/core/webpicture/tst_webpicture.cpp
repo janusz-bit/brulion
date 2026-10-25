@@ -1,10 +1,12 @@
 // Tests of the webpicture module: web URLs, format signatures, attachment and display names, the
 // device's cache and the fetcher against a tiny HTTP server on 127.0.0.1 (limits, redirects,
-// errors, no cookies).
+// errors, no cookies), private hosts and the redirects allowed.
 #include "webpicture/picturecache.h"
 #include "webpicture/picturefetcher.h"
 #include "webpicture/webpicture.h"
 
+#include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -118,10 +120,15 @@ private Q_SLOTS:
     void attachmentNames();
     void displayNames_data();
     void displayNames();
+    void privateHosts_data();
+    void privateHosts();
+    void redirectRule_data();
+    void redirectRule();
 
     void cacheStoresAndFinds();
     void cacheReplacesFormatAndRescans();
     void cachePrunesOldest();
+    void cacheLookupMarksUsed();
     void cacheWithoutFolder();
 
     void fetchesPicture();
@@ -131,6 +138,9 @@ private Q_SLOTS:
     void refusesOtherSchemes();
     void oneRequestPerUrlAndQueue();
     void stallTimesOut();
+    void refusesRedirectToPrivateHost();
+    void tooManyRedirectsIsNoHttpError();
+    void cancelsOneUrl();
 };
 
 void TestWebPicture::webUrls_data()
@@ -258,6 +268,83 @@ void TestWebPicture::displayNames()
     QCOMPARE(displayName(QUrl(url)), shown);
 }
 
+void TestWebPicture::privateHosts_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<bool>("isPrivate");
+    QTest::newRow("public name") << u"https://example.com/a.png"_s << false;
+    QTest::newRow("polish name") << u"https://zdjęcia.przykład.pl/kot.png"_s << false;
+    QTest::newRow("nas name not resolved") << u"http://nas.lan/żółw.png"_s << false;
+    QTest::newRow("public ip4") << u"http://93.184.216.34/a.png"_s << false;
+    QTest::newRow("public ip6") << u"http://[2606:2800:220:1::1]/a.png"_s << false;
+    QTest::newRow("172.15 is public") << u"http://172.15.0.1/a.png"_s << false;
+    QTest::newRow("172.32 is public") << u"http://172.32.0.1/a.png"_s << false;
+    QTest::newRow("localhost") << u"http://localhost:631/admin"_s << true;
+    QTest::newRow("LOCALHOST.") << u"http://LOCALHOST./a.png"_s << true;
+    QTest::newRow("sub.localhost") << u"http://drukarka.localhost/a.png"_s << true;
+    QTest::newRow("not localhost") << u"http://localhost.example.com/a.png"_s << false;
+    QTest::newRow("loopback") << u"http://127.0.0.1:8080/a.png"_s << true;
+    QTest::newRow("loopback 127.8") << u"http://127.8.9.10/a.png"_s << true;
+    QTest::newRow("loopback short") << u"http://127.1/a.png"_s << true;
+    QTest::newRow("loopback decimal") << u"http://2130706433/a.png"_s << true;
+    QTest::newRow("10/8") << u"http://10.1.2.3/a.png"_s << true;
+    QTest::newRow("172.16/12") << u"http://172.31.255.1/a.png"_s << true;
+    QTest::newRow("router") << u"http://192.168.1.1/cgi-bin/reboot?x=1"_s << true;
+    QTest::newRow("link-local") << u"http://169.254.169.254/latest/meta-data"_s << true;
+    QTest::newRow("unspecified") << u"http://0.0.0.0:8000/a.png"_s << true;
+    QTest::newRow("this network") << u"http://0.1.2.3/a.png"_s << true;
+    QTest::newRow("ip6 loopback") << u"http://[::1]:8080/a.png"_s << true;
+    QTest::newRow("ip6 unspecified") << u"http://[::]/a.png"_s << true;
+    QTest::newRow("ip6 link-local") << u"http://[fe80::1]/a.png"_s << true;
+    QTest::newRow("ip6 unique local") << u"http://[fd12:3456::1]/a.png"_s << true;
+    QTest::newRow("ip4-mapped loopback") << u"http://[::ffff:127.0.0.1]/a.png"_s << true;
+    QTest::newRow("ip4-mapped lan") << u"http://[::ffff:192.168.0.10]/a.png"_s << true;
+}
+
+void TestWebPicture::privateHosts()
+{
+    QFETCH(QString, url);
+    QFETCH(bool, isPrivate);
+    const QUrl web = webUrl(url);
+    QVERIFY2(web.isValid(), qPrintable(url));
+    QCOMPARE(isPrivateHost(web.host()), isPrivate);
+}
+
+void TestWebPicture::redirectRule_data()
+{
+    QTest::addColumn<QString>("from");
+    QTest::addColumn<QString>("to");
+    QTest::addColumn<bool>("allowed");
+    QTest::newRow("public to public") << u"http://example.com/a.png"_s << u"https://cdn.example.org/ą.png"_s << true;
+    QTest::newRow("http to https") << u"http://example.com/a"_s << u"https://example.com/a"_s << true;
+    QTest::newRow("https to https") << u"https://example.com/a"_s << u"https://example.com/b"_s << true;
+    QTest::newRow("https to http") << u"https://example.com/a"_s << u"http://example.com/a"_s << false;
+    QTest::newRow("HTTPS to http") << u"HTTPS://example.com/a"_s << u"http://example.com/a"_s << false;
+    QTest::newRow("public to router") << u"http://evil.example/kot.png"_s << u"http://192.168.0.1/reset"_s << false;
+    QTest::newRow("public to localhost") << u"http://evil.example/a"_s << u"http://localhost:631/admin"_s << false;
+    QTest::newRow("public to loopback") << u"http://evil.example/a"_s << u"http://127.0.0.1:8080/x"_s << false;
+    QTest::newRow("public to ip6 loopback") << u"http://evil.example/a"_s << u"http://[::1]/x"_s << false;
+    QTest::newRow("public to link-local") << u"https://evil.example/a"_s << u"https://169.254.169.254/x"_s << false;
+    QTest::newRow("nas to nas") << u"http://192.168.1.5/zdjęcie.jpg"_s << u"http://192.168.1.5/f/zdjęcie.jpg"_s << true;
+    QTest::newRow("nas to public") << u"http://192.168.1.5/a"_s << u"https://example.com/a"_s << true;
+    QTest::newRow("to ftp") << u"http://example.com/a"_s << u"ftp://example.com/a"_s << false;
+    QTest::newRow("to file") << u"http://localhost/a"_s << u"file:///etc/passwd"_s << false;
+    QTest::newRow("to nothing") << u"http://example.com/a"_s << QString() << false;
+}
+
+void TestWebPicture::redirectRule()
+{
+    QFETCH(QString, from);
+    QFETCH(QString, to);
+    QFETCH(bool, allowed);
+    QCOMPARE(redirectAllowed(QUrl(from), QUrl(to)), allowed);
+    // A swapped check: nothing private, so only the schemes count.
+    const bool schemesOnly = redirectAllowed(QUrl(from), QUrl(to), [](const QString &) { return false; });
+    const QString scheme = QUrl(to).scheme();
+    QCOMPARE(schemesOnly, (scheme == u"https" || (scheme == u"http" && QUrl(from).scheme().toLower() == u"http"))
+                                  && !QUrl(to).host().isEmpty());
+}
+
 void TestWebPicture::cacheStoresAndFinds()
 {
     QTemporaryDir tmp;
@@ -326,6 +413,40 @@ void TestWebPicture::cachePrunesOldest()
     QVERIFY(!cache.lookup(urls[4]).isEmpty());
 }
 
+void TestWebPicture::cacheLookupMarksUsed()
+{
+    QTemporaryDir tmp;
+    PictureCache cache(tmp.path());
+    const QByteArray big = pngBytes() + QByteArray(1000, 'x');
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto setTime = [](const QString &path, const QDateTime &when) {
+        QFile f(path);
+        return f.open(QIODevice::ReadWrite) && f.setFileTime(when, QFileDevice::FileModificationTime)
+               && f.setFileTime(when, QFileDevice::FileAccessTime);
+    };
+    // Fetched long ago, in this order; the file system keeps no access times worth trusting.
+    QList<QUrl> urls;
+    for (int i = 0; i < 3; ++i) {
+        urls.append(QUrl(u"https://example.com/zdjęcie-%1.png"_s.arg(i)));
+        QVERIFY(setTime(cache.store(urls.last(), big, u"png"_s), now.addDays(-10 + i)));
+    }
+    // The oldest is looked at: marked used now, so the next-oldest goes first.
+    const QString looked = cache.lookup(urls[0]);
+    QVERIFY(QFileInfo(looked).lastModified().secsTo(now) < 60);
+    // contains() marks nothing.
+    QVERIFY(cache.contains(urls[1]));
+    const QString second = QDir(tmp.path()).filePath(PictureCache::keyOf(urls[1]) + u".png"_s);
+    QVERIFY(QFileInfo(second).lastModified() < now.addDays(-8));
+    cache.prune(2 * big.size());
+    QVERIFY(!cache.contains(urls[1]));
+    QVERIFY(cache.contains(urls[0]));
+    QVERIFY(cache.contains(urls[2]));
+    // Used again within the hour: the time is not rewritten.
+    const QDateTime recent = now.addSecs(-30 * 60);
+    QVERIFY(setTime(looked, recent));
+    QCOMPARE(QFileInfo(cache.lookup(urls[0])).lastModified().toSecsSinceEpoch(), recent.toSecsSinceEpoch());
+}
+
 void TestWebPicture::cacheWithoutFolder()
 {
     PictureCache cache;
@@ -385,6 +506,9 @@ void TestWebPicture::sendsNoCookiesAndFollowsRedirects()
         QVERIFY2(!r.headers.contains("cookie"), r.path.constData());
         QVERIFY(!r.headers.contains("referer"));
         QVERIFY(r.headers.value("accept").startsWith("image/"));
+        // Nothing telling the app or the device's language.
+        QCOMPARE(r.headers.value("user-agent"), QByteArray("Mozilla/5.0"));
+        QCOMPARE(r.headers.value("accept-language"), QByteArray("*"));
     }
 }
 
@@ -465,6 +589,80 @@ void TestWebPicture::stallTimesOut()
     fetcher.cancelAll();
     QVERIFY(!failed.wait(800));
     QCOMPARE(failed.size(), 1);
+}
+
+void TestWebPicture::refusesRedirectToPrivateHost()
+{
+    MiniHttpServer server;
+    const int port = server.url(u"/"_s).port();
+    server.handler = [port](const MiniHttpServer::Request &r) {
+        if (r.path == "/kot.png") // "evil.example" sends the request into the network
+            return rawResponse(302, {}, {{"Location", "http://localhost:" + QByteArray::number(port) + "/reset"}});
+        return rawResponse(200, pngBytes());
+    };
+    PictureFetcher fetcher;
+    // 127.0.0.1 plays a host of the internet, "localhost" the device.
+    fetcher.setPrivateHostCheck([](const QString &host) { return host == u"localhost"; });
+    QSignalSpy fetched(&fetcher, &PictureFetcher::fetched);
+    QSignalSpy failed(&fetcher, &PictureFetcher::failed);
+    fetcher.fetch(server.url(u"/kot.png"_s));
+    QVERIFY(failed.wait(5000));
+    QCOMPARE(fetched.size(), 0);
+    QCOMPARE(failed.at(0).at(0).toUrl(), server.url(u"/kot.png"_s));
+    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Network); // not "error 302"
+    QVERIFY(failed.at(0).at(2).toString().contains(u"localhost"_s));
+    QTest::qWait(100);
+    QCOMPARE(server.requests.size(), 1);
+    QVERIFY(!fetcher.isFetching(server.url(u"/kot.png"_s)));
+}
+
+void TestWebPicture::tooManyRedirectsIsNoHttpError()
+{
+    MiniHttpServer server;
+    server.handler = [&server](const MiniHttpServer::Request &r) {
+        const int hop = r.path.mid(5).toInt(); // "/hop/3"
+        return rawResponse(301, {}, {{"Location", server.url(u"/hop/%1"_s.arg(hop + 1)).toEncoded()}});
+    };
+    PictureFetcher fetcher;
+    QSignalSpy failed(&fetcher, &PictureFetcher::failed);
+    fetcher.fetch(server.url(u"/hop/0"_s));
+    QVERIFY(failed.wait(5000));
+    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Network);
+    QVERIFY(failed.at(0).at(2).toString() != u"301"_s);
+    QCOMPARE(server.requests.size(), 6); // the request and 5 redirects
+}
+
+void TestWebPicture::cancelsOneUrl()
+{
+    MiniHttpServer server;
+    server.handler = [](const MiniHttpServer::Request &r) {
+        return r.path == "/ostatni.png" ? rawResponse(200, pngBytes()) : QByteArray(); // the rest stall
+    };
+    PictureFetcher fetcher;
+    QSignalSpy fetched(&fetcher, &PictureFetcher::fetched);
+    QSignalSpy failed(&fetcher, &PictureFetcher::failed);
+    QList<QUrl> stalled;
+    for (int i = 0; i < PictureFetcher::MaxParallel + 1; ++i) {
+        stalled.append(server.url(u"/wolny-%1.png"_s.arg(i)));
+        fetcher.fetch(stalled.last());
+    }
+    const QUrl last = server.url(u"/ostatni.png"_s);
+    fetcher.fetch(last); // queued behind the stalled ones
+    QTRY_COMPARE(server.requests.size(), PictureFetcher::MaxParallel);
+    fetcher.cancel(stalled.last()); // queued: never sent
+    QVERIFY(!fetcher.isFetching(stalled.last()));
+    QVERIFY(fetcher.isFetching(last));
+    fetcher.cancel(stalled.first()); // running: aborted, the queue moves on
+    QVERIFY(!fetcher.isFetching(stalled.first()));
+    QVERIFY(fetched.wait(5000));
+    QCOMPARE(fetched.at(0).at(0).toUrl(), last);
+    fetcher.cancel(QUrl(u"https://example.com/nieznany.png"_s)); // nothing to cancel
+    QTest::qWait(100);
+    QCOMPARE(failed.size(), 0);
+    QCOMPARE(server.requests.size(), PictureFetcher::MaxParallel + 1);
+    for (const auto &r : std::as_const(server.requests))
+        QVERIFY(r.path != "/wolny-4.png");
+    fetcher.cancelAll();
 }
 
 QTEST_GUILESS_MAIN(TestWebPicture)

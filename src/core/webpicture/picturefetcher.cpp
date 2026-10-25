@@ -42,12 +42,30 @@ bool PictureFetcher::isFetching(const QUrl &url) const
     return false;
 }
 
+void PictureFetcher::cancel(const QUrl &url)
+{
+    m_queue.removeAll(url);
+    QList<QNetworkReply *> replies;
+    for (auto it = m_running.cbegin(); it != m_running.cend(); ++it)
+        if (it.value() == url)
+            replies.append(it.key());
+    for (QNetworkReply *reply : std::as_const(replies)) {
+        m_running.remove(reply);
+        m_aborted.remove(reply);
+        reply->disconnect(this);
+        reply->abort();
+        reply->deleteLater();
+    }
+    if (!replies.isEmpty())
+        startNext();
+}
+
 void PictureFetcher::cancelAll()
 {
     m_queue.clear();
     const auto replies = m_running.keys();
     m_running.clear();
-    m_tooLarge.clear();
+    m_aborted.clear();
     for (QNetworkReply *reply : replies) {
         reply->disconnect(this);
         reply->abort();
@@ -64,22 +82,32 @@ void PictureFetcher::startNext()
 void PictureFetcher::start(const QUrl &url)
 {
     QNetworkRequest request(url);
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    // Every redirect is checked by redirectAllowed() (redirected() below).
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::UserVerifiedRedirectPolicy);
     request.setMaximumRedirectsAllowed(5);
-    // No cookies either way: a picture must not tell a server more than its own address.
+    // No cookies either way, a generic agent, no language: a picture must not tell a server more
+    // than its own address.
     request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
     request.setRawHeader("Accept", "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8");
-    request.setHeader(QNetworkRequest::UserAgentHeader, u"Brulion"_s);
+    request.setHeader(QNetworkRequest::UserAgentHeader, u"Mozilla/5.0"_s);
+    request.setRawHeader("Accept-Language", "*");
     request.setTransferTimeout(m_timeoutMs);
     QNetworkReply *reply = m_manager->get(request);
     m_running.insert(reply, url);
-    const auto tooLarge = [this, reply] {
-        if (!m_running.contains(reply) || m_tooLarge.contains(reply))
+    const auto abortWith = [this, reply](FetchError error, const QString &detail) {
+        if (!m_running.contains(reply) || m_aborted.contains(reply))
             return;
-        m_tooLarge.insert(reply, true);
+        m_aborted.insert(reply, {error, detail});
         reply->abort();
     };
+    const auto tooLarge = [this, abortWith] { abortWith(FetchError::TooLarge, QString::number(m_maxBytes)); };
+    connect(reply, &QNetworkReply::redirected, this, [this, reply, url, abortWith](const QUrl &target) {
+        if (redirectAllowed(url, target, m_isPrivate))
+            Q_EMIT reply->redirectAllowed();
+        else
+            abortWith(FetchError::Network, u"redirect to %1 refused"_s.arg(target.toDisplayString()));
+    });
     connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, tooLarge] {
         const qint64 announced = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
         if (announced > m_maxBytes)
@@ -98,13 +126,19 @@ void PictureFetcher::finish(QNetworkReply *reply)
     if (!m_running.contains(reply))
         return; // cancelled
     const QUrl url = m_running.take(reply);
-    const bool tooLarge = m_tooLarge.remove(reply);
+    const auto aborted = m_aborted.constFind(reply);
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    if (tooLarge) {
-        fail(url, FetchError::TooLarge, QString::number(m_maxBytes));
+    if (aborted != m_aborted.constEnd()) {
+        const Abort why = *aborted;
+        m_aborted.erase(aborted);
+        fail(url, why.error, why.detail);
     } else if (reply->error() == QNetworkReply::TimeoutError
                || reply->error() == QNetworkReply::OperationCanceledError) {
         fail(url, FetchError::Timeout, reply->errorString());
+    } else if (reply->error() == QNetworkReply::InsecureRedirectError
+               || reply->error() == QNetworkReply::TooManyRedirectsError) {
+        // The status is the last redirect's (301): no error of the server's.
+        fail(url, FetchError::Network, reply->errorString());
     } else if (status >= 400 || (status > 0 && (status < 200 || status >= 300))) {
         fail(url, FetchError::Http, QString::number(status));
     } else if (reply->error() != QNetworkReply::NoError) {

@@ -281,6 +281,12 @@ Uwagi:
   dzielą IndexedDB. Inna strona pod tym adresem mogłaby odczytać notatki — dla prywatnych
   danych lepiej hostować Brulion pod własną domeną.
 * Ustawienia przez `QSettings` (format natywny) Qt na WebAssembly trzyma w `localStorage`.
+* **Obrazy z internetu** (docs/SYNTAX.md §2): pamięć podręczna
+  (`QStandardPaths::CacheLocation`/web-pictures) nie jest montażem IDBFS — leży w pamięci
+  karty (MEMFS) i znika razem z nią; pobrane zdjęcie po ponownym otwarciu karty trzeba
+  pokazać jeszcze raz (albo zapisać w notatniku, wtedy jest załącznikiem w IndexedDB). Limit
+  to 50 MB zamiast 200 MB, a adresy `data:` zdjęć wyrzuconych z pamięci podręcznej znikają z
+  pamięci razem z plikami.
 
 ## Powiadomienia (przypomnienia)
 

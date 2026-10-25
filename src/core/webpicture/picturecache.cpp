@@ -44,7 +44,7 @@ void PictureCache::scan() const
     }
 }
 
-QString PictureCache::lookup(const QUrl &url) const
+QString PictureCache::find(const QUrl &url) const
 {
     if (m_dir.isEmpty() || !url.isValid())
         return {};
@@ -57,6 +57,23 @@ QString PictureCache::lookup(const QUrl &url) const
     if (!QFileInfo::exists(path)) { // removed behind our back (the system cleaned the cache)
         m_files.remove(key);
         return {};
+    }
+    return path;
+}
+
+QString PictureCache::lookup(const QUrl &url) const
+{
+    const QString path = find(url);
+    if (path.isEmpty())
+        return {};
+    const QFileInfo info(path);
+    // Used now: prune() drops the files used longest ago, and the file system may keep no
+    // access times. Rewriting the time only now and then spares the disk.
+    const QDateTime now = QDateTime::currentDateTime();
+    if (info.lastModified().secsTo(now) > TouchIntervalSecs) {
+        QFile file(path);
+        if (file.open(QIODevice::ReadWrite | QIODevice::ExistingOnly))
+            file.setFileTime(now, QFileDevice::FileModificationTime);
     }
     return path;
 }
@@ -91,7 +108,7 @@ QByteArray PictureCache::read(const QUrl &url) const
 
 void PictureCache::remove(const QUrl &url)
 {
-    const QString path = lookup(url);
+    const QString path = find(url);
     if (!path.isEmpty())
         QFile::remove(path);
     m_files.remove(keyOf(url));

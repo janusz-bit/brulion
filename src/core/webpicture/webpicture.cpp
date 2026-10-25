@@ -2,6 +2,8 @@
 
 #include "util/paths.h"
 
+#include <QHostAddress>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::webpicture {
@@ -73,6 +75,36 @@ QUrl webUrl(QStringView target)
     if (!url.isValid() || (scheme != u"http" && scheme != u"https") || url.host().isEmpty())
         return {};
     return url;
+}
+
+bool isPrivateHost(const QString &host)
+{
+    QString name = host.trimmed().toLower();
+    if (name.startsWith(u'[') && name.endsWith(u']'))
+        name = name.mid(1, name.size() - 2);
+    if (name.endsWith(u'.'))
+        name.chop(1);
+    if (name == u"localhost" || name.endsWith(u".localhost"))
+        return true;
+    QHostAddress address;
+    if (name.isEmpty() || !address.setAddress(name))
+        return false; // a name: not resolved here
+    bool ip4 = false;
+    const quint32 v4 = address.toIPv4Address(&ip4); // also of ::ffff:a.b.c.d
+    if (ip4 && (v4 >> 24) == 0)
+        return true; // 0.0.0.0/8, "this host"
+    return address.isLoopback() || address.isPrivateUse() || address.isLinkLocal() || address.isUniqueLocalUnicast()
+           || address == QHostAddress(QHostAddress::AnyIPv6);
+}
+
+bool redirectAllowed(const QUrl &from, const QUrl &to, const HostCheck &isPrivate)
+{
+    const QString scheme = to.scheme().toLower();
+    if (!to.isValid() || to.host().isEmpty() || (scheme != u"http" && scheme != u"https"))
+        return false;
+    if (from.scheme().toLower() == u"https" && scheme != u"https")
+        return false;
+    return isPrivate(from.host()) || !isPrivate(to.host());
 }
 
 QString sniffFormat(const QByteArray &data)

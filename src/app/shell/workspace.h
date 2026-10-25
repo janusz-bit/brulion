@@ -208,6 +208,13 @@ public:
     void setWebPicturesShown(bool shown);
     /// The cache's folder (tests: a temporary one; "" — the default).
     void setWebPictureCacheDir(const QString &dir);
+    /// The size the cache is pruned to (tests; 0 — the default: 200 MB, 50 MB in the browser,
+    /// whose cache is in the tab's memory).
+    void setWebPictureCacheBytes(qint64 bytes) { m_webPictureCacheBytes = bytes; }
+    /// Which hosts are this device's or its private network's (tests: 127.0.0.1 as a host of
+    /// the internet; webpicture::isPrivateHost by default). Such a picture is not fetched without
+    /// asking, and no redirect leads there from a host of the internet.
+    void setWebPictureHostCheck(std::function<bool(const QString &)> isPrivate);
     QVariantMap vaultConfig() const override;
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
@@ -518,6 +525,8 @@ private:
     mutable WebPictures *m_webPictures = nullptr;
     bool m_webPicturesShown = false;
     QString m_webPictureCacheDir;
+    qint64 m_webPictureCacheBytes = 0;
+    std::function<bool(const QString &)> m_webPictureHostCheck;
     bool m_remindersPaused = false;
     bool m_wasInactive = false; ///< the app left the foreground since the last rescan
     mutable QHash<QString, QUrl> m_dataUrls;

@@ -502,7 +502,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   with "Zapisz w notatniku" checked: `PageController.insertWebPicture` writes `![](url)` (between
   `<…>` when it has blanks or parentheses) at the caret, or as a block of its own after a block that
   is not text. Settings → Edytor → "Pokazuj obrazy z internetu bez pytania"
-  (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown`.
+  (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown` (not for
+  private hosts — those keep "ask" —, once a session per picture; turned off, the fetches it
+  queued are cancelled and their rows ask again, "Pokaż" / "Zapisz w notatniku" go on).
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
