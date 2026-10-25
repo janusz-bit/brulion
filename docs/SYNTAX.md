@@ -167,8 +167,10 @@ keeps the URL; nothing is written for showing it. The editor shows such a pictur
 device's cache, fetched when the user allows it — "Pokaż" on that picture, or the device setting
 "show pictures from the internet without asking" (off by default: opening a synced or imported
 note contacts no server). Without asking, a picture is fetched only from a host of the internet:
-`localhost`, loopback, private-use, link-local and unspecified IP addresses
-(`webpicture::isPrivateHost`; names are not resolved) wait for "Pokaż", as does a picture fetched
+loopback, private-use, shared (100.64.0.0/10: carrier NAT, Tailscale), link-local, site-local and
+unspecified IP addresses, and the names of a home network by their form — one label (`localhost`,
+`nas`) or a suffix such as `.local`, `.lan`, `.home.arpa`, `.internal`, `.fritz.box`
+(`webpicture::isPrivateHost`; other names are not resolved) — wait for "Pokaż", as does a picture fetched
 so already this session and dropped from the cache since; turning the setting off cancels the
 fetches it started. The fetch: http(s) only, every redirect checked (`webpicture::redirectAllowed`:
 never https → http, never from a host of the internet to a private one), no cookies, a generic

@@ -2026,7 +2026,10 @@ FocusScope {
     function downloadWebPictures(url) {
         if (!controller)
             return
-        if (controller.downloadWebPictures(url || "") === 0 && !url)
+        const count = controller.downloadWebPictures(url || "")
+        if (count < 0)
+            notice(qsTr("Switch back to blocks (Ctrl+E) to save the pictures in the notebook"), "info")
+        else if (count === 0 && !url)
             notice(qsTr("This page has no pictures from the internet"), "info")
     }
     /// WebPictureMenu for a shown picture from the internet (EmbedView: a click, right-click or

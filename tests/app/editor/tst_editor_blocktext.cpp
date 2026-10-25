@@ -683,6 +683,11 @@ private Q_SLOTS:
         QTest::newRow("title only") << u"![k](https://example.com/pies.jpg \"https://example.com/kot.jpg\")"_s << u
                                     << u"assets/kot.jpg"_s
                                     << u"![k](https://example.com/pies.jpg \"https://example.com/kot.jpg\")"_s;
+        // A code span in the alt text or title is read as the parser reads it (masked).
+        QTest::newRow("code span in alt") << u"![wykres `a]b`](https://example.com/kot.jpg) ż"_s << u
+                                          << u"assets/kot.jpg"_s << u"![wykres `a]b`](assets/kot.jpg) ż"_s;
+        QTest::newRow("code span in title") << u"![k](https://example.com/kot.jpg \"a `\"` b\")"_s << u
+                                            << u"assets/kot.jpg"_s << u"![k](assets/kot.jpg \"a `\"` b\")"_s;
         // Backslash escapes: the target as parsed (Embed::target) names it; replaced as a whole.
         QTest::newRow("escaped") << u"Zdjęcie ![żółw](https://example.com/Foo_\\(1\\)\\_b.jpg) i tekst"_s
                                  << u"https://example.com/Foo_(1)_b.jpg"_s << u"assets/Foo_(1)_b.jpg"_s

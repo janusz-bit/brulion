@@ -841,8 +841,10 @@ MarkdownDestination markdownDestination(QStringView source)
     const qsizetype open = source.startsWith(u'!') ? 1 : 0;
     if (open >= source.size() || source[open] != u'[')
         return {};
-    // Within a link inline code is no different from text: parsed as the original.
-    const auto parts = parseMdLink(source, open);
+    // Parsed as the lexer parses it: on the masked text (a `]` or quote in a code span or comment
+    // ends nothing; same length, so the offsets are the original's).
+    const QString masked = maskInline(source);
+    const auto parts = parseMdLink(masked, open);
     if (!parts || parts->end != source.size())
         return {};
     return {parts->destFrom, parts->destTo, parts->angle};

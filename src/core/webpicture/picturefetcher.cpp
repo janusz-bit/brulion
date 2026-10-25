@@ -4,6 +4,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSet>
 
 using namespace Qt::StringLiterals;
 
@@ -44,10 +45,18 @@ bool PictureFetcher::isFetching(const QUrl &url) const
 
 void PictureFetcher::cancel(const QUrl &url)
 {
-    m_queue.removeAll(url);
+    cancel(QList<QUrl>{url});
+}
+
+void PictureFetcher::cancel(const QList<QUrl> &urls)
+{
+    if (urls.isEmpty())
+        return;
+    const QSet<QUrl> gone(urls.cbegin(), urls.cend());
+    m_queue.removeIf([&gone](const QUrl &url) { return gone.contains(url); });
     QList<QNetworkReply *> replies;
     for (auto it = m_running.cbegin(); it != m_running.cend(); ++it)
-        if (it.value() == url)
+        if (gone.contains(it.value()))
             replies.append(it.key());
     for (QNetworkReply *reply : std::as_const(replies)) {
         m_running.remove(reply);
@@ -106,7 +115,7 @@ void PictureFetcher::start(const QUrl &url)
         if (redirectAllowed(url, target, m_isPrivate))
             Q_EMIT reply->redirectAllowed();
         else
-            abortWith(FetchError::Network, u"redirect to %1 refused"_s.arg(target.toDisplayString()));
+            abortWith(FetchError::Redirect, u"redirect to %1 refused"_s.arg(target.toDisplayString()));
     });
     connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, tooLarge] {
         const qint64 announced = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
@@ -138,7 +147,7 @@ void PictureFetcher::finish(QNetworkReply *reply)
     } else if (reply->error() == QNetworkReply::InsecureRedirectError
                || reply->error() == QNetworkReply::TooManyRedirectsError) {
         // The status is the last redirect's (301): no error of the server's.
-        fail(url, FetchError::Network, reply->errorString());
+        fail(url, FetchError::Redirect, reply->errorString());
     } else if (status >= 400 || (status > 0 && (status < 200 || status >= 300))) {
         fail(url, FetchError::Http, QString::number(status));
     } else if (reply->error() != QNetworkReply::NoError) {
@@ -165,6 +174,7 @@ QString errorName(FetchError error)
 {
     switch (error) {
     case FetchError::Network: return u"network error"_s;
+    case FetchError::Redirect: return u"redirect refused"_s;
     case FetchError::Timeout: return u"timed out"_s;
     case FetchError::Http: return u"HTTP error"_s;
     case FetchError::TooLarge: return u"too large"_s;

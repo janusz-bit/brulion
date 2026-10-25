@@ -105,6 +105,9 @@ Workspace::WebPictures *Workspace::webPictures() const
                 const QString host = url.host();
                 switch (error) {
                 case webpicture::FetchError::Network: message = tr("No connection to %1.").arg(host); break;
+                case webpicture::FetchError::Redirect:
+                    message = tr("%1 redirected to an address Brulion does not open.").arg(host);
+                    break;
                 case webpicture::FetchError::Timeout: message = tr("%1 did not answer in time.").arg(host); break;
                 case webpicture::FetchError::Http: message = tr("%1 answered with error %2.").arg(host, detail); break;
                 case webpicture::FetchError::TooLarge:
@@ -158,10 +161,10 @@ void Workspace::setWebPicturesShown(bool shown)
         // Consent withdrawn: what was fetched only for it stops; "Pokaż" and "Zapisz w notatniku"
         // go on. The rows ask again.
         WebPictures *web = m_webPictures;
-        for (const QUrl &url : std::as_const(web->autoQueued)) {
-            web->fetcher->cancel(url);
+        // All at once: aborting one must not start another of them from the queue.
+        web->fetcher->cancel(web->autoQueued.values());
+        for (const QUrl &url : std::as_const(web->autoQueued))
             web->waiting.remove(url);
-        }
         web->autoQueued.clear();
     }
     Q_EMIT webPicturesShownChanged();

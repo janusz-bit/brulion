@@ -1300,7 +1300,12 @@
         <translation>Blok…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2030"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2031"/>
+        <source>Switch back to blocks (Ctrl+E) to save the pictures in the notebook</source>
+        <translation>Wróć do bloków (Ctrl+E), aby zapisać obrazy w notatniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2033"/>
         <source>This page has no pictures from the internet</source>
         <translation>Na tej stronie nie ma obrazów z internetu</translation>
     </message>
@@ -11813,6 +11818,11 @@
         <location filename="../src/app/shell/workspacepictures.cpp" line="107"/>
         <source>No connection to %1.</source>
         <translation>Brak połączenia z %1.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacepictures.cpp" line="109"/>
+        <source>%1 redirected to an address Brulion does not open.</source>
+        <translation>Serwer %1 przekierował do adresu, którego Brulion nie otwiera.</translation>
     </message>
     <message>
         <location filename="../src/app/shell/workspacepictures.cpp" line="108"/>

@@ -591,6 +591,15 @@ private Q_SLOTS:
                                      << u"https://pl.wikipedia.org/wiki/Kot_(zwierzę).png"_s << false;
         QTest::newRow("angle") << u"![ż](  <https://example.com/mój kot.png> 'tytuł' )"_s
                                << u"https://example.com/mój kot.png"_s << true;
+        // Code spans and comments are masked, as the lexer reads the link: their `]` or quote ends nothing.
+        QTest::newRow("code span in alt")
+                << u"![wykres `a]b`](https://example.com/w.png)"_s << u"https://example.com/w.png"_s << false;
+        QTest::newRow("code span bracket only")
+                << u"![`]` ikona](https://example.com/i.png)"_s << u"https://example.com/i.png"_s << false;
+        QTest::newRow("code span in title")
+                << u"![ż](https://example.com/a.png \"a `\"` b\")"_s << u"https://example.com/a.png"_s << false;
+        QTest::newRow("comment in alt") << u"![a %%]%% b](https://example.com/a.png)"_s
+                                        << u"https://example.com/a.png"_s << false;
         QTest::newRow("empty") << u"![]()"_s << QString() << false;
         QTest::newRow("wiki") << u"![[kot.png]]"_s << u"-"_s << false;
         QTest::newRow("unclosed") << u"![a](https://example.com/a.png"_s << u"-"_s << false;

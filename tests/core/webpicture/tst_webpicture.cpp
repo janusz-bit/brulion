@@ -141,6 +141,7 @@ private Q_SLOTS:
     void refusesRedirectToPrivateHost();
     void tooManyRedirectsIsNoHttpError();
     void cancelsOneUrl();
+    void cancelsManyWithoutStartingThem();
 };
 
 void TestWebPicture::webUrls_data()
@@ -274,7 +275,26 @@ void TestWebPicture::privateHosts_data()
     QTest::addColumn<bool>("isPrivate");
     QTest::newRow("public name") << u"https://example.com/a.png"_s << false;
     QTest::newRow("polish name") << u"https://zdjęcia.przykład.pl/kot.png"_s << false;
-    QTest::newRow("nas name not resolved") << u"http://nas.lan/żółw.png"_s << false;
+    QTest::newRow("name not resolved") << u"http://nas.example.com/żółw.png"_s << false;
+    QTest::newRow("lan suffix in the middle") << u"http://zdjęcia.lan.example.pl/a.png"_s << false;
+    QTest::newRow("not .local") << u"http://example.locally.pl/a.png"_s << false;
+    QTest::newRow("100.63 is public") << u"http://100.63.255.255/a.png"_s << false;
+    QTest::newRow("100.128 is public") << u"http://100.128.0.1/a.png"_s << false;
+    QTest::newRow("fec0 not as prefix") << u"http://[2001:db8::fec0]/a.png"_s << false;
+    QTest::newRow("single label") << u"http://nas/zdjęcie.jpg"_s << true;
+    QTest::newRow("single label polish") << u"http://drukarka-żółta:631/a.png"_s << true;
+    QTest::newRow(".lan") << u"http://nas.lan/żółw.png"_s << true;
+    QTest::newRow(".local") << u"http://drukarka.local/status.png"_s << true;
+    QTest::newRow(".LOCAL.") << u"http://Drukarka.LOCAL./status.png"_s << true;
+    QTest::newRow(".home.arpa") << u"http://router.home.arpa/a.png"_s << true;
+    QTest::newRow(".internal") << u"http://grafana.internal/a.png"_s << true;
+    QTest::newRow("fritz.box") << u"http://fritz.box/a.png"_s << true;
+    QTest::newRow("cgnat tailscale") << u"http://100.101.102.103:5000/webapi/a.png"_s << true;
+    QTest::newRow("tailscale resolver") << u"http://100.100.100.100/a.png"_s << true;
+    QTest::newRow("cgnat last") << u"http://100.127.255.254/a.png"_s << true;
+    QTest::newRow("ip4-mapped cgnat") << u"http://[::ffff:100.64.0.1]/a.png"_s << true;
+    QTest::newRow("ip6 site-local") << u"http://[fec0::1]/a.png"_s << true;
+    QTest::newRow("ip6 site-local end") << u"http://[feff::1]/a.png"_s << true;
     QTest::newRow("public ip4") << u"http://93.184.216.34/a.png"_s << false;
     QTest::newRow("public ip6") << u"http://[2606:2800:220:1::1]/a.png"_s << false;
     QTest::newRow("172.15 is public") << u"http://172.15.0.1/a.png"_s << false;
@@ -325,6 +345,9 @@ void TestWebPicture::redirectRule_data()
     QTest::newRow("public to loopback") << u"http://evil.example/a"_s << u"http://127.0.0.1:8080/x"_s << false;
     QTest::newRow("public to ip6 loopback") << u"http://evil.example/a"_s << u"http://[::1]/x"_s << false;
     QTest::newRow("public to link-local") << u"https://evil.example/a"_s << u"https://169.254.169.254/x"_s << false;
+    QTest::newRow("public to .local") << u"http://evil.example/a"_s << u"http://drukarka.local/status"_s << false;
+    QTest::newRow("public to single label") << u"https://evil.example/a"_s << u"https://nas/zdjęcie.jpg"_s << false;
+    QTest::newRow("public to tailscale") << u"https://evil.example/a"_s << u"https://100.101.102.103/x"_s << false;
     QTest::newRow("nas to nas") << u"http://192.168.1.5/zdjęcie.jpg"_s << u"http://192.168.1.5/f/zdjęcie.jpg"_s << true;
     QTest::newRow("nas to public") << u"http://192.168.1.5/a"_s << u"https://example.com/a"_s << true;
     QTest::newRow("to ftp") << u"http://example.com/a"_s << u"ftp://example.com/a"_s << false;
@@ -609,8 +632,9 @@ void TestWebPicture::refusesRedirectToPrivateHost()
     QVERIFY(failed.wait(5000));
     QCOMPARE(fetched.size(), 0);
     QCOMPARE(failed.at(0).at(0).toUrl(), server.url(u"/kot.png"_s));
-    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Network); // not "error 302"
+    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Redirect); // not "error 302"
     QVERIFY(failed.at(0).at(2).toString().contains(u"localhost"_s));
+    QCOMPARE(errorName(FetchError::Redirect), u"redirect refused"_s);
     QTest::qWait(100);
     QCOMPARE(server.requests.size(), 1);
     QVERIFY(!fetcher.isFetching(server.url(u"/kot.png"_s)));
@@ -627,7 +651,7 @@ void TestWebPicture::tooManyRedirectsIsNoHttpError()
     QSignalSpy failed(&fetcher, &PictureFetcher::failed);
     fetcher.fetch(server.url(u"/hop/0"_s));
     QVERIFY(failed.wait(5000));
-    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Network);
+    QCOMPARE(failed.at(0).at(1).value<FetchError>(), FetchError::Redirect);
     QVERIFY(failed.at(0).at(2).toString() != u"301"_s);
     QCOMPARE(server.requests.size(), 6); // the request and 5 redirects
 }
@@ -662,6 +686,39 @@ void TestWebPicture::cancelsOneUrl()
     QCOMPARE(server.requests.size(), PictureFetcher::MaxParallel + 1);
     for (const auto &r : std::as_const(server.requests))
         QVERIFY(r.path != "/wolny-4.png");
+    fetcher.cancelAll();
+}
+
+void TestWebPicture::cancelsManyWithoutStartingThem()
+{
+    MiniHttpServer server;
+    server.handler = [](const MiniHttpServer::Request &r) {
+        return r.path == "/zostaje.png" ? rawResponse(200, pngBytes()) : QByteArray(); // the rest stall
+    };
+    PictureFetcher fetcher;
+    QSignalSpy fetched(&fetcher, &PictureFetcher::fetched);
+    QSignalSpy failed(&fetcher, &PictureFetcher::failed);
+    QList<QUrl> automatic;
+    for (int i = 0; i < 3 * PictureFetcher::MaxParallel; ++i) {
+        automatic.append(server.url(u"/żółw-%1.png"_s.arg(i)));
+        fetcher.fetch(automatic.last());
+    }
+    const QUrl kept = server.url(u"/zostaje.png"_s);
+    fetcher.fetch(kept);
+    QTRY_COMPARE(server.requests.size(), PictureFetcher::MaxParallel);
+    // Running ones first: aborting each must not send the next of the same list.
+    QList<QUrl> order = automatic.mid(0, PictureFetcher::MaxParallel);
+    order += automatic.mid(PictureFetcher::MaxParallel);
+    fetcher.cancel(order);
+    for (const QUrl &url : std::as_const(automatic))
+        QVERIFY(!fetcher.isFetching(url));
+    QVERIFY(fetcher.isFetching(kept));
+    QVERIFY(fetched.wait(5000));
+    QCOMPARE(fetched.at(0).at(0).toUrl(), kept);
+    QTest::qWait(100);
+    QCOMPARE(failed.size(), 0);
+    QCOMPARE(server.requests.size(), PictureFetcher::MaxParallel + 1);
+    fetcher.cancel(QList<QUrl>{}); // nothing
     fetcher.cancelAll();
 }
 

@@ -3111,7 +3111,9 @@ QStringList PageController::webPictureUrls() const
 
 int PageController::downloadWebPictures(const QString &url)
 {
-    if (!m_host || m_sourceMode)
+    if (m_sourceMode)
+        return -1; // the blocks are not what is saved: the caller says "switch back to blocks"
+    if (!m_host)
         return 0;
     const QStringList onPage = webPictureUrls();
     QStringList wanted;

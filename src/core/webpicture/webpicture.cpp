@@ -84,15 +84,36 @@ bool isPrivateHost(const QString &host)
         name = name.mid(1, name.size() - 2);
     if (name.endsWith(u'.'))
         name.chop(1);
-    if (name == u"localhost" || name.endsWith(u".localhost"))
-        return true;
+    if (name.isEmpty())
+        return false;
     QHostAddress address;
-    if (name.isEmpty() || !address.setAddress(name))
-        return false; // a name: not resolved here
+    if (!address.setAddress(name)) {
+        // A name is not resolved here: a home network's names are told by their form — one
+        // label ("nas", "drukarka") or a suffix that names no host of the internet (mDNS
+        // ".local", RFC 8375 ".home.arpa", ICANN's ".internal", and the ones routers use).
+        if (!name.contains(u'.'))
+            return true;
+        static const QStringList suffixes = {
+                u".localhost"_s, u".local"_s, u".lan"_s,     u".home"_s,        u".home.arpa"_s, u".internal"_s,
+                u".intranet"_s,  u".corp"_s,  u".private"_s, u".localdomain"_s, u".fritz.box"_s,
+        };
+        const QString dotted = u'.' + name;
+        for (const QString &suffix : suffixes)
+            if (dotted.endsWith(suffix))
+                return true;
+        return false;
+    }
     bool ip4 = false;
     const quint32 v4 = address.toIPv4Address(&ip4); // also of ::ffff:a.b.c.d
     if (ip4 && (v4 >> 24) == 0)
         return true; // 0.0.0.0/8, "this host"
+    if (ip4 && (v4 & 0xffc00000u) == 0x64400000u)
+        return true; // 100.64.0.0/10, shared address space (carrier NAT, Tailscale)
+    if (!ip4 && address.protocol() == QAbstractSocket::IPv6Protocol) {
+        const Q_IPV6ADDR v6 = address.toIPv6Address();
+        if (v6[0] == 0xfe && (v6[1] & 0xc0) == 0xc0)
+            return true; // fec0::/10, site-local (deprecated, still routed inside networks)
+    }
     return address.isLoopback() || address.isPrivateUse() || address.isLinkLocal() || address.isUniqueLocalUnicast()
            || address == QHostAddress(QHostAddress::AnyIPv6);
 }

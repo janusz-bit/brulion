@@ -2,7 +2,7 @@
 //
 // Only http(s); redirects followed at most 5 times and each checked (redirectAllowed(): an https
 // picture never comes over http, a picture of a host of the internet never from this device or
-// its private network — a refused one fails with Network); no cookies sent or kept, no referrer;
+// its private network — a refused one fails with Redirect); no cookies sent or kept, no referrer;
 // at most MaxBytes (also when the server announces more, it is aborted at once); a stall of
 // TimeoutMs fails; the bytes must be a picture by their signature (an HTML page that answers with
 // 200 is no picture). One request per URL at a time (a second fetch() of a URL in flight waits
@@ -28,7 +28,8 @@ class QNetworkReply;
 namespace brulion::webpicture {
 
 enum class FetchError {
-    Network,    ///< no connection, DNS, TLS, refused, a redirect refused or too many
+    Network,    ///< no connection, DNS, TLS, refused
+    Redirect,   ///< a redirect refused (redirectAllowed()) or too many: the server did answer
     Timeout,    ///< no progress for TimeoutMs
     Http,       ///< the server answered with an error status (404, 403, …)
     TooLarge,   ///< more than the size limit
@@ -52,6 +53,9 @@ public:
     bool isFetching(const QUrl &url) const;
     /// Forget `url`: taken from the queue or its request aborted (no signal for it).
     void cancel(const QUrl &url);
+    /// Forget all of `urls` at once: none of them is started by the requests that free a place
+    /// (the queue is cleared of them before any running one is aborted).
+    void cancel(const QList<QUrl> &urls);
     /// Abort everything (no signals for the aborted fetches).
     void cancelAll();
     /// Which hosts are private for redirectAllowed() (tests; isPrivateHost() by default).

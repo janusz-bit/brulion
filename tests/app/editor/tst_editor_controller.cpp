@@ -2540,10 +2540,12 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(f.text().contains(u"- Pies: ![](assets/pies.png) i tekst"_s));
         QVERIFY(f.text().contains(brak));
         QCOMPARE(f.page.webPictureUrls(), QStringList{brak});
-        // A URL not on the page, or source mode: nothing.
+        // A URL not on the page: nothing; source mode: refused (-1, not "no pictures").
         QCOMPARE(f.page.downloadWebPictures(u"https://example.com/inny.png"_s), 0);
         f.page.setSourceMode(true);
-        QCOMPARE(f.page.downloadWebPictures(), 0);
+        QCOMPARE(f.page.downloadWebPictures(), -1);
+        QCOMPARE(f.page.downloadWebPictures(brak), -1);
+        QCOMPARE(f.page.webPictureDownloads(), 0);
     }
 
     void insertWebPicture()
