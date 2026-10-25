@@ -43,3 +43,24 @@ kolejki to, co ma być zrobione, w wybranej kolejności.
   Gboard na początku bloku.
 * **Pasek przewijania w długich listach** skacze (ListView szacuje wysokość niewidocznych
   wierszy; docs/UI.md, „Still there”).
+* **Telefon: boczne menu gestem** — otwieranie szuflady przesunięciem palca od krawędzi ekranu,
+  nie tylko przyciskiem.
+* **Synchronizacja: istniejący folder Obsidiana** — odpowiedzieć na pytanie, czy można po prostu
+  otworzyć istniejący folder z notatkami Obsidiana (synchronizowany Syncthingiem), czy lepiej
+  użyć synchronizacji, którą proponuje aplikacja; ewentualnie dopisać to do dokumentacji lub
+  onboardingu.
+* **Rysunki w notatkach** — sprawdzić, czy da się dodać rysowanie (coś jak Excalidraw
+  w Obsidianie, ale wygodniejsze na tablecie). Przypadek użycia: Natalia na studia,
+  z synchronizacją przez Syncthing.
+* **Import zadań z Microsoft To Do** (link z researchem:
+  https://share.google/aimode/IkspZGTIWv9OVFLLT).
+* **Widgety na Androida**:
+  * widget z zadaniami: podgląd listy i szybkie dodawanie bez wchodzenia do aplikacji (wzór:
+    widget To Do 3×2 „My Day”);
+  * widget kalendarza, który pokazuje też zadania z ustawionym czasem;
+  * widgety z notatkami (niski priorytet).
+* **Windows**:
+  * podgląd kalendarza z paska zadań, podobny do domyślnego z Windows 7/10; opcjonalnie
+    zastąpienie nim domyślnego kalendarza Windows;
+  * wersja na Windows dostępna publicznie (pierwsza, testowa: 0.4.5 — instalator i ZIP);
+  * zebrać opinie o wersji desktopowej (tester obejrzy ją później).
