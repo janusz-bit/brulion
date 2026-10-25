@@ -60,7 +60,9 @@ jobs:
 
       # The essential Qt modules (qtbase, qtdeclarative, qtsvg, qttools, qttranslations) hold all
       # the CMake files find: Core, Gui, Network, Qml, Quick, QuickControls2, Svg, Widgets, Test,
-      # LinguistTools, GuiPrivate (DBus is for Linux only).
+      # LinguistTools, GuiPrivate (DBus is for Linux only). aqtinstall 3.3.0 (the latest release)
+      # does not know the Windows repository layout of Qt 6.11 (qt6_6112_msvc2022_64/, aqtinstall
+      # PR #1000, merged after 3.3.0): its master at a pinned commit until a release has it.
       - uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
@@ -68,6 +70,7 @@ jobs:
           target: desktop
           arch: win64_msvc2022_64
           aqtversion: ==3.3.0
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7
           cache: true
 
       - uses: ilammy/msvc-dev-cmd@v1
