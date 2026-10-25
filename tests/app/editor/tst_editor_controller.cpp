@@ -40,14 +40,29 @@ namespace {
 const QString Page = u"Notatki/Strona.md"_s;
 const QString Now = u"2026-10-15 10:00"_s;
 
-/// A controller on `content` (with a model tester watching every signal).
+/// A controller on `content` (with a model tester watching every signal, unless `NoModelTester`).
 struct Fixture {
+    /// The model tester checks the whole model after every signal: on pages of thousands of
+    /// blocks it takes most of the time (the small pages of the other tests check the signals).
+    struct NoModelTester { };
+
     FakeEditorHost host;
     PageController page;
     std::unique_ptr<QAbstractItemModelTester> tester;
 
     explicit Fixture(const QString &content, int saveDelay = 0, const QString &path = Page,
                      const QStringList &others = {})
+        : Fixture(content, saveDelay, path, others, NoModelTester{})
+    {
+        tester = std::make_unique<QAbstractItemModelTester>(page.blocks(),
+                                                            QAbstractItemModelTester::FailureReportingMode::QtTest);
+    }
+
+    Fixture(const QString &content, int saveDelay, NoModelTester)
+        : Fixture(content, saveDelay, Page, {}, NoModelTester{})
+    { }
+
+    Fixture(const QString &content, int saveDelay, const QString &path, const QStringList &others, NoModelTester)
     {
         host.setFile(path, content);
         host.setFile(u"Inna.md"_s, u"- Blok z innej strony #inne ^inny1\n- Drugi blok\n"_s);
@@ -57,7 +72,6 @@ struct Fixture {
         page.setSaveDelay(saveDelay);
         page.setHost(&host);
         page.setPath(path);
-        tester = std::make_unique<QAbstractItemModelTester>(page.blocks(), QAbstractItemModelTester::FailureReportingMode::QtTest);
     }
 
     BlockListModel *model() const { return page.blocks(); }
@@ -5203,7 +5217,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QString content;
         for (int i = 0; i < 3000; ++i)
             content += u"- Blok numer %1 z tekstem zażółć gęślą jaźń\n"_s.arg(i);
-        Fixture f(content, 100000);
+        Fixture f(content, 100000, Fixture::NoModelTester{});
         for (int k = 0; k < 60; ++k) {
             f.page.startEditing(k * 10, -1);
             f.page.split(k * 10, -1);
@@ -5237,7 +5251,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         }
         QElapsedTimer load;
         load.start();
-        Fixture f(content, 100000);
+        Fixture f(content, 100000, Fixture::NoModelTester{});
         const qint64 loadMs = load.elapsed();
         const int row = 2500;
         QVERIFY(f.edit(row).startsWith(u"Wpis"_s));
