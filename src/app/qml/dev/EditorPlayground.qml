@@ -985,12 +985,13 @@ ApplicationWindow {
                     editor.webPictureMenu.close()
             },
             () => {
-                const body = info(window.realRow).editText
-                check(body === "![Mapa trasy](assets/mapa.svg)", "“Zapisz w notatniku” points the picture at the attachment: " + body)
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const embed = item && item.embeds.length > 0 ? item.embeds[0] : null
+                check(page.webPictureUrls().length === 0 && embed !== null && !embed.web && embed.target === "assets/mapa.svg",
+                      "“Zapisz w notatniku” points the picture at the attachment: " + (embed ? embed.target : "-"))
                 page.undo()
             },
-            () => check(info(window.realRow).editText === "![Mapa trasy](https://example.com/mapa.svg)",
-                        "undo brings the address back"),
+            () => check(page.webPictureUrls().indexOf("https://example.com/mapa.svg") >= 0, "undo brings the address back"),
             // The journal stream caps document headings at the size of a day's date: smaller, in
             // the same order.
             () => {

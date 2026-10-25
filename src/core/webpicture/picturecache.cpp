@@ -13,10 +13,7 @@ using namespace Qt::StringLiterals;
 
 namespace brulion::webpicture {
 
-PictureCache::PictureCache(QString dir)
-    : m_dir(std::move(dir))
-{
-}
+PictureCache::PictureCache(QString dir) : m_dir(std::move(dir)) { }
 
 void PictureCache::setDir(const QString &dir)
 {

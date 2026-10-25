@@ -2480,7 +2480,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const QString brak = u"https://example.com/brak.png"_s;
         const QByteArray png = QByteArray::fromBase64(
                 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
-        Fixture f(u"- ![Mój kot](%1)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](%1)\n"_s.arg(kot, pies, brak));
+        Fixture f(u"- ![Mój kot](%1)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](%1)\n"_s.arg(kot, pies,
+                                                                                                             brak));
         f.host.setWebPicture(kot, png);
         f.host.setWebPicture(pies, png);
         f.host.setWebPicture(brak, QByteArray("<html>404</html>"));
@@ -2521,8 +2522,10 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(done.size(), 1); // cached: at once
         QCOMPARE(done.at(0).at(0).toInt(), 1);
         QVERIFY(done.at(0).at(1).toStringList().isEmpty());
-        QCOMPARE(f.text(), u"- ![Mój kot](assets/kot.png)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](assets/kot.png)\n"_s
-                                   .arg(kot, pies, brak));
+        QCOMPARE(
+                f.text(),
+                u"- ![Mój kot](assets/kot.png)\n- Pies: ![](%2) i tekst\n- ![](%3)\n- `![kod](%1)` ![kot](assets/kot.png)\n"_s
+                        .arg(kot, pies, brak));
         QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"web"_s).toBool(), false);
         f.page.undo();
         QCOMPARE(f.text(), before);
@@ -2576,8 +2579,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     {
         const QString url = u"https://example.com/a.png"_s;
         Fixture f(u"- ![a](%1)\n- tekst\n"_s.arg(url));
-        f.host.setWebPicture(url, QByteArray::fromBase64(
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII="));
+        f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
+                                                         "AIAAAUAAen63NgAAAAASUVORK5CYII="));
         QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
         QCOMPARE(f.page.downloadWebPictures(), 1);
         QCOMPARE(f.host.webFetches(), 1); // fetched even though pictures are not shown

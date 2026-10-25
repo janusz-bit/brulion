@@ -642,9 +642,9 @@ private Q_SLOTS:
                                     << u"![k](assets/k.jpg \"Tytuł\")"_s;
         QTest::newRow("angle kept") << u"![k](<https://example.com/kot.jpg>)"_s << u << u"assets/a b.jpg"_s
                                     << u"![k](<assets/a%20b.jpg>)"_s;
-        QTest::newRow("alt naming the url") << u"![https://example.com/kot.jpg](https://example.com/kot.jpg)"_s << u
-                                            << u"assets/kot.jpg"_s
-                                            << u"![https://example.com/kot.jpg](assets/kot.jpg)"_s;
+        QTest::newRow("alt naming the url")
+                << u"![https://example.com/kot.jpg](https://example.com/kot.jpg)"_s << u << u"assets/kot.jpg"_s
+                << u"![https://example.com/kot.jpg](assets/kot.jpg)"_s;
         QTest::newRow("twice") << u"![a](https://example.com/kot.jpg)\r\n![b](https://example.com/kot.jpg)"_s << u
                                << u"assets/kot.jpg"_s << u"![a](assets/kot.jpg)\r\n![b](assets/kot.jpg)"_s;
         QTest::newRow("other url stays") << u"![a](https://example.com/pies.jpg)"_s << u << u"assets/kot.jpg"_s
@@ -656,8 +656,8 @@ private Q_SLOTS:
                                     << u"`![a](https://example.com/kot.jpg)`"_s;
         QTest::newRow("hash and percent") << u"![a](https://example.com/kot.jpg)"_s << u << u"assets/100% #1.jpg"_s
                                           << u"![a](assets/100%25%20%231.jpg)"_s;
-        QTest::newRow("wiki embed") << u"![[https://example.com/kot.jpg|Mój kot]] ![[https://example.com/kot.jpg]]"_s << u
-                                    << u"assets/Mój kot.jpg"_s
+        QTest::newRow("wiki embed") << u"![[https://example.com/kot.jpg|Mój kot]] ![[https://example.com/kot.jpg]]"_s
+                                    << u << u"assets/Mój kot.jpg"_s
                                     << u"![[assets/Mój kot.jpg|Mój kot]] ![[assets/Mój kot.jpg]]"_s;
         QTest::newRow("empty path") << u"![a](https://example.com/kot.jpg)"_s << u << QString()
                                     << u"![a](https://example.com/kot.jpg)"_s;

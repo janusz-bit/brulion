@@ -18,8 +18,8 @@
 #include "queryhost.h"
 
 #include <QHash>
-#include <QStringList>
 #include <QSet>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QUrl>
 

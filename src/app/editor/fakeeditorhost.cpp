@@ -515,9 +515,9 @@ QVariantMap FakeEditorHost::webPicture(const QString &url) const
     const QString state = m_webStates.value(url);
     if (state.isEmpty() && m_webShown) {
         // Asked for in the "always" setting: fetched (outside this const call).
-        QMetaObject::invokeMethod(const_cast<FakeEditorHost *>(this), [this, url] {
-            const_cast<FakeEditorHost *>(this)->loadWebPicture(url);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+                const_cast<FakeEditorHost *>(this),
+                [this, url] { const_cast<FakeEditorHost *>(this)->loadWebPicture(url); }, Qt::QueuedConnection);
         m_webStates.insert(url, u"loading"_s);
         return {{u"state"_s, u"loading"_s}};
     }
@@ -538,27 +538,30 @@ void FakeEditorHost::loadWebPicture(const QString &url, bool forDownload)
     m_webInFlight.insert(url);
     Q_EMIT webPictureChanged(url);
     ++m_webFetches;
-    QMetaObject::invokeMethod(this, [this, url] {
-        m_webInFlight.remove(url);
-        const QByteArray data = m_webSources.value(url);
-        QString file;
-        if (!data.isEmpty()) {
-            if (!m_assetDir)
-                m_assetDir = std::make_unique<QTemporaryDir>();
-            file = m_assetDir->filePath(u"web-"_s + QString::number(m_webFetches) + u'.'
-                                        + webpicture::sniffFormat(data));
-            QFile f(file);
-            if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size())
-                file.clear();
-        }
-        if (file.isEmpty() || webpicture::sniffFormat(data).isEmpty()) {
-            m_webStates.insert(url, u"failed"_s);
-        } else {
-            m_webStates.insert(url, u"ready"_s);
-            m_webFiles.insert(url, QUrl::fromLocalFile(file));
-        }
-        Q_EMIT webPictureChanged(url);
-    }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+            this,
+            [this, url] {
+                m_webInFlight.remove(url);
+                const QByteArray data = m_webSources.value(url);
+                QString file;
+                if (!data.isEmpty()) {
+                    if (!m_assetDir)
+                        m_assetDir = std::make_unique<QTemporaryDir>();
+                    file = m_assetDir->filePath(u"web-"_s + QString::number(m_webFetches) + u'.'
+                                                + webpicture::sniffFormat(data));
+                    QFile f(file);
+                    if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size())
+                        file.clear();
+                }
+                if (file.isEmpty() || webpicture::sniffFormat(data).isEmpty()) {
+                    m_webStates.insert(url, u"failed"_s);
+                } else {
+                    m_webStates.insert(url, u"ready"_s);
+                    m_webFiles.insert(url, QUrl::fromLocalFile(file));
+                }
+                Q_EMIT webPictureChanged(url);
+            },
+            Qt::QueuedConnection);
 }
 
 QByteArray FakeEditorHost::webPictureData(const QString &url, QString *format) const

@@ -26,10 +26,7 @@ namespace brulion::shell {
 
 class Workspace::WebPictures : public QObject {
 public:
-    explicit WebPictures(QObject *parent)
-        : QObject(parent)
-    {
-    }
+    explicit WebPictures(QObject *parent) : QObject(parent) { }
     webpicture::PictureCache cache;
     webpicture::PictureFetcher *fetcher = nullptr;
     /// The URLs as written (the editor's keys) waiting for each fetched URL.
@@ -73,15 +70,9 @@ Workspace::WebPictures *Workspace::webPictures() const
                 QString message;
                 const QString host = url.host();
                 switch (error) {
-                case webpicture::FetchError::Network:
-                    message = tr("No connection to %1.").arg(host);
-                    break;
-                case webpicture::FetchError::Timeout:
-                    message = tr("%1 did not answer in time.").arg(host);
-                    break;
-                case webpicture::FetchError::Http:
-                    message = tr("%1 answered with error %2.").arg(host, detail);
-                    break;
+                case webpicture::FetchError::Network: message = tr("No connection to %1.").arg(host); break;
+                case webpicture::FetchError::Timeout: message = tr("%1 did not answer in time.").arg(host); break;
+                case webpicture::FetchError::Http: message = tr("%1 answered with error %2.").arg(host, detail); break;
                 case webpicture::FetchError::TooLarge:
                     message = tr("The picture is larger than %1 MB.").arg(webpicture::MaxBytes / (1024 * 1024));
                     break;
@@ -89,7 +80,8 @@ Workspace::WebPictures *Workspace::webPictures() const
                     message = tr("%1 sent no picture from this address.").arg(host);
                     break;
                 }
-                qInfo().noquote() << u"Picture from %1 not loaded: %2 (%3)"_s.arg(host, webpicture::errorName(error), detail);
+                qInfo().noquote() << u"Picture from %1 not loaded: %2 (%3)"_s.arg(host, webpicture::errorName(error),
+                                                                                  detail);
                 const QSet<QString> written = web->waiting.take(url);
                 for (const QString &w : written) {
                     web->errors.insert(w, message);
@@ -141,7 +133,7 @@ QVariantMap Workspace::webPicture(const QString &url) const
         if (cached == pictures->dataUrls.constEnd()) {
             const QByteArray bytes = pictures->cache.read(web);
             const QString format = QFileInfo(file).suffix();
-            const QString mime = format == u"svg" ? u"image/svg+xml"_s
+            const QString mime = format == u"svg"   ? u"image/svg+xml"_s
                                  : format == u"jpg" ? u"image/jpeg"_s
                                  : format == u"ico" ? u"image/x-icon"_s
                                                     : u"image/"_s + format;

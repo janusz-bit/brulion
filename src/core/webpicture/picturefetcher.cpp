@@ -10,10 +10,8 @@ using namespace Qt::StringLiterals;
 namespace brulion::webpicture {
 
 PictureFetcher::PictureFetcher(QNetworkAccessManager *manager, QObject *parent)
-    : QObject(parent)
-    , m_manager(manager ? manager : new QNetworkAccessManager(this))
-{
-}
+    : QObject(parent), m_manager(manager ? manager : new QNetworkAccessManager(this))
+{ }
 
 PictureFetcher::~PictureFetcher()
 {
@@ -104,7 +102,8 @@ void PictureFetcher::finish(QNetworkReply *reply)
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     if (tooLarge) {
         fail(url, FetchError::TooLarge, QString::number(m_maxBytes));
-    } else if (reply->error() == QNetworkReply::TimeoutError || reply->error() == QNetworkReply::OperationCanceledError) {
+    } else if (reply->error() == QNetworkReply::TimeoutError
+               || reply->error() == QNetworkReply::OperationCanceledError) {
         fail(url, FetchError::Timeout, reply->errorString());
     } else if (status >= 400 || (status > 0 && (status < 200 || status >= 300))) {
         fail(url, FetchError::Http, QString::number(status));
@@ -116,8 +115,7 @@ void PictureFetcher::finish(QNetworkReply *reply)
         if (data.size() > m_maxBytes)
             fail(url, FetchError::TooLarge, QString::number(m_maxBytes));
         else if (format.isEmpty())
-            fail(url, FetchError::NotPicture,
-                 reply->header(QNetworkRequest::ContentTypeHeader).toString());
+            fail(url, FetchError::NotPicture, reply->header(QNetworkRequest::ContentTypeHeader).toString());
         else
             Q_EMIT fetched(url, data, format);
     }

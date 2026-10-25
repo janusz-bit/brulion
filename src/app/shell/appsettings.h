@@ -55,7 +55,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool editorSourceMode READ editorSourceMode WRITE setEditorSourceMode NOTIFY editorSourceModeChanged FINAL)
     /// Show pictures from the internet in notes without asking (`![x](https://…)`; off: each
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
-    Q_PROPERTY(bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    Q_PROPERTY(
+            bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
 
     // ---- Vaults -------------------------------------------------------------------------
     /// Absolute path of the vault opened last ("" before the first one).

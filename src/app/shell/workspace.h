@@ -119,7 +119,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(QVariantList recentPages READ recentPages NOTIFY recentPagesChanged FINAL)
     /// Pictures from the internet in notes are shown without asking (AppSettings'
     /// webPicturesShown; workspacepictures.cpp). Off: each waits for "Pokaż".
-    Q_PROPERTY(bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    Q_PROPERTY(
+            bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
 
 public:
     static constexpr int MaxRecentPages = 20;

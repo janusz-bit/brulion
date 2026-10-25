@@ -1212,8 +1212,7 @@ QVariantMap BlockListModel::webEmbed(const Embed &em) const
 {
     // A picture from the internet: what the host has of it (EditorHost::webPicture) — the UI
     // shows a cached file only, never the URL itself.
-    const QVariantMap picture =
-            m_host ? m_host->webPicture(em.target) : QVariantMap{{u"state"_s, u"ask"_s}};
+    const QVariantMap picture = m_host ? m_host->webPicture(em.target) : QVariantMap{{u"state"_s, u"ask"_s}};
     const QString state = picture.value(u"state"_s, u"ask"_s).toString();
     const QUrl url = state == u"ready" ? picture.value(u"url"_s).toUrl() : QUrl();
     const QUrl web = webpicture::webUrl(em.target);

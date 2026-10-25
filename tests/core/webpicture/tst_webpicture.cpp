@@ -54,7 +54,10 @@ public:
             }
         });
     }
-    QUrl url(const QString &path) const { return QUrl(u"http://127.0.0.1:%1%2"_s.arg(m_server.serverPort()).arg(path)); }
+    QUrl url(const QString &path) const
+    {
+        return QUrl(u"http://127.0.0.1:%1%2"_s.arg(m_server.serverPort()).arg(path));
+    }
 
 private:
     void onData(QTcpSocket *socket)
@@ -72,7 +75,8 @@ private:
         for (qsizetype i = 1; i < lines.size(); ++i) {
             const qsizetype colon = lines.at(i).indexOf(':');
             if (colon > 0)
-                request.headers.insert(lines.at(i).left(colon).trimmed().toLower(), lines.at(i).mid(colon + 1).trimmed());
+                request.headers.insert(lines.at(i).left(colon).trimmed().toLower(),
+                                       lines.at(i).mid(colon + 1).trimmed());
         }
         m_buffers.remove(socket);
         requests.append(request);
@@ -167,18 +171,31 @@ void TestWebPicture::formats_data()
     QTest::newRow("gif87") << QByteArray("GIF87a....") << u"gif"_s;
     QTest::newRow("webp") << QByteArray("RIFF\x10\x00\x00\x00WEBPVP8 ", 16) << u"webp"_s;
     QTest::newRow("riff wave") << QByteArray("RIFF\x10\x00\x00\x00WAVEfmt ", 16) << QString();
-    QTest::newRow("bmp") << (QByteArray("BM\x46\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00", 14) + QByteArray(20, '\0'))
+    QTest::newRow("bmp") << (QByteArray("BM\x46\x00\x00\x00\x00\x00\x00\x00\x36\x00\x00\x00", 14)
+                             + QByteArray(20, '\0'))
                          << u"bmp"_s;
     QTest::newRow("text starting BM") << QByteArray("BMW is a car brand, not a picture") << QString();
     QTest::newRow("ico") << (QByteArray("\x00\x00\x01\x00\x01\x00", 6) + QByteArray(20, '\x10')) << u"ico"_s;
-    QTest::newRow("ico without pictures") << (QByteArray("\x00\x00\x01\x00\x00\x00", 6) + QByteArray(20, '\x10'))
-                                          << QString();
-    QTest::newRow("avif") << QByteArray("\x00\x00\x00\x1c" "ftypavif\x00\x00\x00\x00" "avifmif1miaf", 28) << u"avif"_s;
-    QTest::newRow("avif compatible") << QByteArray("\x00\x00\x00\x1c" "ftypmif1\x00\x00\x00\x00" "mif1avifmiaf", 28)
+    QTest::newRow("ico without pictures")
+            << (QByteArray("\x00\x00\x01\x00\x00\x00", 6) + QByteArray(20, '\x10')) << QString();
+    QTest::newRow("avif") << QByteArray("\x00\x00\x00\x1c"
+                                        "ftypavif\x00\x00\x00\x00"
+                                        "avifmif1miaf",
+                                        28)
+                          << u"avif"_s;
+    QTest::newRow("avif compatible") << QByteArray("\x00\x00\x00\x1c"
+                                                   "ftypmif1\x00\x00\x00\x00"
+                                                   "mif1avifmiaf",
+                                                   28)
                                      << u"avif"_s;
-    QTest::newRow("mp4") << QByteArray("\x00\x00\x00\x18" "ftypisom\x00\x00\x00\x00" "isommp42", 24) << QString();
+    QTest::newRow("mp4") << QByteArray("\x00\x00\x00\x18"
+                                       "ftypisom\x00\x00\x00\x00"
+                                       "isommp42",
+                                       24)
+                         << QString();
     QTest::newRow("svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"/>") << u"svg"_s;
-    QTest::newRow("svg xml decl bom") << QByteArray("\xef\xbb\xbf  <?xml version=\"1.0\"?>\n<!-- ąę -->\n<SVG width=\"1\"/>")
+    QTest::newRow("svg xml decl bom") << QByteArray(
+            "\xef\xbb\xbf  <?xml version=\"1.0\"?>\n<!-- ąę -->\n<SVG width=\"1\"/>")
                                       << u"svg"_s;
     QTest::newRow("svg doctype") << QByteArray("<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"><svg/>") << u"svg"_s;
     QTest::newRow("html") << QByteArray("<!DOCTYPE html><html><body>Zaloguj się</body></html>") << QString();
@@ -349,8 +366,9 @@ void TestWebPicture::sendsNoCookiesAndFollowsRedirects()
     MiniHttpServer server;
     server.handler = [&server](const MiniHttpServer::Request &r) {
         if (r.path == "/stare.png")
-            return rawResponse(302, {}, {{"Location", server.url(u"/nowe.png"_s).toEncoded()},
-                                         {"Set-Cookie", "sledzenie=1; Path=/"}});
+            return rawResponse(
+                    302, {},
+                    {{"Location", server.url(u"/nowe.png"_s).toEncoded()}, {"Set-Cookie", "sledzenie=1; Path=/"}});
         return rawResponse(200, jpegBytes(), {{"Content-Type", "image/jpeg"}, {"Set-Cookie", "sledzenie=2"}});
     };
     PictureFetcher fetcher;
@@ -377,13 +395,14 @@ void TestWebPicture::failures_data()
     QTest::addColumn<QString>("detail");
     QTest::newRow("404") << rawResponse(404, "<html>Nie ma</html>") << int(FetchError::Http) << u"404"_s;
     QTest::newRow("500 with picture") << rawResponse(500, pngBytes()) << int(FetchError::Http) << u"500"_s;
-    QTest::newRow("html page") << rawResponse(200, "<!DOCTYPE html><html>Zaloguj</html>", {{"Content-Type", "text/html"}})
+    QTest::newRow("html page") << rawResponse(200, "<!DOCTYPE html><html>Zaloguj</html>",
+                                              {{"Content-Type", "text/html"}})
                                << int(FetchError::NotPicture) << u"text/html"_s;
     QTest::newRow("empty body") << rawResponse(200, {}) << int(FetchError::NotPicture) << QString();
     QTest::newRow("announced too large") << rawResponse(200, pngBytes(), {}, 100 * 1024 * 1024)
                                          << int(FetchError::TooLarge) << QString();
-    QTest::newRow("too large body") << rawResponse(200, pngBytes() + QByteArray(5000, 'x'))
-                                    << int(FetchError::TooLarge) << QString();
+    QTest::newRow("too large body") << rawResponse(200, pngBytes() + QByteArray(5000, 'x')) << int(FetchError::TooLarge)
+                                    << QString();
 }
 
 void TestWebPicture::failures()

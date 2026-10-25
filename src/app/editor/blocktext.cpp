@@ -89,7 +89,8 @@ bool shownPictureTarget(QStringView target)
         return true;
     // A URL scheme ("ftp:", "data:", "mailto:") — not a Windows drive ("C:\").
     qsizetype i = 0;
-    while (i < target.size() && (target[i].isLetterOrNumber() || target[i] == u'+' || target[i] == u'-' || target[i] == u'.')
+    while (i < target.size()
+           && (target[i].isLetterOrNumber() || target[i] == u'+' || target[i] == u'-' || target[i] == u'.')
            && target[i].unicode() < 128)
         ++i;
     return !(i > 1 && i < target.size() && target[i] == u':' && target[0].isLetter());
@@ -799,7 +800,8 @@ QList<Transclusion> transclusionsOf(QStringView body)
             t.kind = Transclusion::Kind::Block;
             t.blockId = link.blockId;
             t.blockRef = true;
-        } else if (link.kind == LinkKind::Embed && !isAttachmentTarget(link.target) && !webpicture::isWebUrl(link.target)) {
+        } else if (link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)
+                   && !webpicture::isWebUrl(link.target)) {
             t.target = link.target;
             t.display = link.display;
             if (!link.blockId.isEmpty()) {
@@ -830,15 +832,16 @@ bool onlyEmbeds(QStringView body, bool transclusions)
     QList<Link> links = scan.links;
     std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
     for (const Link &link : std::as_const(links)) {
-        const bool attachment = (link.kind == LinkKind::Embed
-                                 && (isAttachmentTarget(link.target) || webpicture::isWebUrl(link.target)))
-                                || (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < body.size()
-                                    && body[link.from] == u'!' && shownPictureTarget(link.target));
-        const bool transclusion = transclusions
-                                  && ((link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)
-                                       && !webpicture::isWebUrl(link.target)
-                                       && (!link.target.isEmpty() || !link.heading.isEmpty() || !link.blockId.isEmpty()))
-                                      || link.kind == LinkKind::BlockEmbed);
+        const bool attachment =
+                (link.kind == LinkKind::Embed && (isAttachmentTarget(link.target) || webpicture::isWebUrl(link.target)))
+                || (link.kind == LinkKind::Markdown && link.from >= 0 && link.from < body.size()
+                    && body[link.from] == u'!' && shownPictureTarget(link.target));
+        const bool transclusion =
+                transclusions
+                && ((link.kind == LinkKind::Embed && !isAttachmentTarget(link.target)
+                     && !webpicture::isWebUrl(link.target)
+                     && (!link.target.isEmpty() || !link.heading.isEmpty() || !link.blockId.isEmpty()))
+                    || link.kind == LinkKind::BlockEmbed);
         if ((!attachment && !transclusion) || link.from < 0 || link.to > rest.size())
             continue;
         rest.remove(link.from, link.to - link.from);
