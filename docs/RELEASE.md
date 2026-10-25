@@ -6,11 +6,11 @@ Wszystkie buildy z GitHub Actions da się powtórzyć lokalnie tymi samymi skryp
 Testy w GitHub Actions nie startują same przy każdym pushu. Uruchamia się je:
 
 * **ręcznie** — Actions → wybrany workflow → *Run workflow*, albo
-  `gh workflow run ci.yml --ref main` (tak samo `android.yml`, `appimage.yml`,
+  `gh workflow run ci.yml --ref main` (tak samo `android.yml`, `appimage.yml`, `windows.yml`,
   `wasm.yml -f deploy=false`);
 * **znacznikiem `[ci]`** w opisie któregoś z wypychanych commitów na `main` (np.
   `git commit -m "Poprawka eksportu [ci]"`) — wtedy rusza `ci.yml`, a `android.yml`,
-  `appimage.yml` i `wasm.yml`, gdy push zmienia ich ścieżki; push bez znacznika pokazuje się
+  `appimage.yml`, `windows.yml` i `wasm.yml`, gdy push zmienia ich ścieżki; push bez znacznika pokazuje się
   w Actions jako przebieg z pominiętymi zadaniami;
 * **zawsze przy wydaniu** — `release.yml` uruchamia `ci.yml` i wszystkie buildy z ich testami,
   a wydanie publikuje dopiero, gdy wszystko przejdzie.
@@ -23,7 +23,8 @@ Testy w GitHub Actions nie startują same przy każdym pushu. Uruchamia się je:
 | `.github/workflows/android.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `android/`…), z `release.yml` | `scripts/android-build.sh`: podpisany APK arm64 + testy Kotlina + Android lint → artefakt `brulion-android-apk` |
 | `.github/workflows/wasm.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `wasm/`…), z `release.yml` | `scripts/wasm-build.sh --setup`, test dymny w Chrome (`scripts/wasm-smoke.mjs`: start, trwałość notatek, indeks bez wejścia, start offline) → artefakt `brulion-web`; z `main` **wdrożenie na GitHub Pages** (wydanie wdraża swoją wersję po publikacji) |
 | `.github/workflows/appimage.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`…), z `release.yml` | `scripts/appimage-build.sh` dla x86_64 (kontener Ubuntu 22.04) i aarch64 (Ubuntu 24.04): build Release, testy, AppImage, próbne uruchomienie → artefakty `brulion-appimage-<arch>` |
-| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml`), trzy powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i wdraża jego wersję przeglądarkową na GitHub Pages (wydanie testowe nie) |
+| `.github/workflows/windows.yml` | ręcznie, push na `main` ze znacznikiem `[ci]` (zmiany w `src/`, `tests/`, `packaging/windows/`…), z `release.yml` | `scripts/windows-build.ps1` na `windows-2022` (Qt 6.11.2 MSVC 2022 z aqt, MSVC, Ninja): build Release, testy offscreen, `windeployqt`, przenośny ZIP i instalator Inno Setup, sprawdzenie obu bez Qt w `PATH` (rozpakowany ZIP, cicha instalacja dla użytkownika, autotest powłoki, ciche odinstalowanie) → artefakt `brulion-windows` (wersja testowa, docs/WINDOWS.md) |
+| `.github/workflows/release.yml` | tag `v*` albo ręcznie | sprawdza wersję, tworzy szkic wydania, uruchamia testy (`ci.yml`), cztery powyższe buildy + `git archive`, dołącza pliki i `SHA256SUMS.txt`, publikuje wydanie i wdraża jego wersję przeglądarkową na GitHub Pages (wydanie testowe nie) |
 
 Wersje narzędzi są przypięte w skryptach (Qt 6.11.2, aqtinstall 3.3.0, NDK r27c, Emscripten
 4.0.7, linuxdeploy z sumami SHA-256); `dependabot.yml` co miesiąc aktualizuje akcje GitHuba

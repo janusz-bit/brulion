@@ -5,11 +5,12 @@ brulion: document
 ---
 # Wiersz poleceń i agenci AI
 
-Na komputerze z Linuksem Brulion ma też **wiersz poleceń**: program `brulion-cli`. Dopisuje do dziennika, dodaje zadania i przypomnienia, szuka, uruchamia zapytania i przenosi strony — bez otwierania okna, dokładnie tak, jak robi to aplikacja. Przydaje się w skryptach, w terminalu i przede wszystkim dla **agentów AI** (np. Hermes albo Claude Code), które mogą prowadzić Twoje notatki na Twoją prośbę.
+Na komputerze z Linuksem albo Windowsem Brulion ma też **wiersz poleceń**: program `brulion-cli`. Dopisuje do dziennika, dodaje zadania i przypomnienia, szuka, uruchamia zapytania i przenosi strony — bez otwierania okna, dokładnie tak, jak robi to aplikacja. Przydaje się w skryptach, w terminalu i przede wszystkim dla **agentów AI** (np. Hermes albo Claude Code), które mogą prowadzić Twoje notatki na Twoją prośbę.
 
 ## Skąd go wziąć
 - **NixOS**: jest w pakiecie Brulionu (`brulion-cli`). Na komputer bez pulpitu, np. Raspberry Pi z agentem, jest lżejszy pakiet z samym wierszem poleceń.
 - **AppImage**: `Brulion.AppImage cli …` — to ten sam program w pliku aplikacji.
+- **Windows** (wersja testowa): `brulion-cli.exe` leży w folderze programu obok `brulion.exe` — po instalacji w `%LOCALAPPDATA%\Programs\Brulion`, w wersji przenośnej w rozpakowanym folderze `Brulion`.
 - Na Androidzie i w przeglądarce wiersza poleceń nie ma; agent sięga do tych notatek przez folder synchronizowany przez Syncthing albo Nextcloud.
 
 ## Pierwsze polecenia

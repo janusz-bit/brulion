@@ -5,16 +5,17 @@ block outliner with daily journals, calendar, reminders and alarms, calculations
 live queries, sync through Syncthing (plain folder) or Nextcloud (WebDAV), import/export from
 other apps.
 
-One C++/QML code base, three targets, all built against **Qt 6.11.2** (CMake accepts ≥ 6.8):
+One C++/QML code base, four targets, all built against **Qt 6.11.2** (CMake accepts ≥ 6.8):
 
 | Target | How | Vault storage | Reminders |
 |---|---|---|---|
 | **NixOS / Linux desktop** | Qt from nixpkgs: flake package + NixOS module; AppImage (Qt from aqt) for other distributions | a folder (e.g. a Syncthing folder) | `org.freedesktop.Notifications` over D-Bus, tray as fallback; timed in-app (`ReminderScheduler`), the app can live hidden in the tray (`--hidden`, autostart) |
+| **Windows** 10/11 x86_64 (test version, docs/WINDOWS.md) | MSVC 2022 + Qt from aqt, `windeployqt`; portable ZIP and a per-user Inno Setup installer from GitHub Actions | a folder (default `Documents\Brulion`) | the tray icon's messages only (no native toasts with actions), timed in-app (`ReminderScheduler`) while the app runs, also hidden in the tray; no autostart |
 | **Android** (9+, API 28–36) | Qt for Android (aqt) + `androiddeployqt`, signed APK from GitHub Actions | a folder on shared storage (Syncthing-Fork; "All files access") or app storage + Nextcloud | native `AlarmManager` alarms (Kotlin via JNI) — fire while the app is closed and after a reboot |
 | **Browser** | Qt for WebAssembly (single-threaded) + emsdk, offline PWA shell (`wasm/`) on GitHub Pages | Emscripten IDBFS (IndexedDB) + import/export, Nextcloud sync | web Notification API (service worker where needed) while the page is open |
 
-On the desktop a command line for scripts and AI agents comes with it: `brulion-cli` (also
-`brulion cli …`), with an MCP server (`brulion-cli mcp`) — see "Command line" below and
+On the desktop (Linux, Windows) a command line for scripts and AI agents comes with it:
+`brulion-cli` (also `brulion cli …`), with an MCP server (`brulion-cli mcp`) — see "Command line" below and
 docs/CLI.md.
 
 ## Layers
@@ -87,7 +88,7 @@ those of before —, `relocate.cpp`; `RelocationPlanner` makes the same plan a f
 ## Platform layer (`src/platform/`, library `brulion_platform`)
 
 Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h`:
-`targetName()` ("linux" | "android" | "wasm").
+`targetName()` ("linux" | "windows" | "android" | "wasm").
 
 * **Everywhere** (`platform.h`): `logDirectory()` (Linux `$XDG_STATE_HOME/Brulion/Brulion/logs`,
   Android the app's files dir + `/logs`, the browser none: memory only) and `deviceDescription()`
@@ -161,12 +162,15 @@ QML smoke tests and screenshot scripts that run the real app headless).
   `$XDG_RUNTIME_DIR`, a lock file decides the primary; only in a folder of the user's own —
   `socketFolderProblem()`, never the shared temp folder: without one the app runs without a
   single instance and the event log says why — and both ends talk only to this user's processes,
-  `trustedPeer()` of the peer's `SO_PEERCRED`) and the messages of its socket
+  `trustedPeer()` of the peer's `SO_PEERCRED`; on Windows a named pipe with an access list of the
+  user, its key and lock file in `%TEMP%`, the peer process's SID compared) and the messages of
+  its socket
   (`appmessage.h`: `activate`, `capture`, `today`, `open {"route", "vault"}` — one-way lines a
   second launch or `brulion-cli app open` sends); the **remote control** of the running app
   (`controlprotocol.h`: JSON-line requests and responses, the methods and their parameters;
   `controlserver.h`: a second socket, `<key>-control`, owner-only, other users' connections
-  refused; `controlclient.h` for `brulion-cli app …`). Off unless `--remote-control` or the device
+  refused; `controlclient.h` for `brulion-cli app …`); `profile.h`: the app's names shared by the
+  app and brulion-cli, `BRULION_PROFILE=<name>` for a separate profile (test runs on Windows). Off unless `--remote-control` or the device
   setting `devtools/remoteControl`; the app's side is `src/app/shell/remotecontrol.h`, its input
   and item finding the UI driver `src/app/shell/uidriver.h` (library `brulion_uidriver`), shared
   with the shell self-test and the journey. Nothing nested: gestures play from timers, waits
@@ -299,6 +303,13 @@ app; these guards keep data from being lost:
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
   `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check`.
+* Windows (test version): `scripts/windows-build.ps1` — MSVC 2022 (`/utf-8`, `/permissive-`,
+  `/Zc:__cplusplus`, `/bigobj`, `/W4` without `/WX`), Qt 6.11.2 `win64_msvc2022_64`, `windeployqt`
+  + the app-local MSVC runtime → portable ZIP + Inno Setup installer (`packaging/windows/`: the
+  `.iss`, the icon, the executables' version resources); the desktop integration
+  (`BRULION_DESKTOP`: tray, single instance over a named pipe of this user, brulion-cli, the QML
+  self-tests) as on Linux; `BRULION_PROFILE` (src/ipc/profile.h) isolates test runs there —
+  docs/WINDOWS.md.
 * Linux: `scripts/appimage-build.sh` (Qt 6.11.2 from aqt, linuxdeploy) → AppImage x86_64 +
   aarch64, each with a `.zsync` file for AppImageUpdate (checked before publishing by
   `scripts/appimage-update-check.sh`); desktop entry and metainfo in `packaging/`.
@@ -311,5 +322,5 @@ app; these guards keep data from being lost:
   docs/WEB.md.
 * CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
-  `appimage.yml`, `wasm.yml` (Pages), `release.yml` (tag `v*` → draft release with APK,
-  AppImages, web ZIP, sources, checksums) — docs/RELEASE.md.
+  `appimage.yml`, `windows.yml`, `wasm.yml` (Pages), `release.yml` (tag `v*` → draft release with
+  APK, AppImages, the Windows installer and ZIP, web ZIP, sources, checksums) — docs/RELEASE.md.

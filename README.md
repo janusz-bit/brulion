@@ -164,6 +164,7 @@
 |---|---|
 | **NixOS** | flake + moduł `programs.brulion` (z autostartem w zasobniku) — [docs/NIXOS.md](docs/NIXOS.md) |
 | **Inne Linuksy** | AppImage (x86_64, aarch64) z [Wydań](https://github.com/janusz-bit/brulion/releases); aktualizuje się przez AppImageUpdate, Gear Lever albo AppImageLauncher |
+| **Windows** 10/11 (x86_64) — **wersja testowa** | instalator `Brulion-<wersja>-windows-x86_64-setup.exe` (dla bieżącego użytkownika, bez uprawnień administratora) albo przenośny `brulion-<wersja>-windows-x86_64.zip` z [Wydań](https://github.com/janusz-bit/brulion/releases); pliki nie są podpisane (SmartScreen: „Więcej informacji” → „Uruchom mimo to”), przypomnienia przez ikonę w zasobniku — [docs/WINDOWS.md](docs/WINDOWS.md) |
 | **Android** (9+) | plik APK (arm64) z [Wydań](https://github.com/janusz-bit/brulion/releases) — [docs/ANDROID.md](docs/ANDROID.md) |
 | **Przeglądarka** | <https://janusz-bit.github.io/brulion/> (działa offline po pierwszym otwarciu) — [docs/WEB.md](docs/WEB.md); na własnym serwerze: `brulion-web-<wersja>.zip` z Wydań albo moduł `services.brulion-web` |
 
@@ -366,8 +367,10 @@ Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar (export
 Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact
-  alarms that fire while the app is closed) and in the **browser** (Qt for WebAssembly,
-  works offline). On phones the editing toolbar always sits right on the on-screen keyboard
+  alarms that fire while the app is closed), in the **browser** (Qt for WebAssembly,
+  works offline) and, as a **test version**, on **Windows** 10/11 x86_64 (a per-user installer
+  without admin rights or a portable ZIP; unsigned, reminders through the tray icon —
+  [docs/WINDOWS.md](docs/WINDOWS.md)). On phones the editing toolbar always sits right on the on-screen keyboard
   (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
@@ -418,8 +421,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * Built with C++20 and Qt 6.11 Quick; GUI-free core libraries with thousands of unit tests.
 
 The screenshots above show the Polish UI with the bundled sample notebook (`brulion --demo`).
-Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK, or
-<https://janusz-bit.github.io/brulion/>). Build: `nix develop`, then
+Install: see the table above (`nix run github:janusz-bit/brulion`, AppImage, APK, the Windows
+installer or ZIP — a test version —, or <https://janusz-bit.github.io/brulion/>). Build: `nix develop`, then
 `scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
