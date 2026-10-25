@@ -21,8 +21,10 @@
 #include <QTest>
 #include <QUuid>
 
+#ifdef Q_OS_UNIX
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 using namespace Qt::StringLiterals;
 using brulion::ipc::SingleInstance;
@@ -33,10 +35,12 @@ class TestSingleInstance : public QObject {
 
     static QString uniqueName() { return u"brulion-test-"_s + QUuid::createUuid().toString(QUuid::Id128).left(12); }
     QString uniqueKey() const { return m_dir.filePath(uniqueName()); }
+#ifdef Q_OS_UNIX
     static bool chmod(const QString &path, mode_t mode)
     {
         return ::chmod(QFile::encodeName(path).constData(), mode) == 0;
     }
+#endif
 
 private Q_SLOTS:
     void initTestCase() { QVERIFY(m_dir.isValid()); }
@@ -48,10 +52,15 @@ private Q_SLOTS:
         QVERIFY(SingleInstance::keyFor(u"/a"_s) != SingleInstance::keyFor(u"/b"_s));
         QVERIFY(QFileInfo(SingleInstance::keyFor(u"/home/żółw"_s)).fileName().startsWith(u"brulion-"_s));
         // In the user's private runtime folder when there is one (not world-writable /tmp,
-        // where another user could squat the name).
+        // where another user could squat the name); on Windows the user's own temp folder (the
+        // named pipe's name and the lock file's folder).
+#ifdef Q_OS_WIN
+        QCOMPARE(QFileInfo(SingleInstance::keyFor(u"/a"_s)).absolutePath(), QDir(QDir::tempPath()).absolutePath());
+#else
         const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
         if (!runtime.isEmpty())
             QCOMPARE(QFileInfo(SingleInstance::keyFor(u"/a"_s)).absolutePath(), QDir(runtime).absolutePath());
+#endif
     }
 
     void secondLaunchActivatesFirst()
@@ -126,6 +135,10 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(QDir::temp().filePath(bare + u".lock"_s)));
         QVERIFY(!SingleInstance(bare).sendToPrimary("activate", 200));
 
+#ifndef Q_OS_UNIX
+        QSKIP("Folder modes and symbolic links are Unix checks: on Windows the socket is a named pipe "
+              "with an access list of the user (its lock file in the user's temp folder)");
+#else
         // A folder the group or others can write to (the shared /tmp is 1777).
         const QString shared = m_dir.filePath(u"wspólny"_s);
         QVERIFY(QDir().mkpath(shared));
@@ -161,12 +174,16 @@ private Q_SLOTS:
             QTRY_COMPARE(messages.size(), 1);
             QCOMPARE(refused.size(), 0); // a connection of this user
         }
+#endif
     }
 
     // A lock file that cannot be made (a folder the user cannot write to) is no running primary:
     // listen() says why instead of sending the caller to wait for an answer that never comes.
     void lockThatCannotBeMade()
     {
+#ifndef Q_OS_UNIX
+        QSKIP("A folder the user cannot write to is made with Unix modes here");
+#else
         if (::geteuid() == 0)
             QSKIP("root writes to any folder");
         const QString folder = m_dir.filePath(u"tylko-do-odczytu"_s);
@@ -179,6 +196,7 @@ private Q_SLOTS:
         QVERIFY(chmod(folder, 0700));
         QVERIFY2(app.listen(), qPrintable(app.errorString())); // tried anew
         QVERIFY(app.errorString().isEmpty());
+#endif
     }
 
     void parseMessages_data()

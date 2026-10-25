@@ -14,10 +14,15 @@ brulion_add_test(tst_notify_sounds SOURCES tst_notify_sounds.cpp LIBS brulion_no
 # the ringtone back after "Silent", "Play sample" — on a phone with finger taps, on the desktop
 # with mouse clicks. Fresh homes (settings and the sample notebook of the run).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
-if(TARGET brulion AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
+if(TARGET brulion AND BRULION_DESKTOP
    AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     set(_sounds_homes ${CMAKE_CURRENT_BINARY_DIR}/sounds-selftest-homes)
-    add_test(NAME tst_notify_sounds_qml_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_sounds_homes})
+    set(_sounds_remove ${_sounds_homes})
+    foreach(_kind phone desktop)
+        brulion_test_profile(_profile sounds-${_kind})
+        list(APPEND _sounds_remove ${_profile_DIRS})
+    endforeach()
+    add_test(NAME tst_notify_sounds_qml_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_sounds_remove})
     set_tests_properties(tst_notify_sounds_qml_homes PROPERTIES FIXTURES_SETUP notify_sounds_homes)
     add_test(NAME tst_notify_sounds_qml
         COMMAND brulion --demo --selftest-sounds --no-single-instance
@@ -30,9 +35,10 @@ if(TARGET brulion AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
         set(_home ${_sounds_homes}/${_kind})
+        brulion_test_profile(_profile sounds-${_kind})
         # No session bus: "Play sample" must not reach the desktop of whoever runs the tests.
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/brulion-test-bus;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/brulion-test-bus;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}${_profile}"
             FIXTURES_REQUIRED notify_sounds_homes TIMEOUT ${_sounds_timeout} RUN_SERIAL TRUE
             FAIL_REGULAR_EXPRESSION "selftest: FAIL;TypeError;ReferenceError")
     endforeach()

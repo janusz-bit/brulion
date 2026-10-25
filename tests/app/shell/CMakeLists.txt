@@ -30,6 +30,10 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     # Each test gets its own home with a fresh sample notebook (the self-test edits pages):
     # the fixture removes both before every run.
     set(_shell_selftest_homes ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-phone ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-desktop)
+    foreach(_kind phone desktop)
+        brulion_test_profile(_profile shell-${_kind})
+        list(APPEND _shell_selftest_homes ${_profile_DIRS})
+    endforeach()
     add_test(NAME tst_shell_qml_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_shell_selftest_homes})
     set_tests_properties(tst_shell_qml_homes PROPERTIES FIXTURES_SETUP shell_qml_homes)
     add_test(NAME tst_shell_qml
@@ -43,8 +47,9 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
+        brulion_test_profile(_profile shell-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
             FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE
             # QML that ran on something already gone fails too, as in tst_editor_qml (a side
             # panel created from the context of the view the shell had just left did).
@@ -59,6 +64,10 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     # the bottom bar; the desktop run clicks through the sidebar and menus. Screenshots land in
     # the build dir (tests/app/shell/journey.sh makes the reviewed set).
     set(_journey_homes ${CMAKE_CURRENT_BINARY_DIR}/journey-home-phone ${CMAKE_CURRENT_BINARY_DIR}/journey-home-desktop)
+    foreach(_kind phone desktop)
+        brulion_test_profile(_profile journey-${_kind})
+        list(APPEND _journey_homes ${_profile_DIRS})
+    endforeach()
     add_test(NAME tst_shell_journey_homes COMMAND ${CMAKE_COMMAND} -E rm -rf ${_journey_homes})
     set_tests_properties(tst_shell_journey_homes PROPERTIES FIXTURES_SETUP shell_journey_homes)
     add_test(NAME tst_shell_journey
@@ -71,8 +80,9 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
+        brulion_test_profile(_profile journey-${_kind})
         set_tests_properties(${_test} PROPERTIES
-            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state"
+            ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state${_profile}"
             FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
@@ -81,8 +91,10 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     # offscreen on a small notebook in a private home, driven through `brulion-cli app …` and the
     # control socket (off by default, 0600, state, navigate, open, find and click, Polish text typed
     # into a block and saved, Ctrl+K, commands, capture, waitFor, screenshots, gestures, the MCP app
-    # tools, quit). The test sets the app's environment itself.
-    if(TARGET brulion-cli)
+    # tools, quit). The test sets the app's environment itself — a private home of XDG folders, its
+    # sockets in its runtime folder, Unix file modes —, which does not apply on Windows: not built
+    # there.
+    if(TARGET brulion-cli AND NOT WIN32)
         brulion_add_test(tst_remote_control_qml SOURCES tst_remote_control.cpp LIBS brulion_ipc)
         target_compile_definitions(tst_remote_control_qml PRIVATE BRULION_APP="$<TARGET_FILE:brulion>"
             BRULION_CLI="$<TARGET_FILE:brulion-cli>" BRULION_QML_ROOT="${_brulion_qt_qml_root}")

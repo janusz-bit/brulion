@@ -24,6 +24,24 @@ function(brulion_add_test name)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTEST_FUNCTION_TIMEOUT=${_function_timeout_ms}")
 endfunction()
 
+# brulion_test_profile(<var> <name>) — the app's own runs in a test (the QML self-tests, the
+# journey) keep out of the user's settings and notebooks with a private home of XDG folders. On
+# Windows these do not move QStandardPaths: there such a run uses a separate profile instead
+# (BRULION_PROFILE=test-<name>, src/ipc/profile.h). Sets <var> to the environment entries to append
+# to the test's ENVIRONMENT (";BRULION_PROFILE=…" on Windows, "" elsewhere) and <var>_DIRS to the
+# profile's folders, for the fixture that removes them before the run.
+function(brulion_test_profile var name)
+    if(WIN32)
+        file(TO_CMAKE_PATH "$ENV{APPDATA}" _roaming)
+        file(TO_CMAKE_PATH "$ENV{LOCALAPPDATA}" _local)
+        set(${var} ";BRULION_PROFILE=test-${name}" PARENT_SCOPE)
+        set(${var}_DIRS "${_roaming}/Brulion-test-${name}" "${_local}/Brulion-test-${name}" PARENT_SCOPE)
+    else()
+        set(${var} "" PARENT_SCOPE)
+        set(${var}_DIRS "" PARENT_SCOPE)
+    endif()
+endfunction()
+
 add_subdirectory(core)
 # The app's areas (src/app): design system helpers, the editor, the shell, the views, the QML.
 if(BRULION_BUILD_APP)
@@ -36,7 +54,8 @@ endif()
 if(TARGET brulion-cli)
     add_subdirectory(cli)
 endif()
-# Shell scripts from scripts/ (release.sh, appimage-update-check.sh).
+# Shell scripts from scripts/ (release.sh, appimage-update-check.sh); bash scripts for Linux, not
+# run on Windows (tests/scripts/CMakeLists.txt).
 add_subdirectory(scripts)
 # QBENCHMARK suites (tests/bench, run with scripts/bench.sh); off by default so CI and Nix stay fast.
 option(BRULION_BUILD_BENCHMARKS "Build the benchmark suites in tests/bench (scripts/bench.sh)" OFF)
