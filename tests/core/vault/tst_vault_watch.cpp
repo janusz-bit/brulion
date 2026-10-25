@@ -7,6 +7,10 @@
 
 #include <cstdio>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 using namespace vaulttest;
 
 namespace {
@@ -16,12 +20,21 @@ qint64 diskMtime(const QString &abs)
     return QFileInfo(abs).fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
 }
 
-/// rename(2) that replaces an existing target, like editors and Syncthing do.
+/// rename(2) that replaces an existing target, like editors and Syncthing do (on Windows
+/// MoveFileEx, as there the C library's rename() never replaces a file).
 bool replaceBehind(const QString &root, const QString &from, const QString &to)
 {
+#ifdef Q_OS_WIN
+    const QString a = QDir::toNativeSeparators(root + u'/' + from);
+    const QString b = QDir::toNativeSeparators(root + u'/' + to);
+    return ::MoveFileExW(reinterpret_cast<const wchar_t *>(a.utf16()), reinterpret_cast<const wchar_t *>(b.utf16()),
+                         MOVEFILE_REPLACE_EXISTING)
+           != 0;
+#else
     const QByteArray a = QFile::encodeName(root + u'/' + from);
     const QByteArray b = QFile::encodeName(root + u'/' + to);
     return std::rename(a.constData(), b.constData()) == 0;
+#endif
 }
 
 /// Rewrite an existing file in place, as many editors (VS Code, nano) and scripts do: the same
@@ -368,6 +381,11 @@ private Q_SLOTS:
 
     void watcherDetectsFolderRenames()
     {
+#ifdef Q_OS_WIN
+        // Qt's watcher holds a handle on every watched folder, and Windows moves no folder with an
+        // open handle inside: other programs cannot rename a watched folder (docs/WINDOWS.md).
+        QSKIP("Windows refuses to rename a folder the watcher holds open");
+#endif
         Fixture f;
         f.write(u"F/a.md"_s, "a");
         f.write(u"F/sub/b.md"_s, "b");
@@ -610,8 +628,10 @@ private Q_SLOTS:
         f.vault->watchFile(u"Nowe/jeszcze nie ma.md"_s); // an editor on a page not created yet
         // Renamed by the vault: watched under the new name.
         QVERIFY(f.vault->rename(u"a.md"_s, u"Folder/b.md"_s));
-        QVERIFY(watchedRel(*f.vault, f.root()).contains(u"Folder/b.md"_s));
-        QVERIFY(!watchedRel(*f.vault, f.root()).contains(u"a.md"_s));
+        QVERIFY2(watchedRel(*f.vault, f.root()).contains(u"Folder/b.md"_s),
+                 qPrintable(watchedRel(*f.vault, f.root()).join(u", "_s)));
+        QVERIFY2(!watchedRel(*f.vault, f.root()).contains(u"a.md"_s),
+                 qPrintable(watchedRel(*f.vault, f.root()).join(u", "_s)));
         // Renamed by another program: found through the folders, watched under the new name.
         QVERIFY(renameBehind(f.root(), u"Folder/b.md"_s, u"Inny/c.md"_s));
         QTRY_COMPARE(f.changes().mid(1), QStringList{u"rename:Folder/b.md->Inny/c.md@external"_s});

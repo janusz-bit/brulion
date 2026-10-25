@@ -697,15 +697,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.visible(), QList<bool>({true, false, false, true, true}));
         QVERIFY(f.role(0, "collapsed").toBool());
         QCOMPARE(f.page.editingRow(), 0); // the caret moved out of the folded subtree
-        QCOMPARE(f.page.foldState(), QVariantList({0}));
+        QCOMPARE(f.page.foldState(), QVariantList{0});
         QCOMPARE(f.page.nextVisibleRow(0), 3);
         QCOMPARE(f.page.previousVisibleRow(3), 0);
         f.page.toggleFold(1); // hidden but has children: folds too
         f.page.toggleFold(0);
         QCOMPARE(f.visible(), QList<bool>({true, true, false, true, true}));
-        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        QCOMPARE(f.page.foldState(), QVariantList{1});
         f.page.toggleFold(4); // no children: nothing
-        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        QCOMPARE(f.page.foldState(), QVariantList{1});
         f.page.foldAll(true);
         QCOMPARE(f.visible(), QList<bool>({true, false, false, true, false}));
         f.page.foldAll(false);

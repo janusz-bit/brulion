@@ -337,10 +337,14 @@ private Q_SLOTS:
         QVERIFY(QFileInfo::exists(QDir::fromNativeSeparators(c.savedTo())));
         QFile::remove(first);
         QFile::remove(QDir::fromNativeSeparators(c.savedTo()));
-        // Saving into a folder that cannot exist fails with a message.
+        // Saving into a folder that cannot exist (below a file) fails with a message.
+        const QString blocker = m_tmp.filePath(u"plik, nie folder"_s);
+        QFile file(blocker);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.close();
         c.prepare();
         QVERIFY(waitState(c, u"ready"_s));
-        QVERIFY(!c.saveTo(QUrl::fromLocalFile(u"/proc/nie/wolno.csv"_s)));
+        QVERIFY(!c.saveTo(QUrl::fromLocalFile(blocker + u"/nie/wolno.csv"_s)));
         QCOMPARE(c.state(), u"error"_s);
         QVERIFY(!c.errorText().isEmpty());
         QVERIFY(!c.saveInBrowser()); // desktop build

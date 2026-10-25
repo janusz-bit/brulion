@@ -539,6 +539,7 @@ private Q_SLOTS:
         QFile file(a.root + u"/nowy.md"_s);
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(), QByteArray("lokalny\n"));
+        file.close(); // Windows replaces no file another handle has open
         // Once the vault knows it, both versions are kept.
         a.vault->rescan();
         const SyncReport next = a.sync();

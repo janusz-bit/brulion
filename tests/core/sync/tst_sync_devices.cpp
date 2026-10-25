@@ -445,23 +445,29 @@ private Q_SLOTS:
 
     void specialCharactersInNamesRoundTrip()
     {
+        // "?" means a query in a URL; Windows allows no "?" in file names, so "!" there.
+#ifdef Q_OS_WIN
+        const QString percent = u"100% gotowe #1 !.md"_s;
+#else
+        const QString percent = u"100% gotowe #1 ?.md"_s;
+#endif
         const QMap<QString, QByteArray> files = {
-            {u"100% gotowe #1 ?.md"_s, "procenty\n"},
-            {u"Notatki (stare)/[szkic] ąę & żółw.md"_s, u8(u"nawiasy\n"_s)},
-            {u"a+b=c; d,e'f.md"_s, "znaki\n"},
-            {u"Łódź/Źródła/Ćwiczenia/ŚWIT.md"_s, u8(u"wielkie litery\n"_s)},
-            // Surrogate pairs (UTF-16) in folder and file names and in the content.
-            {u"📓 Dziennik/😀 radość 👍🏽.md"_s, u8(u"emoji 🎉\n"_s)},
+                {percent, "procenty\n"},
+                {u"Notatki (stare)/[szkic] ąę & żółw.md"_s, u8(u"nawiasy\n"_s)},
+                {u"a+b=c; d,e'f.md"_s, "znaki\n"},
+                {u"Łódź/Źródła/Ćwiczenia/ŚWIT.md"_s, u8(u"wielkie litery\n"_s)},
+                // Surrogate pairs (UTF-16) in folder and file names and in the content.
+                {u"📓 Dziennik/😀 radość 👍🏽.md"_s, u8(u"emoji 🎉\n"_s)},
         };
         Pair p(files);
         QCOMPARE(counts(p.a.sync()), (Counts{.up = 5}));
         QCOMPARE(counts(p.b.sync()), (Counts{.down = 5}));
         QCOMPARE(p.b.files(), p.a.files());
         QCOMPARE(p.server.files(kFolder), p.a.files());
-        QVERIFY(p.b.write(u"100% gotowe #1 ?.md"_s, u"procenty\nzmiana\n"_s));
+        QVERIFY(p.b.write(percent, u"procenty\nzmiana\n"_s));
         QCOMPARE(counts(p.b.sync()), (Counts{.up = 1}));
         QCOMPARE(counts(p.a.sync()), (Counts{.down = 1}));
-        QCOMPARE(p.a.read(u"100% gotowe #1 ?.md"_s), u"procenty\nzmiana\n"_s);
+        QCOMPARE(p.a.read(percent), u"procenty\nzmiana\n"_s);
     }
 
     void notesInAFolderTheServerSpellsInNfdSyncBothWays()

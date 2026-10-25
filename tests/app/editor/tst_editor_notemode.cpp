@@ -418,13 +418,13 @@ private Q_SLOTS:
         QCOMPARE(f.page.zoomBlock(), -1);
         QCOMPARE(f.visible(), QList<bool>({false, true, true, true, true})); // row 0: the mode key
         QVERIFY(!f.role(1, "collapsed").toBool());
-        QCOMPARE(f.page.foldState(), QVariantList({3})); // line of "- a" below the frontmatter
+        QCOMPARE(f.page.foldState(), QVariantList{3}); // line of "- a" below the frontmatter
         // Zoom and folding commands do nothing here.
         f.page.zoomInto(1);
         QCOMPARE(f.page.zoomBlock(), -1);
         f.page.toggleFold(4);
         f.page.foldAll(true);
-        QCOMPARE(f.page.foldState(), QVariantList({3}));
+        QCOMPARE(f.page.foldState(), QVariantList{3});
         // Back in the outline the fold is there again — but the edited block stays in view.
         f.page.startEditing(3, 0);
         QVERIFY(f.page.setMode(u"outline"_s));
