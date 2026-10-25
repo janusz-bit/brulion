@@ -74,6 +74,16 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
   w konsoli nie widać jego wyjścia; w skryptach i dla agentów AI używaj `brulion-cli.exe`.
   Zdalne sterowanie aplikacją (`--remote-control`, `brulion-cli app …`) działa przez potok
   nazwany, ale jego test end-to-end jest tylko linuksowy (niżej).
+* **Nazw folderów notatnika nie zmienia się w Eksploratorze, gdy Brulion jest uruchomiony.**
+  Brulion obserwuje foldery notatnika (`QFileSystemWatcher` trzyma otwarty uchwyt każdego z nich),
+  a Windows nie przenosi folderu, w którym coś jest otwarte — Eksplorator zgłasza, że folder jest
+  używany. W Brulionie (pasek boczny, „Zmień nazwę”, „Przenieś do…”) działa normalnie; usuwanie
+  folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
+* **Nazwy, których Windows nie dopuszcza:** notatka z innego urządzenia o nazwie ze znakiem
+  `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
+  synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
+  urządzeniu.
+* Dowiązania symboliczne i punkty połączenia (junction) w notatniku nie są testowane na Windows.
 * Tylko x86_64 (bez Windows na ARM) i tylko Windows 10/11.
 
 ## Budowanie
@@ -82,7 +92,8 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
 
 `.github/workflows/windows.yml` (runner `windows-2022`): Qt 6.11.2 `win64_msvc2022_64` z aqt
 (`jurplel/install-qt-action`, w cache; aqtinstall z przypiętego commita gałęzi master, bo wydanie
-3.3.0 nie zna układu repozytorium Qt 6.11 dla Windows), MSVC z `ilammy/msvc-dev-cmd`, CMake +
+3.3.0 nie zna układu repozytorium Qt 6.11 dla Windows), MSVC z `ilammy/msvc-dev-cmd`, ccache
+z Chocolatey (pamięć podręczna kompilacji w cache Actions, zapisywana zaraz po budowaniu), CMake +
 Ninja, Release, potem `scripts/windows-build.ps1` krok po kroku: build, testy, paczki, sprawdzenie
 paczek → artefakt `brulion-windows` (ZIP + instalator). Uruchamia się jak `appimage.yml`: ręcznie
 (`gh workflow run windows.yml --ref main`), przy pushu na `main` ze znacznikiem `[ci]` (gdy zmienia
@@ -103,7 +114,8 @@ powershell -ExecutionPolicy Bypass -File scripts\windows-build.ps1 -QtDir C:\Qt\
 scripts\windows-build.ps1 -QtDir C:\Qt\6.11.2\msvc2022_64 -Steps build,test
 ```
 
-Bez środowiska MSVC (brak `cl.exe` w `PATH`) skrypt sam je wczytuje (`vswhere` + `vcvars64.bat`).
+Bez środowiska MSVC (brak `cl.exe` w `PATH`) skrypt sam je wczytuje (`vswhere` + `vcvars64.bat`);
+`ccache` w `PATH` (4.6 lub nowszy) jest używany sam.
 Kroki:
 
 1. **build** — `cmake -G Ninja -DCMAKE_BUILD_TYPE=Release` w `build-windows`. MSVC dostaje
@@ -141,6 +153,18 @@ z wyjątkami:
 * pomijane (`QSKIP` z powodem): w `tst_ipc_singleinstance` i `tst_ipc_control` przypadki
   uprawnień folderów, dowiązań symbolicznych i porzuconego pliku gniazda — na Windows gniazdo to
   potok nazwany z listą dostępu użytkownika, bez pliku;
+* pomijane według możliwości systemu plików (`tests/common/filesystemtraits.h`): przypadki
+  z **dowiązaniami symbolicznymi** (`QFile::link()` robi na Windows skrót `.lnk`) — w `tst_vault`,
+  `tst_vault_edge`, `tst_vault_safety`, `tst_shell_settings`, `tst_shell_nextcloud`; z
+  **uprawnieniami uniksowymi** (folder bez prawa odczytu, plik tylko dla właściciela; Windows ma
+  tylko atrybut „tylko do odczytu”, a resztę załatwiają listy dostępu profilu) — w
+  `tst_vault_safety`, `tst_sync_engine`, `tst_log_logger`, `tst_shell_settings`; z **dwoma
+  plikami różniącymi się tylko wielkością liter** (NTFS ich nie odróżnia) — w `tst_vault`,
+  `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (tam na takim systemie plików
+  test sprawdza zamiast tego, że po zmianie wielkości liter folderu na innym urządzeniu żadna
+  notatka nie ginie);
+* `watcherDetectsFolderRenames` w `tst_vault_watch`: inny program nie zmieni na Windows nazwy
+  obserwowanego folderu (niżej, „Ograniczenia”);
 * autotesty QML (`tst_shell_qml*`, `tst_shell_journey*`, `tst_notify_sounds_qml*`,
   `tst_appio_import_qml*`, `tst_content_journals_qml`) dostają osobny profil
   `BRULION_PROFILE=test-<nazwa>` (`brulion_test_profile()` w `tests/CMakeLists.txt`), który ich
