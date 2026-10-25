@@ -10,7 +10,7 @@ name: Windows
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/windows] # TEMPORARY: feature/windows until windows.yml is on main
     paths:
       - src/**
       - tests/**
@@ -42,7 +42,7 @@ env:
 jobs:
   windows:
     name: Windows (x86_64, MSVC 2022)
-    if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
+    if: github.event_name != 'push' || github.ref_type == 'tag' || github.ref == 'refs/heads/feature/windows' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: windows-2022
     timeout-minutes: 120
     outputs:
