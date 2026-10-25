@@ -132,6 +132,10 @@ if ($Steps -contains 'test') {
     # The tests run from the build directory: Qt's DLLs come from Qt's bin folder.
     $env:PATH = "$(Join-Path $QtDir 'bin');$env:PATH"
     $env:QT_QPA_PLATFORM = 'offscreen'
+    # Without a console window Qt (and QtTest's report) writes to the debugger, not to the output
+    # ctest shows; the offscreen platform looks for fonts in Qt's own lib\fonts, which is empty.
+    $env:QT_FORCE_STDERR_LOGGING = '1'
+    $env:QT_QPA_FONTDIR = Join-Path $env:WINDIR 'Fonts'
     Exec ctest @('--test-dir', $BuildDir, '--output-on-failure', '--parallel', "$Jobs", '--timeout', '600')
 }
 
@@ -205,7 +209,7 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
     foreach ($file in $exe, $cli) { if (-not (Test-Path $file)) { Fail "$Label`: $file missing" } }
     $saved = @{}
     foreach ($name in 'PATH', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH', 'QML2_IMPORT_PATH', 'QT_ROOT_DIR', 'Qt6_DIR',
-        'QT_QPA_PLATFORM', 'QT_QUICK_BACKEND', 'QT_FORCE_STDERR_LOGGING', 'BRULION_PROFILE') {
+        'QT_QPA_PLATFORM', 'QT_QUICK_BACKEND', 'QT_FORCE_STDERR_LOGGING', 'QT_QPA_FONTDIR', 'BRULION_PROFILE') {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
     }
     try {
@@ -216,6 +220,7 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         $env:QT_QPA_PLATFORM = 'offscreen'
         $env:QT_QUICK_BACKEND = 'software'
         $env:QT_FORCE_STDERR_LOGGING = '1'
+        $env:QT_QPA_FONTDIR = Join-Path $env:WINDIR 'Fonts' # the offscreen platform's fonts
         $env:BRULION_PROFILE = $CheckProfile
 
         Info "$Label`: brulion-cli --version"
