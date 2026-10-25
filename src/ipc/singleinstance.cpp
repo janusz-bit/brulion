@@ -115,8 +115,17 @@ bool SingleInstance::listen()
     connect(m_server, &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket *socket = m_server->nextPendingConnection()) {
             // Linux and Windows tell who connected: another user, or one it cannot tell, is dropped
-            // unheard. (Elsewhere the socket file's permissions decide.)
-            if (const qint64 uid = peerUid(socket->socketDescriptor()); !trustedPeer(uid, ownUid())) {
+            // unheard. (Elsewhere the socket file's permissions decide.) On Windows a sender that
+            // wrote and left before this event loop got here (a busy primary, or one in the same
+            // thread) can no longer be asked: its end of the pipe is closed. The pipe's access list
+            // (UserAccessOption) lets nobody but this user open it, so such a sender is this user.
+            const qint64 uid = peerUid(socket->socketDescriptor());
+#ifdef Q_OS_WIN
+            const bool trusted = uid < 0 || trustedPeer(uid, ownUid());
+#else
+            const bool trusted = trustedPeer(uid, ownUid());
+#endif
+            if (!trusted) {
                 Q_EMIT refused(uid);
                 socket->abort();
                 socket->deleteLater();
