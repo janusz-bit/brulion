@@ -7,7 +7,7 @@ import Brulion
 // ImportExportView — route "importExport": bring notes in from other apps (qml/io/ImportPanel:
 // Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Bear, Markdown/TXT,
 // HTML, iCalendar — how to export from each, auto-detection with an override, a preview before
-// anything is written, the report) and take them out (qml/io/ExportPanel: nine formats; the whole
+// anything is written, the report) and take them out (qml/io/ExportPanel: ten formats; the whole
 // notebook, a folder or a page).
 //
 // Route parameters: tab ("import" | "export"); import: importer (an importer id), files (local

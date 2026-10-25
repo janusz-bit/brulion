@@ -225,8 +225,17 @@ private:
 
     void tap(QQuickItem *target)
     {
-        ensureVisible(target);
-        const QPointF at = target->mapToScene(QPointF(target->width() / 2, target->height() / 2));
+        // The page may still be settling (a summary arriving, rows of tiles wrapping): aim once
+        // the target stays put, else the tap lands where it was.
+        QPointF at;
+        for (int i = 0; i < 20; ++i) {
+            ensureVisible(target);
+            const QPointF now = target->mapToScene(QPointF(target->width() / 2, target->height() / 2));
+            if (i > 0 && now == at)
+                break;
+            at = now;
+            settle(100);
+        }
         if (m_touch)
             touchTap(m_window, at);
         else

@@ -6,9 +6,9 @@ import QtQuick.Templates as T
 import Brulion
 
 // ExportPanel — the "Export" tab of ImportExportView (ExportController): format (Markdown ZIP,
-// Obsidian, Logseq, HTML website, one HTML file, JSON, iCalendar, OPML, tasks CSV), what to export
-// (the whole notebook / a folder / a page, with the attachments they use), then "Eksportuj…":
-// the file is produced in the background and saved where the user says.
+// Obsidian, Logseq, HTML website, one HTML file, Pandoc Markdown, JSON, iCalendar, OPML, tasks
+// CSV), what to export (the whole notebook / a folder / a page, with the attachments they use),
+// then "Eksportuj…": the file is produced in the background and saved where the user says.
 //
 // Saving: desktop and Android — FileDialog in save mode (Android: the system's "Save as" document
 // picker; "Zapisz w Pobranych" writes into the Download folder instead); browser — a download.
