@@ -429,7 +429,7 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
     for (int i = 0; i < m_doc.count(); ++i)
         oldSources.append(m_doc.at(i).prefix + m_doc.at(i).body + QString::number(m_doc.at(i).depth));
 
-    markdown::BlockDocument fresh(content);
+    markdown::BlockDocument fresh(content, &m_doc); // unchanged blocks keep their parse
     fresh.restoreBlankBlocks(blankBlocks);
     QStringList newSources;
     newSources.reserve(fresh.count());

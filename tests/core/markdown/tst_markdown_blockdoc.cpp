@@ -125,6 +125,37 @@ bool changesReplay(const QList<quint64> &before, const QList<quint64> &after, co
     return true;
 }
 
+/// The first difference between two documents, empty when there is none: their text, every field
+/// of every block, and what the same edit of each block does (it reads the parse results the
+/// entries do not show: continuation indentation, list marker columns, open display formulas).
+QString difference(const BlockDocument &a, const BlockDocument &b, bool edits = true)
+{
+    if (a.toString() != b.toString())
+        return u"text: "_s + a.toString() + u" | "_s + b.toString();
+    if (a.count() != b.count())
+        return u"count %1 != %2"_s.arg(a.count()).arg(b.count());
+    for (int i = 0; i < a.count(); ++i) {
+        const BlockEntry &x = a.at(i);
+        const BlockEntry &y = b.at(i);
+        if (x.uid != y.uid || x.kind != y.kind || x.prefix != y.prefix || x.body != y.body || x.depth != y.depth
+            || x.parent != y.parent || x.headingLevel != y.headingLevel || x.lang != y.lang
+            || x.taskStatus != y.taskStatus || x.blockId != y.blockId || x.trailing != y.trailing || x.line != y.line
+            || a.hasChildren(i) != b.hasChildren(i) || a.blockSource(i) != b.blockSource(i))
+            return u"block %1: "_s.arg(i) + entries(a).value(i) + u" | "_s + entries(b).value(i);
+    }
+    if (!edits)
+        return {};
+    for (int i = 0; i < a.count(); ++i) {
+        BlockDocument ea = a;
+        BlockDocument eb = b;
+        ea.setBody(i, a.at(i).body + u"\nciąg dalszy"_s);
+        eb.setBody(i, b.at(i).body + u"\nciąg dalszy"_s);
+        if (const QString d = difference(ea, eb, false); !d.isEmpty())
+            return u"after editing block %1: "_s.arg(i) + d;
+    }
+    return {};
+}
+
 /// Fixtures for the round trip (ported from the archive's markdown tests plus edge cases).
 QStringList fixtures()
 {
@@ -240,6 +271,7 @@ private Q_SLOTS:
             BlockDocument doc(docs[rnd(quint32(docs.size()))]);
             for (int step = 0; step < 6; ++step) {
                 const QList<quint64> before = uids(doc);
+                const BlockDocument prior = doc;
                 const int n = doc.count();
                 const int i = n ? int(rnd(quint32(n))) : -1;
                 EditResult r;
@@ -269,7 +301,14 @@ private Q_SLOTS:
                 QVERIFY2(changesReplay(before, uids(doc), r.changes, &why),
                          qPrintable(why + u": "_s + describe(r.changes)));
                 const QString text = doc.toString();
-                QCOMPARE(BlockDocument(text).toString(), text);
+                const BlockDocument fresh(text);
+                QCOMPARE(fresh.toString(), text);
+                // Read again with the parse of the blocks before and after the edit (it comes from
+                // the operations): the same document.
+                QString d = difference(BlockDocument(text, &doc), fresh, false);
+                QVERIFY2(d.isEmpty(), qPrintable(d));
+                d = difference(BlockDocument(text, &prior), fresh, false);
+                QVERIFY2(d.isEmpty(), qPrintable(d));
                 for (int b = 0; b < doc.count(); ++b) {
                     const BlockEntry &e = doc.at(b);
                     QVERIFY(e.parent < b);
@@ -279,6 +318,71 @@ private Q_SLOTS:
                     QVERIFY(r.focus < doc.count());
             }
         }
+    }
+
+    // --- reusing the parse of another document ------------------------------------------------------
+
+    void reuse_data()
+    {
+        QTest::addColumn<QString>("before");
+        QTest::addColumn<QString>("after");
+        const QString fm = u"---\ntytuł: Zażółć\n---\n"_s;
+        const QString rest = u"status:: szkic\n\n- [ ] zadanie ^z1\n"_s;
+        // Frontmatter and page properties are only read at the top: the same text elsewhere is a
+        // paragraph, a rule or a heading.
+        QTest::newRow("frontmatter removed") << fm + rest << rest;
+        QTest::newRow("frontmatter added") << rest << fm + rest;
+        QTest::newRow("frontmatter moved down") << fm + rest << u"- przed\n\n"_s + fm + rest;
+        QTest::newRow("page properties pushed down") << u"tags:: dom\n\n- a\n"_s << u"- nowy\n\ntags:: dom\n\n- a\n"_s;
+        QTest::newRow("page properties moved up") << u"- nowy\n\ntags:: dom\n\n- a\n"_s << u"tags:: dom\n\n- a\n"_s;
+        QTest::newRow("the same text at the top and below")
+                << u"klucz:: wartość\n\n- a\n\nklucz:: wartość\n"_s << u"- a\n\nklucz:: wartość\n\nklucz:: wartość\n"_s;
+        QTest::newRow("blank lines before the first block") << fm + rest << u"\n\n"_s + fm + rest;
+        QTest::newRow("byte order mark") << u"\uFEFF"_s + fm + rest << fm + rest;
+        QTest::newRow("display math") << u"- Wzór:\n  $$\n  a\n- b\n- $$\n- c $$ d\n"_s
+                                      << u"- b\n- Wzór:\n  $$\n  a\n- $$\n- c $$ d\n- $$\n"_s;
+        QTest::newRow("display math blocks") << u"$$\nf(x) = a\n+ b\n$$\n\n- Wzór:\n  $$\n  a\n  $$\n"_s
+                                             << u"- Wzór:\n  $$\n  a\n  $$\n\n$$\nf(x) = a\n+ b\n$$\n"_s;
+        QTest::newRow("code fences")
+                << u"```calc\nx = 1 zł\n```\n\n- ```\n  - nie lista\n  ```\n- y\n"_s
+                << u"- y\n- ```\n  - nie lista\n  ```\n\n```calc\nx = 1 zł\n```\n\n```query\ntype:tasks\n```\n"_s;
+        QTest::newRow("tasks, ids and headings")
+                << u"# Nagłówek ąę\n\n- [x] Zrobione ✅ 2026-10-14 ^id1\n- TODO Zadzwonić\n  SCHEDULED: <2026-10-15 Thu>\n## Dwa ##\n"_s
+                << u"## Dwa ##\n- TODO Zadzwonić\n  SCHEDULED: <2026-10-15 Thu>\n\n# Nagłówek ąę\n\n- [x] Zrobione ✅ 2026-10-14 ^id1\n- [-] Anulowane\n"_s;
+        QTest::newRow("nesting changes") << u"- a\n\t- b\n\t  ciąg\n\t\t- c\n- d\n"_s
+                                         << u"- d\n\t\t- c\n\t- b\n\t  ciąg\n- a\n"_s;
+        QTest::newRow("numbered lists") << u"1. jeden\n2. dwa\n   1) trzy\n"_s << u"2. dwa\n   1) trzy\n1. jeden\n"_s;
+        QTest::newRow("callouts and quotes") << u"> [!note] Notatka\n> - a\n\n- b\n\t- c\n"_s
+                                             << u"- b\n\t- c\n\n> [!note] Notatka\n> - a\n\n> cytat\n"_s;
+        QTest::newRow("line endings") << u"- a\n- b\n  ciąg\n"_s << u"- a\r\n- b\r\n  ciąg\r\n"_s;
+        QTest::newRow("comments") << u"%% komentarz %%\n\nAkapit\n"_s << u"Akapit\n\n%% komentarz %%\n"_s;
+        QTest::newRow("to empty") << fm + rest << QString();
+        QTest::newRow("from empty") << QString() << fm + rest;
+        QTest::newRow("malformed") << u"- \n-\n- [ ] \n```\nniezamknięty"_s << u"-\n- \n```\nniezamknięty\n- [ ] "_s;
+    }
+
+    void reuse()
+    {
+        // A document built with the parse of another one (undo / redo re-read a page that is
+        // mostly unchanged) is the document built from scratch: blocks with the same text whose
+        // position changes the parse options (frontmatter, page properties) are parsed again.
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        const BlockDocument fresh(after);
+        const BlockDocument old(before);
+        QString d = difference(BlockDocument(after, &old), fresh);
+        QVERIFY2(d.isEmpty(), qPrintable(d));
+        // Reusing itself.
+        BlockDocument self(before);
+        self.setContent(after, &self);
+        BlockDocument freshSelf(before);
+        freshSelf.setContent(after);
+        d = difference(self, freshSelf);
+        QVERIFY2(d.isEmpty(), qPrintable(d));
+        // And back, from a document whose blocks came from the reuse.
+        const BlockDocument reused(after, &old);
+        d = difference(BlockDocument(before, &reused), BlockDocument(before));
+        QVERIFY2(d.isEmpty(), qPrintable(d));
     }
 
     // --- entries ---------------------------------------------------------------------------------

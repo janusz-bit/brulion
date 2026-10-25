@@ -144,17 +144,44 @@ bool needsBlankLine(BlockKind a, BlockKind b)
     }
 }
 
+/// A block's text with its position-dependent parse options: everything derive() reads.
+struct DeriveKey {
+    QStringView own;
+    bool frontmatter = false;
+    bool properties = false;
+};
+
+bool operator==(const DeriveKey &a, const DeriveKey &b)
+{
+    return a.frontmatter == b.frontmatter && a.properties == b.properties && a.own == b.own;
+}
+
+size_t qHash(const DeriveKey &key, size_t seed = 0)
+{
+    return qHashMulti(seed, key.own, key.frontmatter, key.properties);
+}
+
 } // namespace
 
 BlockDocument::BlockDocument() = default;
 
-BlockDocument::BlockDocument(const QString &content)
+BlockDocument::BlockDocument(const QString &content, const BlockDocument *reuse)
 {
-    setContent(content);
+    setContent(content, reuse);
 }
 
-void BlockDocument::setContent(const QString &content)
+void BlockDocument::setContent(const QString &content, const BlockDocument *reuse)
 {
+    // The parsed blocks of `reuse` by text and options (`previous` shares its list: `reuse` may
+    // be this document; the keys point into its strings).
+    const QList<Item> previous = reuse ? reuse->m_items : QList<Item>();
+    QHash<DeriveKey, qsizetype> parsed;
+    parsed.reserve(previous.size());
+    for (qsizetype k = 0; k < previous.size(); ++k) {
+        const Item &it = previous[k];
+        parsed.insert(DeriveKey{it.own, it.frontmatterAllowed, it.propertiesAllowed}, k);
+    }
+
     m_items.clear();
     m_leading.clear();
     m_bom.clear();
@@ -209,8 +236,14 @@ void BlockDocument::setContent(const QString &content)
         m_items.append(makeItem(joinLineRange(lines, from, last + 1, false), lines[last].eol,
                                 joinLineRange(lines, last + 1, to, true)));
     }
-    for (int i = 0; i < count(); ++i)
-        derive(i);
+    for (int i = 0; i < count(); ++i) {
+        const PositionalOptions options = positionalOptions(i);
+        const auto known = parsed.constFind(DeriveKey{m_items[i].own, options.frontmatter, options.properties});
+        if (known != parsed.constEnd())
+            takeDerived(m_items[i], previous[*known]);
+        else
+            derive(i);
+    }
     recompute();
 }
 
@@ -354,17 +387,27 @@ BlockDocument::Item BlockDocument::makeItem(const QString &own, const QString &e
     return it;
 }
 
+BlockDocument::PositionalOptions BlockDocument::positionalOptions(int i) const
+{
+    PositionalOptions options;
+    options.frontmatter = i == 0 && m_leading.isEmpty();
+    options.properties = true; // only frontmatter blocks before this one (checked backwards: O(1) in practice)
+    for (int j = i - 1; j >= 0 && options.properties; --j)
+        options.properties = m_items[j].entry.kind == BlockKind::Frontmatter;
+    return options;
+}
+
 void BlockDocument::derive(int i)
 {
     Item &it = m_items[i];
     BlockEntry &e = it.entry;
     // A block is parsed on its own; frontmatter and page properties are only possible at the
-    // top of the document.
+    // top of the document. Everything set here depends only on `own` and these two options
+    // (takeDerived() copies it).
+    const PositionalOptions positional = positionalOptions(i);
     StructureOptions options;
-    options.frontmatter = i == 0 && m_leading.isEmpty();
-    options.pageProperties = true; // only frontmatter blocks before this one (checked backwards: O(1) in practice)
-    for (int j = i - 1; j >= 0 && options.pageProperties; --j)
-        options.pageProperties = m_items[j].entry.kind == BlockKind::Frontmatter;
+    options.frontmatter = positional.frontmatter;
+    options.pageProperties = positional.properties;
     it.frontmatterAllowed = options.frontmatter;
     it.propertiesAllowed = options.pageProperties;
     const ParsedNote note = parseNoteWith(QString(), it.own, VaultConfig(), options);
@@ -408,6 +451,23 @@ void BlockDocument::derive(int i)
     }
     it.contIndent = cont.isEmpty() ? defaultContIndent(e.prefix) : cont;
     e.body = body.join(u'\n');
+}
+
+/// What derive() sets, from a block with the same text and options (keep the two in step).
+void BlockDocument::takeDerived(Item &to, const Item &from)
+{
+    to.entry.kind = from.entry.kind;
+    to.entry.headingLevel = from.entry.headingLevel;
+    to.entry.lang = from.entry.lang;
+    to.entry.taskStatus = from.entry.taskStatus;
+    to.entry.blockId = from.entry.blockId;
+    to.entry.prefix = from.entry.prefix;
+    to.entry.body = from.entry.body;
+    to.markerCol = from.markerCol;
+    to.contIndent = from.contIndent;
+    to.frontmatterAllowed = from.frontmatterAllowed;
+    to.propertiesAllowed = from.propertiesAllowed;
+    to.displayMathOpen = from.displayMathOpen;
 }
 
 void BlockDocument::setOwn(int i, const QString &own)

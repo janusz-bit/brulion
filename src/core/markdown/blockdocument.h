@@ -107,10 +107,13 @@ struct BlockIdResult {
 class BlockDocument {
 public:
     BlockDocument();
-    explicit BlockDocument(const QString &content);
+    explicit BlockDocument(const QString &content, const BlockDocument *reuse = nullptr);
 
-    /// Replace the whole document (all uids are new).
-    void setContent(const QString &content);
+    /// Replace the whole document (all uids are new). A block of `reuse` (may be this document)
+    /// with the same text and the same position-dependent parse options lends its parse instead
+    /// of parsing the text again: undo / redo re-read a long page that is mostly unchanged. The
+    /// result is the same as without `reuse`.
+    void setContent(const QString &content, const BlockDocument *reuse = nullptr);
     /// The document text; byte-identical to the original when nothing changed.
     QString toString() const;
 
@@ -266,7 +269,15 @@ private:
     };
 
     Item makeItem(const QString &own, const QString &eol, const QString &trailing);
+    /// The position-dependent parse options of block `i` (frontmatter / page properties are only
+    /// recognised at the top of the document).
+    struct PositionalOptions {
+        bool frontmatter = false;
+        bool properties = false;
+    };
+    PositionalOptions positionalOptions(int i) const;
     void derive(int i);
+    static void takeDerived(Item &to, const Item &from);
     void setOwn(int i, const QString &own);
     void rederivePositional();
     void recompute();
