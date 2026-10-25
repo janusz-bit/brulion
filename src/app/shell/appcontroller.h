@@ -87,7 +87,7 @@ class AppController : public QObject {
     Q_PROPERTY(bool sourceModeShown READ sourceModeShown WRITE setSourceModeShown NOTIFY sourceModeShownChanged FINAL)
 
     // ---- Platform -----------------------------------------------------------------------
-    /// "linux", "android" or "wasm".
+    /// "linux", "windows", "android" or "wasm".
     Q_PROPERTY(QString platform READ platform CONSTANT FINAL)
     Q_PROPERTY(bool isAndroid READ isAndroid CONSTANT FINAL)
     Q_PROPERTY(bool isWasm READ isWasm CONSTANT FINAL)

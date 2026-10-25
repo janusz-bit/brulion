@@ -551,6 +551,8 @@ QString AppController::platform() const
     return u"android"_s;
 #elif defined(Q_OS_WASM)
     return u"wasm"_s;
+#elif defined(Q_OS_WIN)
+    return u"windows"_s;
 #else
     return u"linux"_s;
 #endif
