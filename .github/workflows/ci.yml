@@ -120,6 +120,7 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBRULION_WERROR=ON
           "-DCMAKE_CXX_FLAGS_DEBUG=-g1 -O1"
