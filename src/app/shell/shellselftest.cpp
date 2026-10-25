@@ -1603,11 +1603,25 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     //      "Pokaż w drzewie" opens it and shows the page.
     openDrawer();
     if (QQuickItem *sidebar = sidebarItem(); sidebar && (header = named(u"sidebarPagesHeader"_s))) {
+        // The header scrolls with the tree, which the drag above may have left scrolled.
+        if (QQuickItem *list = treeList()) {
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+        }
         if (sidebar->property("pagesOpen").toBool())
             tapOrClick(window, pointIn(header, 0.15), touch);
-        check(waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
-                      && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
-              "a tap on “Strony” collapses the section");
+        const bool collapsed = waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
+                               && !app->settings()->value(u"ui/sidebar/pages"_s).toBool();
+        if (!collapsed) {
+            const QPointF at = pointIn(header, 0.15);
+            const QQuickItem *list = treeList();
+            std::fprintf(stderr,
+                         "selftest: “Strony” header at %.0f,%.0f, visible %d, open %d, setting '%s', tree at %.0f\n",
+                         at.x(), at.y(), int(header->isVisible()), int(sidebar->property("pagesOpen").toBool()),
+                         qPrintable(app->settings()->value(u"ui/sidebar/pages"_s).toString()),
+                         list ? list->property("contentY").toReal() : -1.0);
+        }
+        check(collapsed, "a tap on “Strony” collapses the section");
         app->openPage(recipes);
         settle(300);
         check(!sidebar->property("pagesOpen").toBool() && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
