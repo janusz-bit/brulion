@@ -28,13 +28,15 @@
 #include <memory>
 
 #ifdef BRULION_DESKTOP_INTEGRATION
-// Linux desktop: system tray (Qt Widgets, hence QApplication) and one instance per session.
+// The desktop (Linux, Windows): system tray (Qt Widgets, hence QApplication) and one instance per
+// session.
 #include "appmessage.h"
 #include "cli.h" // `brulion cli …`: the command line (src/cli)
 #include "controlprotocol.h"
 #include "desktop/desktoptray.h"
 #include "ioselftest.h"
 #include "notifyselftest.h"
+#include "profile.h"
 #include "remotecontrol.h" // --remote-control: AI agents drive the running app (brulion-cli app …)
 #include "shelljourney.h"
 #include "shellselftest.h"
@@ -88,9 +90,15 @@ int main(int argc, char *argv[])
 #else
     QGuiApplication app(argc, argv);
 #endif
+#ifdef BRULION_DESKTOP_INTEGRATION
+    // "Brulion", or a separate profile for BRULION_PROFILE (src/ipc/profile.h): the same names as
+    // brulion-cli's.
+    brulion::ipc::applyAppNames();
+#else
     QGuiApplication::setApplicationName(QStringLiteral("Brulion"));
     QGuiApplication::setOrganizationName(QStringLiteral("Brulion"));
     QGuiApplication::setOrganizationDomain(QStringLiteral("januszbit.github.io"));
+#endif
     QGuiApplication::setApplicationVersion(QStringLiteral(BRULION_VERSION));
 #ifdef BRULION_DESKTOP_INTEGRATION
     // Wayland app id / desktop entry: io.github.januszbit.brulion.desktop (packaging/).

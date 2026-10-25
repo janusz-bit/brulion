@@ -1,6 +1,7 @@
 // brulion::cli::run — the program: Qt application object, arguments, one command, output.
 #include "cli.h"
 #include "cli_p.h"
+#include "profile.h" // the app's names (BRULION_PROFILE)
 
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -51,10 +52,9 @@ int run(int argc, char **argv)
     static int qtArgc = 1;
     static char *qtArgv[] = {argc > 0 ? argv[0] : const_cast<char *>("brulion-cli"), nullptr};
     QCoreApplication app(qtArgc, qtArgv);
-    // The app's names: the same settings file, app data (History, LocalStore) and socket.
-    QCoreApplication::setOrganizationName(u"Brulion"_s);
-    QCoreApplication::setApplicationName(u"Brulion"_s);
-    QCoreApplication::setOrganizationDomain(u"januszbit.github.io"_s);
+    // The app's names: the same settings file, app data (History, LocalStore) and socket — also
+    // for a separate profile (BRULION_PROFILE, src/ipc/profile.h).
+    brulion::ipc::applyAppNames();
     QCoreApplication::setApplicationVersion(QStringLiteral(BRULION_VERSION));
 
     const Invocation inv = parseArguments(arguments);
