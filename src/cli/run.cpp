@@ -6,9 +6,17 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QScopeGuard>
 
 #include <atomic>
 #include <cstdio>
+
+#ifdef Q_OS_WIN
+#include <fcntl.h>
+#include <io.h>
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -36,14 +44,50 @@ void print(const QString &text)
     std::fflush(stdout);
 }
 
+/// The arguments after the program's name. Linux: argv, read as UTF-8 whatever the locale (LANG=C
+/// must not mangle "żółw"). Windows: argv is in the ANSI code page, which lacks letters such as "ż"
+/// on most systems, so the command line comes from the system as UTF-16; `brulion cli …` passes
+/// argv from "cli" on, which the count tells.
+QStringList commandLineArguments(int argc, char **argv)
+{
+#ifdef Q_OS_WIN
+    int count = 0;
+    if (LPWSTR *wide = ::CommandLineToArgvW(::GetCommandLineW(), &count)) {
+        QStringList all;
+        for (int i = 0; i < count; ++i)
+            all.append(QString::fromWCharArray(wide[i]));
+        ::LocalFree(wide);
+        if (argc > 0 && count >= argc)
+            return all.mid(count - argc + 1);
+    }
+#endif
+    QStringList arguments;
+    for (int i = 1; i < argc; ++i)
+        arguments.append(QString::fromUtf8(argv[i]));
+    return arguments;
+}
+
 } // namespace
 
 int run(int argc, char **argv)
 {
-    // Arguments are UTF-8 whatever the locale (LANG=C must not mangle "żółw").
-    QStringList arguments;
-    for (int i = 1; i < argc; ++i)
-        arguments.append(QString::fromUtf8(argv[i]));
+    const QStringList arguments = commandLineArguments(argc, argv);
+#ifdef Q_OS_WIN
+    // Bytes in and out as on Linux: no CRLF for LF and no end of input at Ctrl+Z (the C runtime's
+    // text mode); UTF-8 also in a console window, set back to its code page at the end.
+    // (A GUI program's streams may be closed: _fileno() < 0, which _setmode() must not get.)
+    for (FILE *stream : {stdin, stdout, stderr}) {
+        if (const int fd = _fileno(stream); fd >= 0)
+            _setmode(fd, _O_BINARY);
+    }
+    const UINT consoleCodePage = ::GetConsoleOutputCP();
+    if (consoleCodePage != 0)
+        ::SetConsoleOutputCP(CP_UTF8);
+    const auto restoreCodePage = qScopeGuard([consoleCodePage] {
+        if (consoleCodePage != 0)
+            ::SetConsoleOutputCP(consoleCodePage);
+    });
+#endif
     const QString programPath = argc > 0 ? QString::fromUtf8(argv[0]) : u"brulion-cli"_s;
     // `brulion cli …` hands over argv starting at "cli".
     const QString program = QFileInfo(programPath).fileName() == u"cli" ? u"brulion cli"_s : u"brulion-cli"_s;
