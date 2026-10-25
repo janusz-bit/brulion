@@ -2211,15 +2211,21 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
               "a picture smaller than the view is shown at its own size, without a size toggle");
     }
 
-    // A file name that looks like markup is shown as written (one line, not a line break).
+    // A file name that looks like markup is shown as written (one line, not a line break). Windows
+    // allows no "<" or ">" in file names: there entities stand for the markup.
     {
-        const QString odd = u"assets/a<br>b <i>szkic.svg"_s;
+#ifdef Q_OS_WIN
+        const QString oddName = u"a&lt;br&gt;b &amp;szkic.svg"_s;
+#else
+        const QString oddName = u"a<br>b <i>szkic.svg"_s;
+#endif
+        const QString odd = u"assets/"_s + oddName;
         check(workspace->writeFile(odd, bytes), "a picture with markup in its name is added to the notebook");
         app->openPage(odd);
         check(waitFor([&] { return opened(odd) && pictureShown(); }), "the picture with markup in its name opens");
         QQuickItem *name = child(pictureView(), "pictureName");
         check(name && name->property("lineCount").toInt() == 1
-                      && name->property("text").toString() == u"a<br>b <i>szkic.svg"_s
+                      && name->property("text").toString() == oddName
                       && name->property("textFormat").toInt() == 0 /* Text.PlainText */,
               "a picture's file name is shown as plain text");
     }
