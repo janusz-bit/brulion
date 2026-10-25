@@ -38,6 +38,14 @@ if(TARGET brulion-cli)
 endif()
 # Shell scripts from scripts/ (release.sh, appimage-update-check.sh).
 add_subdirectory(scripts)
+
+# The longest tests start first: ctest orders a parallel run by the timings of the earlier runs
+# in Testing/Temporary/CTestCostData.txt, which a fresh build (CI) does not have, so it starts
+# with ctest-costs.txt (seconds in the sanitizer build on a CI runner). Without it the tests run
+# in the order they were added, and a long one that starts late runs alone at the end.
+if(NOT EXISTS "${CMAKE_BINARY_DIR}/Testing/Temporary/CTestCostData.txt")
+    configure_file(ctest-costs.txt "${CMAKE_BINARY_DIR}/Testing/Temporary/CTestCostData.txt" COPYONLY)
+endif()
 # QBENCHMARK suites (tests/bench, run with scripts/bench.sh); off by default so CI and Nix stay fast.
 option(BRULION_BUILD_BENCHMARKS "Build the benchmark suites in tests/bench (scripts/bench.sh)" OFF)
 if(BRULION_BUILD_BENCHMARKS AND BRULION_BUILD_APP)

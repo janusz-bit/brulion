@@ -5,7 +5,8 @@
 #  * nix     — `nix flake check` + `nix build .#brulion` (builds the package; tests run in linux) on
 #              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
 #  * linux   — plain CMake build with Qt 6.11.2 from aqt, -Werror, AddressSanitizer +
-#              UndefinedBehaviorSanitizer, ctest (fast feedback, independent of nixpkgs);
+#              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
+#              with the GUI tests side by side (fast feedback, independent of nixpkgs);
 #  * lint    — actionlint + shellcheck (workflows, scripts), no QML read made only for a binding's
 #              dependency (scripts/check-qml-reads.sh) and clang-format on the changed lines
 #              (.clang-format; tools from the flake's nixpkgs, the same as `nix develop`);
@@ -81,7 +82,13 @@ jobs:
     name: Linux (Qt 6.11.2 from aqt, GCC, -Werror, sanitizers)
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Warm cache: ~20 min; a cold one (new compiler, Qt or flags): ~30 min.
+    timeout-minutes: 60
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 1500M
+      CCACHE_COMPILERCHECK: content
     steps:
       - uses: actions/checkout@v7
 
@@ -94,24 +101,62 @@ jobs:
           aqtversion: ==3.3.0
           cache: true
 
+      - name: Install ccache
+        run: command -v ccache || { sudo apt-get update -qq && sudo apt-get install -y -qq ccache; }
+
+      # The newest cache of an earlier run (a tag's run sees main's caches); saved again right
+      # after the build, so a failing test does not lose it.
+      - name: Restore the compiler cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .ccache
+          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-asan-O1-${{ env.QT_VERSION }}-
+
+      # -O1 (what the sanitizers recommend) roughly halves the CPU-bound tests' time against
+      # -O0; Debug keeps Q_ASSERT on, -g1 the line tables the sanitizers' reports need.
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DBRULION_WERROR=ON
-          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+          "-DCMAKE_CXX_FLAGS_DEBUG=-g1 -O1"
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls"
           "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"
 
       - name: Build
-        run: cmake --build build --parallel
+        id: build
+        run: |
+          ccache -z
+          cmake --build build --parallel
+          ccache -s
+
+      - name: Save the compiler cache
+        if: ${{ !cancelled() && steps.build.outcome != 'skipped' }}
+        uses: actions/cache/save@v6
+        with:
+          path: .ccache
+          key: ccache-asan-O1-${{ env.QT_VERSION }}-${{ github.sha }}
 
       - name: Unit tests (ctest)
         env:
           # Leak checking off: Qt keeps global singletons alive until exit.
           ASAN_OPTIONS: detect_leaks=0:strict_string_checks=1:detect_stack_use_after_return=1
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
+        run: >-
+          ctest --test-dir build --output-on-failure --parallel "$(nproc)" --timeout 300
+          --output-junit "$RUNNER_TEMP/ctest-junit.xml"
+
+      # Every test's time (and the output of the failed ones) for comparing runs.
+      - name: Upload the test times
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctest-junit-linux-asan
+          path: ${{ runner.temp }}/ctest-junit.xml
+          if-no-files-found: ignore
 
       # qmllint over the app's QML modules; advisory (warnings show up as annotations).
       - name: QML lint

@@ -12,11 +12,12 @@ brulion_add_test(tst_content_models SOURCES tst_content_models.cpp
 # with the sample notebook; QML warnings from the content files fail the test.
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
 if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
+    math(EXPR _content_qml_timeout "300 + 10 * ${BRULION_TEST_SLOWDOWN}")
     add_test(NAME tst_content_qml
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
     set_tests_properties(tst_content_qml PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-        TIMEOUT 300 RUN_SERIAL TRUE)
+        TIMEOUT ${_content_qml_timeout})
 
     # The journal stream's data safety (`--editor-script journals-selftest`,
     # qml/content/ContentJournalsSelfTest.qml, developer QML: BRULION_DEV_QML): days edited and
@@ -31,7 +32,7 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
                 --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
         set_tests_properties(tst_content_journals_qml PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache;XDG_STATE_HOME=${_journals_home}/state"
-            FIXTURES_REQUIRED content_journals_home TIMEOUT 300 RUN_SERIAL TRUE
+            FIXTURES_REQUIRED content_journals_home TIMEOUT 300 PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
     endif()
 endif()
