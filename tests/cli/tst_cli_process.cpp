@@ -1,4 +1,5 @@
-// brulion-cli as a process (QProcess on the built binary, a private HOME / XDG folders): the JSON
+// brulion-cli as a process (QProcess on the built binary, a private HOME / XDG folders — on Windows,
+// where these do not move QStandardPaths, a separate profile, BRULION_PROFILE): the JSON
 // envelope and exit code of the commands on temporary notebooks with Polish text, the files they
 // write byte for byte (line endings, BOM), refusals (read-only, destructive without
 // --allow-destructive, paths outside the notebook, a missing notebook — never created), the app's
@@ -29,6 +30,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 using namespace Qt::StringLiterals;
 
@@ -87,8 +89,39 @@ class TestCliProcess : public QObject {
         env.insert(u"XDG_RUNTIME_DIR"_s, m_home + u"/run"_s);
         env.remove(u"BRULION_VAULT"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
+#ifdef Q_OS_WIN
+        env.insert(u"BRULION_PROFILE"_s, profile());
+#endif
         return env;
     }
+
+    // Where brulion-cli (and the app) keep their settings, app data and log for this test: in the
+    // private home's XDG folders, on Windows in the profile (src/ipc/profile.h), whose paths this
+    // process gets from Qt under the profile's names (initTestCase()).
+#ifdef Q_OS_WIN
+    static QString profile() { return u"test-cli-%1"_s.arg(QCoreApplication::applicationPid()); }
+    QString settingsFile() const
+    {
+        return QSettings(QSettings::IniFormat, QSettings::UserScope, QCoreApplication::organizationName(),
+                         QCoreApplication::applicationName())
+                .fileName();
+    }
+    QString appDataDir() const { return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation); }
+    QString logFile() const
+    {
+        return QStandardPaths::writableLocation(QStandardPaths::StateLocation) + u"/logs/brulion.log"_s;
+    }
+    /// The profile's folders (removed before and after the test).
+    QStringList profileDirs() const
+    {
+        return {QFileInfo(settingsFile()).absolutePath(),
+                QFileInfo(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)).absolutePath()};
+    }
+#else
+    QString settingsFile() const { return m_home + u"/config/Brulion/Brulion.ini"_s; }
+    QString appDataDir() const { return m_home + u"/data/Brulion/Brulion"_s; }
+    QString logFile() const { return m_home + u"/state/Brulion/Brulion/logs/brulion.log"_s; }
+#endif
 
     Run cli(const QStringList &args, const QByteArray &input = {}, const QProcessEnvironment &env = {})
     {
@@ -160,7 +193,7 @@ class TestCliProcess : public QObject {
     /// The device state the app (and brulion-cli) keeps for a notebook folder.
     QString stateDirOf(const QString &vaultDir) const
     {
-        return brulion::notebook::deviceStatePath(m_home + u"/data/Brulion/Brulion"_s, vaultDir);
+        return brulion::notebook::deviceStatePath(appDataDir(), vaultDir);
     }
 
 private Q_SLOTS:
@@ -174,7 +207,22 @@ private Q_SLOTS:
         // The stand-in app below computes the socket key in this process: the same runtime folder.
         qputenv("XDG_RUNTIME_DIR", (m_home + u"/run"_s).toUtf8());
         QVERIFY(QFileInfo::exists(QStringLiteral(BRULION_CLI)));
+#ifdef Q_OS_WIN
+        // The profile's names, as brulion-cli sets them for BRULION_PROFILE.
+        QCoreApplication::setOrganizationName(u"Brulion-"_s + profile());
+        QCoreApplication::setApplicationName(u"Brulion"_s);
+        for (const QString &dir : profileDirs())
+            QDir(dir).removeRecursively();
+#endif
     }
+
+#ifdef Q_OS_WIN
+    void cleanupTestCase()
+    {
+        for (const QString &dir : profileDirs())
+            QDir(dir).removeRecursively();
+    }
+#endif
 
     void versionAndHelp()
     {
@@ -242,7 +290,7 @@ private Q_SLOTS:
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"vault"_s).toObject().value(u"source"_s).toString(), u"environment"_s);
         // The app's current notebook, read from its settings — which stay byte for byte as they were.
-        const QString ini = m_home + u"/config/Brulion/Brulion.ini"_s;
+        const QString ini = settingsFile();
         const QByteArray settings = "[ui]\nlanguage=en\n\n[vaults]\ncurrent=" + dir.toUtf8() + "\n";
         writeFile(ini, settings);
         const QDateTime mtime = QFileInfo(ini).lastModified();
@@ -723,8 +771,8 @@ private Q_SLOTS:
     void notebookAndLanguageAsTheApp()
     {
         const QString dir = vault({{u"Dom.md"_s, "- dom\n"}});
-        const QString ini = m_home + u"/config/Brulion/Brulion.ini"_s;
-        const QString docs = m_home + u"/data/Brulion/Brulion/Dokumentacja Brulionu"_s;
+        const QString ini = settingsFile();
+        const QString docs = appDataDir() + u"/Dokumentacja Brulionu"_s;
         QDir().mkpath(docs);
         {
             QSettings settings(ini, QSettings::IniFormat);
@@ -869,24 +917,40 @@ private Q_SLOTS:
 
     void twoProcessesAppendingLoseNothing()
     {
+        // Two writers at once, each running brulion-cli 25 times in a row (the next run when the
+        // previous one ended), as two shell loops would.
         const QString dir = vault();
-        const auto loop = [&](const QString &who) {
-            auto *p = new QProcess(this);
-            p->setProcessEnvironment(environment());
-            QStringList script;
-            for (int i = 0; i < 25; ++i)
-                script.append(
-                        u"\"$1\" --vault \"$2\" --now \"$3\" journal append \"%1 %2\" >/dev/null || exit 1"_s.arg(who)
-                                .arg(i));
-            p->start(u"sh"_s, {u"-c"_s, script.join(u'\n'), u"sh"_s, QStringLiteral(BRULION_CLI), dir, kNow});
-            return p;
+        struct Writer {
+            QString who;
+            int runs = 0;
+            int failures = 0;
+            bool done = false;
+            QProcess process;
         };
-        QProcess *a = loop(u"A"_s);
-        QProcess *b = loop(u"B"_s);
-        QVERIFY(a->waitForFinished(kTimeoutMs * 4));
-        QVERIFY(b->waitForFinished(kTimeoutMs * 4));
-        QCOMPARE(a->exitCode(), 0);
-        QCOMPARE(b->exitCode(), 0);
+        Writer a;
+        Writer b;
+        a.who = u"A"_s;
+        b.who = u"B"_s;
+        const auto start = [this, &dir](Writer &w) {
+            w.process.setProcessEnvironment(environment());
+            w.process.setStandardOutputFile(QProcess::nullDevice());
+            w.process.start(QStringLiteral(BRULION_CLI), {u"--vault"_s, dir, u"--now"_s, kNow, u"journal"_s,
+                                                          u"append"_s, u"%1 %2"_s.arg(w.who).arg(w.runs)});
+        };
+        for (Writer *w : {&a, &b}) {
+            connect(&w->process, &QProcess::finished, this, [w, &start](int code, QProcess::ExitStatus status) {
+                if (code != 0 || status != QProcess::NormalExit)
+                    ++w->failures;
+                if (++w->runs < 25)
+                    QTimer::singleShot(0, &w->process, [w, &start] { start(*w); }); // not inside its signal
+                else
+                    w->done = true;
+            });
+            start(*w);
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(a.done && b.done, kTimeoutMs * 4);
+        QCOMPARE(a.failures, 0);
+        QCOMPARE(b.failures, 0);
         const QString journal = QString::fromUtf8(readFile(dir + u"/journals/2026-10-14.md"_s));
         for (int i = 0; i < 25; ++i) {
             QVERIFY2(journal.contains(u"- A %1\n"_s.arg(i)), qPrintable(u"A %1"_s.arg(i)));
@@ -911,7 +975,7 @@ private Q_SLOTS:
                          .value(u"running"_s)
                          .toBool(true));
         // A stand-in app on the socket the real one uses for this home.
-        brulion::ipc::SingleInstance app(brulion::ipc::SingleInstance::keyFor(m_home + u"/data/Brulion/Brulion"_s));
+        brulion::ipc::SingleInstance app(brulion::ipc::SingleInstance::keyFor(appDataDir()));
         QVERIFY(app.listen());
         QSignalSpy messages(&app, &brulion::ipc::SingleInstance::messageReceived);
         QProcess p;
@@ -974,7 +1038,7 @@ private Q_SLOTS:
         QCOMPARE(r.errorCode(), u"read_only"_s);
 
         // An app without remote control: refused, with the way to allow it.
-        const QString key = brulion::ipc::SingleInstance::keyFor(m_home + u"/data/Brulion/Brulion"_s);
+        const QString key = brulion::ipc::SingleInstance::keyFor(appDataDir());
         brulion::ipc::SingleInstance app(key);
         QVERIFY(app.listen());
         r = cliLive({u"app"_s, u"state"_s});
@@ -1289,8 +1353,14 @@ private Q_SLOTS:
         const QJsonObject json = QJsonDocument::fromJson(p.readAllStandardOutput()).object();
         QVERIFY(json.value(u"ok"_s).toBool());
         QCOMPARE(readFile(dir + u"/journals/2026-10-14.md"_s), "- [ ] Test ⏰ 2026-10-15 09:00\n"_ba);
+        // No single-instance claim: nothing in the runtime folder (on Windows no lock file of this
+        // profile's key in the temp folder).
+#ifdef Q_OS_WIN
+        QVERIFY(!QFileInfo::exists(brulion::ipc::SingleInstance::keyFor(appDataDir()) + u".lock"_s));
+#else
         QVERIFY(QDir(m_home + u"/run"_s).entryList({u"brulion-*"_s}, QDir::AllEntries | QDir::System).isEmpty());
-        QVERIFY(!QFileInfo::exists(m_home + u"/state/Brulion/Brulion/logs/brulion.log"_s));
+#endif
+        QVERIFY(!QFileInfo::exists(logFile()));
         p.start(QStringLiteral(BRULION_APP), {u"cli"_s, u"--help"_s});
         QVERIFY(p.waitForFinished(kTimeoutMs));
         QVERIFY(p.readAllStandardOutput().contains("brulion cli"));
@@ -1307,7 +1377,7 @@ private Q_SLOTS:
         QVERIFY(run(dir, {u"remind"_s, u"list"_s}).code == 0);
         const QString store = QString::fromUtf8(readFile(stateDirOf(dir) + u"/store.json"_s));
         QVERIFY(!store.contains(u"reminders/"_s));
-        QVERIFY(!QFileInfo::exists(m_home + u"/config/Brulion/Brulion.ini"_s)); // never created
+        QVERIFY(!QFileInfo::exists(settingsFile())); // never created
     }
 };
 
