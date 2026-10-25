@@ -108,6 +108,10 @@ public:
     /// Pictures from the internet are shown without asking (the app's setting); emits
     /// webPictureChanged("").
     Q_INVOKABLE void setWebPicturesShown(bool shown);
+    /// Attachments stored so far (saveAttachment(); tests: none is left behind).
+    int attachmentCount() const { return int(m_assets.size()); }
+    /// Ready pictures are handed out as data: URLs, as in the browser build.
+    void setWebPictureDataUrls(bool on) { m_webDataUrls = on; }
     /// Fetches made so far (tests: nothing loads without being allowed).
     Q_INVOKABLE int webFetchCount() const { return m_webFetches; }
     int webFetches() const { return m_webFetches; }
@@ -171,6 +175,7 @@ private:
     QHash<QString, QUrl> m_webFiles;
     QSet<QString> m_webInFlight;
     bool m_webShown = false;
+    bool m_webDataUrls = false;
     int m_webFetches = 0;
     int m_writeCount = 0;
     int m_casRefusals = 0;

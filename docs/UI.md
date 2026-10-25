@@ -484,7 +484,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   `calendar`.
 * Pictures from the internet (`![alt](https://…)`, docs/SYNTAX.md §2): the embeds' entry has
   `web`, `state` ("ask" | "loading" | "ready" | "failed"), `host`, `error` and, once ready, the
-  cached file's `url` and size (`EditorHost::webPicture`, the Workspace's
+  cached file's `url`, `format` (the cached picture's as the host tells it, "PNG", "SVG" — not
+  from the URL, a data: URL in the browser has no file name) and size (`EditorHost::webPicture`, the Workspace's
   `workspacepictures.cpp`: fetched into the device's cache, never by QML). `EmbedView` gives a
   picture not shown yet its frame (320 × 180) with the site's name and the alt text, **Pokaż**
   (`PageController.showWebPicture`; **Spróbuj ponownie** with the reason after a failure) and
@@ -493,8 +494,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   platform's handler, Kopiuj adres obrazu) instead of the picture view. "Zapisz w notatniku"
   (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
   shown —, stores the attachment and points every picture of that URL on the page at it, one undo
-  step; a toast says how many were saved or which failed (a picture edited away meanwhile counts as
-  failed, nothing is stored). The palette's "Zapisz obrazy z internetu w notatniku" (uiAction
+  step; a toast says how many were saved or which failed (a picture edited away meanwhile, or whose
+  fetch ends while the page is shown as source, counts as failed, nothing is stored). Pictures in
+  blocks that show no embeds (code, formulas, tables, HTML) are text: never fetched or rewritten. The palette's "Zapisz obrazy z internetu w notatniku" (uiAction
   `saveWebPictures`, the page or the journal day on screen) does that for all of them. "/Obraz z
   internetu…" (`EditorDialogs.pickWebImage`) asks for the address (Wstaw only for an http(s) URL)
   with "Zapisz w notatniku" checked: `PageController.insertWebPicture` writes `![](url)` (between

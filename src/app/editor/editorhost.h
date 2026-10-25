@@ -119,8 +119,9 @@ public:
     // The UI never loads them itself: the host fetches them (when the user allows it) into the
     // device's cache and hands out the cached file. webPictureChanged() tells when one changed.
     /// The picture at the web URL `url` as written: { state: "ask" (not loaded — the user did not
-    /// allow it yet), "loading", "ready" (url: a local URL of the cached picture, width, height
-    /// when known) or "failed" (error: a sentence for the user) }. In the "always show" setting a
+    /// allow it yet), "loading", "ready" (url: a local URL of the cached picture, format: its
+    /// picture format as the cache stores it — "png", "svg", webpicture::sniffFormat() —, width,
+    /// height when known) or "failed" (error: a sentence for the user) }. In the "always show" setting a
     /// picture not cached yet is fetched by asking ("loading"). Default: "ask" — nothing loads.
     virtual QVariantMap webPicture(const QString &url) const
     {

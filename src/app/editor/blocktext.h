@@ -162,9 +162,14 @@ bool onlyEmbeds(QStringView body, bool transclusions = false);
 /// written, webpicture::isWebUrl) pointed at the vault path `path` instead (a downloaded
 /// picture): `![alt](assets/Mój%20kot.jpg)` — the alt text, a title and `<…>` stay; spaces,
 /// parentheses, '%', '#', '<' and '>' of the path percent-encoded; an embed `![[url|alias]]`
-/// becomes `![[path|alias]]`. Pictures elsewhere (code, links) and every other byte stay; `body`
-/// unchanged when it has none.
+/// becomes `![[path|alias]]`. `url` is the target as the parser reads it (Embed::target: a
+/// destination written with backslash escapes, `a\_b.png`, is replaced as a whole); only the
+/// destination is replaced, never the alt text or a title naming the URL. Pictures elsewhere
+/// (code spans, links) and every other byte stay; `body` unchanged when it has none.
 QString retargetWebPicture(const QString &body, const QString &url, const QString &path);
+/// Whether a block shown as `view` shows its embeds (text, headings, quotes, callouts): in code,
+/// formulas, tables and HTML a picture is text, never shown, fetched or retargeted.
+bool showsEmbeds(BlockView view);
 
 /// A page, section or block embedded in a block body (docs/SYNTAX.md §2, "transclusion"):
 /// `![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`, same-page `![[#Heading]]` / `![[#^id]]`

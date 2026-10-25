@@ -724,7 +724,7 @@ bool onlyNoteModeKey(const QString &body)
 
 QString retargetWebPicture(const QString &body, const QString &url, const QString &path)
 {
-    if (url.isEmpty() || path.isEmpty() || !body.contains(url))
+    if (url.isEmpty() || path.isEmpty() || !body.contains(u"!["))
         return body;
     QString encoded;
     for (const QChar c : path) {
@@ -744,11 +744,12 @@ QString retargetWebPicture(const QString &body, const QString &url, const QStrin
     std::sort(links.begin(), links.end(), [](const Link &a, const Link &b) { return a.from > b.from; });
     QString out = body;
     for (const Link &link : std::as_const(links)) {
+        // The target as the parser read it (escapes removed), as embedsOf() names the picture.
         if (link.from < 0 || link.to > body.size() || link.target.trimmed() != url)
             continue;
+        const QStringView token = QStringView(body).sliced(link.from, link.to - link.from);
         if (link.kind == LinkKind::Embed) {
             // `![[https://…|alias]]`: the vault path as written in wiki links (not encoded).
-            const QStringView token = QStringView(body).sliced(link.from, link.to - link.from);
             const qsizetype at = token.indexOf(url);
             if (at >= 3)
                 out.replace(link.from + at, url.size(), path);
@@ -756,16 +757,20 @@ QString retargetWebPicture(const QString &body, const QString &url, const QStrin
         }
         if (link.kind != LinkKind::Markdown || body[link.from] != u'!')
             continue;
-        // The destination is the URL as written (a URL is not unescaped): its last occurrence
-        // in the token, after the alt text's "](".
-        const QStringView token = QStringView(body).sliced(link.from, link.to - link.from);
-        const qsizetype open = token.lastIndexOf(u"](");
-        const qsizetype at = token.lastIndexOf(url);
-        if (open < 0 || at < open + 2)
+        // Exactly the destination the parser read — never the alt text or a title naming the
+        // URL; a destination with backslash escapes is replaced as a whole.
+        const markdown::MarkdownDestination dest = markdown::markdownDestination(token);
+        if (dest.from < 0)
             continue;
-        out.replace(link.from + at, url.size(), encoded);
+        out.replace(link.from + dest.from, dest.to - dest.from, encoded);
     }
     return out;
+}
+
+bool showsEmbeds(BlockView view)
+{
+    return view == BlockView::Text || view == BlockView::Heading || view == BlockView::Quote
+           || view == BlockView::Callout;
 }
 
 QList<Embed> embedsOf(QStringView body)

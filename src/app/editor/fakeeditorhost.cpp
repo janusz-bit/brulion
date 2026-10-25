@@ -18,6 +18,7 @@
 #include <QBuffer>
 #include <QDateTime>
 #include <QFile>
+#include <QFileInfo>
 #include <QImage>
 #include <QLinearGradient>
 #include <QPainter>
@@ -521,8 +522,18 @@ QVariantMap FakeEditorHost::webPicture(const QString &url) const
         m_webStates.insert(url, u"loading"_s);
         return {{u"state"_s, u"loading"_s}};
     }
-    if (state == u"ready")
-        return {{u"state"_s, state}, {u"url"_s, m_webFiles.value(url)}};
+    if (state == u"ready") {
+        const QUrl file = m_webFiles.value(url);
+        const QString format = QFileInfo(file.toLocalFile()).suffix();
+        if (!m_webDataUrls)
+            return {{u"state"_s, state}, {u"url"_s, file}, {u"format"_s, format}};
+        // As the browser build hands them out (Workspace::webPicture): no file name to go by.
+        const QString mime = format == u"svg" ? u"image/svg+xml"_s : u"image/"_s + format;
+        return {{u"state"_s, state},
+                {u"url"_s,
+                 QUrl(u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(m_webSources.value(url).toBase64()))},
+                {u"format"_s, format}};
+    }
     if (state == u"failed")
         return {{u"state"_s, state}, {u"error"_s, u"Could not load the picture."_s}};
     return {{u"state"_s, state.isEmpty() ? u"ask"_s : state}};

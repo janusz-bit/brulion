@@ -625,7 +625,9 @@ public:
     /// `![alt](url)` at them (retargetWebPicture(), one undo step per picture): the picture
     /// `url`, or — "" — every picture from the internet on the page. Fetched first when not
     /// cached (also while pictures are not shown); webPicturesDownloaded() once all are done.
-    /// Returns how many pictures are being stored (0: none, or the page is in source mode).
+    /// Returns how many pictures are being stored, those already on their way included (0:
+    /// none, or the page is in source mode). A picture whose fetch ends in source mode, or that
+    /// no longer is on the page in a block showing pictures, is not stored (named as failed).
     Q_INVOKABLE int downloadWebPictures(const QString &url = QString());
     /// The pictures from the internet on the page: their URLs as written, each once.
     Q_INVOKABLE QStringList webPictureUrls() const;

@@ -836,6 +836,18 @@ QList<TagSpan> findTags(QStringView text)
     return out;
 }
 
+MarkdownDestination markdownDestination(QStringView source)
+{
+    const qsizetype open = source.startsWith(u'!') ? 1 : 0;
+    if (open >= source.size() || source[open] != u'[')
+        return {};
+    // Within a link inline code is no different from text: parsed as the original.
+    const auto parts = parseMdLink(source, open);
+    if (!parts || parts->end != source.size())
+        return {};
+    return {parts->destFrom, parts->destTo, parts->angle};
+}
+
 InlineScan extractInline(QStringView text, qsizetype baseOffset, int line)
 {
     const QString masked = maskInline(text);

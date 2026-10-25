@@ -568,6 +568,52 @@ private Q_SLOTS:
         QVERIFY(!detail::hasUrlScheme(u"Page.md"));
         QCOMPARE(uniqueTags({u"A"_s, u"a"_s, u"B"_s}), QStringList({u"A"_s, u"B"_s}));
     }
+
+    void markdownDestinations_data()
+    {
+        QTest::addColumn<QString>("source");
+        QTest::addColumn<QString>("dest"); ///< the text at the range; "-": none
+        QTest::addColumn<bool>("angle");
+        QTest::newRow("picture") << u"![kot](https://example.com/kot.jpg)"_s << u"https://example.com/kot.jpg"_s
+                                 << false;
+        QTest::newRow("link") << u"[Mój dom](Projekty/M%C3%B3j%20dom.md#Plan)"_s << u"Projekty/M%C3%B3j%20dom.md#Plan"_s
+                              << false;
+        QTest::newRow("title naming the url")
+                << u"![k](https://example.com/kot.jpg \"źródło: https://example.com/kot.jpg\")"_s
+                << u"https://example.com/kot.jpg"_s << false;
+        QTest::newRow("title with brackets")
+                << u"![k](https://example.com/a.png \"a](b\")"_s << u"https://example.com/a.png"_s << false;
+        QTest::newRow("alt naming the url") << u"![https://example.com/a.png](https://example.com/a.png)"_s
+                                            << u"https://example.com/a.png"_s << false;
+        QTest::newRow("escapes kept") << u"![](https://example.com/Foo_\\(1\\)\\_b.jpg)"_s
+                                      << u"https://example.com/Foo_\\(1\\)\\_b.jpg"_s << false;
+        QTest::newRow("parentheses") << u"![](https://pl.wikipedia.org/wiki/Kot_(zwierzę).png)"_s
+                                     << u"https://pl.wikipedia.org/wiki/Kot_(zwierzę).png"_s << false;
+        QTest::newRow("angle") << u"![ż](  <https://example.com/mój kot.png> 'tytuł' )"_s
+                               << u"https://example.com/mój kot.png"_s << true;
+        QTest::newRow("empty") << u"![]()"_s << QString() << false;
+        QTest::newRow("wiki") << u"![[kot.png]]"_s << u"-"_s << false;
+        QTest::newRow("unclosed") << u"![a](https://example.com/a.png"_s << u"-"_s << false;
+        QTest::newRow("more after") << u"![a](a.png) tekst"_s << u"-"_s << false;
+        QTest::newRow("no link") << u"zwykły tekst"_s << u"-"_s << false;
+        QTest::newRow("blank") << QString() << u"-"_s << false;
+    }
+
+    void markdownDestinations()
+    {
+        QFETCH(QString, source);
+        QFETCH(QString, dest);
+        QFETCH(bool, angle);
+        const MarkdownDestination d = markdownDestination(source);
+        if (dest == u"-") {
+            QCOMPARE(d.from, -1);
+            QCOMPARE(d.to, -1);
+            return;
+        }
+        QVERIFY(d.from >= 0 && d.to >= d.from && d.to <= source.size());
+        QCOMPARE(source.sliced(d.from, d.to - d.from), dest);
+        QCOMPARE(d.angle, angle);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestInline)

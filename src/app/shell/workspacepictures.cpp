@@ -123,7 +123,9 @@ QVariantMap Workspace::webPicture(const QString &url) const
     WebPictures *pictures = webPictures();
     const QString file = pictures->cache.lookup(web);
     if (!file.isEmpty()) {
-        QVariantMap out{{u"state"_s, u"ready"_s}};
+        // The format from the cache's file name (sniffed when it was stored): a data: URL has
+        // none, and the web URL's ending need not name it.
+        QVariantMap out{{u"state"_s, u"ready"_s}, {u"format"_s, QFileInfo(file).suffix()}};
         if (!m_dataUrlAssets) {
             out.insert(u"url"_s, QUrl::fromLocalFile(file));
             return out;

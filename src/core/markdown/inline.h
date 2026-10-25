@@ -24,6 +24,20 @@ struct InlineScan {
 /// (`[[#^id]]`) have an empty target. Linear time, never fails.
 InlineScan extractInline(QStringView text, qsizetype baseOffset = 0, int line = 0);
 
+/// The destination of one Markdown link or picture: its range in the link's source text
+/// (without the angle brackets of `<…>`), as written — escapes and percent-encoding kept.
+struct MarkdownDestination {
+    qsizetype from = -1; ///< -1: `source` is no Markdown link
+    qsizetype to = -1;
+    bool angle = false; ///< written as `<…>`
+};
+
+/// Where the destination of the Markdown link `source` (`[text](dest "title")`, `![alt](<dest>)`
+/// — exactly a link's source, Link::from to Link::to of extractInline()) is written, by the rules
+/// the parser read it with: a title, a `](` in the title or the URL repeated in the text are
+/// never taken for it. {-1, -1} when `source` is no complete Markdown link.
+MarkdownDestination markdownDestination(QStringView source);
+
 /// One `#tag` occurrence (see findTags()).
 struct TagSpan {
     QString name;       ///< without '#', NFC, as in InlineScan::tags (not deduplicated)

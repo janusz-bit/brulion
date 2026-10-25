@@ -11,6 +11,7 @@
 #include "picturesize.h"
 #include "webpicture/webpicture.h"
 
+#include <QFileInfo>
 #include <QUrl>
 
 #include <algorithm>
@@ -1154,7 +1155,7 @@ void BlockListModel::ensureEmbeds(int row) const
     st.onlyEmbeds = false;
     const markdown::BlockEntry &e = m_doc.at(i);
     const BlockView view = cachedShape(row).view;
-    if (view != BlockView::Text && view != BlockView::Heading && view != BlockView::Quote && view != BlockView::Callout)
+    if (!showsEmbeds(view))
         return;
     st.onlyEmbeds = view == BlockView::Text && (e.body.contains(u"![") || e.body.contains(u"!((")) && onlyEmbeds(e.body, true);
     const QList<Embed> embeds = embedsOf(e.body);
@@ -1217,10 +1218,15 @@ QVariantMap BlockListModel::webEmbed(const Embed &em) const
     const QUrl url = state == u"ready" ? picture.value(u"url"_s).toUrl() : QUrl();
     const QUrl web = webpicture::webUrl(em.target);
     QSize size(picture.value(u"width"_s).toInt(), picture.value(u"height"_s).toInt());
-    const QString file = url.isLocalFile() ? url.toLocalFile() : url.fileName();
-    const bool decodable = url.isEmpty() || canDecodePictureFormat(file);
+    // The format of the cached picture: the host's (a data: URL in the browser has no file name;
+    // the web URL's ending says nothing — an SVG badge without ".svg"), else the file's suffix.
+    QString format = picture.value(u"format"_s).toString();
+    if (format.isEmpty() && url.isLocalFile())
+        format = QFileInfo(url.toLocalFile()).suffix();
+    const QString formatFile = u"picture."_s + format;
+    const bool decodable = url.isEmpty() || (!format.isEmpty() && canDecodePictureFormat(formatFile));
     if (!url.isEmpty() && decodable && size.isEmpty() && url.isLocalFile())
-        size = localPictureSize(file);
+        size = localPictureSize(url.toLocalFile());
     if (!size.isValid() || size.isEmpty())
         size = QSize(0, 0);
     return QVariantMap{{u"target"_s, em.target},
@@ -1231,7 +1237,7 @@ QVariantMap BlockListModel::webEmbed(const Embed &em) const
                        {u"error"_s, picture.value(u"error"_s).toString()},
                        {u"host"_s, web.host()},
                        {u"decodable"_s, decodable},
-                       {u"format"_s, url.isEmpty() ? QString() : pictureFormatName(file)},
+                       {u"format"_s, url.isEmpty() ? QString() : pictureFormatName(formatFile)},
                        {u"url"_s, url},
                        {u"name"_s, webpicture::displayName(web)},
                        {u"width"_s, size.width()},
@@ -1243,11 +1249,18 @@ void BlockListModel::webPictureChanged(const QString &url)
     QList<int> rows;
     for (int row = 0; row < m_rows.size(); ++row) {
         const int i = docIndexOfRow(row);
-        if (i < 0 || !m_doc.at(i).body.contains(url.isEmpty() ? u"://"_s : url))
+        if (i < 0 || !m_doc.at(i).body.contains(u"!["))
             continue;
         RowState &st = stateFor(m_rows[row]);
         if (!st.embedsValid)
             continue; // computed when asked for, with the new state
+        // By the pictures the row shows (their targets as parsed: `a\_b.png` names `a_b.png`).
+        const bool names = std::any_of(st.embeds.cbegin(), st.embeds.cend(), [&url](const QVariant &v) {
+            const QVariantMap em = v.toMap();
+            return em.value(u"web"_s).toBool() && (url.isEmpty() || em.value(u"target"_s).toString() == url);
+        });
+        if (!names)
+            continue;
         st.embedsValid = false;
         rows.append(row);
     }

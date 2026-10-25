@@ -3100,7 +3100,7 @@ QStringList PageController::webPictureUrls() const
     const markdown::BlockDocument &doc = m_model->document();
     for (int i = 0; i < doc.count(); ++i) {
         const QString &body = doc.at(i).body;
-        if (!body.contains(u"![") || !body.contains(u"://"))
+        if (!body.contains(u"![") || !showsEmbeds(shapeOf(doc.at(i)).view))
             continue;
         for (const Embed &em : embedsOf(body))
             if (em.web && !urls.contains(em.target))
@@ -3119,13 +3119,13 @@ int PageController::downloadWebPictures(const QString &url)
         wanted = onPage;
     else if (onPage.contains(url))
         wanted = {url};
-    int started = 0;
     for (const QString &u : std::as_const(wanted)) {
-        if (m_webDownloads.contains(u))
-            continue;
-        m_webDownloads.append(u);
-        ++started;
+        if (!m_webDownloads.contains(u))
+            m_webDownloads.append(u);
     }
+    // Being stored: the new ones and those already on their way (a picture's "Zapisz w
+    // notatniku" chosen while it was fetched) — counted before the cached ones finish below.
+    const int pending = int(wanted.size());
     // Cached ones are stored at once, the rest once fetched (onWebPictureChanged()).
     for (const QString &u : std::as_const(wanted)) {
         QString format;
@@ -3136,7 +3136,7 @@ int PageController::downloadWebPictures(const QString &url)
         else
             m_host->loadWebPicture(u, true);
     }
-    return started;
+    return pending;
 }
 
 void PageController::onWebPictureChanged(const QString &url)
@@ -3162,18 +3162,32 @@ void PageController::finishWebDownload(const QString &url, bool ready)
     QString format;
     const QByteArray data = ready && m_host ? m_host->webPictureData(url, &format) : QByteArray();
     bool stored = false;
-    // Still on the page (an edit or a reload while it was fetched may have removed it)?
-    if (!data.isEmpty() && !format.isEmpty() && webPictureUrls().contains(url)) {
-        const QString path = m_host->saveAttachment(webpicture::attachmentName(web, format), data);
-        if (!path.isEmpty()) {
+    // The blocks that would point at the attachment, found before it is saved: a picture an edit
+    // or a reload removed while it was fetched, or one no block can point elsewhere, leaves no
+    // file behind. In source mode the blocks are not what is saved (m_sourceText, which a
+    // whole-page retarget could change inside code): the picture is not stored.
+    const auto retargeted = [this, &url](const QString &path) {
+        QList<std::pair<int, QString>> out;
+        const markdown::BlockDocument &doc = m_model->document();
+        for (int i = 0; i < doc.count(); ++i) {
+            const QString &body = doc.at(i).body;
+            if (!body.contains(u"![") || !showsEmbeds(shapeOf(doc.at(i)).view))
+                continue;
+            const QString changed = retargetWebPicture(body, url, path);
+            if (changed != body)
+                out.append({i, changed});
+        }
+        return out;
+    };
+    const QString name = format.isEmpty() ? QString() : webpicture::attachmentName(web, format);
+    if (!data.isEmpty() && !name.isEmpty() && !m_sourceMode && !retargeted(name).isEmpty()) {
+        const QString path = m_host->saveAttachment(name, data);
+        const QList<std::pair<int, QString>> edits =
+                path.isEmpty() ? QList<std::pair<int, QString>>{} : retargeted(path);
+        if (!edits.isEmpty()) {
             beginCommand();
-            const markdown::BlockDocument &doc = m_model->document();
-            for (int i = 0; i < doc.count(); ++i) {
-                const QString &body = doc.at(i).body;
-                const QString changed = retargetWebPicture(body, url, path);
-                if (changed != body)
-                    editBody(i, changed);
-            }
+            for (const auto &[i, body] : edits)
+                editBody(i, body);
             endCommand(currentFocus());
             stored = true;
         }

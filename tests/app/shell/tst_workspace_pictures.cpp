@@ -156,6 +156,16 @@ private Q_SLOTS:
         QCOMPARE(embedOf(page, 0).value(u"web"_s).toBool(), false);
         QVERIFY(embedOf(page, 0).value(u"url"_s).toUrl().isLocalFile());
         QCOMPARE(server.requests.size(), requests); // from the cache
+        QCOMPARE(ws.webPicture(pies).value(u"format"_s).toString(), u"png"_s);
+
+        // The browser build: data: URLs, whose format the cache tells — so the picture shows.
+        ws.setDataUrlAssets(true);
+        page.blocks()->webPictureChanged(QString());
+        QCOMPARE(embedOf(page, 1).value(u"url"_s).toUrl().scheme(), u"data"_s);
+        QCOMPARE(embedOf(page, 1).value(u"format"_s).toString(), u"PNG"_s);
+        QCOMPARE(embedOf(page, 1).value(u"decodable"_s).toBool(), true);
+        QCOMPARE(embedOf(page, 1).value(u"width"_s).toInt(), 1);
+        ws.setDataUrlAssets(false);
 
         // A new session finds the cached pictures (the device's cache, not the notebook's).
         Workspace other;

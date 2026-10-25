@@ -624,6 +624,19 @@ private Q_SLOTS:
         // Another scheme is no embed — so the block keeps its text (it was blank before).
         QVERIFY(!onlyEmbeds(u"![a](ftp://example.com/a.png)"_s));
         QVERIFY(!onlyEmbeds(u"![a](data:image/png;base64,AAAA)"_s));
+        // A destination with backslash escapes is named as parsed (what retargetWebPicture() and
+        // the host get).
+        QCOMPARE(embedsOf(u"![](https://example.com/a\\_b\\(1\\).png)"_s).value(0).target,
+                 u"https://example.com/a_b(1).png"_s);
+    }
+
+    void viewsShowingEmbeds()
+    {
+        for (const BlockView v : {BlockView::Text, BlockView::Heading, BlockView::Quote, BlockView::Callout})
+            QVERIFY(showsEmbeds(v));
+        for (const BlockView v : {BlockView::Code, BlockView::Calc, BlockView::Query, BlockView::Math, BlockView::Table,
+                                  BlockView::Rule, BlockView::Frontmatter, BlockView::Html})
+            QVERIFY(!showsEmbeds(v));
     }
 
     void retargetWebPictures_data()
@@ -661,6 +674,22 @@ private Q_SLOTS:
                                     << u"![[assets/Mój kot.jpg|Mój kot]] ![[assets/Mój kot.jpg]]"_s;
         QTest::newRow("empty path") << u"![a](https://example.com/kot.jpg)"_s << u << QString()
                                     << u"![a](https://example.com/kot.jpg)"_s;
+        // Only the destination the parser read: a title naming the URL, or holding "](", stays.
+        QTest::newRow("title naming the url")
+                << u"![k](https://example.com/kot.jpg \"źródło: https://example.com/kot.jpg\")"_s << u
+                << u"assets/kot.jpg"_s << u"![k](assets/kot.jpg \"źródło: https://example.com/kot.jpg\")"_s;
+        QTest::newRow("title with brackets") << u"![k](https://example.com/kot.jpg \"a](b\")"_s << u
+                                             << u"assets/kot.jpg"_s << u"![k](assets/kot.jpg \"a](b\")"_s;
+        QTest::newRow("title only") << u"![k](https://example.com/pies.jpg \"https://example.com/kot.jpg\")"_s << u
+                                    << u"assets/kot.jpg"_s
+                                    << u"![k](https://example.com/pies.jpg \"https://example.com/kot.jpg\")"_s;
+        // Backslash escapes: the target as parsed (Embed::target) names it; replaced as a whole.
+        QTest::newRow("escaped") << u"Zdjęcie ![żółw](https://example.com/Foo_\\(1\\)\\_b.jpg) i tekst"_s
+                                 << u"https://example.com/Foo_(1)_b.jpg"_s << u"assets/Foo_(1)_b.jpg"_s
+                                 << u"Zdjęcie ![żółw](assets/Foo_%281%29_b.jpg) i tekst"_s;
+        QTest::newRow("escaped spelling stays")
+                << u"![a](https://example.com/a\\_b.png)"_s << u"https://example.com/a\\_b.png"_s << u"assets/a_b.png"_s
+                << u"![a](https://example.com/a\\_b.png)"_s;
     }
 
     void retargetWebPictures()

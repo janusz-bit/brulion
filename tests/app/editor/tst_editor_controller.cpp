@@ -2588,6 +2588,115 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTRY_COMPARE(done.size(), 1);
         QCOMPARE(done.at(0).at(0).toInt(), 0);
         QCOMPARE(done.at(0).at(1).toStringList().size(), 1);
+        QCOMPARE(f.host.attachmentCount(), 0); // nothing to point at it: no file left behind
+    }
+
+    void webPictureFormatFromTheHost()
+    {
+        // The browser build hands out data: URLs: the format comes from the host, not from the
+        // URL's file name — nor from the web address (an SVG badge without ".svg").
+        const QString kot = u"https://example.com/kot.png"_s;
+        const QString badge = u"https://img.example.com/badge/build-passing"_s;
+        Fixture f(u"- ![kot](%1)\n- ![](%2)\n"_s.arg(kot, badge));
+        f.host.setWebPicture(kot,
+                             QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAA"
+                                                    "IAAAUAAen63NgAAAAASUVORK5CYII="));
+        f.host.setWebPictureText(badge, u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"90\" height=\"20\"/>"_s);
+        f.host.setWebPictureDataUrls(true);
+        f.page.showWebPicture(kot);
+        f.page.showWebPicture(badge);
+        QTRY_COMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ready"_s);
+        QVariantMap e = f.role(0, "embeds").toList().value(0).toMap();
+        QCOMPARE(e.value(u"url"_s).toUrl().scheme(), u"data"_s);
+        QCOMPARE(e.value(u"format"_s).toString(), u"PNG"_s);
+        QCOMPARE(e.value(u"decodable"_s).toBool(), true);
+        QTRY_COMPARE(f.role(1, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ready"_s);
+        QCOMPARE(f.role(1, "embeds").toList().value(0).toMap().value(u"format"_s).toString(), u"SVG"_s);
+        f.host.setWebPictureDataUrls(false);
+        f.page.blocks()->webPictureChanged(QString());
+        e = f.role(1, "embeds").toList().value(0).toMap();
+        QVERIFY(e.value(u"url"_s).toUrl().isLocalFile());
+        QCOMPARE(e.value(u"format"_s).toString(), u"SVG"_s);
+    }
+
+    void webPictureEscapedDestination()
+    {
+        // `\_` and `\(` in the destination: the picture is named as parsed (a_b(1).png), its row
+        // follows the host's state, and storing it rewrites the destination as written.
+        const QString url = u"https://example.com/a_b(1).png"_s;
+        Fixture f(u"- Zdjęcie ![żółw](https://example.com/a\\_b\\(1\\).png \"https://example.com/a_b(1).png\")\n"_s);
+        f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
+                                                         "AIAAAUAAen63NgAAAAASUVORK5CYII="));
+        QCOMPARE(f.page.webPictureUrls(), QStringList{url});
+        QCOMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ask"_s);
+        f.page.showWebPicture(url);
+        QTRY_COMPARE(f.role(0, "embeds").toList().value(0).toMap().value(u"state"_s).toString(), u"ready"_s);
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(url), 1);
+        QCOMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(f.text(), u"- Zdjęcie ![żółw](assets/a_b%281%29.png \"https://example.com/a_b(1).png\")\n"_s);
+        QCOMPARE(f.host.attachmentCount(), 1);
+        QVERIFY(f.page.webPictureUrls().isEmpty());
+    }
+
+    void webPicturesInCodeStay()
+    {
+        // Pictures in code, formulas and HTML are text: never fetched, stored or rewritten.
+        const QString url = u"https://example.com/kot.png"_s;
+        const QString content = u"- ![kot](%1)\n\n~~~markdown\n![](%1)\n~~~\n\n```\n![](%1)\n```\n\n"
+                                "<div>\n![](%1)\n</div>\n"_s.arg(url);
+        Fixture f(content);
+        f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
+                                                         "AIAAAUAAen63NgAAAAASUVORK5CYII="));
+        QCOMPARE(f.page.webPictureUrls(), QStringList{url});
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(), 1);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(f.text(), u"- ![kot](assets/kot.png)\n"_s + content.sliced(content.indexOf(u'\n') + 1));
+        QVERIFY(f.page.webPictureUrls().isEmpty());
+        // Only a block showing pictures is no picture of the page: code alone has none.
+        Fixture code(u"~~~\n![](%1)\n~~~\n"_s.arg(url));
+        QVERIFY(code.page.webPictureUrls().isEmpty());
+        QCOMPARE(code.page.downloadWebPictures(url), 0);
+    }
+
+    void webPictureFinishedInSourceMode()
+    {
+        // The fetch ends while the page is shown as source: the blocks are not what is saved, so
+        // the picture is not stored (named as failed) and no attachment is left behind.
+        const QString url = u"https://example.com/kot.png"_s;
+        Fixture f(u"- ![kot](%1)\n"_s.arg(url));
+        f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
+                                                         "AIAAAUAAen63NgAAAAASUVORK5CYII="));
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(), 1);
+        f.page.setSourceMode(true);
+        f.page.setSourceText(u"- ![kot](%1) dopisane w źródle\n"_s.arg(url));
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 0);
+        QCOMPARE(done.at(0).at(1).toStringList(), QStringList{u"example.com › kot.png"_s});
+        QCOMPARE(f.host.attachmentCount(), 0);
+        f.page.setSourceMode(false);
+        QCOMPARE(f.text(), u"- ![kot](%1) dopisane w źródle\n"_s.arg(url));
+    }
+
+    void webPicturesAlreadyBeingStored()
+    {
+        // "Save all" while the page's only picture is already on its way: counted, not "none".
+        const QString url = u"https://example.com/kot.png"_s;
+        Fixture f(u"- ![kot](%1)\n"_s.arg(url));
+        f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
+                                                         "AIAAAUAAen63NgAAAAASUVORK5CYII="));
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.downloadWebPictures(url), 1);
+        QCOMPARE(f.page.downloadWebPictures(), 1);
+        QCOMPARE(f.page.webPictureDownloads(), 1);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(f.host.webFetches(), 1);
+        QCOMPARE(f.text(), u"- ![kot](assets/kot.png)\n"_s);
     }
 
     void attachments()
