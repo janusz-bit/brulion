@@ -57,7 +57,7 @@ target_link_libraries(brulion PRIVATE brulion_ioviews)
 
 # Desktop builds: the import self-test of the real app (`--selftest-import`, ioselftest.h; ctest
 # tst_appio_import_qml*), started by main.cpp like the shell's self-test.
-if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+if(BRULION_DESKTOP)
     target_sources(brulion PRIVATE ${_brulion_ioviews_dir}/ioselftest.h ${_brulion_ioviews_dir}/ioselftest.cpp)
 endif()
 

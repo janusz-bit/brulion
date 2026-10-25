@@ -150,6 +150,8 @@ qt_add_qml_module(brulion
 )
 
 set_target_properties(brulion PROPERTIES OUTPUT_NAME brulion)
+# Windows: the icon and version information of brulion.exe.
+brulion_windows_resources(brulion "Brulion")
 
 # --- App areas (editor, shell, views, ...): every src/app/<area>/area.cmake is included here.
 # An area adds its C++ with target_sources(brulion PRIVATE <area>/x.cpp ...) and its QML with

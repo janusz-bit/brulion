@@ -37,6 +37,7 @@ brulion_set_warnings(brulion_cli)
 set_property(TARGET brulion_cli PROPERTY QT_EXCLUDE_FROM_TRANSLATION ON)
 
 qt_add_executable(brulion-cli main.cpp)
+brulion_windows_resources(brulion-cli "Brulion command line")
 target_link_libraries(brulion-cli PRIVATE brulion_cli)
 brulion_set_warnings(brulion-cli)
 set_property(TARGET brulion-cli PROPERTY QT_EXCLUDE_FROM_TRANSLATION ON)

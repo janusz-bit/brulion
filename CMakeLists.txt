@@ -29,6 +29,23 @@ if(BRULION_BUILD_APP)
 endif()
 
 include(cmake/BrulionWarnings.cmake)
+include(cmake/BrulionWindows.cmake)
+
+# The desktop (Linux and Windows): the system tray, one instance per session, the command line
+# brulion-cli and the self-tests of the real app (BRULION_DESKTOP_INTEGRATION in the code).
+if(NOT ANDROID AND NOT EMSCRIPTEN AND (WIN32 OR (UNIX AND NOT APPLE)))
+    set(BRULION_DESKTOP ON)
+else()
+    set(BRULION_DESKTOP OFF)
+endif()
+
+# Windows (MSVC), every target including 3rdparty: UTF-8 sources (Polish string literals), the
+# standard's rules and a correct __cplusplus, more sections per object file than the default
+# (generated QML type registrations, big test files), no min/max macros from <windows.h>.
+if(MSVC)
+    add_compile_options(/utf-8 /permissive- /Zc:__cplusplus /bigobj)
+    add_compile_definitions(NOMINMAX)
+endif()
 
 # Tests are built on desktop only (not for Android/WebAssembly cross builds).
 if(NOT ANDROID AND NOT EMSCRIPTEN)
@@ -38,8 +55,8 @@ else()
 endif()
 
 add_subdirectory(src/core)
-# The desktop (Linux): the single-instance socket and the command line for scripts and AI agents
-# (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.
+# The desktop (Linux, Windows): the single-instance socket and the command line for scripts and AI
+# agents (brulion-cli, docs/CLI.md); the app hands `brulion cli …` over to it.
 if(NOT ANDROID AND NOT EMSCRIPTEN)
     add_subdirectory(src/ipc)
     add_subdirectory(src/cli)

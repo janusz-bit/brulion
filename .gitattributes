@@ -1,0 +1,4 @@
+# Every file is checked out byte for byte as committed (LF), also by Git for Windows with
+# core.autocrlf=true: the tests compare bytes (line endings are preserved, docs/SYNTAX.md), the
+# guide's pages are hashed (tst_shell_demovault) and the scripts are bash. No EOL conversion.
+* -text
