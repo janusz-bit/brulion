@@ -463,7 +463,7 @@ private:
         const QSGRendererInterface *ri = m_window->rendererInterface();
         const QString api = ri ? QString::number(int(ri->graphicsApi())) : u"?"_s;
         log(u"target %1 '%2' in %3, %4x%5 at %6,%7; window %8x%9 dpr %10; QPA %11; graphics api %12; render loop %13; "
-            "screen %14 Hz; script %15, %16 pass(es), speed %17 px/s"_s
+            u"screen %14 Hz; script %15, %16 pass(es), speed %17 px/s"_s
                     .arg(QString::fromLatin1(m_target->metaObject()->className()), m_target->objectName(),
                          parentChain(m_target))
                     .arg(m_target->width())
@@ -534,8 +534,8 @@ private:
         const QStyleHints *hints = QGuiApplication::styleHints();
         const QScreen *screen = m_window->screen();
         log(u"tuning: flickDeceleration %1, maximumFlickVelocity %2, pressDelay %3, cacheBuffer %4, "
-            "boundsBehavior %5, synchronousDrag %6; startDragDistance %7, wheelScrollLines %8, "
-            "mouseDoubleClickDistance %9; screen %10x%11 logical, %12 dpi physical, %13 Hz"_s
+            u"boundsBehavior %5, synchronousDrag %6; startDragDistance %7, wheelScrollLines %8, "
+            u"mouseDoubleClickDistance %9; screen %10x%11 logical, %12 dpi physical, %13 Hz"_s
                     .arg(num(m_target, "flickDeceleration"))
                     .arg(num(m_target, "maximumFlickVelocity"))
                     .arg(num(m_target, "pressDelay"))
@@ -606,7 +606,7 @@ private:
         }
         log(u"inventory: overlay %1"_s.arg(overlay.join(u' ')));
         log(u"inventory: %1 items (%2 in the target), %3 BlockDelegates, %4 IconImages (%5 without source or name); "
-            "%6 menus holding %7 objects, %8 menu items, %9 IconImages (%10 without source or name)"_s.arg(all.size())
+            u"%6 menus holding %7 objects, %8 menu items, %9 IconImages (%10 without source or name)"_s.arg(all.size())
                     .arg(inTarget)
                     .arg(blocks)
                     .arg(icons)
@@ -1320,7 +1320,7 @@ private:
                      .arg(percentile(swapIntervals, 0.99), 0, 'f', 1)
                      .arg(percentile(swapIntervals, 1), 0, 'f', 1));
         line(u"JUMPS %1 frames (%2), total %3 px, max %4 px; layout shifts of the anchor: %5 frames, %6 px; "
-             "input held back (drag threshold, an end): %7 frames, %8 px"_s.arg(jumps.size())
+             u"input held back (drag threshold, an end): %7 frames, %8 px"_s.arg(jumps.size())
                      .arg(m_observe ? u"drags: content moved more than the finger, or against it; flings: "
                                       u"displacement off the animation's by > max(6 px, 50%)"_s
                           : m_direct ? u"content moved more than the input, or against it"_s
@@ -1332,7 +1332,7 @@ private:
                      .arg(heldFrames)
                      .arg(heldTotal, 0, 'f', 0));
         line(u"SCROLL not from input or animation (timers, queued calls, model signals): %1 frames, %2 px; contentY "
-             "changes inside frames (polish, touch moves Qt delivers with the frame): %3 px; animations: %4 px"_s
+             u"changes inside frames (polish, touch moves Qt delivers with the frame): %3 px; animations: %4 px"_s
                      .arg(other.size())
                      .arg(otherTotal, 0, 'f', 0)
                      .arg(frameDyDirect, 0, 'f', 0)
@@ -1351,7 +1351,7 @@ private:
         const auto describe = [](const Frame *f) {
             return u"#%1 t=%2 %3 interval=%4 gap=%5 polish=%6 prevgui=%7 dy(in/frame/anim/other)=%8/%9/%10/%11 "
                    u"unexplained=%12 "
-                   "shift=%13 created=%14 blocks+=%15 y=%16 origin=%17 h=%18 [%19]"_s.arg(f->n)
+                   u"shift=%13 created=%14 blocks+=%15 y=%16 origin=%17 h=%18 [%19]"_s.arg(f->n)
                            .arg(f->t, 0, 'f', 0)
                            .arg(f->phase)
                            .arg(f->interval, 0, 'f', 1)
@@ -1457,8 +1457,8 @@ private:
         }
         const auto share = [drag](int n) { return drag ? 100.0 * n / drag : 0.0; };
         log(u"TOUCH drag frames %1: no new move %2 (%3%), 1 move %4 (%5%), 2+ moves %6 (%7%); content movement per "
-            "frame px p10=%8 p50=%9 p90=%10 max=%11, frames < 0.25x median %12, > 1.75x median %13; last move "
-            "arrived before the frame ms p10=%14 p50=%15 p90=%16"_s.arg(drag)
+            u"frame px p10=%8 p50=%9 p90=%10 max=%11, frames < 0.25x median %12, > 1.75x median %13; last move "
+            u"arrived before the frame ms p10=%14 p50=%15 p90=%16"_s.arg(drag)
                     .arg(still)
                     .arg(share(still), 0, 'f', 0)
                     .arg(one)
@@ -1501,8 +1501,8 @@ private:
                                          ? kNaN
                                          : std::sqrt(2 * deceleration * std::abs(flung));
             log(u"  stroke t=%1 %2 ms, finger %3 px, %4 moves (%5/s); drag frames %6, no new move %7, 2+ moves %8; "
-                "release speed %9 px/s, view velocity after %10 px/s, fling %11 px in %12 ms%13, start velocity "
-                "from its distance %14 px/s (x%15 the release speed)"_s.arg(s.tDown - m_startMs, 0, 'f', 0)
+                u"release speed %9 px/s, view velocity after %10 px/s, fling %11 px in %12 ms%13, start velocity "
+                u"from its distance %14 px/s (x%15 the release speed)"_s.arg(s.tDown - m_startMs, 0, 'f', 0)
                         .arg(duration, 0, 'f', 0)
                         .arg(s.yUp - s.yDown, 0, 'f', 0)
                         .arg(s.moves)
@@ -1526,7 +1526,7 @@ private:
         // strokes with BRULION_TOUCHFLICK=0 by their fling distances for the exact factor.
         if (!startRatios.isEmpty())
             log(u"TOUCH fling start velocity / release speed, strokes of 300 ms or more: p50 x%1 (%2 strokes; Qt "
-                "6.11 alone: x0.70)"_s.arg(percentile(startRatios, 0.5), 0, 'f', 2)
+                u"6.11 alone: x0.70)"_s.arg(percentile(startRatios, 0.5), 0, 'f', 2)
                         .arg(startRatios.size()));
     }
 

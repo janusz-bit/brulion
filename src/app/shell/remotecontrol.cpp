@@ -948,7 +948,7 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                 if (problem) {
                     reply.fail(code(E::OffScreen),
                                u"The item is outside the window, and scrolling cannot bring it in: nothing "
-                               "was touched"_s,
+                               u"was touched"_s,
                                {{u"item"_s, describe(target.item)},
                                 {u"window"_s,
                                  QJsonObject{{u"width"_s, reached->width()}, {u"height"_s, reached->height()}}}});
@@ -1078,7 +1078,7 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
                     QQuickItem *off = problem ? from.item.data() : to.item.data();
                     reply.fail(code(E::OffScreen),
                                u"The %1 item is outside the window, and scrolling cannot bring it in: nothing was "
-                               "touched"_s.arg(problem ? u"from"_s : u"to"_s),
+                               u"touched"_s.arg(problem ? u"from"_s : u"to"_s),
                                {{u"param"_s, problem ? u"from"_s : u"to"_s}, {u"item"_s, describe(off)}});
                     finished();
                     return;

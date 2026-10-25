@@ -1724,7 +1724,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     const QString newPage = u"Linki/Nowa strona.md"_s;
     ws->write(newPage, u"- Wstęp\n- Przeniesiony blok z łazienką ^przen1\n"_s);
     ws->write(oldPage, u"# Stara strona\n\nZobacz [[Stara strona#^przen1]] i [[Stara strona#Brakujący nagłówek]].\n\n"
-                       "Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
+                       u"Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
     QString lastToast;
     const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
                                                             [&lastToast](const QString &text) { lastToast = text; });

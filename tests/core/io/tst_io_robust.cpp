@@ -112,7 +112,7 @@ QList<QList<InputFile>> hostileInputs()
     // Trilium: a meta of the wrong types, a deep tree pointing out of the archive, random content.
     sets.append({iotest::text(u"!!!meta.json"_s,
                               u"{\"formatVersion\":\"2\",\"files\":[1,\"x\",null,{\"children\":5,\"title\":7,"
-                              "\"attributes\":\"x\",\"attachments\":[3],\"dataFileName\":[\"a\"]}]}"_s)});
+                              u"\"attributes\":\"x\",\"attachments\":[3],\"dataFileName\":[\"a\"]}]}"_s)});
     sets.append({iotest::text(u"!!!meta.json"_s,
                               u"{\"formatVersion\":2,\"files\":["_s
                                       + u"{\"title\":\"../..\",\"dirFileName\":\"../..\",\"children\":["_s.repeated(300)
@@ -120,8 +120,8 @@ QList<QList<InputFile>> hostileInputs()
                  iotest::text(u"x.html"_s, u"<p>liść</p>"_s)});
     sets.append({iotest::text(u"!!!meta.json"_s,
                               u"{\"formatVersion\":2,\"files\":[{\"noteId\":\"a\",\"title\":\"a\",\"type\":\"text\","
-                              "\"format\":\"markdown\",\"dataFileName\":\"a.md\"},{\"noteId\":\"b\",\"title\":\"b\","
-                              "\"dataFileName\":\"b.html\"}]}"_s),
+                              u"\"format\":\"markdown\",\"dataFileName\":\"a.md\"},{\"noteId\":\"b\",\"title\":\"b\","
+                              u"\"dataFileName\":\"b.html\"}]}"_s),
                  iotest::text(u"a.md"_s, pathologicalTexts().join(u'\n')),
                  iotest::text(u"b.html"_s, pathologicalTexts().join(u"<br>"_s))});
     sets.append({iotest::bytes(u"!!!meta.json"_s, randomBytes(rng, 2000)),
@@ -210,7 +210,7 @@ private Q_SLOTS:
         ExportInput in;
         in.files = {iotest::text(u"x.md"_s, pathologicalTexts().last()
                                                     + u"\n\n[a](javascript:alert(1)) [b](data:text/html,x) "
-                                                      "<iframe src=x></iframe> ![c](vbscript:x)"_s)};
+                                                      u"<iframe src=x></iframe> ![c](vbscript:x)"_s)};
         for (const QString &id : {u"html-site"_s, u"html-single"_s}) {
             const ExportedFile f = runExport(*exporterById(id), in).files.first();
             QString html;

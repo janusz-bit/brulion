@@ -600,8 +600,8 @@ private Q_SLOTS:
     {
         const QList<Embed> e = embedsOf(
                 u"Kot ![mój kot](https://example.com/kot.jpg) ![](HTTP://cdn.example.pl/img?id=3) "
-                "![ftp](ftp://example.com/a.png) ![d](data:image/png;base64,AAAA) [link](https://example.com/b.png) "
-                "`![kod](https://example.com/c.png)`"_s);
+                u"![ftp](ftp://example.com/a.png) ![d](data:image/png;base64,AAAA) [link](https://example.com/b.png) "
+                u"`![kod](https://example.com/c.png)`"_s);
         QCOMPARE(e.size(), 2);
         QCOMPARE(e[0].target, u"https://example.com/kot.jpg"_s);
         QCOMPARE(e[0].alt, u"mój kot"_s);

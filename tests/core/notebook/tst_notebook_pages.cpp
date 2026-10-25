@@ -239,7 +239,7 @@ private Q_SLOTS:
                 << u"page:Dom.md:Mój dom"_s << u"Mój dom.md"_s
                 << QStringList{u"Notatka.md=- #[[Mój dom]]"_s,
                                u"Zapytania.md=```query\r\ntype:tasks tag:[[Mój dom]] -tag:dom/kuchnia ref:[[Mój dom]] "
-                               "page:\"Mój dom\"\r\n```\r\n"_s};
+                               u"page:\"Mój dom\"\r\n```\r\n"_s};
         QTest::newRow("folder rename rewrites path filters")
                 << QStringList{u"Projekty/Dom.md=x"_s, u"Projekty/Plan.md=y"_s,
                                u"Zapytania.md=- ```query\n  path:Projekty/ -path:Projekty/Plan\n  ```\n"_s}

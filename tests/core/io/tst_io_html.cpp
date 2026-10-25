@@ -221,28 +221,28 @@ private Q_SLOTS:
                 << u"<p><b>bold</b> <i>it</i> <s>strike</s> <code>x*y</code> <mark>hl</mark> <u>pod</u></p>"_s
                 << u"**bold** *it* ~~strike~~ `x*y` ==hl== pod\n"_s;
         QTest::newRow("css styles") << u"<p><span style=\"font-weight:bold\">mocno</span> "
-                                       "<span style=\"font-family:Menlo, monospace\">kod</span> "
-                                       "<span style=\"background-color: rgb(255, 250, 165)\">żółte</span></p>"_s
+                                       u"<span style=\"font-family:Menlo, monospace\">kod</span> "
+                                       u"<span style=\"background-color: rgb(255, 250, 165)\">żółte</span></p>"_s
                                     << u"**mocno** `kod` ==żółte==\n"_s;
         QTest::newRow("spaces outside markers") << u"<p><b> spaced </b>x</p>"_s << u"**spaced** x\n"_s;
         QTest::newRow("code with backtick") << u"<p><code>a`b</code></p>"_s << u"`` a`b ``\n"_s;
         QTest::newRow("links") << u"<p><a href=\"https://example.com/a b\">Przykład</a> i "
-                                  "<a href=\"https://x.org\">https://x.org</a></p>"_s
+                                  u"<a href=\"https://x.org\">https://x.org</a></p>"_s
                                << u"[Przykład](https://example.com/a%20b) i <https://x.org>\n"_s;
         QTest::newRow("mailto") << u"<p><a href=\"mailto:jan@x.pl\">jan@x.pl</a></p>"_s << u"<mailto:jan@x.pl>\n"_s;
         QTest::newRow("unsafe links keep text") << u"<p><a href=\"javascript:alert(1)\">kliknij</a> "
-                                                   "<a href=\"#sekcja\">kotwica</a></p>"_s
+                                                   u"<a href=\"#sekcja\">kotwica</a></p>"_s
                                                 << u"kliknij kotwica\n"_s;
         QTest::newRow("bold inside link")
                 << u"<p><a href=\"https://x.org\"><b>B</b> t</a></p>"_s << u"[**B** t](https://x.org)\n"_s;
         // Brackets in a link label or an image alt would end the label (or make a wiki link).
         QTest::newRow("brackets in labels")
                 << u"<p><a href=\"https://x.org\">a]b</a> <a href=\"https://x.org/(x)\">[x]</a> "
-                   "<img src=\"https://x.org/i.png\" alt=\"[[alt]]\"></p>"_s
+                   u"<img src=\"https://x.org/i.png\" alt=\"[[alt]]\"></p>"_s
                 << u"[a\\]b](https://x.org) [\\[x\\]](https://x.org/%28x%29) ![\\[\\[alt\\]\\]](https://x.org/i.png)\n"_s;
         // Attributes are read in order: a name inside another attribute's quoted value is text.
         QTest::newRow("attribute inside a value") << u"<p><img alt=\"x src=evil.png\" src=\"https://x.org/good.png\"> "
-                                                     "<input value='type=checkbox checked' type=text>t</p>"_s
+                                                     u"<input value='type=checkbox checked' type=text>t</p>"_s
                                                   << u"![x src=evil.png](https://x.org/good.png) t\n"_s;
         QTest::newRow("quoted > in attributes")
                 << u"<p><img alt=\"a > b\" src=\"https://x.org/c.png\"><input title='x>y' type=checkbox checked> z</p>"_s
@@ -250,10 +250,10 @@ private Q_SLOTS:
         QTest::newRow("task-like text in list") << u"<ul><li>[ ] nie zadanie</li><li>[x] też nie</li></ul>"_s
                                                 << u"- \\[ ] nie zadanie\n- \\[x] też nie\n"_s;
         QTest::newRow("images") << u"<p><img src=\"https://x.org/a.png\" alt=\"Obraz\"> "
-                                   "<img src=\"data:image/png;base64,AAAA\"> <img src=\"local dir/b.png\"></p>"_s
+                                   u"<img src=\"data:image/png;base64,AAAA\"> <img src=\"local dir/b.png\"></p>"_s
                                 << u"![Obraz](https://x.org/a.png) ![](local%20dir/b.png)\n"_s;
         QTest::newRow("table") << u"<table><tr><th>Nazwa</th><th>Cena</th></tr>"
-                                  "<tr><td>a|b</td><td>5 <b>zł</b></td></tr><tr><td></td><td>x<br>y</td></tr></table>"_s
+                                  u"<tr><td>a|b</td><td>5 <b>zł</b></td></tr><tr><td></td><td>x<br>y</td></tr></table>"_s
                                << u"| Nazwa | Cena |\n| --- | --- |\n| a\\|b | 5 **zł** |\n|  | x y |\n"_s;
         QTest::newRow("pre with language")
                 << u"<pre><code class=\"language-cpp\">int x = 1;\nreturn x;</code></pre><p>po</p>"_s
@@ -271,19 +271,19 @@ private Q_SLOTS:
                                << u"> Cytat\n>\n> dalej\n\npo\n"_s;
         QTest::newRow("nested quote with list")
                 << u"<blockquote><p>A</p><blockquote><p>B</p></blockquote><ul><li>c</li></ul></blockquote>"
-                   "<p style=\"margin-left:40px\">wcięty, nie cytat</p>"_s
+                   u"<p style=\"margin-left:40px\">wcięty, nie cytat</p>"_s
                 << u"> A\n>\n>> B\n>\n> - c\n\nwcięty, nie cytat\n"_s;
         QTest::newRow("rule") << u"<p>a</p><hr><p>b</p>"_s << u"a\n\n---\n\nb\n"_s;
         QTest::newRow("headings") << u"<h1>Tytuł</h1><h2>Sekcja <b>x</b></h2><h6>mały</h6>"_s
                                   << u"# Tytuł\n\n## Sekcja x\n\n###### mały\n"_s;
         QTest::newRow("escaping") << u"<p>* nie lista</p><p># nie nagłówek</p><p>1. nie numer</p>"
-                                     "<p>a *b* [[x]] `c` ==d== %%e%% ((f)) &lt;tag&gt; ^id</p>"_s
+                                     u"<p>a *b* [[x]] `c` ==d== %%e%% ((f)) &lt;tag&gt; ^id</p>"_s
                                   << u"\\* nie lista\n\n\\# nie nagłówek\n\n1\\. nie numer\n\n"
-                                     "a \\*b\\* \\[\\[x\\]\\] \\`c\\` \\==d\\== \\%%e\\%% \\((f)) \\<tag> \\^id\n"_s;
+                                     u"a \\*b\\* \\[\\[x\\]\\] \\`c\\` \\==d\\== \\%%e\\%% \\((f)) \\<tag> \\^id\n"_s;
         QTest::newRow("entities and nbsp") << u"<p>a&nbsp;b &amp; c &lt; d</p>"_s << u"a b & c < d\n"_s;
         QTest::newRow("scripts and styles dropped")
                 << u"<html><head><style>p{color:red}</style><script>alert('x')</script></head>"
-                   "<body><p>Treść</p><script>evil()</script><noscript>ns</noscript></body></html>"_s
+                   u"<body><p>Treść</p><script>evil()</script><noscript>ns</noscript></body></html>"_s
                 << u"Treść\n"_s;
         QTest::newRow("empty") << QString() << QString();
         QTest::newRow("whitespace only") << u"<p>  </p><div><br></div>"_s << QString();
@@ -337,7 +337,7 @@ private Q_SLOTS:
         const QString html = io::clipboardHtml(
                 u"# Zakupy\n\n- [ ] Kupić żółć i\u00a0źdźbło #dom\n\t- [x] mleko\n- [[Strona]] i ((abc123)) "
                 u"((brak))\n\n"
-                "![[zdjęcie.png]] ![[inline.png]] ![x](https://example.com/a.png)\n\n<script>alert(1)</script>\n"_s,
+                u"![[zdjęcie.png]] ![[inline.png]] ![x](https://example.com/a.png)\n\n<script>alert(1)</script>\n"_s,
                 options);
         QVERIFY(html.startsWith(u"<meta charset=\"utf-8\">"_s + QString(io::ClipboardHtmlMarker)));
         QVERIFY2(html.contains(u"<h1"_s) && html.contains(u"Zakupy"_s), qPrintable(html));
@@ -409,8 +409,8 @@ private Q_SLOTS:
             return std::nullopt;
         };
         const HtmlMarkdown r = htmlToMarkdown(u"<p><img src=\"/etc/passwd\"><img src=\"file:///dev/zero\" alt=\"zero\">"
-                                              "<img src='data:image/png;base64,iVBO' alt=\"Wykres &amp; dane\"></p>"
-                                              "<p><a href=\"inna.html\">Inna</a> <a href=\"https://x.org\">x</a></p>"_s,
+                                              u"<img src='data:image/png;base64,iVBO' alt=\"Wykres &amp; dane\"></p>"
+                                              u"<p><a href=\"inna.html\">Inna</a> <a href=\"https://x.org\">x</a></p>"_s,
                                               o);
         QCOMPARE(seen.size(), 3);
         QCOMPARE(seen[0].src, u"/etc/passwd"_s);
@@ -426,7 +426,7 @@ private Q_SLOTS:
         // /dev/zero, no file access).
         const HtmlMarkdown r = htmlToMarkdown(
                 u"<link rel=\"stylesheet\" href=\"file:///dev/zero\"><style>@import url(/dev/zero);</style>"
-                "<table background=\"/dev/zero\"><tr><td style=\"background-image:url(/dev/zero)\">x</td></tr></table>"_s);
+                u"<table background=\"/dev/zero\"><tr><td style=\"background-image:url(/dev/zero)\">x</td></tr></table>"_s);
         QVERIFY(r.markdown.contains(u"x"_s));
     }
 
@@ -617,7 +617,7 @@ private Q_SLOTS:
         QCOMPARE(
                 split,
                 u"<ol start=3 class=\"x\" style=\"-qt-list-number-prefix:'#:0'; margin-bottom:0px\">\n<li>a<li>b</li> "
-                "</ol><ol start=3 class=\"x\" style=\"-qt-list-number-prefix:'#:0'; margin-top:0px\"><li>c<ol><li>d</ol>e</ol>"_s);
+                u"</ol><ol start=3 class=\"x\" style=\"-qt-list-number-prefix:'#:0'; margin-top:0px\"><li>c<ol><li>d</ol>e</ol>"_s);
     }
 
     void listPartPrefixCannotBeForged()

@@ -32,36 +32,36 @@ constexpr int Document = int(NoteMode::Document);
 
 /// A Logseq page: page properties, bullets with children, properties, markers, block refs.
 const QString logseqPage = u"title:: Remont mieszkania\n"
-                           "tags:: projekt, dom\n"
-                           "\n"
-                           "- Plan prac na jesień\n"
-                           "  collapsed:: true\n"
-                           "\t- Łazienka: płytki, fugi\n"
-                           "\t- Kuchnia\n"
-                           "- TODO Kupić farbę\n"
-                           "  SCHEDULED: <2026-10-20 Tue>\n"
-                           "- Notatka ((64f1a2b3-0000-4000-8000-000000000001))\n"_s;
+                           u"tags:: projekt, dom\n"
+                           u"\n"
+                           u"- Plan prac na jesień\n"
+                           u"  collapsed:: true\n"
+                           u"\t- Łazienka: płytki, fugi\n"
+                           u"\t- Kuchnia\n"
+                           u"- TODO Kupić farbę\n"
+                           u"  SCHEDULED: <2026-10-20 Tue>\n"
+                           u"- Notatka ((64f1a2b3-0000-4000-8000-000000000001))\n"_s;
 
 /// An Obsidian note: frontmatter, headings, paragraphs, a short task list, a callout, a table.
 const QString obsidianNote = u"---\n"
-                             "tags: [projekt]\n"
-                             "aliases: [Remont]\n"
-                             "---\n"
-                             "# Remont mieszkania\n"
-                             "\n"
-                             "Plan prac na jesień. Zaczynamy od łazienki, potem kuchnia.\n"
-                             "\n"
-                             "## Zadania\n"
-                             "\n"
-                             "- [ ] Kupić płytki 📅 2026-10-20\n"
-                             "- [ ] Zamówić hydraulika\n"
-                             "\n"
-                             "> [!tip] Pamiętaj\n"
-                             "> Zmierzyć ściany przed zakupem.\n"
-                             "\n"
-                             "| Pokój | Koszt |\n"
-                             "|---|---|\n"
-                             "| Łazienka | 5000 |\n"_s;
+                             u"tags: [projekt]\n"
+                             u"aliases: [Remont]\n"
+                             u"---\n"
+                             u"# Remont mieszkania\n"
+                             u"\n"
+                             u"Plan prac na jesień. Zaczynamy od łazienki, potem kuchnia.\n"
+                             u"\n"
+                             u"## Zadania\n"
+                             u"\n"
+                             u"- [ ] Kupić płytki 📅 2026-10-20\n"
+                             u"- [ ] Zamówić hydraulika\n"
+                             u"\n"
+                             u"> [!tip] Pamiętaj\n"
+                             u"> Zmierzyć ściany przed zakupem.\n"
+                             u"\n"
+                             u"| Pokój | Koszt |\n"
+                             u"|---|---|\n"
+                             u"| Łazienka | 5000 |\n"_s;
 
 QString repeated(const QString &line, int n)
 {

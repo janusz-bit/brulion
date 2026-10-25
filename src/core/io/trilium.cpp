@@ -855,9 +855,9 @@ private:
     {
         static const QRegularExpression ref(
                 u"<a\\b[^>]*?\\bhref\\s*=\\s*\"#fn(?!ref)([^\"]*)\"[^>]*>\\s*<sup\\b[^>]*>\\s*\\[(\\d{1,6})\\]\\s*"
-                "</sup>\\s*</"
-                "a>|<sup\\b[^>]*>\\s*<a\\b[^>]*?\\bhref\\s*=\\s*\"#fn(?!ref)([^\"]*)\"[^>]*>\\s*\\[(\\d{1,6})"
-                "\\]\\s*</a>\\s*</sup>"_s,
+                u"</sup>\\s*</"
+                u"a>|<sup\\b[^>]*>\\s*<a\\b[^>]*?\\bhref\\s*=\\s*\"#fn(?!ref)([^\"]*)\"[^>]*>\\s*\\[(\\d{1,6})"
+                u"\\]\\s*</a>\\s*</sup>"_s,
                 QRegularExpression::CaseInsensitiveOption);
         if (!html.contains(u"#fn"_s))
             return html;
@@ -2052,7 +2052,7 @@ QString markdownNoteToMarkdown(const QString &markdown, const QString &title, co
     static const QRegularExpression footnoteItem(
             u"^\\s*(\\d{1,6})\\.\\s+(?:<sup>\\s*<strong>\\s*<a\\s+href=\"#fnref[^\"]*\"\\s*>\\s*\\^\\s*</a>\\s*</"
             u"strong>"
-            "\\s*</sup>|\\[\\*\\*<sup>\\^</sup>\\*\\*\\]\\(#fnref[^)\\s]*\\))\\s*(.*)$"_s,
+            u"\\s*</sup>|\\[\\*\\*<sup>\\^</sup>\\*\\*\\]\\(#fnref[^)\\s]*\\))\\s*(.*)$"_s,
             QRegularExpression::CaseInsensitiveOption);
 
     QString text = markdown;

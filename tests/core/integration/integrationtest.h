@@ -60,41 +60,41 @@ inline QByteArray photoBytes()
 }
 
 inline const QString kJournal14Text = u"- Środa — plan dnia #dziennik\n"
-                                      "\t- [ ] Podlać kwiaty 📅 2026-10-14 🔁 co tydzień w środę ⏰ 2026-10-14 18:00\n"
-                                      "\t- [ ] Zadzwonić do mamy ⏰ 2026-10-14 12:30 #rodzina\n"
-                                      "- Notatki ze spotkania o [[Kuchnia|kuchni]]\n"
-                                      "\t- Ustalenia: płytki szare, fugi białe ^ustalenia\n"
-                                      "\t- Koszt robocizny ustalony z [[Jan Kowalski|Jankiem]]\n"_s;
+                                      u"\t- [ ] Podlać kwiaty 📅 2026-10-14 🔁 co tydzień w środę ⏰ 2026-10-14 18:00\n"
+                                      u"\t- [ ] Zadzwonić do mamy ⏰ 2026-10-14 12:30 #rodzina\n"
+                                      u"- Notatki ze spotkania o [[Kuchnia|kuchni]]\n"
+                                      u"\t- Ustalenia: płytki szare, fugi białe ^ustalenia\n"
+                                      u"\t- Koszt robocizny ustalony z [[Jan Kowalski|Jankiem]]\n"_s;
 
 inline const QString kKitchenText = u"---\n"
-                                    "aliases: [Kuchnia]\n"
-                                    "tags: [dom, remont]\n"
-                                    "---\n"
-                                    "# Remont kuchni\n"
-                                    "\n"
-                                    "Plan prac i koszty. Ustalenia z dziennika: ((ustalenia))\n"
-                                    "\n"
-                                    "| Produkt | Cena | Ilość | Razem |\n"
-                                    "| --- | ---: | ---: | ---: |\n"
-                                    "| Płytki | 45,50 | 12 | =[Cena]*[Ilość] |\n"
-                                    "| Klej | 32 | 3 | =[Cena]*[Ilość] |\n"
-                                    "| Suma | | | =sum(above) |\n"
-                                    "\n"
-                                    "```calc\n"
-                                    "płytki = 45,50 * 12\n"
-                                    "klej = 32 * 3\n"
-                                    "robocizna = 1200\n"
-                                    "łącznie = płytki + klej + robocizna\n"
-                                    "rabat = 10%\n"
-                                    "łącznie - rabat\n"
-                                    "```\n"
-                                    "\n"
-                                    "Do zapłaty po rabacie: `= łącznie - rabat` zł\n"
-                                    "\n"
-                                    "- [ ] Kupić płytki 📅 2026-10-16 ⏫ #zakupy\n"
-                                    "- [/] Zamówić fachowca ⏳ 2026-10-15\n"
-                                    "- [ ] Odebrać zamówienie ⏰! 2026-10-15 07:30\n"
-                                    "- Zdjęcie obecnej kuchni: ![[kuchnia.png]]\n"_s;
+                                    u"aliases: [Kuchnia]\n"
+                                    u"tags: [dom, remont]\n"
+                                    u"---\n"
+                                    u"# Remont kuchni\n"
+                                    u"\n"
+                                    u"Plan prac i koszty. Ustalenia z dziennika: ((ustalenia))\n"
+                                    u"\n"
+                                    u"| Produkt | Cena | Ilość | Razem |\n"
+                                    u"| --- | ---: | ---: | ---: |\n"
+                                    u"| Płytki | 45,50 | 12 | =[Cena]*[Ilość] |\n"
+                                    u"| Klej | 32 | 3 | =[Cena]*[Ilość] |\n"
+                                    u"| Suma | | | =sum(above) |\n"
+                                    u"\n"
+                                    u"```calc\n"
+                                    u"płytki = 45,50 * 12\n"
+                                    u"klej = 32 * 3\n"
+                                    u"robocizna = 1200\n"
+                                    u"łącznie = płytki + klej + robocizna\n"
+                                    u"rabat = 10%\n"
+                                    u"łącznie - rabat\n"
+                                    u"```\n"
+                                    u"\n"
+                                    u"Do zapłaty po rabacie: `= łącznie - rabat` zł\n"
+                                    u"\n"
+                                    u"- [ ] Kupić płytki 📅 2026-10-16 ⏫ #zakupy\n"
+                                    u"- [/] Zamówić fachowca ⏳ 2026-10-15\n"
+                                    u"- [ ] Odebrać zamówienie ⏰! 2026-10-15 07:30\n"
+                                    u"- Zdjęcie obecnej kuchni: ![[kuchnia.png]]\n"_s;
 
 /// The sample vault: vault path -> file content.
 inline QMap<QString, QByteArray> sampleVault()
@@ -104,28 +104,28 @@ inline QMap<QString, QByteArray> sampleVault()
     text(kConfig,
          u"{\n  \"version\": 1,\n  \"journalsFolder\": \"journals\",\n  \"defaultReminderTime\": \"09:00\"\n}\n"_s);
     text(kJournal13, u"- Spotkanie z [[Jan Kowalski]] w sprawie remontu #praca\n"
-                     "- [x] Wysłać raport kwartalny ✅ 2026-10-13 #praca\n"
-                     "- Pomysł: ogródek na balkonie #dom\n"_s);
+                     u"- [x] Wysłać raport kwartalny ✅ 2026-10-13 #praca\n"
+                     u"- Pomysł: ogródek na balkonie #dom\n"_s);
     text(kJournal14, kJournal14Text);
     text(kJan, u"alias:: Janek\n"
-               "tags:: znajomi\n"
-               "\n"
-               "- Telefon: 600 100 200\n"
-               "- Pomaga przy [[Projekty/Remont kuchni]]\n"
-               "- DONE Oddać wiertarkę\n"
-               "- TODO Kupić prezent na urodziny\n"
-               "  SCHEDULED: <2026-10-20 Tue +1y>\n"_s);
+               u"tags:: znajomi\n"
+               u"\n"
+               u"- Telefon: 600 100 200\n"
+               u"- Pomaga przy [[Projekty/Remont kuchni]]\n"
+               u"- DONE Oddać wiertarkę\n"
+               u"- TODO Kupić prezent na urodziny\n"
+               u"  SCHEDULED: <2026-10-20 Tue +1y>\n"_s);
     text(kKitchen, kKitchenText);
     text(kChores, u"# Zadania domowe\r\n"
-                  "\r\n"
-                  "- [ ] Wynieść śmieci 📅 2026-10-15 🔁 every week on Monday, Thursday ⏰ 2026-10-15 07:00\r\n"
-                  "- [ ] Zapłacić czynsz 📅 2026-11-10 🔁 every month on the 10th 🔼\r\n"
-                  "- Wieczorny przegląd ⏰ 2026-10-14 20:00\r\n"
-                  "- Wizyta u dentysty (@2026-10-16 10:00)\r\n"_s);
+                  u"\r\n"
+                  u"- [ ] Wynieść śmieci 📅 2026-10-15 🔁 every week on Monday, Thursday ⏰ 2026-10-15 07:00\r\n"
+                  u"- [ ] Zapłacić czynsz 📅 2026-11-10 🔁 every month on the 10th 🔼\r\n"
+                  u"- Wieczorny przegląd ⏰ 2026-10-14 20:00\r\n"
+                  u"- Wizyta u dentysty (@2026-10-16 10:00)\r\n"_s);
     text(kShopping, u"- [ ] Mleko #zakupy\n"
-                    "- [ ] Chleb #zakupy\n"
-                    "- [x] Kawa #zakupy ✅ 2026-10-12\n"
-                    "- Lista dla [[Projekty/Remont kuchni#Remont kuchni|remontu]]\n"_s);
+                    u"- [ ] Chleb #zakupy\n"
+                    u"- [x] Kawa #zakupy ✅ 2026-10-12\n"
+                    u"- Lista dla [[Projekty/Remont kuchni#Remont kuchni|remontu]]\n"_s);
     text(u"templates/journal.md"_s, u"- {{date}} — {{weekday}}\n- \n"_s);
     for (int i = 0; i < kArchiveNotes; ++i)
         text(archiveNote(i), u"- Stara notatka %1 o [[Zakupy]] #archiwum\n"_s.arg(i));

@@ -266,7 +266,7 @@ private Q_SLOTS:
         QCOMPARE(iotest::pathsOf(r),
                  sorted({u"Trilium/Archiwum.md"_s,
                          u"Trilium/Archiwum/Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i "
-                         "dalej.md"_s,
+                         u"dalej.md"_s,
                          u"Trilium/Archiwum/Zarchiwizowana notatka.md"_s,
                          u"Trilium/Inne typy/Mapa myśli.md"_s,
                          u"Trilium/Inne typy/Mapa relacji.md"_s,
@@ -332,30 +332,30 @@ private Q_SLOTS:
             // Trilium shows them), image notes embedded, file notes linked.
             row("tags and properties", u"Trilium/Projekty.md"_s,
                 u"---\ntags:\n  - projekt\nstatus: w toku\n---\nWszystkie bieżące projekty. Zobacz też "
-                "[[Trilium/Archiwum|Archiwum]].\n\n---\n\n"
-                "- [[Trilium/Projekty/Ogród plan budżet|Ogród: plan/budżet?]]\n"
-                "- [[Trilium/Projekty/Zadania|Zadania]]\n- [[Trilium/Projekty/Zadania 2|Zadania]]\n"
-                "- [[Trilium/Projekty/Kod|Kod]]\n- [[Trilium/Projekty/Biblioteka|Biblioteka]]\n"
-                "- [[Trilium/Projekty/Diagram przepływu|Diagram przepływu]]\n"
-                "- [[Trilium/Projekty/Szkic grządek|Szkic grządek]]\n- ![[assets/Trilium/Projekty/kropka.png]]\n"
-                "- [[assets/Trilium/Projekty/umowa.pdf|umowa.pdf]]\n"
-                "- [[Trilium/Projekty/Spotkanie 2026-10-14|Spotkanie 2026-10-14]]\n"
-                "- [[Trilium/Projekty/Untitled|???]]\n"_s);
+                u"[[Trilium/Archiwum|Archiwum]].\n\n---\n\n"
+                u"- [[Trilium/Projekty/Ogród plan budżet|Ogród: plan/budżet?]]\n"
+                u"- [[Trilium/Projekty/Zadania|Zadania]]\n- [[Trilium/Projekty/Zadania 2|Zadania]]\n"
+                u"- [[Trilium/Projekty/Kod|Kod]]\n- [[Trilium/Projekty/Biblioteka|Biblioteka]]\n"
+                u"- [[Trilium/Projekty/Diagram przepływu|Diagram przepływu]]\n"
+                u"- [[Trilium/Projekty/Szkic grządek|Szkic grządek]]\n- ![[assets/Trilium/Projekty/kropka.png]]\n"
+                u"- [[assets/Trilium/Projekty/umowa.pdf|umowa.pdf]]\n"
+                u"- [[Trilium/Projekty/Spotkanie 2026-10-14|Spotkanie 2026-10-14]]\n"
+                u"- [[Trilium/Projekty/Untitled|???]]\n"_s);
             row("done task", u"Trilium/Projekty/Zadania 2.md"_s,
                 u"Drugi notatnik o tym samym tytule (rodzeństwo z duplikatem nazwy).\n\n- [x] Zrobione zadanie\n"_s);
             row("folder page", u"Trilium/Projekty/Kod.md"_s,
                 u"- [[Trilium/Projekty/Kod/skrypt.js|skrypt.js]]\n- [[Trilium/Projekty/Kod/dane|dane]]\n"
-                "- [[Trilium/Projekty/Kod/Notatka Markdown|Notatka Markdown]]\n"
-                "- [[Trilium/Projekty/Kod/Analiza plonów|Analiza plonów]]\n"_s);
+                u"- [[Trilium/Projekty/Kod/Notatka Markdown|Notatka Markdown]]\n"
+                u"- [[Trilium/Projekty/Kod/Analiza plonów|Analiza plonów]]\n"_s);
             row("book with a prefixed child", u"Trilium/Projekty/Biblioteka.md"_s,
                 u"- [[Trilium/Projekty/Biblioteka/Część I - Rozdział 1 Gleba|Część I - Rozdział 1: Gleba]]\n"
-                "- [[Trilium/Projekty/Biblioteka/Rozdział 2 Nawożenie|Rozdział 2: Nawożenie]]\n"_s);
+                u"- [[Trilium/Projekty/Biblioteka/Rozdział 2 Nawożenie|Rozdział 2: Nawożenie]]\n"_s);
             // The clone placement and the other children (not the protected one).
             row("clone placement", u"Trilium/Archiwum.md"_s,
                 u"Stare rzeczy.\n\n---\n\n- [[Trilium/Projekty/Spotkanie 2026-10-14|2026 - Spotkanie 2026-10-14]]\n"
-                "- [[Trilium/Archiwum/Zarchiwizowana notatka|Zarchiwizowana notatka]]\n"
-                "- [[Trilium/Archiwum/Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i dalej|"
-                "Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i dalej]]\n"_s);
+                u"- [[Trilium/Archiwum/Zarchiwizowana notatka|Zarchiwizowana notatka]]\n"
+                u"- [[Trilium/Archiwum/Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i dalej|"
+                u"Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i dalej]]\n"_s);
             row("title made of forbidden characters", u"Trilium/Projekty/Untitled.md"_s,
                 u"---\naliases:\n  - \"???\"\n---\nTytuł złożony wyłącznie z niedozwolonych znaków.\n"_s);
             row("template", u"Trilium/Szablony/Osoba (szablon).md"_s,
@@ -364,17 +364,17 @@ private Q_SLOTS:
                 u"```python\ndef plon(kg: float) -> str:\n    return f\"Zebrano {kg} kg — świetnie!\"\n```\n"_s);
             row("javascript code", u"Trilium/Projekty/Kod/skrypt.js.md"_s,
                 u"```javascript\n// Licznik grządek\nconst grządki = [\"marchew\", \"pietruszka\"];\n"
-                "api.log(`Liczba: ${grządki.length}`);\n```\n"_s);
+                u"api.log(`Liczba: ${grządki.length}`);\n```\n"_s);
             row("html code", u"Trilium/Inne typy/widok.html.md"_s,
                 u"```html\n<p>Widok renderowany: <b>ąęś</b></p>\n```\n"_s);
             row("markdown code", u"Trilium/Projekty/Kod/Notatka Markdown.md"_s,
                 u"# Notatka w Markdown\n\nLink do [[Trilium/Projekty/Ogród plan budżet|planu ogrodu]] i "
-                "**pogrubienie**.\n\n- [ ] zadanie w Markdown\n- [x] zrobione\n"_s);
+                u"**pogrubienie**.\n\n- [ ] zadanie w Markdown\n- [x] zrobione\n"_s);
             row("mermaid", u"Trilium/Projekty/Diagram przepływu.md"_s,
                 u"![[assets/Trilium/Projekty/Diagram przepływu.svg]]\n\n```mermaid\ngraph LR\n    A[Siew] --> B[Zbiór]\n```\n"_s);
             row("canvas", u"Trilium/Projekty/Szkic grządek.md"_s,
                 u"![[assets/Trilium/Projekty/Szkic grządek.svg]]\n\n"
-                "[[assets/Trilium/Projekty/Szkic grządek.excalidraw|Szkic grządek.excalidraw]]\n"_s);
+                u"[[assets/Trilium/Projekty/Szkic grządek.excalidraw|Szkic grządek.excalidraw]]\n"_s);
             row("mind map", u"Trilium/Inne typy/Mapa myśli.md"_s,
                 u"- Ogród\n\t- Warzywa\n\t- Kwiaty\n\n[[assets/Trilium/Inne typy/Mapa myśli.json|Mapa myśli.json]]\n"_s);
             row("relation map", u"Trilium/Inne typy/Mapa relacji.md"_s,
@@ -383,10 +383,10 @@ private Q_SLOTS:
             row("empty note", u"Trilium/Inne typy/Pusta notatka.md"_s, QString());
             row("journal", u"journals/2026-10-14.md"_s,
                 u"Spotkanie w sprawie działki: [[Trilium/Projekty/Spotkanie 2026-10-14|Spotkanie 2026-10-14]].\n\n"
-                "- [x] Zadzwonić do sąsiada\n"_s);
+                u"- [x] Zadzwonić do sąsiada\n"_s);
             row("journal with a property", u"journals/2026-10-16.md"_s,
                 u"---\nnastrój: dobry\n---\nDziś: **sadzenie czosnku**.\n\n- [ ] Posadzić czosnek o 10:00\n"
-                "- [/] Grabienie liści\n\nZobacz [[Trilium/Projekty/Zadania|Zadania]].\n"_s);
+                u"- [/] Grabienie liści\n\nZobacz [[Trilium/Projekty/Zadania|Zadania]].\n"_s);
             row("journal of another year", u"journals/2025-12-31.md"_s, u"Podsumowanie roku. Sylwester 🎆\n"_s);
             // Trilium has no inline tags: "#archived" in the text is no tag in Brulion either.
             row("hashtag in the text", u"Trilium/Archiwum/Zarchiwizowana notatka.md"_s,
@@ -394,12 +394,12 @@ private Q_SLOTS:
         }
         QTest::newRow("html.zip task states") << u"html.zip"_s << u"Trilium/Projekty/Zadania.md"_s
                                               << u"- [x] Kupić nasiona marchwi\n- [ ] Przekopać grządkę (ok. 2 h)\n"
-                                                 "- [/] Zamówić **kompostownik**\n- [ ] Szklarnia?\n- [-] Oczko wodne\n"
-                                                 "\t- [ ] zagnieżdżone: wybrać folię\n"_s;
+                                                 u"- [/] Zamówić **kompostownik**\n- [ ] Szklarnia?\n- [-] Oczko wodne\n"
+                                                 u"\t- [ ] zagnieżdżone: wybrać folię\n"_s;
         QTest::newRow("markdown.zip task states") << u"markdown.zip"_s << u"Trilium/Projekty/Zadania.md"_s
                                                   << u"- [x] Kupić nasiona marchwi\n- [ ] Przekopać grządkę (ok. 2 h)\n"
-                                                     "- [/] Zamówić **kompostownik**\n- [ ] Szklarnia?\n- [-] Oczko "
-                                                     "wodne\n    - [ ] zagnieżdżone: wybrać folię\n"_s;
+                                                     u"- [/] Zamówić **kompostownik**\n- [ ] Szklarnia?\n- [-] Oczko "
+                                                     u"wodne\n    - [ ] zagnieżdżone: wybrać folię\n"_s;
     }
 
     void pages()
@@ -450,12 +450,12 @@ private Q_SLOTS:
                 u"> Ukryta treść."_s,
                 u"Odnośnik referencyjny: [[Trilium/Projekty/Spotkanie 2026-10-14|Spotkanie 2026-10-14]]."_s,
                 u"Zwykły link wewnętrzny z własnym tekstem: [[Trilium/Osoby/Jan Kowalski|autor planu]]; do klonu "
-                "przez drugą ścieżkę: [[Trilium/Projekty/Spotkanie 2026-10-14|spotkanie w archiwum]]."_s,
+                u"przez drugą ścieżkę: [[Trilium/Projekty/Spotkanie 2026-10-14|spotkanie w archiwum]]."_s,
                 u"Do innego poddrzewa: [[Trilium/Szablony/Osoba (szablon)|Osoba (szablon)]], do folderu: "
-                "[[Trilium/Projekty/Kod|Kod]], do kodu: [[Trilium/Projekty/Kod/skrypt.js|skrypt.js]], do duplikatu: "
-                "[[Trilium/Projekty/Zadania 2|Zadania]], do dnia: [[2026-10-16]]."_s,
+                u"[[Trilium/Projekty/Kod|Kod]], do kodu: [[Trilium/Projekty/Kod/skrypt.js|skrypt.js]], do duplikatu: "
+                u"[[Trilium/Projekty/Zadania 2|Zadania]], do dnia: [[2026-10-16]]."_s,
                 u"Do notatki chronionej: Sekretne hasła, do wykluczonej: Nie eksportuj, do nieistniejącej: \\[missing "
-                "note\\]."_s,
+                u"note\\]."_s,
                 u"Załącznik (plik): [[assets/Trilium/Projekty/Ogród plan budżet/lista zakupów.txt|lista zakupów.txt]]."_s,
                 u"Podgląd linku: [Example Domain](https://example.org/) w zdaniu."_s,
                 u"[Artykuł o ogrodach](https://example.org/artykul)"_s,
@@ -475,20 +475,20 @@ private Q_SLOTS:
         QTest::newRow("html inline formatting")
                 << u"html.zip"_s
                 << u"Plan ogrodu na rok 2026. Tekst **pogrubiony**, *kursywa*, podkreślenie, ~~przekreślenie~~, "
-                   "`kod_w_linii()`, H2O, m2, `Ctrl`+`S`, ==zaznaczenie==, czerwony tekst i emoji 🌱."_s;
+                   u"`kod_w_linii()`, H2O, m2, `Ctrl`+`S`, ==zaznaczenie==, czerwony tekst i emoji 🌱."_s;
         QTest::newRow("html escaping") << u"html.zip"_s
                                        << u"Znaki specjalne: \\<script>alert(1)\\</script>, \\*gwiazdki\\*, "
-                                          "\\_podkreślniki\\_, [nawiasy], a&b, 100% i \\ukośnik."_s;
+                                          u"\\_podkreślniki\\_, [nawiasy], a&b, 100% i \\ukośnik."_s;
         // A list right after another one keeps its own start: the other delimiter.
         QTest::newRow("html lists") << u"html.zip"_s << u"5) Lista od piątki"_s;
         QTest::newRow("html footnote") << u"html.zip"_s << u"[^1]: Treść przypisu z *ogonkami*: ąćęłńóśźż."_s;
         QTest::newRow("markdown inline formatting")
                 << u"markdown.zip"_s
                 << u"Plan ogrodu na rok 2026. Tekst **pogrubiony**, _kursywa_, podkreślenie, ~~przekreślenie~~, "
-                   "`kod_w_linii()`, H2O, m2, `Ctrl`+`S`, ==zaznaczenie==, czerwony tekst i emoji 🌱."_s;
+                   u"`kod_w_linii()`, H2O, m2, `Ctrl`+`S`, ==zaznaczenie==, czerwony tekst i emoji 🌱."_s;
         QTest::newRow("markdown escaping") << u"markdown.zip"_s
                                            << u"Znaki specjalne: \\<script\\>alert(1)\\</script\\>, \\*gwiazdki\\*, "
-                                              "\\_podkreślniki\\_, \\[nawiasy\\], a&b, 100% i \\\\ukośnik."_s;
+                                              u"\\_podkreślniki\\_, \\[nawiasy\\], a&b, 100% i \\\\ukośnik."_s;
         QTest::newRow("markdown lists") << u"markdown.zip"_s << u"5)  Lista od piątki"_s;
         QTest::newRow("markdown footnote") << u"markdown.zip"_s << u"[^1]: Treść przypisu z _ogonkami_: ąćęłńóśźż."_s;
     }
@@ -556,7 +556,7 @@ private Q_SLOTS:
         QCOMPARE(iotest::pathsOf(r),
                  sorted({u"Trilium/Archiwum.md"_s, u"Trilium/Archiwum/2026 - Spotkanie 2026-10-14.md"_s,
                          u"Trilium/Archiwum/Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i "
-                         "dalej.md"_s,
+                         u"dalej.md"_s,
                          u"Trilium/Archiwum/Sekretne hasła.md"_s, u"Trilium/Archiwum/Zarchiwizowana notatka.md"_s}));
         QCOMPARE(frontmatterOf(iotest::textAt(r, u"Trilium/Archiwum/2026 - Spotkanie 2026-10-14.md"_s))
                          .value(u"aliases"_s)
@@ -581,29 +581,29 @@ private Q_SLOTS:
                 << u"0.99-subtree-projekty-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                 << u"Znaki specjalne: \\<script>alert(1)\\</script>, \\*gwiazdki\\*, \\_podkreślniki\\_, "
                    u"\\[nawiasy\\], "
-                   "a&b, 100% i \\\\ukośnik."_s;
+                   u"a&b, 100% i \\\\ukośnik."_s;
         QTest::newRow("0.99 markdown code note (.mkd)")
                 << u"0.99-subtree-projekty-markdown.zip"_s << u"Trilium/Projekty/Kod/Notatka Markdown.md"_s
                 << u"Link do [[Trilium/Projekty/Ogród plan budżet|planu ogrodu]] i **pogrubienie**."_s;
         QTest::newRow("0.63 html links")
                 << u"0.63-html.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                 << u"Linki: [[Trilium/Projekty/Spotkanie 2026-10-14|Spotkanie 2026-10-14]], [[Trilium/Osoby/Jan "
-                   "Kowalski|autor]], [[Trilium/Projekty/Kod|Kod]], [[Trilium/Projekty/Zadania 2|Zadania]], Sekretne "
-                   "hasła, [[2026-10-16]], [[Trilium/Projekty/Bardzo długi tytuł notatki o planowaniu ogrodu "
-                   "warzywnego "
-                   "na sezon 2026 i dalej|Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i "
-                   "dalej]], [example.org](https://example.org/), załącznik [[assets/Trilium/Projekty/Ogród plan "
-                   "budżet/lista zakupów.txt|lista zakupów.txt]]."_s;
+                   u"Kowalski|autor]], [[Trilium/Projekty/Kod|Kod]], [[Trilium/Projekty/Zadania 2|Zadania]], Sekretne "
+                   u"hasła, [[2026-10-16]], [[Trilium/Projekty/Bardzo długi tytuł notatki o planowaniu ogrodu "
+                   u"warzywnego "
+                   u"na sezon 2026 i dalej|Bardzo długi tytuł notatki o planowaniu ogrodu warzywnego na sezon 2026 i "
+                   u"dalej]], [example.org](https://example.org/), załącznik [[assets/Trilium/Projekty/Ogród plan "
+                   u"budżet/lista zakupów.txt|lista zakupów.txt]]."_s;
         QTest::newRow("0.63 html old markup")
                 << u"0.63-html.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                 << u"Tekst **pogrubiony**, *kursywa*, podkreślenie, ~~przekreślenie~~, `kod()`, H2O, ==zaznaczenie==, "
-                   "czerwony 🌱."_s;
+                   u"czerwony 🌱."_s;
         QTest::newRow("0.63 html math") << u"0.63-html.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                                         << u"Wzór $E=mc^2$."_s;
         QTest::newRow("0.63 markdown strike and literal tag")
                 << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s
                 << u"Tekst **pogrubiony**, _kursywa_, podkreślenie, ~~przekreślenie~~, `kod()`, H2O, zaznaczenie, "
-                   "czerwony 🌱."_s;
+                   u"czerwony 🌱."_s;
         QTest::newRow("0.63 markdown math")
                 << u"0.63-markdown.zip"_s << u"Trilium/Projekty/Ogród plan budżet.md"_s << u"Wzór $E=mc^2$."_s;
         // Attachment names with spaces, unencoded (not valid CommonMark).
@@ -794,7 +794,7 @@ private Q_SLOTS:
                  {u"DOM/Pokój.html"_s, page(u"Pokój"_s, u"<p>4</p>"_s)},
                  {u"Spis.html"_s,
                   page(u"Spis"_s, u"<p><a class=\"reference-link\" href=\"1_dom.html\">dom</a>, <a "
-                                  "href=\"DOM/Pok%C3%B3j.html\">pokój</a>, <a href=\"#root/a3\">trzeci</a></p>"_s)}});
+                                  u"href=\"DOM/Pok%C3%B3j.html\">pokój</a>, <a href=\"#root/a3\">trzeci</a></p>"_s)}});
         QCOMPARE(iotest::pathsOf(r), sorted({u"Trilium/DOM 3.md"_s, u"Trilium/DOM 3/Pokój.md"_s, u"Trilium/Dom.md"_s,
                                              u"Trilium/Spis.md"_s, u"Trilium/dom 2.md"_s}));
         // The link text as written ("pokój", not the title "Pokój").
@@ -998,9 +998,9 @@ private Q_SLOTS:
         note.attachments = attachments;
         const QString html =
                 u"<p><img src=\"data:image/png;base64,UE5H\"> <img src=\"https://example.org/x.png\" alt=\"zdalny\"> "
-                "<img src=\"file:///etc/passwd\"> <img src=\"api/attachments/at2/image/wykres.png\"></p>"
-                "<p><a href=\"javascript:alert(1)\">skrypt</a> <script>alert(2)</script><iframe "
-                "src=\"https://evil.example\"></iframe></p>"_s;
+                u"<img src=\"file:///etc/passwd\"> <img src=\"api/attachments/at2/image/wykres.png\"></p>"
+                u"<p><a href=\"javascript:alert(1)\">skrypt</a> <script>alert(2)</script><iframe "
+                u"src=\"https://evil.example\"></iframe></p>"_s;
         const ImportResult r = importZip({{u"!!!meta.json"_s, metaJson({note})},
                                           {u"Notatka.html"_s, page(u"Notatka"_s, html)},
                                           {u"Notatka_skan.pdf"_s, "%PDF-1.4"},
@@ -1010,7 +1010,7 @@ private Q_SLOTS:
                          u"assets/Trilium/Notatka/skan.pdf"_s, u"assets/Trilium/Notatka/wykres.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Trilium/Notatka.md"_s),
                  u"![[assets/Trilium/Notatka/image-1.png]] ![zdalny](https://example.org/x.png) "
-                 "![[assets/Trilium/Notatka/wykres.png]]\n\nskrypt\n\n![[assets/Trilium/Notatka/skan.pdf]]\n"_s);
+                 u"![[assets/Trilium/Notatka/wykres.png]]\n\nskrypt\n\n![[assets/Trilium/Notatka/skan.pdf]]\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Trilium/Notatka/image-1.png"_s)->data, QByteArray("PNG"));
     }
 
@@ -1083,7 +1083,7 @@ private Q_SLOTS:
                  {u"Szkic.json"_s, R"({"type":"excalidraw","elements":[]})"},
                  {u"Szkic_canvas-export.svg"_s, canvasSvg},
                  {u"Opis.html"_s, page(u"Opis"_s, u"<section class=\"include-note\" data-note-id=\"m1\">&nbsp;"
-                                                  "</section><p><img src=\"Flow_mermaid-export.svg\"></p>"_s)}});
+                                                  u"</section><p><img src=\"Flow_mermaid-export.svg\"></p>"_s)}});
         QCOMPARE(iotest::textAt(r, u"Trilium/Flow.md"_s),
                  u"```mermaid\ngraph TD\n    A[Start] --> B[Koniec]\n```\n\n[[assets/Trilium/Flow.svg|Flow.svg]]\n"_s);
         QCOMPARE(
@@ -1162,7 +1162,7 @@ private Q_SLOTS:
         QCOMPARE(iotest::textAt(r, u"Trilium/Zdjęcia z wycieczki.md"_s),
                  u"- ![[assets/Trilium/Zdjęcia z wycieczki/01.jpeg]]\n- ![[assets/Trilium/Zdjęcia z "
                  u"wycieczki/02.jpeg]]\n"
-                 "- [[assets/Trilium/Zdjęcia z wycieczki/plan.pdf|plan.pdf]]\n"_s);
+                 u"- [[assets/Trilium/Zdjęcia z wycieczki/plan.pdf|plan.pdf]]\n"_s);
     }
 
     void childLists()
@@ -1188,7 +1188,7 @@ private Q_SLOTS:
         // The rule keeps the content's list and the child list apart.
         QCOMPARE(iotest::textAt(r, u"Trilium/Rodzic.md"_s),
                  u"- punkt\n\n---\n\n- [[Trilium/Rodzic/Dziecko|Dziecko]]\n- ![[assets/Trilium/Rodzic/foto.png]]\n"
-                 "- [[Trilium/Inna|Inna]]\n"_s);
+                 u"- [[Trilium/Inna|Inna]]\n"_s);
         r = importZip(QList<FileEntry>{{u"!!!meta.json"_s, tree({label(u"hideChildrenOverview"_s)})}} + files);
         QCOMPARE(iotest::textAt(r, u"Trilium/Rodzic.md"_s),
                  u"- punkt\n\n---\n\n- ![[assets/Trilium/Rodzic/foto.png]]\n- [[Trilium/Inna|Inna]]\n"_s);
@@ -1283,7 +1283,7 @@ private Q_SLOTS:
     {
         QTest::addColumn<QString>("html");
         QTest::newRow("mixed") << u"<aside class=\"admonition note\"><details><summary>s</summary><blockquote><ul><li>"
-                                  "<p>a</p><p>b</p><section>"_s.repeated(3000)
+                                  u"<p>a</p><p>b</p><section>"_s.repeated(3000)
                                           + u"dno"_s;
         QTest::newRow("collapsible blocks") << u"<details><summary>s</summary>"_s.repeated(3000) + u"dno"_s;
         QTest::newRow("lists with blocks") << u"<ul><li><p>a</p><p>b</p>"_s.repeated(3000) + u"dno"_s;
@@ -1428,21 +1428,21 @@ private Q_SLOTS:
         QTest::addColumn<QString>("markdown");
         QTest::newRow("task states")
                 << u"<ul class=\"todo-list\"><li data-trilium-task-state=\"doing\"><label><input type=\"checkbox\">"
-                   "<span>w toku</span></label></li><li data-trilium-task-state=\"cancelled\"><label><input "
-                   "type=\"checkbox\"><span>anulowane</span></label><ul class=\"todo-list\"><li><label><input "
-                   "type=\"checkbox\" checked=\"checked\"><span>pod</span></label></li></ul></li>"
-                   "<li data-trilium-task-state=\"maybe\"><label><input type=\"checkbox\"><span>może</span></label>"
-                   "</li></ul>"_s
+                   u"<span>w toku</span></label></li><li data-trilium-task-state=\"cancelled\"><label><input "
+                   u"type=\"checkbox\"><span>anulowane</span></label><ul class=\"todo-list\"><li><label><input "
+                   u"type=\"checkbox\" checked=\"checked\"><span>pod</span></label></li></ul></li>"
+                   u"<li data-trilium-task-state=\"maybe\"><label><input type=\"checkbox\"><span>może</span></label>"
+                   u"</li></ul>"_s
                 << u"- [/] w toku\n- [-] anulowane\n\t- [x] pod\n- [ ] może"_s;
         QTest::newRow("admonition") << u"<aside class=\"admonition important\"><p>Ważne <em>bardzo</em></p><p>drugi "
-                                       "akapit</p></aside><blockquote><p>cytat</p></blockquote>"_s
+                                       u"akapit</p></aside><blockquote><p>cytat</p></blockquote>"_s
                                     << u"> [!important]\n> Ważne *bardzo*\n>\n> drugi akapit\n\n> cytat"_s;
         QTest::newRow("details open with nested admonition")
                 << u"<details open><summary>Więcej *info*</summary><aside class=\"admonition tip\"><p>rada</p></aside>"
-                   "</details>"_s
+                   u"</details>"_s
                 << u"> [!note]+ Więcej \\*info\\*\n> > [!tip]\n> > rada"_s;
         QTest::newRow("math") << u"<p>a <span class=\"math-tex\">\\(x_1 &lt; y`\\)</span></p><span "
-                                 "class=\"math-tex\">\\[\\int_0^1 x\\,dx\\]</span>"_s
+                                 u"class=\"math-tex\">\\[\\int_0^1 x\\,dx\\]</span>"_s
                               << u"a `` $x_1 < y`$ ``\n\n```math\n\\int_0^1 x\\,dx\n```"_s;
         // A formula is checked in its paragraph as the editor reads it. A `$` of the text that
         // would pair with it (or with another `$` of the text) is escaped, so the formula stays;
@@ -1450,7 +1450,7 @@ private Q_SLOTS:
         // of that line stay code with their LaTeX source.
         QTest::newRow("formulas next to prices")
                 << u"<p>Cena $5, a wzór <span class=\"math-tex\">\\(x^2\\)</span>. Kosztuje 5$.<span "
-                   "class=\"math-tex\">\\(y\\)</span></p>"_s
+                   u"class=\"math-tex\">\\(y\\)</span></p>"_s
                 << u"Cena $5, a wzór $x^2$. Kosztuje 5$.$y$"_s;
         QTest::newRow("prices pairing next to a formula")
                 << u"<p>Cena $10, Netflix 15$ i wzór <span class=\"math-tex\">\\(x^2\\)</span> – żółw</p>"_s
@@ -1463,7 +1463,7 @@ private Q_SLOTS:
                 << u"`$x$`2 i `$y$`"_s;
         QTest::newRow("dollar on the line before")
                 << u"<p>Cena $b<br>wzór,<span class=\"math-tex\">\\(x\\)</span></p><p>Dalej <span "
-                   "class=\"math-tex\">\\(y\\)</span>.</p>"_s
+                   u"class=\"math-tex\">\\(y\\)</span>.</p>"_s
                 << u"Cena \\$b\nwzór,$x$\n\nDalej $y$."_s;
         // Text that only looks like a formula to the editor is text: its dollar is escaped, and its
         // hashtags too.
@@ -1471,35 +1471,35 @@ private Q_SLOTS:
                 << u"<p>Plik $a$b #pilne$ koniec</p>"_s << u"Plik \\$a$b \\#pilne$ koniec"_s;
         QTest::newRow("footnotes")
                 << u"<p>tekst<span class=\"footnote-reference\" data-footnote-index=\"2\" data-footnote-id=\"ab\"><sup>"
-                   "<a href=\"#fnab\">[2]</a></sup></span></p><ol class=\"footnote-section footnotes\"><li "
-                   "class=\"footnote-item\" data-footnote-index=\"2\" data-footnote-id=\"ab\"><span "
-                   "class=\"footnote-back-link\"><sup><strong><a href=\"#fnrefab\">^</a></strong></sup></span><div "
-                   "class=\"footnote-content\"><p>przypis <a href=\"Inna.html\">link</a></p><p>dalej</p></div>"
-                   "</li></ol>"_s
+                   u"<a href=\"#fnab\">[2]</a></sup></span></p><ol class=\"footnote-section footnotes\"><li "
+                   u"class=\"footnote-item\" data-footnote-index=\"2\" data-footnote-id=\"ab\"><span "
+                   u"class=\"footnote-back-link\"><sup><strong><a href=\"#fnrefab\">^</a></strong></sup></span><div "
+                   u"class=\"footnote-content\"><p>przypis <a href=\"Inna.html\">link</a></p><p>dalej</p></div>"
+                   u"</li></ol>"_s
                 << u"tekst[^2]\n\n[^2]: przypis [[Inna|link]]\n\n    dalej"_s;
         QTest::newRow("include note and previews")
                 << u"<section class=\"include-note\" data-note-id=\"Ab12\" data-box-size=\"small\">&nbsp;</section>"
-                   "<p><span class=\"link-mention\" data-url=\"https://x.org/?a=1&amp;b=2\" "
-                   "data-title=\"X &amp; Y\"></span> i <span class=\"tn-icon bx bx-star\"></span>ikona</p>"
-                   "<section class=\"link-embed\" data-url=\"https://y.org\"></section>"_s
+                   u"<p><span class=\"link-mention\" data-url=\"https://x.org/?a=1&amp;b=2\" "
+                   u"data-title=\"X &amp; Y\"></span> i <span class=\"tn-icon bx bx-star\"></span>ikona</p>"
+                   u"<section class=\"link-embed\" data-url=\"https://y.org\"></section>"_s
                 << u"![[note Ab12]]\n\n[X & Y](https://x.org/?a=1&b=2) i ikona\n\n<https://y.org>"_s;
         QTest::newRow("code languages")
                 << u"<pre><code class=\"language-text-x-csrc\">int x;</code></pre><pre><code "
-                   "class=\"language-text-x-trilium-auto\">auto</code></pre><pre><code "
-                   "class=\"language-application-javascript-env-backend\">api.x()</code></pre>"_s
+                   u"class=\"language-text-x-trilium-auto\">auto</code></pre><pre><code "
+                   u"class=\"language-application-javascript-env-backend\">api.x()</code></pre>"_s
                 << u"```c\nint x;\n```\n\n```\nauto\n```\n\n```javascript\napi.x()\n```"_s;
         QTest::newRow("reference and plain links")
                 << u"<p><a class=\"reference-link\" href=\"Cel.html\">Stary tytuł</a> <a "
-                   "href=\"Cel.html\">własny</a> <a href=\"https://example.org\">www</a></p>"_s
+                   u"href=\"Cel.html\">własny</a> <a href=\"https://example.org\">www</a></p>"_s
                 << u"[[Cel]] [[Cel|własny]] [www](https://example.org)"_s;
         QTest::newRow("figure caption and page break")
                 << u"<figure class=\"image\"><img src=\"a.png\"><figcaption>Podpis</figcaption></figure><div "
-                   "class=\"page-break\" style=\"page-break-after:always;\"><span style=\"display:none;\">&nbsp;"
-                   "</span></div><p>po</p>"_s
+                   u"class=\"page-break\" style=\"page-break-after:always;\"><span style=\"display:none;\">&nbsp;"
+                   u"</span></div><p>po</p>"_s
                 << u"![[a.png]]\n\nPodpis\n\npo"_s;
         QTest::newRow("scripts and unsafe links")
                 << u"<p><script>alert(1)</script><a href=\"javascript:alert(2)\">kliknij</a><img src=\"x\" "
-                   "onerror=\"alert(3)\"></p><iframe src=\"https://evil.example\"></iframe>"_s
+                   u"onerror=\"alert(3)\"></p><iframe src=\"https://evil.example\"></iframe>"_s
                 << u"kliknij![[x]]"_s;
         QTest::newRow("forged markers") << u"<p><img src=\"trilium-raw:0\"> <a href=\"trilium-ref:x\">a</a></p>"_s
                                         << u"![[trilium-raw-:0]] [a](trilium-ref-:x)"_s;
@@ -1508,7 +1508,7 @@ private Q_SLOTS:
         // move them out of the list).
         QTest::newRow("list item with code")
                 << u"<ol><li><p>Krok pierwszy</p><pre><code class=\"language-text-x-sh\">echo raz\n  wcięte  </code>"
-                   "</pre></li><li><p>Krok drugi</p></li></ol>"_s
+                   u"</pre></li><li><p>Krok drugi</p></li></ol>"_s
                 << u"1. Krok pierwszy\n\n   ```sh\n   echo raz\n     wcięte  \n   ```\n2. Krok drugi"_s;
         QTest::newRow("list item starting with code")
                 << u"<ol><li><pre><code>#include &lt;x&gt;  </code></pre><p>po</p></li></ol>"_s
@@ -1518,22 +1518,22 @@ private Q_SLOTS:
                 << u"- nazwa to sh (\n\n  NB: /bin/sh bywa dowiązaniem\n\n  )\n- dalej"_s;
         QTest::newRow("list items with a quote, an image and a nested list")
                 << u"<ul><li>Krok 3<blockquote><p>cytat</p></blockquote></li><li><p>obraz</p><figure "
-                   "class=\"image\"><img src=\"a.png\"></figure><ul><li>pod</li></ul></li></ul>"_s
+                   u"class=\"image\"><img src=\"a.png\"></figure><ul><li>pod</li></ul></li></ul>"_s
                 << u"- Krok 3\n\n  > cytat\n- obraz\n\n  ![[a.png]]\n\t- pod"_s;
         QTest::newRow("to-do items with blocks")
                 << u"<ul class=\"todo-list\"><li><label class=\"todo-list__label\"><input type=\"checkbox\" "
-                   "checked=\"checked\"><span class=\"todo-list__label__description\">zrobione</span></label>"
-                   "<pre><code>kod</code></pre></li><li data-trilium-task-state=\"doing\"><label><input "
-                   "type=\"checkbox\"><span>w toku</span></label><p>opis</p></li></ul>"_s
+                   u"checked=\"checked\"><span class=\"todo-list__label__description\">zrobione</span></label>"
+                   u"<pre><code>kod</code></pre></li><li data-trilium-task-state=\"doing\"><label><input "
+                   u"type=\"checkbox\"><span>w toku</span></label><p>opis</p></li></ul>"_s
                 << u"- [x] zrobione\n\n  ```\n  kod\n  ```\n- [/] w toku\n\n  opis"_s;
         QTest::newRow("empty to-do items left out")
                 << u"<ul class=\"todo-list\"><li><label class=\"todo-list__label\"><input type=\"checkbox\" "
-                   "disabled=\"disabled\"><span class=\"todo-list__label__description\">&nbsp;&nbsp;</span>"
-                   "</label></li><li><label><input type=\"checkbox\" checked><span>zrobione</span></label></li></ul>"_s
+                   u"disabled=\"disabled\"><span class=\"todo-list__label__description\">&nbsp;&nbsp;</span>"
+                   u"</label></li><li><label><input type=\"checkbox\" checked><span>zrobione</span></label></li></ul>"_s
                 << u"- [x] zrobione"_s;
         QTest::newRow("lists and quotes next to each other")
                 << u"<ol><li>a</li></ol><ol start=\"5\"><li>b</li><li>c</li></ol><ul><li>d</li></ul><ul><li>e</li>"
-                   "</ul><blockquote><p>f</p></blockquote><blockquote><p>g</p></blockquote>"_s
+                   u"</ul><blockquote><p>f</p></blockquote><blockquote><p>g</p></blockquote>"_s
                 << u"1. a\n\n5) b\n6) c\n\n- d\n\n* e\n\n> f\n\n> g"_s;
         QTest::newRow("quote in a table stays in its cell")
                 << u"<table><tr><td><blockquote><p>q</p></blockquote></td><td>x</td></tr></table>"_s
@@ -1541,8 +1541,8 @@ private Q_SLOTS:
         // Footnotes of notes Trilium imported from Markdown.
         QTest::newRow("footnotes of an imported note")
                 << u"<p>tekst<a\n  href=\"#fn2b8\"><sup>[1]</sup></a> i dalej</p><ol><li><p><a "
-                   "href=\"#fnref2b8\"><strong><sup>^</sup></strong></a></p><p><a "
-                   "href=\"https://example.org/x\">źródło</a></p></li></ol>"_s
+                   u"href=\"#fnref2b8\"><strong><sup>^</sup></strong></a></p><p><a "
+                   u"href=\"https://example.org/x\">źródło</a></p></li></ol>"_s
                 << u"tekst[^1] i dalej\n\n[^1]: [źródło](https://example.org/x)"_s;
         // Pretty-printed pages: the indentation after `</pre>` is no part of the code.
         QTest::newRow("code of a pretty-printed page")
@@ -1550,10 +1550,10 @@ private Q_SLOTS:
         // Trilium has no inline tags: hashtag-like text stays text.
         QTest::newRow("hashtags")
                 << u"<p>Ukryta przez #archived, kolor #a13d5f, kanał #node.js, numer #2, # spacja, C#, (#nawias) i "
-                   "<code>#kod</code></p><p>#początek</p>"_s
+                   u"<code>#kod</code></p><p>#początek</p>"_s
                 << u"Ukryta przez \\#archived, kolor \\#a13d5f, kanał \\#node.js, numer #2, # spacja, C#, (\\#nawias) "
                    u"i "
-                   "`#kod`\n\n\\#początek"_s;
+                   u"`#kod`\n\n\\#początek"_s;
         QTest::newRow("code fences longer than the code's backticks")
                 << u"<pre><code>a ```` b</code></pre><p><span class=\"math-tex\">\\(x``y\\)</span></p>"_s
                 << u"`````\na ```` b\n`````\n\n``` $x``y$ ```"_s;
@@ -1593,20 +1593,20 @@ private Q_SLOTS:
                 << u"Znaki \\<script>alert(1)\\</script> i \\<b> oraz <https://x.org> <a@b.pl>"_s;
         QTest::newRow("inline html islands")
                 << u"H<sub>2</sub>O, <kbd>Ctrl</kbd>, <span style=\"color:red\">czerwony</span>, ikona "
-                   "<span class=\"tn-icon bx bx-star\"></span> tu, <a class=\"reference-link\" "
-                   "href=\"Cel.md\">Cel</a>"_s
+                   u"<span class=\"tn-icon bx bx-star\"></span> tu, <a class=\"reference-link\" "
+                   u"href=\"Cel.md\">Cel</a>"_s
                 << u"H2O, `Ctrl`, czerwony, ikona tu, [[Cel]]"_s;
         QTest::newRow("html block") << u"Przed\n<figure class=\"image\"><img src=\"a.png\"></figure><section "
-                                       "class=\"include-note\" data-note-id=\"N1\">&nbsp;</section>\nPo"_s
+                                       u"class=\"include-note\" data-note-id=\"N1\">&nbsp;</section>\nPo"_s
                                     << u"Przed\n\n![[a.png]]\n\n![[note N1]]\n\nPo"_s;
         QTest::newRow("details block") << u"<details>\n    <summary>Więcej</summary>\n    <p>Ukryte.</p>\n</details>"_s
                                        << u"> [!note]- Więcej\n> Ukryte."_s;
         QTest::newRow("footnotes")
                 << u"Tekst<sup><a href=\"#fnab\">[1]</a></sup>.\n\n1.  <sup><strong><a "
-                   "href=\"#fnrefab\">^</a></strong></sup>\n    \n    Przypis _ważny_.\n    \n    Drugi akapit."_s
+                   u"href=\"#fnrefab\">^</a></strong></sup>\n    \n    Przypis _ważny_.\n    \n    Drugi akapit."_s
                 << u"Tekst[^1].\n\n[^1]: Przypis _ważny_.\n\n    Drugi akapit."_s;
         QTest::newRow("links") << u"[tekst](Cel.md) ![](obraz.png) [www](https://x.org) [stary](Plik z spacjami.txt) "
-                                  "[poza](#root/abc/def)"_s
+                                  u"[poza](#root/abc/def)"_s
                                << u"[[Cel|tekst]] ![[obraz.png]] [www](https://x.org) [[Plik z spacjami|stary]] poza"_s;
         QTest::newRow("code untouched")
                 << u"```text-x-python\nx = \"<b>$a$</b>\"  \n```\n`$b$ <i>`\n~~~csrc\n~x~\n~~~"_s
@@ -1629,13 +1629,13 @@ private Q_SLOTS:
         QTest::newRow("math with angle brackets") << u"$a<b$ i <b>x</b> <i"_s << u"$a<b$ i **x** \\<i"_s;
         QTest::newRow("footnotes of an imported note")
                 << u"Tekst.[<sup>[1]</sup>](#fn2b8)\n\n1.  [**<sup>^</sup>**](#fnref2b8)\n    \n    "
-                   "[https://x.org/a](https://x.org/a)"_s
+                   u"[https://x.org/a](https://x.org/a)"_s
                 << u"Tekst.[^1]\n\n[^1]: [https://x.org/a](https://x.org/a)"_s;
         QTest::newRow("bracketed superscript")
                 << u"Indeks<sup>[2]</sup> i H<sub>2</sub>O"_s << u"Indeks\\[2\\] i H2O"_s;
         QTest::newRow("figures in a table row")
                 << u"| <figure class=\"image\"><img src=\"a.png\"></figure> | tekst |\n| --- | --- |\n| x <figure "
-                   "class=\"image\"><img src=\"b.png\"><figcaption>Podpis</figcaption></figure> | y |"_s
+                   u"class=\"image\"><img src=\"b.png\"><figcaption>Podpis</figcaption></figure> | y |"_s
                 << u"| ![[a.png]] | tekst |\n| --- | --- |\n| x ![[b.png]] Podpis | y |"_s;
         QTest::newRow("ordered lists next to each other")
                 << u"1.  a\n2.  b\n\n5.  c\n6.  d\n\n7.  e\n\nakapit\n\n1.  f"_s
@@ -1736,9 +1736,9 @@ private Q_SLOTS:
                                   page(title, u"<p>Treść notatki "_s + QString::number(n)
                                                       + u" — zażółć gęślą jaźń. <a href=\""_s + previous
                                                       + u"\">poprzednia</a></p><ul class=\"todo-list\"><li><label>"
-                                                        "<input type=\"checkbox\"><span>zadanie</span></label></li>"
-                                                        "</ul><figure class=\"table\"><table><tr><td>a</td><td>b</td>"
-                                                        "</tr></table></figure>"_s)});
+                                                        u"<input type=\"checkbox\"><span>zadanie</span></label></li>"
+                                                        u"</ul><figure class=\"table\"><table><tr><td>a</td><td>b</td>"
+                                                        u"</tr></table></figure>"_s)});
             }
             folders.push_back(std::move(folder));
         }
@@ -1752,7 +1752,7 @@ private Q_SLOTS:
         QCOMPARE(r.files.size(), Folders * PerFolder);
         QCOMPARE(iotest::textAt(r, u"Trilium/Folder 29/Notatka 2999.md"_s),
                  u"Treść notatki 2999 — zażółć gęślą jaźń. [[Trilium/Folder 29/Notatka 2998|poprzednia]]\n\n"
-                 "- [ ] zadanie\n\n| a | b |\n| --- | --- |\n"_s);
+                 u"- [ ] zadanie\n\n| a | b |\n| --- | --- |\n"_s);
         QVERIFY(r.warnings.isEmpty());
         QVERIFY2(ms < 60000 * BRULION_TEST_SLOWDOWN, qPrintable(QString::number(ms)));
     }
