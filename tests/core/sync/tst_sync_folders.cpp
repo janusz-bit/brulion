@@ -39,6 +39,15 @@ bool isLocalDir(const Device &d, const QString &rel)
     return QFileInfo(d.root + u'/' + rel).isDir();
 }
 
+/// Files by their lower-case names: what case-insensitive storage tells apart.
+QMap<QString, QString> byLowerCase(const QMap<QString, QString> &files)
+{
+    QMap<QString, QString> out;
+    for (auto it = files.cbegin(); it != files.cend(); ++it)
+        out.insert(it.key().toLower(), it.value());
+    return out;
+}
+
 QStringList requestPaths(const FakeWebDavServer &server, const QByteArray &method)
 {
     QStringList out;
@@ -785,6 +794,18 @@ private Q_SLOTS:
         const SyncReport rb = p.b.sync();
         QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
         QVERIFY(!rb.needsConfirmation);
+        if (!brulion::test::isCaseSensitive(p.b.root)) {
+            // Case-insensitive storage (Windows, Android shared storage): "Projekty" is the very
+            // folder "projekty". Whatever the runs do, every note stays, on both sides.
+            for (int run = 0; run < 3 && byLowerCase(p.b.files()) != byLowerCase(p.a.files()); ++run) {
+                const SyncReport again = p.b.sync();
+                QVERIFY2(!again.failed(), qPrintable(again.failureMessage()));
+                QVERIFY(!again.needsConfirmation);
+            }
+            QCOMPARE(byLowerCase(p.b.files()), byLowerCase(p.a.files()));
+            QCOMPARE(p.server.files(kFolder), p.a.files());
+            return;
+        }
         QCOMPARE(counts(rb), (Counts{.down = 12, .delL = 12}));
         QCOMPARE(p.b.files(), p.a.files());
         QVERIFY(!isLocalDir(p.b, u"projekty"_s));
@@ -804,6 +825,11 @@ private Q_SLOTS:
         QFETCH(bool, onServer);
         QFETCH(bool, aliased);
         Pair p(notesIn(u""_s, 2));
+        // Storage that is case-insensitive itself (Windows) is the aliased case without a link.
+        const bool caseSensitive = brulion::test::isCaseSensitive(p.a.root);
+        if (aliased && !caseSensitive)
+            QSKIP("the storage is case-insensitive itself: the row \"renamed on the server\" is this case");
+        aliased = aliased || (onServer && !caseSensitive);
         QVERIFY(p.a.vault->createFolder(u"projekty"_s));
         p.a.sync();
         QVERIFY(p.a.engine->knowsFolder(u"projekty"_s));
@@ -812,7 +838,7 @@ private Q_SLOTS:
         else
             QVERIFY(p.a.vault->rename(u"projekty"_s, u"Projekty"_s));
         // Case-insensitive storage, simulated: "Projekty" opens the very folder "projekty".
-        if (aliased)
+        if (aliased && caseSensitive)
             QVERIFY(QFile::link(p.a.root + u"/projekty"_s, p.a.root + u"/Projekty"_s));
         const SyncReport r = p.a.sync();
         QVERIFY(!r.failed());
@@ -830,7 +856,8 @@ private Q_SLOTS:
         const SyncAction created = onServer ? SyncAction::CreateFolderLocal : SyncAction::CreateFolderRemote;
         QCOMPARE(folderChanges(r, deleted), QStringList{u"projekty"_s});
         QCOMPARE(folderChanges(r, created), QStringList{u"Projekty"_s});
-        QVERIFY(!isLocalDir(p.a, u"projekty"_s));
+        if (caseSensitive)
+            QVERIFY(!isLocalDir(p.a, u"projekty"_s));
         QVERIFY(isLocalDir(p.a, u"Projekty"_s));
         QVERIFY(!p.server.isDir(u"Notatki/projekty"_s));
         QVERIFY(p.server.isDir(u"Notatki/Projekty"_s));

@@ -188,6 +188,7 @@ private Q_SLOTS:
 
     void anUnreadableFolderKeepsItsFiles()
     {
+        BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS();
         QFETCH(int, permissions);
         Fixture f;
         f.write(u"c.md"_s, "c");
@@ -224,6 +225,7 @@ private Q_SLOTS:
 
     void anUnreadableVaultFolderChangesNothing()
     {
+        BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS();
         Fixture f;
         f.write(u"a.md"_s, "a");
         f.write(u"b/c.md"_s, "c");
@@ -247,6 +249,7 @@ private Q_SLOTS:
 
     void openReportsUnreadableFolders()
     {
+        BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS();
         Fixture f;
         f.write(u"a.md"_s, "a");
         f.write(u"Tajne/b.md"_s, "b");
@@ -268,6 +271,7 @@ private Q_SLOTS:
 
     void aLinkedFolderWithAnUnmountedTargetKeepsItsFiles()
     {
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
         const QString card = f.tmp.path() + u"/karta/Zdjęcia"_s;
         writeBehind(card, u"zdjęcie.png"_s, "PNG");

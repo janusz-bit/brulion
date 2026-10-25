@@ -133,8 +133,10 @@ private Q_SLOTS:
         QCOMPARE(a.id(), Vault::idForPath(root));
         QCOMPARE(a.id().size(), 16);
         QVERIFY(a.id() != c.id());
-        QVERIFY(QFile::link(root, tmp.path() + u"/skrót"_s));
-        QCOMPARE(Vault::idForPath(tmp.path() + u"/skrót"_s), a.id()); // canonical path
+        if (brulion::test::hasSymlinks()) {
+            QVERIFY(QFile::link(root, tmp.path() + u"/skrót"_s));
+            QCOMPARE(Vault::idForPath(tmp.path() + u"/skrót"_s), a.id()); // canonical path
+        }
     }
 
     void openAgainReloads()
@@ -620,6 +622,7 @@ private Q_SLOTS:
     {
         // On case-sensitive storage "notatka.md" is a different file from "Notatka.md".
         Fixture f;
+        BRULION_SKIP_IF_CASE_INSENSITIVE(f.tmp.path());
         f.write(u"Notatka.md"_s, "duża");
         QVERIFY(f.open());
         f.write(u"notatka.md"_s, "mała, inna");
@@ -1066,6 +1069,7 @@ private Q_SLOTS:
     void caseOnlyRenameOntoADistinctFileIsRefused()
     {
         Fixture f;
+        BRULION_SKIP_IF_CASE_INSENSITIVE(f.tmp.path());
         f.write(u"Notatka.md"_s, "duża");
         f.write(u"notatka.md"_s, "mała");
         f.write(u"Żaba.md"_s, "moja żaba");
@@ -1106,6 +1110,7 @@ private Q_SLOTS:
     // ---- symlinks -------------------------------------------------------------------------
     void symlinkedFolders()
     {
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
         const QString outside = f.tmp.path() + u"/Zdjęcia"_s;
         writeBehind(outside, u"lato.png"_s, "\x01");

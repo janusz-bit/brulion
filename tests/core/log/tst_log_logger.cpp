@@ -3,6 +3,7 @@
 // rules (QT_LOGGING_RULES still wins), coalesced notifications, export, clear, the rotating
 // file with session lines, an unwritable folder, earlier sessions, and an end-to-end check that
 // a secret never reaches the ring, the files, the export or stderr.
+#include "filesystemtraits.h"
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
@@ -346,8 +347,10 @@ void TestLogLogger::fileRotation()
     QVERIFY(files.first().endsWith(Logger::rotatedFileName()));
     for (const QString &f : files)
         QVERIFY2(QFileInfo(f).size() < 4096 + 512, qPrintable(f));
-    QCOMPARE(QFileInfo(o.directory).permissions() & (QFileDevice::ReadOther | QFileDevice::ReadGroup),
-             QFileDevice::Permissions());
+    if (brulion::test::hasUnixPermissions()) {
+        QCOMPARE(QFileInfo(o.directory).permissions() & (QFileDevice::ReadOther | QFileDevice::ReadGroup),
+                 QFileDevice::Permissions());
+    }
     // The newest line is in brulion.log, readable as UTF-8.
     QVERIFY(readFile(files.last()).contains(u"linia 299 — zażółć gęślą jaźń"_s));
     QVERIFY(!readFile(files.first()).contains(u"linia 0 —"_s)); // rotated away twice

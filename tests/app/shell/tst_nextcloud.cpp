@@ -10,6 +10,7 @@
 #include "workspacesync.h"
 
 #include "fakewebdavserver.h"
+#include "filesystemtraits.h"
 #include "synctest.h"
 
 #include "sync/scheduler.h"
@@ -424,6 +425,7 @@ private Q_SLOTS:
     {
         // One folder reached through a symlink and through its real path has one sync
         // bookkeeping (device state) and so one switch and server folder.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         FakeWebDavServer server;
         server.putText(u"Notatki/Z serwera.md"_s, u"- z serwera\n"_s);
         const Paths p = freshPaths();

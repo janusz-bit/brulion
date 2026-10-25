@@ -6,6 +6,7 @@
 #include "appsettings.h"
 #include "workspacesync.h"
 
+#include "filesystemtraits.h"
 #include "text/text.h"
 
 #include <QDir>
@@ -355,6 +356,7 @@ private Q_SLOTS:
         // One folder reached through a symlink or a relative path is one notebook: one switch
         // and folder (as it has one sync bookkeeping). Settings 0.3.1–0.3.5 wrote under the path
         // as written move to the folder's id.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         const QString real = notebook(u"Dropbox/Notatnik źródłowy"_s);
         const QString link = QDir::cleanPath(m_tmp.filePath(u"Notatnik-skrót"_s));
         QVERIFY(QFile::link(real, link));
@@ -639,14 +641,18 @@ private Q_SLOTS:
         QCOMPARE(s.nextcloudPassword(), u"hasło-zażółć-123"_s);
         QCOMPARE(s.passwordFile(), data.path() + u"/secrets/nextcloud-password"_s);
 
-        // Owner-only permissions, and never in the settings file.
+        // Owner-only permissions (Unix modes; on Windows the user's profile folder keeps others
+        // out), and never in the settings file.
         const QFileDevice::Permissions perms = QFile::permissions(s.passwordFile());
         QVERIFY(perms & QFileDevice::ReadOwner);
         QVERIFY(perms & QFileDevice::WriteOwner);
-        QVERIFY(!(perms & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup
-                           | QFileDevice::WriteOther)));
-        const QFileDevice::Permissions dirPerms = QFile::permissions(data.path() + u"/secrets"_s);
-        QVERIFY(!(dirPerms & (QFileDevice::ReadOther | QFileDevice::ExeOther | QFileDevice::ReadGroup)));
+        if (brulion::test::hasUnixPermissions()) {
+            QVERIFY(!(perms
+                      & (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup
+                         | QFileDevice::WriteOther)));
+            const QFileDevice::Permissions dirPerms = QFile::permissions(data.path() + u"/secrets"_s);
+            QVERIFY(!(dirPerms & (QFileDevice::ReadOther | QFileDevice::ExeOther | QFileDevice::ReadGroup)));
+        }
         s.sync();
         QFile ini(file);
         QVERIFY(ini.open(QIODevice::ReadOnly));

@@ -3,6 +3,7 @@
 // file system's timestamp granularity), a controllable clock and a vault fixture.
 #pragma once
 
+#include "filesystemtraits.h"
 #include "vault/vault.h"
 
 #include <QDateTime>

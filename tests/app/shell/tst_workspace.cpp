@@ -6,6 +6,7 @@
 #include "foldertreemodel.h"
 #include "workspace.h"
 
+#include "filesystemtraits.h"
 #include "markdown/markdown.h"
 #include "vault/vault.h"
 
@@ -477,6 +478,7 @@ private Q_SLOTS:
         // A Logseq vault names daily notes "2026_10_14.md"; a vault synced from another device
         // may have "Journals/" capitalised. That day's note exists already: no second one is
         // created next to it, and quick capture appends to it.
+        BRULION_SKIP_IF_CASE_INSENSITIVE(m_tmp.path()); // "journals/" next to "Journals/"
         auto ws = open({ { u"journals/2026_10_14.md"_s, u"- z Logseqa\n"_s },
                          { u"Journals/2026-10-15.md"_s, u"- z dużej litery\n"_s },
                          { u"templates/journal.md"_s, u"## Plan dnia\n- \n"_s } });

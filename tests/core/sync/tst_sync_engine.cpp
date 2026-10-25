@@ -919,6 +919,7 @@ private Q_SLOTS:
 
     void readFailureCode()
     {
+        BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS(); // no mode that keeps the owner from reading
         FakeWebDavServer server;
         Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"tajne.md"_s, "x"}});
         const QString file = a.root + u"/tajne.md"_s;
