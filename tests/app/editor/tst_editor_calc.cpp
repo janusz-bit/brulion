@@ -13,6 +13,7 @@
 #include "calc/calc.h"
 
 #include <QJsonDocument>
+#include <QRegularExpression>
 
 #include <QRandomGenerator>
 #include <QTest>
@@ -247,6 +248,76 @@ private Q_SLOTS:
         f.page.setTableCell(t, 3, 0, u"Wałek"_s);
         f.page.setTableCell(t, 3, 1, u"=cena + 1"_s);
         QCOMPARE(f.cell(t, 3, 1), u"11"_s);
+        VERIFY_FRESH(f);
+    }
+
+    void inlineCalculationInATableCell_data()
+    {
+        QTest::addColumn<QString>("table");
+        // Only inline calculations: nothing else in the table reads calc variables.
+        QTest::addRow("inline only") << u"| Rzecz `= cena` | Kwota |\n| --- | --- |\n| Farba | `= cena * 2` zł |\n"_s;
+        // Next to a formula: the table is recomputed, the cell must not come from a cache.
+        QTest::addRow("with a formula")
+            << u"| Rzecz `= cena` | Kwota |\n| --- | --- |\n| Farba | `= cena * 2` zł |\n| Razem | =cena + 1 |\n"_s;
+        QTest::addRow("spaced, CRLF")
+            << u"| Rzecz ` = cena` | Kwota |\r\n| --- | --- |\r\n| Farba | ` = cena * 2` zł |\r\n"_s;
+    }
+
+    void inlineCalculationInATableCell()
+    {
+        // `= …` inline code inside a cell is rendered with the variables above the table, and
+        // follows when they change (the cell's text itself stays the same).
+        QFETCH(QString, table);
+        Fixture f(u"```calc\ncena = 10\n```\n\nŻółta notatka\n\n"_s + table);
+        // Shown text (no markup: colours in the chip's style are digits too).
+        const auto cellText = [&f](int row, int tableRow, int column) {
+            const QVariantList rows = f.role(row, BlockListModel::TableDataRole).toMap().value(u"rows"_s).toList();
+            return rows.value(tableRow).toList().value(column).toMap().value(u"plain"_s).toString();
+        };
+        const auto headerText = [&f](int row, int column) {
+            QString html =
+                    f.role(row, BlockListModel::TableDataRole).toMap().value(u"headerHtml"_s).toList().value(column).toString();
+            return html.remove(QRegularExpression(u"<[^>]*>"_s));
+        };
+        int t = f.table();
+        QVERIFY(t > 0);
+        QVERIFY2(cellText(t, 0, 1).contains(u"20"_s), qPrintable(cellText(t, 0, 1)));
+        QVERIFY2(headerText(t, 0).contains(u"10"_s), qPrintable(headerText(t, 0)));
+
+        // Typing in the note between them: nothing changes.
+        const int note = f.rowOf(u"Żółta"_s);
+        f.page.setEditText(note, u"Żółta notatka ąćęłńóśźż"_s);
+        QVERIFY2(cellText(t, 0, 1).contains(u"20"_s), qPrintable(cellText(t, 0, 1)));
+        VERIFY_FRESH(f);
+
+        // The definition changes: the cell and the header follow.
+        f.page.setEditText(0, u"cena = 21"_s);
+        QVERIFY2(cellText(t, 0, 1).contains(u"42"_s), qPrintable(cellText(t, 0, 1)));
+        QVERIFY2(headerText(t, 0).contains(u"21"_s), qPrintable(headerText(t, 0)));
+        VERIFY_FRESH(f);
+
+        // …is removed (an error), and comes back with undo (typing in one block is one step).
+        f.page.setEditText(0, u"inna = 1"_s);
+        QVERIFY2(cellText(t, 0, 1).contains(u"#ERR"_s), qPrintable(cellText(t, 0, 1)));
+        VERIFY_FRESH(f);
+        f.page.undo();
+        QCOMPARE(f.edit(0), u"cena = 10"_s);
+        QVERIFY2(cellText(t, 0, 1).contains(u"20"_s), qPrintable(cellText(t, 0, 1)));
+        QVERIFY2(headerText(t, 0).contains(u"10"_s), qPrintable(headerText(t, 0)));
+        VERIFY_FRESH(f);
+        f.page.redo();
+        QVERIFY2(cellText(t, 0, 1).contains(u"#ERR"_s), qPrintable(cellText(t, 0, 1)));
+        VERIFY_FRESH(f);
+        f.page.setEditText(0, u"cena = 21"_s);
+
+        // A property between them overrides; editing the cell itself still works.
+        const int at = f.page.insertBlockAfter(note, u"cena:: 3"_s);
+        QVERIFY(at > note);
+        t = f.table();
+        QVERIFY2(cellText(t, 0, 1).contains(u"6"_s), qPrintable(cellText(t, 0, 1)));
+        VERIFY_FRESH(f);
+        f.page.setTableCell(t, 0, 1, u"`= cena * 5` zł"_s, true);
+        QVERIFY2(cellText(t, 0, 1).contains(u"15"_s), qPrintable(cellText(t, 0, 1)));
         VERIFY_FRESH(f);
     }
 

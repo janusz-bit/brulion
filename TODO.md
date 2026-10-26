@@ -90,7 +90,6 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
 * **Stare błędy do sprawdzenia** (mogły zniknąć przy innych zmianach):
-  * obliczenie w komórce tabeli nie odświeża się po zmianie;
   * kod `` `…` `` z `=` w nowej linii nie jest przerysowany;
   * zły wiersz po cofnięciu wstawienia na początku strony;
   * „/” zaraz po tokenie przypomnienia;

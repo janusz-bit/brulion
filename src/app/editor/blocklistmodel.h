@@ -239,7 +239,7 @@ private:
         bool onlyEmbeds = false;
         QVariantList calcResults;
         QVariantMap tableData;
-        QHash<QString, QString> cellHtml; ///< rendered table cells by text (until the rendering changes)
+        QHash<QString, QString> cellHtml; ///< rendered table cells by text (until the rendering changes; no inline calculations)
         bool transclusionsValid = false;
         bool transclusionsLocal = false; ///< embeds this page: follows every change of it
         QVariantList transclusions;
@@ -248,7 +248,8 @@ private:
         int htmlCalcEpoch = -1;     ///< m_calcEpoch the html's inline calculations saw
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
         // Calculations: calcResults / tableData are current while resultsValid and, when they
-        // read calc variables (resultsUseScope: calc blocks, tables with formulas), resultsEpoch
+        // read calc variables (resultsUseScope: calc blocks, tables with formulas or inline
+        // calculations in cells), resultsEpoch
         // == m_calcEpoch (the block's own text and everything the calculations see unchanged).
         bool resultsValid = false;
         bool resultsUseScope = false;

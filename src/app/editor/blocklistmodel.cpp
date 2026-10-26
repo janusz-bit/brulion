@@ -54,6 +54,13 @@ QString alignName(calc::TableAlign a)
     return {};
 }
 
+/// The text may hold an inline calculation (`` `= expr` ``): its rendering depends on the calc
+/// variables above the block.
+bool hasInlineCalc(const QString &text)
+{
+    return text.contains(u"`=") || text.contains(u"` =");
+}
+
 /// Longest common subsequence of two lists of strings as matched index pairs, with common
 /// prefix/suffix trimmed first; a middle part too large for the quadratic table is treated as
 /// completely replaced.
@@ -817,14 +824,17 @@ QVariantMap BlockListModel::computeTableData(int i) const
     const calc::TableEval eval = formulas ? calc::evaluateTable(*model, calcLocale(), *scopeFor(i))
                                           : calc::evaluateTable(*model, calcLocale());
     // Cells are inline Markdown (bold, links, tags, chips): rendered like paragraphs, cached by
-    // their text until the rendering changes (theme, index, language, today).
+    // their text until the rendering changes (theme, index, language, today). A cell with an
+    // inline calculation also depends on the variables above the table: never cached, and the
+    // table is recomputed when they may have changed (a new calc epoch).
     RowState &st = stateFor(e.uid);
-    st.resultsUseScope = formulas;
+    st.resultsUseScope = formulas || hasInlineCalc(e.body);
     std::optional<markdown::InlineRenderer> renderer;
     const auto cellHtml = [&](const QString &cell) -> QString {
         if (cell.trimmed().isEmpty())
             return {};
-        const auto cached = st.cellHtml.constFind(cell);
+        const bool calcDependent = hasInlineCalc(cell);
+        const auto cached = calcDependent ? st.cellHtml.constEnd() : st.cellHtml.constFind(cell);
         if (cached != st.cellHtml.constEnd())
             return *cached;
         if (!renderer) {
@@ -834,7 +844,8 @@ QVariantMap BlockListModel::computeTableData(int i) const
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
-        st.cellHtml.insert(cell, html);
+        if (!calcDependent)
+            st.cellHtml.insert(cell, html);
         return html;
     };
     QVariantList aligns;
@@ -1005,7 +1016,7 @@ QString BlockListModel::renderHtml(int i) const
     st.renderOffset = offset;
     // ((id)) and [[…#^id]] show the text of their block, which may be on this page.
     st.dependsOnRefs = e.body.contains(u"((") || e.body.contains(u"#^");
-    st.dependsOnCalc = e.body.contains(u"`=") || e.body.contains(u"` =");
+    st.dependsOnCalc = hasInlineCalc(e.body);
     st.htmlCalcEpoch = m_calcEpoch;
     if (st.dependsOnCalc)
         m_hasCalcConsumers = true;
