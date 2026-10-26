@@ -1984,14 +1984,17 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
             return label.isValid() ? label.toString() : button->property("text").toString();
         };
         if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
+            // (Once the row's layout has settled: the name may widen before the toggle moves.)
+            const bool fits = waitFor([&] {
+                return name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                       && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
+                       && right(textButton) <= window->width() + 0.5;
+            });
             std::fprintf(stderr,
                          "selftest: picture bar: name %.0f of %.0f px, size toggle %.0f–%.0f, text button %.0f–%.0f\n",
                          name->width(), name->property("implicitWidth").toReal(), left(size), right(size),
                          left(textButton), right(textButton));
-            check(name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
-                          && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
-                          && right(textButton) <= window->width() + 0.5
-                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
+            check(fits && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
                   "the picture's bar shows the file name next to the size toggle and fits the window");
             // (The mouse still rests where an earlier step clicked the note mode toggle, hidden
             // since: its tooltip waits for a deletion this running test does not let happen —
