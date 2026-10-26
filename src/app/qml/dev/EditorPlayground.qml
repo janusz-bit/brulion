@@ -405,6 +405,9 @@ ApplicationWindow {
         return editor.handleEditorKey({ key: k, modifiers: modifiers || Qt.NoModifier }, edit)
     }
     function info(row) { return page.blocks.get(row) }
+    // What an input method (Gboard) is told about the text around the caret.
+    function surroundingText(edit) { return edit ? String(edit.inputMethodQuery(Qt.ImSurroundingText, null)) : "<none>" }
+    function imCursor(edit) { return edit ? Number(edit.inputMethodQuery(Qt.ImCursorPosition, null)) : -1 }
     /// The item named `name` under `item` (depth first), or null.
     /// TestEvent for the pictures from the internet (null without QtTest).
     property var webEvents: null
@@ -531,8 +534,15 @@ ApplicationWindow {
                 check(info(r + 1).taskStatus === "todo", "the new block continues the task")
                 check(editor.activeEditor && editor.activeEditor.row === r + 1 && editor.activeEditor.activeFocus, "new block has focus")
             },
+            // The keyboard capitalises a sentence start from the text around the caret: the
+            // hidden task marker must not be part of it (an empty text, caret at 0).
+            () => check(surroundingText(editor.activeEditor) === "" && imCursor(editor.activeEditor) === 0,
+                        "a new task block shows the keyboard an empty text: \"" + surroundingText(editor.activeEditor)
+                        + "\" at " + imCursor(editor.activeEditor)),
             () => editor.activeEditor.insert(editor.activeEditor.cursorPosition, "Nowe zadanie ąę"),
             () => check(info(r + 1).plainText === "Nowe zadanie ąę", "typing reaches the model: " + info(r + 1).plainText),
+            () => check(surroundingText(editor.activeEditor) === "Nowe zadanie ąę",
+                        "the keyboard sees the task's text without its marker: " + surroundingText(editor.activeEditor)),
             () => { key(Qt.Key_Tab) },
             () => check(info(r + 1).depth === info(r).depth + 1, "Tab indents"),
             () => { key(Qt.Key_Backtab) },
@@ -651,8 +661,10 @@ ApplicationWindow {
             // ---- Input method composition (Android keyboards compose every word) ---------------
             () => { window.realRow = page.insertBlockAfter(window.realRow, ""); window.countBefore = page.blocks.count },
             // A block is prose: the keyboard capitalises its first letter (unlike the date fields).
-            () => check(editor.activeEditor && (editor.activeEditor.inputMethodHints & Qt.ImhNoAutoUppercase) === 0,
-                        "a new block keeps the keyboard's automatic capital letter"),
+            () => check(editor.activeEditor && (editor.activeEditor.inputMethodHints & Qt.ImhNoAutoUppercase) === 0
+                        && surroundingText(editor.activeEditor) === "" && imCursor(editor.activeEditor) === 0,
+                        "a new block keeps the keyboard's automatic capital letter: \""
+                        + surroundingText(editor.activeEditor) + "\" at " + imCursor(editor.activeEditor)),
             () => EditorInput.sendInputMethod(editor.activeEditor, "kot"),
             () => check(editor.activeEditor.preeditText === "kot", "composing text is preedit"),
             () => realKey(Qt.Key_Backspace),
