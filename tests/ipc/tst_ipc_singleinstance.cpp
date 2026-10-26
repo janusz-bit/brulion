@@ -71,12 +71,10 @@ private Q_SLOTS:
         QVERIFY(primary.listen());
         QVERIFY(primary.isListening());
         QSignalSpy messages(&primary, &SingleInstance::messageReceived);
-        QSignalSpy refused(&primary, &SingleInstance::refused);
 
         SingleInstance second(key);
         QVERIFY(second.sendToPrimary("activate"));
-        QTRY_VERIFY2(messages.size() == 1,
-                     qPrintable(u"%1 messages, %2 refused"_s.arg(messages.size()).arg(refused.size())));
+        QTRY_COMPARE(messages.size(), 1);
         QCOMPARE(messages.first().first().toByteArray(), QByteArray("activate"));
         QVERIFY(second.sendToPrimary("capture"));
         QTRY_COMPARE(messages.size(), 2);
