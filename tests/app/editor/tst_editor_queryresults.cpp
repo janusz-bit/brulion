@@ -385,6 +385,64 @@ private Q_SLOTS:
         QCOMPARE(f.rowOf(u"Śrubki"_s), -1);
     }
 
+    void heldRowFollowsItsTaskWhoseStatusChanged()
+    {
+        // The rows wait while the index changes: the row's task is found again by its text, not
+        // by its source line, which holds the status marker and the date tokens. The user's own
+        // choice from the menu, then a click on the same checkbox before the rows catch up.
+        Fixture f(u"type:tasks tag:zakupy"_s);
+        QObject menu;
+        f.results.hold(&menu);
+        const int milk = f.rowOf(u"Mleko"_s);
+        QVERIFY(f.results.setTaskStatus(milk, u"doing"_s));
+        QVERIFY(f.host.file(u"Zakupy.md"_s).startsWith(u"- [/] Mleko #zakupy 📅 2026-10-16\n"_s));
+        f.host.externalWrite(u"Zakupy.md"_s, u"- [ ] Jajka #zakupy\n"_s + f.host.file(u"Zakupy.md"_s));
+        QTest::qWait(100);
+        QCOMPARE(f.row(milk).value(u"line"_s).toInt(), 0); // the rows waited
+        QVERIFY(f.results.toggleTask(milk));
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).startsWith(u"- [ ] Jajka #zakupy\n- [x] Mleko #zakupy 📅 2026-10-16 ✅ 2026-10-15\n"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+        QCOMPARE(f.row(milk).value(u"status"_s).toString(), u"done"_s);
+        // Once more, after another change: the row knows where its task was written last.
+        f.host.externalWrite(u"Zakupy.md"_s, u"- [ ] Ser\n"_s + f.host.file(u"Zakupy.md"_s));
+        QTest::qWait(100);
+        QVERIFY(f.results.toggleTask(milk));
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).startsWith(u"- [ ] Ser\n- [ ] Jajka #zakupy\n- [ ] Mleko #zakupy 📅 2026-10-16\n"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+
+        // Another device changed only the task's status and its due date while the menu was open:
+        // the choice still goes to that task.
+        const int screws = f.rowOf(u"Śrubki"_s);
+        QString content = f.host.file(u"Zakupy.md"_s);
+        content.replace(u"- [ ] Śrubki do półki **M6** #zakupy #remont"_s, u"- [>] Śrubki do półki **M6** #zakupy #remont 📅 2026-11-02"_s);
+        f.host.externalWrite(u"Zakupy.md"_s, content);
+        QTest::qWait(100);
+        QVERIFY(f.results.setTaskStatus(screws, u"cancelled"_s));
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).contains(u"- [-] Śrubki do półki **M6** #zakupy #remont 📅 2026-11-02"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+        f.results.release(&menu);
+        QTRY_VERIFY(f.rowOf(u"Ser"_s) < 0 && f.rowOf(u"Jajka"_s) >= 0);
+    }
+
+    void heldRowPrefersTheNearestOfTwoSameTasks()
+    {
+        // Two tasks with the same text: the row's own (its status changed from the menu) is the
+        // nearest one to where it was, not the other one that still has the old source line.
+        Fixture f(u"type:tasks tag:zakupy"_s, u"- Notatka\n"_s);
+        f.host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko #zakupy\n- [x] Chleb #zakupy\n- [ ] Mleko #zakupy\n"_s);
+        f.results.refresh();
+        QObject menu;
+        f.results.hold(&menu);
+        const int first = f.rowOf(u"Mleko"_s);
+        QCOMPARE(f.row(first).value(u"line"_s).toInt(), 0);
+        QVERIFY(f.results.setTaskStatus(first, u"doing"_s));
+        f.host.externalWrite(u"Zakupy.md"_s, u"- [ ] Ser\n"_s + f.host.file(u"Zakupy.md"_s));
+        QTest::qWait(100);
+        QVERIFY(f.results.setTaskStatus(first, u"deferred"_s));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [ ] Ser\n- [>] Mleko #zakupy\n- [x] Chleb #zakupy\n- [ ] Mleko #zakupy\n"_s);
+        f.results.release(&menu);
+    }
+
     void followsTheQueryText()
     {
         Fixture f(u"type:tasks tag:zakupy"_s);

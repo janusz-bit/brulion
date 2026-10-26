@@ -179,6 +179,7 @@ private:
     void schedule();
     void timerFired();
     int currentLine(const Row &row) const;
+    bool writeStatus(Row &row, const QString &status);
     void rebuildRows();
     void invalidateHtml();
     QString renderItem(const QVariantMap &item) const;

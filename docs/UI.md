@@ -452,7 +452,12 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`TransclusionView`) show the embeds from when the menu opened (`shown`) and follow
   `transclusions` again a moment after it closed. A status chosen on rows that waited goes to the
   same block where it is now (the query run again / the current embeds: same file and text, the
-  nearest line), never to whatever took its old line; a task that is gone is left alone. Tasks
+  nearest line), never to whatever took its old line; a task that is gone is left alone. A
+  result matches by the item's `text` (no status marker, no date tokens: the menu's own choice or
+  another device may have changed them meanwhile; the unchanged `raw` only breaks a tie between
+  two as near), and after a write the row keeps the line it wrote to. A task that the query no
+  longer lists (its new status left a `status:` filter) is not found: a further click on it
+  before the rows catch up does nothing. Tasks
   (`TaskListModel`) update their rows in place (inserts, removals, moves by `path:line`), so a
   row's menu stays open unless its own task moves to another line.
 * A day without a note (journal stream or a single day) starts from the journal template; the

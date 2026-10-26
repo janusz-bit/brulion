@@ -412,26 +412,46 @@ int QueryResultModel::currentLine(const Row &row) const
         return line;
     // The rows waited for a menu while the index changed: the task may be on another line now
     // (an edit above it, a sync), and its old line may hold another task. Ask the index where
-    // the same block of the same file is now (the nearest one when the text repeats).
+    // the same block of the same file is now: the same text — without the status marker and the
+    // date tokens, which the menu itself or another device may have changed meanwhile — the
+    // nearest one when the text repeats (the unchanged source line when two are as near).
     auto *queries = qobject_cast<QueryHost *>(m_host.data());
     if (!queries || !m_controller)
         return -1;
     const QString path = row.item.value(u"path"_s).toString();
+    const QString text = row.item.value(u"text"_s).toString();
     const QString raw = row.item.value(u"raw"_s).toString();
     const QVariantMap result = queries->runQuery(m_source, m_controller->path());
     QVariantList items = result.value(u"items"_s).toList();
     for (const QVariant &g : result.value(u"groups"_s).toList())
         items.append(g.toMap().value(u"items"_s).toList());
     int best = -1;
+    bool bestSameRaw = false;
     for (const QVariant &i : std::as_const(items)) {
         const QVariantMap item = i.toMap();
-        if (item.value(u"path"_s).toString() != path || item.value(u"raw"_s).toString() != raw)
-            continue;
         const int at = item.value(u"line"_s, -1).toInt();
-        if (at >= 0 && (best < 0 || std::abs(at - line) < std::abs(best - line)))
+        if (at < 0 || item.value(u"path"_s).toString() != path || item.value(u"text"_s).toString() != text)
+            continue;
+        const bool sameRaw = item.value(u"raw"_s).toString() == raw;
+        const int distance = std::abs(at - line);
+        const int bestDistance = std::abs(best - line);
+        if (best < 0 || distance < bestDistance || (distance == bestDistance && sameRaw && !bestSameRaw)) {
             best = at;
+            bestSameRaw = sameRaw;
+        }
     }
     return best;
+}
+
+bool QueryResultModel::writeStatus(Row &row, const QString &status)
+{
+    const int line = currentLine(row);
+    if (!m_controller->setTaskStatusAt(row.item.value(u"path"_s).toString(), line, status))
+        return false;
+    // Where the task is now: the next lookup (the rows still waiting) starts there.
+    row.item.insert(u"line"_s, line);
+    row.status = status;
+    return true;
 }
 
 bool QueryResultModel::toggleTask(int row)
@@ -442,11 +462,9 @@ bool QueryResultModel::toggleTask(int row)
     if (r.group || r.status.isEmpty())
         return false;
     const QString next = PageController::toggledStatus(r.status);
-    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(), currentLine(r), next);
-    if (!changed)
+    if (!writeStatus(r, next))
         return false;
-    r.status = next;
-    Q_EMIT dataChanged(index(row), index(row), {StatusRole, IsTaskRole, OverdueRole});
+    Q_EMIT dataChanged(index(row), index(row), {LineRole, StatusRole, IsTaskRole, OverdueRole});
     m_timer.start();
     return true;
 }
@@ -458,11 +476,9 @@ bool QueryResultModel::setTaskStatus(int row, const QString &status)
     Row &r = m_rows[row];
     if (r.group || r.status.isEmpty() || r.status == status)
         return false;
-    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(), currentLine(r), status);
-    if (!changed)
+    if (!writeStatus(r, status))
         return false;
-    r.status = status;
-    Q_EMIT dataChanged(index(row), index(row), {StatusRole, IsTaskRole, OverdueRole});
+    Q_EMIT dataChanged(index(row), index(row), {LineRole, StatusRole, IsTaskRole, OverdueRole});
     m_timer.start();
     return true;
 }
