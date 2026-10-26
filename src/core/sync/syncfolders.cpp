@@ -324,13 +324,13 @@ void SyncRun::moveFolders(qsizetype index, std::function<void()> next)
                    }));
 }
 
-void SyncRun::applyFolderMove(const FolderMove &move)
+void SyncRun::rebaseStates(const VaultPath &from, const VaultPath &to)
 {
-    const auto rebased = [&move](const VaultPath &path) { return move.to + path.mid(move.from.size()); };
+    const auto rebased = [&from, &to](const VaultPath &path) { return to + path.mid(from.size()); };
     // Sync states and merge bases: the files are compared at their new paths.
     QStringList statePaths;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (isWithin(it.key(), move.from))
+        if (isWithin(it.key(), from))
             statePaths.append(it.key());
     }
     for (const VaultPath &path : std::as_const(statePaths)) {
@@ -338,22 +338,78 @@ void SyncRun::applyFolderMove(const FolderMove &move)
         m_states.insert(target, m_states.take(path));
         const QJsonValue state = store()->get(SyncEngine::stateKey(path));
         const QJsonValue base = store()->get(SyncEngine::baseKey(path));
+        // Removed first: a case-only rename may map a key onto itself in another store.
+        store()->remove(SyncEngine::stateKey(path));
+        store()->remove(SyncEngine::baseKey(path));
         if (!state.isUndefined())
             store()->set(SyncEngine::stateKey(target), state);
         if (!base.isUndefined())
             store()->set(SyncEngine::baseKey(target), base);
-        store()->remove(SyncEngine::stateKey(path));
-        store()->remove(SyncEngine::baseKey(path));
     }
     const QSet<VaultPath> folders = m_folderStates;
     for (const VaultPath &folder : folders) {
-        if (!isWithin(folder, move.from))
+        if (!isWithin(folder, from))
             continue;
         m_folderStates.remove(folder);
         m_folderStates.insert(rebased(folder));
         store()->remove(SyncEngine::folderKey(folder));
         store()->set(SyncEngine::folderKey(rebased(folder)), QJsonObject{{u"syncedAt"_s, now().toMSecsSinceEpoch()}});
     }
+}
+
+void SyncRun::adoptCaseOnlyFolderRenames()
+{
+    QHash<QString, VaultPath> remoteDirs; // lower-cased -> as the server spells it
+    for (auto it = m_remoteAll.cbegin(); it != m_remoteAll.cend(); ++it) {
+        if (it->isDir && isSyncablePath(it.key()))
+            remoteDirs.insert(it.key().toLower(), it.key());
+    }
+    if (remoteDirs.isEmpty() || m_states.isEmpty())
+        return;
+    // Parents first; after a rename the folders below it are looked at under their new names.
+    for (bool renamed = true; renamed;) {
+        renamed = false;
+        const QSet<VaultPath> known = knownFolders();
+        QStringList folders(known.cbegin(), known.cend());
+        std::sort(folders.begin(), folders.end());
+        for (const VaultPath &from : std::as_const(folders)) {
+            if (from.isEmpty() || !isSyncablePath(from) || m_remoteAll.contains(from))
+                continue;
+            const VaultPath to = remoteDirs.value(from.toLower());
+            // Only the last name differs in case: a parent's case is the parent's rename.
+            if (to.isEmpty() || paths::dirname(to) != paths::dirname(from))
+                continue;
+            // One folder on disk under both names; on case-sensitive storage "Projekty" is
+            // another folder (or none) and the old one is deleted as usual.
+            const QString absFrom = vault()->absolutePath(from);
+            if (!QFileInfo(absFrom).isDir() || !sameFolderOnDisk(absFrom, vault()->absolutePath(to)))
+                continue;
+            if (!vault()->rename(from, to, ChangeSource::Sync)) {
+                qCWarning(lcSync).noquote() << u"%1 folder %2 renamed on the server to %3: not renamed here: %4"_s.arg(
+                        tag(), from, to, vault()->errorString());
+                continue;
+            }
+            rebaseStates(from, to);
+            QHash<VaultPath, FileStat> local;
+            for (auto it = m_local.cbegin(); it != m_local.cend(); ++it) {
+                FileStat stat = *it;
+                if (isWithin(stat.path, from))
+                    stat.path = to + stat.path.mid(from.size());
+                local.insert(stat.path, stat);
+            }
+            m_local = local;
+            qCInfo(lcSync).noquote() << u"%1 folder %2 renamed on the server to %3 (letter case): renamed here too"_s
+                                                .arg(tag(), from, to);
+            renamed = true;
+            break;
+        }
+    }
+}
+
+void SyncRun::applyFolderMove(const FolderMove &move)
+{
+    const auto rebased = [&move](const VaultPath &path) { return move.to + path.mid(move.from.size()); };
+    rebaseStates(move.from, move.to);
     // The listing as the server has it now.
     QHash<VaultPath, RemoteEntry> remote;
     for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {

@@ -262,7 +262,11 @@ app; these guards keep data from being lost:
   existing name; any refusal falls back to per-file upload and deletion), only when it is a
   rename (the old folder missing here, still on the server; at least half of its synced files
   unchanged below a new folder nothing of which was ever synced); an interrupted move is
-  recognised next time (identical files on both sides are only recorded). Concurrent edits are
+  recognised next time (identical files on both sides are only recorded). A synced folder
+  another device renamed in letter case only, which on case-insensitive storage is the same
+  folder on disk under the server's new name, is renamed here too before anything is compared and
+  its states follow (`adoptCaseOnlyFolderRenames()`): its notes are never trashed under the old
+  name while being downloaded under the new one. Concurrent edits are
   merged three-way; when that fails both versions stay (conflict copy) for `ConflictResolver`.
 * **Editor**: unsaved edits are merged three-way with external changes; an unresolved conflict
   is saved as a conflict copy, never over the other version. Deleting moves to `.trash/`.

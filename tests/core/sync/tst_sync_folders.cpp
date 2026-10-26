@@ -39,15 +39,6 @@ bool isLocalDir(const Device &d, const QString &rel)
     return QFileInfo(d.root + u'/' + rel).isDir();
 }
 
-/// Files by their lower-case names: what case-insensitive storage tells apart.
-QMap<QString, QString> byLowerCase(const QMap<QString, QString> &files)
-{
-    QMap<QString, QString> out;
-    for (auto it = files.cbegin(); it != files.cend(); ++it)
-        out.insert(it.key().toLower(), it.value());
-    return out;
-}
-
 QStringList requestPaths(const FakeWebDavServer &server, const QByteArray &method)
 {
     QStringList out;
@@ -796,14 +787,12 @@ private Q_SLOTS:
         QVERIFY(!rb.needsConfirmation);
         if (!brulion::test::isCaseSensitive(p.b.root)) {
             // Case-insensitive storage (Windows, Android shared storage): "Projekty" is the very
-            // folder "projekty". Whatever the runs do, every note stays, on both sides.
-            for (int run = 0; run < 3 && byLowerCase(p.b.files()) != byLowerCase(p.a.files()); ++run) {
-                const SyncReport again = p.b.sync();
-                QVERIFY2(!again.failed(), qPrintable(again.failureMessage()));
-                QVERIFY(!again.needsConfirmation);
-            }
-            QCOMPARE(byLowerCase(p.b.files()), byLowerCase(p.a.files()));
+            // folder "projekty" — renamed here too, nothing to transfer, no note trashed.
+            QCOMPARE(counts(rb), Counts{});
+            QCOMPARE(p.b.files(), p.a.files());
+            QVERIFY(p.b.vault->trash().isEmpty());
             QCOMPARE(p.server.files(kFolder), p.a.files());
+            QCOMPARE(p.b.sync().changeCount(), 0);
             return;
         }
         QCOMPARE(counts(rb), (Counts{.down = 12, .delL = 12}));

@@ -197,6 +197,13 @@ private:
     void moveFolders(qsizetype index, std::function<void()> next);
     /// The server moved `move.from` to `move.to`: states, merge bases and the listing follow.
     void applyFolderMove(const FolderMove &move);
+    /// The sync states, merge bases and folder states below `from` move to `to`.
+    void rebaseStates(const VaultPath &from, const VaultPath &to);
+    /// Case-insensitive storage: a synced folder another device renamed in letter case only
+    /// ("projekty" -> "Projekty", one folder here) is renamed here too, its states following, so
+    /// its notes are unchanged at the new paths — not trashed under the old name while the very
+    /// same files are downloaded under the new one.
+    void adoptCaseOnlyFolderRenames();
     /// Files and folders written or deleted on the server in this run (m_remoteAll follows).
     void noteRemoteWritten(const VaultPath &path, bool isDir = false);
     void noteRemoteDeleted(const VaultPath &path);

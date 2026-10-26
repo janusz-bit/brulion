@@ -474,6 +474,7 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         finish();
         return;
     }
+    adoptCaseOnlyFolderRenames();
     // The guard first: a side that looked empty makes the folder renames stricter.
     if (!m_options.allowEmptySide && !guardEmptySides()) {
         finish();
