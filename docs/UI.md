@@ -1078,6 +1078,9 @@ Qt's own texts (dialog buttons, the QtQuick.Dialogs file dialog) come from Qt's 
   applies a typed date or time on Enter, when the field loses focus
   (`applyTypedOnFocusLoss`), when the keyboard is hidden and on Save (`commitPending()`, called
   from `BDialog.acceptRequested`); an invalid time keeps the dialog open with its hint.
+  Fields for a date or a recurrence rule in words (`BDatePicker`'s natural-language field, the
+  recurrence dialog's rule) set `Qt.ImhNoAutoUppercase`: Gboard otherwise capitalised the first
+  letter ("Za 2 minuty"). Block text keeps the keyboard's sentence capitalisation.
   A binding that has to follow a value it does not otherwise use — a counter
   (`Workspace.revision`, `calendar.revision`, a Repeater's `revision` that its itemAdded /
   itemRemoved bump: itemAt() notifies nothing), what a method call's result depends on

@@ -89,5 +89,3 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
   wstrzymać odświeżenie, póki menu jest otwarte.
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
-* **Stare błędy do sprawdzenia** (mogły zniknąć przy innych zmianach):
-  * wielkie litery Gboard na początku bloku.

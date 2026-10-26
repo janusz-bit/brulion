@@ -650,6 +650,9 @@ ApplicationWindow {
             () => check(page.sourceText.indexOf("w\u00a0domu i\u00a0w\u00a0pracy!") >= 0, "no-break spaces are kept when typing"),
             // ---- Input method composition (Android keyboards compose every word) ---------------
             () => { window.realRow = page.insertBlockAfter(window.realRow, ""); window.countBefore = page.blocks.count },
+            // A block is prose: the keyboard capitalises its first letter (unlike the date fields).
+            () => check(editor.activeEditor && (editor.activeEditor.inputMethodHints & Qt.ImhNoAutoUppercase) === 0,
+                        "a new block keeps the keyboard's automatic capital letter"),
             () => EditorInput.sendInputMethod(editor.activeEditor, "kot"),
             () => check(editor.activeEditor.preeditText === "kot", "composing text is preedit"),
             () => realKey(Qt.Key_Backspace),
@@ -752,6 +755,10 @@ ApplicationWindow {
                 check(window.dateField !== null && window.dateField.EnterKey.type === Qt.EnterKeyDone
                       && window.timeField !== null && window.timeField.EnterKey.type === Qt.EnterKeyDone,
                       "the fields' keyboard action key is Done (Enter), not Next")
+                // Gboard wrote "Za 2 minuty": a date in words is no sentence, so the keyboard
+                // must not capitalise its first letter (the block editor itself still does).
+                check(window.dateField !== null && (window.dateField.inputMethodHints & Qt.ImhNoAutoUppercase) !== 0,
+                      "the typed date gets no automatic capital letter")
                 window.dateField.forceActiveFocus()
             },
             () => typeKeys("za 2 minuty"),
@@ -817,6 +824,8 @@ ApplicationWindow {
             () => {
                 const field = editor.dialogs.recurrenceDialog.ruleField as BTextField
                 check(field !== null && field.EnterKey.type === Qt.EnterKeyDone, "the recurrence rule's action key is Done")
+                check(field !== null && (field.inputMethodHints & Qt.ImhNoAutoUppercase) !== 0,
+                      "the typed recurrence rule gets no automatic capital letter")
                 editor.dialogs.recurrenceDialog.close()
             },
             // ---- Live query results: tasks from the vault, checkable in their own files ----------

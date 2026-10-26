@@ -412,6 +412,8 @@ Item {
                 Layout.fillWidth: true
                 leadingIcon: "repeat"
                 placeholderText: qsTr("e.g. co tydzień w poniedziałek, every month on the 15th")
+                // No sentence: no automatic capital letter from the keyboard ("Co tydzień").
+                inputMethodHints: Qt.ImhNoAutoUppercase
                 errorText: text.trim() !== "" && !recurrenceDialog.parsed.ok ? qsTr("Not a recurrence rule") : ""
                 onAccepted: recurrenceDialog.tryAccept()
             }

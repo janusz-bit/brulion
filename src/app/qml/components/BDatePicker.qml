@@ -218,7 +218,8 @@ T.Control {
                 clearable: true
                 placeholderText: qsTr("Type a date, e.g. tomorrow 9:00")
                 accessibleName: qsTr("Date in your own words")
-                inputMethodHints: Qt.ImhNoPredictiveText
+                // No sentence: Gboard would capitalise its first letter ("Za 2 minuty").
+                inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                 onAccepted: control.applyNatural()
                 // Leaving the field (editingFinished without focus: not Enter, which accepted()
                 // handled and which cleared the field).
