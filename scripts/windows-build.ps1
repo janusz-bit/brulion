@@ -247,7 +247,8 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         if ($out -notmatch [regex]::Escape($Version)) { Fail "$Label`: brulion-cli --version does not say $Version" }
 
         Info "$Label`: brulion.exe --selftest-shell (offscreen)"
-        foreach ($dir in $ProfileDirs) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
+        # (Not $dir: PowerShell names are case-insensitive, that is the parameter $Dir.)
+        foreach ($old in $ProfileDirs) { if (Test-Path $old) { Remove-Item -Recurse -Force $old } }
         # brulion.exe is a GUI program (no console): started directly, with its output captured
         # (UTF-8) and its exit code. The environment is this process's, as changed above.
         $start = [Diagnostics.ProcessStartInfo]::new($exe)
@@ -319,7 +320,7 @@ if ($Steps -contains 'check') {
     if (-not (Test-Path $settings)) { Fail "The uninstaller removed the settings $settings" }
     Write-Host "Uninstalled; the profile's settings stay ($settings)"
 
-    foreach ($dir in $ProfileDirs + @($work)) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
+    foreach ($old in $ProfileDirs + @($work)) { if (Test-Path $old) { Remove-Item -Recurse -Force $old } }
 }
 
 Info 'Done'
