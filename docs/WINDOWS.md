@@ -77,8 +77,9 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
 * **Nazw folderów notatnika nie zmienia się w Eksploratorze, gdy Brulion jest uruchomiony.**
   Brulion obserwuje foldery notatnika (`QFileSystemWatcher` trzyma otwarty uchwyt każdego z nich),
   a Windows nie przenosi folderu, w którym coś jest otwarte — Eksplorator zgłasza, że folder jest
-  używany. W Brulionie (pasek boczny, „Zmień nazwę”, „Przenieś do…”) działa normalnie; usuwanie
-  folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
+  używany. Tak samo Syncthing, gdy przenosi folder przemianowany na innym urządzeniu: zgłosi błąd
+  i spróbuje ponownie. W Brulionie (pasek boczny, „Zmień nazwę”, „Przenieś do…”) działa normalnie;
+  usuwanie folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
 * **Nazwy, których Windows nie dopuszcza:** notatka z innego urządzenia o nazwie ze znakiem
   `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
   synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
