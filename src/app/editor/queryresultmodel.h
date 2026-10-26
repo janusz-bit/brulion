@@ -16,6 +16,10 @@
 // "YYYY-MM-DD HH:mm"), alarm, showPage (show the page next to the item: it is another page and
 // not the group header), journal ("YYYY-MM-DD" when the page is a daily note, else "").
 // Only the first `maxItems` items get rows (hiddenCount: the others; showMore() adds rows).
+// A task's status menu open on a row holds the rows (hold() / release(): new rows would take the
+// menu away with the old ones): runs that come due meanwhile (index changes from sync or other
+// notes, the query edited) wait and run once when the last holder lets go; a status chosen on
+// held rows goes to the task where the index has it now (lines may have moved meanwhile).
 // Created from QML, it runs the query the first time when it is completed (with its controller
 // and source), so the block is created with its results — a block whose results came a moment
 // later grew after the editor's list had placed it (docs/UI.md "Scrolling performance").
@@ -24,6 +28,7 @@
 #include "types.h"
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QPointer>
 #include <QQmlParserStatus>
 #include <QString>
@@ -70,6 +75,8 @@ class QueryResultModel : public QAbstractListModel, public QQmlParserStatus {
     Q_PROPERTY(int maxItems READ maxItems WRITE setMaxItems NOTIFY maxItemsChanged FINAL)
     /// Debounce of re-runs after index / source changes in ms (default 150).
     Q_PROPERTY(int refreshDelay READ refreshDelay WRITE setRefreshDelay NOTIFY refreshDelayChanged FINAL)
+    /// Something holds the rows (see hold()).
+    Q_PROPERTY(bool held READ held NOTIFY heldChanged FINAL)
 
 public:
     enum Role {
@@ -122,9 +129,16 @@ public:
     void setMaxItems(int max);
     int refreshDelay() const { return m_timer.interval(); }
     void setRefreshDelay(int ms);
+    bool held() const { return !m_holders.isEmpty(); }
 
     /// Run the query now.
     Q_INVOKABLE void refresh();
+    /// Keep the rows as they are while `holder` shows something on one (a task's status menu):
+    /// runs due meanwhile wait until every holder let go (release(), or the holder destroyed —
+    /// a view destroyed with its menu open holds nothing). Holding twice is holding once.
+    Q_INVOKABLE void hold(QObject *holder);
+    /// `holder` lets go; the last one runs what waited (debounced, like an index change).
+    Q_INVOKABLE void release(QObject *holder);
     /// Show 50 more items.
     Q_INVOKABLE void showMore();
     /// A row's roles by name (tests, QML helpers); empty for an invalid row.
@@ -150,6 +164,7 @@ Q_SIGNALS:
     void resultChanged();
     void maxItemsChanged();
     void refreshDelayChanged();
+    void heldChanged();
 
 private:
     struct Row {
@@ -162,6 +177,8 @@ private:
     };
 
     void schedule();
+    void timerFired();
+    int currentLine(const Row &row) const;
     void rebuildRows();
     void invalidateHtml();
     QString renderItem(const QVariantMap &item) const;
@@ -184,6 +201,8 @@ private:
     int m_maxItems = 50;
     bool m_groupedByPage = false;
     VaultConfig m_config;
+    QHash<QObject *, QMetaObject::Connection> m_holders;
+    bool m_pending = false; ///< a run waited for the holders: the rows may be behind the index
 };
 
 } // namespace brulion::editor

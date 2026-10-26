@@ -10,7 +10,8 @@ import Brulion
 // and pages rendered like the editor renders them (links, tags, date chips), `group:` results
 // under group headers, the page of each item (unless grouped by page) as a quiet link. A click
 // on an item opens it at its block; the results follow the index (other devices, edits
-// elsewhere). The header, the filters (or Enter when the block is selected) edit the query
+// elsewhere; while a result's status menu is open they wait, QueryResultModel.hold(), and follow
+// once it closed). The header, the filters (or Enter when the block is selected) edit the query
 // source in place; while editing, the results follow the typed query. Without a host that runs
 // queries (QueryHost) only the filters show.
 Rectangle {
@@ -373,6 +374,7 @@ Rectangle {
                     Loader {
                         active: !row.group && row.isTask
                         sourceComponent: TaskBox {
+                            id: resultBox
                             objectName: "queryTaskBox"
                             x: -Math.round((width - boxSize) / 2) + 2
                             y: Math.round(row.pad + root.itemLineHeight / 2 - height / 2)
@@ -380,6 +382,14 @@ Rectangle {
                             Accessible.name: qsTr("Task: %1").arg(row.text)
                             onToggled: results.toggleTask(row.index)
                             onStatusChosen: (status) => results.setTaskStatus(row.index, status)
+                            // The results wait while its menu is open: new rows would take it away
+                            // (a box destroyed with its menu open lets go by itself).
+                            onMenuOpenChanged: {
+                                if (menuOpen)
+                                    results.hold(resultBox)
+                                else
+                                    results.release(resultBox)
+                            }
                         }
                     }
 

@@ -84,8 +84,5 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 
 ## Poprawki
 
-* **Menu statusu na wyniku zapytania znika**, gdy wyniki odświeżą się z zewnątrz (synchronizacja,
-  zmiana w innej notatce), bo wiersze są tworzone od nowa. Nic złego się nie zapisuje. Można
-  wstrzymać odświeżenie, póki menu jest otwarte.
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).

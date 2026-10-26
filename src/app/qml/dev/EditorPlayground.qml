@@ -1771,7 +1771,9 @@ ApplicationWindow {
     // ---- Self test of task statuses (`--editor-script taskstatus`, tst_editor_qml_taskstatus*) ---
     // The status menu with real input — a right-click (mouse) or a long press (finger, --touch) —
     // on the checkboxes of the editor, a query result and an embedded section, a menu item clicked
-    // or tapped; a plain click / tap still toggles; Ctrl+Shift+Enter while editing and on a
+    // or tapped (the result's and the embed's menu stay open while their file changes elsewhere:
+    // the rows wait, the status goes to the task's line now); a plain click / tap still toggles;
+    // Ctrl+Shift+Enter while editing and on a
     // selected block (menu keys, Escape, the caret kept); the "/" commands typed with real keys
     // (list item, paragraph, Logseq keyword, undo); the touch toolbar's task button held down.
     // QtTest's TestEvent sends the pointer events through the window like a real device.
@@ -1939,6 +1941,13 @@ ApplicationWindow {
                 return box
         }
         return null
+    }
+    /// The TransclusionView of the embedded section (the one with embedTaskBox()), or null.
+    function embedView() {
+        let item = embedTaskBox()
+        while (item && item.shown === undefined)
+            item = item.parent
+        return item
     }
     function fileLine(path, prefix) {
         const lines = host.file(path).split("\n")
@@ -2166,17 +2175,33 @@ ApplicationWindow {
                       "the query block lists the shopping tasks"),
             ...menuGesture(() => resultTaskBox("Mleko"), () => resultMenuOpen("Mleko")),
             waitStep(() => resultMenuOpen("Mleko"), gesture + " on a query result's checkbox opens its menu"),
+            // Another device adds a task above it while the menu is open (a sync): the results
+            // wait for the menu — new rows would take it away — and the status goes to the task
+            // where it is now, not to its old line.
             () => {
                 window.ownMenu = resultTaskBox("Mleko").statusMenu
-                check(host.file("Zakupy.md").indexOf("- [ ] Mleko") === 0, gesture + " does not toggle the result")
+                check(queryResults().held, "the open menu holds the results")
+                host.externalWrite("Zakupy.md", "- [ ] Jajka #zakupy\n" + host.file("Zakupy.md"))
+            },
+            waitStep(() => (host.runQuery(queryResults().source, page.path).items || []).some(i => i.text.indexOf("Jajka") === 0),
+                     "the index has the new task"),
+            () => {}, () => {}, () => {}, // longer than the results' debounce
+            () => {
+                check(resultMenuOpen("Mleko") && resultTaskBox("Mleko").statusMenu === window.ownMenu,
+                      "the menu stays open while the results change elsewhere")
+                check(resultTaskBox("Jajka") === null, "the results wait for the menu")
+                check(fileLine("Zakupy.md", "Mleko") === "- [ ] Mleko #zakupy", gesture + " does not toggle the result")
                 check(menuItemNamed(window.ownMenu, "taskStatus_todo").checked, "its status is checked")
                 tapItem(menuItemNamed(window.ownMenu, "taskStatus_deferred"))
             },
-            waitStep(() => host.file("Zakupy.md").indexOf("- [>] Mleko #zakupy") === 0,
-                      () => "a result's status is written in its own file: " + host.file("Zakupy.md").split("\n")[0]),
-            // The next gesture once the results followed: "status:open" lists no waiting task.
-            waitStep(() => queryResultsSettled() && resultTaskBox("Mleko") === null && resultTaskBox("Śrubki") !== null,
-                      "the results follow: the waiting task is no open task any more"),
+            waitStep(() => host.file("Zakupy.md").indexOf("- [ ] Jajka #zakupy\n- [>] Mleko #zakupy\n") === 0,
+                      () => "a result's status is written in its own file, on the task's line now: "
+                            + host.file("Zakupy.md").split("\n").slice(0, 2).join(" | ")),
+            // The next gesture once the results followed: "status:open" lists no waiting task, and
+            // the task added meanwhile came.
+            waitStep(() => queryResultsSettled() && resultTaskBox("Mleko") === null && resultTaskBox("Śrubki") !== null
+                           && resultTaskBox("Jajka") !== null && !queryResults().held,
+                      "the results follow once the menu closed: the waiting task is no open task any more, the new one is listed"),
             ...menuGesture(() => resultTaskBox("Śrubki"), () => resultMenuOpen("Śrubki")),
             waitStep(() => resultMenuOpen("Śrubki"), "the next result's menu opens"),
             () => tapItem(menuItemNamed(resultTaskBox("Śrubki").statusMenu, "taskStatus_none")),
@@ -2188,9 +2213,25 @@ ApplicationWindow {
             waitStep(() => embedTaskBox() !== null, "the embedded section shows its task's checkbox"),
             ...menuGesture(() => embedTaskBox(), embedMenuOpen),
             waitStep(embedMenuOpen, gesture + " on an embedded task opens its menu"),
-            () => tapItem(menuItemNamed(embedTaskBox().statusMenu, "taskStatus_done")),
+            // The section changes elsewhere while the menu is open: the embed waits, the status
+            // goes to the task's line now.
+            () => {
+                window.ownMenu = embedTaskBox().statusMenu
+                host.externalWrite("Budżet domowy.md", host.file("Budżet domowy.md").replace("- [ ] Opłacić czynsz", "- Prąd: 250 zł\n- [ ] Opłacić czynsz"))
+            },
+            waitStep(() => embedView() !== null && JSON.stringify(embedView().transclusions).indexOf("Prąd") >= 0,
+                     "the block's embeds follow the file"),
+            () => {}, () => {},
+            () => {
+                check(embedMenuOpen() && embedTaskBox().statusMenu === window.ownMenu, "the embed's menu stays open")
+                check(JSON.stringify(embedView().shown).indexOf("Prąd") < 0, "the embed waits for the menu")
+                tapItem(menuItemNamed(window.ownMenu, "taskStatus_done"))
+            },
             waitStep(() => fileLine("Budżet domowy.md", "czynsz") === "- [x] Opłacić czynsz 📅 2026-10-20 #finanse ✅ 2026-10-15",
                       () => "an embedded task's status is written in its own file: " + fileLine("Budżet domowy.md", "czynsz")),
+            () => check(fileLine("Budżet domowy.md", "Prąd") === "- Prąd: 250 zł", "the line above it is left alone"),
+            waitStep(() => embedView() !== null && JSON.stringify(embedView().shown).indexOf("Prąd") >= 0,
+                     "the embed follows once the menu closed"),
             // ---- The touch toolbar: the task button held down opens the menu above it --------------
             () => {
                 Theme.forceTouch = true

@@ -15,6 +15,8 @@
 #include <QDate>
 #include <QUrl>
 
+#include <cstdlib>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::editor {
@@ -35,7 +37,7 @@ QueryResultModel::QueryResultModel(QObject *parent) : QAbstractListModel(parent)
 {
     m_timer.setSingleShot(true);
     m_timer.setInterval(DefaultRefreshDelay);
-    connect(&m_timer, &QTimer::timeout, this, &QueryResultModel::refresh);
+    connect(&m_timer, &QTimer::timeout, this, &QueryResultModel::timerFired);
 }
 
 QueryResultModel::~QueryResultModel() = default;
@@ -210,12 +212,51 @@ void QueryResultModel::setRefreshDelay(int ms)
     Q_EMIT refreshDelayChanged();
 }
 
+void QueryResultModel::hold(QObject *holder)
+{
+    if (!holder || m_holders.contains(holder))
+        return;
+    const bool wasHeld = held();
+    m_holders.insert(holder, connect(holder, &QObject::destroyed, this, [this, holder] { release(holder); }));
+    if (!wasHeld)
+        Q_EMIT heldChanged();
+}
+
+void QueryResultModel::release(QObject *holder)
+{
+    const auto it = m_holders.find(holder);
+    if (it == m_holders.end())
+        return;
+    disconnect(it.value());
+    m_holders.erase(it);
+    if (held())
+        return;
+    Q_EMIT heldChanged();
+    // Not right here: the menu letting go may be in the middle of closing, on a row that the
+    // run would destroy.
+    if (m_pending)
+        schedule();
+}
+
+void QueryResultModel::timerFired()
+{
+    if (held())
+        m_pending = true;
+    else
+        refresh();
+}
+
 void QueryResultModel::schedule()
 {
     // The first run comes right away (the block appears with its results: from QML when the
     // model is completed), later ones debounced (an index change per save while typing).
+    // Held rows (a menu open on one) wait: the run comes when they are let go.
     if (m_completing)
         return;
+    if (held()) {
+        m_pending = true;
+        return;
+    }
     if (!m_ready) {
         QTimer::singleShot(0, this, [this] {
             if (!m_ready)
@@ -229,6 +270,7 @@ void QueryResultModel::schedule()
 void QueryResultModel::refresh()
 {
     m_timer.stop();
+    m_pending = false;
     auto *queries = qobject_cast<QueryHost *>(m_host.data());
     bool ok = true;
     QString error;
@@ -363,6 +405,35 @@ QString QueryResultModel::renderItem(const QVariantMap &item) const
     return html.isEmpty() ? markdown::InlineRenderer::escape(plainTextOf(e, 300)) : html;
 }
 
+int QueryResultModel::currentLine(const Row &row) const
+{
+    const int line = row.item.value(u"line"_s, -1).toInt();
+    if (!m_pending)
+        return line;
+    // The rows waited for a menu while the index changed: the task may be on another line now
+    // (an edit above it, a sync), and its old line may hold another task. Ask the index where
+    // the same block of the same file is now (the nearest one when the text repeats).
+    auto *queries = qobject_cast<QueryHost *>(m_host.data());
+    if (!queries || !m_controller)
+        return -1;
+    const QString path = row.item.value(u"path"_s).toString();
+    const QString raw = row.item.value(u"raw"_s).toString();
+    const QVariantMap result = queries->runQuery(m_source, m_controller->path());
+    QVariantList items = result.value(u"items"_s).toList();
+    for (const QVariant &g : result.value(u"groups"_s).toList())
+        items.append(g.toMap().value(u"items"_s).toList());
+    int best = -1;
+    for (const QVariant &i : std::as_const(items)) {
+        const QVariantMap item = i.toMap();
+        if (item.value(u"path"_s).toString() != path || item.value(u"raw"_s).toString() != raw)
+            continue;
+        const int at = item.value(u"line"_s, -1).toInt();
+        if (at >= 0 && (best < 0 || std::abs(at - line) < std::abs(best - line)))
+            best = at;
+    }
+    return best;
+}
+
 bool QueryResultModel::toggleTask(int row)
 {
     if (row < 0 || row >= m_rows.size() || !m_controller)
@@ -371,8 +442,7 @@ bool QueryResultModel::toggleTask(int row)
     if (r.group || r.status.isEmpty())
         return false;
     const QString next = PageController::toggledStatus(r.status);
-    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(),
-                                                       r.item.value(u"line"_s, -1).toInt(), next);
+    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(), currentLine(r), next);
     if (!changed)
         return false;
     r.status = next;
@@ -388,8 +458,7 @@ bool QueryResultModel::setTaskStatus(int row, const QString &status)
     Row &r = m_rows[row];
     if (r.group || r.status.isEmpty() || r.status == status)
         return false;
-    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(),
-                                                       r.item.value(u"line"_s, -1).toInt(), status);
+    const bool changed = m_controller->setTaskStatusAt(r.item.value(u"path"_s).toString(), currentLine(r), status);
     if (!changed)
         return false;
     r.status = status;

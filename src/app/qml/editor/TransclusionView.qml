@@ -9,13 +9,21 @@ import Brulion
 // Październik") and the embedded blocks rendered read-only like the editor renders them —
 // headings, links, tags, chips, nested embeds (depth-limited, a cycle is named instead of
 // repeated). Tasks inside keep a working checkbox (it changes the task in its own file; a
-// right-click or long press: the status menu). A click on the header opens the source; a click
-// on the content edits the block with the embed.
+// right-click or long press: the status menu; while it is open, changed embeds wait — new rows
+// would take the menu away — and come a moment after it closed). A click on the header opens the
+// source; a click on the content edits the block with the embed.
 Column {
     id: root
 
     property BlockDelegate block
     property var transclusions: []
+    /// The embeds shown: `transclusions`, except while a task's status menu is open in them (and a
+    /// moment after it closed: the menu is still closing on its row) — then the ones from when it
+    /// opened.
+    readonly property var shown: menuBox !== null || releaseTimer.running ? frozen : transclusions
+    /// The checkbox whose status menu is open (null: none; also when it is destroyed).
+    property TaskBox menuBox: null
+    property var frozen: []
     readonly property BlockEditor editor: block ? block.editor : null
     readonly property PageController controller: block ? block.controller : null
     /// Centre of the first header line (the block's bullet aligns with it).
@@ -63,6 +71,47 @@ Column {
         if (root.editor && href !== "")
             root.editor.activateLink(root.block.index, href)
     }
+    /// A checkbox's status menu opened or closed.
+    function menuShown(box: TaskBox, open: bool) {
+        if (open) {
+            if (root.menuBox !== box) {
+                root.frozen = root.shown // the same array: the rows stay
+                root.menuBox = box
+            }
+        } else if (root.menuBox === box) {
+            releaseTimer.restart()
+            root.menuBox = null
+        }
+    }
+    /// An embedded task's line in its file now: while the rows waited for a menu, the file may
+    /// have changed (a line added above the task). The same block of the same file in the embeds
+    /// as they are now (the nearest one when the text repeats); -1 when it is not there any more.
+    function currentLine(data): int {
+        const path = data.path
+        const line = data.line
+        if (root.shown === root.transclusions)
+            return line
+        let best = -1
+        for (const frame of root.transclusions || []) {
+            for (const b of frame.blocks || []) {
+                if (b.kind !== "embed" && (b.task || "") !== "" && b.path === path && b.html === data.html
+                        && (best < 0 || Math.abs(b.line - line) < Math.abs(best - line)))
+                    best = b.line
+            }
+        }
+        return best
+    }
+    function setStatus(data, status: string) {
+        const line = currentLine(data)
+        if (line >= 0)
+            root.controller.setTaskStatusAt(data.path, line, status)
+    }
+
+    Timer {
+        id: releaseTimer
+        interval: 0
+    }
+
     /// A link inside the embedded text: tasks and reminders belong to the source block.
     function activate(link, path, line) {
         if (link.startsWith("task:") || link.startsWith("reminder:")) {
@@ -81,7 +130,7 @@ Column {
         property int revision: 0
         onItemAdded: revision++
         onItemRemoved: revision++
-        model: root.transclusions
+        model: root.shown
         delegate: Rectangle {
             id: frame
             required property var modelData
@@ -253,11 +302,12 @@ Column {
                             opacity: enabled ? 1 : 0.6
                             x: entry.indent - Math.round((width - boxSize) / 2) + 2
                             y: Math.round(entry.lineHeightPx / 2 - height / 2) + 1
-                            onToggled: root.controller.toggleTaskAt(entry.modelData.path, entry.modelData.line, entry.task)
+                            onToggled: root.controller.toggleTaskAt(entry.modelData.path, root.currentLine(entry.modelData), entry.task)
                             onStatusChosen: (status) => {
                                 if (status !== entry.task)
-                                    root.controller.setTaskStatusAt(entry.modelData.path, entry.modelData.line, status)
+                                    root.setStatus(entry.modelData, status)
                             }
+                            onMenuOpenChanged: root.menuShown(taskBox, menuOpen)
                         }
 
                         Text {

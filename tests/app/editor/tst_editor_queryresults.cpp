@@ -255,6 +255,136 @@ private Q_SLOTS:
         QCOMPARE(resets.size(), 0);
     }
 
+    void heldRowsWaitForTheMenu()
+    {
+        // A status menu open on a row holds the rows: an index change (sync, an edit in another
+        // note) would rebuild them and take the menu away. The run comes when it lets go.
+        Fixture f(u"type:tasks tag:zakupy status:open"_s);
+        QSignalSpy held(&f.results, &QueryResultModel::heldChanged);
+        QObject menu;
+        QVERIFY(!f.results.held());
+        f.results.hold(&menu);
+        QVERIFY(f.results.held());
+        QCOMPARE(held.size(), 1);
+        f.results.hold(&menu); // the same holder twice: still one
+        QCOMPARE(held.size(), 1);
+        QSignalSpy resets(&f.results, &QAbstractItemModel::modelReset);
+        f.host.externalWrite(u"Ogród.md"_s, u"- [ ] Nasiona marchwi #zakupy\n"_s);
+        QTest::qWait(100);
+        QCOMPARE(f.results.itemCount(), 2);
+        QCOMPARE(resets.size(), 0);
+        // The query edited meanwhile waits as well.
+        f.results.setSource(u"type:tasks tag:zakupy status:open sort:due"_s);
+        QTest::qWait(50);
+        QCOMPARE(resets.size(), 0);
+        // Let go: one run with everything that came meanwhile.
+        f.results.release(&menu);
+        QVERIFY(!f.results.held());
+        QCOMPARE(held.size(), 2);
+        QTRY_COMPARE(f.results.itemCount(), 3);
+        QVERIFY(f.rowOf(u"Nasiona marchwi"_s) >= 0);
+        // Releasing again, or something that holds nothing, changes nothing.
+        f.results.release(&menu);
+        f.results.release(nullptr);
+        f.results.hold(nullptr);
+        QVERIFY(!f.results.held());
+        QCOMPARE(held.size(), 2);
+    }
+
+    void heldByTwoHolders()
+    {
+        Fixture f(u"type:tasks tag:zakupy status:open"_s);
+        QObject first;
+        QObject second;
+        f.results.hold(&first);
+        f.results.hold(&second);
+        f.host.externalWrite(u"Ogród.md"_s, u"- [ ] Nasiona marchwi #zakupy\n"_s);
+        f.results.release(&first);
+        QVERIFY(f.results.held());
+        QTest::qWait(100);
+        QCOMPARE(f.results.itemCount(), 2);
+        f.results.release(&second);
+        QTRY_COMPARE(f.results.itemCount(), 3);
+    }
+
+    void aDestroyedHolderLetsGo()
+    {
+        // The view is destroyed with its menu open: nothing stays held, no run is lost.
+        Fixture f(u"type:tasks tag:zakupy status:open"_s);
+        auto menu = std::make_unique<QObject>();
+        f.results.hold(menu.get());
+        f.host.externalWrite(u"Ogród.md"_s, u"- [ ] Nasiona marchwi #zakupy\n"_s);
+        QTest::qWait(100);
+        QCOMPARE(f.results.itemCount(), 2);
+        menu.reset();
+        QVERIFY(!f.results.held());
+        QTRY_COMPARE(f.results.itemCount(), 3);
+        // Without anything waiting, letting go runs nothing.
+        auto other = std::make_unique<QObject>();
+        f.results.hold(other.get());
+        QSignalSpy changed(&f.results, &QueryResultModel::resultChanged);
+        other.reset();
+        QTest::qWait(100);
+        QCOMPARE(changed.size(), 0);
+        // The model goes first: the holder's end later reaches nothing.
+        auto holder = std::make_unique<QObject>();
+        {
+            Fixture gone(u"type:tasks tag:zakupy"_s);
+            gone.results.hold(holder.get());
+        }
+        holder.reset();
+    }
+
+    void statusChosenWhileHeld()
+    {
+        // The menu's own choice: the row shows it at once and stays (the menu closes on its own);
+        // the run that drops the waiting task comes once the menu let go.
+        Fixture f(u"type:tasks tag:zakupy status:open"_s);
+        QObject menu;
+        f.results.hold(&menu);
+        const int milk = f.rowOf(u"Mleko"_s);
+        QSignalSpy resets(&f.results, &QAbstractItemModel::modelReset);
+        QVERIFY(f.results.setTaskStatus(milk, u"deferred"_s));
+        QCOMPARE(f.row(milk).value(u"status"_s).toString(), u"deferred"_s);
+        QVERIFY(f.host.file(u"Zakupy.md"_s).startsWith(u"- [>] Mleko #zakupy"_s));
+        QTest::qWait(100);
+        QCOMPARE(resets.size(), 0);
+        QCOMPARE(f.results.itemCount(), 2);
+        f.results.release(&menu);
+        QTRY_COMPARE(f.results.itemCount(), 1);
+        QCOMPARE(f.rowOf(u"Mleko"_s), -1);
+    }
+
+    void statusChosenOnHeldRowsFollowsTheFile()
+    {
+        // While the rows wait, the file changed: a line above the task moved it down. The status
+        // goes to the same task, not to whatever is on its old line now.
+        Fixture f(u"type:tasks tag:zakupy status:open"_s);
+        QObject menu;
+        f.results.hold(&menu);
+        const int milk = f.rowOf(u"Mleko"_s);
+        QCOMPARE(f.row(milk).value(u"line"_s).toInt(), 0);
+        f.host.externalWrite(u"Zakupy.md"_s, u"- [ ] Jajka #zakupy\n- [ ] Mleko #zakupy 📅 2026-10-16\n- [x] Chleb #zakupy\n"
+                                             u"- [ ] Śrubki do półki **M6** #zakupy #remont\n"_s);
+        QTest::qWait(100);
+        QCOMPARE(f.row(milk).value(u"line"_s).toInt(), 0); // the rows waited
+        QVERIFY(f.results.setTaskStatus(milk, u"done"_s));
+        QVERIFY2(f.host.file(u"Zakupy.md"_s).startsWith(u"- [ ] Jajka #zakupy\n- [x] Mleko #zakupy 📅 2026-10-16 ✅ 2026-10-15\n"_s),
+                 qPrintable(f.host.file(u"Zakupy.md"_s)));
+        // The task is gone from the file meanwhile: nothing is written anywhere.
+        const int screws = f.rowOf(u"Śrubki"_s);
+        f.host.externalWrite(u"Zakupy.md"_s, u"- [ ] Jajka #zakupy\n- [x] Mleko #zakupy\n- [ ] Ćwiczyć #zakupy\n"_s);
+        QTest::qWait(100);
+        const int edits = f.host.taskEdits();
+        QVERIFY(!f.results.setTaskStatus(screws, u"cancelled"_s));
+        QVERIFY(!f.results.toggleTask(screws));
+        QCOMPARE(f.host.taskEdits(), edits);
+        QCOMPARE(f.host.file(u"Zakupy.md"_s), u"- [ ] Jajka #zakupy\n- [x] Mleko #zakupy\n- [ ] Ćwiczyć #zakupy\n"_s);
+        f.results.release(&menu);
+        QTRY_VERIFY(f.rowOf(u"Ćwiczyć"_s) >= 0);
+        QCOMPARE(f.rowOf(u"Śrubki"_s), -1);
+    }
+
     void followsTheQueryText()
     {
         Fixture f(u"type:tasks tag:zakupy"_s);
