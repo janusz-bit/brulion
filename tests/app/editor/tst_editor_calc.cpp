@@ -376,6 +376,13 @@ private Q_SLOTS:
         QTest::addRow("double backticks") << u"Wynik: ``\n= cena * 2 `` zł"_s;
         QTest::addRow("tab") << u"Wynik: `\t= cena * 2` zł"_s;
         QTest::addRow("two spaces") << u"Wynik: `  = cena * 2` zł"_s;
+        // In a quote or callout the next line starts with its `> ` prefix, which the renderer
+        // strips before the inline text.
+        QTest::addRow("quote") << u"> Wynik: `\n> = cena * 2` zł"_s;
+        QTest::addRow("nested quote") << u"> > Wynik: `\n> >   = cena * 2` zł"_s;
+        QTest::addRow("quote, lazy line") << u"> Wynik: `\n= cena * 2` zł"_s;
+        QTest::addRow("callout") << u"> [!note] Koszt\n> Wynik: `\n> = cena * 2` zł"_s;
+        QTest::addRow("callout, CRLF") << u"> [!note] Koszt\r\n> Wynik: `\r\n>= cena * 2` zł"_s;
     }
 
     void inlineCalculationAfterALineBreak()
@@ -388,7 +395,14 @@ private Q_SLOTS:
             content.replace(u"\n"_s, u"\r\n"_s).replace(u"\r\r\n"_s, u"\r\n"_s);
         Fixture f(content);
         const auto shown = [&f](int row) { return f.html(row).remove(QRegularExpression(u"<[^>]*>"_s)); };
-        const int row = f.rowOf(u"Wynik:"_s);
+        const auto rowOfResult = [&f] {
+            for (int r = 0; r < f.count(); ++r) {
+                if (f.edit(r).contains(u"Wynik:"_s))
+                    return r;
+            }
+            return -1;
+        };
+        const int row = rowOfResult();
         QVERIFY(row > 0);
         QVERIFY2(shown(row).contains(u"20"_s), qPrintable(f.html(row)));
 
@@ -406,7 +420,7 @@ private Q_SLOTS:
         // A property between them overrides.
         const int at = f.page.insertBlockAfter(f.rowOf(u"Żółć"_s), u"cena:: 3"_s);
         QVERIFY(at > 0);
-        QVERIFY2(shown(f.rowOf(u"Wynik:"_s)).contains(u"6"_s), qPrintable(f.html(f.rowOf(u"Wynik:"_s))));
+        QVERIFY2(shown(rowOfResult()).contains(u"6"_s), qPrintable(f.html(rowOfResult())));
         VERIFY_FRESH(f);
     }
 
