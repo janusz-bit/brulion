@@ -294,7 +294,12 @@ app; these guards keep data from being lost:
   `scripts/dev-build.sh` (locked, `-j2`) — see CLAUDE.md. Sanitizer builds (`-fsanitize=` in
   `CMAKE_CXX_FLAGS`, CI) get `BRULION_TEST_SLOWDOWN=25`: tests multiply their wall-clock limits
   and worker-thread stack sizes by it (1 otherwise), the editor playground's self-tests their
-  waits for something asynchronous (`DevTools.testSlowdown`).
+  waits for something asynchronous (`DevTools.testSlowdown`); CI builds them at `-O1`. The GUI
+  tests run side by side with the others (`PROCESSORS 2` for a whole app's self-test): their
+  checks wait for the state they read, never for a fixed time; only measurements that compare
+  wall-clock times run alone (`RUN_SERIAL`: `tst_shell_workspace_perf`, `tst_scroll_jumps_qml`).
+  A fresh build directory starts the longest tests first (`tests/ctest-costs.txt` becomes
+  ctest's cost data until ctest has its own timings).
 * Nix: `nix develop` (Qt 6.11 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and

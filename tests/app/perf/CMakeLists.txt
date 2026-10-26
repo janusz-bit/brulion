@@ -5,7 +5,8 @@
 # the scroll probe (`--probe-check`, src/app/ui/scrollprobe.h) fails a run when the content moves
 # more than the input explains or shifts inside the list. Geometry only, no timing thresholds: the
 # sanitizer build runs two cases with more time and only scrolls less far (BRULION_TEST_SLOWDOWN).
-# Alone (RUN_SERIAL): other GUI tests next to it would only make it slower. Every app run has its
+# Alone (RUN_SERIAL): other GUI tests next to it would only make it slower (the other GUI tests run
+# side by side, two cores each). Every app run has its
 # own time limit inside the script, the test a limit for all of them.
 # The measurement scripts next to it (scroll-probe.sh, perf-record.sh, android-scroll.sh) are run
 # by hand (docs/UI.md "Scrolling performance").

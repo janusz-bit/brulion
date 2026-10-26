@@ -18,9 +18,10 @@ endif()
 # Qt's QML modules are found as for tst_editor_qml (tests/app/editor/CMakeLists.txt).
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
 if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
+    math(EXPR _planning_qml_timeout "240 + 10 * ${BRULION_TEST_SLOWDOWN}")
     add_test(NAME tst_planning_qml
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/qml-smoke.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/qml-smoke)
     set_tests_properties(tst_planning_qml PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root}"
-        TIMEOUT 240 RUN_SERIAL TRUE)
+        TIMEOUT ${_planning_qml_timeout})
 endif()

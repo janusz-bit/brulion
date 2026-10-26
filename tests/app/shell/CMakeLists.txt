@@ -39,13 +39,16 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     add_test(NAME tst_shell_qml_capture
         COMMAND brulion --demo --route journals --capture --selftest-shell --no-single-instance
             --size 1280x800 --now "2026-10-14 10:00" --locale en)
+    # Next to other tests (two cores each): every wait of the self-test follows the state it waits
+    # for (shellselftest.cpp), so a loaded machine only makes it slower.
+    math(EXPR _shell_qml_timeout "90 + 10 * ${BRULION_TEST_SLOWDOWN}")
     foreach(_pair "tst_shell_qml;phone" "tst_shell_qml_capture;desktop")
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/selftest-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state"
-            FIXTURES_REQUIRED shell_qml_homes TIMEOUT 90 RUN_SERIAL TRUE
+            FIXTURES_REQUIRED shell_qml_homes TIMEOUT ${_shell_qml_timeout} PROCESSORS 2
             # QML that ran on something already gone fails too, as in tst_editor_qml (a side
             # panel created from the context of the view the shell had just left did).
             FAIL_REGULAR_EXPRESSION "Binding loop detected;TypeError;ReferenceError;Cannot create a component in an invalid context")
@@ -67,13 +70,14 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
     add_test(NAME tst_shell_journey_desktop
         COMMAND brulion --journey ${CMAKE_CURRENT_BINARY_DIR}/journey-desktop --journey-theme dark
             --no-single-instance --size 1280x800 --now "2026-10-14 10:00" --locale pl)
+    math(EXPR _journey_timeout "240 + 10 * ${BRULION_TEST_SLOWDOWN}")
     foreach(_pair "tst_shell_journey;phone" "tst_shell_journey_desktop;desktop")
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
         set(_home ${CMAKE_CURRENT_BINARY_DIR}/journey-home-${_kind})
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};HOME=${_home};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state"
-            FIXTURES_REQUIRED shell_journey_homes TIMEOUT 240 RUN_SERIAL TRUE LABELS slow
+            FIXTURES_REQUIRED shell_journey_homes TIMEOUT ${_journey_timeout} PROCESSORS 2 LABELS slow
             FAIL_REGULAR_EXPRESSION "Binding loop detected")
     endforeach()
 
@@ -87,8 +91,8 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
         target_compile_definitions(tst_remote_control_qml PRIVATE BRULION_APP="$<TARGET_FILE:brulion>"
             BRULION_CLI="$<TARGET_FILE:brulion-cli>" BRULION_QML_ROOT="${_brulion_qt_qml_root}")
         add_dependencies(tst_remote_control_qml brulion brulion-cli)
-        math(EXPR _remote_timeout "240 * ${BRULION_TEST_SLOWDOWN}")
-        set_tests_properties(tst_remote_control_qml PROPERTIES TIMEOUT ${_remote_timeout} RUN_SERIAL TRUE)
+        math(EXPR _remote_timeout "240 + 30 * ${BRULION_TEST_SLOWDOWN}")
+        set_tests_properties(tst_remote_control_qml PROPERTIES TIMEOUT ${_remote_timeout} PROCESSORS 2)
     endif()
 endif()
 
@@ -121,7 +125,8 @@ endif()
 
 # Start-up of a 3000-note notebook (Workspace::open, chunked indexing on the event loop, the
 # first view queries): open() time, the longest UI-thread stall, time until `ready`. Prints the
-# measurements ("perf: …"); BRULION_PERF_NOTES=<n> changes the size.
+# measurements ("perf: …"); BRULION_PERF_NOTES=<n> changes the size. Alone (RUN_SERIAL): it has a
+# wall-clock limit on writing the notebook.
 brulion_add_test(tst_shell_workspace_perf SOURCES tst_workspace_perf.cpp
     LIBS brulion_shell brulion_core_reminders)
 set_tests_properties(tst_shell_workspace_perf PROPERTIES TIMEOUT 600 RUN_SERIAL TRUE)

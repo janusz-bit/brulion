@@ -25,7 +25,7 @@ if(TARGET brulion AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
     add_test(NAME tst_notify_sounds_qml_desktop
         COMMAND brulion --demo --selftest-sounds --no-single-instance
             --size 1280x800 --now "2026-10-14 10:00" --locale en)
-    math(EXPR _sounds_timeout "90 * ${BRULION_TEST_SLOWDOWN}")
+    math(EXPR _sounds_timeout "90 + 10 * ${BRULION_TEST_SLOWDOWN}")
     foreach(_pair "tst_notify_sounds_qml;phone" "tst_notify_sounds_qml_desktop;desktop")
         list(GET _pair 0 _test)
         list(GET _pair 1 _kind)
@@ -33,7 +33,7 @@ if(TARGET brulion AND UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN
         # No session bus: "Play sample" must not reach the desktop of whoever runs the tests.
         set_tests_properties(${_test} PROPERTIES
             ENVIRONMENT "BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN};QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_home}/data;XDG_CONFIG_HOME=${_home}/config;XDG_CACHE_HOME=${_home}/cache;XDG_STATE_HOME=${_home}/state;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/brulion-test-bus;BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN}"
-            FIXTURES_REQUIRED notify_sounds_homes TIMEOUT ${_sounds_timeout} RUN_SERIAL TRUE
+            FIXTURES_REQUIRED notify_sounds_homes TIMEOUT ${_sounds_timeout} PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "selftest: FAIL;TypeError;ReferenceError")
     endforeach()
 endif()
