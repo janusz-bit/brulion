@@ -384,17 +384,22 @@ void SyncRun::adoptCaseOnlyFolderRenames()
             const QString absFrom = vault()->absolutePath(from);
             if (!QFileInfo(absFrom).isDir() || !sameFolderOnDisk(absFrom, vault()->absolutePath(to)))
                 continue;
-            if (!vault()->rename(from, to, ChangeSource::Sync)) {
+            // The folder as the vault spells it: this device may have renamed it in letter case
+            // too since the last run ("projekty" -> "Projekty" here, -> "PROJEKTY" on the server).
+            const VaultPath here = vault()->existingCase(from);
+            if (paths::dirname(here) != paths::dirname(from))
+                continue;
+            if (here != to && !vault()->rename(here, to, ChangeSource::Sync)) {
                 qCWarning(lcSync).noquote() << u"%1 folder %2 renamed on the server to %3: not renamed here: %4"_s.arg(
-                        tag(), from, to, vault()->errorString());
+                        tag(), here, to, vault()->errorString());
                 continue;
             }
             rebaseStates(from, to);
             QHash<VaultPath, FileStat> local;
             for (auto it = m_local.cbegin(); it != m_local.cend(); ++it) {
                 FileStat stat = *it;
-                if (isWithin(stat.path, from))
-                    stat.path = to + stat.path.mid(from.size());
+                if (isWithin(stat.path, here))
+                    stat.path = to + stat.path.mid(here.size());
                 local.insert(stat.path, stat);
             }
             m_local = local;

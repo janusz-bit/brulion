@@ -800,6 +800,28 @@ private Q_SLOTS:
         QVERIFY(!isLocalDir(p.b, u"projekty"_s));
     }
 
+    void caseOnlyFolderRenamedOnBothSides()
+    {
+        // Case-insensitive storage: "projekty" renamed to "Projekty" here and to "PROJEKTY" on
+        // the server since the last run. The vault's spelling moves to the server's, the notes
+        // with it — none trashed, none downloaded again, the synced state follows.
+        Pair p(notesIn(u"projekty"_s, 4) + notesIn(u""_s, 2, 20));
+        // Links cannot stand in here: the vault would track every spelling as a folder of its own.
+        if (brulion::test::isCaseSensitive(p.a.root))
+            QSKIP("needs case-insensitive storage (Windows)");
+        p.settle();
+        QVERIFY(p.a.vault->rename(u"projekty"_s, u"Projekty"_s));
+        QVERIFY(p.server.moveNode(u"Notatki/projekty"_s, u"Notatki/PROJEKTY"_s));
+        const SyncReport r = p.a.sync();
+        QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
+        QVERIFY(!r.needsConfirmation);
+        QCOMPARE(p.a.trash().size(), 0);
+        QCOMPARE(counts(r).down, 0);
+        QVERIFY(p.a.vault->exists(u"PROJEKTY/"_s + noteName(0)));
+        QCOMPARE(p.server.files(kFolder), p.a.files());
+        QCOMPARE(p.a.sync().changeCount(), 0);
+    }
+
     void caseOnlyRenameOfAnEmptyFolder_data()
     {
         QTest::addColumn<bool>("onServer");
