@@ -174,6 +174,9 @@ if ($Steps -contains 'package') {
     $windeployqt = Join-Path $QtDir 'bin\windeployqt.exe'
     Exec $windeployqt @('--release', '--qmldir', (Join-Path $Root 'src\app\qml'), '--no-translations',
         '--no-opengl-sw', '--no-compiler-runtime', '--verbose', '1', (Join-Path $Stage 'brulion.exe'))
+    # The offscreen platform too (windeployqt takes only the windows one; it needs nothing more):
+    # headless runs of the packaged app — the check below, screenshots — work.
+    Copy-Item (Join-Path $QtDir 'plugins\platforms\qoffscreen.dll') (Join-Path $Stage 'platforms')
     Exec $windeployqt @('--release', '--no-translations', '--no-opengl-sw', '--no-compiler-runtime',
         '--verbose', '1', (Join-Path $Stage 'brulion-cli.exe'))
 
@@ -264,12 +267,14 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
         $process = [Diagnostics.Process]::Start($start)
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit(300000)) {
-            $process.Kill()
-            Fail "$Label`: brulion.exe --selftest-shell did not finish in 5 minutes"
-        }
+        $finished = $process.WaitForExit(300000)
+        if (-not $finished) { $process.Kill() }
         $process.WaitForExit() # the output's end too
         $output = $stdout.Result + $stderr.Result
+        if (-not $finished) {
+            if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
+            Fail "$Label`: brulion.exe --selftest-shell did not finish in 5 minutes (output above)"
+        }
         if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
         if ($process.ExitCode -ne 0) { Fail "$Label`: brulion.exe --selftest-shell exited with $($process.ExitCode)" }
         if ($output -match '(?i)is not installed|module .* not found|cannot load library|could not load the qt platform plugin|failed to load|TypeError|ReferenceError') {

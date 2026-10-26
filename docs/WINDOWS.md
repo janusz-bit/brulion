@@ -130,7 +130,8 @@ Kroki:
 2. **test** — `ctest` offscreen (`QT_QPA_PLATFORM=offscreen`) z Qt w `PATH`.
 3. **package** — do `build-windows\package\Brulion`: `brulion.exe`, `brulion-cli.exe`,
    `windeployqt --release --qmldir src\app\qml --no-translations --no-opengl-sw` (biblioteki Qt,
-   wtyczki — platformy, formaty obrazów z SVG, TLS przez Schannel bez OpenSSL — i moduły QML) oraz
+   wtyczki — platformy, formaty obrazów z SVG, TLS przez Schannel bez OpenSSL — i moduły QML), do
+   tego `platforms\qoffscreen.dll` (uruchomienia bez ekranu: sprawdzenie paczek, zrzuty) oraz
    biblioteki MSVC (`Microsoft.VC143.CRT`, obok programu — bez instalowania Visual C++
    Redistributable). Z tego folderu: `dist-windows\brulion-<wersja>-windows-x86_64.zip` i
    instalator z `packaging/windows/brulion.iss` →
