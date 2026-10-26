@@ -1662,6 +1662,78 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(lines.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n  do mamy\n"_s);
     }
 
+    // The space the editor writes after a token at the end of the edited block (so the caret does
+    // not stick to it) is not saved while nothing follows it, and goes when the caret leaves.
+    void editorSpaceNotSaved()
+    {
+        Fixture f(u"- Zadzwonić /przyp\n- Drugi\n"_s);
+        f.page.startEditing(0, 16);
+        f.page.applySlashCommand(0, 10, 16, u"reminder"_s);
+        f.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00 \n- Drugi\n"_s);
+        QCOMPARE(f.page.cursorPosition(), int(f.edit(0).size()));
+        QCOMPARE(f.host.file(Page), u"- Zadzwonić ⏰ 2026-10-16 18:00\n- Drugi\n"_s);
+        QVERIFY(!f.page.dirty());
+        f.page.startEditing(1);
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n- Drugi\n"_s);
+        QCOMPARE(f.host.file(Page), f.text());
+        QVERIFY(!f.page.dirty());
+        // No undo step of its own: undo takes the reminder away, redo brings it back without the space.
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Zadzwonić \n- Drugi\n"_s);
+        f.page.redo();
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n- Drugi\n"_s);
+        QCOMPARE(f.host.file(Page), f.text());
+
+        // Typed after it, the space stays; typed and deleted again, it goes as the caret leaves.
+        Fixture typed(u"- /przyp\n"_s);
+        typed.page.startEditing(0, 6);
+        typed.page.applySlashCommand(0, 0, 6, u"reminder"_s);
+        typed.page.setReminder(0, u"2026-10-16 18:00"_s, true, u"every day"_s);
+        const QString written = typed.edit(0);
+        QCOMPARE(typed.text(), u"- ⏰! 2026-10-16 18:00 🔁 every day \n"_s);
+        QCOMPARE(typed.host.file(Page), u"- ⏰! 2026-10-16 18:00 🔁 every day\n"_s);
+        typed.page.setEditText(0, written + u"żółw"_s, int(written.size()) + 4);
+        QCOMPARE(typed.host.file(Page), u"- ⏰! 2026-10-16 18:00 🔁 every day żółw\n"_s);
+        typed.page.setEditText(0, written, int(written.size()));
+        typed.page.stopEditing();
+        QCOMPARE(typed.text(), u"- ⏰! 2026-10-16 18:00 🔁 every day\n"_s);
+        QCOMPARE(typed.host.file(Page), typed.text());
+        Fixture kept(u"- /przyp\n"_s);
+        kept.page.startEditing(0, 6);
+        kept.page.applySlashCommand(0, 0, 6, u"reminder"_s);
+        kept.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QString text = kept.edit(0) + u"zadzwonić"_s;
+        kept.page.setEditText(0, text, int(text.size()));
+        kept.page.stopEditing();
+        QCOMPARE(kept.host.file(Page), u"- ⏰ 2026-10-16 18:00 zadzwonić\n"_s);
+
+        // A completed date and a completed tag, the same.
+        Fixture date(u"- Zadzwonić ⏰ jutro o 9\n- Drugi\n"_s);
+        date.page.startEditing(0, int(date.edit(0).size()));
+        date.page.applyCompletion(0, completionTriggerAt(date.edit(0), int(date.edit(0).size())).toMap(),
+                                  {{u"insertText"_s, u"2026-10-16 09:00"_s}, {u"kind"_s, u"date"_s}});
+        QCOMPARE(date.text(), u"- Zadzwonić ⏰ 2026-10-16 09:00 \n- Drugi\n"_s);
+        QCOMPARE(date.host.file(Page), u"- Zadzwonić ⏰ 2026-10-16 09:00\n- Drugi\n"_s);
+        date.page.startEditing(1);
+        QCOMPARE(date.text(), u"- Zadzwonić ⏰ 2026-10-16 09:00\n- Drugi\n"_s);
+        Fixture tag(u"- Kupić #zak\n"_s);
+        tag.page.startEditing(0, int(tag.edit(0).size()));
+        tag.page.applyCompletion(0, completionTriggerAt(tag.edit(0), int(tag.edit(0).size())).toMap(),
+                                 {{u"insertText"_s, u"zakupy domowe"_s}, {u"kind"_s, u"tag"_s}});
+        QCOMPARE(tag.text(), u"- Kupić #[[zakupy domowe]] \n"_s);
+        QCOMPARE(tag.host.file(Page), u"- Kupić #[[zakupy domowe]]\n"_s);
+        tag.page.stopEditing();
+        QCOMPARE(tag.text(), u"- Kupić #[[zakupy domowe]]\n"_s);
+
+        // A space the user typed is the user's: saved and kept.
+        Fixture own(u"- Zadzwonić\n"_s);
+        own.page.startEditing(0, 9);
+        own.page.setEditText(0, u"Zadzwonić "_s, 10);
+        own.page.stopEditing();
+        QCOMPARE(own.host.file(Page), u"- Zadzwonić \n"_s);
+    }
+
     void slashCommands()
     {
         Fixture f(u"- Zrobić /zad\n"_s);

@@ -382,6 +382,9 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   2026-10-15 09:00`, `(@2026-10-15 09:00)`) the rest of the line completes as anywhere else
   (`/`, `#`). A reminder added from the dialog where the caret was at the end of the text leaves
   the caret after it and a space, as a completed date does, so a `/` typed next opens the menu.
+  Such a space the editor adds after a completed date or tag or a reminder at the end of the
+  block is not saved while nothing follows it, and goes when the caret leaves the block (part
+  of the undo step that wrote it; `PageController::rememberEditorSpace`).
 * Slash commands (`/`, Polish and English names, diacritic-insensitive filter): the task
   statuses Zadanie: do zrobienia / w toku / zrobione / oczekujące / anulowane / bez statusu
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,

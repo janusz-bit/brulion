@@ -102,6 +102,16 @@ public:
         return true;
     }
     void setMergeable(bool mergeable) { m_mergeable = mergeable; }
+    /// Change the result of this step, the current text `current`, to `amended` (the step stays
+    /// one): false when the current text is not its result.
+    bool amendResult(const QString &current, const QString &amended)
+    {
+        const std::optional<QString> before = m_delta.revert(current);
+        if (!before)
+            return false;
+        m_delta = TextDelta::between(*before, amended);
+        return true;
+    }
     /// Characters held by the step.
     qsizetype size() const { return m_delta.size(); }
     /// Unique among the steps of the app's run (PageController::undoToken(): an edit undone and
@@ -611,15 +621,68 @@ QString PageController::textToSave() const
 {
     const BlockDocument &doc = m_model->document();
     std::optional<BlockDocument> closed;
-    for (int i = 0; i + 1 < doc.count(); ++i) {
-        const QString body = loneFenceClosed(doc.at(i));
-        if (body.isEmpty() || !loneFenceRunsOn(doc, i))
-            continue;
+    const auto setBody = [&](int row, const QString &body) {
         if (!closed)
             closed = doc;
-        closed->setBody(i, body);
+        closed->setBody(row, body);
+    };
+    for (int i = 0; i + 1 < doc.count(); ++i) {
+        const QString body = loneFenceClosed(doc.at(i));
+        if (!body.isEmpty() && loneFenceRunsOn(doc, i))
+            setBody(i, body);
+    }
+    const int spaced = m_editorSpaceUid ? m_model->rowOfUid(m_editorSpaceUid) : -1;
+    if (validRow(spaced)) {
+        const QString body = bodyWithoutEditorSpace(doc.at(spaced));
+        if (!body.isEmpty())
+            setBody(spaced, body);
     }
     return closed ? closed->toString() : text();
+}
+
+void PageController::rememberEditorSpace(int row, const QString &tail)
+{
+    if (!validRow(row) || editingRow() != row || !tail.endsWith(u' '))
+        return;
+    m_editorSpaceUid = m_model->uidAt(row);
+    m_editorSpaceTail = tail;
+}
+
+QString PageController::bodyWithoutEditorSpace(const markdown::BlockEntry &entry) const
+{
+    if (!m_editorSpaceUid || entry.uid != m_editorSpaceUid || !entry.body.endsWith(m_editorSpaceTail))
+        return {};
+    return entry.body.chopped(1);
+}
+
+void PageController::dropEditorSpace(quint64 uid)
+{
+    if (!uid || uid != m_editorSpaceUid)
+        return;
+    const int row = m_model->rowOfUid(uid);
+    const QString body = validRow(row) ? bodyWithoutEditorSpace(m_model->document().at(row)) : QString();
+    m_editorSpaceUid = 0;
+    m_editorSpaceTail.clear();
+    if (body.isEmpty() || m_undoing || m_sourceMode)
+        return;
+    if (inCommand()) { // part of the enclosing undo step
+        applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
+        return;
+    }
+    // The file never had the space (textToSave()): the step that wrote it, when it is the last
+    // one, ends without it — undo needs no step of its own for a change nobody saw saved.
+    const QString before = text();
+    const Focus focusBefore = currentFocus();
+    if (!applyOp([&](BlockDocument &d) { return d.setBody(row, body); }).changed())
+        return;
+    const int last = m_undo->index() - 1;
+    auto *step = last >= 0 && last + 1 == m_undo->count()
+                         ? static_cast<EditCommand *>(const_cast<QUndoCommand *>(m_undo->command(last)))
+                         : nullptr;
+    if (!step || !step->amendResult(before, text()))
+        m_undo->push(new EditCommand(this, before, text(), focusBefore, Focus{-1, -1}, 0));
+    m_typingOpen = false;
+    markDirty();
 }
 
 void PageController::closeLoneFence(quint64 uid)
@@ -952,6 +1015,7 @@ void PageController::setFocus(const Focus &target, bool resetText)
     Focus focus = target;
     if (rowChanged && m_editingUid) {
         closeLoneFence(m_editingUid);
+        dropEditorSpace(m_editingUid);
         focus.row = m_model->rowOfUid(uid); // the same row: only that block's body changed
         if (!validRow(focus.row))
             return;
@@ -1165,6 +1229,7 @@ void PageController::stopEditing()
     closeLoneFence(m_editingUid);
     if (!m_editingUid)
         return; // closing it stopped editing already
+    dropEditorSpace(m_editingUid);
     m_editingUid = 0;
     m_typingOpen = false;
     m_model->setEditingUid(0);
@@ -1927,6 +1992,7 @@ void PageController::remapBlocks(const QHash<quint64, quint64> &mapping)
     m_editingUid = mapping.value(m_editingUid, 0);
     m_selectedUid = mapping.value(m_selectedUid, 0);
     m_anchorUid = mapping.value(m_anchorUid, 0);
+    m_editorSpaceUid = mapping.value(m_editorSpaceUid, 0);
     for (quint64 &uid : m_pickedUids)
         uid = mapping.value(uid, 0);
     m_pickedUids.removeAll(0);
@@ -2263,9 +2329,22 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
     // The caret at the end of the edited text stays there, after what was written — with a space
     // after it, as after a completed date: a "/" or "#" typed next starts a command or tag
     // instead of sticking to the token ("/przypomnienie" in an empty block, then "/").
+    // That space (also one typed before "/przypomnienie", now after the token) is not saved while
+    // nothing follows it (rememberEditorSpace()).
     const bool caretAtEnd = editingRow() == row && m_cursor >= m_model->editTextAt(row).size();
-    if (caretAtEnd && (body.endsWith(token) || (!ruleToken.isEmpty() && body.endsWith(ruleToken))))
-        body += u' ';
+    QString tail;
+    for (const QString &written : {token, ruleToken}) {
+        if (!caretAtEnd || written.isEmpty())
+            continue;
+        if (body.endsWith(written))
+            body += u' ';
+        else if (!body.endsWith(written + u' '))
+            continue;
+        tail = written + u' ';
+        break;
+    }
+    if (!tail.isEmpty())
+        rememberEditorSpace(row, tail); // before the edit saves the page
     editBody(row, body);
 }
 
@@ -2530,6 +2609,9 @@ QVariantMap PageController::applyCompletion(int row, const QVariantMap &triggerM
     if (editingRow() == row)
         m_cursor = cursorAfter;
     applyOp([&](BlockDocument &d) { return d.setBody(row, bodyWithEditText(m_model->document().at(row), updated)); });
+    // A space added after a date or tag that ends the block is not saved (rememberEditorSpace()).
+    if (replacement.endsWith(u' ') && cursorAfter == int(updated.size()))
+        rememberEditorSpace(row, replacement);
     endCommand(Focus{row, cursorAfter});
     if (editingRow() == row)
         emitEditTextReset();

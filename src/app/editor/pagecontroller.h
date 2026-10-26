@@ -505,7 +505,8 @@ public:
     /// Add a reminder (`⏰`/`⏰!` at `at`, "YYYY-MM-DD HH:mm"), or replace the reminder token at
     /// body range [from, to) (a clicked chip). `recurrence` (canonical rule) sets the block's 🔁
     /// token; an empty rule removes it when editing an existing reminder. A caret at the end of
-    /// the edited text that what was written reaches stays at the end, after an added space.
+    /// the edited text that what was written reaches stays at the end, after an added space
+    /// (never saved while nothing follows it: rememberEditorSpace()).
     Q_INVOKABLE void setReminder(int row, const QString &at, bool alarm, const QString &recurrence,
                                  int from = -1, int to = -1);
     /// Remove the token at body range [from, to).
@@ -779,8 +780,19 @@ private:
     void updateTitleRow();
     /// The text written to the file: text() with the lone opening fences of text blocks that
     /// would run on over the blocks after them closed (loneFenceClosed(), loneFenceRunsOn()) —
-    /// "```js" being typed is saved as a closed, empty code block.
+    /// "```js" being typed is saved as a closed, empty code block — and without the space the
+    /// editor wrote after a token at the end of the edited block (rememberEditorSpace()).
     QString textToSave() const;
+    /// The edited block at `row` is to end with `tail`: a token the editor wrote (a completed date or
+    /// tag, a reminder from the dialog) and the space it added after it, so that the caret does
+    /// not stick to the token. The space is not saved while the block still ends with `tail`
+    /// (textToSave()) and goes when the caret leaves the block (dropEditorSpace()).
+    void rememberEditorSpace(int row, const QString &tail);
+    /// The body of `entry` without the remembered editor's space, or empty when it has none.
+    QString bodyWithoutEditorSpace(const markdown::BlockEntry &entry) const;
+    /// Leaving block `uid`: the editor's space after its last token goes (in the undo step that
+    /// wrote it when that is the last one, else in the enclosing command or one of its own).
+    void dropEditorSpace(quint64 uid);
     /// Leaving block `uid` (the caret moves to another block, editing stops): a body that is only
     /// an opening fence line gets its closing fence (in the undo step of the typing that wrote
     /// it, else in one of its own) when it was edited since the block got the caret or would run
@@ -874,6 +886,9 @@ private:
     /// The block that got the caret last and its body then (closeLoneFence()).
     quint64 m_focusedUid = 0;
     QString m_focusedBody;
+    /// The block with the editor's space and the token with that space (rememberEditorSpace()).
+    quint64 m_editorSpaceUid = 0;
+    QString m_editorSpaceTail;
 };
 
 } // namespace brulion::editor
