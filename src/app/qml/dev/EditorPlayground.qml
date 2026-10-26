@@ -848,6 +848,49 @@ ApplicationWindow {
                 const section = info(rowOf("Budżet na październik") + 1)
                 check(section.view === "text", "the embedded section's block is a text block")
             },
+            // ---- Undo of a block inserted at the very start of a page (row 0) ----------------------
+            // The caret goes back to the block it was in and every row shows its own block.
+            () => {
+                page.save()
+                host.setFile("Na początek.md", "- Zażółć gęślą\n- jaźń\n")
+                page.path = "Na początek.md"
+            },
+            () => editor.startEditing(0, 0),
+            () => realKey(Qt.Key_Return),
+            () => check(page.blocks.count === 3 && info(0).plainText === "" && page.editingRow === 1
+                        && editor.activeEditor && editor.activeEditor.activeFocus && editor.activeEditor.row === 1
+                        && editor.activeEditor.plain() === "Zażółć gęślą",
+                        "real Enter at the start of the first block puts an empty block above it"),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier),
+            () => {
+                check(page.sourceText === "- Zażółć gęślą\n- jaźń\n" && page.blocks.count === 2,
+                      "real Ctrl+Z takes the block at the start away: " + JSON.stringify(page.sourceText))
+                check(page.editingRow === 0 && editor.activeEditor && editor.activeEditor.activeFocus
+                      && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "Zażółć gęślą"
+                      && editor.activeEditor.cursorPosition === 0,
+                      "after Ctrl+Z the caret is at the start of the first block: row "
+                      + (editor.activeEditor ? editor.activeEditor.row + " " + JSON.stringify(editor.activeEditor.plain()) : "none"))
+                const second = editor.listView.itemAtIndex(1)
+                check(second !== null && textContaining(second, "jaźń") !== null && textContaining(second, "Zażółć") === null,
+                      "after Ctrl+Z the second row shows its own block")
+            },
+            () => typeKeys("ą"),
+            () => check(page.sourceText === "- ąZażółć gęślą\n- jaźń\n", "typing after Ctrl+Z goes into the first block: "
+                        + JSON.stringify(page.sourceText)),
+            () => { realKey(Qt.Key_Z, Qt.ControlModifier); editor.startEditing(1, 2) },
+            () => page.insertBlockAfter(-1),
+            () => check(page.editingRow === 0 && info(0).plainText === "" && editor.activeEditor && editor.activeEditor.row === 0,
+                        "a block inserted at the start of the page is edited"),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.sourceText === "- Zażółć gęślą\n- jaźń\n" && page.editingRow === 1 && editor.activeEditor
+                        && editor.activeEditor.activeFocus && editor.activeEditor.row === 1 && editor.activeEditor.plain() === "jaźń"
+                        && editor.activeEditor.cursorPosition === 2,
+                        "real Ctrl+Z of that insertion puts the caret back where it was: row "
+                        + (editor.activeEditor ? editor.activeEditor.row + " " + JSON.stringify(editor.activeEditor.plain()) : "none")),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier),
+            () => check(page.blocks.count === 3 && page.editingRow === 0 && editor.activeEditor && editor.activeEditor.activeFocus
+                        && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "",
+                        "real Ctrl+Shift+Z inserts it again, edited"),
             // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
             () => { page.save(); page.path = host.documentPath },
             () => {

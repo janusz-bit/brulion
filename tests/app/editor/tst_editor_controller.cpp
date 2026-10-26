@@ -120,6 +120,89 @@ void verifyReload(Fixture &f)
         QCOMPARE(reopened.blocks()->editTextAt(r), f.edit(r));
 }
 
+/// What a view knows of a model that it only learns about through its signals: the rows'
+/// roles, fetched when rows are inserted, refetched on dataChanged (only the roles named) and
+/// on reset. stale() lists every role whose value the view still shows wrongly. Block uids and
+/// file line numbers are left out: no view shows them.
+class ViewMirror {
+public:
+    explicit ViewMirror(const QAbstractListModel *model) : m_model(model)
+    {
+        const QHash<int, QByteArray> names = model->roleNames();
+        for (auto it = names.begin(); it != names.end(); ++it) {
+            if (it.value() != "uid" && it.value() != "line")
+                m_roles.insert(it.key(), QString::fromLatin1(it.value()));
+        }
+        reset();
+        QObject::connect(model, &QAbstractItemModel::rowsInserted, &m_context, [this](const QModelIndex &, int first, int last) {
+            for (int r = first; r <= last; ++r)
+                m_rows.insert(r, fetch(r));
+        });
+        QObject::connect(model, &QAbstractItemModel::rowsRemoved, &m_context, [this](const QModelIndex &, int first, int last) {
+            m_rows.remove(first, last - first + 1);
+        });
+        QObject::connect(model, &QAbstractItemModel::rowsMoved, &m_context,
+                         [this](const QModelIndex &, int first, int last, const QModelIndex &, int destination) {
+                             const QList<QHash<int, QVariant>> part = m_rows.mid(first, last - first + 1);
+                             m_rows.remove(first, part.size());
+                             const int dest = destination > first ? destination - int(part.size()) : destination;
+                             for (int k = 0; k < part.size(); ++k)
+                                 m_rows.insert(dest + k, part[k]);
+                         });
+        QObject::connect(model, &QAbstractItemModel::modelReset, &m_context, [this] { reset(); });
+        QObject::connect(model, &QAbstractItemModel::dataChanged, &m_context,
+                         [this](const QModelIndex &from, const QModelIndex &to, const QList<int> &roles) {
+                             for (int r = from.row(); r <= to.row(); ++r) {
+                                 if (roles.isEmpty()) {
+                                     m_rows[r] = fetch(r);
+                                     continue;
+                                 }
+                                 for (const int role : roles) {
+                                     if (m_roles.contains(role))
+                                         m_rows[r].insert(role, value(r, role));
+                                 }
+                             }
+                         });
+    }
+
+    /// "row/role: shown → actual" for every stale value (empty: the view is current).
+    QStringList stale() const
+    {
+        QStringList out;
+        if (m_rows.size() != m_model->rowCount())
+            out.append(u"rows: %1 → %2"_s.arg(m_rows.size()).arg(m_model->rowCount()));
+        for (int r = 0; r < std::min(int(m_rows.size()), m_model->rowCount()); ++r) {
+            for (auto it = m_roles.begin(); it != m_roles.end(); ++it) {
+                const QVariant actual = value(r, it.key());
+                if (m_rows[r].value(it.key()) != actual)
+                    out.append(u"%1/%2: %3 → %4"_s.arg(r).arg(it.value(), m_rows[r].value(it.key()).toString(), actual.toString()));
+            }
+        }
+        return out;
+    }
+
+private:
+    QVariant value(int row, int role) const { return m_model->data(m_model->index(row), role); }
+    QHash<int, QVariant> fetch(int row) const
+    {
+        QHash<int, QVariant> out;
+        for (auto it = m_roles.begin(); it != m_roles.end(); ++it)
+            out.insert(it.key(), value(row, it.key()));
+        return out;
+    }
+    void reset()
+    {
+        m_rows.clear();
+        for (int r = 0; r < m_model->rowCount(); ++r)
+            m_rows.append(fetch(r));
+    }
+
+    const QAbstractListModel *m_model;
+    QObject m_context;
+    QHash<int, QString> m_roles;
+    QList<QHash<int, QVariant>> m_rows;
+};
+
 } // namespace
 
 class TestPageController : public QObject {
@@ -417,6 +500,113 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QVERIFY(!textResets.isEmpty());
         QCOMPARE(textResets.last().at(0).toInt(), 1);
         QCOMPARE(textResets.last().at(1).toString(), u"b"_s);
+    }
+
+    // A block inserted at the very start of a page (row 0), then undone and redone: the rows a
+    // view learns about from the model's signals match the model, the caret goes back to the
+    // block (and place) it was in, and only that row is the edited one.
+    void undoOfAnInsertionAtTheStart_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("command"); // "enter": Enter at the edited place; "insert": insertBlockAfter(-1)
+        QTest::addColumn<int>("editRow");      // edited before the command (-1: nothing)
+        QTest::addColumn<int>("editCursor");
+        QTest::addColumn<QString>("inserted"); // the text after the command
+        QTest::addColumn<int>("rowAfter");     // edited after the command
+
+        QTest::newRow("enter-list") << u"- Zażółć gęślą\n- jaźń\n"_s << u"enter"_s << 0 << 0
+                                    << u"- \n- Zażółć gęślą\n- jaźń\n"_s << 1;
+        QTest::newRow("enter-children") << u"- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << u"enter"_s << 0 << 0
+                                        << u"- \n- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << 1;
+        QTest::newRow("enter-task") << u"- [ ] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
+                                    << u"- [ ] \n- [ ] Kupić ćwikłę\n- dalej\n"_s << 1;
+        QTest::newRow("enter-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 0 << 0
+                                         << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1;
+        QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0
+                                     << u"\n\n# Strona\n- treść\n"_s << 1;
+        QTest::newRow("enter-ordered") << u"1. jeden\n2. dwa\n3. trzy\n"_s << u"enter"_s << 0 << 0
+                                       << u"1. \n2. jeden\n3. dwa\n4. trzy\n"_s << 1;
+        QTest::newRow("enter-empty-first") << u"- \n- \n- b\n"_s << u"enter"_s << 0 << 0
+                                           << u"- \n- \n- \n- b\n"_s << 1;
+        QTest::newRow("enter-after-properties") << u"---\ntags: [dom]\n---\n- Zażółć gęślą\n"_s << u"enter"_s << 1 << 0
+                                                << u"---\ntags: [dom]\n---\n- \n- Zażółć gęślą\n"_s << 2;
+        QTest::newRow("enter-crlf") << u"- ąę\r\n- b\r\n"_s << u"enter"_s << 0 << 0 << u"- \r\n- ąę\r\n- b\r\n"_s << 1;
+        QTest::newRow("insert-nothing-edited") << u"- a\n- b\n"_s << u"insert"_s << -1 << -1
+                                               << u"- \n- a\n- b\n"_s << 0;
+        QTest::newRow("insert-editing-below") << u"- a\n- bęben\n"_s << u"insert"_s << 1 << 3
+                                              << u"- \n- a\n- bęben\n"_s << 0;
+        QTest::newRow("insert-same-as-first") << u"- \n- b\n"_s << u"insert"_s << 0 << 0 << u"- \n- \n- b\n"_s << 0;
+    }
+
+    void undoOfAnInsertionAtTheStart()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, command);
+        QFETCH(int, editRow);
+        QFETCH(int, editCursor);
+        QFETCH(QString, inserted);
+        QFETCH(int, rowAfter);
+
+        Fixture f(content);
+        if (editRow >= 0)
+            f.page.startEditing(editRow, editCursor);
+        const ViewMirror view(f.model());
+        QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        const auto editedRows = [&] {
+            QList<int> rows;
+            for (int r = 0; r < f.count(); ++r) {
+                if (f.role(r, "isEditing").toBool())
+                    rows.append(r);
+            }
+            return rows;
+        };
+        const auto check = [&](const QString &text, int row, int cursor) {
+            QCOMPARE(f.text(), text);
+            QCOMPARE(view.stale(), QStringList());
+            QCOMPARE(f.page.editingRow(), row);
+            QCOMPARE(editedRows(), row >= 0 ? QList<int>{row} : QList<int>{});
+            if (row < 0)
+                return;
+            if (cursor >= 0)
+                QCOMPARE(f.page.cursorPosition(), cursor);
+            // The edited row's text editor gets that row's text.
+            QVERIFY(!textResets.isEmpty());
+            QCOMPARE(textResets.last().at(0).toInt(), row);
+            QCOMPARE(textResets.last().at(1).toString(), f.edit(row));
+            QCOMPARE(textResets.last().at(2).toInt(), f.page.cursorPosition());
+        };
+
+        if (command == u"enter"_s)
+            f.page.split(editRow, editCursor);
+        else
+            f.page.insertBlockAfter(-1);
+        check(inserted, rowAfter, 0);
+        if (QTest::currentTestFailed())
+            return;
+        const int afterCursor = f.page.cursorPosition();
+
+        for (int round = 0; round < 2; ++round) {
+            textResets.clear();
+            f.page.undo();
+            check(content, editRow, editCursor);
+            if (QTest::currentTestFailed())
+                return;
+            QVERIFY(!f.page.canUndo());
+            textResets.clear();
+            f.page.redo();
+            check(inserted, rowAfter, afterCursor);
+            if (QTest::currentTestFailed())
+                return;
+        }
+        f.page.undo();
+        // Typing goes into the block the caret is back in.
+        if (editRow >= 0) {
+            const QString typed = f.edit(editRow) + u"ż"_s;
+            f.page.setEditText(editRow, typed, int(typed.size()));
+            QCOMPARE(f.edit(editRow), typed);
+            QCOMPARE(view.stale(), QStringList());
+        }
+        verifyReload(f);
     }
 
     void typingTaskMarkerBecomesCheckbox()
