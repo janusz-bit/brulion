@@ -15,7 +15,6 @@
 #include <QJsonObject>
 #include <QRandomGenerator>
 #include <QRegularExpression>
-#include <QSaveFile>
 #include <QSet>
 
 #include <algorithm>
@@ -301,10 +300,9 @@ bool History::save(const VaultPath &path, const QList<Stored> &entries)
 
 bool History::writeFile(const QString &file, QByteArrayView bytes)
 {
-    QSaveFile out(file);
-    if (!QDir().mkpath(QFileInfo(file).absolutePath()) || !out.open(QIODevice::WriteOnly)
-        || out.write(bytes.data(), bytes.size()) != bytes.size() || !out.commit())
-        return fail(tr("Cannot write %1: %2").arg(file, out.errorString()));
+    QString error;
+    if (!QDir().mkpath(QFileInfo(file).absolutePath()) || !vaultutil::saveAtomically(file, bytes, &error))
+        return fail(tr("Cannot write %1: %2").arg(file, error));
     return true;
 }
 

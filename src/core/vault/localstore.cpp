@@ -9,7 +9,6 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonParseError>
-#include <QSaveFile>
 
 using namespace Qt::StringLiterals;
 
@@ -160,10 +159,9 @@ bool LocalStore::flush()
     for (auto it = m_data.cbegin(); it != m_data.cend(); ++it)
         object.insert(it.key(), it.value());
     const QByteArray bytes = QJsonDocument(object).toJson(QJsonDocument::Compact);
-    QSaveFile file(m_path);
-    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()) || !file.open(QIODevice::WriteOnly)
-        || file.write(bytes) != bytes.size() || !file.commit()) {
-        m_error = tr("Cannot save %1: %2").arg(m_path, file.errorString());
+    QString error;
+    if (!QDir().mkpath(QFileInfo(m_path).absolutePath()) || !vaultutil::saveAtomically(m_path, bytes, &error)) {
+        m_error = tr("Cannot save %1: %2").arg(m_path, error);
         Q_EMIT saveFailed(m_error);
         return false;
     }

@@ -4,7 +4,9 @@
 #include "vault/vaultconfig.h"
 
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSet>
+#include <QThread>
 
 using namespace Qt::StringLiterals;
 
@@ -98,6 +100,27 @@ bool isTracked(const VaultPath &path)
 QByteArray utf8Bom()
 {
     return QByteArrayLiteral("\xEF\xBB\xBF");
+}
+
+bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *error)
+{
+    constexpr int kAttempts = 4;
+    for (int attempt = 0;; ++attempt) {
+        QSaveFile file(absolutePath);
+        if (!file.open(QIODevice::WriteOnly) || file.write(bytes.data(), bytes.size()) != bytes.size()) {
+            if (error)
+                *error = file.errorString();
+            return false;
+        }
+        if (file.commit())
+            return true;
+        if (file.error() != QFileDevice::RenameError || attempt + 1 == kAttempts) {
+            if (error)
+                *error = file.errorString();
+            return false;
+        }
+        QThread::msleep(15 * (attempt + 1)); // 15 + 30 + 45 ms
+    }
 }
 
 QString decodeUtf8(const QByteArray &bytes)
