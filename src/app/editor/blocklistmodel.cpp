@@ -55,10 +55,19 @@ QString alignName(calc::TableAlign a)
 }
 
 /// The text may hold an inline calculation (`` `= expr` ``): its rendering depends on the calc
-/// variables above the block.
+/// variables above the block. Like InlineRenderer, which trims the code span's content (line
+/// breaks read as spaces), any whitespace may stand between the backtick and the `=`: a code
+/// span whose text starts on the next line of the block (`` `⏎= cena`` ``) is one too.
 bool hasInlineCalc(const QString &text)
 {
-    return text.contains(u"`=") || text.contains(u"` =");
+    for (qsizetype i = text.indexOf(u'`'); i >= 0; i = text.indexOf(u'`', i + 1)) {
+        qsizetype j = i + 1;
+        while (j < text.size() && text[j].isSpace())
+            ++j;
+        if (j < text.size() && text[j] == u'=')
+            return true;
+    }
+    return false;
 }
 
 /// Longest common subsequence of two lists of strings as matched index pairs, with common

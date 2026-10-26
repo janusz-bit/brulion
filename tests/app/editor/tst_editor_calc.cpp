@@ -321,6 +321,51 @@ private Q_SLOTS:
         VERIFY_FRESH(f);
     }
 
+    void inlineCalculationAfterALineBreak_data()
+    {
+        QTest::addColumn<QString>("block");
+        // The code span's text starts on the next line of the block: a line break (rendered as
+        // a space) before `=` still makes it an inline calculation.
+        QTest::addRow("LF") << u"Wynik: `\n= cena * 2` zł"_s;
+        QTest::addRow("CRLF") << u"Wynik: `\r\n= cena * 2` zł"_s;
+        QTest::addRow("indented line") << u"Wynik: `\n   = cena * 2` zł"_s;
+        QTest::addRow("double backticks") << u"Wynik: ``\n= cena * 2 `` zł"_s;
+        QTest::addRow("tab") << u"Wynik: `\t= cena * 2` zł"_s;
+        QTest::addRow("two spaces") << u"Wynik: `  = cena * 2` zł"_s;
+    }
+
+    void inlineCalculationAfterALineBreak()
+    {
+        // Old bug: such a block was rendered with the variables once and never again when
+        // they changed (the model did not see that its html depends on the calc scope).
+        QFETCH(QString, block);
+        QString content = u"```calc\ncena = 10\n```\n\nŻółć pośrodku\n\n"_s + block + u"\n"_s;
+        if (block.contains(u'\r'))
+            content.replace(u"\n"_s, u"\r\n"_s).replace(u"\r\r\n"_s, u"\r\n"_s);
+        Fixture f(content);
+        const auto shown = [&f](int row) { return f.html(row).remove(QRegularExpression(u"<[^>]*>"_s)); };
+        const int row = f.rowOf(u"Wynik:"_s);
+        QVERIFY(row > 0);
+        QVERIFY2(shown(row).contains(u"20"_s), qPrintable(f.html(row)));
+
+        f.page.setEditText(0, u"cena = 21"_s);
+        QVERIFY2(shown(row).contains(u"42"_s), qPrintable(f.html(row)));
+        VERIFY_FRESH(f);
+
+        f.page.setEditText(0, u"inna = 1"_s);
+        QVERIFY2(shown(row).contains(u"#ERR"_s), qPrintable(f.html(row)));
+        VERIFY_FRESH(f);
+        f.page.undo();
+        QVERIFY2(shown(row).contains(u"20"_s), qPrintable(f.html(row)));
+        VERIFY_FRESH(f);
+
+        // A property between them overrides.
+        const int at = f.page.insertBlockAfter(f.rowOf(u"Żółć"_s), u"cena:: 3"_s);
+        QVERIFY(at > 0);
+        QVERIFY2(shown(f.rowOf(u"Wynik:"_s)).contains(u"6"_s), qPrintable(f.html(f.rowOf(u"Wynik:"_s))));
+        VERIFY_FRESH(f);
+    }
+
     void propertyAboveATableIsEdited()
     {
         // `key:: value` properties in list items, a table below and one above the definition.

@@ -518,9 +518,9 @@ sum                   → 139
 
 ### Inline calculations
 Inline code starting with `=`: `` `= cena * 2` `` renders as the result — in any block text,
-table cells included. Variables from calc blocks earlier on the same page are in scope, as are
-numeric page properties (frontmatter and `key:: value`; `due-date` becomes `due_date`); the
-result follows them when they change.
+table cells included (spaces or a line break may come before the `=`). Variables from calc
+blocks earlier on the same page are in scope, as are numeric page properties (frontmatter and
+`key:: value`; `due-date` becomes `due_date`); the result follows them when they change.
 
 ### Table formulas
 Any GFM table body cell whose content starts with `=` is a formula, rendered as its result:
