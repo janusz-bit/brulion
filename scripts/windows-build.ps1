@@ -248,19 +248,27 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
 
         Info "$Label`: brulion.exe --selftest-shell (offscreen)"
         foreach ($dir in $ProfileDirs) { if (Test-Path $dir) { Remove-Item -Recurse -Force $dir } }
-        $log = Join-Path $TempRoot "brulion-$($Label -replace '\W', '-').log"
-        $err = "$log.err"
-        # brulion.exe is a GUI program: Start-Process waits for it and gives its exit code.
-        $arguments = '--demo --route journals --selftest-shell --no-single-instance --size 412x915 --touch ' +
+        # brulion.exe is a GUI program (no console): started directly, with its output captured
+        # (UTF-8) and its exit code. The environment is this process's, as changed above.
+        $start = [Diagnostics.ProcessStartInfo]::new($exe)
+        $start.Arguments = '--demo --route journals --selftest-shell --no-single-instance --size 412x915 --touch ' +
             '--now "2026-10-14 10:00" --locale pl'
-        $process = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $Dir -NoNewWindow `
-            -PassThru -RedirectStandardOutput $log -RedirectStandardError $err
-        $null = $process.Handle # without it ExitCode stays empty
+        $start.WorkingDirectory = $Dir
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = [Text.Encoding]::UTF8
+        $start.StandardErrorEncoding = [Text.Encoding]::UTF8
+        $process = [Diagnostics.Process]::Start($start)
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit(300000)) {
             $process.Kill()
             Fail "$Label`: brulion.exe --selftest-shell did not finish in 5 minutes"
         }
-        $output = (Get-Content -Raw -ErrorAction SilentlyContinue $log) + (Get-Content -Raw -ErrorAction SilentlyContinue $err)
+        $process.WaitForExit() # the output's end too
+        $output = $stdout.Result + $stderr.Result
         if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
         if ($process.ExitCode -ne 0) { Fail "$Label`: brulion.exe --selftest-shell exited with $($process.ExitCode)" }
         if ($output -match '(?i)is not installed|module .* not found|cannot load library|could not load the qt platform plugin|failed to load|TypeError|ReferenceError') {
