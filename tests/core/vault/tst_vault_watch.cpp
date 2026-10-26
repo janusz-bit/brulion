@@ -4,6 +4,7 @@
 #include "vaulttest.h"
 
 #include <QRegularExpression>
+#include <QThread>
 
 #include <cstdio>
 
@@ -21,15 +22,24 @@ qint64 diskMtime(const QString &abs)
 }
 
 /// rename(2) that replaces an existing target, like editors and Syncthing do (on Windows
-/// MoveFileEx, as there the C library's rename() never replaces a file).
+/// MoveFileEx, as there the C library's rename() never replaces a file — and, as those programs
+/// do, again a moment later while something still has the target open for a look: the watcher
+/// thread, a virus scanner).
 bool replaceBehind(const QString &root, const QString &from, const QString &to)
 {
 #ifdef Q_OS_WIN
     const QString a = QDir::toNativeSeparators(root + u'/' + from);
     const QString b = QDir::toNativeSeparators(root + u'/' + to);
-    return ::MoveFileExW(reinterpret_cast<const wchar_t *>(a.utf16()), reinterpret_cast<const wchar_t *>(b.utf16()),
-                         MOVEFILE_REPLACE_EXISTING)
-           != 0;
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        if (::MoveFileExW(reinterpret_cast<const wchar_t *>(a.utf16()), reinterpret_cast<const wchar_t *>(b.utf16()),
+                          MOVEFILE_REPLACE_EXISTING))
+            return true;
+        const DWORD error = ::GetLastError();
+        if (error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED)
+            return false;
+        QThread::msleep(20);
+    }
+    return false;
 #else
     const QByteArray a = QFile::encodeName(root + u'/' + from);
     const QByteArray b = QFile::encodeName(root + u'/' + to);
