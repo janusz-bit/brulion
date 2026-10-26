@@ -22,6 +22,8 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * format HTML tworzony dopiero wtedy, gdy inna aplikacja o niego poprosi (kopia dużej strony
     ~3× szybsza);
   * zaznaczanie bloków z kilku dni dziennika naraz.
+* **Dostosowanie wyglądu interfejsu** — własne ustawienia UI (do doprecyzowania, np. kolory
+  i motywy, czcionka i jej rozmiar, układ i widoczność elementów).
 * **brulion-cli po polsku** — komunikaty wiersza poleceń mają dziś tylko wersję angielską.
 
 ## Import i synchronizacja
