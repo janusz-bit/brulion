@@ -189,6 +189,12 @@ aplikacji „Dostęp do wszystkich plików”). Brulion zapisuje pliki atomowo, 
 konfliktów Syncthinga (`*.sync-conflict-*`) i pozwala je scalić. Opcjonalnie pokazuje stan
 synchronizacji z API Syncthinga.
 
+**Masz już skarbiec Obsidiana w Syncthingu?** Nie importuj go i nie włączaj dla niego
+Nextclouda — po prostu otwórz jego folder jako notatnik na każdym urządzeniu. Obie aplikacje
+mogą z niego korzystać na zmianę; warto tylko raz ustawić folder i format dziennika jak
+w notatkach dziennych Obsidiana. Co działa, co się różni i co Brulion dopisuje do folderu:
+[docs/IMPORT.md](docs/IMPORT.md#folder-obsidiana-bez-importu).
+
 **Nextcloud (WebDAV):** w *Centrum synchronizacji* (menu *Więcej* ⋮ lub *Ustawienia →
 Synchronizacja*) podaj adres serwera, użytkownika i **hasło aplikacji** (Nextcloud →
 Ustawienia osobiste → Bezpieczeństwo → „Utwórz nowe hasło aplikacji”) oraz folder (przy
@@ -375,7 +381,7 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   [docs/WINDOWS.md](docs/WINDOWS.md)). On phones the editing toolbar always sits right on the on-screen keyboard
   (Android's IME insets, frame by frame on Android 11+; the browser's visualViewport).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
-  the app) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
+  the app; an Obsidian vault synced with Syncthing opens as it is, no import needed) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard; folders travel too — empty ones, deletions of emptied ones, and a folder
   renamed in the app is moved on the server in one WebDAV MOVE, never mistaken for a mass
   deletion).

@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="496"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="515"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -43,7 +43,7 @@
 <context>
     <name>BDatePicker</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/components/BDatePicker.qml" line="394"/>
+        <location filename="../src/app/qml/components/BDatePicker.qml" line="395"/>
         <source>%n item(s)</source>
         <translation>
             <numerusform>%n item</numerusform>
@@ -629,7 +629,7 @@
 <context>
     <name>QueryBlockView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="88"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="89"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
@@ -637,7 +637,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="89"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="90"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -645,7 +645,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="90"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="91"/>
         <source>%n reminder(s)</source>
         <translation>
             <numerusform>%n reminder</numerusform>
@@ -653,7 +653,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="91"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="92"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>
@@ -661,7 +661,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="438"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="448"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -1093,7 +1093,7 @@
 <context>
     <name>TransclusionView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TransclusionView.qml" line="330"/>
+        <location filename="../src/app/qml/editor/TransclusionView.qml" line="380"/>
         <source>%n more block(s) — open the page</source>
         <translation>
             <numerusform>%n more block — open the page</numerusform>

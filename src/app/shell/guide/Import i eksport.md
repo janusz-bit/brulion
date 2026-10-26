@@ -19,6 +19,13 @@ Tekst z programów, które nie piszą w Markdownie (HTML, Evernote, Google Keep,
 
 Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po prostu otworzyć ich folder jako notatnik. Notatki z Obsidiana (nagłówki i akapity) otworzą się jako dokumenty, a z Logseqa (same punkty) jako konspekty. Tag to w Brulionie [[Tagi i właściwości#Tag to link do strony|link do strony]], jak w Logsequ: strony tagów z Logseqa łączą się ze swoimi tagami. W Obsidianie tagi i strony są osobne — tag `#projekt` obok strony „Projekt” zacznie do niej prowadzić.
 
+### Skarbiec Obsidiana bez importu
+Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu jako notatnik (*Przełącz notatnik → Otwórz inny notatnik…*) na każdym urządzeniu i zostaw synchronizację Syncthingowi; nie włączaj dla niego dodatkowo Nextclouda. Folder `.obsidian/` Brulion pomija.
+
+- W **Ustawienia → Notatnik** wpisz raz folder i format dziennika z notatek dziennych Obsidiana (domyślnie trzyma je na samej górze skarbca, więc zostaw „Folder dziennika” pusty; format `YYYY-MM-DD` z Obsidiana to tu `yyyy-MM-dd`) i folder załączników. Inaczej nowe dni powstaną w `journals/`.
+- Do bloków linkuj przez **Kopiuj link do bloku** (`[[Strona#^id]]`) — odwołanie `((id))` Obsidian pokaże jako zwykły tekst. Przypomnienia `⏰`, bloki `calc` i `query` to składnia Brulionu; zadania wtyczki Tasks działają w obu aplikacjach.
+- Nie edytuj tej samej notatki w obu aplikacjach w tej samej chwili; zmiany z dysku Brulion przejmuje na bieżąco, a poprzednie wersje zostają w historii.
+
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,
 - statyczna **strona HTML** albo jeden plik HTML,

@@ -44,9 +44,10 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 * **Import zadań z Microsoft To Do** (link z researchem:
   https://share.google/aimode/IkspZGTIWv9OVFLLT).
-* **Istniejący folder Obsidiana** — odpowiedzieć na pytanie, czy można po prostu otworzyć folder
-  z notatkami Obsidiana synchronizowany Syncthingiem, czy lepiej użyć synchronizacji, którą
-  proponuje aplikacja. Ewentualnie dopisać odpowiedź do dokumentacji lub onboardingu.
+* **Ustawienia ze skarbca Obsidiana** — notatnik otwarty w folderze Obsidiana bez
+  `.brulion/config.json` mógłby sam przejąć folder, format (Moment → Qt) i szablon dziennika
+  z `.obsidian/daily-notes.json` oraz folder załączników z `.obsidian/app.json`; dziś trzeba je
+  raz wpisać w ustawieniach (docs/IMPORT.md „Folder Obsidiana bez importu”).
 * **Zmiana nazwy folderu w Nextcloud** — zrobiona na serwerze dociera do innych urządzeń jako
   pobranie i kosz, więc historia wersji, ulubione i zwinięcia nie idą za stroną.
 

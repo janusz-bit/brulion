@@ -19,6 +19,78 @@ Dotyczy to też znaku `$` — ale tylko tam, gdzie dwa `$` utworzyłyby wzór (�
 Netflix 15$”, „$x$”); pojedyncze ceny („$5 i $10”, „15$”) zostają bez zmian. Kod i adresy
 linków nie są zmieniane.
 
+## Folder Obsidiana bez importu
+
+Skarbca Obsidiana nie trzeba importować — także takiego, który już synchronizujesz
+Syncthingiem. Brulion czyta te same pliki `.md`, więc folder skarbca możesz po prostu otworzyć
+jako notatnik (na ekranie startowym albo *Przełącz notatnik → Otwórz inny notatnik…*) na każdym
+urządzeniu, na którym Syncthing go trzyma; na Androidzie Brulion poprosi o „Dostęp do wszystkich
+plików” (szczegóły: [ANDROID.md](ANDROID.md)). Obie aplikacje mogą pracować na tym samym
+folderze na zmianę.
+
+**Polecenie:** zostań przy Syncthingu i otwórz folder. *Nie* włączaj dla tego notatnika
+dodatkowo synchronizacji z Nextcloudem — dwa mechanizmy synchronizacji na jednym folderze
+przesyłają te same zmiany dwiema drogami i mnożą konflikty. Nextcloud ma sens tam, gdzie
+Syncthinga nie ma (przeglądarka, notatki w pamięci aplikacji na telefonie). Import wybierz
+tylko wtedy, gdy chcesz osobnej kopii (np. żeby wypróbować Brulion bez dotykania skarbca):
+zaimportowane notatki trafiają do innego notatnika i nie są już tymi samymi plikami.
+
+**Co działa od razu:** linki `[[Strona]]`, `[[Strona|alias]]`, `[[Strona#Nagłówek]]`,
+`[[Strona#^id]]`, osadzenia `![[…]]` (także obrazów leżących w dowolnym folderze), linki
+Markdownowe, nagłówek YAML (`tags`, `aliases`), tagi, ramki `> [!note]`, `==zakreślenia==`,
+`%%komentarze%%`, wzory `$…$` i zadania w składni wtyczki **Tasks** (`📅 ⏳ 🛫 ✅ 🔁`) — Brulion
+także je tak zapisuje. Notatki z nagłówkami i akapitami otwierają się jako dokumenty, jak
+w Obsidianie. Zmiana nazwy albo przeniesienie strony poprawia linki do niej we wszystkich
+notatkach (jak w Obsidianie). Folder `.obsidian/` (ustawienia, wtyczki, motywy) jest pomijany
+i nigdy nie zmieniany, a kopie konfliktów Syncthinga (`*.sync-conflict-*`) notatek nie są
+pokazywane jako strony, tylko w centrum synchronizacji jako konflikty do scalenia.
+
+**Co ustawić raz** (*Ustawienia → Notatnik*; zapisuje się w `.brulion/config.json`, więc inne
+urządzenia dostaną to przez Syncthing):
+
+* **Folder dziennika** — Brulion trzyma dni w `journals/`, a Obsidian (wtyczka *Daily notes*)
+  domyślnie w głównym folderze skarbca. Wpisz folder z ustawień notatek dziennych Obsidiana
+  (`.obsidian/daily-notes.json`, pole `folder`) albo zostaw pole puste, gdy dni leżą na samej
+  górze — inaczej Brulion założy nowe dni w `journals/`, obok starych.
+* **Nazwy plików dziennika** — ten sam wzór co w Obsidianie (pole `format`), ale w zapisie Qt:
+  `YYYY-MM-DD` to `yyyy-MM-dd` (domyślny w obu), `DD.MM.YYYY` to `dd.MM.yyyy`.
+* **Szablon dziennika** — np. `Szablony/Dzień.md`, jeśli Obsidian ma szablon notatki dziennej.
+  Zmienne `{{date}}`, `{{time}}`, `{{title}}` działają w obu aplikacjach.
+* **Folder załączników** — gdzie trafiają wklejone obrazy (w Brulionie `assets/`; w Obsidianie
+  *Settings → Files and links → Default location for new attachments*). Obrazy już wstawione
+  działają bez tego.
+* **Tryb dziennika** — dni są domyślnie konspektem (punkty, jak w Logseq); jeśli piszesz
+  w notatkach dziennych akapitami, wybierz *Dokument*.
+
+**Co się różni:**
+
+* **Tagi** to w Brulionie linki do stron (jak w Logseq): `#projekt` prowadzi do strony
+  „projekt” — zob. „Tagi a strony” niżej. W plikach nic się przez to nie zmienia.
+* **Odwołanie do bloku** `((id))` (*Kopiuj odwołanie do bloku*, `Ctrl+Shift+C`) to składnia
+  Logseq: Obsidian pokaże je jako zwykły tekst. W skarbcu, który otwierasz w obu aplikacjach,
+  używaj *Kopiuj link do bloku* — `[[Strona#^id]]` działa w obu.
+* Przypomnienia `⏰ …`, bloki kodu `calc` i `query` oraz formuły w tabelach to składnia
+  Brulionu — Obsidian pokaże je jako tekst albo blok kodu. W drugą stronę: zapytania Dataview
+  i pliki innych wtyczek (np. rysunki Excalidraw `*.excalidraw.md`) Brulion pokaże jako zwykły
+  tekst lub stronę; pliki `.canvas` nie są stronami.
+* **Ulubione** (zakładki Obsidiana z `.obsidian/bookmarks.json` nie są czytane) i **zwinięcia
+  bloków** Brulion pamięta na urządzeniu, nie w plikach.
+
+**Co Brulion dopisuje do folderu:** `.brulion/config.json` (dopiero po zmianie ustawień
+notatnika), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
+*Move to Obsidian trash*; obie aplikacje go pomijają), nowe dni dziennika (dopiero po
+pierwszym wpisie — samo oglądanie dnia niczego nie tworzy), wklejone obrazy w folderze
+załączników, klucz `brulion: document`/`outline` w nagłówku YAML notatki, której tryb zmienisz
+ręcznie (Obsidian pokaże go jako zwykłą właściwość), i identyfikator ` ^id` na końcu bloku,
+do którego skopiujesz link — w formacie Obsidiana. Historia wersji, indeks i stan
+synchronizacji leżą poza folderem, więc Syncthing ich nie przesyła.
+
+**Ryzyko konfliktów:** nie edytuj tej samej notatki w tej samej chwili w obu aplikacjach ani na
+dwóch urządzeniach naraz. Brulion przejmuje zmiany z dysku na bieżąco (także w otwartej
+notatce, scalając je z tym, co właśnie piszesz), a poprzednie wersje zostają w *Historii
+wersji*. Gdy Syncthing mimo to zostawi kopię `*.sync-conflict-*`, scal ją w centrum
+synchronizacji. Konflikty w `.obsidian/` (np. `workspace.json`) dotyczą tylko Obsidiana.
+
 ## Tagi a strony
 
 W Brulionie tag nazywa stronę, jak w Logseq: `#praca` prowadzi do strony „praca” (szczegóły:

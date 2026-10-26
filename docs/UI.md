@@ -71,7 +71,9 @@ components — no Material/Fusion look, so all targets look identical.
   phones this menu (and the command palette) is the way to them. A new notebook (at most one
   note) also offers **Importuj notatki** under the empty journal's hint, and onboarding has an
   "Importuj notatki" card that opens the chosen notebook on its import tab
-  (`AppController.openVaultAt`).
+  (`AppController.openVaultAt`); outside the browser its text first says that an Obsidian vault
+  (also one synced with Syncthing) needs no import: its folder opens as the notebook
+  (docs/IMPORT.md "Folder Obsidiana bez importu").
 * **The documentation notebook** „Dokumentacja Brulionu” (desktop and Android; the browser has
   one notebook, so its sample welcome page links to the guide online): Brulion notes written
   from `src/app/shell/guide/*.md` into `<AppData>/Dokumentacja Brulionu` and brought up to date

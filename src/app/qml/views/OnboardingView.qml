@@ -281,7 +281,11 @@ Rectangle {
                         }
                         BText {
                             Layout.fillWidth: true
-                            text: qsTr("Brulion imports Obsidian vaults, Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others. The notebook above opens on its import screen.")
+                            // An Obsidian vault (synced with Syncthing or not) needs no import:
+                            // its folder opens as the notebook (docs/IMPORT.md).
+                            text: AppController.isWasm
+                                  ? qsTr("Brulion imports Obsidian vaults, Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others. The notebook above opens on its import screen.")
+                                  : qsTr("An Obsidian vault needs no import: choose its folder above and open it — also one synced with Syncthing. Other notes come in through import: Logseq graphs and exports of Notion, Evernote, Google Keep, Joplin and others; the notebook above opens on its import screen.")
                             variant: "muted"
                             font.pixelSize: Theme.textSm
                             wrapMode: Text.Wrap
