@@ -197,7 +197,8 @@ with the year when it is not the current one). The file keeps `[[2026-10-13]]`. 
 `[[Page#^id]]` without an alias shows "Page › " and the first 60 characters of the block's text,
 like `((id))` does: the block with that id on that page (Obsidian ids are the page's own: another
 page may have the same one), else, moved away, the block the link now leads to (below); the id
-itself while the block is unknown.
+itself while the block is unknown. Both show the block's current text, in table cells too: an edit
+of a block on the same page shows at once.
 
 ### Headings and blocks in links / Linki do nagłówków i bloków
 

@@ -239,7 +239,9 @@ private:
         bool onlyEmbeds = false;
         QVariantList calcResults;
         QVariantMap tableData;
-        QHash<QString, QString> cellHtml; ///< rendered table cells by text (until the rendering changes; no inline calculations)
+        /// Rendered table cells by text (until the rendering changes; no inline calculations or
+        /// block references: those depend on more than the cell's text).
+        QHash<QString, QString> cellHtml;
         bool transclusionsValid = false;
         bool transclusionsLocal = false; ///< embeds this page: follows every change of it
         QVariantList transclusions;
@@ -249,10 +251,12 @@ private:
         int renderOffset = 0;       ///< offset of the rendered text in the body (reminder: ranges)
         // Calculations: calcResults / tableData are current while resultsValid and, when they
         // read calc variables (resultsUseScope: calc blocks, tables with formulas or inline
-        // calculations in cells), resultsEpoch
-        // == m_calcEpoch (the block's own text and everything the calculations see unchanged).
+        // calculations in cells), resultsEpoch == m_calcEpoch (the block's own text and
+        // everything the calculations see unchanged). A table with block references in its
+        // cells (resultsUseRefs) is recomputed on every change of the page.
         bool resultsValid = false;
         bool resultsUseScope = false;
+        bool resultsUseRefs = false;
         int resultsEpoch = -1;
         bool calcTextValid = false; ///< calcInert / calcFences describe the current text
         bool calcInert = true;      ///< the text defines nothing (see analyseCalc())

@@ -261,6 +261,9 @@ private Q_SLOTS:
             << u"| Rzecz `= cena` | Kwota |\n| --- | --- |\n| Farba | `= cena * 2` zł |\n| Razem | =cena + 1 |\n"_s;
         QTest::addRow("spaced, CRLF")
             << u"| Rzecz ` = cena` | Kwota |\r\n| --- | --- |\r\n| Farba | ` = cena * 2` zł |\r\n"_s;
+        // Any whitespace may stand between the backtick and `=` (InlineRenderer trims it).
+        QTest::addRow("two spaces") << u"| Rzecz `  = cena` | Kwota |\n| --- | --- |\n| Farba | `  = cena * 2` zł |\n"_s;
+        QTest::addRow("tab") << u"| Rzecz `\t= cena` | Kwota |\n| --- | --- |\n| Farba | `\t= cena * 2` zł |\n"_s;
     }
 
     void inlineCalculationInATableCell()
@@ -318,6 +321,47 @@ private Q_SLOTS:
         VERIFY_FRESH(f);
         f.page.setTableCell(t, 0, 1, u"`= cena * 5` zł"_s, true);
         QVERIFY2(cellText(t, 0, 1).contains(u"15"_s), qPrintable(cellText(t, 0, 1)));
+        VERIFY_FRESH(f);
+    }
+
+    void blockReferenceInATableCell_data()
+    {
+        QTest::addColumn<QString>("cell");
+        QTest::addRow("block ref") << u"((farba-1))"_s;
+        QTest::addRow("same-page link") << u"[[#^farba-1]]"_s;
+        QTest::addRow("next to a formula") << u"((farba-1))"_s; // the table also has a formula row
+    }
+
+    void blockReferenceInATableCell()
+    {
+        // Old bug: a table cell was cached by its text, so a reference showed the referenced
+        // block's old text after that block was edited (a paragraph follows it).
+        QFETCH(QString, cell);
+        QString content = u"Żółta farba ^farba-1\n\n| Rzecz | Uwagi |\n| --- | --- |\n| Farba | "_s + cell
+                + u" |\n"_s;
+        if (QByteArrayView(QTest::currentDataTag()) == "next to a formula")
+            content += u"| Razem | =1 + 1 |\n"_s;
+        Fixture f(content);
+        const auto shown = [&f](int row) {
+            const QVariantList rows = f.role(row, BlockListModel::TableDataRole).toMap().value(u"rows"_s).toList();
+            QString html = rows.value(0).toList().value(1).toMap().value(u"html"_s).toString();
+            return html.remove(QRegularExpression(u"<[^>]*>"_s));
+        };
+        const int t = f.table();
+        QVERIFY(t > 0);
+        QVERIFY2(shown(t).contains(u"Żółta farba"_s), qPrintable(shown(t)));
+
+        f.page.setEditText(0, u"Zielona farba ąćęłńóśźż ^farba-1"_s);
+        QVERIFY2(shown(t).contains(u"Zielona farba ąćęłńóśźż"_s), qPrintable(shown(t)));
+        QVERIFY2(!shown(t).contains(u"Żółta"_s), qPrintable(shown(t)));
+        VERIFY_FRESH(f);
+
+        f.page.undo();
+        QCOMPARE(f.edit(0), u"Żółta farba ^farba-1"_s);
+        QVERIFY2(shown(t).contains(u"Żółta farba"_s), qPrintable(shown(t)));
+        VERIFY_FRESH(f);
+        f.page.redo();
+        QVERIFY2(shown(t).contains(u"Zielona farba"_s), qPrintable(shown(t)));
         VERIFY_FRESH(f);
     }
 

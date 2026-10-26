@@ -70,6 +70,13 @@ bool hasInlineCalc(const QString &text)
     return false;
 }
 
+/// The text may hold a block reference (`((id))`, `[[…#^id]]`): its rendering shows the
+/// referenced block's text, which may be on this page and change with any edit of it.
+bool hasBlockRef(const QString &text)
+{
+    return text.contains(u"((") || text.contains(u"#^");
+}
+
 /// Longest common subsequence of two lists of strings as matched index pairs, with common
 /// prefix/suffix trimmed first; a middle part too large for the quadratic table is treated as
 /// completely replaced.
@@ -724,7 +731,8 @@ void BlockListModel::refresh(bool contentChanged)
         // calculations see are unchanged.
         const BlockShape &shape = cachedShape(row);
         if (shape.view == BlockView::Calc || shape.view == BlockView::Table) {
-            if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)) {
+            if (!st.resultsValid || (st.resultsUseScope && st.resultsEpoch != m_calcEpoch)
+                || (shape.view == BlockView::Table && st.resultsUseRefs)) {
                 st.resultsValid = true;
                 st.resultsEpoch = m_calcEpoch;
                 if (shape.view == BlockView::Calc) {
@@ -735,7 +743,7 @@ void BlockListModel::refresh(bool contentChanged)
                         calcRows.append(row);
                     }
                 } else {
-                    QVariantMap table = computeTableData(i); // sets resultsUseScope
+                    QVariantMap table = computeTableData(i); // sets resultsUseScope / resultsUseRefs
                     if (table != st.tableData) {
                         st.tableData = table;
                         tableRows.append(row);
@@ -823,6 +831,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
     const auto model = calc::parseTable(e.body);
     if (!model) {
         stateFor(e.uid).resultsUseScope = false;
+        stateFor(e.uid).resultsUseRefs = false;
         return {};
     }
     // Only formula cells read the variables above the table: no page scope for a table without.
@@ -835,15 +844,17 @@ QVariantMap BlockListModel::computeTableData(int i) const
     // Cells are inline Markdown (bold, links, tags, chips): rendered like paragraphs, cached by
     // their text until the rendering changes (theme, index, language, today). A cell with an
     // inline calculation also depends on the variables above the table: never cached, and the
-    // table is recomputed when they may have changed (a new calc epoch).
+    // table is recomputed when they may have changed (a new calc epoch). A cell with a block
+    // reference shows that block's text: never cached, the table follows every page change.
     RowState &st = stateFor(e.uid);
     st.resultsUseScope = formulas || hasInlineCalc(e.body);
+    st.resultsUseRefs = hasBlockRef(e.body);
     std::optional<markdown::InlineRenderer> renderer;
     const auto cellHtml = [&](const QString &cell) -> QString {
         if (cell.trimmed().isEmpty())
             return {};
-        const bool calcDependent = hasInlineCalc(cell);
-        const auto cached = calcDependent ? st.cellHtml.constEnd() : st.cellHtml.constFind(cell);
+        const bool live = hasInlineCalc(cell) || hasBlockRef(cell);
+        const auto cached = live ? st.cellHtml.constEnd() : st.cellHtml.constFind(cell);
         if (cached != st.cellHtml.constEnd())
             return *cached;
         if (!renderer) {
@@ -853,7 +864,7 @@ QVariantMap BlockListModel::computeTableData(int i) const
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
-        if (!calcDependent)
+        if (!live)
             st.cellHtml.insert(cell, html);
         return html;
     };
@@ -1024,7 +1035,7 @@ QString BlockListModel::renderHtml(int i) const
     st.htmlValid = true;
     st.renderOffset = offset;
     // ((id)) and [[…#^id]] show the text of their block, which may be on this page.
-    st.dependsOnRefs = e.body.contains(u"((") || e.body.contains(u"#^");
+    st.dependsOnRefs = hasBlockRef(e.body);
     st.dependsOnCalc = hasInlineCalc(e.body);
     st.htmlCalcEpoch = m_calcEpoch;
     if (st.dependsOnCalc)
