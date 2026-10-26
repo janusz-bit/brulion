@@ -7,6 +7,7 @@
 #include "markdown/journal.h"
 #include "notebook/journals.h"
 #include "notebook/pages.h"
+#include "profile.h" // the app's settings file (BRULION_PROFILE)
 #include "text/text.h"
 #include "util/paths.h"
 #include "vault/vault.h"
@@ -32,6 +33,14 @@ QString expandHome(const QString &path)
     if (path == u"~" || path.startsWith(u"~/"))
         return QDir::homePath() + path.mid(1);
     return path;
+}
+
+/// A value of the app's settings file, read only: AppSettings' file (IniFormat, UserScope,
+/// "Brulion"/"Brulion" — or "Brulion-<name>" for BRULION_PROFILE, src/ipc/profile.h).
+QVariant appSettingsValue(const QString &key)
+{
+    const QSettings settings(QSettings::IniFormat, QSettings::UserScope, ipc::organizationName(), u"Brulion"_s);
+    return settings.value(key);
 }
 
 QString foldName(const QString &name)
@@ -72,9 +81,7 @@ Qt::DayOfWeek Context::weekStart() const
 
 QString Context::settingsValue(const QString &key) const
 {
-    // The app's settings file (AppSettings: IniFormat, UserScope, "Brulion"/"Brulion"), read only.
-    const QSettings settings(QSettings::IniFormat, QSettings::UserScope, u"Brulion"_s, u"Brulion"_s);
-    return settings.value(key).toString();
+    return appSettingsValue(key).toString();
 }
 
 QString Context::appDataDir() const
@@ -102,8 +109,7 @@ std::optional<Error> Context::resolveVault()
         const QString docs = QDir::cleanPath(appDataDir() + u"/Dokumentacja Brulionu"_s);
         if (!path.trimmed().isEmpty() && QDir::cleanPath(path.trimmed()) == docs) {
             path.clear();
-            const QSettings settings(QSettings::IniFormat, QSettings::UserScope, u"Brulion"_s, u"Brulion"_s);
-            for (const QVariant &recent : settings.value(u"vaults/recent"_s).toList()) {
+            for (const QVariant &recent : appSettingsValue(u"vaults/recent"_s).toList()) {
                 const QString candidate = recent.toMap().value(u"path"_s).toString();
                 if (!candidate.trimmed().isEmpty() && QDir::cleanPath(candidate.trimmed()) != docs) {
                     path = candidate;

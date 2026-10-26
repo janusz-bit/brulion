@@ -15,17 +15,71 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLocalServer>
+#include <QMutex>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QThread>
 #include <QUuid>
 
+#ifdef Q_OS_UNIX
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 using namespace Qt::StringLiterals;
 using brulion::ipc::SingleInstance;
+
+namespace {
+
+/// A primary in a thread of its own, as the running app is another process: a sender blocks until
+/// its message is read — on Windows a named pipe from QLocalServer has no buffer, so a primary in
+/// the sender's thread would never read it.
+class PrimaryThread : public QThread {
+public:
+    explicit PrimaryThread(QString key) : m_key(std::move(key)) { }
+    ~PrimaryThread() override
+    {
+        quit();
+        wait();
+    }
+    /// Starts it and waits until it listens (or failed to).
+    bool startListening()
+    {
+        start();
+        m_ready.acquire();
+        return m_listening;
+    }
+    QList<QByteArray> messages() const
+    {
+        const QMutexLocker lock(&m_mutex);
+        return m_messages;
+    }
+
+protected:
+    void run() override
+    {
+        SingleInstance primary(m_key);
+        QObject::connect(&primary, &SingleInstance::messageReceived, &primary, [this](const QByteArray &message) {
+            const QMutexLocker lock(&m_mutex);
+            m_messages.append(message);
+        });
+        m_listening = primary.listen() && primary.isListening();
+        m_ready.release();
+        exec();
+    }
+
+private:
+    QString m_key;
+    QSemaphore m_ready;
+    bool m_listening = false;
+    mutable QMutex m_mutex;
+    QList<QByteArray> m_messages;
+};
+
+} // namespace
 
 class TestSingleInstance : public QObject {
     Q_OBJECT
@@ -33,10 +87,12 @@ class TestSingleInstance : public QObject {
 
     static QString uniqueName() { return u"brulion-test-"_s + QUuid::createUuid().toString(QUuid::Id128).left(12); }
     QString uniqueKey() const { return m_dir.filePath(uniqueName()); }
+#ifdef Q_OS_UNIX
     static bool chmod(const QString &path, mode_t mode)
     {
         return ::chmod(QFile::encodeName(path).constData(), mode) == 0;
     }
+#endif
 
 private Q_SLOTS:
     void initTestCase() { QVERIFY(m_dir.isValid()); }
@@ -48,28 +104,31 @@ private Q_SLOTS:
         QVERIFY(SingleInstance::keyFor(u"/a"_s) != SingleInstance::keyFor(u"/b"_s));
         QVERIFY(QFileInfo(SingleInstance::keyFor(u"/home/żółw"_s)).fileName().startsWith(u"brulion-"_s));
         // In the user's private runtime folder when there is one (not world-writable /tmp,
-        // where another user could squat the name).
+        // where another user could squat the name); on Windows the user's own temp folder (the
+        // named pipe's name and the lock file's folder).
+#ifdef Q_OS_WIN
+        QCOMPARE(QFileInfo(SingleInstance::keyFor(u"/a"_s)).absolutePath(), QDir(QDir::tempPath()).absolutePath());
+#else
         const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
         if (!runtime.isEmpty())
             QCOMPARE(QFileInfo(SingleInstance::keyFor(u"/a"_s)).absolutePath(), QDir(runtime).absolutePath());
+#endif
     }
 
     void secondLaunchActivatesFirst()
     {
         const QString key = uniqueKey();
-        SingleInstance primary(key);
-        QVERIFY(!primary.sendToPrimary("activate", 200)); // nobody there yet
-        QVERIFY(primary.listen());
-        QVERIFY(primary.isListening());
-        QSignalSpy messages(&primary, &SingleInstance::messageReceived);
+        QVERIFY(!SingleInstance(key).sendToPrimary("activate", 200)); // nobody there yet
+        PrimaryThread primary(key);
+        QVERIFY(primary.startListening());
 
         SingleInstance second(key);
         QVERIFY(second.sendToPrimary("activate"));
-        QTRY_COMPARE(messages.size(), 1);
-        QCOMPARE(messages.first().first().toByteArray(), QByteArray("activate"));
+        QTRY_COMPARE(primary.messages().size(), 1);
+        QCOMPARE(primary.messages().first(), QByteArray("activate"));
         QVERIFY(second.sendToPrimary("capture"));
-        QTRY_COMPARE(messages.size(), 2);
-        QCOMPARE(messages.last().first().toByteArray(), QByteArray("capture"));
+        QTRY_COMPARE(primary.messages().size(), 2);
+        QCOMPARE(primary.messages().last(), QByteArray("capture"));
     }
 
     void simultaneousLaunchDoesNotStealTheSocket()
@@ -78,33 +137,33 @@ private Q_SLOTS:
         // that loses must not delete the winner's socket (that would leave two primaries and
         // the first one unreachable).
         const QString key = uniqueKey();
-        SingleInstance first(key);
-        QVERIFY(first.listen());
-        QSignalSpy messages(&first, &SingleInstance::messageReceived);
+        PrimaryThread first(key);
+        QVERIFY(first.startListening());
         SingleInstance second(key);
         QVERIFY(!second.listen());
         QVERIFY(!second.isListening());
         QVERIFY(second.sendToPrimary("activate")); // what main() does then
-        QTRY_COMPARE(messages.size(), 1);
+        QTRY_COMPARE(first.messages().size(), 1);
         SingleInstance third(key);
         QVERIFY(third.sendToPrimary("today"));
-        QTRY_COMPARE(messages.size(), 2);
-        QCOMPARE(messages.last().first().toByteArray(), QByteArray("today"));
+        QTRY_COMPARE(first.messages().size(), 2);
+        QCOMPARE(first.messages().last(), QByteArray("today"));
     }
 
     void openMessageFromTheCommandLine()
     {
         const QString key = uniqueKey();
-        SingleInstance app(key);
+        PrimaryThread app(key);
         SingleInstance cli(key);
         QVERIFY(!cli.isPrimaryRunning(100));
-        QVERIFY(app.listen());
-        QSignalSpy messages(&app, &SingleInstance::messageReceived);
+        QVERIFY(app.startListening());
         QVERIFY(cli.isPrimaryRunning()); // probing sends nothing
         const QJsonObject route{{u"view"_s, u"page"_s}, {u"path"_s, u"Projekty/Żółw.md"_s}, {u"line"_s, 4}};
         QVERIFY(cli.sendToPrimary(brulion::ipc::openMessage(route, u"/home/ala/Notatki"_s)));
-        QTRY_COMPARE(messages.size(), 1);
-        const auto message = brulion::ipc::parseMessage(messages.first().first().toByteArray());
+        QTRY_COMPARE(app.messages().size(), 1);
+        QTest::qWait(50);
+        QCOMPARE(app.messages().size(), 1); // nothing from the probe
+        const auto message = brulion::ipc::parseMessage(app.messages().first());
         QVERIFY(message);
         QCOMPARE(message->verb, QByteArray("open"));
         QCOMPARE(message->payload.value(u"route"_s).toObject(), route);
@@ -126,6 +185,10 @@ private Q_SLOTS:
         QVERIFY(!QFileInfo::exists(QDir::temp().filePath(bare + u".lock"_s)));
         QVERIFY(!SingleInstance(bare).sendToPrimary("activate", 200));
 
+#ifndef Q_OS_UNIX
+        QSKIP("Folder modes and symbolic links are Unix checks: on Windows the socket is a named pipe "
+              "with an access list of the user (its lock file in the user's temp folder)");
+#else
         // A folder the group or others can write to (the shared /tmp is 1777).
         const QString shared = m_dir.filePath(u"wspólny"_s);
         QVERIFY(QDir().mkpath(shared));
@@ -161,12 +224,16 @@ private Q_SLOTS:
             QTRY_COMPARE(messages.size(), 1);
             QCOMPARE(refused.size(), 0); // a connection of this user
         }
+#endif
     }
 
     // A lock file that cannot be made (a folder the user cannot write to) is no running primary:
     // listen() says why instead of sending the caller to wait for an answer that never comes.
     void lockThatCannotBeMade()
     {
+#ifndef Q_OS_UNIX
+        QSKIP("A folder the user cannot write to is made with Unix modes here");
+#else
         if (::geteuid() == 0)
             QSKIP("root writes to any folder");
         const QString folder = m_dir.filePath(u"tylko-do-odczytu"_s);
@@ -179,6 +246,7 @@ private Q_SLOTS:
         QVERIFY(chmod(folder, 0700));
         QVERIFY2(app.listen(), qPrintable(app.errorString())); // tried anew
         QVERIFY(app.errorString().isEmpty());
+#endif
     }
 
     void parseMessages_data()
@@ -221,12 +289,11 @@ private Q_SLOTS:
             QLocalServer old;
             QVERIFY(old.listen(key));
         }
-        SingleInstance next(key);
-        QVERIFY(next.listen());
-        QSignalSpy messages(&next, &SingleInstance::messageReceived);
+        PrimaryThread next(key);
+        QVERIFY(next.startListening());
         SingleInstance other(key);
         QVERIFY(other.sendToPrimary("activate"));
-        QTRY_COMPARE(messages.size(), 1);
+        QTRY_COMPARE(next.messages().size(), 1);
     }
 };
 

@@ -697,15 +697,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.visible(), QList<bool>({true, false, false, true, true}));
         QVERIFY(f.role(0, "collapsed").toBool());
         QCOMPARE(f.page.editingRow(), 0); // the caret moved out of the folded subtree
-        QCOMPARE(f.page.foldState(), QVariantList({0}));
+        QCOMPARE(f.page.foldState(), QVariantList{0});
         QCOMPARE(f.page.nextVisibleRow(0), 3);
         QCOMPARE(f.page.previousVisibleRow(3), 0);
         f.page.toggleFold(1); // hidden but has children: folds too
         f.page.toggleFold(0);
         QCOMPARE(f.visible(), QList<bool>({true, true, false, true, true}));
-        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        QCOMPARE(f.page.foldState(), QVariantList{1});
         f.page.toggleFold(4); // no children: nothing
-        QCOMPARE(f.page.foldState(), QVariantList({1}));
+        QCOMPARE(f.page.foldState(), QVariantList{1});
         f.page.foldAll(true);
         QCOMPARE(f.visible(), QList<bool>({true, false, false, true, false}));
         f.page.foldAll(false);
@@ -905,8 +905,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     static QString linkPage()
     {
         return u"---\ntytuł: Wyjazd\n---\n# Wyjazd\n\nAkapit o wyjeździe\nw dwóch liniach.\n\n## Plan #praca\n\n"
-               "- Kupić bilety\n- [ ] Spakować się 📅 2026-10-20\n- ## Lista rzeczy\n\t- szczoteczka\n\n"
-               "```js\nconst a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nGotowy blok ^gotowy\n"_s;
+               u"- Kupić bilety\n- [ ] Spakować się 📅 2026-10-20\n- ## Lista rzeczy\n\t- szczoteczka\n\n"
+               u"```js\nconst a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nGotowy blok ^gotowy\n"_s;
     }
 
     void copyLinks_data()
@@ -1052,7 +1052,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
     void copyDuplicateHeadings()
     {
         Fixture f(u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n## Plan\n"
-                  "# A\n## B\n# A\n## B\n"_s);
+                  u"# A\n## B\n# A\n## B\n"_s);
         const auto copied = [&f](int row, const QString &kind = u"heading"_s) {
             return f.page.copyLink(row, kind).value(u"text"_s).toString();
         };
@@ -1086,7 +1086,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QTest::addColumn<QStringList>("others"); // pages of the same name elsewhere
         QTest::addColumn<QString>("target");     // the page part of every link
         const QString headings = u"# Projekt\n## Plan\n### Zadania\n## Budżet\n### Zadania\n# Archiwum\n"
-                                 "## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
+                                 u"## Plan\n# A\n## B\n# A\n## B\n## Zakupy\n- mleko\n## Zakupy\n"_s;
         QTest::newRow("blocks") << linkPage() << Page << QStringList() << u"Strona"_s;
         QTest::newRow("repeated headings") << headings << Page << QStringList() << u"Strona"_s;
         QTest::newRow("same name in another folder")
@@ -2647,7 +2647,7 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         // Pictures in code, formulas and HTML are text: never fetched, stored or rewritten.
         const QString url = u"https://example.com/kot.png"_s;
         const QString content = u"- ![kot](%1)\n\n~~~markdown\n![](%1)\n~~~\n\n```\n![](%1)\n```\n\n"
-                                "<div>\n![](%1)\n</div>\n"_s.arg(url);
+                                u"<div>\n![](%1)\n</div>\n"_s.arg(url);
         Fixture f(content);
         f.host.setWebPicture(url, QByteArray::fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgA"
                                                          "AIAAAUAAen63NgAAAAASUVORK5CYII="));

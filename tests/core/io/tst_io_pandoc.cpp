@@ -23,73 +23,73 @@ using namespace Qt::StringLiterals;
 namespace {
 
 const QString Dom = u"---\n"
-                    "tags: [dom, remont]\n"
-                    "---\n"
-                    "# Dom\n"
-                    "\n"
-                    "Plan remontu ^plan\n"
-                    "\n"
-                    "## Zakupy na już\n"
-                    "\n"
-                    "- [ ] Kup farbę 📅 2026-10-20 ⏳ 2026-10-18 10:00 🔁 every week ⏫ #zakupy ^farba\n"
-                    "- [x] Zmierz ściany ✅ 2026-10-10\n"
-                    "- [/] Malowanie\n"
-                    "\t- [-] Tapeta\n"
-                    "- [>] Meble\n"
-                    "\n"
-                    "1. pierwszy\n"
-                    "2. drugi\n"
-                    "\n"
-                    "```js\n"
-                    "let x = 1; // [[nie link]]\n"
-                    "```\n"
-                    "\n"
-                    "| Pokój | Kolor |\n"
-                    "| --- | :-: |\n"
-                    "| Salon \\| hol | =SUM(A1) |\n"
-                    "\n"
-                    "> [!warning] Uwaga\n"
-                    "> Pamiętaj o ((farba))\n"
-                    "\n"
-                    "Zdjęcie: ![[assets/salon.png]] i [plan](../assets/plan.pdf)\n"
-                    "⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
+                    u"tags: [dom, remont]\n"
+                    u"---\n"
+                    u"# Dom\n"
+                    u"\n"
+                    u"Plan remontu ^plan\n"
+                    u"\n"
+                    u"## Zakupy na już\n"
+                    u"\n"
+                    u"- [ ] Kup farbę 📅 2026-10-20 ⏳ 2026-10-18 10:00 🔁 every week ⏫ #zakupy ^farba\n"
+                    u"- [x] Zmierz ściany ✅ 2026-10-10\n"
+                    u"- [/] Malowanie\n"
+                    u"\t- [-] Tapeta\n"
+                    u"- [>] Meble\n"
+                    u"\n"
+                    u"1. pierwszy\n"
+                    u"2. drugi\n"
+                    u"\n"
+                    u"```js\n"
+                    u"let x = 1; // [[nie link]]\n"
+                    u"```\n"
+                    u"\n"
+                    u"| Pokój | Kolor |\n"
+                    u"| --- | :-: |\n"
+                    u"| Salon \\| hol | =SUM(A1) |\n"
+                    u"\n"
+                    u"> [!warning] Uwaga\n"
+                    u"> Pamiętaj o ((farba))\n"
+                    u"\n"
+                    u"Zdjęcie: ![[assets/salon.png]] i [plan](../assets/plan.pdf)\n"
+                    u"⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
 
 const QString Zakupy = u"- Lista na [[Dom]] i [[Projekty/Dom#^farba|farba]], [[Dom#Zakupy na już]]\n"
-                       "- ![[Dom#^plan]]\n"
-                       "- Odnośnik do ((farba)) i [[Nie ma takiej]]\n"
-                       "- TODO Logseq marker\n"
-                       "  SCHEDULED: <2026-10-21 Wed>\n"
-                       "- [[2026-10-14]] notatka\n"_s;
+                       u"- ![[Dom#^plan]]\n"
+                       u"- Odnośnik do ((farba)) i [[Nie ma takiej]]\n"
+                       u"- TODO Logseq marker\n"
+                       u"  SCHEDULED: <2026-10-21 Wed>\n"
+                       u"- [[2026-10-14]] notatka\n"_s;
 
 const QString Wzory = u"Pole koła: $\\pi r^2$, a $$\\frac{a}{b}$$ też.\n"
-                      "\n"
-                      "```math\n"
-                      "\\sum_{i=1}^{n} i\n"
-                      "\n"
-                      "= \\frac{n(n+1)}{2}\n"
-                      "```\n"
-                      "\n"
-                      "- ```math\n"
-                      "  e^{i\\pi} + 1 = 0\n"
-                      "  ```\n"
-                      "- **gruby** i *kursywa* ==zaznaczenie== ~~skreślenie~~ `kod`\n"
-                      "\n"
-                      "Przypis[^1].\n"
-                      "\n"
-                      "[^1]: Treść przypisu.\n"_s;
+                      u"\n"
+                      u"```math\n"
+                      u"\\sum_{i=1}^{n} i\n"
+                      u"\n"
+                      u"= \\frac{n(n+1)}{2}\n"
+                      u"```\n"
+                      u"\n"
+                      u"- ```math\n"
+                      u"  e^{i\\pi} + 1 = 0\n"
+                      u"  ```\n"
+                      u"- **gruby** i *kursywa* ==zaznaczenie== ~~skreślenie~~ `kod`\n"
+                      u"\n"
+                      u"Przypis[^1].\n"
+                      u"\n"
+                      u"[^1]: Treść przypisu.\n"_s;
 
 const QString Unsafe =
         u"<script>alert(1)</script>\n"
-        "\n"
-        "Tekst <b>pogrubiony</b> [x](javascript:alert(1)) & \"cudzysłów\" @jan $5 i $6 x^2 a~b *gwiazdka\n"
-        "# nie nagłówek, bo w akapicie? \n"
-        "linia\n"
-        "- myślnik\n"
-        "1. jeden\n"
-        ": dwukropek\n"_s;
+        u"\n"
+        u"Tekst <b>pogrubiony</b> [x](javascript:alert(1)) & \"cudzysłów\" @jan $5 i $6 x^2 a~b *gwiazdka\n"
+        u"# nie nagłówek, bo w akapicie? \n"
+        u"linia\n"
+        u"- myślnik\n"
+        u"1. jeden\n"
+        u": dwukropek\n"_s;
 
 const QString Journal = u"- Rano: zadzwonić ⏰! 2026-10-14 07:30\n"
-                        "- ![[Zakupy]]\n"_s;
+                        u"- ![[Zakupy]]\n"_s;
 
 ExportInput fixture()
 {
@@ -209,21 +209,21 @@ private Q_SLOTS:
         // The note's headings one level down, tags under the title (a tag naming a page links to it).
         QVERIFY(doc.contains(u"\n### Zakupy na już {#n2-zakupy-na-już}\n"_s));
         QVERIFY(doc.contains(u"# Dom {#n2}\n\n[#dom](#n2){.tag} [#remont]{.tag} [#zakupy](#n4){.tag}\n\n"
-                             "[]{#n2-block-plan}Plan remontu\n"_s));
+                             u"[]{#n2-block-plan}Plan remontu\n"_s));
     }
 
     void links()
     {
         const QString doc = documentOf(exportPandoc());
         QVERIFY2(doc.contains(u"- Lista na [Dom](#n2) i [farba](#n2-block-farba), "
-                              "[Dom > Zakupy na już](#n2-zakupy-na-już)\n"_s),
+                              u"[Dom > Zakupy na już](#n2-zakupy-na-już)\n"_s),
                  qPrintable(doc));
         // Block references show the block's text; a missing page is its name.
         QVERIFY(doc.contains(u"- Odnośnik do [Kup farbę \\#zakupy](#n2-block-farba) i [Nie ma takiej]{.missing}\n"_s));
         QVERIFY(doc.contains(u"- [2026-10-14](#n5) notatka\n"_s));
         // Attachments relative to the document; pictures as images.
         QVERIFY(doc.contains(u"Zdjęcie: ![salon.png](assets/salon.png) i [plan](assets/plan.pdf)\\\n"
-                             "Zadzwoń do fachowca [reminder: 2026-10-16 09:00]{.reminder}\n"_s));
+                             u"Zadzwoń do fachowca [reminder: 2026-10-16 09:00]{.reminder}\n"_s));
     }
 
     void embeds()
@@ -234,8 +234,8 @@ private Q_SLOTS:
                  qPrintable(doc));
         QVERIFY(doc.contains(
                 u"- ::: {.embed}\n  **[Zakupy](#n4)**\n\n"
-                "  - Lista na [Dom](#n2) i [farba](#n2-block-farba), [Dom > Zakupy na już](#n2-zakupy-na-już)\n"
-                "  - [Dom](#n2-block-plan)\n"_s));
+                u"  - Lista na [Dom](#n2) i [farba](#n2-block-farba), [Dom > Zakupy na już](#n2-zakupy-na-już)\n"
+                u"  - [Dom](#n2-block-plan)\n"_s));
         QCOMPARE(doc.count(u"{#n2-block-farba}"_s), 1);
     }
 
@@ -243,13 +243,13 @@ private Q_SLOTS:
     {
         const QString doc = documentOf(exportPandoc());
         QVERIFY2(doc.contains(u"- [ ] []{#n2-block-farba}Kup farbę [#zakupy](#n4){.tag} [due: 2026-10-20]{.due} "
-                              "[scheduled: 2026-10-18 10:00]{.scheduled} [repeats: every week]{.recurrence} "
-                              "[priority: high]{.priority}\n"
-                              "- [x] Zmierz ściany [done: 2026-10-10]{.done}\n"
-                              "- [ ] Malowanie [in progress]{.status}\n"
-                              "  - [x] ~~Tapeta~~\n"
-                              "- [ ] Meble [deferred]{.status}\n\n"
-                              "1. pierwszy\n2. drugi\n"_s),
+                              u"[scheduled: 2026-10-18 10:00]{.scheduled} [repeats: every week]{.recurrence} "
+                              u"[priority: high]{.priority}\n"
+                              u"- [x] Zmierz ściany [done: 2026-10-10]{.done}\n"
+                              u"- [ ] Malowanie [in progress]{.status}\n"
+                              u"  - [x] ~~Tapeta~~\n"
+                              u"- [ ] Meble [deferred]{.status}\n\n"
+                              u"1. pierwszy\n2. drugi\n"_s),
                  qPrintable(doc));
         // Logseq markers and planning lines, reminders and alarms.
         QVERIFY(doc.contains(u"- [ ] Logseq marker [scheduled: 2026-10-21]{.scheduled}\n"_s));
@@ -263,7 +263,7 @@ private Q_SLOTS:
         QVERIFY2(doc.contains(u"```js\nlet x = 1; // [[nie link]]\n```\n"_s), qPrintable(doc));
         QVERIFY(doc.contains(u"| Pokój | Kolor |\n|---|:-:|\n| Salon \\| hol | `=SUM(A1)` |\n"_s));
         QVERIFY(doc.contains(u"::: {.callout .callout-warning}\n**Uwaga**\n\n"
-                             "Pamiętaj o [Kup farbę \\#zakupy](#n2-block-farba)\n:::\n"_s));
+                             u"Pamiętaj o [Kup farbę \\#zakupy](#n2-block-farba)\n:::\n"_s));
         // Raw HTML is text (a code block), as in the app.
         QVERIFY(doc.contains(u"```\n<script>alert(1)</script>\n```\n"_s));
     }
@@ -289,7 +289,7 @@ private Q_SLOTS:
     {
         const QString doc = documentOf(exportPandoc());
         QVERIFY2(doc.contains(u"Tekst \\<b>pogrubiony\\</b> \\[x\\](javascript:alert(1)) \\& \"cudzysłów\" \\@jan "
-                              "\\$5 i \\$6 x\\^2 a\\~b \\*gwiazdka\n"_s),
+                              u"\\$5 i \\$6 x\\^2 a\\~b \\*gwiazdka\n"_s),
                  qPrintable(doc));
     }
 
@@ -302,7 +302,7 @@ private Q_SLOTS:
         const QString doc = documentOf(f, u"Dom"_s);
         // The page is the document: its title as the title, headings as written, no own heading.
         QVERIFY2(doc.startsWith(u"---\ntitle: 'Dom'\n---\n\n[#dom]{.tag} [#remont]{.tag} [#zakupy]{.tag}\n\n"
-                                "[]{#n1-block-plan}Plan remontu\n\n## Zakupy na już {#n1-zakupy-na-już}\n"_s),
+                                u"[]{#n1-block-plan}Plan remontu\n\n## Zakupy na już {#n1-zakupy-na-już}\n"_s),
                  qPrintable(doc));
         QVERIFY(doc.contains(u"Pamiętaj o [Kup farbę \\#zakupy](#n1-block-farba)"_s));
         QCOMPARE(iotest::entryPaths(readZip(f.data)), QStringList({u"Dom/Dom.md"_s, u"Dom/assets/salon.png"_s}));
@@ -354,7 +354,7 @@ private Q_SLOTS:
         QTest::newRow("math") << u"$x_1 + y$ i $$\\int f$$"_s << u"$x_1 + y$ i $$\\int f$$"_s;
         QTest::newRow("tokens") << u"📅 2026-10-20 🛫 2026-10-01 ❌ 2026-10-02 🔺"_s
                                 << u"[due: 2026-10-20]{.due} [starts: 2026-10-01]{.start} "
-                                   "[cancelled: 2026-10-02]{.cancelled} [priority: highest]{.priority}"_s;
+                                   u"[cancelled: 2026-10-02]{.cancelled} [priority: highest]{.priority}"_s;
         QTest::newRow("block id hidden") << u"tekst ^abc123"_s << u"tekst"_s;
         QTest::newRow("footnote ref") << u"x[^a]"_s << u"x[^a]"_s;
         QTest::newRow("missing wiki link") << u"[[Strona|inna nazwa]]"_s << u"[inna nazwa]{.missing}"_s;

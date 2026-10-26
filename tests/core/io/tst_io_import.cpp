@@ -279,7 +279,7 @@ private Q_SLOTS:
         const QList<InputFile> files = {
                 text(u"notes/Projekty/Dom.md"_s,
                      u"# Dom\n\n![plan](../img/plan%201.png) [[Budżet]] ![[plan 1.png]] [x](https://x.org/a b)\n"
-                     "```\n[[nie link]](../img/plan%201.png)\n```\n"_s),
+                     u"```\n[[nie link]](../img/plan%201.png)\n```\n"_s),
                 text(u"notes/Budżet.txt"_s, u"Zażółć gęślą jaźń\r\nlinia 2"_s),
                 bytes(u"notes/img/plan 1.png"_s, "PNG"),
                 text(u"notes/.obsidian/workspace.json"_s, u"{}"_s),
@@ -290,7 +290,7 @@ private Q_SLOTS:
                  QStringList({u"Import/Budżet.md"_s, u"Import/Projekty/Dom.md"_s, u"assets/Import/img/plan 1.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Import/Projekty/Dom.md"_s),
                  u"# Dom\n\n![plan](../../assets/Import/img/plan%201.png) [[Budżet]] ![[plan 1.png]] "
-                 "[x](https://x.org/a b)\n```\n[[nie link]](../img/plan%201.png)\n```\n"_s);
+                 u"[x](https://x.org/a b)\n```\n[[nie link]](../img/plan%201.png)\n```\n"_s);
         QCOMPARE(iotest::textAt(r, u"Import/Budżet.md"_s), u"Zażółć gęślą jaźń\r\nlinia 2"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Import/img/plan 1.png"_s)->data, QByteArray("PNG"));
         QVERIFY(r.warnings.isEmpty());
@@ -416,7 +416,7 @@ private Q_SLOTS:
                 {u"Vault/.obsidian/app.json"_s, "{}"},
                 {u"Vault/Notes/Dom.md"_s, u"---\ntags: [dom]\n---\n[[Notes/Inne]] ![[attachments/zdjęcie.png]] "
                                           u"[[Inne#Sekcja|alias]] [md](Inne.md)"
-                                          " ![[zdjęcie.png]] - [ ] zadanie 📅 2026-10-15 ^abc\n"_s.toUtf8()},
+                                          u" ![[zdjęcie.png]] - [ ] zadanie 📅 2026-10-15 ^abc\n"_s.toUtf8()},
                 {u"Vault/Notes/Inne.md"_s, "## Sekcja\n"},
                 {u"Vault/attachments/zdjęcie.png"_s, "IMG"},
                 {u"Vault/.trash/old.md"_s, "old"},
@@ -429,7 +429,7 @@ private Q_SLOTS:
                               u"assets/Obsidian/attachments/zdjęcie.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Obsidian/Notes/Dom.md"_s),
                  u"---\ntags: [dom]\n---\n[[Obsidian/Notes/Inne]] ![[assets/Obsidian/attachments/zdjęcie.png]] "
-                 "[[Inne#Sekcja|alias]] [md](Inne.md) ![[zdjęcie.png]] - [ ] zadanie 📅 2026-10-15 ^abc\n"_s);
+                 u"[[Inne#Sekcja|alias]] [md](Inne.md) ![[zdjęcie.png]] - [ ] zadanie 📅 2026-10-15 ^abc\n"_s);
     }
 
     void obsidianZipAttachmentStaysAttachment()
@@ -460,7 +460,7 @@ private Q_SLOTS:
         const QByteArray backup = writeZip({
                 {u"Lista zakupów.textbundle/text.md"_s,
                  u"# Lista zakupów\n#zakupy/dom #multi word tag# ::ważne:: (#inny tag#)\n![](assets/foto%20a.jpg)\n"
-                 "`#not a tag#`\n```\n#code tag#\n```\n"_s.toUtf8()},
+                 u"`#not a tag#`\n```\n#code tag#\n```\n"_s.toUtf8()},
                 {u"Lista zakupów.textbundle/assets/foto a.jpg"_s, "JPG"},
                 {u"Lista zakupów.textbundle/info.json"_s,
                  R"({"net.shinyfrog.bear": {"creationDate": "2026-10-14T08:00:00Z", "modificationDate": "2026-10-15T10:30:00Z"}})"},
@@ -475,7 +475,7 @@ private Q_SLOTS:
         QCOMPARE(fm.value(u"updated"_s).toString(), u"2026-10-15 12:30"_s);
         QCOMPARE(bodyOf(note),
                  u"# Lista zakupów\n#zakupy/dom #[[multi word tag]] ==ważne== (#[[inny tag]])\n"
-                 "![](assets/Bear/Lista%20zakupów/foto%20a.jpg)\n`#not a tag#`\n```\n#code tag#\n```\n"_s);
+                 u"![](assets/Bear/Lista%20zakupów/foto%20a.jpg)\n`#not a tag#`\n```\n#code tag#\n```\n"_s);
         QCOMPARE(iotest::textAt(r, u"Inna.md"_s), u"#[[a b c]] tekst"_s);
     }
 
@@ -486,9 +486,9 @@ private Q_SLOTS:
         const QList<InputFile> files = {
                 text(u"site/index.html"_s,
                      u"<html><head><title>Strona główna</title></head><body><h1>Strona główna</h1>"
-                     "<p>Zobacz <a href=\"o-nas.html#zespol\">O nas</a> i <a href=\"pliki/cennik.pdf\">cennik</a>.</p>"
-                     "<p><img src=\"img/logo.png\"><img src=\"data:image/png;base64,iVBORw0KGgo=\">"
-                     "<img src=\"https://x.org/a.png\" alt=\"Zew\"><img src=\"brak.png\" alt=\"brak\"></p></body></html>"_s),
+                     u"<p>Zobacz <a href=\"o-nas.html#zespol\">O nas</a> i <a href=\"pliki/cennik.pdf\">cennik</a>.</p>"
+                     u"<p><img src=\"img/logo.png\"><img src=\"data:image/png;base64,iVBORw0KGgo=\">"
+                     u"<img src=\"https://x.org/a.png\" alt=\"Zew\"><img src=\"brak.png\" alt=\"brak\"></p></body></html>"_s),
                 text(u"site/o-nas.html"_s, u"<h1>o-nas</h1><p>Zespół</p>"_s),
                 bytes(u"site/img/logo.png"_s, "LOGO"),
                 bytes(u"site/pliki/cennik.pdf"_s, "%PDF"),
@@ -501,7 +501,7 @@ private Q_SLOTS:
         QCOMPARE(frontmatterOf(index).value(u"aliases"_s).toStringList(), QStringList({u"Strona główna"_s}));
         QCOMPARE(bodyOf(index),
                  u"Zobacz [[Web/o-nas|O nas]] i [[assets/Web/cennik.pdf|cennik]].\n\n![[assets/Web/logo.png]]"
-                 "![[assets/Web/index-1.png]]![Zew](https://x.org/a.png)brak\n"_s);
+                 u"![[assets/Web/index-1.png]]![Zew](https://x.org/a.png)brak\n"_s);
         QCOMPARE(iotest::textAt(r, u"Web/o-nas.md"_s), u"Zespół\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Web/index-1.png"_s)->data, QByteArray::fromBase64("iVBORw0KGgo="));
         QCOMPARE(r.warnings.size(), 1); // brak.png
@@ -513,7 +513,7 @@ private Q_SLOTS:
         // imported note, in the editor or the export; code keeps its dollars as written.
         const ImportResult r =
                 importWith(u"html"_s, {text(u"ceny.html"_s, u"<p>Cena $10, <i>Netflix</i> 15$</p><p>$5 i $10</p>"
-                                                            "<ul><li>Wzór $x$ i <code>$y$</code></li></ul>"_s)});
+                                                            u"<ul><li>Wzór $x$ i <code>$y$</code></li></ul>"_s)});
         const QString note = iotest::textAt(r, u"ceny.md"_s);
         QCOMPARE(bodyOf(note), u"Cena \\$10, *Netflix* 15$\n\n$5 i $10\n\n- Wzór \\$x$ i `$y$`\n"_s);
         for (const bool exported : {false, true}) {
@@ -529,7 +529,7 @@ private Q_SLOTS:
             QSKIP("windows-1250 is not available (Qt without ICU)");
         const QByteArray page = encoder.encode(
                 u"<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=windows-1250\">"
-                "<title>Zażółć</title></head><body><p>Gęślą jaźń ĄĆĘŁŃÓŚŹŻ</p></body></html>"_s);
+                u"<title>Zażółć</title></head><body><p>Gęślą jaźń ĄĆĘŁŃÓŚŹŻ</p></body></html>"_s);
         QVERIFY(!encoder.hasError());
         const ImportResult r = importWith(u"html"_s, {bytes(u"stara.html"_s, page)});
         const QString note = iotest::textAt(r, u"stara.md"_s);

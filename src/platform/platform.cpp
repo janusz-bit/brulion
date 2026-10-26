@@ -11,6 +11,8 @@ QString targetName()
     return QStringLiteral("android");
 #elif defined(Q_OS_WASM)
     return QStringLiteral("wasm");
+#elif defined(Q_OS_WIN)
+    return QStringLiteral("windows");
 #else
     return QStringLiteral("linux");
 #endif

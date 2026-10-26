@@ -27,10 +27,12 @@
 #include <QElapsedTimer>
 
 #include <cstring>
+#ifdef Q_OS_UNIX
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
+#endif
 
 using namespace Qt::StringLiterals;
 using namespace brulion::ipc;
@@ -387,11 +389,14 @@ private Q_SLOTS:
                 reply.fail(QString::fromLatin1(ControlError::NotFound), u"Nie ma takiego elementu"_s);
         });
         QVERIFY2(server.startListening(), qPrintable(server.error));
-        // Owner only: rw for the user, nothing for the group and others.
+#ifdef Q_OS_UNIX
+        // Owner only: rw for the user, nothing for the group and others. (Windows: a named pipe,
+        // no file; QLocalServer::UserAccessOption gives it an access list of this user alone.)
         struct stat st{};
         QCOMPARE(::stat(QFile::encodeName(k).constData(), &st), 0);
         QVERIFY(S_ISSOCK(st.st_mode));
         QCOMPARE(int(st.st_mode & 0777), 0600);
+#endif
 
         ControlClient client(k);
         QVERIFY(client.connect());
@@ -436,7 +441,11 @@ private Q_SLOTS:
                 reply.ok(QJsonObject{{u"method"_s, request.method}});
         });
         QVERIFY2(server.listen(k), qPrintable(server.errorString()));
+#ifdef Q_OS_WIN
+        QCOMPARE(server.socketPath(), u"\\\\.\\pipe\\"_s + k);
+#else
         QCOMPARE(server.socketPath(), k);
+#endif
         QLocalSocket raw;
         raw.connectToServer(k);
         QVERIFY(raw.waitForConnected(1000));
@@ -509,6 +518,9 @@ private Q_SLOTS:
 
     void staleSocketFileIsReplaced()
     {
+#ifndef Q_OS_UNIX
+        QSKIP("A socket file left behind is a Unix thing: a named pipe goes with its last handle");
+#else
         const QString k = key(u"brulion-test-stale"_s);
         {
             // A socket file left behind by a crashed run: bound, then closed without unlinking.
@@ -529,6 +541,7 @@ private Q_SLOTS:
         ControlClient client(k);
         QVERIFY(client.connect());
         QVERIFY(client.call(u"hello"_s).ok);
+#endif
     }
 
     void noHandlerMeansNotReady()
@@ -555,6 +568,10 @@ private Q_SLOTS:
         QVERIFY(!server.isListening());
         QVERIFY(!QFileInfo::exists(QDir::temp().filePath(bare)));
 
+#ifndef Q_OS_UNIX
+        QSKIP("Folder modes and symbolic links are Unix checks: on Windows the socket is a named pipe "
+              "with an access list of the user");
+#else
         // A folder the group or others can write to (the shared /tmp is 1777).
         const QString shared = key(u"wspólny"_s);
         QVERIFY(QDir().mkpath(shared));
@@ -580,16 +597,17 @@ private Q_SLOTS:
         QVERIFY(client.connect());
         QVERIFY(client.errorString().isEmpty());
         server.close();
+#endif
     }
 
     // Who may talk with whom (trustedPeer(), the control and the single-instance sockets alike):
-    // on Linux only this user, never a process whose credentials cannot be read.
+    // on Linux and Windows only this user, never a process whose credentials cannot be read.
     void peersOfThisUserOnly()
     {
         const qint64 own = ownUid();
         QVERIFY(trustedPeer(own, own));
         QVERIFY(listenerProblem(own, u"/run/user/1000/brulion-x"_s).isEmpty());
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
         QVERIFY(own >= 0);
         QVERIFY(!trustedPeer(own + 1, own));
         QVERIFY(!trustedPeer(-1, own));

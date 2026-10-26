@@ -13,8 +13,9 @@
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
 # qmlcachegen their full API).
-# Desktop Linux only: the system tray (QSystemTrayIcon needs Qt Widgets, so main.cpp creates a
-# QApplication there and BRULION_DESKTOP_INTEGRATION is defined for it), the QML self-test
+# The desktop (Linux, Windows; BRULION_DESKTOP) only: the system tray (QSystemTrayIcon needs Qt
+# Widgets, so main.cpp creates a QApplication there and BRULION_DESKTOP_INTEGRATION is defined for
+# it), the QML self-test
 # (--selftest-shell, run by ctest as tst_shell_qml), the user journey with screenshots
 # (--journey <dir>, shelljourney.h; ctest tst_shell_journey, tests/app/shell/journey.sh) and the
 # remote control of the running app for AI agents (--remote-control, remotecontrol.h; ctest
@@ -85,7 +86,7 @@ target_sources(brulion PRIVATE shell/shellqml.h)
 target_include_directories(brulion PRIVATE ${_brulion_shell_dir})
 target_link_libraries(brulion PRIVATE brulion_shell)
 
-if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
+if(BRULION_DESKTOP)
     find_package(Qt6 REQUIRED COMPONENTS Widgets)
     # The UI driver (uidriver.h): real input and item finding for the self-test, the journey and
     # the remote control (tests/app/shell: tst_uidriver).

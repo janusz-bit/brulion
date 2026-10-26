@@ -9,9 +9,9 @@
 # side by side, two cores each). Every app run has its
 # own time limit inside the script, the test a limit for all of them.
 # The measurement scripts next to it (scroll-probe.sh, perf-record.sh, android-scroll.sh) are run
-# by hand (docs/UI.md "Scrolling performance").
+# by hand (docs/UI.md "Scrolling performance"). Not on Windows: scroll-jumps.sh is a bash script.
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
-if(TARGET brulion AND BRULION_SCROLL_PROBE AND NOT ANDROID AND NOT EMSCRIPTEN
+if(TARGET brulion AND BRULION_SCROLL_PROBE AND NOT ANDROID AND NOT EMSCRIPTEN AND NOT WIN32
    AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Controls")
     add_test(NAME tst_scroll_jumps_qml
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scroll-jumps.sh $<TARGET_FILE:brulion> ${CMAKE_CURRENT_BINARY_DIR}/scroll-jumps)

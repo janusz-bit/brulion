@@ -13,7 +13,6 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
-#include <QSaveFile>
 #include <QStorageInfo>
 #include <QTimeZone>
 
@@ -831,9 +830,8 @@ bool VaultPrivate::writeFile(const VaultPath &path, const QByteArray &bytes, Cha
     const bool existed = tracked ? files.contains(path) : disk.has_value();
     if (!ensureDirs(paths::dirname(path), changes))
         return false;
-    QSaveFile file(absPath(path));
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit())
-        return fail(Vault::tr("Cannot write %1: %2").arg(path, file.errorString()));
+    if (QString why; !vaultutil::saveAtomically(absPath(path), data, &why))
+        return fail(Vault::tr("Cannot write %1: %2").arg(path, why));
     if (!tracked)
         return true;
     const std::optional<FileStat> written = diskStat(path);

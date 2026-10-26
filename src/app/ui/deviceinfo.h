@@ -14,7 +14,7 @@ class DeviceInfo : public QObject {
     QML_ELEMENT
     QML_SINGLETON
 
-    /// "linux", "android" or "wasm" (brulion::platform::targetName()).
+    /// "linux", "windows", "android" or "wasm" (brulion::platform::targetName()).
     Q_PROPERTY(QString platform READ platform CONSTANT FINAL)
     /// Android (or another phone/tablet OS): touch-first UI everywhere.
     Q_PROPERTY(bool mobile READ mobile CONSTANT FINAL)

@@ -211,9 +211,9 @@ int htmlStart(QStringView t, bool inParagraph)
     static const QRegularExpression html2(u"^[ \\t]{0,3}<!--"_s);
     static const QRegularExpression html6(
             u"^[ \\t]{0,3}</?(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|"
-            "details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|"
-            "html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|"
-            "summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\\s/>]|$)"_s,
+            u"details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|"
+            u"html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|"
+            u"summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)(?=[\\s/>]|$)"_s,
             QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression html7(
             uR"(^[ \t]{0,3}(?:<[A-Za-z][A-Za-z0-9-]*(?:\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*/?>|</[A-Za-z][A-Za-z0-9-]*\s*>)[ \t]*$)"_s);

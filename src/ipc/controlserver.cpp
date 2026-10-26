@@ -73,9 +73,12 @@ bool ControlServer::listen(const QString &key)
         m_server = nullptr;
         return false;
     }
+#ifdef Q_OS_UNIX
     // Owner only: read and write for the user, nothing for anybody else (UserAccessOption gives
-    // 0700; a socket needs no execute bit).
+    // 0700; a socket needs no execute bit). On Windows the named pipe has no file: there
+    // UserAccessOption gives it an access list of this user alone.
     QFile::setPermissions(m_server->fullServerName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+#endif
     connect(m_server, &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket *socket = m_server->nextPendingConnection())
             accept(socket);
@@ -107,8 +110,8 @@ QString ControlServer::socketPath() const
 
 void ControlServer::accept(QLocalSocket *socket)
 {
-    // Linux tells who connected: anyone else, or someone it cannot tell, is refused. (Elsewhere the
-    // socket file's permissions decide.)
+    // Linux and Windows tell who connected: anyone else, or someone it cannot tell, is refused.
+    // (Elsewhere the socket file's permissions decide.)
     if (const qint64 uid = peerUid(socket->socketDescriptor()); !trustedPeer(uid, ownUid())) {
         Q_EMIT refused(uid);
         socket->abort();

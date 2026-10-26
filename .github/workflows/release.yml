@@ -5,6 +5,8 @@
 # "[ci]" in a commit message, a release always; the builds below test themselves too), builds
 #   brulion-<version>-arm64-v8a.apk          Android (android.yml, signed with the release key)
 #   Brulion-<version>-<arch>.AppImage(.zsync) Linux x86_64 + aarch64 (appimage.yml)
+#   Brulion-<version>-windows-x86_64-setup.exe, brulion-<version>-windows-x86_64.zip
+#                                            Windows, the test version (windows.yml)
 #   brulion-web-<version>.zip                the browser version for any web server (wasm.yml)
 #   brulion-<version>-source.tar.gz          the tagged sources (git archive)
 #   SHA256SUMS.txt
@@ -156,6 +158,13 @@ jobs:
       contents: read
     uses: ./.github/workflows/appimage.yml
 
+  windows:
+    name: Windows
+    needs: draft
+    permissions:
+      contents: read
+    uses: ./.github/workflows/windows.yml
+
   android:
     name: Android
     needs: draft
@@ -180,7 +189,7 @@ jobs:
 
   publish:
     name: Publish the release
-    needs: [draft, source, tests, appimage, android, web]
+    needs: [draft, source, tests, appimage, windows, android, web]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -201,7 +210,8 @@ jobs:
       - name: Collect the release files
         run: |
           mkdir assets
-          cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-source/* assets/
+          cp -- artifacts/brulion-android-apk/* artifacts/brulion-appimage-*/* artifacts/brulion-windows/* \
+            artifacts/brulion-source/* assets/
           (cd artifacts/brulion-web && zip -q -r -X "$GITHUB_WORKSPACE/assets/brulion-web-$FILE_VERSION.zip" .)
           # The AppImages update themselves from their .zsync files in the latest release.
           scripts/appimage-update-check.sh assets "$GH_REPO"

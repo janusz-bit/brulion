@@ -581,7 +581,13 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
         if (file.isEmpty()) {
             // The user's private runtime folder, a folder of its own — never the shared temp
             // folder, where another user could have made that folder and read the notes shown.
+            // Windows has no runtime folder (Qt gives the profile folder): the user's own temp
+            // folder (%TEMP%, inside the profile) is private.
+#ifdef Q_OS_WIN
+            const QString runtime = QDir::tempPath();
+#else
             const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+#endif
             if (runtime.isEmpty()) {
                 reply.fail(code(E::BadParams), u"There is no private runtime folder ($XDG_RUNTIME_DIR): give a path"_s,
                            {{u"param"_s, u"path"_s}});
@@ -942,7 +948,7 @@ void RemoteControl::pointer(const QString &method, const QJsonObject &params, co
                 if (problem) {
                     reply.fail(code(E::OffScreen),
                                u"The item is outside the window, and scrolling cannot bring it in: nothing "
-                               "was touched"_s,
+                               u"was touched"_s,
                                {{u"item"_s, describe(target.item)},
                                 {u"window"_s,
                                  QJsonObject{{u"width"_s, reached->width()}, {u"height"_s, reached->height()}}}});
@@ -1072,7 +1078,7 @@ void RemoteControl::drag(const QJsonObject &params, const ipc::ControlReply &rep
                     QQuickItem *off = problem ? from.item.data() : to.item.data();
                     reply.fail(code(E::OffScreen),
                                u"The %1 item is outside the window, and scrolling cannot bring it in: nothing was "
-                               "touched"_s.arg(problem ? u"from"_s : u"to"_s),
+                               u"touched"_s.arg(problem ? u"from"_s : u"to"_s),
                                {{u"param"_s, problem ? u"from"_s : u"to"_s}, {u"item"_s, describe(off)}});
                     finished();
                     return;

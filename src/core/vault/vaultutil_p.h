@@ -59,6 +59,12 @@ bool isTracked(const VaultPath &path);
 /// "\xEF\xBB\xBF" — the UTF-8 byte order mark.
 QByteArray utf8Bom();
 
+/// Writes `bytes` to `absolutePath` atomically (QSaveFile: a temporary file renamed over it). A
+/// rename refused for a moment — on Windows while another program has the file open for a look
+/// after each write (a virus scanner, an indexer) — is tried again a few times within about a
+/// tenth of a second, as Syncthing and editors do; any other failure is final. `error`: why not.
+bool saveAtomically(const QString &absolutePath, QByteArrayView bytes, QString *error);
+
 /// UTF-8 bytes to text with a leading byte order mark removed.
 QString decodeUtf8(const QByteArray &bytes);
 

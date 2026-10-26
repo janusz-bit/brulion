@@ -25,46 +25,46 @@ using namespace Qt::StringLiterals;
 namespace {
 
 const QString Dom = u"---\n"
-                    "tags: [dom, remont]\n"
-                    "aliases: [Remont]\n"
-                    "---\n"
-                    "# Dom\n"
-                    "\n"
-                    "Plan remontu ^plan\n"
-                    "\n"
-                    "- [ ] Kup farbę 📅 2026-10-20 ⏳ 2026-10-18 10:00 🔁 every week ⏫ #zakupy ^farba\n"
-                    "- [x] Zmierz ściany ✅ 2026-10-10\n"
-                    "- [/] Malowanie\n"
-                    "\t- [-] Tapeta\n"
-                    "- [>] Meble\n"
-                    "\n"
-                    "1. pierwszy\n"
-                    "2. drugi\n"
-                    "\n"
-                    "```js\n"
-                    "let x = 1; // [[nie link]]\n"
-                    "```\n"
-                    "\n"
-                    "| Pokój | Kolor |\n"
-                    "| --- | --- |\n"
-                    "| Salon | biały |\n"
-                    "\n"
-                    "> [!note] Uwaga\n"
-                    "> Pamiętaj o ((farba))\n"
-                    "\n"
-                    "Zdjęcie: ![[assets/salon.png]] i [plan](../assets/plan.pdf)\n"
-                    "⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
+                    u"tags: [dom, remont]\n"
+                    u"aliases: [Remont]\n"
+                    u"---\n"
+                    u"# Dom\n"
+                    u"\n"
+                    u"Plan remontu ^plan\n"
+                    u"\n"
+                    u"- [ ] Kup farbę 📅 2026-10-20 ⏳ 2026-10-18 10:00 🔁 every week ⏫ #zakupy ^farba\n"
+                    u"- [x] Zmierz ściany ✅ 2026-10-10\n"
+                    u"- [/] Malowanie\n"
+                    u"\t- [-] Tapeta\n"
+                    u"- [>] Meble\n"
+                    u"\n"
+                    u"1. pierwszy\n"
+                    u"2. drugi\n"
+                    u"\n"
+                    u"```js\n"
+                    u"let x = 1; // [[nie link]]\n"
+                    u"```\n"
+                    u"\n"
+                    u"| Pokój | Kolor |\n"
+                    u"| --- | --- |\n"
+                    u"| Salon | biały |\n"
+                    u"\n"
+                    u"> [!note] Uwaga\n"
+                    u"> Pamiętaj o ((farba))\n"
+                    u"\n"
+                    u"Zdjęcie: ![[assets/salon.png]] i [plan](../assets/plan.pdf)\n"
+                    u"⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
 
 const QString Zakupy = u"- Lista na [[Dom]] i [[Projekty/Dom#^farba|farba]]\n"
-                       "- ![[Dom#^plan]]\n"
-                       "- Odnośnik do ((farba))\n"
-                       "- TODO Logseq marker\n"
-                       "  SCHEDULED: <2026-10-21 Wed>\n"
-                       "- [[2026-10-14]] notatka\n"
-                       "- [ ] =SUM(A1) podejrzane\n"_s;
+                       u"- ![[Dom#^plan]]\n"
+                       u"- Odnośnik do ((farba))\n"
+                       u"- TODO Logseq marker\n"
+                       u"  SCHEDULED: <2026-10-21 Wed>\n"
+                       u"- [[2026-10-14]] notatka\n"
+                       u"- [ ] =SUM(A1) podejrzane\n"_s;
 
 const QString Journal = u"- Rano: zadzwonić ⏰! 2026-10-14 07:30\n"
-                        "- [ ] Pranie 📅 2026-10-14\n"_s;
+                        u"- [ ] Pranie 📅 2026-10-14\n"_s;
 
 const QString Unsafe =
         u"<script>alert(1)</script>\n\nTekst <b>pogrubiony</b> [x](javascript:alert(1)) & \"cudzysłów\"\n"_s;
@@ -166,11 +166,11 @@ private Q_SLOTS:
         const QList<FileEntry> entries = readZip(exportWith(u"obsidian-zip"_s).data);
         const QString root = u"Mój skarbiec/"_s;
         QCOMPARE(textOf(entries, root + u"Zakupy.md"_s), u"- Lista na [[Dom]] i [[Projekty/Dom#^farba|farba]]\n"
-                                                         "- ![[Dom#^plan]]\n"
-                                                         "- Odnośnik do [[Projekty/Dom#^farba]]\n"
-                                                         "- [ ] Logseq marker ⏳ 2026-10-21\n"
-                                                         "- [[2026-10-14]] notatka\n"
-                                                         "- [ ] =SUM(A1) podejrzane\n"_s);
+                                                         u"- ![[Dom#^plan]]\n"
+                                                         u"- Odnośnik do [[Projekty/Dom#^farba]]\n"
+                                                         u"- [ ] Logseq marker ⏳ 2026-10-21\n"
+                                                         u"- [[2026-10-14]] notatka\n"
+                                                         u"- [ ] =SUM(A1) podejrzane\n"_s);
         QVERIFY(textOf(entries, root + u"Projekty/Dom.md"_s).contains(u"> Pamiętaj o [[#^farba]]\n"_s));
         const QJsonObject daily =
                 QJsonDocument::fromJson(iotest::entryData(entries, root + u".obsidian/daily-notes.json"_s)).object();
@@ -240,45 +240,45 @@ private Q_SLOTS:
         // #dom names this page, which Logseq knows as the namespace page "Projekty/Dom"; the
         // alias Remont stays (Logseq resolves alias:: itself).
         const QString expected = u"alias:: Remont\n"
-                                 "tags:: [[Projekty/Dom]], remont\n"
-                                 "\n"
-                                 "- # Dom\n"
-                                 "- Plan remontu\n"
-                                 "  id:: "_s
+                                 u"tags:: [[Projekty/Dom]], remont\n"
+                                 u"\n"
+                                 u"- # Dom\n"
+                                 u"- Plan remontu\n"
+                                 u"  id:: "_s
                                  + uuid(u"plan"_s)
                                  + u"\n"
-                                   "- TODO [#A] Kup farbę #zakupy\n"
-                                   "  id:: "_s
+                                   u"- TODO [#A] Kup farbę #zakupy\n"
+                                   u"  id:: "_s
                                  + uuid(u"farba"_s)
                                  + u"\n"
-                                   "  SCHEDULED: <2026-10-18 Sun 10:00 +1w>\n"
-                                   "  DEADLINE: <2026-10-20 Tue>\n"
-                                   "- DONE Zmierz ściany ✅ 2026-10-10\n"
-                                   "- DOING Malowanie\n"
-                                   "\t- CANCELED Tapeta\n"
-                                   "- WAITING Meble\n"
-                                   "- pierwszy\n"
-                                   "  logseq.order-list-type:: number\n"
-                                   "- drugi\n"
-                                   "  logseq.order-list-type:: number\n"
-                                   "- ```js\n"
-                                   "  let x = 1; // [[nie link]]\n"
-                                   "  ```\n"
-                                   "- | Pokój | Kolor |\n"
-                                   "  | --- | --- |\n"
-                                   "  | Salon | biały |\n"
-                                   "- > [!note] Uwaga\n"
-                                   "  > Pamiętaj o (("_s
+                                   u"  SCHEDULED: <2026-10-18 Sun 10:00 +1w>\n"
+                                   u"  DEADLINE: <2026-10-20 Tue>\n"
+                                   u"- DONE Zmierz ściany ✅ 2026-10-10\n"
+                                   u"- DOING Malowanie\n"
+                                   u"\t- CANCELED Tapeta\n"
+                                   u"- WAITING Meble\n"
+                                   u"- pierwszy\n"
+                                   u"  logseq.order-list-type:: number\n"
+                                   u"- drugi\n"
+                                   u"  logseq.order-list-type:: number\n"
+                                   u"- ```js\n"
+                                   u"  let x = 1; // [[nie link]]\n"
+                                   u"  ```\n"
+                                   u"- | Pokój | Kolor |\n"
+                                   u"  | --- | --- |\n"
+                                   u"  | Salon | biały |\n"
+                                   u"- > [!note] Uwaga\n"
+                                   u"  > Pamiętaj o (("_s
                                  + uuid(u"farba"_s)
                                  + u"))\n"
-                                   "- Zdjęcie: ![salon.png](../assets/salon.png) i [plan](../assets/plan.pdf)\n"
-                                   "  ⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
+                                   u"- Zdjęcie: ![salon.png](../assets/salon.png) i [plan](../assets/plan.pdf)\n"
+                                   u"  ⏰ 2026-10-16 09:00 Zadzwoń do fachowca\n"_s;
         QCOMPARE(dom, expected);
         QCOMPARE(textOf(entries, root + u"pages/Zakupy.md"_s),
                  u"- Lista na [[Projekty/Dom]] i (("_s + uuid(u"farba"_s) + u"))\n- {{embed (("_s + uuid(u"plan"_s)
                          + u"))}}\n- Odnośnik do (("_s + uuid(u"farba"_s)
                          + u"))\n- TODO Logseq marker\n  SCHEDULED: <2026-10-21 Wed>\n- [[2026-10-14]] notatka\n"
-                           "- TODO =SUM(A1) podejrzane\n"_s);
+                           u"- TODO =SUM(A1) podejrzane\n"_s);
         QCOMPARE(textOf(entries, root + u"journals/2026_10_14.md"_s),
                  u"- Rano: zadzwonić ⏰! 2026-10-14 07:30\n- TODO Pranie\n  DEADLINE: <2026-10-14 Wed>\n"_s);
         const QString edn = textOf(entries, root + u"logseq/config.edn"_s);
@@ -294,7 +294,7 @@ private Q_SLOTS:
         in.files = {iotest::text(u"Projekty/Dom.md"_s, u"- x"_s), iotest::text(u"Zakupy.md"_s, u"- y"_s),
                     iotest::text(u"Ludzie/Jan Kowalski.md"_s, u"---\naliases: [Janek]\n---\n- z"_s),
                     iotest::text(u"Notatki.md"_s, u"- #dom, #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, "
-                                                  "#dom/kuchnia\n  tags:: dom, praca\n"_s)};
+                                                  u"#dom/kuchnia\n  tags:: dom, praca\n"_s)};
         const QString page = textOf(readZip(exportWith(u"logseq-zip"_s, in).data), u"Brulion/pages/Notatki.md"_s);
         QVERIFY2(page.contains(
                          u"- #[[Projekty/Dom]], #Zakupy, #Janek, #praca, #[[Projekty/Dom]], `#dom`, #dom/kuchnia\n"_s),
@@ -308,7 +308,7 @@ private Q_SLOTS:
         in.files = {iotest::text(
                 u"Strona.md"_s,
                 u"```js\nlet x = 1;\n```\n^kod1\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n^tab1\n\n"
-                "TODO to nie zadanie\n\n[ ] ani to\n\n- [ ] pilne 🔺\n- [ ] kiedyś ⏬\n- [ ] ważne ⏫\n"_s)};
+                u"TODO to nie zadanie\n\n[ ] ani to\n\n- [ ] pilne 🔺\n- [ ] kiedyś ⏬\n- [ ] ważne ⏫\n"_s)};
         const QString page = textOf(readZip(exportWith(u"logseq-zip"_s, in).data), u"Brulion/pages/Strona.md"_s);
         // The id of a code block or table follows its content (inside, it would be code / break the table).
         QVERIFY2(page.contains(u"- ```js\n  let x = 1;\n  ```\n  id:: "_s + uuid(u"kod1"_s) + u'\n'), qPrintable(page));
@@ -400,7 +400,7 @@ private Q_SLOTS:
         QVERIFY(dom.contains(u"<h1 class=\"title\">Dom</h1>"_s));
         // #zakupy names the page Zakupy (SYNTAX §3): the tag leads there.
         QVERIFY(dom.contains(u"<li class=\"task todo\" id=\"block-farba\"><input type=\"checkbox\" disabled> Kup farbę "
-                             "<a class=\"tag\" href=\"../Zakupy.html\">#zakupy</a>"_s));
+                             u"<a class=\"tag\" href=\"../Zakupy.html\">#zakupy</a>"_s));
         QVERIFY(dom.contains(u"<p class=\"tags\"><a class=\"tag\" href=\"Dom.html\">#dom</a>"_s));
         QVERIFY(dom.contains(u"<span class=\"chip due\">📅 2026-10-20</span>"_s));
         QVERIFY(dom.contains(u"<li class=\"task done\"><input type=\"checkbox\" disabled checked> Zmierz ściany"_s));
@@ -453,7 +453,7 @@ private Q_SLOTS:
         QCOMPARE(item.count(u"class=\"tag\""_s), 2);
         QVERIFY(item.contains(u"</a> #- #_ #٣ ("_s));
         QVERIFY(page.contains(u"<p class=\"tags\"><a class=\"tag\" href=\"tags/tag.html\">#tag</a> <a class=\"tag\" "
-                              "href=\"tags/ok.html\">#ok</a></p>"_s));
+                              u"href=\"tags/ok.html\">#ok</a></p>"_s));
         // Link labels and block references never hold links of their own (no nested anchors).
         QVERIFY(page.contains(u"rel=\"noopener\">link #nie</a>"_s));
         QVERIFY(page.contains(u">alias #nie</a>"_s));
@@ -491,16 +491,16 @@ private Q_SLOTS:
     {
         ExportInput in;
         in.files = {iotest::text(u"Wzory.md"_s, u"Pole koła: $\\pi r^2$, źródło: $\\sqrt{2}$.\n"
-                                                "\n"
-                                                "$$\\frac{a}{b}$$\n"
-                                                "\n"
-                                                "```math\n"
-                                                "\\sum_{i=1}^{n} i\n"
-                                                "```\n"_s)};
+                                                u"\n"
+                                                u"$$\\frac{a}{b}$$\n"
+                                                u"\n"
+                                                u"```math\n"
+                                                u"\\sum_{i=1}^{n} i\n"
+                                                u"```\n"_s)};
         const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
         const QString page = textOf(entries, u"Brulion/Wzory.html"_s);
         QVERIFY2(page.contains(u"Pole koła: <span class=\"math\"><i>π</i><i>r</i><sup>2</sup></span>, źródło: "
-                               "<span class=\"math\">√<span style=\"text-decoration:overline\">2</span></span>."_s),
+                               u"<span class=\"math\">√<span style=\"text-decoration:overline\">2</span></span>."_s),
                  qPrintable(page));
         QVERIFY(page.contains(u"<span class=\"math display\"><sup><i>a</i></sup>&#8260;<sub><i>b</i></sub></span>"_s));
         QVERIFY(page.contains(u"<div class=\"math\">∑<sub><i>i</i> = 1</sub><sup><i>n</i></sup> <i>i</i></div>"_s));
@@ -513,22 +513,22 @@ private Q_SLOTS:
     {
         ExportInput in;
         in.files = {iotest::text(u"Konspekt.md"_s, u"- Wzór w konspekcie:\n"
-                                                   "- ```math\n"
-                                                   "  a^2 + b^2 = c^2\n"
-                                                   "  ```\n"
-                                                   "  - ```calc\n"
-                                                   "    2 + 2\n"
-                                                   "    ```\n"
-                                                   "- ~~~LaTeX\n"
-                                                   "  \\frac{1}{2}\n"
-                                                   "  ~~~\n"
-                                                   "- Tekst i `kod`\n"
-                                                   "  ```js\n"
-                                                   "  x\n"
-                                                   "  ```\n"
-                                                   "- [ ] ```math\n"
-                                                   "- ```\n"
-                                                   "- koniec\n"_s)};
+                                                   u"- ```math\n"
+                                                   u"  a^2 + b^2 = c^2\n"
+                                                   u"  ```\n"
+                                                   u"  - ```calc\n"
+                                                   u"    2 + 2\n"
+                                                   u"    ```\n"
+                                                   u"- ~~~LaTeX\n"
+                                                   u"  \\frac{1}{2}\n"
+                                                   u"  ~~~\n"
+                                                   u"- Tekst i `kod`\n"
+                                                   u"  ```js\n"
+                                                   u"  x\n"
+                                                   u"  ```\n"
+                                                   u"- [ ] ```math\n"
+                                                   u"- ```\n"
+                                                   u"- koniec\n"_s)};
         const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
         const QString page = textOf(entries, u"Brulion/Konspekt.html"_s);
         const QString formula = markdown::renderMath(u"a^2 + b^2 = c^2"_s, true);

@@ -1603,11 +1603,25 @@ void checkFolders(QQuickWindow *window, AppController *app, const Check &check)
     //      "Pokaż w drzewie" opens it and shows the page.
     openDrawer();
     if (QQuickItem *sidebar = sidebarItem(); sidebar && (header = named(u"sidebarPagesHeader"_s))) {
+        // The header scrolls with the tree, which the drag above may have left scrolled.
+        if (QQuickItem *list = treeList()) {
+            QMetaObject::invokeMethod(list, "positionViewAtBeginning");
+            settle(100);
+        }
         if (sidebar->property("pagesOpen").toBool())
             tapOrClick(window, pointIn(header, 0.15), touch);
-        check(waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
-                      && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
-              "a tap on “Strony” collapses the section");
+        const bool collapsed = waitFor([&] { return !sidebar->property("pagesOpen").toBool(); })
+                               && !app->settings()->value(u"ui/sidebar/pages"_s).toBool();
+        if (!collapsed) {
+            const QPointF at = pointIn(header, 0.15);
+            const QQuickItem *list = treeList();
+            std::fprintf(stderr,
+                         "selftest: “Strony” header at %.0f,%.0f, visible %d, open %d, setting '%s', tree at %.0f\n",
+                         at.x(), at.y(), int(header->isVisible()), int(sidebar->property("pagesOpen").toBool()),
+                         qPrintable(app->settings()->value(u"ui/sidebar/pages"_s).toString()),
+                         list ? list->property("contentY").toReal() : -1.0);
+        }
+        check(collapsed, "a tap on “Strony” collapses the section");
         app->openPage(recipes);
         settle(300);
         check(!sidebar->property("pagesOpen").toBool() && !app->settings()->value(u"ui/sidebar/pages"_s).toBool(),
@@ -1724,7 +1738,7 @@ void checkBlockLinks(QQuickWindow *window, AppController *app, const Check &chec
     const QString newPage = u"Linki/Nowa strona.md"_s;
     ws->write(newPage, u"- Wstęp\n- Przeniesiony blok z łazienką ^przen1\n"_s);
     ws->write(oldPage, u"# Stara strona\n\nZobacz [[Stara strona#^przen1]] i [[Stara strona#Brakujący nagłówek]].\n\n"
-                       "Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
+                       u"Akapit do skopiowania.\n\nZnaczniki: [[#<b>Pogrubiony</b> nagłówek]].\n"_s);
     QString lastToast;
     const QMetaObject::Connection toasts = QObject::connect(app, &AppController::toastRequested, app,
                                                             [&lastToast](const QString &text) { lastToast = text; });
@@ -1970,14 +1984,17 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
             return label.isValid() ? label.toString() : button->property("text").toString();
         };
         if (name && size && textButton && waitFor([&] { return size->isVisible(); })) {
+            // (Once the row's layout has settled: the name may widen before the toggle moves.)
+            const bool fits = waitFor([&] {
+                return name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
+                       && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
+                       && right(textButton) <= window->width() + 0.5;
+            });
             std::fprintf(stderr,
                          "selftest: picture bar: name %.0f of %.0f px, size toggle %.0f–%.0f, text button %.0f–%.0f\n",
                          name->width(), name->property("implicitWidth").toReal(), left(size), right(size),
                          left(textButton), right(textButton));
-            check(name->width() >= qMin<qreal>(name->property("implicitWidth").toReal(), 80)
-                          && right(name) <= left(size) + 0.5 && right(size) <= left(textButton) + 0.5
-                          && right(textButton) <= window->width() + 0.5
-                          && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
+            check(fits && nameOf(size) == QCoreApplication::translate("ContentPictureView", "Zoom to actual size"),
                   "the picture's bar shows the file name next to the size toggle and fits the window");
             // (The mouse still rests where an earlier step clicked the note mode toggle, hidden
             // since: its tooltip waits for a deletion this running test does not let happen —
@@ -2211,15 +2228,21 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
               "a picture smaller than the view is shown at its own size, without a size toggle");
     }
 
-    // A file name that looks like markup is shown as written (one line, not a line break).
+    // A file name that looks like markup is shown as written (one line, not a line break). Windows
+    // allows no "<" or ">" in file names: there entities stand for the markup.
     {
-        const QString odd = u"assets/a<br>b <i>szkic.svg"_s;
+#ifdef Q_OS_WIN
+        const QString oddName = u"a&lt;br&gt;b &amp;szkic.svg"_s;
+#else
+        const QString oddName = u"a<br>b <i>szkic.svg"_s;
+#endif
+        const QString odd = u"assets/"_s + oddName;
         check(workspace->writeFile(odd, bytes), "a picture with markup in its name is added to the notebook");
         app->openPage(odd);
         check(waitFor([&] { return opened(odd) && pictureShown(); }), "the picture with markup in its name opens");
         QQuickItem *name = child(pictureView(), "pictureName");
         check(name && name->property("lineCount").toInt() == 1
-                      && name->property("text").toString() == u"a<br>b <i>szkic.svg"_s
+                      && name->property("text").toString() == oddName
                       && name->property("textFormat").toInt() == 0 /* Text.PlainText */,
               "a picture's file name is shown as plain text");
     }
@@ -2318,11 +2341,18 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
           "a time picked on the clock is saved as the default reminder time");
     waitFor([&] { return !dialog->property("visible").toBool(); });
-    workspace->setConfig({{key, u"10:05"_s}});
-    check(waitFor([&] { return field->property("text").toString() == u"10:05"; }),
+    const auto report = [&](bool saved, bool ok) {
+        if (!ok)
+            std::fprintf(stderr, "selftest: config saved %d, config value %s, field %s\n", int(saved),
+                         qPrintable(configValue()), qPrintable(field->property("text").toString()));
+        return ok;
+    };
+    bool saved = workspace->setConfig({{key, u"10:05"_s}});
+    check(report(saved, waitFor([&] { return field->property("text").toString() == u"10:05"; })),
           "after a clock pick the field still follows the notebook's config (a synced change shows)");
-    workspace->setConfig({{key, original}});
-    check(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original,
+    saved = workspace->setConfig({{key, original}});
+    check(report(saved,
+                 waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original),
           "the default reminder time is back");
     app->goHome();
 }

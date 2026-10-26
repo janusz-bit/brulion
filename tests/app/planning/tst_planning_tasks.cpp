@@ -27,20 +27,20 @@ const Files &vault()
     static const Files files = {
             {u"journals/2026-10-15.md"_s,
              u"- [ ] Zaległe zadanie 📅 2026-10-14\n"
-             "- [ ] Na dziś 📅 2026-10-15 #praca\n"
-             "- [ ] Zaplanowane przedwczoraj ⏳ 2026-10-13\n"
-             "- [ ] Zadzwonić do Ani ⏰ 2026-10-16 09:00 #praca/telefony\n"
-             "- [ ] Bez daty #dom\n"_s},
+             u"- [ ] Na dziś 📅 2026-10-15 #praca\n"
+             u"- [ ] Zaplanowane przedwczoraj ⏳ 2026-10-13\n"
+             u"- [ ] Zadzwonić do Ani ⏰ 2026-10-16 09:00 #praca/telefony\n"
+             u"- [ ] Bez daty #dom\n"_s},
             {u"Projekty/Dom/Remont.md"_s,
              u"---\ntags: remont\n---\n"
-             "- [ ] Zamówić farbę ⏫ 📅 2026-10-16\n"
-             "- [/] Zerwać panele 📅 2026-10-18\n"
-             "- [ ] Odebrać listwy 📅 2026-10-19 ➕ 2026-10-01\n"
-             "- [ ] Zapłacić ratę 🔁 every month on the 10th 📅 2026-11-10 ➕ 2026-10-02\n"
-             "- [ ] Kupić żółwia 🔽 🛫 2026-10-20\n"
-             "- [x] Wnieść meble ✅ 2026-10-13\n"
-             "- [-] Wynająć kontener ❌ 2026-10-14\n"
-             "- [x] Stary wpis ✅ 2026-09-01\n"_s},
+             u"- [ ] Zamówić farbę ⏫ 📅 2026-10-16\n"
+             u"- [/] Zerwać panele 📅 2026-10-18\n"
+             u"- [ ] Odebrać listwy 📅 2026-10-19 ➕ 2026-10-01\n"
+             u"- [ ] Zapłacić ratę 🔁 every month on the 10th 📅 2026-11-10 ➕ 2026-10-02\n"
+             u"- [ ] Kupić żółwia 🔽 🛫 2026-10-20\n"
+             u"- [x] Wnieść meble ✅ 2026-10-13\n"
+             u"- [-] Wynająć kontener ❌ 2026-10-14\n"
+             u"- [x] Stary wpis ✅ 2026-09-01\n"_s},
             {u"Książki.md"_s, u"- [ ] Przeczytać „Lalkę” 🔺 #[[do przeczytania]]\n- [>] Odłożone na potem\n"_s},
     };
     return files;

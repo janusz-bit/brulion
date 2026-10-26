@@ -640,7 +640,7 @@ private Q_SLOTS:
         w.end(u"VCALENDAR");
         QCOMPARE(QString::fromUtf8(w.data()),
                  u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nSUMMARY:Kup mleko\\, chleb\\; masło\r\n"
-                 "DTSTART;VALUE=DATE:20261015\r\nX-TEST;CN=\"Kowalski, Jan: szef\":a b\r\nEND:VCALENDAR\r\n"_s);
+                 u"DTSTART;VALUE=DATE:20261015\r\nX-TEST;CN=\"Kowalski, Jan: szef\":a b\r\nEND:VCALENDAR\r\n"_s);
         QCOMPARE(ical::formatDate(QDate(2026, 1, 5)), u"20260105"_s);
         QCOMPARE(ical::formatLocalDateTime(QDate(2026, 1, 5), QTime(9, 7)), u"20260105T090700"_s);
         QCOMPARE(ical::formatUtc(QDateTime(QDate(2026, 10, 15), QTime(12, 0), iotest::warsaw())),

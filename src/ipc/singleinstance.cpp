@@ -25,7 +25,15 @@ QString SingleInstance::keyFor(const QString &appDataDir)
     // there is one. Without one the key is a bare name, which QLocalServer would put into the
     // shared temp folder: listen() refuses it (another user could create the name first and keep
     // Brulion from starting).
+#ifdef Q_OS_WIN
+    // Windows: the socket is a named pipe (\\.\pipe\<key>, machine-wide names: the key carries
+    // the user's own path) and only its lock file is in the folder — the user's temp folder
+    // (%TEMP%, inside the profile, private to the user). RuntimeLocation would be the profile
+    // folder itself, where the lock file would show.
+    const QString runtime = QDir::tempPath();
+#else
     const QString runtime = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+#endif
     return runtime.isEmpty() ? name : QDir(runtime).absoluteFilePath(name);
 }
 
@@ -106,8 +114,8 @@ bool SingleInstance::listen()
     m_server = server;
     connect(m_server, &QLocalServer::newConnection, this, [this] {
         while (QLocalSocket *socket = m_server->nextPendingConnection()) {
-            // Linux tells who connected: another user, or one it cannot tell, is dropped unheard.
-            // (Elsewhere the socket file's permissions decide.)
+            // Linux and Windows tell who connected: another user, or one it cannot tell, is dropped
+            // unheard. (Elsewhere the socket file's permissions decide.)
             if (const qint64 uid = peerUid(socket->socketDescriptor()); !trustedPeer(uid, ownUid())) {
                 Q_EMIT refused(uid);
                 socket->abort();

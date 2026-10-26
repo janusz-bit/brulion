@@ -607,7 +607,8 @@ private Q_SLOTS:
         QCOMPARE(readRaw(root + u"/Archiwum/Dom.md"_s), QByteArray("- mój dom\n"));
         QCOMPARE(readRaw(root + u"/Archiwum/dom 2.md"_s), QByteArray("- importowany dom\n"));
         QVERIFY(QFileInfo::exists(root + u"/Archiwum/Ogród.md"_s));
-        QVERIFY(!QFileInfo::exists(root + u"/archiwum"_s));
+        // (By name: on case-insensitive storage "archiwum" opens "Archiwum".)
+        QVERIFY(!QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot).contains(u"archiwum"_s));
         // The preview counted the taken name; the folder spelling alone is no rename.
         QCOMPARE(c.report().value(u"renamed"_s).toInt(), 0);
         for (const QString &w : c.report().value(u"warnings"_s).toStringList())

@@ -254,7 +254,7 @@ qint64 parseHttpDate(QStringView text)
     // IMF-fixdate "Tue, 14 Oct 2026 08:00:00 GMT" and RFC 850 "Tuesday, 14-Oct-26 08:00:00 GMT".
     static const QRegularExpression imf(
         u"^(?:[A-Za-z]{3,9},?\\s*)?(\\d{1,2})[\\s-]+([A-Za-z]{3})[A-Za-z]*[\\s-]+(\\d{2,4})\\s+"
-        "(\\d{1,2}):(\\d{2})(?::(\\d{2}))?\\s*(GMT|UTC|UT|Z|[+-]\\d{2}:?\\d{2})?$"_s,
+        u"(\\d{1,2}):(\\d{2})(?::(\\d{2}))?\\s*(GMT|UTC|UT|Z|[+-]\\d{2}:?\\d{2})?$"_s,
         QRegularExpression::CaseInsensitiveOption);
     if (const QRegularExpressionMatch m = imf.match(s); m.hasMatch()) {
         const int month = monthNumber(m.capturedView(2));

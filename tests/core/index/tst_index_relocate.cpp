@@ -445,7 +445,7 @@ private Q_SLOTS:
                 << dom << u"Dom.md"_s << u"Mieszkanie.md"_s
                 << u"type:tasks tag:dom -tag:dom/kuchnia #dom tagi:praca,DOM ref:Dom [[Dom]] page:Dom ścieżka:Dom"_s
                 << u"type:tasks tag:Mieszkanie -tag:dom/kuchnia #Mieszkanie tagi:praca,Mieszkanie ref:Mieszkanie "
-                   "[[Mieszkanie]] page:Mieszkanie ścieżka:Mieszkanie"_s
+                   u"[[Mieszkanie]] page:Mieszkanie ścieżka:Mieszkanie"_s
                 << 4 << 4 << 7; // links: 4 filters; tags: Notatka's #dom + 3 filters
         QTest::newRow("a name with spaces: in [[ ]] or quotes")
                 << dom << u"Dom.md"_s << u"Mój dom.md"_s << u"tag:dom #dom ref:Dom ref:[[Dom]] page:\"Dom\" path:Dom"_s
@@ -459,7 +459,7 @@ private Q_SLOTS:
         QTest::newRow("a folder renamed: path prefixes and paths")
                 << QStringList{u"Projekty/Dom.md=- x"_s, u"Projekty/Plan.md=- y"_s} << u"Projekty/"_s << u"Prace/"_s
                 << u"path:Projekty/ -path:Projekty/Plan path:./Projekty/ ref:[[Projekty/Dom]] tag:Projekty/Dom "
-                   "page:Projekty/Dom ref:Dom"_s
+                   u"page:Projekty/Dom ref:Dom"_s
                 << u"path:Prace/ -path:Prace/Plan path:./Prace/ ref:[[Prace/Dom]] tag:Prace/Dom page:Prace/Dom ref:Dom"_s
                 << 5 << 1 << 6;
         QTest::newRow("a folder moved deeper: only path: changes (suffixes still resolve)")

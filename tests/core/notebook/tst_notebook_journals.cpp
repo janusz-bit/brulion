@@ -6,6 +6,7 @@
 // for its saved setting.
 #include "notebook/journals.h"
 
+#include "filesystemtraits.h"
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
 
@@ -193,6 +194,7 @@ private Q_SLOTS:
 
     void existingNotesUnderOtherNames()
     {
+        BRULION_SKIP_IF_CASE_INSENSITIVE(m_tmp.path()); // "journals/" next to "Journals/"
         QString root;
         // Logseq's name and a capitalised folder from another device: no second note for the day.
         auto vault = open({{u"journals/2026_10_14.md"_s, "- z Logseqa\n"}, {u"Journals/2026-10-13.md"_s, "- inny\n"}},

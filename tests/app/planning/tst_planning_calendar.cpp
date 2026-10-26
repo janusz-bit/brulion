@@ -4,6 +4,7 @@
 // how the model updates (dataChanged instead of resets).
 #include "calendarmodel.h"
 #include "planningtest.h"
+#include "centraleuropeantime.h"
 
 #include <QElapsedTimer>
 #include <QSignalSpy>
@@ -47,8 +48,7 @@ private Q_SLOTS:
     void initTestCase()
     {
         // Local wall-clock dates must not depend on the zone; a zone with DST makes sure of it.
-        qputenv("TZ", "Europe/Warsaw");
-        tzset();
+        brulion::test::useCentralEuropeanTime();
     }
 
     void monthGridMondayStart()
@@ -158,12 +158,12 @@ private Q_SLOTS:
                 {u"journals/2026-10-15.md"_s, u"- Dzisiejszy wpis\n"_s},
                 {u"Dom.md"_s,
                  u"- [ ] Zamówić farbę 📅 2026-10-16\n"
-                 "- [ ] Zaległa rata 📅 2026-10-10\n"
-                 "- [x] Odebrać paczkę 📅 2026-10-14 ✅ 2026-10-14\n"
-                 "- [ ] Zerwać panele ⏳ 2026-10-16\n"
-                 "- Spotkanie z ekipą ⏰ 2026-10-16 17:30\n"
-                 "- Pobudka na pociąg ⏰! 2026-10-16 05:45\n"
-                 "- [ ] Zadzwonić do **Ani** [[Kontakty|w sprawie]] remontu 📅 2026-10-16 08:15\n"_s},
+                 u"- [ ] Zaległa rata 📅 2026-10-10\n"
+                 u"- [x] Odebrać paczkę 📅 2026-10-14 ✅ 2026-10-14\n"
+                 u"- [ ] Zerwać panele ⏳ 2026-10-16\n"
+                 u"- Spotkanie z ekipą ⏰ 2026-10-16 17:30\n"
+                 u"- Pobudka na pociąg ⏰! 2026-10-16 05:45\n"
+                 u"- [ ] Zadzwonić do **Ani** [[Kontakty|w sprawie]] remontu 📅 2026-10-16 08:15\n"_s},
         });
         CalendarModel m;
         m.setToday(u"2026-10-15"_s);
@@ -324,8 +324,8 @@ private Q_SLOTS:
         auto index = makeIndex({
                 {u"Dom.md"_s,
                  u"- [ ] Wynieść śmieci 🔁 every week on Monday 📅 2026-10-05\n"
-                 "- Czynsz ⏰ 2026-10-01 08:00 🔁 co miesiąc\n"
-                 "- [x] Zrobione cykliczne 🔁 every day 📅 2026-10-12 ✅ 2026-10-12\n"_s},
+                 u"- Czynsz ⏰ 2026-10-01 08:00 🔁 co miesiąc\n"
+                 u"- [x] Zrobione cykliczne 🔁 every day 📅 2026-10-12 ✅ 2026-10-12\n"_s},
         });
         CalendarModel m;
         m.setToday(u"2026-10-15"_s);

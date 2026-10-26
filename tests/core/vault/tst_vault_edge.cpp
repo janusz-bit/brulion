@@ -38,6 +38,7 @@ private Q_SLOTS:
         // The app names the device state folder by Vault::idForPath() before the first open()
         // creates the vault folder; a symlinked parent (/sdcard -> /storage/emulated/0) must
         // not change the id once the folder exists, or History and LocalStore are orphaned.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         QTemporaryDir tmp;
         QVERIFY(QDir().mkpath(tmp.path() + u"/prawdziwy"_s));
         QVERIFY(QFile::link(tmp.path() + u"/prawdziwy"_s, tmp.path() + u"/skrót"_s));
@@ -166,6 +167,7 @@ private Q_SLOTS:
     {
         // A dangling link (planted by a sync peer, left by a removed drive) is not listed, so a
         // write to its name must not create a file wherever the link points.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
         QVERIFY(f.open());
         const QString outside = f.tmp.path() + u"/poza/sekret.md"_s;
@@ -186,6 +188,7 @@ private Q_SLOTS:
         // A ".trash" link (planted by a sync peer) would carry deleted notes out of the vault,
         // list foreign files as deleted notes, restore them into the (synced) vault and delete
         // them "permanently" where they really are.
+        BRULION_SKIP_WITHOUT_SYMLINKS();
         Fixture f;
         f.write(u"a.md"_s, "notatka");
         f.write(u"Projekt/b.md"_s, "b");

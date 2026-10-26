@@ -78,8 +78,8 @@ QString pageHtml(const QString &title, const QString &vaultName, const QString &
                  const QString &body, const QString &footer)
 {
     QString out = u"<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"
-                  "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-                  "<meta name=\"generator\" content=\"Brulion\">\n<title>"_s
+                  u"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+                  u"<meta name=\"generator\" content=\"Brulion\">\n<title>"_s
                   + esc(title == vaultName ? title : title + u" – "_s + vaultName) + u"</title>\n"_s;
     if (cssHref.isEmpty())
         out += u"<style>\n"_s + QString::fromUtf8(styleSheet()) + u"</style>\n"_s;

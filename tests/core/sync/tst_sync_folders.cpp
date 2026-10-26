@@ -785,6 +785,16 @@ private Q_SLOTS:
         const SyncReport rb = p.b.sync();
         QVERIFY2(!rb.failed(), qPrintable(rb.failureMessage()));
         QVERIFY(!rb.needsConfirmation);
+        if (!brulion::test::isCaseSensitive(p.b.root)) {
+            // Case-insensitive storage (Windows, Android shared storage): "Projekty" is the very
+            // folder "projekty" — renamed here too, nothing to transfer, no note trashed.
+            QCOMPARE(counts(rb), Counts{});
+            QCOMPARE(p.b.files(), p.a.files());
+            QVERIFY(p.b.vault->trash().isEmpty());
+            QCOMPARE(p.server.files(kFolder), p.a.files());
+            QCOMPARE(p.b.sync().changeCount(), 0);
+            return;
+        }
         QCOMPARE(counts(rb), (Counts{.down = 12, .delL = 12}));
         QCOMPARE(p.b.files(), p.a.files());
         QVERIFY(!isLocalDir(p.b, u"projekty"_s));
@@ -804,6 +814,11 @@ private Q_SLOTS:
         QFETCH(bool, onServer);
         QFETCH(bool, aliased);
         Pair p(notesIn(u""_s, 2));
+        // Storage that is case-insensitive itself (Windows) is the aliased case without a link.
+        const bool caseSensitive = brulion::test::isCaseSensitive(p.a.root);
+        if (aliased && !caseSensitive)
+            QSKIP("the storage is case-insensitive itself: the row \"renamed on the server\" is this case");
+        aliased = aliased || (onServer && !caseSensitive);
         QVERIFY(p.a.vault->createFolder(u"projekty"_s));
         p.a.sync();
         QVERIFY(p.a.engine->knowsFolder(u"projekty"_s));
@@ -812,7 +827,7 @@ private Q_SLOTS:
         else
             QVERIFY(p.a.vault->rename(u"projekty"_s, u"Projekty"_s));
         // Case-insensitive storage, simulated: "Projekty" opens the very folder "projekty".
-        if (aliased)
+        if (aliased && caseSensitive)
             QVERIFY(QFile::link(p.a.root + u"/projekty"_s, p.a.root + u"/Projekty"_s));
         const SyncReport r = p.a.sync();
         QVERIFY(!r.failed());
@@ -830,7 +845,8 @@ private Q_SLOTS:
         const SyncAction created = onServer ? SyncAction::CreateFolderLocal : SyncAction::CreateFolderRemote;
         QCOMPARE(folderChanges(r, deleted), QStringList{u"projekty"_s});
         QCOMPARE(folderChanges(r, created), QStringList{u"Projekty"_s});
-        QVERIFY(!isLocalDir(p.a, u"projekty"_s));
+        if (caseSensitive)
+            QVERIFY(!isLocalDir(p.a, u"projekty"_s));
         QVERIFY(isLocalDir(p.a, u"Projekty"_s));
         QVERIFY(!p.server.isDir(u"Notatki/projekty"_s));
         QVERIFY(p.server.isDir(u"Notatki/Projekty"_s));

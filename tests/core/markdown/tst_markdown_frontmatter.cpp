@@ -96,13 +96,13 @@ private Q_SLOTS:
     void quotingEscapesComments()
     {
         const QString y = u"a: \"zażółć \\\"gęślą\\\" \\n jaźń \\u0105 \\x41\"\n"
-                          "b: 'it''s # not a comment'\n"
-                          "c: value # comment\n"
-                          "d: \"#tag\" # c\n"
-                          "e: http://example.com/#frag\n"
-                          "# full line comment\n"
-                          "\"quoted key\": 1\n"
-                          "'single key': 2"_s;
+                          u"b: 'it''s # not a comment'\n"
+                          u"c: value # comment\n"
+                          u"d: \"#tag\" # c\n"
+                          u"e: http://example.com/#frag\n"
+                          u"# full line comment\n"
+                          u"\"quoted key\": 1\n"
+                          u"'single key': 2"_s;
         const QVariantMap r = parseYaml(y);
         QCOMPARE(r.value(u"a"_s), QVariant(u"zażółć \"gęślą\" \n jaźń ą A"_s));
         QCOMPARE(r.value(u"b"_s), QVariant(u"it's # not a comment"_s));
@@ -258,20 +258,20 @@ private Q_SLOTS:
         const QStringList order{u"title"_s, u"tags"_s, u"aliases"_s, u"count"_s, u"done"_s, u"empty"_s,
                                 u"date"_s,  u"link"_s, u"colon"_s,   u"num"_s,   u"hash"_s};
         QCOMPARE(stringifyFrontmatter(data, order), u"---\n"
-                                                    "title: Mój dom\n"
-                                                    "tags:\n"
-                                                    "  - dom\n"
-                                                    "  - projekt\n"
-                                                    "aliases: []\n"
-                                                    "count: 3\n"
-                                                    "done: false\n"
-                                                    "empty:\n"
-                                                    "date: 2026-10-14\n"
-                                                    "link: \"[[Strona]]\"\n"
-                                                    "colon: \"a: b\"\n"
-                                                    "num: \"42\"\n"
-                                                    "hash: \"#tag\"\n"
-                                                    "---\n"_s);
+                                                    u"title: Mój dom\n"
+                                                    u"tags:\n"
+                                                    u"  - dom\n"
+                                                    u"  - projekt\n"
+                                                    u"aliases: []\n"
+                                                    u"count: 3\n"
+                                                    u"done: false\n"
+                                                    u"empty:\n"
+                                                    u"date: 2026-10-14\n"
+                                                    u"link: \"[[Strona]]\"\n"
+                                                    u"colon: \"a: b\"\n"
+                                                    u"num: \"42\"\n"
+                                                    u"hash: \"#tag\"\n"
+                                                    u"---\n"_s);
     }
 
     void roundTrip()

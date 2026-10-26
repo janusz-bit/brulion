@@ -52,17 +52,42 @@ bool VaultPrivate::moveOnDisk(const VaultPath &from, const VaultPath &to)
     const auto move = [realDir](const QString &a, const QString &b) {
         return realDir ? QDir().rename(a, b) : QFile::rename(a, b);
     };
+    // A folder's watches go first: Windows refuses to move a folder while a handle is open inside
+    // it, and the watcher holds one for every folder it watches (and for the folder of every file).
+    // relocate() watches the new locations; a failed move watches the old ones again.
+    const QStringList released = realDir ? releaseWatches(source) : QStringList();
+    const auto moved = [this, &released](bool ok) {
+        if (!ok && watcher && !released.isEmpty())
+            watcher->addPaths(released);
+        return ok;
+    };
     if (from.toLower() != to.toLower())
-        return move(source, target);
+        return moved(move(source, target));
     // Case-only rename: through a temporary name, as some file systems ignore "a" -> "A".
     const QString temp = QFileInfo(target).absolutePath() + u"/.brulion-tmp-"_s
                          + QString::number(QRandomGenerator::global()->generate64(), 36);
     if (!move(source, temp))
-        return false;
+        return moved(false);
     if (move(temp, target))
-        return true;
+        return moved(true);
     move(temp, source);
-    return false;
+    return moved(false);
+}
+
+QStringList VaultPrivate::releaseWatches(const QString &absoluteDir)
+{
+    if (!watcher)
+        return {};
+    const QString inside = absoluteDir + u'/';
+    QStringList held;
+    const QStringList watched = watcher->directories() + watcher->files();
+    for (const QString &path : watched) {
+        if (path == absoluteDir || path.startsWith(inside))
+            held.append(path);
+    }
+    if (!held.isEmpty())
+        watcher->removePaths(held);
+    return held;
 }
 
 void VaultPrivate::moveFileState(const VaultPath &from, const FileStat &to)

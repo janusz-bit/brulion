@@ -539,6 +539,7 @@ private Q_SLOTS:
         QFile file(a.root + u"/nowy.md"_s);
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(file.readAll(), QByteArray("lokalny\n"));
+        file.close(); // Windows replaces no file another handle has open
         // Once the vault knows it, both versions are kept.
         a.vault->rescan();
         const SyncReport next = a.sync();
@@ -919,6 +920,7 @@ private Q_SLOTS:
 
     void readFailureCode()
     {
+        BRULION_SKIP_WITHOUT_UNIX_PERMISSIONS(); // no mode that keeps the owner from reading
         FakeWebDavServer server;
         Device a(server, u"laptop"_s, {{u"a.md"_s, "a"}, {u"tajne.md"_s, "x"}});
         const QString file = a.root + u"/tajne.md"_s;

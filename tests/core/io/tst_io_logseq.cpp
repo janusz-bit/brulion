@@ -181,9 +181,9 @@ private Q_SLOTS:
         QTest::addColumn<QString>("expected");
         QTest::newRow("markers")
                 << u"- TODO kup mleko\n- DOING pisz\n- DONE gotowe\n- LATER potem\n- NOW teraz\n- CANCELED nie\n"
-                   "- CANCELLED nie2\n- WAITING czekam\n- WAIT też\n- IN-PROGRESS w toku\n- TODOs nie zadanie\n- TODO\n"_s
+                   u"- CANCELLED nie2\n- WAITING czekam\n- WAIT też\n- IN-PROGRESS w toku\n- TODOs nie zadanie\n- TODO\n"_s
                 << u"- [ ] kup mleko\n- [/] pisz\n- [x] gotowe\n- [ ] potem\n- [/] teraz\n- [-] nie\n- [-] nie2\n"
-                   "- [>] czekam\n- [>] też\n- [/] w toku\n- TODOs nie zadanie\n- [ ] \n"_s;
+                   u"- [>] czekam\n- [>] też\n- [/] w toku\n- TODOs nie zadanie\n- [ ] \n"_s;
         QTest::newRow("priorities") << u"- TODO [#A] pilne\n- TODO zwykłe [#C]\n- [#B] nie zadanie\n"_s
                                     << u"- [ ] pilne ⏫\n- [ ] zwykłe 🔽\n- [#B] nie zadanie\n"_s;
         QTest::newRow("planning")
@@ -196,7 +196,7 @@ private Q_SLOTS:
                                           << u"- blok z id ^"_s + Uuid + u"\n\t- dziecko\n"_s;
         QTest::newRow("logbook") << u"- DONE zadanie\n  :LOGBOOK:\n  CLOCK: [2026-10-14 Wed 10:00]--[2026-10-14 Wed "
                                     u"11:00] =>  01:00:00\n"
-                                    "  :END:\n  dalszy tekst\n"_s
+                                    u"  :END:\n  dalszy tekst\n"_s
                                  << u"- [x] zadanie\n  dalszy tekst\n"_s;
         QTest::newRow("embeds")
                 << u"- {{embed [[Strona]]}}\n- {{embed ((abc-123))}}\n- `{{embed [[kod]]}}`\nTekst {{embed [[Inna]]}}\n"_s
@@ -243,7 +243,7 @@ private Q_SLOTS:
                 {u"graf/logseq/bak/pages/old.md"_s, "- stare"},
                 {u"graf/pages/Projekty___Dom.md"_s,
                  (u"title:: Projekty/Dom\nalias:: Remont\ntags:: praca, dom\n\n- TODO [#A] kup farbę\n"
-                  "  SCHEDULED: <2026-10-15 Thu>\n  id:: "_s
+                  u"  SCHEDULED: <2026-10-15 Thu>\n  id:: "_s
                   + Uuid + u"\n- zdjęcie ![plan](../assets/plan_1.png)\n- spotkanie [[Oct 14th, 2026]]\n"_s)
                          .toUtf8()},
                 {u"graf/pages/What%3F.md"_s, (u"- pytanie {{embed (("_s + Uuid + u"))}}\n"_s).toUtf8()},
@@ -295,7 +295,7 @@ private Q_SLOTS:
         QTest::addColumn<QString>("edn");
         QTest::newRow("commented old value") << u"{;; :journal/page-title-format \"MMM do, yyyy\"\n "
                                                 u":journal/page-title-format \"dd.MM.yyyy\" ; ;-)\n"
-                                                " :journal/file-name-format \"yyyy-MM-dd\"}"_s;
+                                                u" :journal/file-name-format \"yyyy-MM-dd\"}"_s;
         QTest::newRow("legacy date-formatter") << u"{:date-formatter \"dd.MM.yyyy\"}"_s;
         QTest::newRow("semicolon in a string") << u"{:custom \"a;b\" :journal/page-title-format \"dd.MM.yyyy\"}"_s;
     }

@@ -50,14 +50,16 @@ QString socketFolderProblem(const QString &key, const QString &what);
 QString controlFolderProblem(const QString &key);
 
 /// The uid of the process at the other end of the connected local socket `descriptor` (Linux:
-/// SO_PEERCRED); -1 when it cannot be told. The servers refuse other users' connections, the
-/// clients a socket another user listens on (trustedPeer()).
+/// SO_PEERCRED; Windows: the named pipe's other process and the SID of its user — this user is
+/// ownUid(), another one the relative id of its SID); -1 when it cannot be told. The servers
+/// refuse other users' connections, the clients a socket another user listens on (trustedPeer()).
 qint64 peerUid(qintptr descriptor);
-/// This process's effective uid; -1 where uids are not known (not Unix).
+/// This process's effective uid (Windows: the relative id of the user's SID); -1 where uids are not
+/// known.
 qint64 ownUid();
 /// May the process at the other end of a connection (`uid`: peerUid()) talk with this user's
-/// (`own`: ownUid())? On Linux only the same uid — credentials that cannot be read count as a
-/// stranger's; elsewhere uids are not known and the socket file's permissions decide.
+/// (`own`: ownUid())? On Linux and Windows only the same user — credentials that cannot be read
+/// count as a stranger's; elsewhere uids are not known and the socket file's permissions decide.
 bool trustedPeer(qint64 uid, qint64 own);
 /// Why a client must not talk to the process listening at `key` (`uid`: peerUid() of the
 /// connection), "" when it may (trustedPeer()).

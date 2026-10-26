@@ -4,6 +4,7 @@
 #include "io/importer.h"
 #include "io/zip.h"
 #include "markdown/frontmatter.h"
+#include "centraleuropeantime.h"
 
 #include <QCryptographicHash>
 #include <QElapsedTimer>
@@ -75,30 +76,30 @@ QByteArray enex()
     const QString h2 = md5("%PDF-1.4");
     const QString xml =
             u"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-            "<!DOCTYPE en-export SYSTEM \"http://xml.evernote.com/pub/evernote-export4.dtd\">\n"
-            "<en-export export-date=\"20261014T101010Z\" application=\"Evernote\" version=\"10.0\">\n"
-            "<note><title>Zakupy na weekend</title><created>20261014T080000Z</created>"
-            "<updated>20261015T093000Z</updated><tag>dom</tag><tag>lista zakupów</tag>"
-            "<note-attributes><author>Jan</author><source-url>https://example.com/przepis</source-url>"
-            "<reminder-time>20261016T070000Z</reminder-time></note-attributes>"
-            "<content><![CDATA[<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"
-            "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">\n"
-            "<en-note><div>Lista <b>ważna</b>:</div><div><en-todo checked=\"true\"/>mleko</div>"
-            "<div><en-todo/>chleb</div><div><en-media hash=\"HASH1\" type=\"image/png\"/></div>"
-            "<div><en-media hash=\"HASH2\" type=\"application/pdf\"></en-media></div>"
-            "<div style=\"--en-codeblock:true;\"><div>int x = 1;</div><div>&lt;b&gt;</div></div>"
-            "<en-crypt cipher=\"AES\">c2VjcmV0</en-crypt>"
-            "<div><a href=\"evernote:///view/1/s1/abc/abc/\">Inna notatka</a></div></en-note>]]></content>"
-            "<resource><data encoding=\"base64\">UE5HREFU\nQQ==</data><mime>image/png</mime>"
-            "<resource-attributes><file-name>zdjęcie.png</file-name></resource-attributes></resource>"
-            "<resource><data encoding=\"base64\">JVBERi0xLjQ=</data><mime>application/pdf</mime></resource>"
-            "<resource><data encoding=\"base64\">dW51c2Vk</data><mime>text/plain</mime>"
-            "<resource-attributes><file-name>notatki.txt</file-name></resource-attributes></resource>"
-            "</note>\n"
-            "<note><title>Inna notatka</title><content><![CDATA[<en-note>Treść</en-note>]]></content>"
-            "<task><title>Zadzwoń</title><taskStatus>open</taskStatus><dueDate>20261020T100000Z</dueDate></task>"
-            "<task><title>Zrobione</title><taskStatus>completed</taskStatus></task></note>\n"
-            "</en-export>\n"_s;
+            u"<!DOCTYPE en-export SYSTEM \"http://xml.evernote.com/pub/evernote-export4.dtd\">\n"
+            u"<en-export export-date=\"20261014T101010Z\" application=\"Evernote\" version=\"10.0\">\n"
+            u"<note><title>Zakupy na weekend</title><created>20261014T080000Z</created>"
+            u"<updated>20261015T093000Z</updated><tag>dom</tag><tag>lista zakupów</tag>"
+            u"<note-attributes><author>Jan</author><source-url>https://example.com/przepis</source-url>"
+            u"<reminder-time>20261016T070000Z</reminder-time></note-attributes>"
+            u"<content><![CDATA[<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n"
+            u"<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">\n"
+            u"<en-note><div>Lista <b>ważna</b>:</div><div><en-todo checked=\"true\"/>mleko</div>"
+            u"<div><en-todo/>chleb</div><div><en-media hash=\"HASH1\" type=\"image/png\"/></div>"
+            u"<div><en-media hash=\"HASH2\" type=\"application/pdf\"></en-media></div>"
+            u"<div style=\"--en-codeblock:true;\"><div>int x = 1;</div><div>&lt;b&gt;</div></div>"
+            u"<en-crypt cipher=\"AES\">c2VjcmV0</en-crypt>"
+            u"<div><a href=\"evernote:///view/1/s1/abc/abc/\">Inna notatka</a></div></en-note>]]></content>"
+            u"<resource><data encoding=\"base64\">UE5HREFU\nQQ==</data><mime>image/png</mime>"
+            u"<resource-attributes><file-name>zdjęcie.png</file-name></resource-attributes></resource>"
+            u"<resource><data encoding=\"base64\">JVBERi0xLjQ=</data><mime>application/pdf</mime></resource>"
+            u"<resource><data encoding=\"base64\">dW51c2Vk</data><mime>text/plain</mime>"
+            u"<resource-attributes><file-name>notatki.txt</file-name></resource-attributes></resource>"
+            u"</note>\n"
+            u"<note><title>Inna notatka</title><content><![CDATA[<en-note>Treść</en-note>]]></content>"
+            u"<task><title>Zadzwoń</title><taskStatus>open</taskStatus><dueDate>20261020T100000Z</dueDate></task>"
+            u"<task><title>Zrobione</title><taskStatus>completed</taskStatus></task></note>\n"
+            u"</en-export>\n"_s;
     return QString(xml).replace(u"HASH1"_s, h1).replace(u"HASH2"_s, h2).toUtf8();
 }
 
@@ -162,7 +163,7 @@ class TestIoImportApps : public QObject {
 public:
     /// A system zone with DST, so tests catch timestamps read through the system zone (the
     /// importers convert to ImportOptions::timeZone only).
-    static void initMain() { qputenv("TZ", "Europe/Warsaw"); }
+    static void initMain() { brulion::test::useCentralEuropeanTime(); }
 
 private Q_SLOTS:
     // --- Notion -----------------------------------------------------------------------------------
@@ -176,7 +177,7 @@ private Q_SLOTS:
                               u"Notion/Projekty/Zadania/Kup farbę.md"_s, u"assets/Notion/Projekty/szkic.png"_s}));
         QCOMPARE(iotest::textAt(r, u"Notion/Projekty.md"_s),
                  u"Lista: [[Zadania]]\n\n[[Dom]]\n\n![szkic](../assets/Notion/Projekty/szkic.png)\n\n"
-                 "Link: [[Dom|Dom online]]\n"_s);
+                 u"Link: [[Dom|Dom online]]\n"_s);
         QCOMPARE(iotest::textAt(r, u"Notion/Projekty/Dom.md"_s), u"Opis domu ąę\n"_s);
         const QString row = iotest::textAt(r, u"Notion/Projekty/Zadania/Kup farbę.md"_s);
         QCOMPARE(frontmatterOf(row).value(u"Status"_s).toString(), u"Done"_s);
@@ -184,7 +185,7 @@ private Q_SLOTS:
         QCOMPARE(bodyOf(row), u"Treść zadania\n"_s);
         QCOMPARE(iotest::textAt(r, u"Notion/Projekty/Zadania.md"_s),
                  u"| Name | Status | Tags |\n| --- | --- | --- |\n| [[Kup farbę]] | Done | dom, remont |\n"
-                 "| Pomaluj\\|ściany | Todo |  |\n"_s);
+                 u"| Pomaluj\\|ściany | Todo |  |\n"_s);
         QVERIFY(r.warnings.isEmpty());
     }
 
@@ -225,10 +226,10 @@ private Q_SLOTS:
         QCOMPARE(fm.value(u"source"_s).toString(), u"https://example.com/przepis"_s);
         QCOMPARE(fm.value(u"author"_s).toString(), u"Jan"_s);
         QCOMPARE(bodyOf(note), u"- [ ] Zakupy na weekend ⏰ 2026-10-16 09:00\n\nLista **ważna**:\n\n- [x] mleko\n"
-                               "- [ ] chleb\n\n![[assets/Evernote/zdjęcie.png]]\n![["_s
+                               u"- [ ] chleb\n\n![[assets/Evernote/zdjęcie.png]]\n![["_s
                                        + pdf
                                        + u"]]\n\n```\nint x = 1;\n<b>\n```\n\n[[Inna notatka]]\n\n"
-                                         "[[assets/Evernote/notatki.txt|notatki.txt]]\n"_s);
+                                         u"[[assets/Evernote/notatki.txt|notatki.txt]]\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Evernote/zdjęcie.png"_s)->data, QByteArray("PNGDATA"));
         QCOMPARE(iotest::textAt(r, u"Inna notatka.md"_s),
                  u"Treść\n\n- [ ] Zadzwoń 📅 2026-10-20 12:00\n- [x] Zrobione\n"_s);
@@ -330,20 +331,20 @@ private Q_SLOTS:
         const QList<InputFile> files = {
                 bytes(u"Takeout/Keep/Zakupy.json"_s,
                       json(u"{'color':'YELLOW','isTrashed':false,'isPinned':true,'isArchived':false,'title':'Zakupy',"
-                           "                          "
-                           "'userEditedTimestampUsec':1792060200000000,'createdTimestampUsec':1791964800000000,"
-                           "                          "
-                           "'listContent':[{'text':'mleko','isChecked':true},{'text':'chleb\\nrazowy','isChecked':"
-                           "false}],"
-                           "                          'labels':[{'name':'Dom'},{'name':'Moje zakupy'}],"
-                           "                          "
-                           "'attachments':[{'filePath':'zdjecie.jpg','mimetype':'image/jpeg'}],"
-                           "                          'annotations':[{'description':'','source':'WEBLINK','title':'Przepis','url':'https://example.com/p'}]}"_s)),
+                           u"                          "
+                           u"'userEditedTimestampUsec':1792060200000000,'createdTimestampUsec':1791964800000000,"
+                           u"                          "
+                           u"'listContent':[{'text':'mleko','isChecked':true},{'text':'chleb\\nrazowy','isChecked':"
+                           u"false}],"
+                           u"                          'labels':[{'name':'Dom'},{'name':'Moje zakupy'}],"
+                           u"                          "
+                           u"'attachments':[{'filePath':'zdjecie.jpg','mimetype':'image/jpeg'}],"
+                           u"                          'annotations':[{'description':'','source':'WEBLINK','title':'Przepis','url':'https://example.com/p'}]}"_s)),
                 bytes(u"Takeout/Keep/zdjecie.jpeg"_s, "JPEG"),
                 bytes(u"Takeout/Keep/bez tytułu.json"_s,
                       json(u"{'textContent':'Pierwsza linia "
                            u"notatki\\nDruga','title':'','isTrashed':false,'isArchived':true,"
-                           "                          'color':'DEFAULT','userEditedTimestampUsec':1792060200000000}"_s)),
+                           u"                          'color':'DEFAULT','userEditedTimestampUsec':1792060200000000}"_s)),
                 bytes(u"Takeout/Keep/kosz.json"_s,
                       json(u"{'textContent':'usunięte','isTrashed':true,'userEditedTimestampUsec':1}"_s)),
                 text(u"Takeout/Keep/zly.json"_s, u"{not json"_s),
@@ -363,7 +364,7 @@ private Q_SLOTS:
         QCOMPARE(fm.value(u"color"_s).toString(), u"yellow"_s);
         QVERIFY(!fm.contains(u"archived"_s));
         QCOMPARE(bodyOf(zakupy), u"- [x] mleko\n- [ ] chleb\n  razowy\n\n![[assets/Keep/zdjecie.jpeg]]\n\n"
-                                 "- [Przepis](https://example.com/p)\n"_s);
+                                 u"- [Przepis](https://example.com/p)\n"_s);
         const QString other = iotest::textAt(r, u"Keep/Pierwsza linia notatki.md"_s);
         QCOMPARE(frontmatterOf(other).value(u"archived"_s).toBool(), true);
         QVERIFY(!frontmatterOf(other).contains(u"color"_s));
@@ -388,10 +389,10 @@ private Q_SLOTS:
                 << QList<InputFile>{text(
                            u"Ceny.enex"_s,
                            u"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<en-export><note><title>Ceny</title>"
-                           "<content><![CDATA[<en-note><div>Cena $10, <b>Netflix</b> 15$</div>"
-                           "<div>Wzór $x$ i kod <code>$y$</code></div><div><br/></div><div>$5 i $10</div>"
-                           "</en-note>]]></content><task><title>Zapłacić $5, nie 10$</title>"
-                           "<taskStatus>open</taskStatus></task></note></en-export>\n"_s)}
+                           u"<content><![CDATA[<en-note><div>Cena $10, <b>Netflix</b> 15$</div>"
+                           u"<div>Wzór $x$ i kod <code>$y$</code></div><div><br/></div><div>$5 i $10</div>"
+                           u"</en-note>]]></content><task><title>Zapłacić $5, nie 10$</title>"
+                           u"<taskStatus>open</taskStatus></task></note></en-export>\n"_s)}
                 << u"Ceny.md"_s
                 << QStringList{u"Cena $10, Netflix 15$"_s, u"Wzór $x$ i kod $y$"_s, u"$5 i $10"_s,
                                u"Zapłacić $5, nie 10$"_s}
@@ -402,14 +403,14 @@ private Q_SLOTS:
                 << QList<InputFile>{bytes(
                            u"Takeout/Keep/Ceny.json"_s,
                            json(u"{'title':'Ceny','isTrashed':false,'userEditedTimestampUsec':1792060200000000,"
-                                "'textContent':'Bilet $10\\nparking 5$\\nKurs $1 i `$x$` w kodzie',"
-                                "'listContent':[{'text':'Wzór $x$','isChecked':false},{'text':'$5 i $10',"
-                                "'isChecked':true}]}"_s))}
+                                u"'textContent':'Bilet $10\\nparking 5$\\nKurs $1 i `$x$` w kodzie',"
+                                u"'listContent':[{'text':'Wzór $x$','isChecked':false},{'text':'$5 i $10',"
+                                u"'isChecked':true}]}"_s))}
                 << u"Ceny.md"_s
                 << QStringList{u"Bilet $10"_s, u"parking 5$"_s, u"Kurs $1 i $x$ w kodzie"_s, u"Wzór $x$"_s,
                                u"$5 i $10"_s}
                 << QStringList{u"Bilet \\$10\nparking 5$\nKurs $1 i `$x$` w kodzie\n\n- [ ] Wzór \\$x$\n"
-                               "- [x] $5 i $10\n"_s};
+                               u"- [x] $5 i $10\n"_s};
         QTest::newRow("notion database")
                 << u"notion"_s
                 << QList<InputFile>{bytes(u"n.zip"_s,
@@ -452,7 +453,7 @@ private Q_SLOTS:
         QCOMPARE(fm.value(u"tags"_s).toStringList(), QStringList({u"ważne"_s}));
         QCOMPARE(fm.value(u"source"_s).toString(), u"https://example.com"_s);
         QCOMPARE(bodyOf(note), u"Notatka ze spotkania ąę.\n\n![[assets/Joplin/wykres.png]]\n\nZobacz [[Plan]] i "
-                               "[[assets/Joplin/raport.pdf|plik]].\n\n![[assets/Joplin/wykres.png]]\n"_s);
+                               u"[[assets/Joplin/raport.pdf|plik]].\n\n![[assets/Joplin/wykres.png]]\n"_s);
         QCOMPARE(iotest::textAt(r, u"Praca/Plan.md"_s), u"- [ ] Plan ⏰ 2026-10-16 09:00\n\nKroki.\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Joplin/wykres.png"_s)->data, QByteArray("PNG"));
     }
@@ -462,8 +463,8 @@ private Q_SLOTS:
         const QList<InputFile> files = {
                 text(u"export/Praca/Zadanie.md"_s,
                      u"---\ntitle: Zadanie\nupdated: 2026-10-14 08:00:00Z\ncreated: 2026-10-13 08:00:00Z\n"
-                     "tags:\n  - praca\nlatitude: 0.00000000\ncompleted?: no\ndue: 2026-10-16 07:00:00Z\n---\n\n"
-                     "Opis ![](../_resources/foto.jpg)\n"_s),
+                     u"tags:\n  - praca\nlatitude: 0.00000000\ncompleted?: no\ndue: 2026-10-16 07:00:00Z\n---\n\n"
+                     u"Opis ![](../_resources/foto.jpg)\n"_s),
                 bytes(u"export/_resources/foto.jpg"_s, "JPG"),
         };
         const ImportResult r = importWith(u"joplin"_s, files);
@@ -520,12 +521,12 @@ private Q_SLOTS:
     {
         const QByteArray data =
                 json(u"{'activeNotes':["
-                     "                      {'id':'x1','content':'Lista zadań\\r\\n\\r\\n- mleko\\r\\n- #dom "
-                     "tag','creationDate':'2026-10-14T08:00:00.000Z',"
-                     "                       "
-                     "'lastModified':'2026-10-15T08:00:00.000Z','tags':['dom','praca'],'pinned':true},"
-                     "                      {'id':'x2','content':'','creationDate':'2026-10-14T08:00:00.000Z'}],"
-                     "                    'trashedNotes':[{'id':'x3','content':'kosz'}]}"_s);
+                     u"                      {'id':'x1','content':'Lista zadań\\r\\n\\r\\n- mleko\\r\\n- #dom "
+                     u"tag','creationDate':'2026-10-14T08:00:00.000Z',"
+                     u"                       "
+                     u"'lastModified':'2026-10-15T08:00:00.000Z','tags':['dom','praca'],'pinned':true},"
+                     u"                      {'id':'x2','content':'','creationDate':'2026-10-14T08:00:00.000Z'}],"
+                     u"                    'trashedNotes':[{'id':'x3','content':'kosz'}]}"_s);
         const ImportResult r = importWith(u"simplenote"_s, {bytes(u"source/notes.json"_s, data),
                                                             text(u"source/notes/Lista zadań.txt"_s, u"ignored"_s)});
         QCOMPARE(iotest::pathsOf(r), QStringList({u"Lista zadań.md"_s, u"Simplenote 2026-10-14 10-00.md"_s}));
@@ -547,7 +548,7 @@ private Q_SLOTS:
         const QString longLine = u"Zażółć gęślą jaźń "_s.repeated(6) + u"koniec pierwszej linii"_s;
         const QByteArray data = json(u"{'activeNotes':[{'id':'a1','content':'"_s + longLine
                                      + u"\\ndruga linia'},{'id':'a2','content':'- [ ] kup mleko\\n- [x] chleb'},"
-                                       "{'id':'a3','content':'# Nagłówek\\ntreść'}]}"_s);
+                                       u"{'id':'a3','content':'# Nagłówek\\ntreść'}]}"_s);
         const ImportResult r = importWith(u"simplenote"_s, {bytes(u"notes.json"_s, data)});
         QCOMPARE(r.files.size(), 3);
         bool sawLong = false;
@@ -583,7 +584,7 @@ private Q_SLOTS:
         const QString emoji = u"😀"_s.repeated(100);
         const QByteArray data = json(u"[{'title':'"_s + polish
                                      + u"','children':[{'string':'a','uid':'u0000001'}]},"
-                                       "{'title':'"_s
+                                       u"{'title':'"_s
                                      + emoji + u"/"_s + polish + u"','children':[{'string':'b','uid':'u0000002'}]}]"_s);
         const ImportResult r = importWith(u"roam"_s, {bytes(u"g.json"_s, data)});
         QCOMPARE(r.files.size(), 2);
@@ -601,25 +602,25 @@ private Q_SLOTS:
     {
         const QByteArray data =
                 json(u"["
-                     "          {'title':'Projekty/Dom','create-time':1,'children':["
-                     "             {'string':'{{[[TODO]]}} Kup farbę ^^ważne^^','uid':'abc_DEF12','children':["
-                     "                 {'string':'__kursywa__ i [[October 14th, 2026]]','uid':'child0001'}]},"
-                     "             {'string':'Nagłówek','uid':'head00001','heading':2},"
-                     "             {'string':'Kod:\\n```js\\nlet x = __y__;\\n```','uid':'code00001'},"
-                     "             {'string':'[alias]([[Inna strona]]) i ((abc_DEF12))','uid':'ref000001'}]},"
-                     "          {'title':'October 14th, 2026','uid':'10-14-2026','children':["
-                     "             {'string':'{{[[DONE]]}} rano','uid':'day000001'},"
-                     "             {'string':'{{embed: ((abc_DEF12))}}','uid':'day000002'}]},"
-                     "          {'title':'October 15th, 2026','uid':'10-15-2026','children':[]},"
-                     "          {'title':'Pusta'},"
-                     "          {'title':'Co? Jak?','children':[{'string':'x','uid':'q00000001'}]}"
-                     "        ]"_s);
+                     u"          {'title':'Projekty/Dom','create-time':1,'children':["
+                     u"             {'string':'{{[[TODO]]}} Kup farbę ^^ważne^^','uid':'abc_DEF12','children':["
+                     u"                 {'string':'__kursywa__ i [[October 14th, 2026]]','uid':'child0001'}]},"
+                     u"             {'string':'Nagłówek','uid':'head00001','heading':2},"
+                     u"             {'string':'Kod:\\n```js\\nlet x = __y__;\\n```','uid':'code00001'},"
+                     u"             {'string':'[alias]([[Inna strona]]) i ((abc_DEF12))','uid':'ref000001'}]},"
+                     u"          {'title':'October 14th, 2026','uid':'10-14-2026','children':["
+                     u"             {'string':'{{[[DONE]]}} rano','uid':'day000001'},"
+                     u"             {'string':'{{embed: ((abc_DEF12))}}','uid':'day000002'}]},"
+                     u"          {'title':'October 15th, 2026','uid':'10-15-2026','children':[]},"
+                     u"          {'title':'Pusta'},"
+                     u"          {'title':'Co? Jak?','children':[{'string':'x','uid':'q00000001'}]}"
+                     u"        ]"_s);
         const ImportResult r = importWith(u"roam"_s, {bytes(u"roam-export.json"_s, data)}, iotest::options(u"Roam"_s));
         QCOMPARE(iotest::pathsOf(r), QStringList({u"Roam/Co Jak.md"_s, u"Roam/Projekty/Dom.md"_s, u"Roam/Pusta.md"_s,
                                                   u"journals/2026-10-14.md"_s}));
         QCOMPARE(iotest::textAt(r, u"Roam/Projekty/Dom.md"_s),
                  u"- [ ] Kup farbę ==ważne== ^abc-DEF12\n\t- *kursywa* i [[2026-10-14]]\n- ## Nagłówek\n- Kod:\n"
-                 "  ```js\n  let x = __y__;\n  ```\n- [[Inna strona|alias]] i ((abc-DEF12))\n"_s);
+                 u"  ```js\n  let x = __y__;\n  ```\n- [[Inna strona|alias]] i ((abc-DEF12))\n"_s);
         QCOMPARE(iotest::textAt(r, u"journals/2026-10-14.md"_s), u"- [x] rano\n- !((abc-DEF12))\n"_s);
         QCOMPARE(frontmatterOf(iotest::textAt(r, u"Roam/Co Jak.md"_s)).value(u"aliases"_s).toStringList(),
                  QStringList({u"Co? Jak?"_s}));

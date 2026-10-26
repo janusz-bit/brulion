@@ -21,8 +21,9 @@ Z wersji 0.4.2: zmiana daty z menu (prawy przycisk albo przytrzymanie znacznika 
 | Android 9 lub nowszy (arm64) | `brulion-{{FILE_VERSION}}-arm64-v8a.apk` |
 | Linux x86_64 | `Brulion-{{FILE_VERSION}}-x86_64.AppImage` — Ubuntu 22.04+, Debian 12+, Fedora 36+ (glibc ≥ 2.35) |
 | Linux aarch64 (np. Raspberry Pi 4/5 z 64-bitowym systemem) | `Brulion-{{FILE_VERSION}}-aarch64.AppImage` — Ubuntu 24.04+, Debian 13+, Fedora 40+ (glibc ≥ 2.39) |
+| Windows 10/11 (x86_64) — wersja testowa | `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` (instalator) albo `brulion-{{FILE_VERSION}}-windows-x86_64.zip` (wersja przenośna) |
 | NixOS | flake `github:{{REPO}}/{{TAG}}`, pakiet `brulion` |
-| Wiersz poleceń (Linux) | `brulion-cli` — w AppImage jako `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, w Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …` |
+| Wiersz poleceń (Linux, Windows) | `brulion-cli` — w AppImage jako `./Brulion-{{FILE_VERSION}}-x86_64.AppImage cli …`, w Nix `nix run github:{{REPO}}/{{TAG}}#brulion-cli -- …`, w Windows `brulion-cli.exe` obok `brulion.exe` |
 | Przeglądarka | {{PAGES_URL}} — albo `brulion-web-{{FILE_VERSION}}.zip` na własny serwer (dowolny katalog, HTTPS) |
 | Kod źródłowy | `brulion-{{FILE_VERSION}}-source.tar.gz` |
 
@@ -30,6 +31,7 @@ Z wersji 0.4.2: zmiana daty z menu (prawy przycisk albo przytrzymanie znacznika 
 
 * **Android:** pobierz plik `.apk` na telefonie i otwórz go (pierwszy raz system poprosi o zgodę na instalowanie aplikacji z tego źródła). Nowa wersja instaluje się na poprzednią bez utraty notatek.
 * **Linux (AppImage):** `chmod +x Brulion-*.AppImage`, a potem `./Brulion-{{FILE_VERSION}}-x86_64.AppImage` (albo `…-aarch64.AppImage`). Gdy system zgłasza błąd FUSE (np. w kontenerze): `./Brulion-*.AppImage --appimage-extract-and-run`.
+* **Windows (wersja testowa):** uruchom `Brulion-{{FILE_VERSION}}-windows-x86_64-setup.exe` — instaluje się tylko dla bieżącego użytkownika, bez uprawnień administratora (odinstalowanie zostawia notatki i ustawienia). Aplikacja nie jest podpisana, więc SmartScreen ostrzega: „Więcej informacji” → „Uruchom mimo to”. Wersja przenośna: rozpakuj `brulion-{{FILE_VERSION}}-windows-x86_64.zip` i uruchom `brulion.exe` z folderu `Brulion`. Przypomnienia pokazuje ikona w zasobniku systemowym.
 * **NixOS:** `nix run github:{{REPO}}/{{TAG}}` albo pakiet z flake'a w konfiguracji systemu.
 * **Przeglądarka:** otwórz stronę i wybierz „Zainstaluj aplikację” — działa także bez internetu.
 

@@ -14,14 +14,16 @@
 // Messages are short lines of UTF-8 ("activate", "capture", "open {…}": ipc/appmessage.h). The
 // primary holds a lock file next to the socket; a crashed instance's stale lock and socket are
 // replaced, a live primary is never taken over. The socket lives in the user's runtime folder
-// ($XDG_RUNTIME_DIR) and nowhere else: in the shared temp folder (a bare key: no runtime folder)
+// ($XDG_RUNTIME_DIR; on Windows a named pipe whose name holds the user's temp folder, the lock file
+// in that folder) and nowhere else: in the shared temp folder (a bare key: no runtime folder)
 // or a folder others can change (socketFolderProblem()) another user could create the name first
 // — keeping Brulion from starting — and receive what a second launch and brulion-cli send, so the
 // app runs without a single instance there. Both ends talk only to this user's processes (Linux:
-// SO_PEERCRED, trustedPeer()): a launch or brulion-cli sends nothing to another user's socket, the
-// primary drops other users' connections. brulion-cli reaches the running app through it
-// (`brulion-cli app open …`). Not used on Android (the system keeps one activity) or in the
-// browser (the HTML shell handles a second tab). Library brulion_ipc (src/ipc, desktop only).
+// SO_PEERCRED, Windows: the pipe's processes and their users' SIDs; trustedPeer()): a launch or
+// brulion-cli sends nothing to another user's socket, the primary drops other users' connections.
+// brulion-cli reaches the running app through it (`brulion-cli app open …`). Not used on Android
+// (the system keeps one activity) or in the browser (the HTML shell handles a second tab).
+// Library brulion_ipc (src/ipc, desktop only).
 #pragma once
 
 #include <QByteArray>

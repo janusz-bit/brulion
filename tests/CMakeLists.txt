@@ -13,6 +13,8 @@ function(brulion_add_test name)
     cmake_parse_arguments(ARG "" "" "SOURCES;LIBS" ${ARGN})
     qt_add_executable(${name} ${ARG_SOURCES})
     target_link_libraries(${name} PRIVATE Qt6::Test ${ARG_LIBS})
+    # Helpers shared by tests (tests/common: centraleuropeantime.h, filesystemtraits.h).
+    target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/tests/common)
     target_compile_definitions(${name} PRIVATE BRULION_TEST_DATA="${PROJECT_SOURCE_DIR}/tests/data"
                                                 BRULION_TEST_SLOWDOWN=${BRULION_TEST_SLOWDOWN})
     brulion_set_warnings(${name})
@@ -22,6 +24,24 @@ function(brulion_add_test name)
     math(EXPR _function_timeout_ms "300000 * ${BRULION_TEST_SLOWDOWN}")
     set_tests_properties(${name} PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QTEST_FUNCTION_TIMEOUT=${_function_timeout_ms}")
+endfunction()
+
+# brulion_test_profile(<var> <name>) — the app's own runs in a test (the QML self-tests, the
+# journey) keep out of the user's settings and notebooks with a private home of XDG folders. On
+# Windows these do not move QStandardPaths: there such a run uses a separate profile instead
+# (BRULION_PROFILE=test-<name>, src/ipc/profile.h). Sets <var> to the environment entries to append
+# to the test's ENVIRONMENT (";BRULION_PROFILE=…" on Windows, "" elsewhere) and <var>_DIRS to the
+# profile's folders, for the fixture that removes them before the run.
+function(brulion_test_profile var name)
+    if(WIN32)
+        file(TO_CMAKE_PATH "$ENV{APPDATA}" _roaming)
+        file(TO_CMAKE_PATH "$ENV{LOCALAPPDATA}" _local)
+        set(${var} ";BRULION_PROFILE=test-${name}" PARENT_SCOPE)
+        set(${var}_DIRS "${_roaming}/Brulion-test-${name}" "${_local}/Brulion-test-${name}" PARENT_SCOPE)
+    else()
+        set(${var} "" PARENT_SCOPE)
+        set(${var}_DIRS "" PARENT_SCOPE)
+    endif()
 endfunction()
 
 add_subdirectory(core)
@@ -36,7 +56,8 @@ endif()
 if(TARGET brulion-cli)
     add_subdirectory(cli)
 endif()
-# Shell scripts from scripts/ (release.sh, appimage-update-check.sh).
+# Shell scripts from scripts/ (release.sh, appimage-update-check.sh); bash scripts for Linux, not
+# run on Windows (tests/scripts/CMakeLists.txt).
 add_subdirectory(scripts)
 
 # The longest tests start first: ctest orders a parallel run by the timings of the earlier runs

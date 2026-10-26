@@ -14,6 +14,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #endif
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 using namespace Qt::StringLiterals;
 
@@ -48,13 +51,81 @@ QString controlFolderProblem(const QString &key)
     return socketFolderProblem(key, u"the remote control"_s);
 }
 
+#ifdef Q_OS_WIN
+namespace {
+
+/// The user (SID, as bytes) of a process's access token; empty when it cannot be read.
+QByteArray processUserSid(HANDLE process)
+{
+    HANDLE token = nullptr;
+    if (!::OpenProcessToken(process, TOKEN_QUERY, &token))
+        return {};
+    QByteArray sid;
+    DWORD size = 0;
+    ::GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    QByteArray buffer(qsizetype(size), Qt::Uninitialized);
+    if (size > 0 && ::GetTokenInformation(token, TokenUser, buffer.data(), size, &size)) {
+        const auto *user = reinterpret_cast<const TOKEN_USER *>(buffer.constData());
+        if (::IsValidSid(user->User.Sid))
+            sid = QByteArray(static_cast<const char *>(user->User.Sid), qsizetype(::GetLengthSid(user->User.Sid)));
+    }
+    ::CloseHandle(token);
+    return sid;
+}
+
+const QByteArray &ownSid()
+{
+    static const QByteArray sid = processUserSid(::GetCurrentProcess());
+    return sid;
+}
+
+/// The relative id (the last part, 1001 in S-1-5-21-…-1001) of a SID: the "uid" in messages.
+qint64 relativeId(QByteArray sid)
+{
+    if (sid.isEmpty())
+        return -1;
+    const PSID p = sid.data();
+    const UCHAR count = *::GetSidSubAuthorityCount(p);
+    return count > 0 ? qint64(*::GetSidSubAuthority(p, count - 1)) : -1;
+}
+
+} // namespace
+#endif
+
 qint64 peerUid(qintptr descriptor)
 {
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX)
     ucred credentials{};
     socklen_t size = sizeof(credentials);
     if (descriptor >= 0 && ::getsockopt(int(descriptor), SOL_SOCKET, SO_PEERCRED, &credentials, &size) == 0)
         return qint64(credentials.uid);
+#elif defined(Q_OS_WIN)
+    // A named pipe knows the processes at both ends: the one that is not this process, then the
+    // user of its token. The same user (SID) is ownUid(); another one is its relative id, or -1
+    // when that equals this user's (another domain's user of the same number) or nothing can be
+    // read (another user's process cannot be opened).
+    if (descriptor == -1 || descriptor == 0)
+        return -1;
+    const auto pipe = reinterpret_cast<HANDLE>(descriptor);
+    ULONG server = 0;
+    ULONG client = 0;
+    if (!::GetNamedPipeServerProcessId(pipe, &server) || !::GetNamedPipeClientProcessId(pipe, &client))
+        return -1;
+    const ULONG self = ::GetCurrentProcessId();
+    const ULONG peer = server == self ? client : server;
+    if (peer == self)
+        return ownUid();
+    const HANDLE process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, peer);
+    if (!process)
+        return -1;
+    const QByteArray sid = processUserSid(process);
+    ::CloseHandle(process);
+    if (sid.isEmpty())
+        return -1;
+    if (sid == ownSid())
+        return ownUid();
+    const qint64 rid = relativeId(sid);
+    return rid == ownUid() ? -1 : rid;
 #else
     Q_UNUSED(descriptor);
 #endif
@@ -63,8 +134,10 @@ qint64 peerUid(qintptr descriptor)
 
 qint64 ownUid()
 {
-#ifdef Q_OS_UNIX
+#if defined(Q_OS_UNIX)
     return qint64(::geteuid());
+#elif defined(Q_OS_WIN)
+    return relativeId(ownSid());
 #else
     return -1;
 #endif
@@ -72,7 +145,7 @@ qint64 ownUid()
 
 bool trustedPeer(qint64 uid, qint64 own)
 {
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
     return uid >= 0 && uid == own;
 #else
     return uid < 0 || own < 0 || uid == own;

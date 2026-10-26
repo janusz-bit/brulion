@@ -4,8 +4,13 @@
 #include "vaulttest.h"
 
 #include <QRegularExpression>
+#include <QThread>
 
 #include <cstdio>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 using namespace vaulttest;
 
@@ -16,12 +21,30 @@ qint64 diskMtime(const QString &abs)
     return QFileInfo(abs).fileTime(QFileDevice::FileModificationTime, QTimeZone(QTimeZone::UTC)).toMSecsSinceEpoch();
 }
 
-/// rename(2) that replaces an existing target, like editors and Syncthing do.
+/// rename(2) that replaces an existing target, like editors and Syncthing do (on Windows
+/// MoveFileEx, as there the C library's rename() never replaces a file — and, as those programs
+/// do, again a moment later while something still has the target open for a look: the watcher
+/// thread, a virus scanner).
 bool replaceBehind(const QString &root, const QString &from, const QString &to)
 {
+#ifdef Q_OS_WIN
+    const QString a = QDir::toNativeSeparators(root + u'/' + from);
+    const QString b = QDir::toNativeSeparators(root + u'/' + to);
+    for (int attempt = 0; attempt < 50; ++attempt) {
+        if (::MoveFileExW(reinterpret_cast<const wchar_t *>(a.utf16()), reinterpret_cast<const wchar_t *>(b.utf16()),
+                          MOVEFILE_REPLACE_EXISTING))
+            return true;
+        const DWORD error = ::GetLastError();
+        if (error != ERROR_SHARING_VIOLATION && error != ERROR_ACCESS_DENIED)
+            return false;
+        QThread::msleep(20);
+    }
+    return false;
+#else
     const QByteArray a = QFile::encodeName(root + u'/' + from);
     const QByteArray b = QFile::encodeName(root + u'/' + to);
     return std::rename(a.constData(), b.constData()) == 0;
+#endif
 }
 
 /// Rewrite an existing file in place, as many editors (VS Code, nano) and scripts do: the same
@@ -368,6 +391,11 @@ private Q_SLOTS:
 
     void watcherDetectsFolderRenames()
     {
+#ifdef Q_OS_WIN
+        // Qt's watcher holds a handle on every watched folder, and Windows moves no folder with an
+        // open handle inside: other programs cannot rename a watched folder (docs/WINDOWS.md).
+        QSKIP("Windows refuses to rename a folder the watcher holds open");
+#endif
         Fixture f;
         f.write(u"F/a.md"_s, "a");
         f.write(u"F/sub/b.md"_s, "b");
@@ -589,6 +617,9 @@ private Q_SLOTS:
         QCOMPARE(f.changes().mid(3), (QStringList{u"modify:Otwarta.md@user"_s, u"modify:Otwarta.md@external"_s}));
         // Also when another program still holds the replaced file open (its watch is not gone by
         // itself then): saved by us, the echo handled, then rewritten in place.
+#ifdef Q_OS_WIN
+        QSKIP("Windows replaces no file another program holds open (without FILE_SHARE_DELETE)");
+#endif
         QFile holder(f.root() + u"/Otwarta.md"_s);
         QVERIFY(holder.open(QIODevice::ReadOnly));
         QVERIFY(f.vault->writeText(u"Otwarta.md"_s, u"- szósta, nasza\n"_s));
@@ -610,8 +641,12 @@ private Q_SLOTS:
         f.vault->watchFile(u"Nowe/jeszcze nie ma.md"_s); // an editor on a page not created yet
         // Renamed by the vault: watched under the new name.
         QVERIFY(f.vault->rename(u"a.md"_s, u"Folder/b.md"_s));
-        QVERIFY(watchedRel(*f.vault, f.root()).contains(u"Folder/b.md"_s));
-        QVERIFY(!watchedRel(*f.vault, f.root()).contains(u"a.md"_s));
+        QVERIFY2(watchedRel(*f.vault, f.root()).contains(u"Folder/b.md"_s),
+                 qPrintable(watchedRel(*f.vault, f.root()).join(u", "_s)));
+        // (On Windows the watcher's own thread may have dropped the watch of the moved file just
+        // before: Qt's list of watched files catches up in the event loop.)
+        QTRY_VERIFY2(!watchedRel(*f.vault, f.root()).contains(u"a.md"_s),
+                     qPrintable(watchedRel(*f.vault, f.root()).join(u", "_s)));
         // Renamed by another program: found through the folders, watched under the new name.
         QVERIFY(renameBehind(f.root(), u"Folder/b.md"_s, u"Inny/c.md"_s));
         QTRY_COMPARE(f.changes().mid(1), QStringList{u"rename:Folder/b.md->Inny/c.md@external"_s});

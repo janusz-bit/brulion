@@ -3,6 +3,7 @@
 
 #include "index/textutil_p.h"
 #include "markdown/parse.h"
+#include "centraleuropeantime.h"
 
 #include <QElapsedTimer>
 #include <QTest>
@@ -121,7 +122,7 @@ private Q_SLOTS:
     void parseDetails()
     {
         const Query q = parsed(u"type:tasks status:open,deferred -tag:#Praca,[[Dom Jana]] due:<=+7d,none "
-                               "priority:high,brak sort:due,-priority group:page limit:20 \"a b\""_s);
+                               u"priority:high,brak sort:due,-priority group:page limit:20 \"a b\""_s);
         QVERIFY(q.explicitType);
         QCOMPARE(q.filters.size(), 5);
         QCOMPARE(q.filters[0].kind, QueryFilterKind::Status);
@@ -557,8 +558,9 @@ private Q_SLOTS:
         // Reminders are local wall-clock times. In a DST gap (CET -> CEST on 2026-03-29,
         // 02:00 -> 03:00) "02:30" must still be before "03:15", not moved to 03:30 by QDateTime.
         const QByteArray oldTz = qgetenv("TZ");
-        qputenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3");
-        tzset();
+        brulion::test::useCentralEuropeanTime("CET-1CEST,M3.5.0,M10.5.0/3");
+        if (const QString problem = brulion::test::centralEuropeanTimeProblem(); !problem.isEmpty())
+            QSKIP(qPrintable(problem));
         VaultIndex index;
         index.update(u"N.md"_s, u"- nocna zmiana ⏰ 2026-03-29 02:30\n- później ⏰ 2026-03-29 03:20"_s);
         QueryOptions options;
@@ -612,7 +614,7 @@ private Q_SLOTS:
                 << QStringList{u"tag tylda"_s, u"ref Duże"_s};
         QTest::newRow("in a list item (Logseq, the outline)")
                 << u"- notatka\n- ```query\n  tag:lista\n  ```\n\t- dziecko tag:nie\n- tekst\n  ~~~query\n  ref:Dalej\n"
-                   "  ~~~\n  ```js\n  tag:kod\n  ```\n1. ```query\n   page:Numer\n   ```\n"_s
+                   u"  ~~~\n  ```js\n  tag:kod\n  ```\n1. ```query\n   page:Numer\n   ```\n"_s
                 << QStringList{u"tag lista"_s, u"ref Dalej"_s, u"page Numer"_s};
         QTest::newRow("CRLF, an unclosed fence")
                 << u"```query\r\ntag:a\r\nref:B\r\n"_s << QStringList{u"tag a"_s, u"ref B"_s};
@@ -681,7 +683,7 @@ private Q_SLOTS:
     void retargetQueryNames()
     {
         const QString content = u"\uFEFF# Zapytania\r\n\r\n```query\r\n# Moje zadania\r\ntype:tasks -tag:dom,praca "
-                                "#dom\r\nref:[[Dom]] page:\"Dom\" // tag:dom\r\n```\r\ntag:dom poza zapytaniem\r\n"_s;
+                                u"#dom\r\nref:[[Dom]] page:\"Dom\" // tag:dom\r\n```\r\ntag:dom poza zapytaniem\r\n"_s;
         const QList<QueryNameRef> names = brulion::findQueryNames(content);
         QCOMPARE(names.size(), 5);
         QList<QueryNameEdit> edits;
@@ -696,8 +698,8 @@ private Q_SLOTS:
         const QString out = brulion::retargetQueryNames(content, edits, &applied);
         QCOMPARE(applied, 4);
         QCOMPARE(out, u"\uFEFF# Zapytania\r\n\r\n```query\r\n# Moje zadania\r\ntype:tasks -tag:[[Mój dom]],praca "
-                      "#[[Mój dom]]\r\nref:[[Projekty/Mój dom]] page:\"Projekty/Mój dom\" // tag:dom\r\n```\r\n"
-                      "tag:dom poza zapytaniem\r\n"_s);
+                      u"#[[Mój dom]]\r\nref:[[Projekty/Mój dom]] page:\"Projekty/Mój dom\" // tag:dom\r\n```\r\n"
+                      u"tag:dom poza zapytaniem\r\n"_s);
         // The query reads the new names.
         const QList<QueryNameRef> after = brulion::findQueryNames(out);
         QCOMPARE(after.at(0).value, u"Mój dom"_s);

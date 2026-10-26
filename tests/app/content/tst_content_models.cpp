@@ -1002,7 +1002,7 @@ private Q_SLOTS:
         QCOMPARE(ws->renamePage(u"Dom.md"_s, u"Mój dom"_s), u"Mój dom.md"_s);
         QCOMPARE(ws->readFile(u"Zapytania.md"_s), u"- ```query\n  tag:[[Mój dom]] ref:[[Mój dom]] [[Mój dom]] "
                                                   u"page:\"Mój dom\" path:[[Mój dom]] tag:dom/x "
-                                                  "ref:Inna\n  ```\n"_s);
+                                                  u"ref:Inna\n  ```\n"_s);
     }
 
     void pageTools()

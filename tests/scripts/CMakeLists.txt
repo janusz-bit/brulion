@@ -1,3 +1,9 @@
+# Windows: the scripts are bash for Linux and the release (GNU tools, ELF files, throwaway
+# repositories), and the bash found there may be WSL's: not run on Windows.
+if(WIN32)
+    return()
+endif()
+
 # Tests of the shell scripts in scripts/: bash and git in throwaway repositories, no network.
 find_program(BRULION_BASH bash)
 find_package(Git QUIET)

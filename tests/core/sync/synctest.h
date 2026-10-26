@@ -4,6 +4,7 @@
 #pragma once
 
 #include "fakewebdavserver.h"
+#include "filesystemtraits.h"
 
 #include "sync/sync.h"
 #include "vault/localstore.h"

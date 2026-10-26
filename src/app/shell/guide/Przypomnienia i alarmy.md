@@ -29,6 +29,7 @@ Jeśli blok ma też regułę `🔁` (zobacz [[Zadania|Zadania]]), przypomnienie 
 - Tytuł powiadomienia to tekst bloku bez znaczników.
 - Na Androidzie przypomnienia i alarmy działają przy zamkniętej aplikacji, także po restarcie telefonu; wymagają zgody na powiadomienia i dokładne alarmy, o które aplikacja poprosi.
 - Na komputerze Brulion działa w zasobniku, jeśli włączysz autostart, i stamtąd powiadamia.
+- Na Windows (wersja testowa) przypomnienia i alarmy pokazuje ikona Brulionu w zasobniku systemowym, dopóki program działa — także po zamknięciu okna. Nie ma tam przycisków odkładania ani autostartu.
 - Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku, gdzie pokazuje je baner z przypomnieniami do obsłużenia.
 
 ## Który notatnik przypomina
