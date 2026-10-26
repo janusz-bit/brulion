@@ -155,8 +155,14 @@ if ($Steps -contains 'package') {
     Info "Deploying into $Stage"
     if (Test-Path $Stage) { Remove-Item -Recurse -Force $Stage }
     New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-    Copy-Item (Join-Path $BuildDir 'src\app\brulion.exe') $Stage
-    Copy-Item (Join-Path $BuildDir 'src\cli\brulion-cli.exe') $Stage
+    # qt_standard_project_setup() puts every executable into the build folder's top on Windows
+    # (next to the DLLs it builds); a build with its own CMAKE_RUNTIME_OUTPUT_DIRECTORY elsewhere.
+    foreach ($exe in @(@('brulion.exe', 'src\app'), @('brulion-cli.exe', 'src\cli'))) {
+        $built = @((Join-Path $BuildDir $exe[0]), (Join-Path (Join-Path $BuildDir $exe[1]) $exe[0])) |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $built) { Fail "$($exe[0]) not found in $BuildDir (run the build step)" }
+        Copy-Item $built $Stage
+    }
     Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Stage 'LICENSE.txt')
     $skill = Join-Path $Stage 'agent-skills\brulion'
     New-Item -ItemType Directory -Force -Path $skill | Out-Null
