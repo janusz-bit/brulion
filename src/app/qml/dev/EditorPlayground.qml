@@ -887,19 +887,27 @@ ApplicationWindow {
             () => check(page.sourceText === "- ąZażółć gęślą\n- jaźń\n", "typing after Ctrl+Z goes into the first block: "
                         + JSON.stringify(page.sourceText)),
             () => { realKey(Qt.Key_Z, Qt.ControlModifier); editor.startEditing(1, 2) },
-            () => page.insertBlockAfter(-1),
-            () => check(page.editingRow === 0 && info(0).plainText === "" && editor.activeEditor && editor.activeEditor.row === 0,
-                        "a block inserted at the start of the page is edited"),
+            () => realKey(Qt.Key_Up, Qt.AltModifier),
+            () => check(page.sourceText === "- jaźń\n- Zażółć gęślą\n" && page.editingRow === 0 && editor.activeEditor
+                        && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "jaźń",
+                        "real Alt+Up moves the second block to the start of the page, edited: "
+                        + JSON.stringify(page.sourceText)),
             () => realKey(Qt.Key_Z, Qt.ControlModifier),
-            () => check(page.sourceText === "- Zażółć gęślą\n- jaźń\n" && page.editingRow === 1 && editor.activeEditor
-                        && editor.activeEditor.activeFocus && editor.activeEditor.row === 1 && editor.activeEditor.plain() === "jaźń"
-                        && editor.activeEditor.cursorPosition === 2,
-                        "real Ctrl+Z of that insertion puts the caret back where it was: row "
-                        + (editor.activeEditor ? editor.activeEditor.row + " " + JSON.stringify(editor.activeEditor.plain()) : "none")),
+            () => {
+                check(page.sourceText === "- Zażółć gęślą\n- jaźń\n" && page.editingRow === 1 && editor.activeEditor
+                      && editor.activeEditor.activeFocus && editor.activeEditor.row === 1 && editor.activeEditor.plain() === "jaźń"
+                      && editor.activeEditor.cursorPosition === 2,
+                      "real Ctrl+Z of that move puts the caret back where it was: row "
+                      + (editor.activeEditor ? editor.activeEditor.row + " " + JSON.stringify(editor.activeEditor.plain()) : "none"))
+                const first = editor.listView.itemAtIndex(0)
+                check(first !== null && textContaining(first, "Zażółć") !== null && textContaining(first, "jaźń") === null,
+                      "after Ctrl+Z the first row shows its own block")
+            },
             () => realKey(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier),
-            () => check(page.blocks.count === 3 && page.editingRow === 0 && editor.activeEditor && editor.activeEditor.activeFocus
-                        && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "",
-                        "real Ctrl+Shift+Z inserts it again, edited"),
+            () => check(page.sourceText === "- jaźń\n- Zażółć gęślą\n" && page.editingRow === 0 && editor.activeEditor
+                        && editor.activeEditor.activeFocus && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "jaźń"
+                        && editor.activeEditor.cursorPosition === 2,
+                        "real Ctrl+Shift+Z moves it to the start again, edited"),
             // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
             () => { page.save(); page.path = host.documentPath },
             () => {

@@ -122,15 +122,15 @@ void verifyReload(Fixture &f)
 
 /// What a view knows of a model that it only learns about through its signals: the rows'
 /// roles, fetched when rows are inserted, refetched on dataChanged (only the roles named) and
-/// on reset. stale() lists every role whose value the view still shows wrongly. Block uids and
-/// file line numbers are left out: no view shows them.
+/// on reset. stale() lists every role whose value the view still shows wrongly. Block uids are
+/// left out: no view shows them (they are internal and change with every reload).
 class ViewMirror {
 public:
     explicit ViewMirror(const QAbstractListModel *model) : m_model(model)
     {
         const QHash<int, QByteArray> names = model->roleNames();
         for (auto it = names.begin(); it != names.end(); ++it) {
-            if (it.value() != "uid" && it.value() != "line")
+            if (it.value() != "uid")
                 m_roles.insert(it.key(), QString::fromLatin1(it.value()));
         }
         reset();
@@ -502,40 +502,64 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(textResets.last().at(1).toString(), u"b"_s);
     }
 
-    // A block inserted at the very start of a page (row 0), then undone and redone: the rows a
-    // view learns about from the model's signals match the model, the caret goes back to the
-    // block (and place) it was in, and only that row is the edited one.
+    // A block put at the very start of a page (row 0), then undone and redone: the rows a view
+    // learns about from the model's signals match the model (the file line numbers of the rows
+    // below too), the caret goes back to the block (and place) it was in, and only that row is
+    // the edited one.
     void undoOfAnInsertionAtTheStart_data()
     {
         QTest::addColumn<QString>("content");
-        QTest::addColumn<QString>("command"); // "enter": Enter at the edited place; "insert": insertBlockAfter(-1)
+        // "enter": Enter at the edited place; "insert": insertBlockAfter(-1); "paste": two list
+        // items pasted at the edited place; "up": Alt+Up of the edited block
+        QTest::addColumn<QString>("command");
         QTest::addColumn<int>("editRow");      // edited before the command (-1: nothing)
         QTest::addColumn<int>("editCursor");
         QTest::addColumn<QString>("inserted"); // the text after the command
         QTest::addColumn<int>("rowAfter");     // edited after the command
+        QTest::addColumn<int>("cursorAfter");  // its caret
 
         QTest::newRow("enter-list") << u"- Zażółć gęślą\n- jaźń\n"_s << u"enter"_s << 0 << 0
-                                    << u"- \n- Zażółć gęślą\n- jaźń\n"_s << 1;
+                                    << u"- \n- Zażółć gęślą\n- jaźń\n"_s << 1 << 0;
         QTest::newRow("enter-children") << u"- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << u"enter"_s << 0 << 0
-                                        << u"- \n- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << 1;
+                                        << u"- \n- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << 1 << 0;
         QTest::newRow("enter-task") << u"- [ ] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
-                                    << u"- [ ] \n- [ ] Kupić ćwikłę\n- dalej\n"_s << 1;
+                                    << u"- [ ] \n- [ ] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
         QTest::newRow("enter-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 0 << 0
-                                         << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1;
+                                         << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1 << 0;
         QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0
-                                     << u"\n\n# Strona\n- treść\n"_s << 1;
+                                     << u"\n\n# Strona\n- treść\n"_s << 1 << 0;
         QTest::newRow("enter-ordered") << u"1. jeden\n2. dwa\n3. trzy\n"_s << u"enter"_s << 0 << 0
-                                       << u"1. \n2. jeden\n3. dwa\n4. trzy\n"_s << 1;
+                                       << u"1. \n2. jeden\n3. dwa\n4. trzy\n"_s << 1 << 0;
         QTest::newRow("enter-empty-first") << u"- \n- \n- b\n"_s << u"enter"_s << 0 << 0
-                                           << u"- \n- \n- \n- b\n"_s << 1;
+                                           << u"- \n- \n- \n- b\n"_s << 1 << 0;
         QTest::newRow("enter-after-properties") << u"---\ntags: [dom]\n---\n- Zażółć gęślą\n"_s << u"enter"_s << 1 << 0
-                                                << u"---\ntags: [dom]\n---\n- \n- Zażółć gęślą\n"_s << 2;
-        QTest::newRow("enter-crlf") << u"- ąę\r\n- b\r\n"_s << u"enter"_s << 0 << 0 << u"- \r\n- ąę\r\n- b\r\n"_s << 1;
+                                                << u"---\ntags: [dom]\n---\n- \n- Zażółć gęślą\n"_s << 2 << 0;
+        QTest::newRow("enter-crlf") << u"- ąę\r\n- b\r\n"_s << u"enter"_s << 0 << 0 << u"- \r\n- ąę\r\n- b\r\n"_s << 1 << 0;
         QTest::newRow("insert-nothing-edited") << u"- a\n- b\n"_s << u"insert"_s << -1 << -1
-                                               << u"- \n- a\n- b\n"_s << 0;
+                                               << u"- \n- a\n- b\n"_s << 0 << 0;
         QTest::newRow("insert-editing-below") << u"- a\n- bęben\n"_s << u"insert"_s << 1 << 3
-                                              << u"- \n- a\n- bęben\n"_s << 0;
-        QTest::newRow("insert-same-as-first") << u"- \n- b\n"_s << u"insert"_s << 0 << 0 << u"- \n- \n- b\n"_s << 0;
+                                              << u"- \n- a\n- bęben\n"_s << 0 << 0;
+        QTest::newRow("insert-same-as-first") << u"- \n- b\n"_s << u"insert"_s << 0 << 0 << u"- \n- \n- b\n"_s << 0 << 0;
+        // In document mode a frontmatter with nothing but the mode is hidden: row 0 is invisible.
+        const QString document = u"---\nbrulion: document\n---\n"_s;
+        QTest::newRow("document-enter") << document + u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 1 << 0
+                                        << document + u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 2 << 0;
+        QTest::newRow("document-insert") << document + u"Pierwszy akapit źdźbła\n"_s << u"insert"_s << -1 << -1
+                                         << document + u"\n\nPierwszy akapit źdźbła\n"_s << 1 << 0;
+        QTest::newRow("document-up") << document + u"Pierwszy\n\nDrugi łęg\n"_s << u"up"_s << 2 << 3
+                                     << document + u"Drugi łęg\n\nPierwszy\n"_s << 1 << 3;
+        // Several blocks pasted at the start of the first one: the first joins the text before the
+        // caret (none), the text after the caret goes to the end of the last one.
+        QTest::newRow("paste-list") << u"- Zażółć gęślą\n- jaźń\n"_s << u"paste"_s << 0 << 0
+                                    << u"- wklejone ą\n- drugie ęZażółć gęślą\n- jaźń\n"_s << 1 << 8;
+        QTest::newRow("paste-crlf") << u"- ąę\r\n- b\r\n"_s << u"paste"_s << 0 << 0
+                                    << u"- wklejone ą\r\n- drugie ęąę\r\n- b\r\n"_s << 1 << 8;
+        QTest::newRow("up-list") << u"- pierwszy\n- Zażółć gęślą\n- trzeci\n"_s << u"up"_s << 1 << 4
+                                 << u"- Zażółć gęślą\n- pierwszy\n- trzeci\n"_s << 0 << 4;
+        QTest::newRow("up-children") << u"- pierwszy\n- Zażółć\n\t- dziecko ść\n- trzeci\n"_s << u"up"_s << 1 << 2
+                                     << u"- Zażółć\n\t- dziecko ść\n- pierwszy\n- trzeci\n"_s << 0 << 2;
+        QTest::newRow("up-after-properties") << u"---\ntags: [dom]\n---\n- pierwszy\n- Zażółć\n"_s << u"up"_s << 2 << 1
+                                             << u"---\ntags: [dom]\n---\n- Zażółć\n- pierwszy\n"_s << 1 << 1;
     }
 
     void undoOfAnInsertionAtTheStart()
@@ -546,12 +570,21 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QFETCH(int, editCursor);
         QFETCH(QString, inserted);
         QFETCH(int, rowAfter);
+        QFETCH(int, cursorAfter);
 
         Fixture f(content);
         if (editRow >= 0)
             f.page.startEditing(editRow, editCursor);
         const ViewMirror view(f.model());
         QSignalSpy textResets(&f.page, &PageController::editTextReset);
+        // The blocks of each version (the edited row is the same block, not only the same row).
+        const auto blocks = [&] {
+            QStringList out;
+            for (int r = 0; r < f.count(); ++r)
+                out.append(f.role(r, "kind").toString() + u':' + f.edit(r));
+            return out;
+        };
+        const QStringList blocksBefore = blocks();
         const auto editedRows = [&] {
             QList<int> rows;
             for (int r = 0; r < f.count(); ++r) {
@@ -560,15 +593,18 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             }
             return rows;
         };
-        const auto check = [&](const QString &text, int row, int cursor) {
+        // A moved block keeps its text editor (the row moves): its text is not sent again.
+        const auto check = [&](const QString &text, int row, int cursor, bool textReset = true) {
             QCOMPARE(f.text(), text);
-            QCOMPARE(view.stale(), QStringList());
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
             QCOMPARE(f.page.editingRow(), row);
             QCOMPARE(editedRows(), row >= 0 ? QList<int>{row} : QList<int>{});
             if (row < 0)
                 return;
             if (cursor >= 0)
                 QCOMPARE(f.page.cursorPosition(), cursor);
+            if (!textReset)
+                return;
             // The edited row's text editor gets that row's text.
             QVERIFY(!textResets.isEmpty());
             QCOMPARE(textResets.last().at(0).toInt(), row);
@@ -578,12 +614,21 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
 
         if (command == u"enter"_s)
             f.page.split(editRow, editCursor);
+        else if (command == u"paste"_s)
+            f.page.pasteText(editRow, editCursor, editCursor, u"- wklejone ą\n- drugie ę\n"_s);
+        else if (command == u"up"_s)
+            QVERIFY(f.page.moveUp(editRow));
         else
             f.page.insertBlockAfter(-1);
-        check(inserted, rowAfter, 0);
+        check(inserted, rowAfter, cursorAfter, command != u"up"_s);
         if (QTest::currentTestFailed())
             return;
         const int afterCursor = f.page.cursorPosition();
+        const QStringList blocksAfter = blocks();
+        // Known gap (TODO.md): an empty paragraph is no Markdown block of its own (just blank
+        // lines), so redo, which parses the version's text again, loses it and the caret lands in
+        // the block after it (the rest of such a row stops there: it would go on from that state).
+        const bool emptyParagraph = blocksAfter.count(u"paragraph:"_s) > blocksBefore.count(u"paragraph:"_s);
 
         for (int round = 0; round < 2; ++round) {
             textResets.clear();
@@ -591,12 +636,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             check(content, editRow, editCursor);
             if (QTest::currentTestFailed())
                 return;
+            QCOMPARE(blocks(), blocksBefore);
             QVERIFY(!f.page.canUndo());
             textResets.clear();
             f.page.redo();
             check(inserted, rowAfter, afterCursor);
             if (QTest::currentTestFailed())
                 return;
+            if (emptyParagraph)
+                QEXPECT_FAIL("", "redo loses an inserted empty paragraph (TODO.md)", Abort);
+            QCOMPARE(blocks(), blocksAfter);
         }
         f.page.undo();
         // Typing goes into the block the caret is back in.

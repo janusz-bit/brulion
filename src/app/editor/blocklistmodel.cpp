@@ -674,6 +674,7 @@ void BlockListModel::refresh(bool contentChanged)
     QList<int> tableRows;
     QList<int> htmlRows;
     QList<int> transclusionRows;
+    QList<int> lineRows; // blocks moved to other lines of the file by changes above them
     QString prevKind; // of the last visible row
     int visibleCount = 0;
     bool calcConsumers = false;
@@ -721,6 +722,12 @@ void BlockListModel::refresh(bool contentChanged)
             st.zoomRoot = zoomRoot;
             st.prevKind = prevKind;
             dirty[row] = 1;
+        }
+        // A fresh state belongs to a row a view fetched in full (inserted, reset): nothing to tell.
+        if (e.line != st.line) {
+            if (st.line >= 0)
+                lineRows.append(row);
+            st.line = e.line;
         }
         if (visible) {
             prevKind = kindName(e.kind);
@@ -809,6 +816,7 @@ void BlockListModel::refresh(bool contentChanged)
     emitRowsChanged(tableRows, {TableDataRole});
     emitRowsChanged(htmlRows, {HtmlRole});
     emitRowsChanged(transclusionRows, {TransclusionsRole});
+    emitRowsChanged(lineRows, {LineRole});
 }
 
 QVariantList BlockListModel::computeCalcResults(int i) const

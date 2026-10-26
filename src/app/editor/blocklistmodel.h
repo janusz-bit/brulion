@@ -228,6 +228,7 @@ private:
         quint8 selectionEdge = 0; ///< SelectionEdge
         bool zoomRoot = false;
         QString prevKind;
+        int line = -1; ///< the line number a view was last told (-1: fetched with the row)
         // Content caches.
         BlockShape shape;
         bool shapeValid = false;
