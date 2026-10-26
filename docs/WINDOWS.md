@@ -83,6 +83,10 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
   `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
   synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
   urządzeniu.
+* **Notatki otwartej w innym programie bez współdzielenia** (np. zablokowanej przez Worda) Brulion
+  nie zapisze, dopóki ten program ją trzyma: Windows nie podmienia pliku otwartego bez
+  `FILE_SHARE_DELETE`, a Brulion zapisuje atomowo (nowy plik w miejsce starego). Zamknij ją tam,
+  zanim zmienisz ją w Brulionie; synchronizacja ponawia taki plik przy następnym przebiegu.
 * Dowiązania symboliczne i punkty połączenia (junction) w notatniku nie są testowane na Windows.
 * Tylko x86_64 (bez Windows na ARM) i tylko Windows 10/11.
 
@@ -161,10 +165,11 @@ z wyjątkami:
   `tst_vault_safety`, `tst_sync_engine`, `tst_log_logger`, `tst_shell_settings`; z **dwoma
   plikami różniącymi się tylko wielkością liter** (NTFS ich nie odróżnia) — w `tst_vault`,
   `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (tam na takim systemie plików
-  test sprawdza zamiast tego, że po zmianie wielkości liter folderu na innym urządzeniu żadna
-  notatka nie ginie);
-* `watcherDetectsFolderRenames` w `tst_vault_watch`: inny program nie zmieni na Windows nazwy
-  obserwowanego folderu (niżej, „Ograniczenia”);
+  test sprawdza zamiast tego, że folder, któremu inne urządzenie zmieniło wielkość liter, dostaje
+  tu tę samą nazwę bez przesyłania i bez kosza);
+* w `tst_vault_watch`: `watcherDetectsFolderRenames` (inny program nie zmieni na Windows nazwy
+  obserwowanego folderu) i koniec `inPlaceRewriteOfAnOpenFileIsReportedAtOnce` (zapis notatki,
+  którą inny program trzyma otwartą) — oba opisane wyżej w „Ograniczeniach”;
 * autotesty QML (`tst_shell_qml*`, `tst_shell_journey*`, `tst_notify_sounds_qml*`,
   `tst_appio_import_qml*`, `tst_content_journals_qml`) dostają osobny profil
   `BRULION_PROFILE=test-<nazwa>` (`brulion_test_profile()` w `tests/CMakeLists.txt`), który ich
