@@ -5,7 +5,10 @@ package io.github.januszbit.brulion.android
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The keyboard's overlap of Qt's view, in physical pixels (plain JVM: no Android API is called). */
+/**
+ * The keyboard's overlap of Qt's view and the system gesture zones in it, in physical pixels (plain
+ * JVM: no Android API is called).
+ */
 class ImeInsetsTest {
   // A 1080x2400 phone; Qt's view fills the screen (edge-to-edge).
   private val screen = 2400
@@ -59,6 +62,25 @@ class ImeInsetsTest {
       frames,
       frames.map { ImeInsets.overlap(viewTop = 0, viewBottom = screen, windowBottom = screen, imeBottom = it) },
     )
+  }
+
+  @Test
+  fun gestureZoneInAViewAtTheEdge() {
+    // Gesture navigation (about 30 dp at 2.625: 79 px) and Qt's view from the window's edge.
+    assertEquals(79, ImeInsets.intoView(inset = 79, gap = 0))
+    // Button navigation: no zone.
+    assertEquals(0, ImeInsets.intoView(inset = 0, gap = 0))
+  }
+
+  @Test
+  fun gestureZonePartlyOutsideTheView() {
+    // A view 63 px in from the edge (a cutout in landscape): only the rest of the zone is in it.
+    assertEquals(16, ImeInsets.intoView(inset = 79, gap = 63))
+    // A view beyond the zone (the navigation bar on that side): nothing.
+    assertEquals(0, ImeInsets.intoView(inset = 79, gap = 126))
+    // A view past the edge (negative gap) is treated as at the edge.
+    assertEquals(79, ImeInsets.intoView(inset = 79, gap = -10))
+    assertEquals(0, ImeInsets.intoView(inset = -5, gap = 0))
   }
 
   @Test

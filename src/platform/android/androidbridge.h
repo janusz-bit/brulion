@@ -151,8 +151,8 @@ public:
     /// Opens the system's settings of the notification channel of `kind`.
     void openSoundSettings(int kind);
 
-    /// Asks the keyboard observer (ImeInsets.kt) to report the keyboard's state again: it
-    /// arrives as imeChanged().
+    /// Asks the keyboard observer (ImeInsets.kt) to report the keyboard's state and the system
+    /// gesture insets again: they arrive as imeChanged() and systemGesturesChanged().
     void requestImeState();
 
     /// The system bars' icons over a window drawn behind them (Android 11+): dark over a light
@@ -171,6 +171,9 @@ Q_SIGNALS:
     /// window was resized above it); `shown` while it is up or coming up; `animating` for every
     /// frame of its slide (Android 11+), then once more settled (ImeInsets.kt; KeyboardInsets).
     void imeChanged(int overlap, bool shown, bool animating);
+    /// The system keeps `left` and `right` physical pixels of Qt's view at its edges for its own
+    /// swipes (gesture navigation's "back"; 0 with buttons) (ImeInsets.kt; GestureInsets).
+    void systemGesturesChanged(int left, int right);
 
 private:
     explicit AndroidBridge(QObject *parent);

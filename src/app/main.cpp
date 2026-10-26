@@ -1,6 +1,7 @@
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
 #include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
+#include "ui/gestureinsets.h" // the system's gesture zones at the window's edges (GestureInsets)
 #include "ui/keyboardinsets.h" // the on-screen keyboard's height (KeyboardInsets)
 #include "ui/keyboardsources.h"
 
@@ -246,6 +247,9 @@ int main(int argc, char *argv[])
     brulion::ui::KeyboardInsets keyboardInsets;
     if (devTools.keyboard() >= 0)
         keyboardInsets.setSimulated(devTools.keyboard());
+    // The system's gesture zones at the window's edges (QML singleton GestureInsets: Android's
+    // gesture navigation), fed by the platform (keyboardsources.h).
+    brulion::ui::GestureInsets gestureInsets;
     std::unique_ptr<AppController> controller;
 #ifdef BRULION_DESKTOP_INTEGRATION
     std::unique_ptr<brulion::shell::DesktopTray> tray;
@@ -263,6 +267,7 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     devTools.attach(&engine); // --size, --screenshot
     brulion::ui::connectKeyboardSources(&keyboardInsets, &engine);
+    brulion::ui::connectGestureSources(&gestureInsets, &engine);
 #ifdef BRULION_DESKTOP_INTEGRATION
     // After the engine: it drives the engine's window and goes before it.
     std::unique_ptr<brulion::shell::RemoteControl> remoteControl;

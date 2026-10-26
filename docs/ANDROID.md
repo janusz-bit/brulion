@@ -284,6 +284,44 @@ Na obu pasek leży dokładnie na klawiaturze, zostaje na niej przy przewijaniu d
 a po Wstecz zostaje na dole tuż nad paskiem nawigacji systemu (dolna nawigacja aplikacji wraca
 dopiero po zakończeniu pisania). Android 9–10 i prawdziwe telefony nie były sprawdzane.
 
+## Boczne menu gestem
+
+Szufladę z drzewem stron otwiera — oprócz ☰ i „Menu” na dolnym pasku — przesunięcie palca
+w prawo od lewej krawędzi ekranu; przesunięcie w lewo na szufladzie albo na przyciemnionym tle ją
+zamyka (docs/UI.md „Window layout”). Przy **nawigacji gestami** (Android 10+) system zabiera
+przesunięcie zaczęte przy samej krawędzi na gest „Wstecz” (pas ~30 dp, szerszy przy wyższej
+czułości gestu „Wstecz” w ustawieniach systemu), więc palec trzeba położyć odrobinę dalej od
+krawędzi: pas aplikacji (24 dp) zaczyna się tuż za strefą systemu. Przy nawigacji przyciskami
+pas leży przy samej krawędzi. Podczas pisania i zaznaczania bloków gest nie otwiera szuflady
+(wtedy ☰).
+
+Jak to działa:
+
+* `ImeInsets.kt` z tych samych wstawek okna czyta też `WindowInsets` typu `systemGestures()` —
+  szerokość stref gestów systemu przy lewej i prawej krawędzi widoku Qt (0 przy przyciskach;
+  przy widoku odsuniętym od krawędzi tylko część strefy, która na niego wchodzi) — i zgłasza je
+  przez `BrulionAndroid.gestureInsetsChanged` → natywne `nativeGestureInsetsChanged` (piksele
+  fizyczne, tylko przy zmianie: obrót, zmiana trybu nawigacji albo czułości).
+* C++: `GestureInsets` (`src/app/ui/gestureinsets.h`, singleton QML) przelicza je na piksele
+  logiczne; `AppShell.qml` ustawia `dragMargin` szuflady na `max(SafeArea.left,
+  GestureInsets.left) + 24` px. Stuknięcia i przewijanie w pionie w tym pasie trafiają do
+  treści; szufladę otwiera tylko przesunięcie głównie poziome dłuższe niż 20 px, którego nie
+  trzyma już coś innego (przewijana tabela). Uchwyty zaznaczenia tekstu to osobne okienka
+  Androida nad aplikacją — pas ich nie dotyczy. Podczas pisania i zaznaczania bloków (klawiatura
+  albo zadokowany pasek edycji, gdy dolna nawigacja też się chowa) pasa nie ma: szuflada
+  przejmowała przeciąganie uchwytu początku zaznaczenia bloków, który leży przy lewej krawędzi;
+  ☰ nadal ją otwiera.
+* Aplikacja nie wyłącza gestu „Wstecz” przy krawędzi (`setSystemGestureExclusionRects`): Android
+  ogranicza takie wyłączenie do 200 dp wysokości, a użytkownik straciłby „Wstecz” w tym miejscu.
+
+Sprawdzone tylko na komputerze (`tst_shell_qml`, dotyk syntetyczny, strefa gestów symulowana
+przez `GestureInsets.simulate`). **Do sprawdzenia na telefonie / emulatorze** (nawigacja gestami
+i przyciskami, Android 10 i 15+, pion i poziom z wycięciem ekranu): czy obserwator zgłasza strefę
+(`adb shell setprop log.tag.BrulionIme DEBUG` → „system gestures left … px” w logcat), czy
+przesunięcie zaczęte tuż za strefą otwiera szufladę, a zaczęte przy krawędzi nadal cofa, i czy
+pas nie przeszkadza w przewijaniu tabel, zaznaczaniu tekstu ani w przesuwaniu miesięcy
+w kalendarzu przy lewej krawędzi.
+
 ## Rejestr zdarzeń: udostępnianie
 
 Rejestr zdarzeń (*Ustawienia → Aplikacja → Rejestr zdarzeń*, docs/ARCHITECTURE.md „Logging”)
@@ -683,6 +721,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
+| sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
 | `void setSystemBarsLight(bool light)` | `setSystemBarsLight(Boolean)` — ikony pasków systemu ciemne nad jasnym oknem (Android 11+, okno pod paskami) |
 
 * Element `scheduleReminders`: `{id: int, title, body, at: ms od epoki, alarm: bool,
@@ -723,7 +762,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 * Testy jednostkowe Kotlina (czysta logika: przesuwanie czasu ściennego między strefami, czas
   dzwonienia, JSON przypomnień, dźwięki — wybór z C++, odpowiedź okna wyboru dzwonka, wersje
   kanałów i usuwanie starych — z polskimi znakami; ile widoku zakrywa klawiatura — okno
-  edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania: `ImeInsetsTest`):
+  edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania — i ile z pasa gestów systemu
+  wchodzi na widok Qt: `ImeInsetsTest`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
   `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
   projekcie Gradle).

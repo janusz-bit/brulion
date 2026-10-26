@@ -1,5 +1,6 @@
 #include "keyboardsources.h"
 
+#include "gestureinsets.h"
 #include "keyboardinsets.h"
 
 #include <QGuiApplication>
@@ -118,6 +119,31 @@ void connectKeyboardSources(KeyboardInsets *insets, QQmlApplicationEngine *engin
         QObject::connect(insets, &KeyboardInsets::sourceChanged, insets, publish);
         publish();
     }
+#endif
+}
+
+void connectGestureSources(GestureInsets *insets, QQmlApplicationEngine *engine)
+{
+#ifdef Q_OS_ANDROID
+    // The system gesture insets of the activity (ImeInsets.kt) in physical pixels: the left and
+    // right edges gesture navigation keeps for "back" (0 with buttons).
+    auto window = std::make_shared<QPointer<QQuickWindow>>();
+    QObject::connect(engine, &QQmlApplicationEngine::objectCreated, insets, [window](QObject *object, const QUrl &) {
+        if (auto *w = qobject_cast<QQuickWindow *>(object); w && !*window)
+            *window = w;
+    });
+    QObject::connect(platform::AndroidBridge::instance(), &platform::AndroidBridge::systemGesturesChanged, insets,
+                     [insets, window](int left, int right) {
+                         const qreal dpr = *window ? (*window)->devicePixelRatio() : qGuiApp->devicePixelRatio();
+                         insets->setPlatformInsets(KeyboardInsets::toLogical(left, dpr),
+                                                   KeyboardInsets::toLogical(right, dpr));
+                     });
+    // The observer reports them with the keyboard's state (connectKeyboardSources asks for it
+    // again; asking here too keeps this independent of the order of the two calls).
+    platform::AndroidBridge::instance()->requestImeState();
+#else
+    Q_UNUSED(insets)
+    Q_UNUSED(engine)
 #endif
 }
 

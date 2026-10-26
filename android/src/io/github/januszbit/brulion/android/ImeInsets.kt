@@ -34,12 +34,16 @@ import java.lang.ref.WeakReference
  * * a global layout listener on the decor view: a system that handed the insets to Qt's view
  *   only (Android 9–10 stop at the first view that consumes them).
  * Reports go to C++ through [BrulionAndroid.imeChanged] (physical pixels), only when they change.
+ * The same insets give the system gesture zones at the left and right edges of Qt's view (gesture
+ * navigation's "back"; 0 with buttons), for C++'s `GestureInsets` (src/app/ui/gestureinsets.h)
+ * through [BrulionAndroid.gestureInsetsChanged]: the drawer's edge swipe starts beyond them.
  * Main thread only.
  */
 internal class ImeInsets private constructor(private val activity: Activity) {
   private val observer = View(activity)
   private var animating = false
   private var last: Report? = null
+  private var lastGestures: Pair<Int, Int>? = null
   private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener { if (!animating) reportNow(false) }
 
   private data class Report(val overlap: Int, val shown: Boolean, val animating: Boolean)
@@ -111,6 +115,7 @@ internal class ImeInsets private constructor(private val activity: Activity) {
     val viewOnScreen = IntArray(2)
     decor.getLocationOnScreen(decorOnScreen)
     qtView.getLocationOnScreen(viewOnScreen)
+    reportGestures(insets, decorOnScreen[0], decor.width, viewOnScreen[0], qtView.width, force)
     val value =
       overlap(
         viewTop = viewOnScreen[1],
@@ -125,6 +130,31 @@ internal class ImeInsets private constructor(private val activity: Activity) {
       Log.d(TAG, "ime ${ime}px, view ${viewOnScreen[1]}..${viewOnScreen[1] + qtView.height}: overlap $value shown=$shown animating=$moving")
     }
     if (BrulionAndroid.imeChanged(next.overlap, next.shown, next.animating)) last = next
+  }
+
+  /**
+   * The system gesture zones at the window's left and right edges (screen columns [windowLeft]…
+   * +[windowWidth]) as far as they reach into Qt's view ([viewLeft]…+[viewWidth]).
+   */
+  private fun reportGestures(
+    insets: WindowInsetsCompat,
+    windowLeft: Int,
+    windowWidth: Int,
+    viewLeft: Int,
+    viewWidth: Int,
+    force: Boolean,
+  ) {
+    val gestures = insets.getInsets(WindowInsetsCompat.Type.systemGestures())
+    val next =
+      Pair(
+        intoView(gestures.left, viewLeft - windowLeft),
+        intoView(gestures.right, (windowLeft + windowWidth) - (viewLeft + viewWidth)),
+      )
+    if (viewWidth <= 0 || (!force && next == lastGestures)) return
+    if (Log.isLoggable(TAG, Log.DEBUG)) {
+      Log.d(TAG, "system gestures left ${gestures.left}px, right ${gestures.right}px: in the view ${next.first}, ${next.second}")
+    }
+    if (BrulionAndroid.gestureInsetsChanged(next.first, next.second)) lastGestures = next
   }
 
   /** Qt's view: the activity's content (QtActivity sets one view), else the content frame. */
@@ -171,6 +201,13 @@ internal class ImeInsets private constructor(private val activity: Activity) {
     fun reportAgain() {
       current?.get()?.let { if (!it.animating) it.reportNow(true) }
     }
+
+    /**
+     * Physical pixels of a system gesture zone [inset] pixels wide at a window's edge that lie in a
+     * view [gap] pixels away from that edge (0 when the view starts beyond the zone).
+     */
+    @JvmStatic
+    fun intoView(inset: Int, gap: Int): Int = (inset - maxOf(gap, 0)).coerceAtLeast(0)
 
     /**
      * Physical pixels of a view (screen rows [viewTop]…[viewBottom]) below the top of a keyboard

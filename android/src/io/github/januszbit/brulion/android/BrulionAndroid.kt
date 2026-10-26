@@ -87,6 +87,12 @@ object BrulionAndroid {
    */
   @JvmStatic external fun nativeImeChanged(overlap: Int, shown: Boolean, animating: Boolean)
 
+  /**
+   * The system keeps [left] and [right] physical pixels of the window's edges for its own swipes
+   * (gesture navigation's "back"; [ImeInsets]): the drawer's edge swipe starts beyond them.
+   */
+  @JvmStatic external fun nativeGestureInsetsChanged(left: Int, right: Int)
+
   // -----------------------------------------------------------------------------------------
   // Lifecycle (C++)
   // -----------------------------------------------------------------------------------------
@@ -100,7 +106,10 @@ object BrulionAndroid {
     onMain { ImeInsets.reportAgain() }
   }
 
-  /** C++ asks for the on-screen keyboard's state (it arrives through [nativeImeChanged]). */
+  /**
+   * C++ asks for the on-screen keyboard's state and the system gesture insets (they arrive through
+   * [nativeImeChanged] and [nativeGestureInsetsChanged]).
+   */
   @JvmStatic
   fun requestImeState() {
     onMain { ImeInsets.reportAgain() }
@@ -486,6 +495,23 @@ object BrulionAndroid {
         return true
       } catch (e: UnsatisfiedLinkError) {
         Log.w(TAG, "native keyboard callback not registered", e)
+        return false
+      }
+    }
+  }
+
+  /**
+   * Hands the system gesture insets to C++ ([ImeInsets], main thread). False when C++ does not
+   * listen (yet): the observer reports them again on [attach].
+   */
+  internal fun gestureInsetsChanged(left: Int, right: Int): Boolean {
+    synchronized(lock) {
+      if (!nativeAttached) return false
+      try {
+        nativeGestureInsetsChanged(left, right)
+        return true
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native gesture insets callback not registered", e)
         return false
       }
     }

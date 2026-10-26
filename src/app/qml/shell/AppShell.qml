@@ -7,8 +7,8 @@ import Brulion
 // AppShell — the main UI once a vault is open (docs/UI.md "Window layout").
 //
 // Wide (≥ 900 px): SplitView — sidebar | top bar + current view | optional side panel.
-// Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge where the system
-// leaves it to the app — Android's gesture navigation takes it for "back"), a bottom
+// Narrow: the sidebar is a Drawer (the menu button, or a swipe from the left edge — on touch UIs
+// from a strip beyond the zone Android's gesture navigation keeps for "back"), a bottom
 // navigation bar and a floating quick-capture button; the Android back key walks back through
 // AppController's history and only lets the app close from the home view.
 //
@@ -34,6 +34,9 @@ FocusScope {
     readonly property var route: AppController.currentRoute
     /// How much of the window's bottom the on-screen keyboard covers.
     readonly property real keyboardOverlap: KeyboardInsets.overlap
+    /// Width of the strip at the left edge whose swipe opens the drawer (touch UIs), beyond the
+    /// system's own zones (drawer.dragMargin).
+    readonly property real edgeSwipeStrip: 24
     /// A view's editing toolbar is docked at its bottom edge (touch UIs): the main view's or the
     /// side panel's.
     readonly property bool toolbarDocked: routeView.viewToolbarDocked || sidePanel.toolbarDocked
@@ -368,6 +371,22 @@ FocusScope {
         height: shell.height
         edge: Qt.LeftEdge
         interactive: Theme.narrow
+        // The edge swipe: a finger that starts within dragMargin of the left edge and moves
+        // right opens the drawer (on it or the scrim, to the left, closes it). Touch UIs get a
+        // strip a finger hits (Qt's default is the start-drag distance, a few px) that begins
+        // beyond what the system keeps at that edge: gesture navigation's "back" zone
+        // (GestureInsets, ~30 dp; a swipe there leaves the app), or a display cutout / system bar
+        // in landscape (SafeArea). Taps and vertical scrolls in the strip still reach the content:
+        // the drawer takes only a mostly horizontal drag past its threshold (20 px, more than a
+        // Flickable's), not one an item already keeps (a scrolling Flickable). Android's text
+        // selection handles are windows of their own above the app: the strip never sees them.
+        // While typing or selecting blocks (the keyboard up or an editing toolbar docked: the
+        // bottom navigation makes way too) there is no strip: the drawer took the drag of the
+        // selection's start grip, which lies at the left edge (its MouseArea's preventStealing
+        // did not stop it). The ☰ button still opens it, a swipe on it still closes it.
+        dragMargin: !Theme.touchUi ? Application.styleHints.startDragDistance
+                    : shell.typing ? 0
+                    : Math.max(shell.safe.left, GestureInsets.left) + shell.edgeSwipeStrip
         dim: true
         // Focus while open (Drawer's default, stated because the keys rely on it): Escape / the
         // Android back key close the drawer instead of acting underneath it.

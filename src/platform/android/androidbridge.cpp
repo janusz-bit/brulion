@@ -137,6 +137,18 @@ void JNICALL nativeImeChanged(JNIEnv *, jclass, jint overlap, jboolean shown, jb
             Qt::QueuedConnection);
 }
 
+/// The system gesture insets (ImeInsets.kt), queued to Qt's thread. Negative values count as 0.
+void JNICALL nativeGestureInsetsChanged(JNIEnv *, jclass, jint left, jint right)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    const int l = std::max(0, static_cast<int>(left));
+    const int r = std::max(0, static_cast<int>(right));
+    QMetaObject::invokeMethod(
+            bridge, [bridge, l, r] { Q_EMIT bridge->systemGesturesChanged(l, r); }, Qt::QueuedConnection);
+}
+
 } // namespace
 
 AndroidBridge *AndroidBridge::instance()
@@ -159,6 +171,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
+            {"nativeGestureInsetsChanged", "(II)V", reinterpret_cast<void *>(&nativeGestureInsetsChanged)},
     };
     QJniEnvironment env;
     if (env.registerNativeMethods(kClass, methods, int(std::size(methods))))

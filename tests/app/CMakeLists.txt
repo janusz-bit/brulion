@@ -9,6 +9,11 @@ brulion_add_test(tst_ui_helpers
 brulion_add_test(tst_keyboardinsets
     SOURCES tst_keyboardinsets.cpp
     LIBS brulion_ui_helpers)
+# GestureInsets (brulion_ui_helpers): the system's gesture zones at the window's edges, the
+# platform's report and a simulation over it.
+brulion_add_test(tst_gestureinsets
+    SOURCES tst_gestureinsets.cpp
+    LIBS brulion_ui_helpers)
 
 # App areas add their tests in tests/app/<area>/CMakeLists.txt (picked up automatically).
 file(GLOB _brulion_app_test_dirs LIST_DIRECTORIES true RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)

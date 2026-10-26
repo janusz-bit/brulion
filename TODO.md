@@ -52,8 +52,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Android i telefon
 
-* **Boczne menu gestem** — otwieranie szuflady przesunięciem palca od krawędzi ekranu, nie tylko
-  przyciskiem.
 * **„Udostępnij → Brulion”** — plik `.md`/`.txt` albo tekst z innej aplikacji trafia do
   dziennika lub na nową stronę (docs/ANDROID.md).
 * **Widgety**:

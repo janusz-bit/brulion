@@ -1027,6 +1027,117 @@ void checkNotebookSwitcher(QQuickWindow *window, AppController *app, const Check
     closeMenus(window);
 }
 
+/// 5e. The drawer's edge swipe (phones, real touch input; docs/UI.md "Window layout"): a finger
+/// from the left edge opens it, a swipe to the left closes it; where the system keeps the edge for
+/// its back gesture (GestureInsets, simulated here as Android's gesture navigation reports it) the
+/// strip starts beyond that zone. What the strip must not take: a vertical scroll, a swipe that
+/// starts farther in, a tap on what lies under it, the drag of a selection grip lying in it. Runs
+/// on a page (Remont mieszkania) with the drawer closed and stays there, without navigating: a
+/// view the shell leaves waits for its deferred deletion, which never comes while the self-test
+/// runs, and later findChild() calls would find its items.
+void checkDrawerSwipe(QQuickWindow *window, AppController *app, QObject *drawer, const Check &check)
+{
+    QQuickItem *shellItem = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "AppShell"); });
+    if (!shellItem) {
+        check(false, "the shell is on screen");
+        return;
+    }
+    // True when it ran without an error.
+    const auto run = [&](const QString &js) {
+        QQmlExpression expression(qmlContext(shellItem), shellItem, js);
+        expression.evaluate();
+        if (expression.hasError())
+            std::fprintf(stderr, "selftest: %s\n", qPrintable(expression.error().toString()));
+        return !expression.hasError();
+    };
+    const auto opened = [drawer] { return drawer->property("opened").toBool(); };
+    const auto closed = [drawer] { return !drawer->property("visible").toBool(); };
+    const auto margin = [drawer] { return drawer->property("dragMargin").toReal(); };
+    const qreal y = window->height() * 0.45;
+    const auto swipeOpen = [&](qreal x) {
+        touchDrag(window, QPointF(x, y), QPointF(window->width() * 0.6, 0));
+        return waitFor(opened, 3000);
+    };
+    const auto swipeClose = [&] {
+        const qreal w = drawer->property("width").toReal();
+        touchDrag(window, QPointF(w * 0.7, y), QPointF(-w * 0.6, 0));
+        return waitFor(closed, 3000);
+    };
+
+    check(margin() >= 20, "the drawer's edge strip is wide enough for a finger");
+    check(swipeOpen(4), "a swipe from the left edge opens the drawer");
+    check(swipeClose(), "a swipe to the left closes the drawer");
+    check(swipeOpen(margin() - 6), "a swipe from the inner side of the edge strip opens the drawer");
+    check(swipeClose(), "a swipe to the left closes it again");
+
+    // Android's gesture navigation keeps 32 px of the edge for its back gesture: the strip lies
+    // beyond them.
+    const qreal plain = margin();
+    if (run(u"GestureInsets.simulate(32, 32)"_s)) {
+        check(waitFor([&] { return qAbs(margin() - (32 + plain)) <= 1; }),
+              "with a system gesture zone at the edge the strip starts beyond it");
+        check(swipeOpen(32 + plain / 2), "a swipe started just beyond the system's gesture zone opens the drawer");
+        check(swipeClose(), "a swipe to the left closes the drawer (system gesture zone)");
+        run(u"GestureInsets.simulate(-1, -1)"_s);
+        check(waitFor([&] { return qAbs(margin() - plain) <= 1; }), "without the zone the strip is back at the edge");
+    } else {
+        check(false, "the system gesture insets can be simulated");
+    }
+
+    // A long press selects a block; the start grip of the selection lies at the left edge, in the
+    // strip with a gesture-navigation zone: while blocks are selected (as while typing) there is
+    // no strip, and dragging the grip is the grip's — the drawer used to take it.
+    run(u"GestureInsets.simulate(32, 32)"_s);
+    QQuickItem *editor = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BlockEditor"); });
+    QQuickItem *text = renderedTextContaining(window->contentItem(), u"Budżet całkowity"_s);
+    QQuickItem *grip = nullptr;
+    if (editor && text) {
+        touchTap(window, pointIn(text, 0.3), 1000);
+        waitFor([&] {
+            grip = findShown(window->contentItem(),
+                             [](QQuickItem *item) { return item->objectName() == u"selectionGripStart"; });
+            return grip != nullptr;
+        });
+    }
+    check(grip && editor->property("selectionMode").toBool(), "a long press on a block selects it, with grips");
+    if (grip) {
+        const QPointF at = grip->mapToScene(QPointF(grip->width() / 2, grip->height() / 2));
+        check(at.x() < 32 + plain, "the selection's start grip lies where the edge strip is");
+        check(waitFor([&] { return margin() <= 0; }), "while blocks are selected there is no edge strip");
+        touchDrag(window, at, QPointF(window->width() * 0.5, 0));
+        settle(400);
+        check(closed(), "dragging the selection's grip at the left edge does not open the drawer");
+        check(editor->property("selectionMode").toBool(), "the blocks stay selected");
+    }
+    if (editor)
+        QMetaObject::invokeMethod(editor, "leaveSelectionMode");
+    check(waitFor([&] { return qAbs(margin() - (32 + plain)) <= 1; }), "the selection gone, the edge strip is back");
+    run(u"GestureInsets.simulate(-1, -1)"_s);
+
+    // What the strip leaves alone.
+    touchDrag(window, QPointF(margin() / 2, window->height() * 0.7), QPointF(0, -260));
+    settle(400);
+    check(closed(), "a vertical scroll started in the edge strip does not open the drawer");
+    touchDrag(window, QPointF(margin() + 60, y), QPointF(window->width() * 0.5, 0));
+    settle(400);
+    check(closed(), "a swipe started beyond the edge strip does not open the drawer");
+    // The top bar's menu button lies in the strip: a tap there is the button's (it opens the
+    // drawer — by a tap, not a swipe).
+    QQuickItem *menuButton =
+            findShown(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"topBarMenu"; });
+    const QPointF inStrip = menuButton ? QPointF(margin() / 2, pointIn(menuButton).y()) : QPointF();
+    if (menuButton && menuButton->contains(menuButton->mapFromScene(inStrip))) {
+        touchTap(window, inStrip);
+        check(waitFor(opened, 3000), "a tap in the edge strip reaches the button under it");
+        sendKey(window, Qt::Key_Escape);
+        waitFor(closed);
+    } else {
+        check(false, "the top bar's menu button lies in the edge strip");
+    }
+
+    check(app->currentView() == u"page" && closed(), "the page is still shown, the drawer closed");
+}
+
 void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -1208,6 +1319,8 @@ void checkRowsAndMenus(QQuickWindow *window, AppController *app, const Check &ch
         }
         sendKey(window, Qt::Key_Escape);
         check(waitFor(drawerClosed) && view() == u"page", "Escape closes the drawer");
+        if (touch)
+            checkDrawerSwipe(window, app, drawer, check);
     } else {
         checkEmptyFolder();
     }

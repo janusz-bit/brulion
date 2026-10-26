@@ -17,7 +17,8 @@ brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp
 # The real shell in its QML, headless (`brulion --selftest-shell`, src/app/shell/shellselftest.h):
 # key routing and focus (Escape/back with the drawer and the palette open, back through the
 # history, back at home left to the system), rows with context menus with real input (the phone
-# run: touch taps and long presses in the drawer opened from the bottom bar and the top bar, All
+# run: touch taps and long presses in the drawer opened from the bottom bar and the top bar, its
+# edge swipe (also beyond a simulated gesture-navigation zone), All
 # pages, tasks, editor bullets; the desktop run: left and right clicks), folders (the open page
 # revealed in the tree, "Przenieś do…" from a row's "⋯" / right-click menu, a root folder from the
 # "Strony" header, the desktop run's mouse drag and drop with Escape, All pages' folder rows and
