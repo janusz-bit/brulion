@@ -7,6 +7,16 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.4.5 — 26 października 2026
+
+**Nowe**
+- **Zdjęcia z internetu** — obraz spod adresu `https://…` w notatce, `![opis](https://example.com/kot.jpg)` albo poleceniem `/` → **Obraz z internetu…**. Brulion nic nie pobiera, dopóki nie klikniesz **Pokaż** (w **Ustawieniach → Edytor** włączysz pokazywanie bez pytania). Pobrane zdjęcie działa też bez sieci, a **Zapisz w notatniku** zapisuje jego kopię w załącznikach. Zobacz [[Linki i odnośniki zwrotne#Zdjęcia z internetu|Zdjęcia z internetu]].
+- **Wersja na Windows (testowa)** — instalator albo wersja przenośna (ZIP) dla Windows 10 i 11. Przypomnienia pokazuje ikona w zasobniku systemowym.
+
+**Poprawki**
+- Synchronizacja Nextcloud na telefonie z Androidem i na Windows: gdy na innym urządzeniu zmieniła się tylko wielkość liter w nazwie folderu (`projekty` → `Projekty`), notatki z tego folderu mogły trafić do kosza. Teraz folder zmienia nazwę.
+- Zapis notatki, który system na chwilę odrzucił (np. gdy plik sprawdza program antywirusowy), jest ponawiany.
+
 ## 0.4.4 — 25 października 2026
 
 **Nowe**
