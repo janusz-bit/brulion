@@ -2,7 +2,9 @@
 
 Teksty interfejsu są po angielsku w kodzie (`qsTr()` w QML, `tr()` / `QCoreApplication::translate()`
 w C++). `brulion_pl.ts` to tłumaczenie polskie (domyślny język aplikacji), `brulion_en.ts` zawiera
-tylko angielskie formy liczby mnogiej tekstów z `%n`.
+tylko angielskie formy liczby mnogiej tekstów z `%n`. Te same pliki tłumaczą też wiersz poleceń
+`brulion-cli` (kontekst `brulion::cli`, zobacz [docs/CLI.md](../docs/CLI.md#language)): nazwy
+poleceń, opcji i wartości (`task add`, `--due`, `todo`, `today`) zostają w tłumaczeniu bez zmian.
 
 ## Odświeżanie
 
@@ -12,8 +14,8 @@ rsync -a laptop:work/brulion-i18n/src/i18n/ i18n/      # pliki .ts wracają z la
 ```
 
 Nowe wpisy mają `type="unfinished"` — przetłumacz je (Qt Linguist albo edytor tekstu). Kompilację
-`.qm` robi zwykłe budowanie (`lrelease` w celu `brulion`); jego wynik pokazuje liczbę
-nieprzetłumaczonych tekstów.
+`.qm` robi zwykłe budowanie (`lrelease` w celu `brulion`, drugi raz dla `brulion-cli`); jego
+wynik pokazuje liczbę nieprzetłumaczonych tekstów.
 
 ## Zasady
 

@@ -10,8 +10,11 @@ klient Nextcloud). Zmiany agenta trafiają do historii wersji z opisem „Zastą
 strony idą do kosza. Gdy w aplikacji włączysz „Pozwól agentom sterować aplikacją” (Ustawienia →
 Aplikacja → Dla programistów) albo uruchomisz ją z `--remote-control`, agent może też sterować
 działającym oknem: sprawdzić, co pokazuje, kliknąć, pisać, nacisnąć skrót i zrobić zrzut ekranu
-(`brulion-cli app …`, niżej „Remote control”). Przewodnik dla użytkownika: strona „Wiersz poleceń
-i agenci AI” w dokumentacji w aplikacji. Poniżej — dokumentacja techniczna (po angielsku).
+(`brulion-cli app …`, niżej „Remote control”). Pomoc, błędy i ostrzeżenia są po polsku, gdy
+system ma polski język (np. `LANG=pl_PL.UTF-8`), inaczej po angielsku; nazwy poleceń i opcji,
+klucze JSON, kody błędów i serwer MCP są zawsze po angielsku (niżej „Language”). Przewodnik dla
+użytkownika: strona „Wiersz poleceń i agenci AI” w dokumentacji w aplikacji. Poniżej —
+dokumentacja techniczna (po angielsku).
 
 ---
 
@@ -93,8 +96,10 @@ A failure: `{"ok": false, "command": …, "vault": …, "error": {"code": "stale
 "details": {…}}, "warnings": […]}`. Error codes are English and stable (`not_found`,
 `page_not_found`, `ambiguous_ref`, `stale_ref`, `hash_mismatch`, `date_not_understood`,
 `query_error`, `read_only`, `destructive_refused`, `outside_vault`, `no_vault`, `app_not_running`,
-`remote_control_off`, `bad_target`, `stale_handle`, `timeout`, …); messages are for people. Warnings (`date_in_past`, `ignored_words`, `moved`,
-`stdin_invalid_utf8`, `ref_also_a_date`, …) never fail a command.
+`remote_control_off`, `bad_target`, `stale_handle`, `timeout`, …); messages are for people, in
+the system's language ("Language" below): programs branch on `code`, never on `message`. Warnings
+(`date_in_past`, `ignored_words`, `moved`, `stdin_invalid_utf8`, `ref_also_a_date`, …) never fail a
+command.
 
 * Paths are relative to the notebook, NFC, with `/`.
 * Dates are local wall-clock `YYYY-MM-DD` and `YYYY-MM-DD HH:mm` — never UTC.
@@ -104,6 +109,32 @@ A failure: `{"ok": false, "command": …, "vault": …, "error": {"code": "stale
   "brulion-export v1": `{path, title, folder, line, depth, text, raw, blockId?, task: {status,
   marker, text, priority, due?, scheduled?, start?, done?, recurrence?}, reminder?: {at, alarm,
   recurrence?}, ref}`.
+
+### Language
+
+Messages for people are Polish when the system's language for messages is Polish, else English:
+the help (`help`, `--help`), error and warning messages (`error.message`, `warnings[].message`),
+the words of `--format text` (`błąd:`, `ostrzeżenie:`, `tak`/`nie`), and the core's messages the
+CLI passes on (a query's error, a vault error). The language comes from the environment as gettext
+programs take it — `LANGUAGE`, then `LC_ALL`, `LC_MESSAGES`, `LANG` (`QLocale::system()`'s UI
+languages; on Windows the user's display language): the first Polish or English entry wins, `C` /
+`POSIX` and anything else mean English. `LANGUAGE=en brulion-cli …` forces English without changing
+anything else. This is not `--lang`, which sets the language of what is written into notes (dates,
+templates).
+
+Stable and English whatever the language: command and option names, JSON keys, values such as
+statuses and kinds, error and warning codes, exit codes, `help --json`, `schema` (JSON Schema),
+completion scripts, and the whole MCP server (`brulion-cli mcp`: tool names, descriptions and
+input schemas, `instructions`, tool results' messages and JSON-RPC errors). The MCP server's client
+is a program (an AI agent) that reads tool descriptions and messages as one English text with the
+schemas, and its replies may go into logs or other tools; plain `brulion-cli` runs for whoever
+started it, often a person at a terminal, so its `message` fields — declared as text for people
+— follow that person's language, while everything a program branches on stays English.
+
+The translations are the app's catalogue (`i18n/brulion_pl.ts`, context `brulion::cli`; `lupdate`
+collects `src/cli` with the app, target `update_translations`): brulion-cli embeds the compiled
+`brulion_pl.qm` / `brulion_en.qm`, `brulion cli …` uses the app's own copy. A CLI-only build without
+Qt's LinguistTools (`BRULION_BUILD_APP=OFF`, `find_package` finds no `lrelease`) is English only.
 
 ### Exit codes
 
@@ -265,6 +296,7 @@ client asks for them; one constant in `src/cli/mcp.cpp`).
   input schemas are the commands' arguments; tools that write also take `dryRun`.
 * Results: the same envelope as above, as `structuredContent` and as JSON text; `isError` when it
   failed. Bad JSON, unknown methods and unknown tools are JSON-RPC errors.
+* English whatever the system's language: descriptions, messages and errors ("Language" above).
 * `--read-only` offers only the tools that read; destructive tools are offered only with
   `--allow-destructive`; the tools that drive the running app (`brulion_app_state`,
   `brulion_app_click`, `brulion_app_type`, `brulion_app_screenshot`, … — "Remote control" below)
@@ -464,9 +496,13 @@ schema, completion), `args.cpp` (argv), `context.cpp` (the notebook, refs, dates
 `commands_*.cpp` (`commands_app.cpp`: the running app), `output.cpp` (envelope, text, diff),
 `mcp.cpp`, `run.cpp`. Tests: `tests/cli`
 (`tst_cli_args` in process, `tst_cli_process` runs the binary on temporary notebooks, also the MCP
-server); the shared logic is tested in `tests/core/notebook`. Human messages are English and
-translatable (context `brulion::cli`, not in the Polish catalog yet): error messages through
-`tr()`, the registry's summaries and argument help marked with `QT_TRANSLATE_NOOP` and translated in
-the help printed for people. `schema`, `help --json` and the MCP tool descriptions and server
-instructions keep the English text, stable for programs, as are command names, JSON keys and error
-codes.
+server; `messagesInTheSystemLanguage` and `polishMessagesKeepTheMachineFieldsEnglish` run it under
+Polish and other locales); the shared logic is tested in `tests/core/notebook`. Human messages have
+English source text in the context `brulion::cli` ("Language" above): error and warning messages
+through `tr()` (the free function in `registry.cpp`; classes with `tr()` calls declare
+`Q_DECLARE_TR_FUNCTIONS(brulion::cli)` so that lupdate files them under the same context), whole
+sentences (no English fragments pasted into a translated one), the registry's summaries and argument
+help marked with `QT_TRANSLATE_NOOP` and translated only in the help printed for people. `run()`
+installs the translator (`messageLanguage()`) before parsing the arguments and switches to English
+for `mcp`. `schema`, `help --json` and the MCP tool descriptions and server instructions keep the
+English text, stable for programs, as are command names, JSON keys and error codes.

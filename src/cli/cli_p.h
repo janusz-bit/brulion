@@ -8,6 +8,7 @@
 #include "notebook/session.h"
 #include "types.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -40,7 +41,10 @@ enum Exit : int {
     ExitRefused = 7,     ///< refused by policy: --read-only, destructive without --allow-destructive
 };
 
-/// Human messages are English (translatable later): QCoreApplication::translate("brulion::cli").
+/// A message for people: QCoreApplication::translate("brulion::cli"), in the language run() chose
+/// (docs/CLI.md "Language": Polish under a Polish system locale, else English; MCP always English).
+/// Classes with tr() calls declare the same context (Q_DECLARE_TR_FUNCTIONS(brulion::cli)) so that
+/// lupdate files their texts under it too.
 QString tr(const char *text);
 /// A registry text (Command::summary, Command::help, Arg::help) translated for the help printed
 /// for people; the registry keeps the English source.
@@ -176,6 +180,7 @@ QJsonObject checkArguments(const Command &command, const QJsonObject &args, std:
 
 /// The state of a run (one process; the MCP server keeps it for all its calls).
 class Context {
+    Q_DECLARE_TR_FUNCTIONS(brulion::cli)
 public:
     Context();
     ~Context();
@@ -220,6 +225,7 @@ private:
 
 /// One command being run: its arguments, its warnings, the helpers commands share.
 class Call {
+    Q_DECLARE_TR_FUNCTIONS(brulion::cli)
 public:
     Call(Context &context, const Command &command, const QJsonObject &args);
     ~Call();
@@ -311,6 +317,10 @@ QString mcpProtocolVersion();
 
 /// Shell completion script for bash, fish or zsh ("" for another shell).
 QString completionScript(const QString &shell, const QString &program);
+/// The language of messages for people (docs/CLI.md "Language"): "pl" when the system's UI
+/// language is Polish (on Linux LANGUAGE, LC_ALL, LC_MESSAGES, LANG, through QLocale::system()),
+/// "en" otherwise — also for "C" and when no language is set.
+QString messageLanguage();
 /// The help text (all commands, or one).
 QString helpText(const QString &program, const Command *command);
 

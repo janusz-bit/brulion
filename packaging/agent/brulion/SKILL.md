@@ -37,7 +37,9 @@ or `{"ok": false, "error": {"code", "message", "details"}}`. Exit codes: 0 ok, 1
 (also a path outside the notebook), 3 not found, 4 conflict (stale ref, hash mismatch, ambiguous
 name — `details.candidates`), 5 notebook or app unavailable, 6 date/query/calculation not
 understood, 7 refused (read-only, destructive without the flag). Use `--format text` only for
-showing results to people.
+showing results to people. `message` fields follow the system's language (Polish under a Polish
+locale): branch on `code` and exit codes, or run with `LANGUAGE=en` for English messages. The MCP
+server is always English.
 
 MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brulion_capture`,
 `brulion_task_add`, `brulion_search`, …) over stdio; add `--read-only` for a reading-only agent.

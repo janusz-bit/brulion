@@ -37,6 +37,7 @@ constexpr int kMethodNotFound = -32601;
 constexpr int kInvalidParams = -32602;
 
 class McpServer {
+    Q_DECLARE_TR_FUNCTIONS(brulion::cli)
 public:
     McpServer(Context &context, bool readOnly, bool allowDestructive, bool appControl)
         : m_ctx(context), m_readOnly(readOnly), m_allowDestructive(allowDestructive), m_appControl(appControl)

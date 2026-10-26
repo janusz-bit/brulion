@@ -1,6 +1,7 @@
 # brulion-cli alone (packages.<system>.brulion-cli, docs/CLI.md): the command line for scripts and
-# AI agents, built with BRULION_BUILD_APP=OFF — Qt's base only (no Qt Quick, QML, SVG, Wayland or
-# Qt's tools), so its closure is small and it builds quickly on a Raspberry Pi. The app's package
+# AI agents, built with BRULION_BUILD_APP=OFF — Qt's base only at run time (no Qt Quick, QML, SVG
+# or Wayland), so its closure is small and it builds quickly on a Raspberry Pi. Qt's tools only
+# build its Polish messages (lrelease; docs/CLI.md "Language"). The app's package
 # (nix/package.nix) ships brulion-cli too.
 {
   lib,
@@ -21,6 +22,7 @@ stdenv.mkDerivation (finalAttrs: {
   nativeBuildInputs = [
     cmake
     ninja
+    qt6.qttools
   ];
 
   buildInputs = [ qt6.qtbase ];
@@ -45,7 +47,8 @@ stdenv.mkDerivation (finalAttrs: {
     export TZDIR=${tzdata}/share/zoneinfo
   '';
 
-  # It runs: a notebook made, a capture written with a Polish date, the notebook read back.
+  # It runs: a notebook made, a capture written with a Polish date, the notebook read back, the
+  # help in Polish under a Polish locale.
   doInstallCheck = true;
   installCheckPhase = ''
     runHook preInstallCheck
@@ -55,6 +58,7 @@ stdenv.mkDerivation (finalAttrs: {
     $out/bin/brulion-cli --vault "$TMPDIR/Notatki" --now "2026-10-14 10:30" capture "Zadzwonić jutro o 9"
     grep -q -- "- \[ \] Zadzwonić ⏰ 2026-10-15 09:00" "$TMPDIR/Notatki/journals/2026-10-14.md"
     $out/bin/brulion-cli --vault "$TMPDIR/Notatki" info >/dev/null
+    LANG=pl_PL.UTF-8 $out/bin/brulion-cli help | grep -q "Opcje globalne:"
     test -f $out/share/brulion/agent-skills/brulion/SKILL.md
     runHook postInstallCheck
   '';

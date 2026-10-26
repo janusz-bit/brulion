@@ -32,7 +32,7 @@ namespace {
 QString scalar(const QJsonValue &v)
 {
     switch (v.type()) {
-    case QJsonValue::Bool: return v.toBool() ? u"yes"_s : u"no"_s;
+    case QJsonValue::Bool: return v.toBool() ? tr("yes") : tr("no");
     case QJsonValue::Double: {
         const double d = v.toDouble();
         return d == double(qint64(d)) ? QString::number(qint64(d)) : QString::number(d, 'g', 6);
@@ -111,7 +111,7 @@ QString renderText(const Command *command, const Result &result)
     Q_UNUSED(command);
     QString out;
     if (result.error) {
-        out += u"error: "_s + result.error->message + u" ("_s + result.error->code + u")\n"_s;
+        out += tr("error: %1 (%2)").arg(result.error->message, result.error->code) + u'\n';
         if (!result.error->details.isEmpty())
             render(out, QString(), result.error->details, 1);
     } else if (!result.text.isEmpty()) {
@@ -122,7 +122,7 @@ QString renderText(const Command *command, const Result &result)
         render(out, QString(), result.value, 0);
     }
     for (const QJsonValue &w : result.warnings)
-        out += u"warning: "_s + w.toObject().value(u"message"_s).toString() + u'\n';
+        out += tr("warning: %1").arg(w.toObject().value(u"message"_s).toString()) + u'\n';
     return out;
 }
 

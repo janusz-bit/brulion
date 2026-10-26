@@ -244,7 +244,7 @@ Result links(Call &call)
         if (!l.link.blockId.isEmpty())
             o.insert(u"blockId"_s, l.link.blockId);
         out.append(o);
-        text += l.link.target + u"  →  "_s + (l.target.isEmpty() ? u"(missing)"_s : l.target) + u'\n';
+        text += l.link.target + u"  →  "_s + (l.target.isEmpty() ? tr("(missing)") : l.target) + u'\n';
     }
     return call.ok(QJsonObject{{u"path"_s, ref->path}, {u"links"_s, out}}, text);
 }

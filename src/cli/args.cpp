@@ -252,15 +252,15 @@ QJsonObject checkArguments(const Command &command, const QJsonObject &args, std:
             return {};
         }
         const QJsonValue v = it.value();
-        const auto wrongType = [&](const char *expected) {
-            *error = usage(u"bad_argument"_s, tr("%1 must be %2").arg(it.key(), QString::fromLatin1(expected)),
-                           {{u"argument"_s, it.key()}});
+        // `message`: "%1 must be …" with the argument's name for %1 (whole sentences, translated).
+        const auto wrongType = [&](const QString &message) {
+            *error = usage(u"bad_argument"_s, message.arg(it.key()), {{u"argument"_s, it.key()}});
             return QJsonObject();
         };
         switch (arg->type) {
         case ArgType::Bool:
             if (!v.isBool())
-                return wrongType("true or false");
+                return wrongType(tr("%1 must be true or false"));
             out.insert(arg->name, v);
             break;
         case ArgType::Int: {
@@ -271,19 +271,19 @@ QJsonObject checkArguments(const Command &command, const QJsonObject &args, std:
             bool ok = false;
             const qint64 n = v.toString().trimmed().toLongLong(&ok);
             if (!v.isString() || !ok)
-                return wrongType("a whole number");
+                return wrongType(tr("%1 must be a whole number"));
             out.insert(arg->name, n);
             break;
         }
         case ArgType::Enum: {
             if (!v.isString() || !arg->values.contains(v.toString().trimmed().toLower()))
-                return wrongType(qPrintable(u"one of: "_s + arg->values.join(u", "_s)));
+                return wrongType(tr("%1 must be one of: %2").arg(u"%1"_s, arg->values.join(u", "_s)));
             out.insert(arg->name, v.toString().trimmed().toLower());
             break;
         }
         default:
             if (!v.isString())
-                return wrongType("a string");
+                return wrongType(tr("%1 must be a string"));
             out.insert(arg->name, v);
             break;
         }

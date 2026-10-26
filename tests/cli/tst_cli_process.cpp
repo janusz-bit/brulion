@@ -7,7 +7,8 @@
 // text on stdin, two processes appending to one journal (nothing lost), dry runs showing what the
 // real run writes (a daily note's template, the notes a rename rewrites, what a delete trashes),
 // pages named like dates resolving as [[links]] do, the notebook and language taken as the app
-// takes them, `app open` against a stand-in app, and the MCP server (initialize, tools/list,
+// takes them, messages in the system's language (Polish or English; the machine's fields and MCP
+// English), `app open` against a stand-in app, and the MCP server (initialize, tools/list,
 // tools/call, errors, the warm index seeing a file written meanwhile).
 #include "appmessage.h"
 #include "controlprotocol.h"
@@ -106,6 +107,10 @@ class TestCliProcess : public QObject {
         env.insert(u"XDG_RUNTIME_DIR"_s, m_home + u"/run"_s);
         env.remove(u"BRULION_VAULT"_s);
         env.insert(u"LANG"_s, u"C.UTF-8"_s);
+        // Messages for people follow the system's language (docs/CLI.md "Language"): English here,
+        // whatever the developer's session says.
+        for (const QString &v : {u"LC_ALL"_s, u"LC_MESSAGES"_s, u"LANGUAGE"_s})
+            env.remove(v);
 #ifdef Q_OS_WIN
         env.insert(u"BRULION_PROFILE"_s, profile());
 #endif
@@ -906,6 +911,160 @@ private Q_SLOTS:
         r = run(dir, {u"--allow-destructive"_s, u"page"_s, u"write"_s, u"Dom"_s, u"--expect-hash"_s, hash});
         QCOMPARE(r.code, 2); // no text at all
         QCOMPARE(r.errorCode(), u"text_required"_s);
+    }
+
+    /// environment() with a locale: "NAME=value" pairs (LANG, LC_ALL, LC_MESSAGES, LANGUAGE).
+    QProcessEnvironment localeEnvironment(const QStringList &variables) const
+    {
+        QProcessEnvironment env = environment();
+        for (const QString &v : variables)
+            env.insert(v.section(u'=', 0, 0), v.section(u'=', 1));
+        return env;
+    }
+
+    // Messages for people in Polish when the system's language for messages is Polish (as
+    // gettext programs pick it: LANGUAGE, LC_ALL, LC_MESSAGES, LANG), else English; "C" is English.
+    void messagesInTheSystemLanguage_data()
+    {
+        QTest::addColumn<QStringList>("variables");
+        QTest::addColumn<bool>("polish");
+        QTest::newRow("LANG pl_PL.UTF-8") << QStringList{u"LANG=pl_PL.UTF-8"_s} << true;
+        QTest::newRow("LANG pl_PL") << QStringList{u"LANG=pl_PL"_s} << true;
+        QTest::newRow("LC_ALL over LANG") << QStringList{u"LANG=en_US.UTF-8"_s, u"LC_ALL=pl_PL.UTF-8"_s} << true;
+        QTest::newRow("LC_MESSAGES over LANG") << QStringList{u"LANG=C.UTF-8"_s, u"LC_MESSAGES=pl_PL.UTF-8"_s} << true;
+        QTest::newRow("LANGUAGE list") << QStringList{u"LANG=de_DE.UTF-8"_s, u"LANGUAGE=pl:en"_s} << true;
+        QTest::newRow("LANGUAGE en") << QStringList{u"LANG=pl_PL.UTF-8"_s, u"LANGUAGE=en"_s} << false;
+        QTest::newRow("LC_ALL C") << QStringList{u"LANG=pl_PL.UTF-8"_s, u"LC_ALL=C"_s} << false;
+        QTest::newRow("C.UTF-8") << QStringList{u"LANG=C.UTF-8"_s} << false;
+        QTest::newRow("English") << QStringList{u"LANG=en_GB.UTF-8"_s} << false;
+        QTest::newRow("German") << QStringList{u"LANG=de_DE.UTF-8"_s} << false;
+    }
+
+    void messagesInTheSystemLanguage()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("Windows takes the language from the user's settings, not from LANG");
+#endif
+        QFETCH(QStringList, variables);
+        QFETCH(bool, polish);
+        const QProcessEnvironment env = localeEnvironment(variables);
+        Run r = cli({u"zółw"_s}, {}, env);
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"unknown_command"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(),
+                 polish ? u"Nieznane polecenie: zółw (spróbuj: help)"_s : u"Unknown command: zółw (try: help)"_s);
+        r = cli({u"help"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QCOMPARE(QString::fromUtf8(r.out).contains(u"Opcje globalne:"_s), polish);
+        QCOMPARE(QString::fromUtf8(r.out).contains(u"Global options:"_s), !polish);
+    }
+
+    // In Polish: the help, errors, warnings and --format text are Polish, also the core's messages
+    // the CLI passes on (a query's); command and option names, JSON keys, error and warning codes,
+    // `help --json`, `schema` and the MCP server stay English.
+    void polishMessagesKeepTheMachineFieldsEnglish()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("Windows takes the language from the user's settings, not from LANG");
+#endif
+        const QString dir = vault({{u"Zakupy.md"_s, "- mleko\n"}});
+        const QProcessEnvironment env = localeEnvironment({u"LANG=pl_PL.UTF-8"_s});
+        const auto runPl = [&](QStringList args, const QByteArray &input = {}) {
+            args = QStringList{u"--vault"_s, dir, u"--now"_s, kNow} + args;
+            return cli(args, input, env);
+        };
+        // An error: the envelope's keys and the code in English, the message in Polish.
+        Run r = runPl({u"page"_s, u"read"_s, u"Brak"_s});
+        QCOMPARE(r.code, 3);
+        QCOMPARE(r.json.keys(), (QStringList{u"command"_s, u"error"_s, u"ok"_s, u"vault"_s, u"warnings"_s}));
+        QCOMPARE(r.json.value(u"command"_s).toString(), u"page.read"_s);
+        const QJsonObject error = r.json.value(u"error"_s).toObject();
+        QCOMPARE(error.value(u"code"_s).toString(), u"page_not_found"_s);
+        QVERIFY2(error.value(u"message"_s).toString().startsWith(u"Nie ma strony "_s), r.out.constData());
+        // A bad argument type: a whole Polish sentence.
+        r = runPl({u"task"_s, u"list"_s, u"--limit"_s, u"dużo"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_argument"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"message"_s).toString(), u"limit musi być liczbą całkowitą"_s);
+        // A warning: its code in English, its message in Polish; the result's keys in English.
+        r = runPl({u"task"_s, u"add"_s, u"Zapłacić rachunek"_s, u"--due"_s, u"wczoraj"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.warnings(), QStringList{u"date_in_past"_s});
+        QCOMPARE(r.json.value(u"warnings"_s).toArray().first().toObject().value(u"message"_s).toString(),
+                 u"Data w --due jest w przeszłości: 2026-10-13"_s);
+        QVERIFY(r.result().contains(u"path"_s));
+        QVERIFY(r.result().contains(u"written"_s));
+        // A core message (the query parser's) from the same catalogue.
+        r = runPl({u"query"_s, u"\"mleko"_s});
+        QCOMPARE(r.code, 6);
+        QCOMPARE(r.errorCode(), u"query_error"_s);
+        QVERIFY2(r.json.value(u"error"_s).toObject().value(u"message"_s).toString().contains(
+                         u"Brak zamykającego cudzysłowu"_s),
+                 r.out.constData());
+        // --format text.
+        r = runPl({u"--format"_s, u"text"_s, u"page"_s, u"read"_s, u"Brak"_s});
+        QCOMPARE(r.code, 3);
+        QVERIFY2(r.out.startsWith("błąd: Nie ma strony "), r.out.constData());
+        QVERIFY2(r.out.split('\n').first().endsWith(" (page_not_found)"), r.out.constData());
+        // The help: Polish text around English command and option names.
+        r = cli({u"help"_s, u"task"_s, u"add"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        const QString help = QString::fromUtf8(r.out);
+        QVERIFY2(help.contains(u"brulion-cli task add <text>"_s), r.out.constData());
+        QVERIFY(help.contains(u"Dodaj zadanie z kanonicznymi znacznikami (📅 ⏳ 🛫 ⏰ 🔁, priorytet)"_s));
+        QVERIFY(help.contains(u"Argumenty:"_s));
+        QVERIFY(help.contains(u"--due"_s));
+        QVERIFY(help.contains(u"Termin 📅"_s));
+        QVERIFY(help.contains(u"Zapisuje notatki (odmowa przy --read-only; --dry-run pokazuje zmianę)."_s));
+        // For programs: `help --json` and `schema` keep the English texts.
+        r = cli({u"help"_s, u"--json"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.out.contains("\"Add a task with canonical tokens"));
+        QVERIFY(!r.out.contains("Dodaj zadanie"));
+        r = cli({u"schema"_s, u"task.add"_s}, {}, env);
+        QCOMPARE(r.code, 0);
+        QVERIFY(r.out.contains("Add a task with canonical tokens"));
+        QVERIFY(!r.out.contains("Dodaj zadanie"));
+        // The MCP server speaks English: tool descriptions, tool errors and JSON-RPC errors.
+        QProcess p;
+        p.setProcessEnvironment(env);
+        p.start(QStringLiteral(BRULION_CLI), {u"--vault"_s, dir, u"--now"_s, kNow, u"mcp"_s});
+        QVERIFY(p.waitForStarted(kTimeoutMs));
+        p.write(R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})"
+                "\n"
+                R"({"jsonrpc":"2.0","id":2,"method":"tools/list"})"
+                "\n"
+                R"({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"brulion_page_read","arguments":{"ref":"Brak"}}})"
+                "\n"
+                R"({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"brulion_zolw","arguments":{}}})"
+                "\n");
+        p.closeWriteChannel();
+        QVERIFY(p.waitForFinished(kTimeoutMs));
+        const QList<QByteArray> lines = p.readAllStandardOutput().trimmed().split('\n');
+        QCOMPARE(lines.size(), 4);
+        QVERIFY(lines.at(1).contains("Add a task with canonical tokens"));
+        QVERIFY(!lines.at(1).contains("Dodaj zadanie"));
+        const QJsonObject called = QJsonDocument::fromJson(lines.at(2)).object().value(u"result"_s).toObject();
+        QVERIFY(called.value(u"isError"_s).toBool());
+        const QJsonObject mcpError = called.value(u"structuredContent"_s).toObject().value(u"error"_s).toObject();
+        QCOMPARE(mcpError.value(u"code"_s).toString(), u"page_not_found"_s);
+        QVERIFY2(mcpError.value(u"message"_s).toString().startsWith(u"No page "_s), lines.at(2).constData());
+        QCOMPARE(QJsonDocument::fromJson(lines.at(3)).object().value(u"error"_s).toObject().value(u"message"_s).toString(),
+                 u"Unknown tool: brulion_zolw"_s);
+#ifdef BRULION_APP
+        // `brulion cli …` in the app's binary: the same catalogue (the app's own).
+        QProcessEnvironment appEnv = env;
+        appEnv.remove(u"QT_QPA_PLATFORM"_s);
+        appEnv.remove(u"DISPLAY"_s);
+        appEnv.remove(u"WAYLAND_DISPLAY"_s);
+        p.setProcessEnvironment(appEnv);
+        p.start(QStringLiteral(BRULION_APP), {u"cli"_s, u"--vault"_s, dir, u"page"_s, u"read"_s, u"Brak"_s});
+        QVERIFY(p.waitForFinished(kTimeoutMs));
+        QCOMPARE(p.exitCode(), 3);
+        const QJsonObject appJson = QJsonDocument::fromJson(p.readAllStandardOutput()).object();
+        QCOMPARE(appJson.value(u"error"_s).toObject().value(u"code"_s).toString(), u"page_not_found"_s);
+        QVERIFY(appJson.value(u"error"_s).toObject().value(u"message"_s).toString().startsWith(u"Nie ma strony "_s));
+#endif
     }
 
     void polishArgvAndStdin()

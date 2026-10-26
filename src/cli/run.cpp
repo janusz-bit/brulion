@@ -6,7 +6,9 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QLocale>
 #include <QScopeGuard>
+#include <QTranslator>
 
 #include <atomic>
 #include <cstdio>
@@ -69,6 +71,18 @@ QStringList commandLineArguments(int argc, char **argv)
 
 } // namespace
 
+QString messageLanguage()
+{
+    for (const QString &name : QLocale::system().uiLanguages()) {
+        const QLocale::Language language = QLocale(name).language();
+        if (language == QLocale::Polish)
+            return u"pl"_s;
+        if (language == QLocale::English || language == QLocale::C)
+            return u"en"_s;
+    }
+    return u"en"_s;
+}
+
 int run(int argc, char **argv)
 {
     const QStringList arguments = commandLineArguments(argc, argv);
@@ -100,6 +114,16 @@ int run(int argc, char **argv)
     // for a separate profile (BRULION_PROFILE, src/ipc/profile.h).
     brulion::ipc::applyAppNames();
     QCoreApplication::setApplicationVersion(QStringLiteral(BRULION_VERSION));
+    // Messages for people in the system's language (docs/CLI.md "Language"): the app's catalogue
+    // (:/i18n/brulion_<lang>.qm, in brulion-cli and in the app's binary alike; English loads the
+    // English plural forms).
+    QTranslator translator;
+    const auto useLanguage = [&translator](const QString &language) {
+        QCoreApplication::removeTranslator(&translator);
+        if (translator.load(u":/i18n/brulion_"_s + language + u".qm"_s))
+            QCoreApplication::installTranslator(&translator);
+    };
+    useLanguage(messageLanguage());
 
     const Invocation inv = parseArguments(arguments);
     g_verbose = inv.globals.verbose;
@@ -131,10 +155,14 @@ int run(int argc, char **argv)
         failed.error = inv.error;
         return output(inv.command, failed);
     }
-    if (inv.command->id == u"mcp")
+    if (inv.command->id == u"mcp") {
+        // The MCP server speaks English, whatever the system: its client is a program (an AI
+        // agent), and its tool descriptions are English too.
+        useLanguage(u"en"_s);
         return serveMcp(ctx, inv.globals.readOnly || inv.args.value(u"readOnly"_s).toBool(),
                         inv.globals.allowDestructive || inv.args.value(u"allowDestructive"_s).toBool(),
                         inv.args.value(u"appControl"_s).toBool());
+    }
     return output(inv.command, execute(ctx, *inv.command, inv.args));
 }
 

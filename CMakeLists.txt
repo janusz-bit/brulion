@@ -19,7 +19,8 @@ option(BRULION_BUILD_APP "Build the app (Qt Quick); OFF builds the core librarie
 if(BRULION_BUILD_APP)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Svg LinguistTools)
 else()
-    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network)
+    # LinguistTools: brulion-cli's Polish messages (src/cli/CMakeLists.txt); without it English.
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Network OPTIONAL_COMPONENTS LinguistTools)
 endif()
 qt_standard_project_setup(REQUIRES 6.8
     I18N_SOURCE_LANGUAGE en

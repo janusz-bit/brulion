@@ -4,7 +4,8 @@
 # JSON and exit code on temporary notebooks, refusals (read-only, destructive, outside the
 # notebook, a missing notebook), Polish text in argv (also LANG=C) and on stdin, two processes
 # appending to one journal, dry runs, the app's settings left untouched and no reminder state
-# written, and the MCP server (initialize, tools/list, tools/call).
+# written, messages in the system's language (Polish or English; JSON keys, codes, schema and MCP
+# English), and the MCP server (initialize, tools/list, tools/call).
 brulion_add_test(tst_cli_args SOURCES tst_cli_args.cpp LIBS brulion_cli Qt6::Core)
 target_compile_definitions(tst_cli_args PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_cli_process SOURCES tst_cli_process.cpp LIBS brulion_ipc brulion_core_notebook)

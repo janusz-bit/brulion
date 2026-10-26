@@ -73,7 +73,7 @@ Result calcEval(Call &call)
             continue;
         lines.append(calcLineJson(r, 0));
         errors = errors || r.hasError();
-        text += r.input + u"  =  "_s + (r.hasError() ? u"error: "_s + r.error : r.value) + u'\n';
+        text += r.input + u"  =  "_s + (r.hasError() ? tr("error: %1").arg(r.error) : r.value) + u'\n';
     }
     const QJsonObject o{{u"lines"_s, lines},
                         {u"value"_s, lines.isEmpty() ? QJsonValue() : lines.last().toObject().value(u"value"_s)}};
@@ -98,7 +98,7 @@ Result calcPage(Call &call)
             if (r.input.trimmed().isEmpty())
                 continue;
             lines.append(calcLineJson(r, b.contentStartLine));
-            text += r.input + u"  =  "_s + (r.hasError() ? u"error: "_s + r.error : r.value) + u'\n';
+            text += r.input + u"  =  "_s + (r.hasError() ? tr("error: %1").arg(r.error) : r.value) + u'\n';
         }
         blocks.append(QJsonObject{{u"startLine"_s, b.startLine}, {u"endLine"_s, b.endLine}, {u"lines"_s, lines}});
     }

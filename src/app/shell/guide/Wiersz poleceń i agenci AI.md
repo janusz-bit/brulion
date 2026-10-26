@@ -73,4 +73,5 @@ Na Androidzie i w przeglądarce sterowania nie ma — tam aplikację testuje si�
 ## Dla dociekliwych
 - Wynik każdego polecenia to JSON (`--format text` — czytelnie dla ludzi), a kod wyjścia mówi, co się stało: 0 dobrze, 3 nie znaleziono, 4 konflikt (np. linia zmieniła się od odczytu), 7 odmowa.
 - Zadania i linie wskazujesz odnośnikiem z wyniku, np. `Dom.md#L12@3f9a01bc` — jeśli linia zmieniła się w międzyczasie, polecenie odmówi zamiast zmienić coś innego.
+- Pomoc (`brulion-cli help`), błędy i ostrzeżenia są po polsku, gdy system ma ustawiony język polski (np. `LANG=pl_PL.UTF-8`), a w innym wypadku po angielsku; `LANGUAGE=en brulion-cli …` wymusza angielski. Nazwy poleceń i opcji, kody błędów i klucze JSON są zawsze angielskie, a agent przez MCP zawsze dostaje angielskie opisy i komunikaty.
 - Pełna dokumentacja (po angielsku): `docs/CLI.md` w repozytorium oraz `brulion-cli help`. Składnia zapytań: [[Zapytania|Zapytania]]; zadania: [[Zadania|Zadania]].

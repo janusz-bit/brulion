@@ -235,7 +235,9 @@ brulion-cli --format text journal wczoraj              # wczorajszy dziennik, cz
 ```
 
 Notatnik to `--vault <folder>`, zmienna `BRULION_VAULT` albo bieżący notatnik aplikacji. Wynik to
-JSON (dla ludzi: `--format text`), a kod wyjścia mówi, co się stało. Zmiany z wiersza poleceń
+JSON (dla ludzi: `--format text`), a kod wyjścia mówi, co się stało. Pomoc i komunikaty są po
+polsku, gdy system ma polski język (inaczej po angielsku); kody błędów i klucze JSON — zawsze po
+angielsku. Zmiany z wiersza poleceń
 trafiają do historii wersji urządzenia, na którym działa program (aplikacja na tym samym komputerze
 pokazuje je jako „Zastąpiona z wiersza poleceń (agent)”), i nigdy nie nadpisują tego, co właśnie
 zapisała aplikacja albo Syncthing. Polecenia, które coś usuwają, przenoszą lub nadpisują,
@@ -408,7 +410,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * A command line for scripts and AI agents: `brulion-cli` captures, appends to journals, adds
   tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
   stable exit codes, every change in the version history, destructive commands behind
-  `--allow-destructive`), and `brulion-cli mcp` serves the same commands as MCP tools; see
+  `--allow-destructive`; help and messages in Polish under a Polish locale, else English), and
+  `brulion-cli mcp` serves the same commands as MCP tools; see
   [docs/CLI.md](docs/CLI.md). With remote control allowed (off by default: Settings → Application
   → For developers, or `brulion --remote-control`), agents can also drive the running desktop
   app — its state, clicks, typing, shortcuts, screenshots (`brulion-cli app …`,

@@ -33,14 +33,30 @@ target_link_libraries(brulion_cli
     PRIVATE brulion_core_sync brulion_ipc Qt6::Network)
 target_compile_definitions(brulion_cli PRIVATE BRULION_VERSION="${PROJECT_VERSION}")
 brulion_set_warnings(brulion_cli)
-# Its messages are English (tr(), translatable later); not collected into i18n/brulion_pl.ts.
-set_property(TARGET brulion_cli PROPERTY QT_EXCLUDE_FROM_TRANSLATION ON)
 
 qt_add_executable(brulion-cli main.cpp)
 brulion_windows_resources(brulion-cli "Brulion command line")
 target_link_libraries(brulion-cli PRIVATE brulion_cli)
 brulion_set_warnings(brulion-cli)
-set_property(TARGET brulion-cli PROPERTY QT_EXCLUDE_FROM_TRANSLATION ON)
+
+# Messages for people in the system's language (docs/CLI.md "Language"; run.cpp picks it): the
+# app's catalogues i18n/brulion_pl.ts and brulion_en.ts, whose lupdate (src/app, the target
+# update_translations) collects this library's tr() texts too, so the core's messages the CLI
+# passes on (queries, the vault) are translated as well. The app's binary carries the .qm files for
+# `brulion cli …`; brulion-cli gets its own copy as :/i18n/brulion_<lang>.qm. A CLI-only build
+# (BRULION_BUILD_APP=OFF) without Qt's LinguistTools stays English.
+if(COMMAND qt_add_lrelease)
+    qt_add_lrelease(
+        TS_FILES ${PROJECT_SOURCE_DIR}/i18n/brulion_pl.ts ${PROJECT_SOURCE_DIR}/i18n/brulion_en.ts
+        LRELEASE_TARGET brulion_cli_lrelease
+        QM_FILES_OUTPUT_VARIABLE brulion_cli_qm_files)
+    qt_add_resources(brulion-cli brulion_cli_translations
+        PREFIX /i18n
+        BASE ${CMAKE_CURRENT_BINARY_DIR}
+        FILES ${brulion_cli_qm_files})
+else()
+    message(STATUS "brulion-cli: no Qt LinguistTools, its messages stay English")
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS brulion-cli RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
