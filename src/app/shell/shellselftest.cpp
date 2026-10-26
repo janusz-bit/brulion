@@ -2338,11 +2338,18 @@ void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &c
     check(waitFor([&] { return configValue() == u"07:35" && field->property("text").toString() == u"07:35"; }),
           "a time picked on the clock is saved as the default reminder time");
     waitFor([&] { return !dialog->property("visible").toBool(); });
-    workspace->setConfig({{key, u"10:05"_s}});
-    check(waitFor([&] { return field->property("text").toString() == u"10:05"; }),
+    const auto report = [&](bool saved, bool ok) {
+        if (!ok)
+            std::fprintf(stderr, "selftest: config saved %d, config value %s, field %s\n", int(saved),
+                         qPrintable(configValue()), qPrintable(field->property("text").toString()));
+        return ok;
+    };
+    bool saved = workspace->setConfig({{key, u"10:05"_s}});
+    check(report(saved, waitFor([&] { return field->property("text").toString() == u"10:05"; })),
           "after a clock pick the field still follows the notebook's config (a synced change shows)");
-    workspace->setConfig({{key, original}});
-    check(waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original,
+    saved = workspace->setConfig({{key, original}});
+    check(report(saved,
+                 waitFor([&] { return field->property("text").toString() == original; }) && configValue() == original),
           "the default reminder time is back");
     app->goHome();
 }
