@@ -24,6 +24,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QProcess>
 #include <QSaveFile>
 #include <QSettings>
@@ -79,17 +80,20 @@ class TestCliProcess : public QObject {
     QString m_home;
     int m_n = 0;
 
-    /// {{weekday}} of 2026-10-14 in a journal template: brulion-cli's language when none is set is
+    /// {{weekday}} in a journal template (1 = Monday): brulion-cli's language when none is set is
     /// the system's — Polish for LANG=C.UTF-8 (environment()); Windows ignores LANG, there it is
     /// the user's language (English on the CI runners).
-    static QString wednesday()
+    static QString weekday(int day)
     {
 #ifdef Q_OS_WIN
         if (brulion::notebook::appLanguage({}) == u"en")
-            return u"Wednesday"_s;
+            return QLocale(QLocale::English).dayName(day);
 #endif
-        return u"środa"_s;
+        static const QStringList polish{u"poniedziałek"_s, u"wtorek"_s, u"środa"_s,    u"czwartek"_s,
+                                        u"piątek"_s,       u"sobota"_s, u"niedziela"_s};
+        return polish.at(day - 1);
     }
+    static QString wednesday() { return weekday(3); }
 
     QProcessEnvironment environment() const
     {
@@ -342,7 +346,8 @@ private Q_SLOTS:
         r = run(dir, {u"journal"_s, u"append"_s, u"Notatka z wczoraj"_s, u"--date"_s, u"wczoraj"_s});
         QCOMPARE(r.code, 0);
         QCOMPARE(r.result().value(u"date"_s).toString(), u"2026-10-13"_s);
-        QCOMPARE(readFile(dir + u"/journals/2026-10-13.md"_s), "## wtorek\n- Notatka z wczoraj\n"_ba);
+        QCOMPARE(readFile(dir + u"/journals/2026-10-13.md"_s),
+                 (u"## "_s + weekday(2) + u"\n- Notatka z wczoraj\n"_s).toUtf8());
         r = run(dir, {u"journal"_s});
         QCOMPARE(r.code, 0);
         QVERIFY(r.result().value(u"content"_s).toString().contains(u"Łukasza"_s));
@@ -853,10 +858,11 @@ private Q_SLOTS:
                  (u"## "_s + wednesday() + u"\n### Plan\n- [ ] Kupić mleko ⏰ 2026-10-15 18:00\n"_s).toUtf8());
         // The same for task add and page append into a day without a note.
         dry = run(dir, {u"--dry-run"_s, u"task"_s, u"add"_s, u"Pompki"_s, u"--date"_s, u"jutro"_s});
-        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## czwartek\n+### Plan\n+- [ ] Pompki\n"_s));
+        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## "_s + weekday(4)
+                                                                  + u"\n+### Plan\n+- [ ] Pompki\n"_s));
         dry = run(dir, {u"--dry-run"_s, u"page"_s, u"append"_s, u"2026-10-16"_s, u"x"_s, u"--under"_s, u"### Plan"_s});
         QCOMPARE(dry.code, 0);
-        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## piątek\n"_s));
+        QVERIFY(dry.result().value(u"diff"_s).toString().contains(u"+## "_s + weekday(5) + u"\n"_s));
         QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-15.md"_s));
         QVERIFY(!QFileInfo::exists(dir + u"/journals/2026-10-16.md"_s));
 
