@@ -1079,10 +1079,18 @@ CompletionTrigger completionTriggerAt(QStringView text, int cursor)
     {
         static const QRegularExpression re = text::unicodeRegex(u"(?:^|[\\s(])@([^\\s@][^@\\n]*)?$"_s);
         const auto m = re.matchView(before);
-        if (m.hasMatch()) {
-            const qsizetype at = before.lastIndexOf(u'@');
+        const qsizetype at = before.lastIndexOf(u'@');
+        // `(@2026-10-15 09:00)` is a written reminder (obsidian-reminder syntax), no phrase being
+        // typed: what follows it on the line (a /command, a #tag) completes as anywhere else.
+        const auto writtenReminder = [&] {
+            if (at < 1 || before[at - 1] != u'(')
+                return false;
+            const QList<markdown::Token> tokens = markdown::findTokens(before.sliced(at - 1));
+            return !tokens.isEmpty() && tokens.first().kind == markdown::TokenKind::ReminderCompat
+                   && tokens.first().from == 0;
+        };
+        if (m.hasMatch() && !writtenReminder())
             return result(u"date"_s, at, at + 1, u"@"_s);
-        }
     }
     // #tags
     {

@@ -90,5 +90,4 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
 * **Stare błędy do sprawdzenia** (mogły zniknąć przy innych zmianach):
-  * „/” zaraz po tokenie przypomnienia;
   * wielkie litery Gboard na początku bloku.

@@ -504,7 +504,8 @@ public:
     Q_INVOKABLE bool isHeading(int row) const;
     /// Add a reminder (`⏰`/`⏰!` at `at`, "YYYY-MM-DD HH:mm"), or replace the reminder token at
     /// body range [from, to) (a clicked chip). `recurrence` (canonical rule) sets the block's 🔁
-    /// token; an empty rule removes it when editing an existing reminder.
+    /// token; an empty rule removes it when editing an existing reminder. A caret at the end of
+    /// the edited text that what was written reaches stays at the end, after an added space.
     Q_INVOKABLE void setReminder(int row, const QString &at, bool alarm, const QString &recurrence,
                                  int from = -1, int to = -1);
     /// Remove the token at body range [from, to).

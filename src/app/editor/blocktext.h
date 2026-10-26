@@ -250,6 +250,7 @@ struct CompletionTrigger {
 ///   tags   `#query` after start/whitespace/`(` (a bare `#` at the very start is a heading)
 ///   slash  `/query` after start/whitespace
 ///   date   `📅 `, `⏳ `, `🛫 `, `⏰ `, `⏰! ` + phrase (not a canonical date yet), or `@phrase`
+///          (not the `@` of a written `(@2026-10-15 09:00)` reminder)
 CompletionTrigger completionTriggerAt(QStringView text, int cursor);
 
 /// VaultConfig from EditorHost::vaultConfig() (missing keys keep the defaults; journalMode /

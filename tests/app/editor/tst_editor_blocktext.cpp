@@ -940,6 +940,21 @@ private Q_SLOTS:
                 << u"x 📅 2026-10-15 #zak"_s << 20 << u"tags"_s << u"zak"_s << 17 << 20 << u"#"_s << QString();
         QTest::newRow("slash after a date")
                 << u"x ⏳ 2026-10-15 /prz"_s << 19 << u"slash"_s << u"prz"_s << 15 << 19 << u"/"_s << QString();
+        // "/" and "#" right after a reminder token (TODO: „/” zaraz po tokenie przypomnienia).
+        QTest::newRow("slash after a reminder")
+                << u"x ⏰ 2026-10-15 09:00 /prz"_s << 25 << u"slash"_s << u"prz"_s << 21 << 25 << u"/"_s << QString();
+        QTest::newRow("slash after an alarm") << u"⏰! 2026-10-15 /"_s << 15 << u"slash"_s << QString() << 14 << 15 << u"/"_s
+                                              << QString();
+        QTest::newRow("slash after an obsidian reminder")
+                << u"x (@2026-10-15 09:00) /prz"_s << 26 << u"slash"_s << u"prz"_s << 22 << 26 << u"/"_s << QString();
+        QTest::newRow("tag after an obsidian reminder")
+                << u"(@2026-10-15) #zak"_s << 18 << u"tags"_s << u"zak"_s << 15 << 18 << u"#"_s << QString();
+        QTest::newRow("slash after a reminder, no space")
+                << u"⏰ 2026-10-15 09:00/"_s << 19 << QString() << QString() << -1 << -1 << QString() << QString();
+        QTest::newRow("at date in parentheses")
+                << u"spotkanie (@jutro"_s << 17 << u"date"_s << u"jutro"_s << 11 << 17 << u"@"_s << QString();
+        QTest::newRow("at date, parenthesis not closed")
+                << u"(@2026-10-15 09:00"_s << 18 << u"date"_s << u"2026-10-15 09:00"_s << 1 << 18 << u"@"_s << QString();
         QTest::newRow("date after a date")
                 << u"x 📅 2026-10-15 text"_s << 20 << QString() << QString() << -1 << -1 << QString() << QString();
         QTest::newRow("at date") << u"spotkanie @jutro"_s << 16 << u"date"_s << u"jutro"_s << 10 << 16 << u"@"_s << QString();

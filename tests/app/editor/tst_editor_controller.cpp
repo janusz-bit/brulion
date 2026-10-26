@@ -1552,6 +1552,67 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(at.text(), u"- spotkanie [[2026-10-16]] \n"_s);
     }
 
+    // A reminder added from the "/" menu leaves the caret after a space: "/" typed next opens the
+    // menu again and its command keeps the token whole (TODO: „/” zaraz po tokenie przypomnienia).
+    void slashAfterReminder()
+    {
+        Fixture f(u"- /przyp\n"_s);
+        f.page.startEditing(0, 6);
+        QVariantMap r = f.page.applySlashCommand(0, 0, 6, u"reminder"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"reminder"_s);
+        QCOMPARE(f.page.cursorPosition(), 0);
+        f.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(f.text(), u"- ⏰ 2026-10-16 18:00 \n"_s);
+        QCOMPARE(f.page.cursorPosition(), int(f.edit(0).size()));
+        QString typed = f.edit(0) + u"/jut"_s;
+        f.page.setEditText(0, typed, int(typed.size()));
+        const CompletionTrigger t = completionTriggerAt(typed, int(typed.size()));
+        QCOMPARE(t.mode, u"slash"_s);
+        QCOMPARE(t.filter, u"jut"_s);
+        f.page.applySlashCommand(0, t.from, t.to, u"tomorrow"_s);
+        QCOMPARE(f.text(), u"- ⏰ 2026-10-16 18:00 [[2026-10-16]]\n"_s);
+        const QString body = f.model()->document().at(0).body;
+        const int from = int(body.indexOf(u"⏰"_s));
+        QCOMPARE(f.page.reminderAt(0, from, from + int(u"⏰ 2026-10-16 18:00"_s.size())).value(u"at"_s).toString(),
+                 u"2026-10-16 18:00"_s);
+
+        // An alarm on a task; then another reminder from "/" right after it.
+        Fixture task(u"- [ ] Wstać /alarm\n"_s);
+        task.page.startEditing(0, 12);
+        task.page.applySlashCommand(0, 6, 12, u"alarm"_s);
+        task.page.setReminder(0, u"2026-10-16 06:30"_s, true, QString());
+        QCOMPARE(task.text(), u"- [ ] Wstać ⏰! 2026-10-16 06:30 \n"_s);
+        typed = task.edit(0) + u"/"_s;
+        task.page.setEditText(0, typed, int(typed.size()));
+        QCOMPARE(completionTriggerAt(typed, int(typed.size())).mode, u"slash"_s);
+        task.page.applySlashCommand(0, int(typed.size()) - 1, int(typed.size()), u"reminder"_s);
+        task.page.setReminder(0, u"2026-10-16 06:40"_s, false, QString());
+        QCOMPARE(task.text(), u"- [ ] Wstać ⏰! 2026-10-16 06:30 ⏰ 2026-10-16 06:40 \n"_s);
+
+        // A space already there is not doubled.
+        Fixture spaced(u"- Zadzwonić /przyp\n"_s);
+        spaced.page.startEditing(0, 16);
+        spaced.page.applySlashCommand(0, 10, 16, u"reminder"_s);
+        spaced.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(spaced.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00 \n"_s);
+        QCOMPARE(spaced.page.cursorPosition(), int(spaced.edit(0).size()));
+
+        // The caret elsewhere, or no block being edited: no space is added.
+        Fixture middle(u"- Zadzwonić\n"_s);
+        middle.page.startEditing(0, 4);
+        middle.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(middle.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n"_s);
+        QCOMPARE(middle.page.cursorPosition(), 4);
+        Fixture idle(u"- Zadzwonić\n"_s);
+        idle.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(idle.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n"_s);
+        // A second line: the caret at its end is not next to the token on the first line.
+        Fixture lines(u"- Zadzwonić\n  do mamy\n"_s);
+        lines.page.startEditing(0, int(lines.edit(0).size()));
+        lines.page.setReminder(0, u"2026-10-16 18:00"_s, false, QString());
+        QCOMPARE(lines.text(), u"- Zadzwonić ⏰ 2026-10-16 18:00\n  do mamy\n"_s);
+    }
+
     void slashCommands()
     {
         Fixture f(u"- Zrobić /zad\n"_s);

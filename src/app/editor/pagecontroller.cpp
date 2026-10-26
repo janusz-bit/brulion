@@ -2250,14 +2250,22 @@ void PageController::setReminder(int row, const QString &at, bool alarm, const Q
         body = replaceTokenRange(body, from, to, token);
     else
         body = setFirstLineToken(body, markdown::TokenKind::Reminder, token, true);
+    QString ruleToken;
     if (!recurrence.trimmed().isEmpty()) {
         QString rule = dates::canonicalRecurrence(recurrence);
         if (rule.isEmpty())
             rule = recurrence.trimmed();
-        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, u"🔁 "_s + rule);
+        ruleToken = u"🔁 "_s + rule;
+        body = setFirstLineToken(body, markdown::TokenKind::Recurrence, ruleToken);
     } else if (editingExisting) {
         body = setFirstLineToken(body, markdown::TokenKind::Recurrence, QString());
     }
+    // The caret at the end of the edited text stays there, after what was written — with a space
+    // after it, as after a completed date: a "/" or "#" typed next starts a command or tag
+    // instead of sticking to the token ("/przypomnienie" in an empty block, then "/").
+    const bool caretAtEnd = editingRow() == row && m_cursor >= m_model->editTextAt(row).size();
+    if (caretAtEnd && (body.endsWith(token) || (!ruleToken.isEmpty() && body.endsWith(ruleToken))))
+        body += u' ';
     editBody(row, body);
 }
 
