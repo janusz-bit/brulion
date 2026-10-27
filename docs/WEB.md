@@ -340,7 +340,9 @@ Używaj hasła aplikacji Nextcloud (Ustawienia → Bezpieczeństwo), nie główn
 ## Czcionki: emoji i symbole
 
 Qt for WebAssembly nie widzi czcionek systemu. Ma tylko dwie własne, DejaVu Sans i DejaVu
-Sans Mono (wkompilowane w `brulion.wasm`; czcionki komputera dałoby się wczytać jedynie przez
+Sans Mono (dlatego w przeglądarce Ustawienia → Wygląd i Edytor nie mają wyboru czcionki
+interfejsu, notatek ani kodu; kolor akcentu, tła i gęstość działają jak wszędzie;
+wkompilowane w `brulion.wasm`; czcionki komputera dałoby się wczytać jedynie przez
 Local Font Access API, tylko w Chromium i po zgodzie użytkownika, o którą Qt domyślnie nie
 prosi). DejaVu nie ma żadnego emoji, którego używa Brulion: przypomnienia ⏰, alarmy 🔔,
 znaczniki zadań 📅 ⏳ 🛫 ✅ ❌ 🔁 🔺 ⏫ 🔼 🔽 ⏬ ➕, a także ⧉ osadzonych bloków — wszystkie były

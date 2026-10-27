@@ -558,7 +558,7 @@ Item {
                     objectName: "captureButtonSetting"
                     Layout.fillWidth: true
                     text: qsTr("Quick note button")
-                    description: qsTr("The round + button over the views of narrow windows and phones. Quick capture stays in the menu, the palette and Ctrl+Shift+Space.")
+                    description: qsTr("The round + button over the views of narrow windows and phones. Quick capture stays in the command palette and under Ctrl+Shift+N.")
                     checked: AppSettings.captureButtonShown
                     onToggled: AppSettings.captureButtonShown = checked
                 }
