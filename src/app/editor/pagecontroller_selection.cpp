@@ -423,7 +423,7 @@ QString PageController::selectionPlainText() const
     return markdown::blocksPlainText(m_model->document(), tops, options);
 }
 
-QVariantMap PageController::writeClipboard(const QString &text, const QString &html)
+QVariantMap PageController::writeClipboard(const QString &text, const LazyHtmlMimeData::Render &html)
 {
     const qsizetype bytes = text.toUtf8().size();
     if (bytes > ClipboardLimit)
@@ -431,11 +431,23 @@ QVariantMap PageController::writeClipboard(const QString &text, const QString &h
     QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
     if (!clipboard)
         return failure(u"noClipboard"_s);
-    auto *mime = new QMimeData;
-    mime->setText(text);
-    // The formatted flavour only while both fit (the Markdown alone is never cut short).
-    if (!html.isEmpty() && bytes + html.toUtf8().size() <= ClipboardLimit)
-        mime->setHtml(html);
+    QMimeData *mime = nullptr;
+    if (html && clipboardReadsAtOnce()) {
+        // Android / the browser take every flavour now: the formatted one only while both fit (the
+        // Markdown alone is never cut short).
+        mime = new QMimeData;
+        mime->setText(text);
+        const QString rendered = html();
+        if (!rendered.isEmpty() && bytes + rendered.toUtf8().size() <= ClipboardLimit)
+            mime->setHtml(rendered);
+    } else if (html) {
+        // Desktops: rendered when an application asks for it (a paste into a mail or office app);
+        // their clipboards take megabytes, so the HTML has no limit of its own.
+        mime = new LazyHtmlMimeData(text, html);
+    } else {
+        mime = new QMimeData;
+        mime->setText(text);
+    }
     clipboard->setMimeData(mime);
     // X11 / Wayland: the primary selection too (a middle click pastes it).
     if (clipboard->supportsSelection())
@@ -452,9 +464,12 @@ QVariantMap PageController::copySelection(bool plainText)
     const QString text = plainText ? selectionPlainText() : selectionMarkdown();
     if (text.isEmpty())
         return failure(u"empty"_s);
-    const QString html = plainText || !m_host || text.toUtf8().size() > ClipboardLimit
-                                 ? QString()
-                                 : m_host->renderHtml(text, m_path);
+    LazyHtmlMimeData::Render html;
+    if (!plainText && m_host) {
+        // A snapshot of the Markdown; the host may be gone when another app asks.
+        const QPointer<EditorHost> host = m_host;
+        html = [host, text, path = m_path] { return host ? host->renderHtml(text, path) : QString(); };
+    }
     QVariantMap result = writeClipboard(text, html);
     if (result.value(u"ok"_s).toBool())
         result.insert(u"count"_s, std::max(1, m_selectionCount));
@@ -491,7 +506,7 @@ QVariantMap PageController::copyEditText(int row, int from, int to, bool cut)
     if (from == to)
         return failure(u"empty"_s);
     const QString text = edit.mid(from, to - from);
-    const QVariantMap result = writeClipboard(text, QString());
+    const QVariantMap result = writeClipboard(text, {});
     if (cut && result.value(u"ok"_s).toBool()) {
         // The block's id cut with its text (`… ^abc`) is moved, not copied, by its next paste.
         QSet<QString> ids;
