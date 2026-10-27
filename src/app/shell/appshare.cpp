@@ -168,7 +168,7 @@ QVariantMap AppController::pendingShare() const
                                  {u"size"_s, file.size},
                                  {u"error"_s, problem}});
     }
-    const bool hasFiles = !m_shareFiles.isEmpty();
+    const bool hasFiles = shareSavesFiles();
     const QString text = notebook::composeSharedText(m_share->subject, m_share->text, m_share->url);
     if (!hasFiles) {
         // The subject (a web page's title), else the text's first line; links are no title.
@@ -197,7 +197,7 @@ QVariantMap AppController::saveShare(const QVariantMap &choice)
         if (file.error.isEmpty())
             files.append(&file);
     }
-    const bool hasFiles = !m_shareFiles.isEmpty();
+    const bool hasFiles = shareSavesFiles();
     if (hasFiles && files.isEmpty())
         return failed(tr("None of the shared files can be saved."));
     const QString target = choice.value(u"target"_s).toString();
@@ -287,6 +287,17 @@ QVariantMap AppController::saveShare(const QVariantMap &choice)
     else
         toast(tr("Saved %n page(s)", "", int(created.size())), u"success"_s);
     return result;
+}
+
+bool AppController::shareSavesFiles() const
+{
+    if (!m_share || m_shareFiles.isEmpty())
+        return false;
+    for (const ShareFile &file : m_shareFiles) {
+        if (file.error.isEmpty())
+            return true;
+    }
+    return notebook::composeSharedText(m_share->subject, m_share->text, m_share->url).trimmed().isEmpty();
 }
 
 void AppController::dismissShare()

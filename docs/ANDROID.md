@@ -248,7 +248,11 @@ Brulion nie zapisuje niczego od razu: otwiera okno **„Zapisz w Brulionie”** 
   pomijany z komunikatem);
 * nowe strony trafiają do folderu na nowe strony notatnika (ustawienia notatnika);
 * pliki, których nie da się zapisać (obrazek, za duży, nieczytelny, z bajtami zerowymi), są na
-  liście z powodem; tekst dołączony do plików (np. temat wiadomości) jest wtedy pomijany.
+  liście z powodem. Tekst dołączony do plików (np. temat wiadomości) jest pomijany, gdy choć
+  jeden plik da się zapisać; gdy żadnego, zapisywany jest tekst (link udostępniony razem
+  z obrazkiem albo z załącznikiem, którego nie da się odczytać, to nadal ten link). Miniatura
+  podglądu, którą aplikacja dołącza do udostępnianego tekstu tylko w `ClipData` (bez
+  `EXTRA_STREAM`), w ogóle nie trafia na listę.
 
 „Anuluj” niczego nie zapisuje. Gdy Brulion dopiero otwiera notatnik, okno pojawia się, gdy
 notatnik będzie gotowy; gdy otwarta jest **dokumentacja**, Brulion najpierw wraca do Twojego
@@ -875,8 +879,8 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   kanałów i usuwanie starych — z polskimi znakami; ile widoku zakrywa klawiatura — okno
   edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania — i ile z pasa gestów systemu
   wchodzi na widok Qt: `ImeInsetsTest`; „Udostępnij → Brulion” — które pliki są tekstem, nazwy
-  kopii z `..`, `/`, polskimi znakami i emoji, wiek folderów `share-in`, JSON dla C++:
-  `ShareIntentTest`):
+  kopii z `..`, `/`, polskimi znakami i emoji, wiek folderów `share-in`, pomijane miniatury
+  podglądu, JSON dla C++: `ShareIntentTest`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
   `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
   projekcie Gradle).

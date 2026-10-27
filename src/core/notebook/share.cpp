@@ -86,7 +86,9 @@ QString withoutPart(const QString &text, qsizetype from, qsizetype length)
         left.chop(1);
     while (!right.isEmpty() && horizontal(right.front()))
         right.remove(0, 1);
-    const bool space = !left.isEmpty() && !right.isEmpty() && !left.endsWith(u'\n') && !right.startsWith(u'\n');
+    // No space before what closes the sentence or a bracket: "(zob. <link>)" leaves "(zob.)".
+    const bool space = !left.isEmpty() && !right.isEmpty() && !left.endsWith(u'\n') && !right.startsWith(u'\n')
+                       && !QStringView(u".,;:!?)]>").contains(right.front());
     return QString(left + (space ? u" "_s : QString()) + right).trimmed();
 }
 
@@ -202,10 +204,37 @@ QString composeSharedText(const QString &subject, const QString &text, const QSt
         const QRegularExpressionMatch match = urlInText.match(body);
         if (match.hasMatch()) {
             link = match.captured();
-            // A sentence's closing punctuation is not part of the link.
-            while (!link.isEmpty() && QStringView(u".,;:!?\"'").contains(link.back()))
-                link.chop(1);
-            body = withoutPart(body, match.capturedStart(), match.capturedLength());
+            // A sentence's closing punctuation is not part of the link, and neither is a bracket
+            // around it: ")" or "]" without its opening one in the link (Wikipedia's
+            // "Kraków_(ujednoznacznienie)" keeps its own), or ">".
+            const auto unbalanced = [&link](QChar close, QChar open) {
+                return link.back() == close && link.count(open) < link.count(close);
+            };
+            qsizetype closer = -1; // the bracket that ended the link, in the match
+            while (!link.isEmpty()) {
+                if (QStringView(u".,;:!?\"'").contains(link.back())) {
+                    link.chop(1);
+                } else if (unbalanced(u')', u'(') || unbalanced(u']', u'[') || link.back() == u'>') {
+                    link.chop(1);
+                    closer = link.size();
+                } else {
+                    break;
+                }
+            }
+            qsizetype from = match.capturedStart();
+            qsizetype length = match.capturedLength();
+            if (closer >= 0) {
+                // "(<link>)" goes with its brackets; otherwise the bracket stays in the text.
+                const QChar close = match.captured().at(closer);
+                const QChar open = close == u')' ? u'(' : close == u']' ? u'[' : u'<';
+                if (from > 0 && body.at(from - 1) == open) {
+                    --from;
+                    length = closer + 2;
+                } else {
+                    length = closer;
+                }
+            }
+            body = withoutPart(body, from, length);
         }
     } else if (body.contains(link)) {
         body = withoutPart(body, body.indexOf(link), link.size());

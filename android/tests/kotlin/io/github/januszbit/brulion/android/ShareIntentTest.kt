@@ -94,4 +94,20 @@ class ShareIntentTest {
     assertFalse(ShareIntent.isEmpty("Tytuł", null, emptyList()))
     assertFalse(ShareIntent.isEmpty(null, null, listOf(ShareIntent.SharedFile(null, "a.png", null, 1, "notText"))))
   }
+
+  @Test
+  fun previewImagesOfTextShares() {
+    val image = ShareIntent.SharedFile(null, "podgląd.png", "image/png", 10, "notText")
+    val foreign = ShareIntent.SharedFile(null, "miniatura.jpg", null, -1, "unreadable")
+    val note = ShareIntent.SharedFile("/data/files/share-in/1-1/0/Łódź.md", "Łódź.md", "text/markdown", 12)
+    val unreadableNote = ShareIntent.SharedFile(null, "notatka.txt", "text/plain", -1, "unreadable")
+    // A link with a thumbnail in ClipData only: the thumbnail is no shared file.
+    assertTrue(ShareIntent.isPreview(image, true, "Artykuł", "https://a.pl/żurek"))
+    assertTrue(ShareIntent.isPreview(foreign, true, null, "https://a.pl"))
+    // A text file, or a stream named in EXTRA_STREAM, or a share without text, stays listed.
+    assertFalse(ShareIntent.isPreview(note, true, "Artykuł", "https://a.pl"))
+    assertFalse(ShareIntent.isPreview(unreadableNote, true, "Artykuł", "https://a.pl"))
+    assertFalse(ShareIntent.isPreview(image, false, "Artykuł", "https://a.pl"))
+    assertFalse(ShareIntent.isPreview(image, true, " ", null))
+  }
 }

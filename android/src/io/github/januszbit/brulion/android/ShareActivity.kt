@@ -85,9 +85,12 @@ class ShareActivity : Activity() {
         null
       }
 
+    /** A shared stream, and whether only ClipData named it (no EXTRA_STREAM). */
+    data class Stream(val uri: Uri, val onlyInClipData: Boolean)
+
     /** The shared streams: EXTRA_STREAM (one or a list) and ClipData (some apps use only that). */
     @Suppress("DEPRECATION") // the typed getters need API 33
-    fun streamsOf(intent: Intent): List<Uri> {
+    fun streamsOf(intent: Intent): List<Stream> {
       val out = LinkedHashSet<Uri>()
       safely {
         if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
@@ -108,24 +111,27 @@ class ShareActivity : Activity() {
           uri?.let { out.add(it) }
         }
       }
+      val extra = out.toSet()
       safely {
         val clip = intent.clipData
         if (clip != null) for (i in 0 until clip.itemCount) clip.getItemAt(i)?.uri?.let { out.add(it) }
       }
-      return out.toList()
+      return out.map { Stream(it, it !in extra) }
     }
 
     /** The share as JSON for C++, or null when there is nothing to save. Background thread. */
-    fun receive(context: Context, subject: String?, text: String?, streams: List<Uri>, type: String?): String? {
+    fun receive(context: Context, subject: String?, text: String?, streams: List<Stream>, type: String?): String? {
       val inbox = File(context.filesDir, ShareIntent.INBOX)
       val now = System.currentTimeMillis()
       removeLeftovers(inbox, now)
       val dir = File(inbox, ShareIntent.folderName(now, counter.incrementAndGet()))
       val files = ArrayList<ShareIntent.SharedFile>()
       var copied = 0
-      for ((index, uri) in streams.withIndex()) {
+      for ((index, stream) in streams.withIndex()) {
         if (files.size >= 100) break
-        val file = copy(context, uri, dir, index, if (streams.size == 1) type else null, copied)
+        val fallbackType = if (streams.size == 1 && !stream.onlyInClipData) type else null
+        val file = copy(context, stream.uri, dir, index, fallbackType, copied)
+        if (ShareIntent.isPreview(file, stream.onlyInClipData, subject, text)) continue
         if (file.error == null) copied++
         files.add(file)
       }

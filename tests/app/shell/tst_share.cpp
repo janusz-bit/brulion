@@ -268,6 +268,57 @@ private Q_SLOTS:
         app->dismissShare();
     }
 
+    void textWithRefusedFiles()
+    {
+        // A link shared with a preview image (ClipData) or an attachment that cannot be read: no
+        // file can be saved, so the link and its text are what the dialog saves.
+        auto app = openApp(u"tekst-i-obraz"_s);
+        QVariantMap share = fileShare(*app, {{u"podgląd.png"_s, "\x89PNG"}}, u"image/png"_s);
+        share.insert(u"subject"_s, u"Artykuł o żurku"_s);
+        share.insert(u"text"_s, u"https://a.pl/żurek"_s);
+        QVariantList files = share.value(u"files"_s).toList();
+        files.append(QVariantMap{{u"name"_s, u"załącznik.md"_s}, {u"error"_s, u"unreadable"_s}});
+        files.append(QVariantMap{{u"name"_s, u"duży.txt"_s}, {u"error"_s, u"tooLarge"_s}});
+        share.insert(u"files"_s, files);
+        const QString dir = share.value(u"dir"_s).toString();
+        app->receiveShare(share);
+        const QVariantMap pending = app->pendingShare();
+        QCOMPARE(pending.value(u"kind"_s).toString(), u"text"_s);
+        QCOMPARE(pending.value(u"readable"_s).toInt(), 0);
+        QCOMPARE(pending.value(u"target"_s).toString(), u"journal"_s);
+        QCOMPARE(pending.value(u"text"_s).toString(), u"[Artykuł o żurku](https://a.pl/żurek)"_s);
+        QCOMPARE(pending.value(u"title"_s).toString(), u"Artykuł o żurku"_s);
+        // The refused files are still listed, with their reasons.
+        const QVariantList listed = pending.value(u"files"_s).toList();
+        QCOMPARE(listed.size(), 3);
+        for (const QVariant &file : listed)
+            QVERIFY(!file.toMap().value(u"error"_s).toString().isEmpty());
+
+        const QVariantMap saved = app->saveShare({{u"target"_s, u"journal"_s}, {u"text"_s, pending.value(u"text"_s)}});
+        QVERIFY(saved.value(u"ok"_s).toBool());
+        QCOMPARE(saved.value(u"count"_s).toInt(), 1);
+        QVERIFY(journal(*app).contains(u"- [Artykuł o żurku](https://a.pl/żurek)\n"_s));
+        QVERIFY(!QFileInfo::exists(dir));
+
+        // As a new page too.
+        app->receiveShare(
+                {{u"text"_s, u"Notatka z poczty"_s},
+                 {u"files"_s, QVariantList{QVariantMap{{u"name"_s, u"x.txt"_s}, {u"error"_s, u"unreadable"_s}}}}});
+        QCOMPARE(app->pendingShare().value(u"kind"_s).toString(), u"text"_s);
+        const QVariantMap page =
+                app->saveShare({{u"target"_s, u"page"_s}, {u"title"_s, QString()}, {u"text"_s, u"Notatka z poczty"_s}});
+        QVERIFY(page.value(u"ok"_s).toBool());
+        QVERIFY(page.value(u"path"_s).toString().endsWith(u"Notatka z poczty.md"_s));
+
+        // A readable file wins over the text that came with it.
+        QVariantMap both = fileShare(*app, {{u"Plan.md"_s, "- punkt\n"}});
+        both.insert(u"text"_s, u"temat wiadomości"_s);
+        app->receiveShare(both);
+        QCOMPARE(app->pendingShare().value(u"kind"_s).toString(), u"files"_s);
+        QCOMPARE(app->pendingShare().value(u"text"_s).toString(), QString());
+        app->dismissShare();
+    }
+
     void copiesRemovedOnlyInTheInbox()
     {
         auto app = openApp(u"porzadek"_s);

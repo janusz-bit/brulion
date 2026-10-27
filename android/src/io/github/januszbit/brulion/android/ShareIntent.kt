@@ -104,6 +104,15 @@ internal object ShareIntent {
     }
   }
 
+  /**
+   * A text share's preview image, not a shared file: the share sheet's rich preview has the
+   * sender put a thumbnail into ClipData only (no EXTRA_STREAM) next to its text. Such a stream
+   * that is no text file is left out instead of being listed as one Brulion cannot save.
+   */
+  fun isPreview(file: SharedFile, onlyInClipData: Boolean, subject: String?, text: String?): Boolean =
+    onlyInClipData && file.error != null && !isText(file.name, file.mime) &&
+      !(subject.isNullOrBlank() && text.isNullOrBlank())
+
   /** Nothing to hand over: no text, no subject and no file. */
   fun isEmpty(subject: String?, text: String?, files: List<SharedFile>): Boolean =
     subject.isNullOrBlank() && text.isNullOrBlank() && files.isEmpty()

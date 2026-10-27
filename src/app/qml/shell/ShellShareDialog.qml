@@ -94,7 +94,8 @@ BDialog {
     }
 
     Repeater {
-        model: dialog.hasFiles ? dialog.files : []
+        // With text: the files that could not be saved (a link's preview image, say).
+        model: dialog.files
         delegate: ColumnLayout {
             id: fileRow
             required property var modelData

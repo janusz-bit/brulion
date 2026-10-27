@@ -155,8 +155,9 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantMap remoteControl READ remoteControl NOTIFY remoteControlChanged FINAL)
 
     // ---- Shares from other apps (appshare.cpp) --------------------------------------------
-    /// The share waiting for the share dialog ({} when none): { kind: "text" | "files", text (one
-    /// capture text: notebook::composeSharedText; for "text"), files: [{ name, title, preview
+    /// The share waiting for the share dialog ({} when none): { kind: "text" | "files" ("files"
+    /// when a file can be saved, or when there is no text to save instead), text (one capture
+    /// text: notebook::composeSharedText; for "text"), files: [{ name, title, preview
     /// (the first lines), size, error ("" or a translated reason it cannot be saved) }], readable
     /// (files that can be saved), target ("journal" for text and several files, "page" for one
     /// file), title (the new page's suggested title) }.
@@ -439,6 +440,10 @@ private:
     void applyPendingShare();
     /// Forget the waiting share and remove its copies (inside shareInboxPath() only).
     void clearShare();
+    /// Whether the waiting share saves its files rather than its text: a file can be saved, or
+    /// there is no text. A link shared with a preview image, or with an attachment that cannot
+    /// be read, is still that link.
+    bool shareSavesFiles() const;
     QVariantMap initialRoute() const;
     /// `path` is the documentation notebook's folder.
     bool isDocsPath(const QString &path) const;

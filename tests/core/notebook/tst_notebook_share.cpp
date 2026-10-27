@@ -47,6 +47,20 @@ private Q_SLOTS:
         QTest::newRow("parentheses in the url")
                 << u"Kraków"_s << u"https://pl.wikipedia.org/wiki/Kraków_(ujednoznacznienie)"_s << QString()
                 << u"[Kraków](https://pl.wikipedia.org/wiki/Kraków_%28ujednoznacznienie%29)"_s;
+        QTest::newRow("link in parentheses") << QString() << u"Ciekawy artykuł (https://a.pl/x)"_s << QString()
+                                             << u"<https://a.pl/x> — Ciekawy artykuł"_s;
+        QTest::newRow("link in parentheses, then a dot")
+                << u"Źródło"_s << u"Ciekawy artykuł (https://a.pl/x). Dalej"_s << QString()
+                << u"[Źródło](https://a.pl/x) — Ciekawy artykuł. Dalej"_s;
+        QTest::newRow("link ends a parenthesis") << QString() << u"Żółw (zob. https://a.pl/żółw)"_s << QString()
+                                                 << u"<https://a.pl/żółw> — Żółw (zob.)"_s;
+        QTest::newRow("parenthesised link with parentheses")
+                << u"Kraków"_s << u"Hasło (https://pl.wikipedia.org/wiki/Kraków_(ujednoznacznienie))"_s << QString()
+                << u"[Kraków](https://pl.wikipedia.org/wiki/Kraków_%28ujednoznacznienie%29) — Hasło"_s;
+        QTest::newRow("link in square brackets")
+                << QString() << u"Spis [https://a.pl/spis]"_s << QString() << u"<https://a.pl/spis> — Spis"_s;
+        QTest::newRow("link in angle brackets")
+                << u"Strona"_s << u"<https://a.pl/x>"_s << QString() << u"[Strona](https://a.pl/x)"_s;
         QTest::newRow("subject equals the url")
                 << u"https://a.pl/x"_s << u"https://a.pl/x"_s << QString() << u"<https://a.pl/x>"_s;
         QTest::newRow("http") << QString() << u"Strona http://stara.pl/ do zobaczenia"_s << QString()
