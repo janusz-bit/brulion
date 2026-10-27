@@ -407,8 +407,15 @@ public:
     /// their value; journalMode / pageMode "outline" | "document"). False for an unusable journal
     /// file format, an unknown mode or on I/O errors.
     Q_INVOKABLE bool setConfig(const QVariantMap &config);
-    /// Problems found in .brulion/config.json (English, for the settings page).
+    /// Problems found in .brulion/config.json or in an Obsidian vault's settings (English, for
+    /// the settings page).
     Q_INVOKABLE QStringList configWarnings() const;
+    /// The config.json keys taken from the Obsidian vault's `.obsidian/` folder while the
+    /// notebook has no .brulion/config.json (Vault::configAdoptedFromObsidian()).
+    Q_INVOKABLE QStringList configFromObsidian() const;
+    /// Write the settings in use (also those taken from `.obsidian/`) to .brulion/config.json,
+    /// for devices that do not see `.obsidian/` (the browser with Nextcloud).
+    Q_INVOKABLE bool saveAdoptedConfig();
 
     // ---- Lists for the shell ---------------------------------------------------------------
     /// Items for the quick switcher: [{ title, subtitle (folder / alias), icon, path }].

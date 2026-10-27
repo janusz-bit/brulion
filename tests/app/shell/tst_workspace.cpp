@@ -759,6 +759,34 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 2);
     }
 
+    void configFromObsidian()
+    {
+        // An Obsidian vault without .brulion/config.json: its settings are used, nothing written.
+        QString root;
+        auto ws = open({{u".obsidian/daily-notes.json"_s, uR"({"folder":"Dziennik","format":"DD.MM.YYYY"})"_s},
+                        {u".obsidian/app.json"_s, uR"({"attachmentFolderPath":"Załączniki"})"_s},
+                        {u"Dziennik/14.10.2026.md"_s, u"- środa"_s}},
+                       &root);
+        QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        QCOMPARE(ws->vaultConfig().value(u"journalFileFormat"_s).toString(), u"dd.MM.yyyy"_s);
+        QCOMPARE(ws->vaultConfig().value(u"attachmentsFolder"_s).toString(), u"Załączniki"_s);
+        QCOMPARE(ws->configFromObsidian(), (QStringList{u"journalsFolder"_s, u"journalFileFormat"_s,
+                                                         u"journalTemplate"_s, u"attachmentsFolder"_s}));
+        QCOMPARE(ws->journalPath(u"2026-10-14"_s), u"Dziennik/14.10.2026.md"_s);
+        QVERIFY(!ws->exists(u".brulion/config.json"_s));
+        // A setting set to the value it has writes nothing.
+        QVERIFY(ws->setConfig({{u"journalsFolder"_s, u"Dziennik"_s}}));
+        QVERIFY(!QFileInfo::exists(root + u"/.brulion/config.json"_s));
+
+        // "Save to the notebook": the values in use become the file's.
+        QSignalSpy changed(ws.get(), &Workspace::configChanged);
+        QVERIFY(ws->saveAdoptedConfig());
+        QVERIFY(ws->readFile(u".brulion/config.json"_s).contains(u"\"journalFileFormat\": \"dd.MM.yyyy\""_s));
+        QVERIFY(ws->configFromObsidian().isEmpty());
+        QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        QCOMPARE(changed.size(), 1);
+    }
+
     void favoritesAndRecentPages()
     {
         auto ws = open({ { u"a.md"_s, QString() }, { u"b.md"_s, QString() }, { u"Folder/c.md"_s, QString() } });

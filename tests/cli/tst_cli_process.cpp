@@ -330,6 +330,23 @@ private Q_SLOTS:
         QFile::remove(ini);
     }
 
+    void obsidianVaultSettings()
+    {
+        // An Obsidian vault without .brulion/config.json: its daily notes settings are used.
+        const QString dir = vault({{u".obsidian/daily-notes.json"_s, R"({"folder":"Dziennik","format":"DD.MM.YYYY"})"},
+                                   {u"Dziennik/13.10.2026.md"_s, "- wtorek\n"}});
+        Run r = run(dir, {u"info"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"config"_s).toObject().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        QCOMPARE(r.result().value(u"configFromObsidian"_s).toArray().first().toString(), u"journalsFolder"_s);
+        r = run(dir, {u"journal"_s, u"path"_s, u"2026-10-20"_s});
+        QCOMPARE(r.result().value(u"path"_s).toString(), u"Dziennik/20.10.2026.md"_s);
+        r = run(dir, {u"journal"_s, u"append"_s, u"Kupić żurek"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(readFile(dir + u"/Dziennik/14.10.2026.md"_s), "- Kupić żurek\n"_ba);
+        QVERIFY(!QFileInfo::exists(dir + u"/.brulion/config.json"_s));
+    }
+
     void captureAndJournals()
     {
         const QString dir = vault({{u"templates/journal.md"_s, "## {{weekday}}\n- \n"}});

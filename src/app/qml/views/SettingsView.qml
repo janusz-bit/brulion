@@ -420,6 +420,33 @@ Item {
                     onActivated: (value) => Workspace.setConfig({ journalMode: value })
                 }
             }
+            // An Obsidian vault without .brulion/config.json: the settings below come from its
+            // .obsidian/ folder (in memory) until a setting here is changed or they are saved.
+            ShellSettingRow {
+                id: obsidianRow
+                objectName: "obsidianSettingsRow"
+                // (config: re-read when Obsidian's settings change; revision: after a save)
+                readonly property var adopted: Workspace.config && Workspace.revision >= 0 && Workspace.isOpen
+                                               ? Workspace.configFromObsidian() : []
+                readonly property var labels: ({
+                    journalsFolder: qsTr("Journal folder"),
+                    journalFileFormat: qsTr("Journal file names"),
+                    journalTemplate: qsTr("Journal template"),
+                    templatesFolder: qsTr("Templates folder"),
+                    attachmentsFolder: qsTr("Attachments folder")
+                })
+                visible: obsidianRow.adopted.length > 0
+                title: qsTr("Settings from Obsidian")
+                description: qsTr("Taken from the Obsidian vault's settings (.obsidian): %1. They are saved to .brulion/config.json when you change a setting here.")
+                             .arg(obsidianRow.adopted.map(key => obsidianRow.labels[key] || key).join(", "))
+                BButton {
+                    objectName: "saveObsidianSettings"
+                    text: qsTr("Save to the notebook")
+                    iconName: "check"
+                    size: "small"
+                    onClicked: Workspace.saveAdoptedConfig()
+                }
+            }
             ShellSettingRow {
                 title: qsTr("Journal folder")
                 description: qsTr("Where the daily pages are kept. Empty: the top of the notebook.")
@@ -501,7 +528,8 @@ Item {
                 BText {
                     id: warnings
                     width: parent.width
-                    text: Workspace.revision >= 0 ? Workspace.configWarnings().join("\n") : ""
+                    // (config: also Obsidian's settings, which no file revision follows)
+                    text: Workspace.config && Workspace.revision >= 0 ? Workspace.configWarnings().join("\n") : ""
                     wrapMode: Text.Wrap
                 }
             }

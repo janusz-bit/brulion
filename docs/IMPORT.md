@@ -41,27 +41,55 @@ Markdownowe, nagłówek YAML (`tags`, `aliases`), tagi, ramki `> [!note]`, `==za
 `%%komentarze%%`, wzory `$…$` i zadania w składni wtyczki **Tasks** (`📅 ⏳ 🛫 ✅ 🔁`) — Brulion
 także je tak zapisuje. Notatki z nagłówkami i akapitami otwierają się jako dokumenty, jak
 w Obsidianie. Zmiana nazwy albo przeniesienie strony poprawia linki do niej we wszystkich
-notatkach (jak w Obsidianie). Folder `.obsidian/` (ustawienia, wtyczki, motywy) jest pomijany
-i nigdy nie zmieniany, a kopie konfliktów Syncthinga (`*.sync-conflict-*`) notatek nie są
+notatkach (jak w Obsidianie). Folder `.obsidian/` (ustawienia, wtyczki, motywy) nie jest
+pokazywany i nigdy nie jest zmieniany (Brulion czyta z niego tylko kilka ustawień, zob. niżej), a kopie konfliktów Syncthinga (`*.sync-conflict-*`) notatek nie są
 pokazywane jako strony, tylko w centrum synchronizacji jako konflikty do scalenia.
 
-**Co ustawić raz** (*Ustawienia → Notatnik*; zapisuje się w `.brulion/config.json`, więc inne
-urządzenia dostaną to przez Syncthing):
+**Co Brulion przejmie sam:** dopóki notatnik nie ma `.brulion/config.json`, ustawienia
+dziennika i załączników bierze z ustawień Obsidiana w `.obsidian/` — niczego tam nie zmienia
+i sam niczego nie zapisuje:
 
-* **Folder dziennika** — Brulion trzyma dni w `journals/`, a Obsidian (wtyczka *Daily notes*)
-  domyślnie w głównym folderze skarbca. Wpisz folder z ustawień notatek dziennych Obsidiana
-  (`.obsidian/daily-notes.json`, pole `folder`), a gdy dni leżą na samej górze, usuń z pola
-  `journals` (puste pole to główny folder skarbca) — inaczej Brulion założy nowe dni
-  w `journals/`, obok starych.
-* **Nazwy plików dziennika** — ten sam wzór co w Obsidianie (pole `format`), ale w zapisie Qt:
-  `YYYY-MM-DD` to `yyyy-MM-dd` (domyślny w obu), `DD.MM.YYYY` to `dd.MM.yyyy`.
-* **Szablon dziennika** — np. `Szablony/Dzień.md`, jeśli Obsidian ma szablon notatki dziennej.
-  Wpisz ścieżkę z końcówką `.md` (Obsidian zapisuje pole `template` bez niej) — bez niej nowe
-  dni zaczną się pusto.
-  Zmienne `{{date}}`, `{{time}}`, `{{title}}` działają w obu aplikacjach.
-* **Folder załączników** — gdzie trafiają wklejone obrazy (w Brulionie `assets/`; w Obsidianie
-  *Settings → Files and links → Default location for new attachments*). Obrazy już wstawione
-  działają bez tego.
+* **Folder dziennika** — z `.obsidian/daily-notes.json` (pole `folder`; puste albo `/` to główny
+  folder skarbca). Bez tego pliku (Obsidian zapisuje go dopiero po zmianie ustawień *Daily
+  notes*) Brulion przyjmie domyślny dla Obsidiana główny folder tylko wtedy, gdy leży w nim
+  już jakiś dzień `RRRR-MM-DD.md`, a wtyczka *Daily notes* nie jest wyłączona
+  (`.obsidian/core-plugins.json`).
+* **Nazwy plików dziennika** — wzór z pola `format`, przepisany z zapisu Moment (Obsidian) na
+  zapis Qt (Brulion): `YYYY-MM-DD` to `yyyy-MM-dd` (domyślny w obu), `DD.MM.YYYY` to
+  `dd.MM.yyyy`, `[Dzień] YYYY-MM-DD` to `'Dzień' yyyy-MM-dd`, a `/` we wzorze to podfoldery jak
+  w Obsidianie. Wzorów z elementami bez odpowiednika (`Do` — „27th”, numery tygodni `ww`/`WW`,
+  dzień roku `DDD`, godziny) Brulion nie użyje: zostanie przy `yyyy-MM-dd`, a ustawienia pokażą
+  ostrzeżenie — wtedy wpisz nazwy plików sam. Nazwy miesięcy i dni (`MMMM`, `dddd`) Brulion
+  pisze po angielsku, także gdy Obsidian pisze je po polsku (ostrzeżenie w ustawieniach).
+* **Szablon dziennika** — z pola `template`, z dopisaną końcówką `.md` (Obsidian zapisuje
+  ścieżkę bez niej), np. `Szablony/Dzień.md`; bez szablonu w Obsidianie nowe dni zaczynają się
+  pusto. Zmienne `{{date}}`, `{{time}}`, `{{title}}` działają w obu aplikacjach.
+* **Folder szablonów** — z `.obsidian/templates.json` (wtyczka *Templates*, pole `folder`).
+* **Folder załączników** — z `.obsidian/app.json` (*Settings → Files and links → Default
+  location for new attachments*): wybrany folder albo główny folder skarbca. Położenia „obok
+  notatki” (`./`) Brulion nie ma: zostaje przy `assets/` i pokazuje ostrzeżenie. Obrazy już
+  wstawione działają w każdym przypadku.
+
+*Ustawienia → Notatnik* mówią, co zostało przejęte. Zmiana któregokolwiek ustawienia notatnika
+zapisuje wszystkie (także przejęte) w `.brulion/config.json`; od tej chwili obowiązuje ten plik,
+a zmiany w ustawieniach Obsidiana już się nie liczą. Zanim to nastąpi, Brulion czyta `.obsidian/`
+przy każdym otwarciu notatnika i przy okresowym sprawdzaniu folderu (co parę minut i po powrocie
+do aplikacji). Przycisk **Zapisz w notatniku** zapisuje przejęte ustawienia od razu — przydaje się,
+gdy ten sam notatnik otwierasz w przeglądarce przez Nextcloud: synchronizacja nie przesyła
+`.obsidian/`, więc bez `config.json` przeglądarka miałaby ustawienia domyślne Brulionu.
+
+Folder, którego Brulion już używał z ustawieniami domyślnymi (bez `config.json`), nie zmienia się
+po aktualizacji: dziennika nie przejmie, gdy w `journals/` leży już jakaś notatka, folderu
+załączników — gdy w `assets/` leży jakiś plik, folderu szablonów — gdy w `templates/` leży jakiś
+plik. Nie liczą się przy tym pliki w folderze, który dla tego ustawienia wybrał sam Obsidian (np.
+dni Obsidiana w `journals/` albo `Journals/`): wtedy Brulion przejmie wzór nazw i szablon, a
+swoje dawne dni `RRRR-MM-DD.md` dalej rozpozna. Brulion sprawdza to ponownie, gdy pliki w tych
+folderach się pojawiają albo znikają (np. z synchronizacji na nowym urządzeniu, która przysłała
+`.obsidian/` przed `journals/`). Wartość złego typu w plikach Obsidiana (np. liczba zamiast
+ścieżki) Brulion pomija z ostrzeżeniem i zostaje przy swojej.
+
+**Co ustawić raz** (*Ustawienia → Notatnik*):
+
 * **Tryb dziennika** — dni są domyślnie konspektem (punkty, jak w Logseq); jeśli piszesz
   w notatkach dziennych akapitami, wybierz *Dokument*.
 
@@ -80,7 +108,7 @@ urządzenia dostaną to przez Syncthing):
   bloków** Brulion pamięta na urządzeniu, nie w plikach.
 
 **Co Brulion dopisuje do folderu:** `.brulion/config.json` (dopiero po zmianie ustawień
-notatnika), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
+notatnika albo po *Zapisz w notatniku*), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
 *Move to Obsidian trash*; obie aplikacje go pomijają), nowe dni dziennika (dopiero po
 pierwszym wpisie — samo oglądanie dnia niczego nie tworzy), wklejone obrazy w folderze
 załączników, klucz `brulion: document`/`outline` w nagłówku YAML notatki, której tryb zmienisz
