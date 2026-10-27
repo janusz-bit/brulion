@@ -16082,14 +16082,31 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
 </context>
 <context>
+    <name>brulion::widgets::WidgetActions</name>
+    <message numerus="yes">
+        <location filename="../src/app/widgets/widgetactions.cpp" line="67"/>
+        <source>%n entry(ies) added from the widget to today&apos;s journal.</source>
+        <translation>
+            <numerusform>Dodano %n wpis z widżetu do dzisiejszego dziennika.</numerusform>
+            <numerusform>Dodano %n wpisy z widżetu do dzisiejszego dziennika.</numerusform>
+            <numerusform>Dodano %n wpisów z widżetu do dzisiejszego dziennika.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/widgets/widgetactions.cpp" line="73"/>
+        <source>Could not add “%1” from the widget to today&apos;s journal.</source>
+        <translation>Nie udało się dodać „%1” z widżetu do dzisiejszego dziennika.</translation>
+    </message>
+</context>
+<context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="383"/>
+        <location filename="../src/app/main.cpp" line="387"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="402"/>
+        <location filename="../src/app/main.cpp" line="406"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

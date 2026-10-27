@@ -68,3 +68,14 @@ Regułę zmienisz z menu: prawy przycisk myszy na znaczniku 🔁 (na telefonie p
 Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu.
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).
+
+## Widżety na Androidzie
+Na ekranie głównym telefonu postawisz widżety Brulionu (przytrzymaj puste miejsce → **Widżety** → **Brulion**):
+
+- **Zadania — Mój dzień** — zaległe i dzisiejsze zadania jak w widoku Zadania; większy widżet pokazuje też jutrzejsze. Stuknięcie w zadanie otwiera notatkę na tym wierszu.
+- **Kalendarz** — miesiąc z kropkami i agenda wybranego dnia: najpierw wpisy z godziną. Niski widżet pokazuje samą agendę.
+- **Notatki** — **Dziennik dziś**, **Szybka notatka**, ulubione i ostatnie strony.
+
+Przycisk **+** dodaje zadanie bez otwierania aplikacji: wpisz tekst, wybierz **Dziś**, **Jutro**, **Bez terminu** albo **Data…**, ewentualnie **Godzina…** (przypomnienie) i **Alarm**, i stuknij **Dodaj**. Zadanie trafia na koniec dzisiejszego dziennika — tak jak z aplikacji, na przykład `- [ ] Kupić żółty ser 📅 2026-10-28` — od razu, także gdy Brulion jest zamknięty. Słowa w tekście nie są tu datami: „jutro o 9” zostaje tekstem, dzień i godzinę wybierasz przyciskami.
+
+Widżety pokazują stan z chwili, gdy Brulion był ostatnio otwarty: zmiany z innych urządzeń zobaczysz po otwarciu aplikacji. O północy same przenoszą zadania na nowy dzień. Zadanie odhaczysz w aplikacji albo przyciskiem **Zrobione** w powiadomieniu przypomnienia.

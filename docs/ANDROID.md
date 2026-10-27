@@ -8,7 +8,9 @@ z natywną częścią w Kotlinie (`android/src/io/github/januszbit/brulion/andro
   aplikacji i po restarcie telefonu,
 * otwiera właściwą notatkę po stuknięciu w powiadomienie,
 * przyjmuje tekst i pliki `.md`/`.txt` z menu **Udostępnij** innych aplikacji
-  ([Udostępnij → Brulion](#udostępnij--brulion)).
+  ([Udostępnij → Brulion](#udostępnij--brulion)),
+* daje **widżety** na ekran główny: zadania na dziś z szybkim dodawaniem, kalendarz i notatki
+  ([Widżety](#widżety)).
 
 C++ rozmawia z nią przez JNI (`src/platform/android/androidbridge.{h,cpp}`), patrz
 [Most JNI](#most-jni-c--kotlin).
@@ -286,6 +288,91 @@ nazwy kopii oczyszczone (`/`, `..`, znaki sterujące, długość). C++ (`AppCont
 `src/app/shell/appshare.cpp`; czyste funkcje w `src/core/notebook/share.h`) czyta kopie od razu,
 po zapisaniu lub anulowaniu usuwa folder kopii — tylko wewnątrz `files/share-in/` — a resztki
 starsze niż doba usuwa `ShareActivity` przy następnym udostępnieniu.
+
+## Widżety
+
+Na ekranie głównym (przytrzymaj puste miejsce → **Widżety** → **Brulion**) są trzy widżety:
+
+* **Zadania — Mój dzień** (domyślnie 3×2, rozmiar dowolny) — dzień tygodnia i data, liczba
+  zaległych, a pod spodem lista: **Zaległe** (termin na czerwono: „wczoraj”, „pn 26 paź”) i
+  **Dziś** (godzina przypomnienia — `⏰ 09:00`, `⏰! 06:30` dla alarmu — albo terminu, 🔁 przy
+  zadaniach cyklicznych, nazwa strony). Widżet powiększony do trzech rzędów pokazuje też
+  **Jutro**. Sekcje i kolejność są takie jak w widoku **Zadania**. Stuknięcie w zadanie otwiera
+  jego notatkę na tym wierszu, stuknięcie w nagłówek — Brulion, a **+** dodaje zadanie (niżej).
+* **Kalendarz** (domyślnie 4×4, do 3×2) — miesiąc z kropkami dni (zaległe i alarmy na
+  czerwono, przypomnienia, terminy, zaplanowane, zrobione, dziennik; najwyżej trzy), dzisiaj
+  w ramce, przyciski ‹ ›, stuknięcie w tytuł wraca do dzisiaj. Pod miesiącem agenda wybranego
+  (stukniętego) dnia i kolejnych: **najpierw wpisy z godziną**, według godziny, potem całodniowe;
+  zrobione przekreślone. Niski widżet (poniżej ok. 270 dp) pokazuje samą agendę od dziś.
+* **Notatki** (domyślnie 3×2) — nazwa notatnika, przyciski **Dziennik dziś** (otwiera dzisiejszą
+  notatkę dzienną, gdy już jest; inaczej Brulion) i **Szybka notatka**, a pod nimi **Ulubione**
+  i **Ostatnie** strony (dzienniki opisane dniem: „wtorek, 27 października”).
+
+Widżety mówią językiem aplikacji (Ustawienia → Ogólne), nie telefonu, i mają jasne lub ciemne
+kolory jak system (kolory papieru i łupka z motywu Brulionu).
+
+**Skąd biorą dane.** Brulion przy każdej zmianie w notatniku (z opóźnieniem 2 s), po pełnym
+wczytaniu notatnika, o północy i **gdy wychodzisz z aplikacji** zapisuje dla widżetów
+„migawkę”: otwarte zadania zaległe i na najbliższe dwa tygodnie (z datami, najwyżej 200),
+kalendarz od tygodnia wstecz do ośmiu tygodni naprzód, ulubione i ostatnie strony oraz to, gdzie
+szybkie dodawanie ma pisać (ścieżki dziennika na najbliższy tydzień i tekst z szablonu dziennika
+dla dni, które jeszcze nie mają notatki). Widżety rysują ją same, **bez uruchamiania Brulionu**:
+pokazują stan z chwili, gdy Brulion był ostatnio otwarty — zmiany przysłane przez Syncthing
+pojawią się po otwarciu aplikacji. Po północy (i po zmianie strefy czasowej albo restarcie
+telefonu) widżety same przekładają zadania na nowy dzień: dzisiejsze z terminem stają się
+zaległe, jutrzejsze — dzisiejszymi, tak jak zrobiłby to widok Zadania. Migawka jest tylko
+tekstem (nigdy HTML-em) i zostaje w prywatnych danych aplikacji; w notatniku dokumentacji nic
+się nie zmienia (widżety dalej pokazują Twój notatnik), a zamknięcie notatnika (powrót do
+ekranu startowego) czyści widżety: „Otwórz Brulion, aby pokazać tu swój notatnik”.
+
+### Szybkie dodawanie
+
+**+** na widżecie zadań lub kalendarza otwiera małe okno **Nowe zadanie** nad ekranem głównym
+(**Szybka notatka** w widżecie notatek — okno na zwykły punkt listy, także w kilku wierszach):
+
+* tekst, a pod nim dzień: **Dziś** (wybrany), **Jutro**, **Bez terminu**, **Data…** (kalendarz);
+* **Godzina…** dodaje przypomnienie o tej godzinie w wybranym dniu, a **Alarm** zmienia je
+  w alarm;
+* **Dodaj** zapisuje i czyści pole, więc można dodać kilka zadań z rzędu; Wstecz albo
+  stuknięcie obok zamyka okno.
+
+Zadanie trafia na koniec **dzisiejszego dziennika** dokładnie tak, jak dopisałaby je aplikacja:
+`- [ ] Kupić żółty ser 📅 2026-10-28` (dzień bez godziny — termin), `- [ ] Wizyta u dentysty ⏰
+2026-10-28 09:00` (z godziną — przypomnienie), `⏰!` dla alarmu, samo `- [ ] …` bez terminu.
+**Słowa w tekście nie są datami** — „jutro o 9” zostaje tekstem (inaczej niż w szybkim
+dodawaniu w aplikacji); od daty są przyciski.
+
+**Przy zamkniętej aplikacji też od razu.** Okno nie uruchamia Brulionu: dopisuje wiersz do
+pliku dziennika samo (Kotlin, `JournalAppend.kt`) — to jedyne miejsce, w którym część
+androidowa pisze w notatniku. Robi to bezpiecznie: tylko w folderze notatnika z migawki
+(ścieżka sprawdzana po rozwinięciu `..` i dowiązań), tylko w pliku `.md` w UTF-8, przez plik
+tymczasowy `.brulion-tmp-…` w tym samym folderze zamieniany na notatkę jednym ruchem, i tylko
+gdy notatki nikt w tym czasie nie zmienił; zachowuje końce wierszy i BOM notatki, wypełnia pusty
+punkt `- ` z szablonu, a brakujący dziennik zakłada z szablonu dziennika. Nowe zadanie od razu
+widać w widżetach, a zadanie z godziną dostaje od razu systemowe przypomnienie (tymczasowe —
+aplikacja zastępuje je własnym przy następnym uruchomieniu). Syncthing wyśle zmieniony plik
+od razu.
+
+Gdy działa Brulion (w tle), okno też pisze samo, a aplikacja wczytuje notatkę ponownie, gdy
+wraca na pierwszy plan (Qt w tle wstrzymuje swoją pętlę zdarzeń). Gdy wpisu nie da się zapisać
+od razu — Brulion nie był jeszcze otwarty z notatnikiem (brak migawki), migawka jest starsza niż
+tydzień, notatkę ktoś właśnie zmieniał, błąd zapisu — okno mówi „Zapisze się w dzienniku po
+otwarciu Brulionu”: wpis czeka w kolejce i aplikacja dopisze go do dzisiejszego dziennika przy
+następnym uruchomieniu z tym notatnikiem (komunikat „Dodano 1 wpis z widżetu…”).
+
+**Odhaczanie zadań z widżetu** nie jest możliwe — zadanie zaznaczysz w aplikacji (albo
+**Zrobione** w powiadomieniu przypomnienia).
+
+Jak to działa: C++ (`src/app/widgets/`: `widgetsnapshot.h` buduje migawkę z tych samych
+modeli co widoki Zadania i Kalendarz, `widgetpublisher.h` ją publikuje) przekazuje JSON przez
+`AndroidBridge::updateWidgets`; Kotlin (`WidgetStore`, `WidgetUpdater`) trzyma go
+w SharedPreferences i odświeża widżety (`AppWidgetProvider`-y `TasksWidget`, `CalendarWidget`,
+`NotesWidget`, wiersze list przez `WidgetListService`; bez cyklicznych aktualizacji — tylko
+alarm tuż po północy). Szybkie dodawanie to `QuickAddActivity` (zwykła aktywność Androida, bez
+Qt) i `QuickAdd`/`JournalAppend`; kolejka dla aplikacji — `WidgetInbox`, odbierana jak kolejka
+„Zrobione” (`AndroidBridge::takeWidgetActions`). Reguły (wiersz zadania, dopisywanie do
+dziennika, przekładanie zadań na nowy dzień) są w C++ i w Kotlinie sprawdzane tymi samymi
+przypadkami (`tests/data/widgets/`).
 
 ## Eksport: „Zapisz w Pobranych”
 
@@ -792,8 +879,8 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | Ścieżka | Zawartość |
 |---|---|
 | `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, `ShareActivity` (filtry `ACTION_SEND`/`ACTION_SEND_MULTIPLE` dla `text/*`), ikony |
-| `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++) |
+| `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu; widżety: układy `layout/widget_*.xml` (też podglądy dla wyboru widżetów), `xml/widget_*_info.xml`, kolory `widget_colors.xml` (`values` jasne, `values-night` ciemne), promień rogów (`values-v31`: systemowy), motyw okna szybkiego dodawania |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `DoneQueue` (kolejka „Zrobione” dla C++), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++), widżety: `Widgets` (`TasksWidget`, `CalendarWidget`, `NotesWidget`), `WidgetViews` + `WidgetListService` (RemoteViews i wiersze list), `WidgetSnapshot` (migawka, przekładanie zadań na nowy dzień), `WidgetStore` + `WidgetUpdater` + `WidgetReceiver` (zapis, odświeżanie, północ, przyciski miesiąca), `WidgetDates` (nazwy dni i miesięcy aplikacji), `QuickAddActivity` + `QuickAdd` + `JournalAppend` (szybkie dodawanie, zapis do dziennika), `WidgetInbox` (kolejka wpisów dla C++) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
@@ -802,7 +889,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion” |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion”; `--widgets`: widżety i szybkie dodawanie |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -841,6 +928,10 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | sygnał `shared(QByteArray json)` | natywna `nativeShared(String)` (z `ShareActivity` przez `deliverShare`) |
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
 | sygnał `doneRequestsQueued()` | natywna `nativeDoneQueued()` (z `ReminderActions.done`) + powrót na pierwszy plan + raz po starcie |
+| `int updateWidgets(const QJsonObject &)` | `updateWidgets(Context, String): String` — migawka widżetów (`src/app/widgets/widgetsnapshot.h`) zapisana, widżety odświeżone: `{"widgets": n}` (ile postawionych) albo `{"error":…}` (poprzednia migawka zostaje) |
+| `QJsonArray takeWidgetActions(vault)` | `takeWidgetActions(Context, String): String` — kolejka szybkiego dodawania (`WidgetInbox.kt`): `[{id, kind, text, date, time, alarm, vault, added}, …]` notatnika `vault` (i wpisy bez notatnika), wydane znikają |
+| sygnał `widgetActionsQueued()` | natywna `nativeWidgetQueued()` (z `QuickAdd`) + powrót na pierwszy plan + raz po starcie |
+| sygnał `widgetNoteWritten(QString path)` | natywna `nativeWidgetWrote(String)` — szybkie dodawanie samo dopisało do notatki (ścieżka bezwzględna): notatnik wczytuje ją ponownie |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
 | sygnał `systemGesturesChanged(int left, int right)` | natywna `nativeGestureInsetsChanged(Int, Int)` (z `ImeInsets`, piksele fizyczne stref gestów systemu przy krawędziach widoku Qt; raport jeszcze raz też przez `requestImeState()`) |
@@ -914,7 +1005,12 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania — i ile z pasa gestów systemu
   wchodzi na widok Qt: `ImeInsetsTest`; „Udostępnij → Brulion” — które pliki są tekstem, nazwy
   kopii z `..`, `/`, polskimi znakami i emoji, wiek folderów `share-in`, pomijane miniatury
-  podglądu, JSON dla C++: `ShareIntentTest`):
+  podglądu, JSON dla C++: `ShareIntentTest`; widżety — migawka z C++ i przekładanie zadań na
+  nowy dzień, wiersze list, siatka miesiąca, daty: `WidgetSnapshotTest`; wiersz szybkiego
+  dodawania, dopisywanie do dziennika, zapis atomowy i ścieżki spoza notatnika (`..`, dowiązanie),
+  plik nie w UTF-8: `JournalAppendTest`; kolejka dla C++: `WidgetInboxTest`. Przypadki
+  `tests/data/widgets/*.json` sprawdza też C++ — `tst_widgets` —, więc obie strony piszą
+  i przekładają tak samo; skrypt init podaje ich folder we właściwości `brulion.testData`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
   `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
   projekcie Gradle).
@@ -1006,6 +1102,20 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   5. udostępnienie przy otwartej dokumentacji → Brulion wraca do Twojego notatnika i tam
      pokazuje okno; „Anuluj” → nic nie zapisane, `adb shell run-as io.github.januszbit.brulion
      ls files/share-in` pusty (debuggable APK).
+* Widżety (ten sam APK debugowalny; obraz `google_apis` z `adb root` — okno szybkiego
+  dodawania i odbiornik widżetów nie są eksportowane):
+  ```sh
+  scripts/android-emulator-test.sh --widgets
+  ```
+  Przykładowy notatnik publikuje migawkę, gdy aplikacja schodzi z ekranu; trzy widżety stawia
+  wybór widżetów launchera (przytrzymanie ekranu, „Widgets”, Brulion, stuknięcie w podgląd,
+  „Add”); szybkie dodawanie przy zabitej aplikacji („Kupić żółty ser”, **Jutro**) — wiersz od
+  razu w dzienniku, biblioteka Qt nie wczytana; zadanie na dziś od razu w widżecie; **Godzina…**
+  09:00 + **Jutro** + **Alarm** — `⏰!` i tymczasowe przypomnienie systemowe, które aplikacja
+  potem zastępuje swoim; bez migawki wpis czeka w kolejce, a aplikacja dopisuje go przy starcie;
+  stuknięcie w zadanie widżetu otwiera notatkę (zimny start); › i ‹ kalendarza; widżet zadań
+  powiększony uchwytami launchera pokazuje **Jutro**, kalendarz pomniejszony — samą agendę.
+  Zrzuty `wg-*.png` (jasne i ciemne). Sprawdzone 2026-10-27 (Android 16, Pixel 6).
 * Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
   i zmienne środowiska z intencji):
 
