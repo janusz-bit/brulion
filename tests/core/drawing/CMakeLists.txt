@@ -1,0 +1,1 @@
+brulion_add_test(tst_drawing SOURCES tst_drawing.cpp LIBS brulion_core_drawing)
