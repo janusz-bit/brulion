@@ -26,7 +26,8 @@ BDialog {
     subtitle: hasFiles ? qsTr("%n file(s) shared", "", files.length) : ""
     iconName: "share"
     acceptText: qsTr("Save")
-    acceptEnabled: saveError === "" && (hasFiles ? readable > 0 : textField.typedText.trim() !== "")
+    // Once saved, pendingShare is empty: the dialog still closes as accepted.
+    acceptEnabled: saved || saveError === "" && (hasFiles ? readable > 0 : textField.typedText.trim() !== "")
                    && (target !== "page" || !titleField.visible || titleField.typedText.trim() !== "")
     initialFocusItem: hasFiles ? null : textField
 
