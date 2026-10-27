@@ -2852,7 +2852,9 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     const QString journal = ws->readFile(today);
     const QString saveText = QCoreApplication::translate("ShellShareDialog", "Save");
     const auto save = [&] {
-        QQuickItem *button = findShown(window->contentItem(), [&](QQuickItem *item) {
+        // The dialog's own "Zapisz" (its footer): a view behind it may have a button of that name.
+        auto *footer = qvariant_cast<QQuickItem *>(dialog->property("footer"));
+        QQuickItem *button = !footer ? nullptr : findShown(footer, [&](QQuickItem *item) {
             return isA(item, "BButton") && item->property("text").toString() == saveText;
         });
         if (!button || !button->isEnabled())
@@ -2867,9 +2869,12 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     app->receiveShare({{u"subject"_s, u"Przepis na żurek jutro"_s}, {u"text"_s, u"https://kuchnia.pl/żurek"_s}});
     check(opened(), "a share opens the share dialog");
     check(save() && closed(), "“Zapisz” saves the shared text and closes the dialog");
-    check(ws->readFile(today).endsWith(u"- [Przepis na żurek jutro](https://kuchnia.pl/żurek)\n"_s)
-                  && !ws->readFile(today).contains(u"⏰"_s),
-          "the text is a block of today's journal, no reminder");
+    const bool block = waitFor(
+            [&] { return ws->readFile(today).endsWith(u"- [Przepis na żurek jutro](https://kuchnia.pl/żurek)\n"_s); });
+    if (!block)
+        std::fprintf(stderr, "selftest: today's journal (%s) ends with: %s\n", qPrintable(today),
+                     qPrintable(ws->readFile(today).right(200)));
+    check(block && !ws->readFile(today).contains(u"⏰"_s), "the text is a block of today's journal, no reminder");
     if (ws->readFile(today) != journal)
         ws->writeFile(today, journal);
 
