@@ -22,6 +22,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 
@@ -44,6 +45,28 @@ class AppSettings : public QObject {
     /// Reduce animations (Theme.reducedMotion).
     Q_PROPERTY(bool reducedMotion READ reducedMotion WRITE setReducedMotion NOTIFY reducedMotionChanged FINAL)
 
+    // ---- Appearance (Ustawienia → Wygląd; Theme inputs, ThemePalette) --------------------
+    /// "red" (default) | "blue" | "green" | "teal" | "violet" | "graphite" | "custom" (Theme.accentName).
+    Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentChanged FINAL)
+    /// The custom accent "#rrggbb" (lower case; "" = none: "custom" then looks like "red").
+    Q_PROPERTY(QString customAccent READ customAccent WRITE setCustomAccent NOTIFY accentChanged FINAL)
+    /// Light background "paper" (default) | "white".
+    Q_PROPERTY(QString lightSurface READ lightSurface WRITE setLightSurface NOTIFY surfacesChanged FINAL)
+    /// Dark background "slate" (default) | "black" (OLED).
+    Q_PROPERTY(QString darkSurface READ darkSurface WRITE setDarkSurface NOTIFY surfacesChanged FINAL)
+    /// Font family of the interface ("" = the system's).
+    Q_PROPERTY(QString uiFontFamily READ uiFontFamily WRITE setUiFontFamily NOTIFY fontFamiliesChanged FINAL)
+    /// "comfortable" (default) | "compact": smaller controls and rows (desktop only; touch UIs
+    /// keep their 44 px targets).
+    Q_PROPERTY(QString density READ density WRITE setDensity NOTIFY densityChanged FINAL)
+    /// Navigation entries and sections hidden in the sidebar (ids of SidebarItems).
+    Q_PROPERTY(QStringList sidebarHidden READ sidebarHidden WRITE setSidebarHidden NOTIFY sidebarHiddenChanged FINAL)
+    /// The phone's bottom navigation: exactly four views of BottomNavViews (the menu comes last).
+    Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
+    /// The floating quick-capture button of phones.
+    Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
+                       captureButtonShownChanged FINAL)
+
     // ---- Editor -------------------------------------------------------------------------
     /// "serif" | "sans" (Theme.editorFont).
     Q_PROPERTY(QString editorFont READ editorFont WRITE setEditorFont NOTIFY editorFontChanged FINAL)
@@ -51,6 +74,13 @@ class AppSettings : public QObject {
     Q_PROPERTY(int editorFontSize READ editorFontSize WRITE setEditorFontSize NOTIFY editorFontSizeChanged FINAL)
     /// Maximum width of the editor's text column in px (480 … 1600, default 760); 0 = full width.
     Q_PROPERTY(int editorWidth READ editorWidth WRITE setEditorWidth NOTIFY editorWidthChanged FINAL)
+    /// A font family for notes instead of serif / sans ("" = editorFont decides).
+    Q_PROPERTY(QString editorFontFamily READ editorFontFamily WRITE setEditorFontFamily NOTIFY fontFamiliesChanged FINAL)
+    /// Font family of code ("" = the system's fixed-width font).
+    Q_PROPERTY(QString editorMonoFamily READ editorMonoFamily WRITE setEditorMonoFamily NOTIFY fontFamiliesChanged FINAL)
+    /// Line spacing of notes: "compact" | "normal" (default) | "relaxed" (Theme.lineSpacing).
+    Q_PROPERTY(QString editorLineSpacing READ editorLineSpacing WRITE setEditorLineSpacing NOTIFY
+                       editorLineSpacingChanged FINAL)
     /// Show the whole file as Markdown source by default (Ctrl+E switches per page).
     Q_PROPERTY(bool editorSourceMode READ editorSourceMode WRITE setEditorSourceMode NOTIFY editorSourceModeChanged FINAL)
     /// Show pictures from the internet in notes without asking (`![x](https://…)`; off: each
@@ -113,8 +143,50 @@ public:
     bool reducedMotion() const;
     void setReducedMotion(bool on);
 
+    /// Ids for sidebarHidden: the navigation entries, then the sections.
+    static QStringList sidebarItems();
+    /// Views the bottom navigation can offer, and its default four.
+    static QStringList bottomNavViews();
+    static QStringList defaultBottomNavTabs();
+    /// A font family name as stored: trimmed; "" for one longer than 128 characters or with
+    /// control characters (settings files come from anywhere).
+    static QString cleanFontFamily(const QString &family);
+
+    QString accentColor() const;
+    void setAccentColor(const QString &name);
+    QString customAccent() const;
+    void setCustomAccent(const QString &color);
+    QString lightSurface() const;
+    void setLightSurface(const QString &name);
+    QString darkSurface() const;
+    void setDarkSurface(const QString &name);
+    QString uiFontFamily() const;
+    void setUiFontFamily(const QString &family);
+    QString density() const;
+    void setDensity(const QString &density);
+    QStringList sidebarHidden() const;
+    void setSidebarHidden(const QStringList &ids);
+    /// Show or hide one sidebar entry or section.
+    Q_INVOKABLE void setSidebarItemShown(const QString &id, bool shown);
+    QStringList bottomNavTabs() const;
+    void setBottomNavTabs(const QStringList &views);
+    /// Put `view` into slot `index` (0 … 3) of the bottom navigation; a view already in another
+    /// slot swaps places with the one it replaces.
+    Q_INVOKABLE void setBottomNavTab(int index, const QString &view);
+    bool captureButtonShown() const;
+    void setCaptureButtonShown(bool on);
+    /// Back to the default look: accent, backgrounds, fonts, density, line spacing, sizes (the
+    /// visibility of elements stays).
+    Q_INVOKABLE void resetAppearance();
+
     QString editorFont() const;
     void setEditorFont(const QString &font);
+    QString editorFontFamily() const;
+    void setEditorFontFamily(const QString &family);
+    QString editorMonoFamily() const;
+    void setEditorMonoFamily(const QString &family);
+    QString editorLineSpacing() const;
+    void setEditorLineSpacing(const QString &spacing);
     int editorFontSize() const;
     void setEditorFontSize(int px);
     int editorWidth() const;
@@ -213,6 +285,14 @@ Q_SIGNALS:
     void languageChanged();
     void fontScaleChanged();
     void reducedMotionChanged();
+    void accentChanged();
+    void surfacesChanged();
+    void fontFamiliesChanged();
+    void densityChanged();
+    void sidebarHiddenChanged();
+    void bottomNavTabsChanged();
+    void captureButtonShownChanged();
+    void editorLineSpacingChanged();
     void editorFontChanged();
     void editorFontSizeChanged();
     void editorWidthChanged();
