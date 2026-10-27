@@ -163,6 +163,37 @@ picture view, the file dialog and the HTML export share) is embedded as a pictur
 attachment as a file. Whether the app can draw it depends on the device's image decoders (WebP
 and AVIF are often missing): the picture view then names the format instead of a load error.
 
+**Drawings / Rysunki:** a drawing is an ordinary SVG attachment, embedded like any picture
+(`![[Rysunek 2026-10-27 14.32.svg]]`; "/Rysunek" creates `Rysunek <yyyy-MM-dd HH.mm>.svg` in
+`attachmentsFolder`, a free name `… 2.svg` when taken), that carries its editable data inside: an
+**Excalidraw scene embedded the way excalidraw.com's "Export → SVG → Embed scene" writes it** (core
+module `drawing`, `drawing/excalidraw.h`):
+
+```
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" width="W" height="H">
+<!-- svg-source:excalidraw -->
+<metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 --><!-- payload-start -->BASE64<!-- payload-end --></metadata>
+<rect …paper…/> <path …lines or grid…/> <path d="…" fill="#1f2430"/> …
+</svg>
+```
+
+BASE64 (one line) is base64 of the Latin-1 bytes of `{"version":"1","encoding":"bstring",
+"compressed":true,"encoded":"…"}`, whose `encoded` holds the zlib-compressed scene JSON, one
+character per byte; the scene is `{"type":"excalidraw","version":2,"source","elements","appState",
+"files"}`, every stroke a `freedraw` element (`x`, `y`, `points` relative to them, `pressures`,
+`simulatePressure`, `strokeColor`, `strokeWidth`, `opacity`; a highlighter stroke has
+`customData.brulionTool: "highlighter"`), the paper `appState.viewBackgroundColor` and the pattern
+`appState.brulionBackground` (`lines`, `grid`; none: plain — Excalidraw ignores it). The picture
+covers the strokes plus a 16 px margin at one scene unit a pixel (an empty drawing: 320 × 180), on
+the paper, drawn as filled outlines (perfect-freehand's, as Excalidraw draws freehand lines): every
+program shows the file as a picture (Obsidian, Logseq, browsers, file managers), excalidraw.com
+opens it as a drawing again, Brulion's editor (docs/UI.md "Drawing editor") edits it. Brulion reads
+payload versions 1 and 2, compressed or not, and `.excalidraw` JSON. An SVG is a drawing when its
+first 4 KB name the payload type (`looksLikeExcalidrawSvg`); one without the scene is a picture only.
+Brulion edits only freehand strokes: a scene with other elements (shapes, arrows, text, pictures,
+rotated or filled freehand lines) is shown, never written. Elements and fields Brulion does not
+model are written back as they were; deleted elements are dropped (as Excalidraw's own export does).
+
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL
 with a host — `![alt](https://example.com/kot.jpg)`, `![](<https://example.com/mój kot.png>)`,
 also the embed `![[https://example.com/kot.jpg]]` (`webpicture::isWebUrl`) — is a picture whatever

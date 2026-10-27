@@ -359,6 +359,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control") | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
+| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing attachment ("Drawing editor" below); title: the file's name without `.svg` | `path` |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -439,7 +440,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
   anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
   Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Obraz…, Osadź, Odwołanie do bloku, Priorytet wysoki / niski, Linia
+  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Osadź,
+  Odwołanie do bloku, Priorytet wysoki / niski, Linia
   pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
   zadanie", "blok ```calc"). A status command sets the status of the block being edited
   (`PageController.applySlashCommand` → `setTaskStatus`) in the same undo step that removes the
@@ -455,7 +457,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
   Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
   nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
-  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Zwiększ / Zmniejsz wcięcie
+  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Wstaw rysunek, Zwiększ / Zmniejsz wcięcie
   (outline, list items in a document), Przenieś w górę / w dół, Usuń blok. It opens for every
   block in both note modes: a right-click anywhere on a block — text, heading, a code, calc, table,
   query or callout frame, an embed — with a mouse, touchpad or stylus, never a finger (one
@@ -601,6 +603,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the cursor and a long press selects the word under the finger (a TapHandler on an item above
   the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
   system's selection handles take a selection on where the platform has them).
+* Drawings (an SVG with an embedded scene, docs/SYNTAX.md §2 "Drawings"; the embeds' `drawing` and
+  `path`, `EditorHost::isDrawing`): shown at their own size (one scene unit a pixel, never enlarged
+  as other SVGs are) with a pen in the corner; a click opens the drawing editor
+  (`PageController.openDrawing`: the page is saved, route `drawing`), so does "Edytuj rysunek" in
+  the picture view's bar. "/Rysunek", the touch toolbar's Rysunek and the block menu's "Wstaw
+  rysunek" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
+  `Rysunek <yyyy-MM-dd HH.mm>.svg`, embedded at the caret, one undo step) open the editor on a new
+  one. A drawing saved again is shown again at once: its URL carries its version
+  (`Workspace::assetUrl` adds `?v=<mtime>-<size>`; Qt's pixmap cache keys by the URL, the file
+  itself is found without the query) and the embeds of the page follow the file's change
+  (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
@@ -690,7 +703,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
-  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów,
+  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Rysunek, Cofnij, Ponów,
   Zaznacz (the edited block becomes the selection: the touch selection mode), Więcej (the block
   menu of the edited block, above the toolbar: copying links to it, …), Ukryj
   klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Więcej (the table's block menu: the
@@ -862,6 +875,77 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   on a desktop, `_touch` on a phone); the playground's `selectiontest`
   with real keys, mouse and touch (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` —
   "Pojedynczo"); the journal stream's self-test; `scripts/android-emulator-test.sh --selection`.
+
+## Drawing editor (`qml/drawing`, `src/app/drawing`)
+
+Route `drawing` (`{path}`): `DrawingView` on a drawing attachment (docs/SYNTAX.md §2 "Drawings":
+an SVG with an embedded Excalidraw scene, core module `drawing`). For handwritten notes on a
+tablet (lectures, sketches), on every platform.
+
+* **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): white in every theme (the file's paper,
+  `appState.viewBackgroundColor`), plain, lined (32 px) or squared (24 px), endless in every
+  direction; the picture written covers the strokes plus a margin. Opened: the strokes from their
+  top left at 100 %, zoomed out to the view's width when they are wider (a phone); a zoom other
+  than 100 % is shown in the corner.
+* **Input:**
+  * a **stylus** draws with its pressure (the line widens as it presses harder; a stylus that
+    reports one pressure only draws like a mouse); its **eraser end**, or the barrel button held,
+    erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
+    get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
+    Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
+    it is the topmost item taking input under the pen: a menu, a popup or a toast over it gets the
+    pen as before. Mouse events the system makes of the pen itself (Windows) are recognised by
+    their time and place and left alone;
+  * a **mouse** draws with the left button; the middle or right button — or the left one with
+    Space held — moves the paper; the wheel scrolls it (Shift: sideways), Ctrl+wheel and a
+    touchpad's pinch zoom at the pointer (10 %–1000 %);
+  * **fingers:** with "Rysuj palcem" one finger draws (the eraser tool: erases), else it moves the
+    paper; two fingers move and zoom — a second finger that lands while a stroke has just begun
+    makes it the gesture (the stroke is dropped). "Rysuj palcem" is on by default until a stylus
+    has touched the paper on this device (AppSettings `drawing/stylusSeen`): from then on a palm
+    or a finger never draws; the toggle (the tool bar on wide touch screens, Więcej on phones)
+    makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`).
+* **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — the
+  bottom navigation makes way, `toolbarDocked` —, scrolling sideways when it does not fit): Cofnij,
+  Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
+  as Excalidraw draws it alike), **Gumka** (E: removes every stroke it touches, one undo step per
+  gesture, a ring follows the pointer), the current tool's colours (pen: atrament, niebieski,
+  czerwony, zielony, pomarańczowy, fioletowy; highlighter: żółty, zielony, różowy, niebieski,
+  pomarańczowy) and widths (cienka / średnia / gruba; wąska / średnia / szeroka) — on phones
+  behind one swatch, a popup above the bar —, Papier (gładki, w linie, w kratkę: an undo step),
+  Rysuj palcem (touch screens), Pokaż cały rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
+  (saved, back). Colours and widths are remembered on the device (`drawing/…`). Undo: Ctrl+Z,
+  Ctrl+Shift+Z / Ctrl+Y; the history is the session's (a reload clears it).
+* **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
+  (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
+  atomic, the replaced version kept in History as for notes). A failed write is said by the
+  shell's error toast.
+* **Changes from elsewhere** (Syncthing, Nextcloud, another program) while the drawing is open:
+  with nothing changed here the other version is shown; else they are merged stroke by stroke
+  (`DrawingCanvas.takeExternal`: the other version, plus the strokes drawn here since the last
+  load or save, minus the ones erased here) and saved, with a toast. The canvas's own saves coming
+  back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
+  event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
+  … nie ma w notatniku").
+* **Files Brulion does not edit** are shown as the picture they are, with why and "Otwórz jako
+  obraz" (the picture view): an Excalidraw drawing with shapes, arrows, text or pictures (Brulion
+  would lose them: "edytuje tylko pismo odręczne"), an SVG without a scene, a scene that cannot be
+  read. Nothing is written for them.
+* **Rendering:** the committed strokes are rendered on the GUI thread into a cached image of the
+  view (600 strokes of 60 points: ~7 ms on the laptop); while the paper moves the cached image is
+  drawn moved and scaled and rendered again once the gesture rests; the stroke being drawn is
+  drawn on top, only its area repainted. `paint()` (maybe on the render thread) draws a snapshot
+  taken in `updatePaintNode()`, while the GUI thread waits.
+* View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
+  `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
+
+Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG),
+`tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
+events of the pen, fingers, a pinch, mouse buttons and the wheel, undo, the SVG checked with Qt's
+SVG renderer, loading, merging, painting), `tst_drawing_qml` (the route and its notices, embeds and
+the picture view in the real app; nothing written by looking), `tst_editor_controller`
+(`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
+(`drawingsAreSavedAndShownAgain`).
 
 ## Scrolling performance
 
@@ -1553,6 +1637,10 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   `newpage-folder`, `newpage-root`, `newfolder`, `allpages`, `allpages-folder`); with a simulated
   keyboard (`--keyboard 300`) the guide being edited (`page-editing-keyboard`), today in the
   journal stream (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
+* `tests/app/drawing/screenshots.sh` — the drawing editor (`editor`: a page of handwritten notes on
+  lined paper, written by `tst_drawingcanvas handwritingSample`), the page embedding it (`page`), its
+  picture view with "Edytuj rysunek" (`picture`), an Excalidraw drawing with text (`readonly`) and
+  a new drawing (`new`).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks; the io script also seeds a sync history and an earlier

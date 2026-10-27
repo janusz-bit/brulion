@@ -15,9 +15,16 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * przeglądarka: obraz z serwera z CORS i bez (komunikat nazywa CORS), `http://` na stronie
     `https://` (komunikat o mieszanej treści), brak zapytania wstępnego (preflight) w Firefoksie,
     eksport z kopiami.
-* **Rysunki w notatkach** — sprawdzić, czy da się dodać rysowanie (coś jak Excalidraw
-  w Obsidianie, ale wygodniejsze na tablecie). Przypadek użycia: Natalia na studia,
-  z synchronizacją przez Syncthing.
+* **Rysunki — dalsze kroki.** Edytor rysunków (`/Rysunek`, docs/UI.md „Drawing editor”) ma
+  pismo odręczne, zakreślacz, gumkę i papier. Do zrobienia:
+  * kopie konfliktowe Syncthinga (`*.sync-conflict-….svg`): „Scal rysunki” w centrum
+    synchronizacji, łączące linie obu wersji po ich identyfikatorach (jak przy zmianie z innego
+    urządzenia przy otwartym rysunku);
+  * kształty, strzałki, tekst i zaznaczanie lassem (dziś rysunek z Excalidraw z takimi
+    elementami Brulion tylko pokazuje);
+  * pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana (LZ-String w Markdownie);
+  * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
+    dociera do Brulionu.
 * **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu
   oznacza zadanie z przypomnieniem jako zrobione (`[x]` z datą ✅, jak zmiana statusu w edytorze),
   bez otwierania notatki; na Linuksie, Androidzie i Windows.

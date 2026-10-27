@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="522"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="523"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -163,7 +163,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1495"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1506"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -190,7 +190,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockMenu.qml" line="230"/>
+        <location filename="../src/app/qml/editor/BlockMenu.qml" line="236"/>
         <source>Delete %n block(s)</source>
         <translation>
             <numerusform>Delete %n block</numerusform>
@@ -623,7 +623,7 @@
 <context>
     <name>LogsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="215"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="214"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -631,7 +631,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="385"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="384"/>
         <source>New entries (%n)</source>
         <translation>
             <numerusform>New entry (%n)</numerusform>
@@ -1093,7 +1093,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="195"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="194"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1101,7 +1101,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="197"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="196"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1109,7 +1109,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="199"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="198"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1117,7 +1117,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="285"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="284"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>

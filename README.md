@@ -123,6 +123,13 @@
 * **Wzory matematyczne.** LaTeX w notatkach (`$E=mc^2$`, `$$\frac{a}{b}$$`, blok
   ` ```math `) jest od razu rysowany jako wzór — greckie litery, ułamki, pierwiastki,
   macierze, układy równań. Plik zachowuje źródło LaTeX, a eksport HTML pokazuje gotowy wzór.
+* **Rysunki.** Polecenie `/Rysunek` (albo *Rysunek* na pasku nad klawiaturą) wstawia do notatki
+  rysunek odręczny i otwiera go do rysowania: rysik z naciskiem (drugi koniec rysika ściera),
+  zakreślacz, gumka, kolory i grubości, papier gładki, w linie albo w kratkę, cofanie. Palec
+  przesuwa i powiększa kartkę, gdy rysujesz rysikiem (albo rysuje — „Rysuj palcem”), myszką
+  rysujesz na komputerze. Rysunek to zwykły plik SVG w załącznikach notatnika (`![[Rysunek ….svg]]`)
+  z wbudowaną sceną Excalidraw: Obsidian i przeglądarki pokazują go jako obraz, excalidraw.com
+  otwiera do edycji, a Syncthing synchronizuje jak każdy plik.
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
@@ -371,7 +378,9 @@ Wydajność (liczby na komputerze, telefonie i w przeglądarce, benchmarki, stra
 ## Licencja
 
 [AGPL-3.0-or-later](LICENSE). Ikony: [Lucide](https://lucide.dev) (ISC). Kompresja ZIP:
-[miniz](https://github.com/richgel999/miniz) (MIT). Emoji i symbole tam, gdzie system nie ma
+[miniz](https://github.com/richgel999/miniz) (MIT). Kształt linii w rysunkach: algorytm
+[perfect-freehand](https://github.com/steveruiz/perfect-freehand) (MIT, © Stephen Ruiz Ltd), przeniesiony
+do C++ w `src/core/drawing/stroke.cpp`. Emoji i symbole tam, gdzie system nie ma
 czcionki z nimi (przeglądarka, część Linuksów): fragmenty [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji)
 i Noto Sans Math (SIL OFL 1.1, [assets/fonts](assets/fonts/README.md)).
 
@@ -445,6 +454,12 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   or any colour, kept readable), paper or white and blue-grey or OLED-black backgrounds, any
   installed font for the interface, notes and code, line spacing, a compact density on the
   desktop, and which sidebar entries and phone navigation buttons are shown.
+* Handwritten drawings in notes (`/Rysunek`): a stylus with pressure (its eraser end erases), a
+  highlighter, an eraser, colours and widths, plain, lined or squared paper, undo; fingers move
+  and zoom the paper while you draw with a stylus (or draw — "Draw with finger"), a mouse draws on
+  the desktop. A drawing is a plain SVG attachment (`![[Rysunek ….svg]]`) with an embedded
+  Excalidraw scene: Obsidian and browsers show it as a picture, excalidraw.com opens it for
+  editing, Syncthing syncs it like any file.
 * Polish UI by default, English available. Natural-language dates in Polish and English.
 * Something not working? Settings → Application → **Event log** shows what the app and the sync
   did (live sync progress and the history of runs are in the sync center); share or save it
@@ -458,7 +473,8 @@ installer or ZIP — a test version —, or <https://janusz-bit.github.io/brulio
 `scripts/dev-build.sh -t .`; the Android APK: `nix build .#brulion-android` (x86_64-linux hosts,
 unsigned; sign with `nix run .#brulion-android-sign -- result/*.apk`). Developer docs (in
 English): [architecture](docs/ARCHITECTURE.md), [Markdown dialect](docs/SYNTAX.md),
-[UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), emoji and
+[UI](docs/UI.md). License: AGPL-3.0-or-later; icons Lucide (ISC), ZIP miniz (MIT), the stroke
+outline of drawings ported from perfect-freehand (MIT, © Stephen Ruiz Ltd), emoji and
 symbol fallback fonts: subsets of Noto Emoji and Noto Sans Math (SIL OFL 1.1, `assets/fonts`).
 
 Performance (numbers per platform, budgets, how to benchmark, regression guards): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
