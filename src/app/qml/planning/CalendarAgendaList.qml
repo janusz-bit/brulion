@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Templates as T
 import Brulion
 
 // CalendarAgendaList — the agenda: the days of a CalendarModel in "agenda" mode (four weeks from
@@ -56,7 +55,7 @@ FocusScope {
         reuseItems: true
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
-        T.ScrollBar.vertical: BScrollBar {}
+        BRowScrollBar { list: list }
         Accessible.role: Accessible.List
         Accessible.name: root.calendar.title
 

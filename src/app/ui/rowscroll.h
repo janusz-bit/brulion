@@ -34,6 +34,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QTimer>
 
 #include <optional>
@@ -134,7 +135,8 @@ public:
     /// Moves the view so that the bar's `position` (0 … 1 - size) is shown: right away, or a
     /// frame after the previous move (the latest position wins).
     Q_INVOKABLE void scrollTo(qreal position);
-    /// Recomputes now (otherwise once after the view's changes, coalesced).
+    /// Recomputes now (otherwise after the view's changes, coalesced: in the window's next frame,
+    /// after its polish — or a 0 ms timer when no frame comes).
     Q_INVOKABLE void refresh();
     /// The view's current edges (diagnostics, tests).
     RowEdges edges() const;
@@ -149,6 +151,7 @@ Q_SIGNALS:
 private Q_SLOTS:
     void schedule();
     void rebindModel();
+    void attachWindow(QQuickWindow *window);
 
 private:
     void connectView();
@@ -172,6 +175,7 @@ private:
     // rows are the units, and a fold of many blocks is not a jump of many rows.
     QPointer<QObject> m_model;
     QMetaObject::Connection m_modelConnection;
+    QMetaObject::Connection m_windowConnection;
     bool m_hidden = false;
     QTimer m_refreshTimer;
     QTimer m_scrollTimer;

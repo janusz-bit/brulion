@@ -2,6 +2,7 @@
 
 #include <QMetaMethod>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QVariant>
 
 #include <algorithm>
@@ -153,6 +154,7 @@ void RowScroll::setView(QQuickItem *view)
         disconnect(c);
     m_connections.clear();
     disconnect(m_modelConnection);
+    disconnect(m_windowConnection);
     m_model = nullptr;
     m_hidden = false;
     m_view = view;
@@ -179,6 +181,8 @@ void RowScroll::connectView()
           "movingChanged()", "topMarginChanged()", "bottomMarginChanged()", "headerItemChanged()",
           "footerItemChanged()"})
         follow(m_view, signal);
+    m_connections.append(connect(m_view, &QQuickItem::windowChanged, this, &RowScroll::attachWindow));
+    attachWindow(m_view->window());
     // A model with hidden rows (the editor's folded blocks): its shown rows are the units.
     const int modelChanged = m_view->metaObject()->indexOfSignal("modelChanged()");
     if (modelChanged >= 0) {
@@ -186,6 +190,18 @@ void RowScroll::connectView()
         m_connections.append(connect(m_view, m_view->metaObject()->method(modelChanged), this, rebind));
     }
     bindModel();
+}
+
+void RowScroll::attachWindow(QQuickWindow *window)
+{
+    disconnect(m_windowConnection);
+    // Once a frame, after its polish (where ListView lays out the rows): the bar is where the
+    // content is in the same frame. The 0 ms timer covers changes without a frame.
+    if (window)
+        m_windowConnection = connect(window, &QQuickWindow::afterAnimating, this, [this] {
+            if (m_refreshTimer.isActive())
+                refresh();
+        });
 }
 
 void RowScroll::rebindModel()
