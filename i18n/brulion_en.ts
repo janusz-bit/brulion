@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="523"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="536"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -888,6 +888,17 @@
     </message>
 </context>
 <context>
+    <name>ShellShareDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="26"/>
+        <source>%n file(s) shared</source>
+        <translation>
+            <numerusform>%n file shared</numerusform>
+            <numerusform>%n files shared</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
         <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="241"/>
@@ -1270,6 +1281,25 @@
         <translation>
             <numerusform>Snooze %n min</numerusform>
             <numerusform>Snooze %n min</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::AppController</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appshare.cpp" line="284"/>
+        <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
+        <translation>
+            <numerusform>Saved %n page; not saved, a page with this name exists: %1</numerusform>
+            <numerusform>Saved %n pages; not saved, a page with this name exists: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appshare.cpp" line="288"/>
+        <source>Saved %n page(s)</source>
+        <translation>
+            <numerusform>Saved %n page</numerusform>
+            <numerusform>Saved %n pages</numerusform>
         </translation>
     </message>
 </context>
