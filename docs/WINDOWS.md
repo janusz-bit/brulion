@@ -119,6 +119,52 @@ dzwonią od początku sesji. To wartość `Brulion` klucza
   jak go ustawiono w Brulionie albo w Menedżerze zadań.
 * Odinstalowanie usuwa wpis, gdy wskazuje tę instalację.
 
+## Kalendarz z zasobnika
+
+Kliknięcie ikony Brulionu w zasobniku systemowym (obok zegara) otwiera **kalendarz**, podobny do
+tego, który Windows 7 i 10 pokazują po kliknięciu zegara (`ShellTrayCalendar.qml`):
+
+* małe okno tuż nad ikoną (przy pasku zadań u góry albo z boku — przy tej krawędzi), zawsze na
+  wierzchu, bez przycisku na pasku zadań: dzisiejsza data, miesiąc z kropkami w dniach z wpisami
+  w dzienniku, terminami 📅, zaplanowanymi ⏳ i przypomnieniami ⏰ oraz lista zadań i przypomnień
+  wybranego dnia;
+* kliknięcie zadania albo „Otwórz dziennik” chowa kalendarz i pokazuje ten dzień w oknie Brulionu;
+  na dole **„Otwórz Brulion”** i **„Szybka notatka…”**;
+* kalendarz znika po kliknięciu gdziekolwiek indziej, po Escape, po ponownym kliknięciu ikony
+  i po Alt+F4 — Brulion działa dalej w zasobniku;
+* bez otwartego notatnika pokazuje sam miesiąc i prośbę o otwarcie notatnika.
+
+**Ustawienia → Aplikacja → „Kliknięcie ikony w zasobniku”**: **Kalendarz** (domyślnie na Windows)
+albo **Okno** (pokazuje lub chowa okno Brulionu, jak przed wersją z kalendarzem). Podwójne kliknięcie
+zawsze pokazuje okno, a kalendarz jest też w menu ikony (prawy przycisk → **Kalendarz**).
+
+**Kalendarza zegara Windows Brulion nie zastępuje — i nie da się tego zrobić porządnie.** Okienko
+zegara należy do powłoki systemu (Eksplorator, w Windows 10 `ShellExperienceHost`, w Windows 11
+centrum powiadomień): nie ma publicznego API, które pozwalałoby je podmienić, rozszerzyć albo
+dopisać do niego wpisy. Windows 10 pokazuje w nim tylko wydarzenia kont aplikacji Kalendarz
+(Outlook, Google…) — program bez pakietu MSIX nie może się tam dopisać — a Windows 11 tej listy
+już nie ma. Przełącznik w rejestrze, który przywracał kalendarz z Windows 7
+(`UseWin32TrayClockExperience`), przestał działać we wczesnych wersjach Windows 10. Programy, które
+zmieniają zegar (ExplorerPatcher, mody Windhawk, ElevenClock, T-Clock), wstrzykują kod do
+Eksploratora albo przykrywają go własnym oknem: psują się po aktualizacjach Windows, antywirusy je
+zgłaszają, a niepodpisany program tym bardziej nie powinien tego robić.
+
+Można za to używać kalendarza Brulionu zamiast systemowego:
+
+1. Ukryj zegar systemowy — Windows 10: Ustawienia → Personalizacja → Pasek zadań → „Włącz lub
+   wyłącz ikony systemowe” → Zegar; Windows 11: Ustawienia → Czas i język → Data i godzina →
+   „Pokaż godzinę i datę w zasobniku systemowym” (nowsze wydania).
+2. Przypnij ikonę Brulionu na stałe w zasobniku — Ustawienia paska zadań → „Inne ikony zasobnika
+   systemowego” (Windows 11) albo „Wybierz ikony wyświetlane na pasku zadań” (Windows 10) → Brulion
+   włączony.
+3. Włącz „Uruchamiaj po zalogowaniu” (wyżej), żeby ikona była od początku sesji.
+
+Na Linuksie kalendarz działa tak samo (menu ikony → **Kalendarz**; kliknięcie ikony domyślnie
+pokazuje okno, ustawienie jak wyżej). Pod X11 okienko pojawia się przy kursorze; pod Waylandem
+okna nie da się ustawić samemu — kompozytor kładzie je, gdzie chce (zwykle na środku), i może nie
+oddać mu aktywności: wtedy nie znika po kliknięciu obok, tylko po Escape albo ponownym kliknięciu
+ikony.
+
 ## Ograniczenia wersji testowej
 
 * **Niepodpisane pliki** (SmartScreen, wyżej) i **brak automatycznych aktualizacji** — nową wersję
@@ -150,6 +196,9 @@ dzwonią od początku sesji. To wartość `Brulion` klucza
   zanim zmienisz ją w Brulionie; synchronizacja ponawia taki plik przy następnym przebiegu.
 * Dowiązania symboliczne i punkty połączenia (junction) w notatniku nie są testowane na Windows.
 * Tylko x86_64 (bez Windows na ARM) i tylko Windows 10/11.
+* Kalendarz z zasobnika nie zastępuje kalendarza zegara Windows (wyżej, „Kalendarz z zasobnika”).
+  Jego położenie przy ikonie (pasek zadań z każdej strony, kilka monitorów) i znikanie po kliknięciu
+  obok czekają na sprawdzenie na prawdziwym Windows.
 
 ## Budowanie
 

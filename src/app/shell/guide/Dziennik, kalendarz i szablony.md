@@ -23,6 +23,11 @@ Widok **Kalendarz** ma układ miesiąca, tygodnia i agendy. Pokazuje:
 
 Kliknięcie dnia otwiera jego plan, z którego możesz dodać zadanie lub przypomnienie bez wychodzenia z kalendarza. Prawy przycisk myszy na wpisie (na telefonie przytrzymanie) otwiera menu jego daty albo przypomnienia — zmiana trafia do notatki, a powiadomienie ma przycisk **Cofnij**. W panelu bocznym strony dziennika jest też mały kalendarz miesiąca.
 
+### Kalendarz z ikony w zasobniku
+Na komputerze (Windows i Linux) mały kalendarz otworzysz bez wyciągania okna Brulionu: z ikony Brulionu w zasobniku systemowym, obok zegara. Na Windows wystarczy kliknąć ikonę, na Linuksie wybierz **Kalendarz** z jej menu (prawy przycisk myszy). Okienko pokazuje dzisiejszą datę, miesiąc z kropkami w dniach z wpisami i listę zadań i przypomnień wybranego dnia. Kliknięcie zadania albo **Otwórz dziennik** pokazuje ten dzień w oknie Brulionu, a na dole są **Otwórz Brulion** i **Szybka notatka…**. Kalendarz znika po kliknięciu obok, po Escape albo po ponownym kliknięciu ikony.
+
+Co robi kliknięcie ikony, wybierzesz w *Ustawienia → Aplikacja → Kliknięcie ikony w zasobniku*: **Kalendarz** (domyślnie na Windows) albo **Okno** (domyślnie na Linuksie). Podwójne kliknięcie zawsze pokazuje okno. Kalendarza zegara Windows Brulion nie zastępuje — Windows na to nie pozwala — ale możesz ukryć zegar systemowy i przypiąć ikonę Brulionu na pasku zadań. Jak to zrobić, opisuje `docs/WINDOWS.md` w repozytorium (rozdział „Kalendarz z zasobnika”).
+
 Zobacz [[Zadania|Zadania]] i [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
 
 ## Szablony

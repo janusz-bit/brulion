@@ -45,8 +45,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 * **Podpisane pliki** — instalator i programy podpisane certyfikatem, bez ostrzeżenia SmartScreen;
   potem zdjąć „(wersja testowa)” (docs/WINDOWS.md).
-* **Podgląd kalendarza z paska zadań**, podobny do domyślnego z Windows 7/10. Opcjonalnie mógłby
-  zastąpić domyślny kalendarz Windows.
 * **Opinie o wersji desktopowej** — zebrać je od testera (obejrzy ją później).
 
 ## Wydajność
