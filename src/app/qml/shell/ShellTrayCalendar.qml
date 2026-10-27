@@ -101,6 +101,9 @@ ApplicationWindow {
             ContentMiniCalendar {
                 id: calendar
                 objectName: "trayCalendarMonth"
+                // No Workspace queries on every save while the window is hidden (an item's own
+                // visibility does not follow its window's).
+                visible: popup.visible
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 placeholder: AppController.status === "ready" ? ""
