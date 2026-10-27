@@ -8,6 +8,11 @@ brulion_add_test(tst_notify SOURCES tst_notify.cpp LIBS brulion_notify)
 # a real INI file), the modes each platform offers, the remembered ringtone, the system picker's
 # answers, previews, the system settings.
 brulion_add_test(tst_notify_sounds SOURCES tst_notify_sounds.cpp LIBS brulion_notify)
+# Windows only: WindowsToastBus against the real toast service (shown, replaced, closed, cleared;
+# skipped where notifications are off) under a test AppUserModelID registered for the run.
+if(WIN32)
+    brulion_add_test(tst_windowstoastbus SOURCES tst_windowstoastbus.cpp LIBS brulion_notify brulion_platform)
+endif()
 
 # Settings → Reminders in the real app (`--selftest-sounds`, src/app/notify/notifyselftest.h):
 # "Silent" stored and shown, "Ringtone" without one opens the sound menu, a theme sound chosen,
