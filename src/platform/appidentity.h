@@ -4,7 +4,8 @@
 // HKCU\Software\Classes\AppUserModelId\<id> with the name and icon a toast shows. That is how an
 // app without a package shows toasts (WindowsToastBus, src/app/notify/windowstoastbus.h), the
 // portable ZIP too. A separate profile (BRULION_PROFILE, src/ipc/profile.h) has an id of its own,
-// so tests never touch the real one. The pure parts run on every platform (tests/platform).
+// and so has a process that never set Brulion's names (tests): they never touch the real one.
+// The pure parts run on every platform (tests/platform).
 #pragma once
 
 #include <QString>
@@ -13,7 +14,10 @@ class QSettings;
 
 namespace brulion::platform {
 
-/// "JanuszBit.Brulion", or "JanuszBit.Brulion.<profile>" for the organisation "Brulion-<profile>".
+/// "JanuszBit.Brulion" for the organisation "Brulion", "JanuszBit.Brulion.<profile>" for
+/// "Brulion-<profile>", and "JanuszBit.Brulion.unnamed" for any other (a process that never set
+/// Brulion's names, e.g. a test: nobody registers that id, so its toasts go to the tray, and
+/// clearing them never touches the real Brulion's).
 QString appUserModelId(const QString &organizationName);
 /// The id of this process (QCoreApplication::organizationName()).
 QString appUserModelId();

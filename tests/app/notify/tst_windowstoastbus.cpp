@@ -1,7 +1,8 @@
 // WindowsToastBus on a real Windows (windows.yml): the bus's facts, a toast shown, replaced, in
 // the Action Center's history, closed and cleared — under a test AppUserModelID registered for the
 // run and removed afterwards. A machine with notifications turned off (a CI runner may be one)
-// skips what needs them; no WinRT error may escape the bus.
+// skips what needs them; no WinRT error may escape the bus. Before the test id's first toast,
+// Windows may not know its setting yet (ERROR_NOT_FOUND): that counts as allowed.
 #include "appidentity.h"
 #include "desktopnotifier.h"
 #include "toastxml.h"
@@ -54,7 +55,15 @@ private Q_SLOTS:
         QCOMPARE(bus.name(), u"toast"_s);
         QCOMPARE(bus.appUserModelId(), TestId);
         QVERIFY(!bus.supportsSoundFiles());
-        QVERIFY(bus.ringsItself());
+        // Alarms with a looping sound ring by themselves; a short sound is sent again.
+        const auto alarm = [](const QString &sound) {
+            brulion::ScheduledNotification n = reminder();
+            n.alarm = true;
+            return buildDesktopNotification(n, {u"actions"_s}, 10, 0,
+                                            SoundChoice{SoundChoice::Mode::Custom, sound, {}});
+        };
+        QVERIFY(bus.ringsItself(alarm(u"Looping.Alarm"_s)));
+        QVERIFY(!bus.ringsItself(alarm(u"Mail"_s)));
         QCOMPARE(bus.themeSounds(), windowsToastSounds());
         QVERIFY(bus.capabilities().contains(u"actions"_s));
         QVERIFY(!bus.capabilities().contains(u"body-markup"_s));
@@ -105,12 +114,19 @@ private Q_SLOTS:
 
     void unregisteredIdFailsQuietly()
     {
-        // An id nobody registered (and an empty one): no exception, at worst no toast.
+        // An id nobody registered (and an empty one): no exception, refused (the tray shows it:
+        // Windows would accept the toast and never show it).
         for (const QString &id : {u"JanuszBit.Brulion.niezarejestrowany-żółw"_s, QString()}) {
             WindowsToastBus bus(id);
+            QVERIFY(!bus.isAvailable());
             bool answered = false;
-            bus.notify(buildDesktopNotification(reminder(), bus.capabilities(), 5), [&](uint) { answered = true; });
+            uint shown = 1;
+            bus.notify(buildDesktopNotification(reminder(), bus.capabilities(), 5), [&](uint id) {
+                answered = true;
+                shown = id;
+            });
             QVERIFY(answered);
+            QCOMPARE(shown, 0u);
             bus.close(1);
             bus.clearAll();
             Q_UNUSED(bus.historyTags());

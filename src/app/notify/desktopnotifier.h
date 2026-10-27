@@ -18,8 +18,8 @@
 //     Shell, KDE Plasma); servers without sounds ignore the hints.
 //
 // An alarm rings: it is sent again (same id, sound again) every ringInterval until the user acts
-// on it, closes it, or its ringMinutes are over (a bus that rings itself — Windows' alarm toasts
-// loop their sound — gets it once more, silently, when the ringMinutes are over).
+// on it, closes it, or its ringMinutes are over (an alarm the bus rings itself — Windows' alarm
+// toasts with a looping sound — gets it once more, silently, when the ringMinutes are over).
 // previewSound() sends a short-lived sample notification with a sound (Settings → Reminders,
 // "Play sample"). Without a notification
 // service (no session bus, no daemon, or a failed Notify call) the notification goes to the tray
@@ -88,10 +88,15 @@ public:
     virtual QStringList themeSounds() const;
     /// A sound file can be played (default: true; Windows toasts of an unpackaged app cannot).
     virtual bool supportsSoundFiles() const { return true; }
-    /// An alarm's notification loops its sound itself while it is shown (Windows' alarm toasts):
-    /// DesktopNotifier does not send it again every ring interval, only once silently when its
-    /// ring time is over (sending a toast again would pop it up again).
-    virtual bool ringsItself() const { return false; }
+    /// This alarm's notification loops its sound itself while it is shown (Windows' alarm toasts
+    /// with a Looping.* sound, toastLoopsItsSound()): DesktopNotifier does not send it again every
+    /// ring interval, only once silently when its ring time is over (sending a toast again would
+    /// pop it up again). An alarm with a short sound is sent again, as on Linux.
+    virtual bool ringsItself(const DesktopNotification &notification) const
+    {
+        Q_UNUSED(notification);
+        return false;
+    }
 
 Q_SIGNALS:
     /// The user invoked an action ("default" for a click on the notification).
@@ -146,6 +151,7 @@ private:
     struct Shown {
         ScheduledNotification notification;
         QDateTime ringUntil; ///< invalid: not ringing
+        bool looping = false; ///< the notification on screen loops its sound (NotificationBus::ringsItself())
     };
 
     void onActionInvoked(uint id, const QString &action);

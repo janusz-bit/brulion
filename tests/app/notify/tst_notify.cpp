@@ -56,7 +56,8 @@ public:
     QList<DesktopNotification> sent;
     QList<uint> closed;
     uint nextId = 100;
-    // A Windows-like bus: its own name and sounds, no sound files, alarms looping by themselves.
+    // A Windows-like bus: its own name and sounds, no sound files, alarms with a looping sound
+    // ringing by themselves (as WindowsToastBus decides).
     QString busName = u"dbus"_s;
     QStringList sounds = desktopThemeSounds();
     bool soundFiles = true;
@@ -67,7 +68,7 @@ public:
     QString name() const override { return busName; }
     QStringList themeSounds() const override { return sounds; }
     bool supportsSoundFiles() const override { return soundFiles; }
-    bool ringsItself() const override { return selfRinging; }
+    bool ringsItself(const DesktopNotification &n) const override { return selfRinging && toastLoopsItsSound(n); }
     void notify(const DesktopNotification &n, std::function<void(uint id)> done) override
     {
         sent.append(n);
@@ -419,6 +420,8 @@ private Q_SLOTS:
             QCOMPARE(toast.audio.value(u"src"_s), audioSrc);
             QCOMPARE(toast.audio.value(u"loop"_s), loop ? u"true"_s : QString());
         }
+        // The bus rings exactly the alarms whose toast loops (DesktopNotifier re-sends the others).
+        QCOMPARE(toastLoopsItsSound(message), loop);
         // Markup in a note never becomes elements of the toast.
         QVERIFY(!xml.contains(u"<b>"_s));
         QVERIFY(!xml.contains(u"<i>"_s));
@@ -533,8 +536,32 @@ private Q_SLOTS:
         }
     }
 
-    // Windows' alarm toasts loop their sound themselves: not sent again every ring interval,
-    // once silently when the ring time is over (it stays on screen).
+    void toastPermission_data()
+    {
+        QTest::addColumn<bool>("registered");
+        QTest::addColumn<ToastSetting>("setting");
+        QTest::addColumn<bool>("allowed");
+        QTest::newRow("allowed") << true << ToastSetting::Enabled << true;
+        // ERROR_NOT_FOUND before the first toast of an app without a package: try it.
+        QTest::newRow("not known yet") << true << ToastSetting::Unknown << true;
+        QTest::newRow("off for Brulion") << true << ToastSetting::DisabledForApplication << false;
+        QTest::newRow("off for all apps") << true << ToastSetting::DisabledForUser << false;
+        QTest::newRow("group policy") << true << ToastSetting::DisabledByGroupPolicy << false;
+        QTest::newRow("manifest") << true << ToastSetting::DisabledByManifest << false;
+        // Nobody registered the id (tests): its toasts would never appear — the tray shows them.
+        QTest::newRow("unregistered") << false << ToastSetting::Enabled << false;
+        QTest::newRow("unregistered, not known") << false << ToastSetting::Unknown << false;
+    }
+    void toastPermission()
+    {
+        QFETCH(bool, registered);
+        QFETCH(ToastSetting, setting);
+        QFETCH(bool, allowed);
+        QCOMPARE(toastsAllowed(registered, setting), allowed);
+    }
+
+    // Windows' alarm toasts with a looping sound loop it themselves: not sent again every ring
+    // interval, once silently when the ring time is over (it stays on screen).
     void busThatRingsItself()
     {
         auto *bus = new FakeBus;
@@ -583,6 +610,60 @@ private Q_SLOTS:
         now = now.addSecs(600);
         QTest::qWait(80);
         QCOMPARE(bus->sent.size(), 3);
+    }
+
+    // An alarm with a short Windows sound ("Poczta") plays it once per toast: it is sent again
+    // every ring interval, as on Linux, and stays on screen silently when the time is over.
+    void busThatRingsItselfShortSound()
+    {
+        auto *bus = new FakeBus;
+        bus->busName = u"toast"_s;
+        bus->sounds = windowsToastSounds();
+        bus->soundFiles = false;
+        bus->selfRinging = true;
+        bus->caps = ToastCaps;
+        DesktopNotifier notifier(bus);
+
+        QDateTime now(QDate(2026, 10, 14), QTime(6, 30));
+        notifier.setClock([&now] { return now; });
+        notifier.setRingInterval(20);
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Mail"_s, {}});
+        notifier.showNow(alarm());
+        const uint id = bus->nextId;
+        QCOMPARE(notifier.ringingCount(), 1);
+        QVERIFY(!toastLoopsItsSound(bus->sent.first()));
+        QTRY_VERIFY(bus->sent.size() >= 3);
+        for (const DesktopNotification &sent : std::as_const(bus->sent)) {
+            QCOMPARE(sent.hints.value(u"sound-name"_s).toString(), u"Mail"_s);
+            QVERIFY(!sent.hints.value(u"suppress-sound"_s).toBool());
+        }
+        QCOMPARE(bus->sent.last().replacesId, id);
+
+        now = now.addSecs(61);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+        const qsizetype sent = bus->sent.size();
+        QTest::qWait(80);
+        QCOMPARE(bus->sent.size(), sent); // nothing more, not even a silent copy
+        QVERIFY(!bus->sent.last().hints.value(u"suppress-sound"_s).toBool());
+        QCOMPARE(notifier.shownCount(), 1);
+
+        // Switched to a looping sound while it rings: sent once more (looping), then left alone,
+        // and a silent copy when the time is over.
+        ScheduledNotification other = alarm();
+        other.id = u"3333333333333333"_s;
+        notifier.showNow(other);
+        const uint otherId = bus->nextId;
+        notifier.setSounds({}, {SoundChoice::Mode::Custom, u"Looping.Alarm2"_s, {}});
+        QTRY_COMPARE(bus->sent.last().hints.value(u"sound-name"_s).toString(), u"Looping.Alarm2"_s);
+        QCOMPARE(bus->sent.last().replacesId, otherId);
+        const qsizetype looped = bus->sent.size();
+        QTest::qWait(120);
+        QCOMPARE(bus->sent.size(), looped);
+        QCOMPARE(notifier.ringingCount(), 1);
+        now = now.addSecs(61);
+        QTRY_COMPARE(notifier.ringingCount(), 0);
+        QCOMPARE(bus->sent.size(), looped + 1);
+        QVERIFY(bus->sent.last().hints.value(u"suppress-sound"_s).toBool());
     }
 
     void androidPayload()

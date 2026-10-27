@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QMetaObject>
 #include <QPointer>
+#include <QSettings>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -106,11 +107,29 @@ bool WindowsToastBus::isAvailable() const
 {
     if (!d->notifier)
         return false;
+    // An id nobody registered: Show() would succeed and nothing would appear (tests).
+    QSettings classes(u"HKEY_CURRENT_USER\\Software\\Classes\\AppUserModelId"_s, QSettings::NativeFormat);
+    const bool registered = !m_appUserModelId.isEmpty() && classes.childGroups().contains(m_appUserModelId);
+    ToastSetting setting = ToastSetting::Unknown;
     try {
-        return d->notifier.Setting() == wn::NotificationSetting::Enabled;
-    } catch (const winrt::hresult_error &) {
-        return false;
+        switch (d->notifier.Setting()) {
+        case wn::NotificationSetting::Enabled: setting = ToastSetting::Enabled; break;
+        case wn::NotificationSetting::DisabledForApplication: setting = ToastSetting::DisabledForApplication; break;
+        case wn::NotificationSetting::DisabledForUser: setting = ToastSetting::DisabledForUser; break;
+        case wn::NotificationSetting::DisabledByGroupPolicy: setting = ToastSetting::DisabledByGroupPolicy; break;
+        case wn::NotificationSetting::DisabledByManifest: setting = ToastSetting::DisabledByManifest; break;
+        }
+    } catch (const winrt::hresult_error &error) {
+        // ERROR_NOT_FOUND until this app's first toast (an app without a package): unknown.
+        qCDebug(brulion::logging::lcReminders).noquote()
+                << u"Windows notifications: no setting for %1 yet (%2)"_s.arg(m_appUserModelId, describe(error));
     }
+    return toastsAllowed(registered, setting);
+}
+
+bool WindowsToastBus::ringsItself(const DesktopNotification &notification) const
+{
+    return toastLoopsItsSound(notification);
 }
 
 QStringList WindowsToastBus::capabilities() const
@@ -137,8 +156,8 @@ void WindowsToastBus::notify(const DesktopNotification &notification, std::funct
             m_lastId = 1;
         id = m_lastId;
     }
-    // Turned off for Brulion (or all apps): Show() would succeed and show nothing — the tray
-    // shows it instead (DesktopNotifier's fallback for a refused notification).
+    // Turned off for Brulion (or all apps), or an unregistered id: Show() would succeed and show
+    // nothing — the tray shows it instead (DesktopNotifier's fallback for a refused notification).
     if (!isAvailable()) {
         done(0);
         return;

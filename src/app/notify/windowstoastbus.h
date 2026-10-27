@@ -9,9 +9,11 @@
 //   * the app's identity: the AppUserModelID platform::applyAppIdentity() registered at start
 //     (src/platform/appidentity.h) — the toasts show Brulion's name and icon, also for the
 //     portable ZIP without a Start menu shortcut;
-//   * available while Windows allows Brulion's notifications (ToastNotifier::Setting(), asked
-//     every time: the user may switch them off in Settings → System → Notifications) — otherwise
-//     the tray icon shows the reminder;
+//   * available while the AppUserModelID is registered and Windows allows Brulion's notifications
+//     (toastsAllowed(): ToastNotifier::Setting(), asked every time — the user may switch them off
+//     in Settings → System → Notifications; before the first toast it throws ERROR_NOT_FOUND,
+//     which counts as allowed) — otherwise the tray icon shows the reminder;
+//   * alarms with a Looping.* sound loop it on screen (ringsItself()); others are sent again;
 //   * WinRT raises the toast's events on a thread pool thread: they are queued to the GUI thread
 //     (Activated → actionInvoked, Dismissed → notificationClosed; a toast timed out into the
 //     Action Center stays clickable there); no WinRT exception leaves this class;
@@ -40,7 +42,7 @@ public:
     QString name() const override;
     QStringList themeSounds() const override;
     bool supportsSoundFiles() const override { return false; }
-    bool ringsItself() const override { return true; }
+    bool ringsItself(const DesktopNotification &notification) const override;
 
     /// Removes every toast of this app from the screen and the Action Center.
     void clearAll();

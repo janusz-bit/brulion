@@ -36,6 +36,38 @@ bool isActionKey(const QString &key)
     return key == u"default" || key == u"snooze" || key == u"ok" || key == u"done";
 }
 
+/// The buttons: every action but "default" (the click on the toast itself).
+QList<QPair<QString, QString>> toastButtons(const DesktopNotification &notification)
+{
+    QList<QPair<QString, QString>> buttons;
+    for (qsizetype i = 0; i + 1 < notification.actions.size(); i += 2) {
+        const QString &key = notification.actions.at(i);
+        if (key != u"default" && isActionKey(key))
+            buttons.append({key, notification.actions.at(i + 1)});
+    }
+    return buttons;
+}
+
+/// Alarms and reminders that wait for the user stay on screen; Windows wants a button for that.
+QString toastScenario(const DesktopNotification &notification, bool hasButtons)
+{
+    const QVariantMap &hints = notification.hints;
+    const bool alarm = hints.value(u"urgency"_s).value<uchar>() >= 2 || hints.value(u"resident"_s).toBool();
+    if (hasButtons && alarm)
+        return u"alarm"_s;
+    if (hasButtons && notification.expireTimeout == 0)
+        return u"reminder"_s;
+    return {};
+}
+
+/// The sound event of the toast ("" for the default sound or silence).
+QString toastSound(const DesktopNotification &notification)
+{
+    if (notification.hints.value(u"suppress-sound"_s).toBool())
+        return {};
+    return windowsToastSoundFor(notification.hints.value(u"sound-name"_s).toString());
+}
+
 } // namespace
 
 QStringList windowsToastSounds()
@@ -100,26 +132,13 @@ ToastActivation parseToastArguments(const QString &arguments)
 QString buildToastXml(const DesktopNotification &notification, uint id)
 {
     const QVariantMap &hints = notification.hints;
-    const bool alarm = hints.value(u"urgency"_s).value<uchar>() >= 2 || hints.value(u"resident"_s).toBool();
-
-    // The buttons: every action but "default" (the click on the toast itself).
-    QList<QPair<QString, QString>> buttons;
-    for (qsizetype i = 0; i + 1 < notification.actions.size(); i += 2) {
-        const QString &key = notification.actions.at(i);
-        if (key != u"default" && isActionKey(key))
-            buttons.append({key, notification.actions.at(i + 1)});
-    }
+    const QList<QPair<QString, QString>> buttons = toastButtons(notification);
 
     QString xml;
     QXmlStreamWriter w(&xml);
     w.writeStartElement(u"toast"_s);
     w.writeAttribute(u"launch"_s, toastArguments(id, u"default"_s));
-    // Alarms and reminders that wait for the user stay on screen; Windows wants a button for that.
-    QString scenario;
-    if (!buttons.isEmpty() && alarm)
-        scenario = u"alarm"_s;
-    else if (!buttons.isEmpty() && notification.expireTimeout == 0)
-        scenario = u"reminder"_s;
+    const QString scenario = toastScenario(notification, !buttons.isEmpty());
     if (!scenario.isEmpty())
         w.writeAttribute(u"scenario"_s, scenario);
     else if (!hints.value(u"transient"_s).toBool())
@@ -149,15 +168,26 @@ QString buildToastXml(const DesktopNotification &notification, uint id)
     if (hints.value(u"suppress-sound"_s).toBool()) {
         w.writeEmptyElement(u"audio"_s);
         w.writeAttribute(u"silent"_s, u"true"_s);
-    } else if (const QString sound = windowsToastSoundFor(hints.value(u"sound-name"_s).toString()); !sound.isEmpty()) {
+    } else if (const QString sound = toastSound(notification); !sound.isEmpty()) {
         w.writeEmptyElement(u"audio"_s);
         w.writeAttribute(u"src"_s, u"ms-winsoundevent:Notification."_s + sound);
-        // Looping sounds loop only while an alarm stays on screen (Windows wants a long or alarm toast).
-        if (scenario == u"alarm" && sound.startsWith(u"Looping."))
+        if (toastLoopsItsSound(notification))
             w.writeAttribute(u"loop"_s, u"true"_s);
     }
     w.writeEndElement(); // toast
     return xml;
+}
+
+bool toastLoopsItsSound(const DesktopNotification &notification)
+{
+    // Looping sounds loop only while an alarm stays on screen (Windows wants an alarm toast).
+    return toastSound(notification).startsWith(u"Looping.")
+           && toastScenario(notification, !toastButtons(notification).isEmpty()) == u"alarm";
+}
+
+bool toastsAllowed(bool registered, ToastSetting setting)
+{
+    return registered && (setting == ToastSetting::Enabled || setting == ToastSetting::Unknown);
 }
 
 } // namespace brulion::notify

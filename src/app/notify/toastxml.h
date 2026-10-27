@@ -39,6 +39,28 @@ namespace brulion::notify {
 /// surrogates) are left out.
 QString buildToastXml(const DesktopNotification &notification, uint id);
 
+/// The toast of `notification` loops its sound by itself: an alarm (with buttons, so it stays on
+/// screen) whose sound is one of the Looping.* events. Any other alarm (a short sound such as
+/// "Mail", the default sound) plays its sound once, so DesktopNotifier sends it again every ring
+/// interval as on Linux (NotificationBus::ringsItself()).
+bool toastLoopsItsSound(const DesktopNotification &notification);
+
+/// What ToastNotifier::Setting() says about this app's toasts. Unknown: it threw — an app without
+/// a package gets ERROR_NOT_FOUND until it has shown its first toast.
+enum class ToastSetting {
+    Unknown,
+    Enabled,
+    DisabledForApplication,
+    DisabledForUser,
+    DisabledByGroupPolicy,
+    DisabledByManifest,
+};
+
+/// Toasts may be shown: the AppUserModelID is registered (an unregistered one's toasts are
+/// accepted and never appear) and Windows has not turned them off; Unknown counts as allowed,
+/// otherwise the first toast — after which Windows knows the app — would never be sent.
+bool toastsAllowed(bool registered, ToastSetting setting);
+
 /// The activation arguments of a toast's click ("default") or one of its buttons.
 QString toastArguments(uint id, const QString &action);
 

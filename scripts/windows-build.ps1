@@ -17,8 +17,9 @@ Steps (all by default, in this order; -Steps picks some):
            the Run value must start the installed brulion.exe --hidden), each started headless
            (brulion-cli --version, the shell self-test of the real app in a separate profile,
            which registers its AppUserModelID for the toasts with the icon next to the program),
-           then uninstalled silently — the profile's settings and notes must still be there, the
-           Run value must be gone.
+           then installed again as a silent update with the Run value removed (it must stay
+           removed), then uninstalled silently — the profile's settings and notes must still be
+           there, the Run value must be gone.
 
 CI: .github/workflows/windows.yml (windows-2022, Qt from aqt through jurplel/install-qt-action,
 MSVC from ilammy/msvc-dev-cmd). Locally, in PowerShell from the repository root, with Visual Studio
@@ -348,6 +349,18 @@ if ($Steps -contains 'check') {
     Write-Host "Start at sign-in: $(Get-RunValue)"
     Invoke-Packaged $installDir 'Installed'
     Assert-AppIdentity $installDir 'Installed'
+
+    # An update: autostart turned off (as the app's switch does) stays off — the task is offered on
+    # the first install only (UsePreviousTasks would select it again).
+    Remove-ItemProperty -Path $RunKey -Name 'Brulion'
+    Info "Installing $SetupName again (silent update)"
+    $update = Start-Process -FilePath $setup -PassThru -Wait -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES',
+        '/CURRENTUSER', '/NORESTART', "/LOG=`"$work\update.log`"")
+    if ($update.ExitCode -ne 0) { Get-Content "$work\update.log" | Write-Host; Fail "The update exited with $($update.ExitCode)" }
+    if (Get-RunValue) { Get-Content "$work\update.log" | Write-Host; Fail "The update turned the start at sign-in on again: $(Get-RunValue)" }
+    Write-Host 'Update: the start at sign-in stays off'
+    # On again for the uninstaller's check below.
+    Set-ItemProperty -Path $RunKey -Name 'Brulion' -Value $expectedRun
 
     Info 'Uninstalling (silent)'
     $settings = Join-Path $env:APPDATA "Brulion-$CheckProfile\Brulion.ini"

@@ -160,14 +160,15 @@ void DesktopNotifier::showNow(const ScheduledNotification &notification)
             buildDesktopNotification(notification, m_bus->capabilities(), m_snoozeMinutes, replaces,
                                      sound(notification.alarm ? SoundKind::Alarm : SoundKind::Reminder));
     const QPointer<DesktopNotifier> self(this);
-    m_bus->notify(message, [self, notification](uint id) {
+    const bool looping = m_bus->ringsItself(message);
+    m_bus->notify(message, [self, notification, looping](uint id) {
         if (!self)
             return;
         if (id == 0) {
             self->fallback(notification);
             return;
         }
-        Shown shown{ notification, {} };
+        Shown shown{notification, {}, looping};
         if (notification.alarm && notification.ringMinutes > 0)
             shown.ringUntil = self->now().addSecs(qint64(notification.ringMinutes) * 60);
         self->m_shown.insert(id, shown);
@@ -248,39 +249,43 @@ void DesktopNotifier::ring()
     if (!m_bus)
         return;
     const QDateTime current = now();
-    const bool ringsItself = m_bus->ringsItself();
-    QList<QPair<uint, ScheduledNotification>> again;
+    const QStringList capabilities = m_bus->capabilities();
+    const SoundChoice silent{SoundChoice::Mode::Silent, {}, {}};
+    QList<QPair<uint, DesktopNotification>> again;
     for (auto it = m_shown.begin(); it != m_shown.end(); ++it) {
         if (!it->ringUntil.isValid())
             continue;
+        const uint id = it.key();
+        const DesktopNotification loud =
+                buildDesktopNotification(it->notification, capabilities, m_snoozeMinutes, id, sound(SoundKind::Alarm));
+        // A notification looping its own sound (Windows' alarm toasts with a looping sound) is
+        // left alone while it rings and replaced by a silent one when the time is over; any other
+        // is sent again (once more when the alarm sound was switched to a looping one meanwhile).
         if (current >= it->ringUntil) {
             it->ringUntil = QDateTime(); // rang long enough: it stays on screen, silently
-            // A notification looping its own sound is replaced by a silent one.
-            if (ringsItself)
-                again.append({it.key(), it->notification});
-        } else if (!ringsItself) {
-            again.append({ it.key(), it->notification });
+            if (std::exchange(it->looping, false))
+                again.append(
+                        {id, buildDesktopNotification(it->notification, capabilities, m_snoozeMinutes, id, silent)});
+        } else if (const bool loops = m_bus->ringsItself(loud); !loops || !it->looping) {
+            it->looping = loops;
+            again.append({id, loud});
         }
     }
-    const QStringList capabilities = m_bus->capabilities();
-    const SoundChoice alarmSound =
-            ringsItself ? SoundChoice{SoundChoice::Mode::Silent, {}, {}} : sound(SoundKind::Alarm);
-    for (const auto &[id, notification] : std::as_const(again)) {
+    for (const auto &[id, message] : std::as_const(again)) {
         const QPointer<DesktopNotifier> self(this);
-        m_bus->notify(buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, alarmSound),
-                      [self, id](uint newId) {
-                          if (!self || newId == id)
-                              return;
-                          // Refused, or the server made a new one: stop ringing the old entry.
-                          const auto it = self->m_shown.find(id);
-                          if (it == self->m_shown.end())
-                              return;
-                          Shown shown = *it;
-                          self->m_shown.erase(it);
-                          if (newId != 0)
-                              self->m_shown.insert(newId, shown);
-                          self->updateRingTimer();
-                      });
+        m_bus->notify(message, [self, id](uint newId) {
+            if (!self || newId == id)
+                return;
+            // Refused, or the server made a new one: stop ringing the old entry.
+            const auto it = self->m_shown.find(id);
+            if (it == self->m_shown.end())
+                return;
+            Shown shown = *it;
+            self->m_shown.erase(it);
+            if (newId != 0)
+                self->m_shown.insert(newId, shown);
+            self->updateRingTimer();
+        });
     }
     updateRingTimer();
 }

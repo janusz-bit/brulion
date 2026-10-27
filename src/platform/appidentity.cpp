@@ -24,9 +24,12 @@ QString appUserModelId(const QString &organizationName)
 {
     const QString base = u"JanuszBit.Brulion"_s;
     const QString prefix = u"Brulion-"_s;
+    if (organizationName == u"Brulion")
+        return base;
     if (organizationName.startsWith(prefix) && organizationName.size() > prefix.size())
         return base + u'.' + organizationName.mid(prefix.size());
-    return base;
+    // A process that never set Brulion's names (the tests): never the real Brulion's toasts.
+    return base + u".unnamed"_s;
 }
 
 QString appUserModelId()

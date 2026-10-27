@@ -259,9 +259,11 @@ private Q_SLOTS:
         QTest::newRow("default profile") << u"Brulion"_s << u"JanuszBit.Brulion"_s;
         QTest::newRow("test profile") << u"Brulion-test-shell"_s << u"JanuszBit.Brulion.test-shell"_s;
         QTest::newRow("package check") << u"Brulion-package-check"_s << u"JanuszBit.Brulion.package-check"_s;
-        QTest::newRow("empty profile name") << u"Brulion-"_s << u"JanuszBit.Brulion"_s;
-        QTest::newRow("no names set") << QString() << u"JanuszBit.Brulion"_s;
-        QTest::newRow("another organisation") << u"Żółw"_s << u"JanuszBit.Brulion"_s;
+        // Never the real id for a process that did not set Brulion's names (in-process tests).
+        QTest::newRow("empty profile name") << u"Brulion-"_s << u"JanuszBit.Brulion.unnamed"_s;
+        QTest::newRow("no names set") << QString() << u"JanuszBit.Brulion.unnamed"_s;
+        QTest::newRow("another organisation") << u"Żółw"_s << u"JanuszBit.Brulion.unnamed"_s;
+        QTest::newRow("Brulion in other case") << u"brulion"_s << u"JanuszBit.Brulion.unnamed"_s;
     }
     void appUserModelIds()
     {

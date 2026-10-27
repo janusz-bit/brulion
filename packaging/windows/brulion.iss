@@ -12,10 +12,10 @@
 ;
 ; Notifications: the Start menu shortcut carries the AppUserModelID JanuszBit.Brulion, which the app
 ; registers under HKCU\Software\Classes\AppUserModelId (src/platform/appidentity.h); the
-; uninstaller removes that key. Start at sign-in: the task "autostart" (checked on the first
-; install) writes the value "Brulion" of HKCU\...\CurrentVersion\Run, the same the app's switch
-; (Settings -> Application) writes (src/platform/autostart.h); the uninstaller removes it when it
-; starts this installation's brulion.exe. UTF-8 with a BOM: the Polish texts below.
+; uninstaller removes that key. Start at sign-in: the task "autostart" (offered, checked, on the
+; first install only) writes the value "Brulion" of HKCU\...\CurrentVersion\Run, the same the
+; app's switch (Settings -> Application) writes (src/platform/autostart.h); an update leaves it as
+; the user set it; the uninstaller removes it when it starts this installation's brulion.exe. UTF-8 with a BOM: the Polish texts below.
 
 #ifndef AppVersion
   #error Pass /DAppVersion=<x.y.z> (scripts/windows-build.ps1 does)
@@ -74,9 +74,10 @@ english.AutostartTask=Start Brulion when I sign in (hidden in the tray, so remin
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-; Reminders ring only while Brulion runs. Checked on the first install only: an update does not
-; switch it on again after the user turned it off.
-Name: "autostart"; Description: "{cm:AutostartTask}"; Flags: checkedonce
+; Reminders ring only while Brulion runs. Offered on the first install only: an update must not
+; switch it on again after the user turned it off in the app or in Task Manager (UsePreviousTasks
+; would select it again, whatever checkedonce says); from then on the app's switch decides.
+Name: "autostart"; Description: "{cm:AutostartTask}"; Check: not IsUpdate
 
 [InstallDelete]
 ; An update brings its own Qt Quick modules: no files of the previous version's are left among them.
@@ -103,6 +104,14 @@ Filename: "{app}\brulion.exe"; Description: "{cm:LaunchProgram,Brulion}"; Flags:
 const
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
   ApprovedKey = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run';
+  // The uninstall entry Setup writes for the AppId above (per user or for all users).
+  UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{5E3B8C1A-7F42-4D6B-9A0E-2C8D4B6F1E37}_is1';
+
+// Brulion is installed already: this setup updates it.
+function IsUpdate: Boolean;
+begin
+  Result := RegKeyExists(HKCU, UninstallKey) or RegKeyExists(HKLM, UninstallKey);
+end;
 
 // The start at sign-in goes with this installation (also when the app's switch wrote it); an
 // entry for another copy (a portable one) stays.
