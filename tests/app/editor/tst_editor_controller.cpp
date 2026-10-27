@@ -641,11 +641,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         if (keepsBlock)
             QCOMPARE(f.role(rowAfter, "uid"), uidBefore);
         const int afterCursor = f.page.cursorPosition();
+        // An inserted empty paragraph is no Markdown block of its own (just blank lines): the
+        // step remembers its line, so redo, which reads the version's text again, keeps it.
         const QStringList blocksAfter = blocks();
-        // Known gap (TODO.md): an empty paragraph is no Markdown block of its own (just blank
-        // lines), so redo, which parses the version's text again, loses it and the caret lands in
-        // the block after it (the rest of such a row stops there: it would go on from that state).
-        const bool emptyParagraph = blocksAfter.count(u"paragraph:"_s) > blocksBefore.count(u"paragraph:"_s);
 
         for (int round = 0; round < 2; ++round) {
             textResets.clear();
@@ -660,8 +658,6 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             check(inserted, rowAfter, afterCursor);
             if (QTest::currentTestFailed())
                 return;
-            if (emptyParagraph)
-                QEXPECT_FAIL("", "redo loses an inserted empty paragraph (TODO.md)", Abort);
             QCOMPARE(blocks(), blocksAfter);
         }
         f.page.undo();
@@ -672,6 +668,115 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QCOMPARE(f.edit(editRow), typed);
             QCOMPARE(view.stale(), QStringList());
         }
+        verifyReload(f);
+    }
+
+    // Empty paragraphs are blank lines in the text: every undo and redo step brings back the ones
+    // of its version (not only the step that made them), so rows and the caret stay right.
+    // Steps: "enter row cursor", "set row text" (typing), "insert row"; "+" merges the step with
+    // the previous one (typing on in the same block).
+    void undoKeepsEmptyParagraphs_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("steps");
+
+        QTest::newRow("typing-elsewhere") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                          << QStringList{u"enter 0 0"_s, u"set 2 Drugi ż"_s};
+        QTest::newRow("typed-away") << u"Ala\n\nŁąka\n\nOla\n"_s
+                                    << QStringList{u"set 1 Łą"_s, u"+set 1"_s, u"insert 1"_s};
+        QTest::newRow("two-in-a-row") << u"Ala\n\nOla\n"_s << QStringList{u"enter 1 0"_s, u"enter 2 0"_s};
+        QTest::newRow("heading-then-list") << u"# Strona\n- treść\n"_s
+                                           << QStringList{u"enter 0 0"_s, u"enter 2 5"_s, u"set 3 ąę"_s};
+        QTest::newRow("end-no-final-newline") << u"Ala ma kota"_s << QStringList{u"enter 0 11"_s, u"set 0 Ala ma psa"_s};
+        QTest::newRow("crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"enter 0 0"_s, u"set 2 Drugi ą"_s};
+        const QString document = u"---\nbrulion: document\n---\n"_s;
+        QTest::newRow("document") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
+                                  << QStringList{u"enter 1 0"_s, u"set 3 Drugi łęgi"_s, u"enter 1 0"_s};
+    }
+
+    void undoKeepsEmptyParagraphs()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, steps);
+
+        Fixture f(content);
+        const ViewMirror view(f.model());
+        struct State {
+            QString text;
+            QStringList blocks;
+            int editing = -1;
+        };
+        const auto state = [&] {
+            State st{f.text(), {}, f.page.editingRow()};
+            for (int r = 0; r < f.count(); ++r)
+                st.blocks.append(f.role(r, "kind").toString() + u':' + f.edit(r));
+            return st;
+        };
+        const auto check = [&](const State &want, const char *what, int step) {
+            const State now = state();
+            const QByteArray where = QByteArray(what) + " of step " + QByteArray::number(step);
+            QVERIFY2(now.text == want.text, where.constData());
+            QVERIFY2(now.blocks == want.blocks,
+                     qPrintable(QString::fromLatin1(where) + u": "_s + now.blocks.join(u" | "_s) + u" != "_s
+                                + want.blocks.join(u" | "_s)));
+            QVERIFY2(now.editing == want.editing, where.constData());
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
+        };
+
+        QList<std::pair<State, State>> history; // (before, after) of each undo step
+        for (const QString &step : steps) {
+            const bool merge = step.startsWith(u'+');
+            const QStringList w = (merge ? step.sliced(1) : step).split(u' ');
+            const int row = w.value(1).toInt();
+            if (w[0] == u"enter"_s)
+                f.page.startEditing(row, w.value(2).toInt());
+            else if (w[0] == u"set"_s && !merge)
+                f.page.startEditing(row, int(f.edit(row).size()));
+            const State before = state();
+            if (w[0] == u"enter"_s) {
+                f.page.split(row, w.value(2).toInt());
+            } else if (w[0] == u"set"_s) {
+                const QString typed = w.mid(2).join(u' ');
+                f.page.setEditText(row, typed, int(typed.size()));
+            } else {
+                f.page.insertBlockAfter(row);
+            }
+            if (merge)
+                history.last().second = state();
+            else
+                history.append({before, state()});
+        }
+        QVERIFY(std::any_of(history.begin(), history.end(),
+                            [](const auto &h) { return h.second.blocks.contains(u"paragraph:"_s); }));
+
+        for (int round = 0; round < 2; ++round) {
+            for (qsizetype k = history.size() - 1; k >= 0; --k) {
+                f.page.undo();
+                check(history[k].first, "undo", int(k));
+                if (QTest::currentTestFailed())
+                    return;
+            }
+            QVERIFY(!f.page.canUndo());
+            for (qsizetype k = 0; k < history.size(); ++k) {
+                f.page.redo();
+                check(history[k].second, "redo", int(k));
+                if (QTest::currentTestFailed())
+                    return;
+            }
+            QVERIFY(!f.page.canRedo());
+        }
+        // Typing after a redo goes into the block the caret is in.
+        if (f.page.editingRow() >= 0) {
+            const int r = f.page.editingRow();
+            const QString typed = f.edit(r) + u"ź"_s;
+            f.page.setEditText(r, typed, int(typed.size()));
+            QCOMPARE(f.edit(r), typed);
+            QVERIFY(view.stale().isEmpty());
+            f.page.undo();
+        }
+        while (f.page.canUndo())
+            f.page.undo();
+        QCOMPARE(f.text(), content);
         verifyReload(f);
     }
 

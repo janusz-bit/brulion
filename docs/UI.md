@@ -355,8 +355,13 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
   `undoOfAnInsertionAtTheStart` follows the rows as a view sees them from the model's signals).
   The `line` role (the block's first line in the file) is announced with `dataChanged` for the
-  rows a change above them moved. Still open: an empty paragraph is only blank lines in the
-  file, so redo, which parses the version's text again, loses an inserted one (TODO.md).
+  rows a change above them moved. Empty paragraphs (Enter at the start of a paragraph or
+  heading, a paragraph typed empty, a document's last empty paragraph) are only blank lines in
+  the file, so a re-read text has none: each undo step also remembers the lines of its two
+  versions' empty paragraphs (`BlockDocument::blankBlockLines`), and undo / redo split them out
+  of the blank lines again (`restoreBlankBlocks`, the text unchanged byte for byte;
+  `tst_editor_controller` `undoKeepsEmptyParagraphs`). A reload from the file (or an external
+  change) still reads them as blank lines.
 * Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
   exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
   are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and

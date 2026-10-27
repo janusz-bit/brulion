@@ -268,6 +268,70 @@ bool BlockDocument::hasChildren(int i) const
 }
 
 // ---------------------------------------------------------------------------------------------
+// Blank blocks (empty paragraphs)
+// ---------------------------------------------------------------------------------------------
+
+QList<int> BlockDocument::blankBlockLines() const
+{
+    QList<int> out;
+    for (const Item &it : m_items) {
+        if (it.entry.kind == BlockKind::Paragraph && isBlank(it.own) && countLineBreaks(it.own) == 0)
+            out.append(it.entry.line);
+    }
+    return out;
+}
+
+int BlockDocument::restoreBlankBlocks(const QList<int> &lines)
+{
+    QList<int> wanted = lines;
+    std::sort(wanted.begin(), wanted.end());
+    wanted.erase(std::unique(wanted.begin(), wanted.end()), wanted.end());
+    int made = 0;
+    for (const int line : wanted) {
+        if (line < 0)
+            continue;
+        // The run of blank lines that holds the line: the blank lines before the first block
+        // (k = -1) or the ones after block k.
+        int k = -1;
+        while (k + 1 < count() && m_items[k + 1].entry.line <= line)
+            ++k;
+        const int start = k < 0 ? 0
+                                : m_items[k].entry.line + countLineBreaks(m_items[k].own)
+                                          + countLineBreaks(m_items[k].eol);
+        if (line < start)
+            continue; // a line of the block's own text
+        QString &run = k < 0 ? m_leading : m_items[k].entry.trailing;
+        const QList<text::Line> runLines = text::splitLines(run);
+        // splitLines() ends with an empty line after a final terminator: no line of the run.
+        const int runCount = int(runLines.size())
+                             - (runLines.last().text.isEmpty() && runLines.last().eol.isEmpty() ? 1 : 0);
+        const int index = line - start;
+        Item x = makeItem(QString(), QString(), QString());
+        if (index < runCount) {
+            x.own = runLines[index].text;
+            x.eol = runLines[index].eol;
+            x.entry.trailing = joinLineRange(runLines, index + 1, int(runLines.size()), true);
+            run = joinLineRange(runLines, 0, index, true);
+        } else {
+            // One line past the end of a text that ends with a line break: an empty paragraph
+            // at the very end of a page without a final newline (fixEnds() writes it that way).
+            const bool last = k == count() - 1;
+            const bool terminated = run.isEmpty() ? (k < 0 || !m_items[k].eol.isEmpty()) : endsWithEol(run);
+            if (!last || index != runCount || !terminated)
+                continue;
+            m_finalNewline = false;
+        }
+        x.entry.line = line;
+        m_items.insert(k + 1, std::move(x));
+        derive(k + 1);
+        ++made;
+    }
+    if (made > 0)
+        recompute();
+    return made;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Items
 // ---------------------------------------------------------------------------------------------
 

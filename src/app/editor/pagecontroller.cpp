@@ -54,24 +54,28 @@ using markdown::EditResult;
 
 /// One undo step: the change of the document text (TextDelta: the replaced range only — two
 /// snapshots of a long page per step added up to hundreds of megabytes over an editing session)
-/// plus where the caret was. Undo/redo rebuild the other version from the current text and
-/// restore it through BlockListModel::replaceContent (rows of unchanged blocks stay). Every text
+/// plus where the caret was and the lines of each version's empty paragraphs (blank lines in the
+/// text, so a re-read text has none). Undo/redo rebuild the other version from the current text
+/// and restore it through BlockListModel::replaceContent (rows of unchanged blocks stay). Every text
 /// change goes through a command or clears the stack, so the current text is always the version
 /// a step expects; a mismatch is refused, never patched. Typing commands (typingUid != 0) merge
 /// while the user keeps typing in the same block.
 class EditCommand : public QUndoCommand {
 public:
-    EditCommand(PageController *controller, const QString &before, const QString &after,
-                PageController::Focus focusBefore, PageController::Focus focusAfter, quint64 typingUid)
-        : m_controller(controller), m_delta(TextDelta::between(before, after)), m_focusBefore(focusBefore),
-          m_focusAfter(focusAfter), m_typingUid(typingUid)
+    /// Made right after the edit: the document is the version `after` (its empty paragraphs).
+    EditCommand(PageController *controller, const QString &before, const QList<int> &blankBefore,
+                const QString &after, PageController::Focus focusBefore, PageController::Focus focusAfter,
+                quint64 typingUid)
+        : m_controller(controller), m_delta(TextDelta::between(before, after)), m_blankBefore(blankBefore),
+          m_blankAfter(controller->blankLines()), m_focusBefore(focusBefore), m_focusAfter(focusAfter),
+          m_typingUid(typingUid)
     {
     }
 
     void undo() override
     {
         if (const std::optional<QString> before = m_delta.revert(m_controller->text()))
-            m_controller->restore(*before, m_focusBefore);
+            m_controller->restore(*before, m_focusBefore, m_blankBefore);
         else
             qWarning("PageController: undo step does not match the text, ignored");
     }
@@ -82,7 +86,7 @@ public:
             return;
         }
         if (const std::optional<QString> after = m_delta.apply(m_controller->text()))
-            m_controller->restore(*after, m_focusAfter);
+            m_controller->restore(*after, m_focusAfter, m_blankAfter);
         else
             qWarning("PageController: redo step does not match the text, ignored");
     }
@@ -98,18 +102,21 @@ public:
         if (!merged)
             return false;
         m_delta = *merged;
+        m_blankAfter = o->m_blankAfter;
         m_focusAfter = o->m_focusAfter;
         return true;
     }
     void setMergeable(bool mergeable) { m_mergeable = mergeable; }
     /// Change the result of this step, the current text `current`, to `amended` (the step stays
-    /// one): false when the current text is not its result.
+    /// one; the empty paragraphs are the current document's): false when the current text is not
+    /// its result.
     bool amendResult(const QString &current, const QString &amended)
     {
         const std::optional<QString> before = m_delta.revert(current);
         if (!before)
             return false;
         m_delta = TextDelta::between(*before, amended);
+        m_blankAfter = m_controller->blankLines();
         return true;
     }
     /// Characters held by the step.
@@ -123,6 +130,8 @@ private:
     const quint64 m_serial = ++s_serials;
     PageController *m_controller;
     TextDelta m_delta;
+    QList<int> m_blankBefore; ///< lines of the empty paragraphs before the step (usually none)
+    QList<int> m_blankAfter;  ///< … and after it
     PageController::Focus m_focusBefore;
     PageController::Focus m_focusAfter;
     quint64 m_typingUid = 0;
@@ -672,6 +681,7 @@ void PageController::dropEditorSpace(quint64 uid)
     // The file never had the space (textToSave()): the step that wrote it, when it is the last
     // one, ends without it — undo needs no step of its own for a change nobody saw saved.
     const QString before = text();
+    const QList<int> blankBefore = blankLines();
     const Focus focusBefore = currentFocus();
     if (!applyOp([&](BlockDocument &d) { return d.setBody(row, body); }).changed())
         return;
@@ -680,7 +690,7 @@ void PageController::dropEditorSpace(quint64 uid)
                          ? static_cast<EditCommand *>(const_cast<QUndoCommand *>(m_undo->command(last)))
                          : nullptr;
     if (!step || !step->amendResult(before, text()))
-        m_undo->push(new EditCommand(this, before, text(), focusBefore, Focus{-1, -1}, 0));
+        m_undo->push(new EditCommand(this, before, blankBefore, text(), focusBefore, Focus{-1, -1}, 0));
     m_typingOpen = false;
     markDirty();
 }
@@ -711,11 +721,12 @@ void PageController::closeLoneFence(quint64 uid)
     const bool continueTyping =
             m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo() && !m_undo->canRedo();
     const QString before = text();
+    const QList<int> blankBefore = blankLines();
     const Focus focusBefore = currentFocus();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())
         return;
-    auto *cmd = new EditCommand(this, before, text(), focusBefore, Focus{-1, -1}, uid);
+    auto *cmd = new EditCommand(this, before, blankBefore, text(), focusBefore, Focus{-1, -1}, uid);
     cmd->setMergeable(continueTyping);
     m_undo->push(cmd);
     m_typingOpen = false;
@@ -935,6 +946,7 @@ void PageController::beginCommand()
 {
     if (m_commandDepth++ == 0) {
         m_commandBefore = text();
+        m_commandBlankBefore = blankLines();
         m_commandFocusBefore = currentFocus();
         m_typingOpen = false;
     }
@@ -946,10 +958,11 @@ void PageController::endCommand(const Focus &after)
         return;
     const QString now = text();
     if (now != m_commandBefore) {
-        m_undo->push(new EditCommand(this, m_commandBefore, now, m_commandFocusBefore, after, 0));
+        m_undo->push(new EditCommand(this, m_commandBefore, m_commandBlankBefore, now, m_commandFocusBefore, after, 0));
         markDirty();
     }
     m_commandBefore.clear();
+    m_commandBlankBefore.clear();
 }
 
 EditResult PageController::applyOp(const std::function<EditResult(BlockDocument &)> &op)
@@ -960,12 +973,17 @@ EditResult PageController::applyOp(const std::function<EditResult(BlockDocument 
     return r;
 }
 
-void PageController::restore(const QString &snapshot, const Focus &focus)
+QList<int> PageController::blankLines() const
+{
+    return m_model->document().blankBlockLines();
+}
+
+void PageController::restore(const QString &snapshot, const Focus &focus, const QList<int> &blankLines)
 {
     const QScopedValueRollback undoing(m_undoing, true);
     m_restoring = true;
     m_typingOpen = false;
-    const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot);
+    const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankLines);
     m_restoring = false;
     remapBlocks(mapping);
     if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
@@ -1253,13 +1271,14 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     const quint64 uid = entry.uid;
     const QString body = bodyWithEditText(entry, edit);
     const QString before = text();
+    const QList<int> blankBefore = blankLines();
     const Focus focusBefore = currentFocus();
     const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo()
                                 && !m_undo->canRedo();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())
         return;
-    auto *cmd = new EditCommand(this, before, text(), focusBefore, Focus{row, cursor}, uid);
+    auto *cmd = new EditCommand(this, before, blankBefore, text(), focusBefore, Focus{row, cursor}, uid);
     cmd->setMergeable(continueTyping);
     m_undo->push(cmd);
     m_typingOpen = true;
@@ -2788,11 +2807,12 @@ void PageController::setTableCell(int row, int tableRow, int column, const QStri
     const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell == where && m_undo->canUndo()
                                 && !m_undo->canRedo();
     const QString before = text();
+    const QList<int> blankBefore = blankLines();
     const Focus focus = currentFocus();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())
         return;
-    auto *cmd = new EditCommand(this, before, text(), focus, focus, uid);
+    auto *cmd = new EditCommand(this, before, blankBefore, text(), focus, focus, uid);
     cmd->setMergeable(continueTyping);
     m_undo->push(cmd);
     m_typingOpen = true;

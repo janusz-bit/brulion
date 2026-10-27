@@ -87,10 +87,3 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
-* **Ponowienie (Ctrl+Shift+Z) gubi wstawiony pusty akapit.** Pusty akapit to w pliku tylko puste
-  wiersze, a ponowienie (i cofnięcie) czyta tekst wersji od nowa (`BlockListModel::replaceContent`),
-  więc go nie odtwarza: po Enterze na początku akapitu albo nagłówka (np. pierwszego na stronie,
-  też w trybie dokumentu) i cofnięciu, Ctrl+Shift+Z zostawia tekst pliku poprawny, ale bez
-  pustego bloku, a kursor trafia na początek następnego bloku. Test: `undoOfAnInsertionAtTheStart`
-  w `tst_editor_controller.cpp` (`QEXPECT_FAIL`). Pomysł: krok cofania zapamiętuje wiersze pustych
-  akapitów, a po odtworzeniu tekstu `BlockDocument` wydziela je z pustych wierszy bez zmiany tekstu.

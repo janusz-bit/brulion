@@ -660,6 +660,118 @@ private Q_SLOTS:
         QVERIFY(!BlockDocument(u"```\nx\n```"_s).split(0, 2).changed());
     }
 
+    // --- blank blocks across a re-read (undo/redo) -----------------------------------------------
+
+    // Operations that leave empty paragraphs ("split row cursor", "insert after", "clear row",
+    // "spaces row"): a document read again from its text gets them back from their lines.
+    void restoreBlankBlocks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("ops");
+
+        QTest::newRow("first-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("heading") << u"# Tytuł\n- treść\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("after-frontmatter") << u"---\nbrulion: document\n---\nPierwszy akapit\n"_s
+                                           << QStringList{u"split 1 0"_s};
+        QTest::newRow("after-page-properties") << u"tags:: dom\n\nŁąka\n"_s << QStringList{u"split 1 0"_s};
+        QTest::newRow("between-paragraphs") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s};
+        QTest::newRow("two-in-a-row") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s, u"split 2 0"_s};
+        QTest::newRow("between-list-items") << u"- a\n\nĄ\n\n- b\n"_s << QStringList{u"clear 1"_s};
+        QTest::newRow("before-a-list") << u"Akapit\n- a\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("end") << u"Ala ma kota\n"_s << QStringList{u"split 0 11"_s};
+        QTest::newRow("end-no-final-newline") << u"Ala ma kota"_s << QStringList{u"split 0 11"_s};
+        QTest::newRow("heading-end-no-final-newline") << u"# Tytuł"_s << QStringList{u"split 0 7"_s};
+        QTest::newRow("crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"split 0 0"_s, u"split 2 5"_s};
+        QTest::newRow("bom") << u"\uFEFFZażółć\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("document-append") << u"---\nbrulion: document\n---\nTekst"_s << QStringList{u"insert 1"_s};
+        QTest::newRow("empty-page") << QString() << QStringList{u"insert -1"_s};
+        QTest::newRow("cleared-only-block") << u"a"_s << QStringList{u"clear 0"_s};
+        QTest::newRow("spaces") << u"Ala\n\nŁ\n\nOla\n"_s << QStringList{u"spaces 1"_s};
+        QTest::newRow("many") << u"# Tytuł\n\nAla\n\n- a\n\t- b\n\nKoniec"_s
+                              << QStringList{u"split 0 0"_s, u"split 2 0"_s, u"insert 5"_s, u"split 7 6"_s};
+    }
+
+    void restoreBlankBlocks()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, ops);
+        const auto run = [](BlockDocument &d, const QString &op) {
+            const QStringList w = op.split(u' ');
+            const int a = w.value(1).toInt();
+            if (w[0] == u"split"_s)
+                return d.split(a, w.value(2).toInt()).changed();
+            if (w[0] == u"insert"_s)
+                return d.insertAfter(a, QString(), 0, false).changed();
+            return d.setBody(a, w[0] == u"spaces"_s ? u"   "_s : QString()).changed();
+        };
+        BlockDocument doc(content);
+        for (const QString &op : ops)
+            QVERIFY2(run(doc, op), qPrintable(op));
+        const QList<int> blank = doc.blankBlockLines();
+        QVERIFY(!blank.isEmpty());
+        const auto lines = [](const BlockDocument &d) {
+            QList<int> out;
+            for (int i = 0; i < d.count(); ++i)
+                out.append(d.at(i).line);
+            return out;
+        };
+
+        BlockDocument re(doc.toString());
+        QCOMPARE(re.blankBlockLines(), QList<int>());
+        QCOMPARE(re.restoreBlankBlocks(blank), int(blank.size()));
+        QCOMPARE(re.toString(), doc.toString());
+        QCOMPARE(entries(re), entries(doc));
+        QCOMPARE(lines(re), lines(doc));
+        QCOMPARE(re.blankBlockLines(), blank);
+        // The same edits give the same text (line breaks, separators and the final newline).
+        for (BlockDocument *d : {&doc, &re}) {
+            const int last = d->blankBlockLines().isEmpty() ? -1 : d->indexAtLine(d->blankBlockLines().last());
+            QVERIFY(last >= 0);
+            d->setBody(last, u"żółć"_s);
+            d->insertAfter(d->count() - 1, QString(), 0, false);
+            d->split(0, 0);
+        }
+        QCOMPARE(re.toString(), doc.toString());
+        QCOMPARE(entries(re), entries(doc));
+        QCOMPARE(re.blankBlockLines(), doc.blankBlockLines());
+    }
+
+    void restoreBlankBlocksIgnoresMalformed_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QList<int>>("lines");
+        QTest::addColumn<int>("made");
+        QTest::addColumn<QStringList>("expected"); // entries() after
+
+        const QString text = u"Ala\n\n\n\nOla\n"_s;
+        const QStringList plain{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
+        QTest::newRow("none") << text << QList<int>{} << 0 << plain;
+        QTest::newRow("negative") << text << QList<int>{-1, -5} << 0 << plain;
+        QTest::newRow("own-text") << text << QList<int>{0, 4} << 0 << plain;
+        QTest::newRow("past-the-end") << text << QList<int>{6, 100} << 0 << plain;
+        QTest::newRow("unsorted-duplicates") << text << QList<int>{3, 1, 3, 2, 1} << 3
+                                             << QStringList{u"p:0:|Ala"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|Ola"_s};
+        QTest::newRow("multi-line-block") << u"- a\n  b\n\n- c\n"_s << QList<int>{1, 2} << 1
+                                          << QStringList{u"li:0:- |a⏎b"_s, u"p:0:|"_s, u"li:0:- |c"_s};
+        QTest::newRow("code-block-blank-line") << u"```\nx\n\ny\n```\n"_s << QList<int>{2} << 0
+                                               << QStringList{u"code:0:|```⏎x⏎⏎y⏎```"_s};
+        QTest::newRow("no-final-newline") << u"Ala\n\nOla"_s << QList<int>{3} << 0
+                                          << QStringList{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
+    }
+
+    void restoreBlankBlocksIgnoresMalformed()
+    {
+        QFETCH(QString, content);
+        QFETCH(QList<int>, lines);
+        QFETCH(int, made);
+        QFETCH(QStringList, expected);
+        BlockDocument doc(content);
+        QCOMPARE(doc.blankBlockLines(), QList<int>());
+        QCOMPARE(doc.restoreBlankBlocks(lines), made);
+        QCOMPARE(doc.toString(), content);
+        QCOMPARE(entries(doc), expected);
+    }
+
     // --- insertAfter -----------------------------------------------------------------------------
 
     void insertAfterSiblingsAndChildren()

@@ -957,6 +957,24 @@ ApplicationWindow {
                         && editor.activeEditor.plain() === "Zrobione źdźbło",
                         "real Enter at the start of a done task's text puts an empty task above it: "
                         + JSON.stringify(page.sourceText)),
+            // An empty paragraph is only blank lines in the file: Ctrl+Shift+Z brings it back.
+            () => {
+                page.save()
+                host.setFile("Akapit na początek.md", "---\nbrulion: document\n---\nPierwszy akapit źdźbła\n\nDrugi\n")
+                page.path = "Akapit na początek.md"
+            },
+            () => editor.startEditing(1, 0),
+            () => realKey(Qt.Key_Return),
+            () => check(page.blocks.count === 4 && info(1).kind === "paragraph" && info(1).plainText === ""
+                        && page.editingRow === 2, "real Enter at the start of a paragraph puts an empty one above it"),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier),
+            () => check(page.blocks.count === 3 && page.editingRow === 1, "real Ctrl+Z takes the empty paragraph away"),
+            () => realKey(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier),
+            () => check(page.blocks.count === 4 && info(1).kind === "paragraph" && info(1).plainText === ""
+                        && page.editingRow === 2 && editor.activeEditor && editor.activeEditor.row === 2
+                        && editor.activeEditor.plain() === "Pierwszy akapit źdźbła",
+                        "real Ctrl+Shift+Z brings the empty paragraph back, the caret in the paragraph after it: rows "
+                        + page.blocks.count + ", editing " + page.editingRow),
             // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
             () => { page.save(); page.path = host.documentPath },
             () => {

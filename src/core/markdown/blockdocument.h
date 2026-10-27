@@ -7,6 +7,11 @@
 // together with everything inside it. Each block owns a contiguous range of lines: its own text
 // (`prefix` + `body`) and the blank lines after it (`trailing`).
 //
+// Empty paragraphs (blank blocks: Enter at the start of a paragraph, a document's last empty
+// paragraph) exist only in memory: in the text they are blank lines, which a re-read puts into
+// the blank lines of the block before. blankBlockLines() / restoreBlankBlocks() carry them across
+// a re-read of the same text (undo/redo).
+//
 // Round trip: toString() reproduces the original content byte for byte when nothing changed
 // (any mix of blocks, tabs/spaces/numbering, CRLF, BOM, missing final newline). Operations
 // rewrite only the blocks they touch; everything else keeps its exact bytes. The only edits to
@@ -123,6 +128,16 @@ public:
     /// indentation; "\r\n" in `text` is accepted. The block's kind follows its new text (typing
     /// "# " makes a heading, "- " a list item, …).
     EditResult setBody(int i, const QString &text);
+
+    /// Document lines (BlockEntry::line) of the blank blocks — empty paragraphs, which exist only
+    /// in memory: in the text they are blank lines, so a document read from text has none.
+    /// Ascending.
+    QList<int> blankBlockLines() const;
+    /// Make blank blocks of the blank lines at `lines` (as blankBlockLines() returned them for this
+    /// text) again: the text stays byte for byte, only the blocks change (other uids stay). A line
+    /// that is no blank line before the first block or after a block is ignored. Returns how many
+    /// were made. Meant for a document just read from text (BlockListModel::replaceContent).
+    int restoreBlankBlocks(const QList<int> &lines);
 
     /// Enter at `cursor` in block `i` (list items, paragraphs, headings): the text after the
     /// cursor moves to a new block; line breaks right at the split point are dropped (no blank
