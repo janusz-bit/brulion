@@ -369,6 +369,7 @@ private Q_SLOTS:
         auto ws = open({{u"Zwierzęta.md"_s, page.toUtf8()}});
         const QString cacheDir = m_tmp.filePath(u"cache-%1"_s.arg(m_n));
         ws->setWebPictureCacheDir(cacheDir);
+        ws->setWebPictureHostCheck([](const QString &) { return false; }); // 127.0.0.1 as the internet
         brulion::webpicture::PictureCache cache(cacheDir);
         QVERIFY(!cache.store(QUrl(cached), gif, u"gif"_s).isEmpty());
 
@@ -388,8 +389,8 @@ private Q_SLOTS:
         QVERIFY(html.contains(u"<img src=\""_s + cached + u'"'));
         QVERIFY(server.requests.isEmpty());
 
-        // "Dołącz kopie": the cached one as it is, the missing ones fetched (also from this
-        // device's network: the user asked), a failure keeps its address with a warning.
+        // "Dołącz kopie": the cached one as it is, the missing ones fetched, a failure keeps its
+        // address with a warning.
         c.setWebPictures(u"include"_s);
         QCOMPARE(c.state(), u"idle"_s);
         QStringList texts;
@@ -433,6 +434,7 @@ private Q_SLOTS:
         const QString wolny = server.url(u"/wolny.png"_s);
         auto ws = open({{u"Strona.md"_s, u"![](%1)\n"_s.arg(wolny).toUtf8()}});
         ws->setWebPictureCacheDir(m_tmp.filePath(u"cache-%1"_s.arg(m_n)));
+        ws->setWebPictureHostCheck([](const QString &) { return false; });
         ExportController c;
         c.setWorkspace(ws.get());
         c.setFormat(u"html-site"_s);
@@ -449,6 +451,68 @@ private Q_SLOTS:
         c.setWebPictures(u"link"_s);
         c.prepare();
         QVERIFY(waitState(c, u"ready"_s));
+    }
+
+    // A note (synced, imported) naming a picture on this device or its network: the export never
+    // fetches it on its own — only a copy the user already asked for (cached) is included.
+    void webPicturesOfPrivateHostsAreNotFetched()
+    {
+        const QByteArray gif = QByteArray("GIF89a\x01\x00\x01\x00\x00\x00\x00;", 14);
+        MiniHttpServer server;
+        server.bodies.insert("/router.png", gif);
+        const QString router = server.url(u"/router.png"_s);
+        const QString shown = u"http://nas.local/zdj%C4%99cie.gif"_s;
+        const QString lan = u"http://192.168.1.1/cgi-bin/reboot?x.png"_s;
+        auto ws = open({{u"Sieć.md"_s, u"- ![](%1)\n- ![](%2)\n- ![[%3]]\n"_s.arg(router, shown, lan).toUtf8()}});
+        const QString cacheDir = m_tmp.filePath(u"cache-%1"_s.arg(m_n));
+        ws->setWebPictureCacheDir(cacheDir);
+        brulion::webpicture::PictureCache cache(cacheDir);
+        QVERIFY(!cache.store(QUrl(shown), gif, u"gif"_s).isEmpty());
+        ExportController c;
+        c.setWorkspace(ws.get());
+        c.setFormat(u"html-single"_s);
+        c.setWebPictures(u"include"_s);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QTest::qWait(50);
+        QVERIFY(server.requests.isEmpty());
+        const QString html = QString::fromUtf8(c.result().first().data);
+        QVERIFY2(html.contains(u"<img src=\""_s + router + u'"'), qPrintable(html));
+        QVERIFY(html.contains(u"src=\"data:image/gif;base64,"_s + QString::fromLatin1(gif.toBase64()) + u'"'));
+        QCOMPARE(c.warnings().size(), 1);
+        QVERIFY2(c.warnings().first().contains(u"127.0.0.1, 192.168.1.1"_s), qPrintable(c.warnings().first()));
+    }
+
+    // The copies are held in memory until the export is made: past the limit the rest keep
+    // their addresses (one warning with the count), and nothing more is fetched.
+    void webPicturesLimit()
+    {
+        const QByteArray gif = QByteArray("GIF89a\x01\x00\x01\x00\x00\x00\x00;", 14);
+        MiniHttpServer server;
+        server.bodies.insert("/trzy.gif", gif);
+        const QString raz = u"https://example.invalid/raz.gif"_s;
+        const QString dwa = u"https://example.invalid/dwa.gif"_s;
+        const QString trzy = server.url(u"/trzy.gif"_s);
+        auto ws = open({{u"Żółw.md"_s, u"![](%1) ![](%2) ![](%3)\n"_s.arg(raz, dwa, trzy).toUtf8()}});
+        const QString cacheDir = m_tmp.filePath(u"cache-%1"_s.arg(m_n));
+        ws->setWebPictureCacheDir(cacheDir);
+        ws->setWebPictureHostCheck([](const QString &) { return false; });
+        brulion::webpicture::PictureCache cache(cacheDir);
+        QVERIFY(!cache.store(QUrl(raz), gif, u"gif"_s).isEmpty());
+        QVERIFY(!cache.store(QUrl(dwa), gif, u"gif"_s).isEmpty());
+        ExportController c;
+        c.setReadChunk(1); // the cache read in several turns
+        c.setWebCopiesLimit(gif.size());
+        c.setWorkspace(ws.get());
+        c.setFormat(u"html-single"_s);
+        c.setWebPictures(u"include"_s);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY(server.requests.isEmpty());
+        const QString html = QString::fromUtf8(c.result().first().data);
+        QCOMPARE(html.count(u"src=\"data:image/gif;base64,"_s), 1);
+        QCOMPARE(c.warnings().size(), 1);
+        QVERIFY2(c.warnings().first().startsWith(u"2 picture(s)"_s), qPrintable(c.warnings().first()));
     }
 
     void cancelWhileReading()

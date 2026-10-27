@@ -118,6 +118,9 @@ ExportController::ExportController(QObject *parent)
     m_readTimer.setSingleShot(true);
     m_readTimer.setInterval(0);
     connect(&m_readTimer, &QTimer::timeout, this, &ExportController::readStep);
+    m_webTimer.setSingleShot(true);
+    m_webTimer.setInterval(0);
+    connect(&m_webTimer, &QTimer::timeout, this, &ExportController::webCacheStep);
     connect(this, &ExportController::optionsChanged, &m_summaryTimer, qOverload<>(&QTimer::start));
     // Switching the UI language installs another translator: the translated lists follow.
     if (QCoreApplication *app = QCoreApplication::instance())
@@ -468,27 +471,67 @@ void ExportController::collectWebPictures()
 
 void ExportController::fetchWebPictures(const QStringList &urls)
 {
-    m_webPending.clear();
-    QStringList missing;
-    for (const QString &url : urls) {
-        QString format;
-        const QByteArray data = m_workspace->webPictureData(url, &format);
-        if (!data.isEmpty() && !format.isEmpty())
-            addWebPicture(url, data, format);
-        else
-            missing.append(url);
-    }
-    if (missing.isEmpty()) {
-        runExporter();
+    m_webQueue = urls;
+    m_webIndex = 0;
+    m_webMissing.clear();
+    m_webPrivateHosts.clear();
+    m_webBytes = 0;
+    m_webOverLimit = 0;
+    m_webTimer.start();
+}
+
+void ExportController::webCacheStep()
+{
+    if (m_state != u"preparing" || !m_workspace) {
+        m_webQueue.clear();
         return;
     }
-    // The user asked for copies: fetched like "Zapisz w notatniku" (also from a private host).
+    // The cached copies, read a few per event loop turn like the notes (each may be megabytes).
+    int read = 0;
+    while (m_webIndex < m_webQueue.size() && read < m_readChunk) {
+        const QString url = m_webQueue.at(m_webIndex++);
+        ++read;
+        QString format;
+        const QByteArray data = m_workspace->webPictureData(url, &format);
+        if (!data.isEmpty() && !format.isEmpty()) {
+            addWebPicture(url, data, format);
+            continue;
+        }
+        const QString host = webpicture::webUrl(url).host();
+        if (m_workspace->isPrivateWebHost(host)) {
+            // This device or its network: fetched only when the user asks for that picture, never
+            // because a note (synced, imported) names it.
+            if (!m_webPrivateHosts.contains(host))
+                m_webPrivateHosts.append(host);
+            continue;
+        }
+        if (m_webBytes >= m_webLimit) {
+            ++m_webOverLimit;
+            continue;
+        }
+        m_webMissing.append(url);
+    }
+    if (m_webIndex < m_webQueue.size()) {
+        m_webTimer.start();
+        return;
+    }
+    m_webQueue.clear();
+    if (!m_webPrivateHosts.isEmpty())
+        m_readWarnings.append(tr("Pictures from this device or its network (%1) were not fetched – the export keeps "
+                                 "their addresses. Show them in the note first to include them.")
+                                      .arg(m_webPrivateHosts.join(u", "_s)));
+    if (m_webMissing.isEmpty()) {
+        finishWebPictures();
+        return;
+    }
+    // The user asked for copies: the missing ones fetched like "Zapisz w notatniku".
+    const QStringList missing = std::exchange(m_webMissing, {});
     m_webPending = QSet<QString>(missing.cbegin(), missing.cend());
     m_webTotal = m_webPending.size();
     m_webConnection = connect(m_workspace, &shell::Workspace::webPictureChanged, this,
                               &ExportController::webPictureChanged);
     webPictureProgress();
-    for (const QString &url : std::as_const(missing))
+    for (const QString &url : missing)
         m_workspace->loadWebPicture(url, true);
 }
 
@@ -518,12 +561,31 @@ void ExportController::webPictureChanged(const QString &url)
         return;
     }
     stopWebPictures();
-    runExporter();
+    finishWebPictures();
 }
 
 void ExportController::addWebPicture(const QString &url, const QByteArray &data, const QString &format)
 {
+    // All copies are held until the exporter has run (and html-single makes text of them): a
+    // notebook with hundreds of large pictures keeps the rest as addresses instead of running out
+    // of memory.
+    if (m_webBytes + data.size() > m_webLimit) {
+        ++m_webOverLimit;
+        return;
+    }
+    m_webBytes += data.size();
     m_webCopies.insert(url, io::WebPictureCopy{data, format, webpicture::attachmentName(webpicture::webUrl(url), format)});
+}
+
+void ExportController::finishWebPictures()
+{
+    if (m_webOverLimit > 0)
+        m_readWarnings.append(tr("%n picture(s) from the internet were not included – the copies are limited to %1 "
+                                 "in all; the export keeps their addresses.",
+                                 nullptr, int(m_webOverLimit))
+                                      .arg(QLocale().formattedDataSize(m_webLimit)));
+    m_webOverLimit = 0;
+    runExporter();
 }
 
 void ExportController::webPictureProgress()
@@ -535,6 +597,9 @@ void ExportController::webPictureProgress()
 
 void ExportController::stopWebPictures()
 {
+    m_webTimer.stop();
+    m_webQueue.clear();
+    m_webMissing.clear();
     if (m_webConnection)
         disconnect(m_webConnection);
     m_webConnection = {};

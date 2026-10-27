@@ -215,6 +215,9 @@ public:
     /// the internet; webpicture::isPrivateHost by default). Such a picture is not fetched without
     /// asking, and no redirect leads there from a host of the internet.
     void setWebPictureHostCheck(std::function<bool(const QString &)> isPrivate);
+    /// `host` is this device's or its private network's (setWebPictureHostCheck()): a bulk
+    /// fetch (the export's copies) leaves it out — such a picture is fetched only when asked for.
+    bool isPrivateWebHost(const QString &host) const;
     /// The browser build: the scheme of the page Brulion runs on ("https", "http"; "" — not in a
     /// browser, the default elsewhere). Pictures are fetched with requests a page may send to
     /// another site (PictureFetcher::setSimpleRequests), and a failed connection names what a

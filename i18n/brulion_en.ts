@@ -1183,6 +1183,17 @@
     </message>
 </context>
 <context>
+    <name>brulion::ioviews::ExportController</name>
+    <message numerus="yes">
+        <location filename="../src/app/io/exportcontroller.cpp" line="583"/>
+        <source>%n picture(s) from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</source>
+        <translation>
+            <numerusform>%n picture from the internet was not included – the copies are limited to %1 in all; the export keeps its address.</numerusform>
+            <numerusform>%n pictures from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::ioviews::FileGatherer</name>
     <message numerus="yes">
         <location filename="../src/app/io/fileexchange.cpp" line="329"/>

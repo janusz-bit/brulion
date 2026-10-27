@@ -12604,12 +12604,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Obrazy (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3615"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3630"/>
         <source>Attachment</source>
         <translation>Załącznik</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/pagecontroller.cpp" line="3679"/>
+        <location filename="../src/app/editor/pagecontroller.cpp" line="3694"/>
         <source>Pasted image %1</source>
         <translation>Wklejony obraz %1</translation>
     </message>
@@ -12692,168 +12692,182 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::ExportController</name>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="167"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="170"/>
         <source>All notes as plain Markdown files with their attachments – a backup any app can read.</source>
         <translation>Wszystkie notatki jako zwykłe pliki Markdown z załącznikami – kopia zapasowa, którą odczyta każda aplikacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="170"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="173"/>
         <source>A vault to open in Obsidian: wiki links, attachments and daily notes in its layout.</source>
         <translation>Skarbiec do otwarcia w Obsidianie: linki wiki, załączniki i notatki dzienne w jego układzie.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="173"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="176"/>
         <source>A graph for Logseq: pages, journals and assets in Logseq&apos;s outline format.</source>
         <translation>Graf dla Logseq: strony, dzienniki i zasoby w formacie konspektu Logseq.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="176"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="179"/>
         <source>A small website: one page per note with working links, for a browser or a web server.</source>
         <translation>Mała witryna: jedna strona na notatkę, z działającymi linkami, do przeglądarki lub na serwer WWW.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="179"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="182"/>
         <source>Everything in one HTML file – easy to print, send or archive.</source>
         <translation>Wszystko w jednym pliku HTML – łatwo wydrukować, wysłać albo zarchiwizować.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="181"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="184"/>
         <source>One Markdown document for Pandoc, to turn into Word, LibreOffice, PDF or EPUB.</source>
         <translation>Jeden dokument Markdown dla programu Pandoc – do zamiany w plik Worda, LibreOffice, PDF albo EPUB.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="184"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="187"/>
         <source>Notes with their tasks, tags and links in one JSON file, for scripts and other tools.</source>
         <translation>Notatki z zadaniami, tagami i linkami w jednym pliku JSON, dla skryptów i innych narzędzi.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="187"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="190"/>
         <source>Dated tasks and reminders as a calendar file for Google Calendar, Outlook or a phone.</source>
         <translation>Zadania z datami i przypomnienia jako plik kalendarza dla Kalendarza Google, Outlooka lub telefonu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="190"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="193"/>
         <source>The outline of the pages for outliner and mind-mapping apps.</source>
         <translation>Konspekt stron dla aplikacji do konspektów i map myśli.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="192"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="195"/>
         <source>All tasks as a table for a spreadsheet (LibreOffice Calc, Excel).</source>
         <translation>Wszystkie zadania jako tabela do arkusza kalkulacyjnego (LibreOffice Calc, Excel).</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="301"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="304"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="303"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="306"/>
         <source>Choose a folder.</source>
         <translation>Wybierz folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="303"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="306"/>
         <source>The folder “%1” does not exist.</source>
         <translation>Folder „%1” nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="305"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="308"/>
         <source>Choose a page.</source>
         <translation>Wybierz stronę.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="305"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="308"/>
         <source>The page “%1” does not exist.</source>
         <translation>Strona „%1” nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="308"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="311"/>
         <source>There is nothing to export yet.</source>
         <translation>Na razie nie ma nic do wyeksportowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="412"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="415"/>
         <source>Reading the notes…</source>
         <translation>Wczytywanie notatek…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="430"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="433"/>
         <source>“%1” could not be read and is missing from the export.</source>
         <translation>Nie udało się odczytać „%1”, więc brakuje go w eksporcie.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="437"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="440"/>
         <source>Reading %1 of %2 files…</source>
         <translation>Wczytywanie pliku %1 z %2…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="457"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="460"/>
         <source>Looking for pictures from the internet…</source>
         <translation>Szukanie obrazów z internetu…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="511"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="520"/>
+        <source>Pictures from this device or its network (%1) were not fetched – the export keeps their addresses. Show them in the note first to include them.</source>
+        <translation>Obrazów z tego urządzenia lub jego sieci (%1) nie pobrano – w eksporcie zostają ich adresy. Aby je dołączyć, najpierw wyświetl je w notatce.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/io/exportcontroller.cpp" line="554"/>
         <source>The picture from %1 was not included – the export keeps its address.</source>
         <translation>Obrazu z %1 nie dołączono – w eksporcie zostaje jego adres.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="512"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="555"/>
         <source>The picture from %1 was not included (%2) – the export keeps its address.</source>
         <translation>Obrazu z %1 nie dołączono (%2) – w eksporcie zostaje jego adres.</translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/app/io/exportcontroller.cpp" line="583"/>
+        <source>%n picture(s) from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</source>
+        <translation>
+            <numerusform>%n obrazu z internetu nie dołączono – kopii może być łącznie najwyżej %1; w eksporcie zostaje jego adres.</numerusform>
+            <numerusform>%n obrazów z internetu nie dołączono – kopii może być łącznie najwyżej %1; w eksporcie zostają ich adresy.</numerusform>
+            <numerusform>%n obrazów z internetu nie dołączono – kopii może być łącznie najwyżej %1; w eksporcie zostają ich adresy.</numerusform>
+        </translation>
+    </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="533"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="595"/>
         <source>Fetching pictures from the internet (%1 of %2)…</source>
         <translation>Pobieranie obrazów z internetu (%1 z %2)…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="548"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="613"/>
         <source>This format is not available.</source>
         <translation>Ten format jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="558"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="623"/>
         <source>Creating “%1”…</source>
         <translation>Tworzenie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="575"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="640"/>
         <source>Nothing was exported.</source>
         <translation>Nic nie wyeksportowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="590"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="655"/>
         <source>The file could not be saved: %1</source>
         <translation>Nie udało się zapisać pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="598"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="631"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="663"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="696"/>
         <source>“%1” could not be saved: %2</source>
         <translation>Nie udało się zapisać „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="603"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="668"/>
         <source>Saved “%1”.</source>
         <translation>Zapisano „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="623"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="688"/>
         <source>The file could not be saved in Downloads: %1</source>
         <translation>Nie udało się zapisać pliku w Pobranych: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="633"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="698"/>
         <source>Downloads/%1</source>
         <translation>Pobrane/%1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="635"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="700"/>
         <source>Saved “%1” in Downloads.</source>
         <translation>Zapisano „%1” w Pobranych.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="659"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="724"/>
         <source>“%1” is being downloaded.</source>
         <translation>Trwa pobieranie „%1”.</translation>
     </message>

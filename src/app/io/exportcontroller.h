@@ -148,6 +148,9 @@ public:
     QList<io::ExportedFile> result() const { return m_result; }
     /// Files read per event loop turn (default 64; tests).
     void setReadChunk(int files) { m_readChunk = qMax(1, files); }
+    /// The most bytes of copies of pictures from the internet one export includes ("include";
+    /// default 256 MB; tests). Past it the export keeps their addresses, with a warning.
+    void setWebCopiesLimit(qint64 bytes) { m_webLimit = qMax<qint64>(0, bytes); }
     /// Clock for the export's time stamps (default: Workspace::now()).
     void setClock(std::function<QDateTime()> clock) { m_clock = std::move(clock); }
 
@@ -176,7 +179,11 @@ private:
     /// "include": the pictures from the internet of the read notes, copies from the cache, the
     /// missing ones fetched — then runExporter().
     void collectWebPictures();
+    /// The copies of `urls`: from the cache in chunks (webCacheStep()), the missing ones of the
+    /// internet fetched (not those of private hosts), then finishWebPictures().
     void fetchWebPictures(const QStringList &urls);
+    void webCacheStep();
+    void finishWebPictures();
     void webPictureChanged(const QString &url);
     void addWebPicture(const QString &url, const QByteArray &data, const QString &format);
     void webPictureProgress();
@@ -211,6 +218,14 @@ private:
     QString m_webPictures = QStringLiteral("link");
     // The copies of pictures from the internet being collected (webPictures "include").
     QHash<QString, io::WebPictureCopy> m_webCopies;
+    QStringList m_webQueue; ///< the pictures of the notes, looked up in the cache
+    qsizetype m_webIndex = 0;
+    QStringList m_webMissing;
+    QStringList m_webPrivateHosts;
+    qint64 m_webBytes = 0;
+    qint64 m_webLimit = 256LL * 1024 * 1024;
+    qsizetype m_webOverLimit = 0;
+    QTimer m_webTimer;
     QSet<QString> m_webPending;
     qsizetype m_webTotal = 0;
     QMetaObject::Connection m_webConnection;

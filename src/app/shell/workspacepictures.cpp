@@ -244,8 +244,7 @@ QVariantMap Workspace::webPicture(const QString &url) const
     }
     if (const auto error = pictures->errors.constFind(url); error != pictures->errors.constEnd())
         return {{u"state"_s, u"failed"_s}, {u"error"_s, *error}};
-    const bool isPrivate =
-            m_webPictureHostCheck ? m_webPictureHostCheck(web.host()) : webpicture::isPrivateHost(web.host());
+    const bool isPrivate = isPrivateWebHost(web.host());
     if (m_webPicturesShown && !isPrivate && !pictures->autoFetched.contains(web)) {
         // Shown without asking: fetched now (the answer comes from the event loop, so asking
         // while the editor builds its rows changes nothing under it).
@@ -255,6 +254,11 @@ QVariantMap Workspace::webPicture(const QString &url) const
         return {{u"state"_s, u"loading"_s}};
     }
     return {{u"state"_s, u"ask"_s}};
+}
+
+bool Workspace::isPrivateWebHost(const QString &host) const
+{
+    return m_webPictureHostCheck ? m_webPictureHostCheck(host) : webpicture::isPrivateHost(host);
 }
 
 void Workspace::loadWebPicture(const QString &url, bool forDownload)
