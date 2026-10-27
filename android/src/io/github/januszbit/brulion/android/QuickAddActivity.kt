@@ -63,6 +63,31 @@ class QuickAddActivity : Activity() {
     refreshChips()
   }
 
+  // Opened again while still open (another "+" or a launcher that keeps it): the new kind and text.
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    val newKind = if (intent.getStringExtra(EXTRA_KIND) == WidgetAction.KIND_NOTE) WidgetAction.KIND_NOTE else WidgetAction.KIND_TASK
+    setIntent(intent)
+    if (newKind != kind) {
+      recreate()
+      return
+    }
+    // A new "+": a new entry, today's (as when the dialog opens).
+    day = LocalDate.now()
+    time = null
+    alarm = false
+    customDay = false
+    refreshChips()
+    status.text = ""
+    input.setText(intent.getStringExtra(Intent.EXTRA_TEXT) ?: "")
+  }
+
+  // Left for the home screen or another app: the dialog does not linger behind it.
+  override fun onStop() {
+    super.onStop()
+    if (!isChangingConfigurations) finish()
+  }
+
   override fun onSaveInstanceState(outState: Bundle) {
     super.onSaveInstanceState(outState)
     outState.putString("day", day?.toString())
@@ -116,18 +141,15 @@ class QuickAddActivity : Activity() {
     root.addView(input, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(8) })
 
     if (kind == WidgetAction.KIND_TASK) {
-      val scroll = HorizontalScrollView(this)
-      scroll.isHorizontalScrollBarEnabled = false
-      val row = LinearLayout(this)
-      row.orientation = LinearLayout.HORIZONTAL
-      row.addView(chip(CHIP_TODAY, R.string.brulion_quick_add_today) { pick(LocalDate.now()) })
-      row.addView(chip(CHIP_TOMORROW, R.string.brulion_quick_add_tomorrow) { pick(LocalDate.now().plusDays(1)) })
-      row.addView(chip(CHIP_NONE, R.string.brulion_quick_add_no_date) { day = null; time = null; alarm = false; customDay = false; refreshChips() })
-      row.addView(chip(CHIP_DATE, R.string.brulion_quick_add_date) { pickDate() })
-      row.addView(chip(CHIP_TIME, R.string.brulion_quick_add_time) { pickTime() })
-      row.addView(chip(CHIP_ALARM, R.string.brulion_quick_add_alarm) { alarm = !alarm && time != null; refreshChips() })
-      scroll.addView(row)
-      root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(10) })
+      // The day, then the time: two rows (each scrolls sideways on a narrow screen).
+      val days = chipRow(root)
+      days.addView(chip(CHIP_TODAY, R.string.brulion_quick_add_today) { pick(LocalDate.now()) })
+      days.addView(chip(CHIP_TOMORROW, R.string.brulion_quick_add_tomorrow) { pick(LocalDate.now().plusDays(1)) })
+      days.addView(chip(CHIP_NONE, R.string.brulion_quick_add_no_date) { day = null; time = null; alarm = false; customDay = false; refreshChips() })
+      days.addView(chip(CHIP_DATE, R.string.brulion_quick_add_date) { pickDate() })
+      val times = chipRow(root)
+      times.addView(chip(CHIP_TIME, R.string.brulion_quick_add_time) { pickTime() })
+      times.addView(chip(CHIP_ALARM, R.string.brulion_quick_add_alarm) { alarm = !alarm && time != null; refreshChips() })
     }
 
     status = TextView(this)
@@ -151,6 +173,16 @@ class QuickAddActivity : Activity() {
     buttons.addView(addButton)
     root.addView(buttons, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     return root
+  }
+
+  private fun chipRow(root: LinearLayout): LinearLayout {
+    val scroll = HorizontalScrollView(this)
+    scroll.isHorizontalScrollBarEnabled = false
+    val row = LinearLayout(this)
+    row.orientation = LinearLayout.HORIZONTAL
+    scroll.addView(row)
+    root.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).also { it.topMargin = dp(10) })
+    return row
   }
 
   private fun chip(key: String, text: Int, onClick: () -> Unit): TextView {

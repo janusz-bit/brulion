@@ -13,6 +13,7 @@
 #include "vault/vault.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QDateTime>
 #include <QGuiApplication>
 #include <QLoggingCategory>
@@ -87,8 +88,9 @@ WidgetPublisher::WidgetPublisher(shell::AppController *app) : QObject(app), m_ap
         Vault *vault = m_app->workspace()->vault();
         if (!vault)
             return;
-        const QString root = QDir::cleanPath(vault->rootPath()) + u'/';
-        if (!QDir::cleanPath(path).startsWith(root))
+        // Symbolic links on the way (/data/user/0 is /data/data) do not matter.
+        const QString root = QFileInfo(vault->rootPath()).canonicalFilePath() + u'/';
+        if (root.size() < 2 || !QFileInfo(path).canonicalFilePath().startsWith(root))
             return;
         qCInfo(lcWidgets) << "Quick add wrote" << path << "- reading the notebook again";
         vault->rescan();

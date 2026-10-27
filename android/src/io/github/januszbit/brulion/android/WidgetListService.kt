@@ -110,7 +110,7 @@ class WidgetListService : RemoteViewsService() {
 
     private fun page(page: PageRef): RemoteViews {
       val views = RemoteViews(context.packageName, R.layout.widget_row_page)
-      views.setTextViewText(R.id.row_text, page.title)
+      views.setTextViewText(R.id.row_text, pageLabel(page, snapshot.locale))
       views.setOnClickFillInIntent(R.id.row_text, fillIn(page.path, 0))
       return views
     }
@@ -225,6 +225,10 @@ internal fun pageRows(snapshot: WidgetSnapshot, favorites: String, recent: Strin
   }
   return out
 }
+
+/** A page's name in the list: a daily note by its day ("wtorek, 27 października"), else its title. */
+internal fun pageLabel(page: PageRef, locale: String): String =
+  JournalAppend.parseDate(page.title)?.let { WidgetDates.long(it, locale) } ?: page.title
 
 /** The mark of an agenda entry: a task's status, a reminder's bell. */
 internal fun entryMark(entry: CalendarEntry): String =

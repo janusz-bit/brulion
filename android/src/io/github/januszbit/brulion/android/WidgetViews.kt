@@ -39,8 +39,8 @@ internal enum class WidgetKind(val provider: Class<*>, val key: String) {
  * [QuickAddActivity], the calendar's buttons go to [WidgetReceiver].
  */
 internal object WidgetViews {
-  /** A tasks widget at least this tall (dp) also lists tomorrow's tasks. */
-  const val TALL_TASKS_DP = 220
+  /** A tasks widget at least this tall (dp, three rows of cells) also lists tomorrow's tasks. */
+  const val TALL_TASKS_DP = 300
 
   /** A calendar widget at least this tall (dp) shows the month grid above its agenda. */
   const val TALL_CALENDAR_DP = 270

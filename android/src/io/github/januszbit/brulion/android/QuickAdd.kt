@@ -40,7 +40,8 @@ internal object QuickAdd {
           WidgetStore.saveSnapshot(app, snapshot.withAddedTask(task, JournalAppend.parseDate(action.date), entryOf(task, action)).toString())
           provisionalReminder(action, task, vault, now)?.let { arm(app, it) }
         }
-        BrulionAndroid.widgetWrote(result.file.absolutePath)
+        // The notebook's own spelling of the path (the canonical one may differ: /data/user/0 is /data/data).
+        BrulionAndroid.widgetWrote(File(vault.root, day.path).path)
         WidgetUpdater.refreshAll(app)
         return Outcome.WRITTEN
       }

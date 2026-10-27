@@ -171,6 +171,8 @@ class WidgetSnapshotTest {
       ),
       pages
     )
+    assertEquals("wtorek, 27 października", pageLabel(PageRef("journals/2026-10-27.md", "2026-10-27"), "pl"))
+    assertEquals("Zakupy ąę", pageLabel(PageRef("Zakupy ąę.md", "Zakupy ąę"), "pl"))
   }
 
   @Test

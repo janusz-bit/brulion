@@ -38,7 +38,17 @@
 # .md file on shared storage shared through MediaStore after a cold start (a new page, its bytes
 # kept, CRLF too), a picture refused (no dialog: ShareActivity accepts text/* only), and the
 # copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
-# --selection, --folders and --share find what they tap by its accessible name (UiAutomator reads Qt's
+# With --widgets instead: the home-screen widgets (docs/ANDROID.md "Widgety") — the sample
+# notebook publishes their snapshot when the app leaves the front; the three widgets are placed
+# through the launcher's widget picker (tap a preview, "Add"); quick add with the app killed writes
+# into today's journal at once (Qt not even loaded), a task for today shows in the tasks widget,
+# a time and "Alarm" write "⏰!" and arm a provisional native reminder, an entry without a
+# snapshot waits in the inbox and the app writes it at its next start, a tap on a widget's task
+# opens the note; the calendar's month buttons; screenshots of each widget light and dark, the
+# tasks widget made taller (tomorrow's tasks) and the calendar lower (the agenda only) with the
+# launcher's resize handles (wg-*.png). Needs a google_apis image (adb root: quick add and the
+# widgets' receiver are not exported) and the same debuggable APK.
+# --selection, --folders, --share and --widgets find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
@@ -47,6 +57,7 @@
 #        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --share [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --widgets [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -87,6 +98,7 @@ KEYBOARD=0
 SELECTION=0
 FOLDERS=0
 SHARE=0
+WIDGETS=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
   shift
@@ -99,11 +111,14 @@ elif [[ ${1:-} == --folders ]]; then
 elif [[ ${1:-} == --share ]]; then
   SHARE=1
   shift
+elif [[ ${1:-} == --widgets ]]; then
+  WIDGETS=1
+  shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD || SELECTION || FOLDERS || SHARE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION || FOLDERS || SHARE || WIDGETS)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -664,6 +679,200 @@ if ((SHARE)); then
   check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/share-logcat.txt'"
   check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/share-logcat.txt'"
   info "Result"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- the home-screen widgets (--widgets) ---------------------------------------------------------
+
+QUICK_ADD=$PKG/$PKG.android.QuickAddActivity
+WIDGET_RECEIVER=$PKG/$PKG.android.WidgetReceiver
+WIDGET_PREFS=shared_prefs/$PKG.android.widgets.xml
+prefs_grep() { adb shell run-as "$PKG" cat "$1" 2>/dev/null | grep -q -- "$2"; } # <file> <text>
+# Qt's library is not loaded in the app's process (quick add and the widgets run without it).
+qt_not_loaded() {
+  local pid
+  pid=$(adb shell pidof "$PKG" | tr -d '\r')
+  [[ -n $pid ]] && [[ $(adb shell "grep -c libbrulion /proc/$pid/maps" | tr -d '\r') == 0 ]]
+}
+home() { adb shell input keyevent 3 && sleep 1 && adb shell input keyevent 3 && sleep 2; }
+# The home screen's page with the item named so (the launcher puts each new widget where it fits).
+show_page() { # <ERE>
+  local _
+  home
+  for _ in 1 2 3 4; do
+    ui_has "$1" && return 0
+    adb shell input swipe $((SCREEN_W * 85 / 100)) $((SCREEN_H / 2)) $((SCREEN_W * 15 / 100)) $((SCREEN_H / 2)) 300
+    sleep 2
+  done
+  ui_has "$1"
+}
+# A widget placed from the launcher's picker: long press on the home screen, "Widgets", Brulion's
+# entry, a tap on the widget's preview (named "<label> widget, …") and its "Add".
+place_widget() { # <label ERE>
+  local y found=0
+  # An empty spot of the home screen (a long press on a widget would pick the widget up).
+  for y in 52 66 47 74 58; do
+    home
+    adb shell input swipe $((SCREEN_W / 2)) $((SCREEN_H * y / 100)) $((SCREEN_W / 2)) $((SCREEN_H * y / 100)) 1300
+    sleep 2
+    if ui_has 'Widgets|Widżety'; then
+      found=1
+      break
+    fi
+    adb shell input keyevent 4
+  done
+  ((found)) || return 1
+  ui_tap 'Widgets|Widżety' || return 1
+  ui_tap 'Brulion' || return 1
+  ui_tap "($1) widget.*" || return 1
+  ui_tap "(Add|Dodaj) ($1) widget" first 4 || return 1
+  home
+}
+# The launcher's resize frame of the widget named so moved by its bottom handle by <dy> px.
+resize_widget() { # <ERE of a text in the widget> <dy>
+  local xy handle
+  xy=$(ui_find_all "$1" | head -n 1)
+  [[ -n $xy ]] || return 1
+  adb shell input swipe $xy $xy 1500
+  sleep 2
+  ui_dump
+  handle=$(sed 's/<node /\n<node /g' "$OUT/ui.xml" | grep 'widget_resize_bottom_handle' |
+    sed -nE 's/.*bounds="\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]".*/\1 \2 \3 \4/p' | awk '{ print int(($1 + $3) / 2), int(($2 + $4) / 2) }')
+  [[ -n $handle ]] || return 1
+  adb shell input swipe $handle "${handle% *}" $((${handle#* } + $2)) 1500
+  sleep 2
+  adb shell input keyevent 4
+  sleep 3
+}
+refresh_widgets() { adb shell am broadcast -a "$PKG.android.action.WIDGETS_MIDNIGHT" -n "$WIDGET_RECEIVER" >/dev/null; sleep 3; }
+quick_add() { # <text> [chips to tap…]: QuickAddActivity with the text, the chips, "Dodaj"
+  local chip
+  adb shell am start -n "$QUICK_ADD" --es android.intent.extra.TEXT "'$1'" >/dev/null
+  wait_for 15 ui_has 'Dodaj' || return 1
+  shift
+  for chip in "$@"; do
+    if [[ $chip == OK ]]; then ui_tap 'OK' || return 1; else ui_tap "$chip" || return 1; fi
+  done
+  ui_tap 'Dodaj'
+}
+
+if ((WIDGETS)); then
+  info "Widgets: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb root >/dev/null 2>&1 || true
+  sleep 3
+  adb wait-for-device
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  adb shell am start -n "$QUICK_ADD" >/dev/null 2>&1 && adb shell am force-stop "$PKG" ||
+    die "cannot start the (not exported) QuickAddActivity: a google_apis image with adb root is needed"
+  today=$(adb shell date +%Y-%m-%d | tr -d '\r')
+  tomorrow=$(adb shell date -d @$(($(adb shell date +%s | tr -d '\r') + 86400)) +%Y-%m-%d | tr -d '\r')
+  journal="journals/$today.md"
+
+  # 1. The app publishes the snapshot (the sample notebook) when it leaves the front.
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+  home
+  check "the snapshot of the notebook is stored" wait_for 15 prefs_grep "$WIDGET_PREFS" 'Przykładowy brulion'
+  check "the app says so" log_has 'Snapshot published'
+
+  # 2. The three widgets from the launcher's picker.
+  check "the tasks widget is placed" place_widget 'Tasks — My day|Zadania — Mój dzień'
+  check "the calendar widget is placed" place_widget 'Calendar|Kalendarz'
+  check "the notes widget is placed" place_widget 'Notes|Notatki'
+  adb shell dumpsys appwidget >"$OUT/dumpsys-appwidget.txt"
+  check "the system binds the three providers" bash -c \
+    "grep -q TasksWidget '$OUT/dumpsys-appwidget.txt' && grep -q CalendarWidget '$OUT/dumpsys-appwidget.txt' && grep -q NotesWidget '$OUT/dumpsys-appwidget.txt'"
+  check "the tasks widget shows the day in the app's language" show_page 'Mój dzień'
+  app_shot wg-1-tasks-light
+
+  # 3. Quick add with the app killed: written at once, Qt never starts.
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  check "quick add: a task for tomorrow (Jutro)" quick_add 'Kupić żółty ser' 'Jutro'
+  check "it says it was added" wait_for 10 ui_has 'Dodano do dzisiejszego dziennika.*'
+  app_shot wg-2-quick-add
+  check "the line is in today's journal" vault_grep "$journal" "^- \[ \] Kupić żółty ser 📅 $tomorrow\$"
+  check "Qt was not loaded for it" qt_not_loaded
+  check "quick add: a task for today (Dziś)" quick_add 'Odebrać paczkę' 'Dziś'
+  check "quick add: a time (Godzina… 09:00) tomorrow with Alarm" quick_add 'Pobudka na pociąg' 'Godzina…' OK 'Jutro' 'Alarm'
+  check "the alarm line is in today's journal" vault_grep "$journal" "^- \[ \] Pobudka na pociąg ⏰! $tomorrow 09:00\$"
+  check "a provisional native reminder is armed for it" prefs_grep "shared_prefs/$PKG.android.reminders.xml" '&quot;provisional&quot;:true'
+  adb shell input keyevent 4
+  adb shell input keyevent 4
+  check "the tasks widget shows today's new task at once" show_page 'Odebrać paczkę'
+  app_shot wg-3-tasks-added
+
+  # 4. Without a snapshot the entry waits for the app, which writes it at its start.
+  adb shell am force-stop "$PKG"
+  adb shell run-as "$PKG" rm -f "$WIDGET_PREFS"
+  check "quick add without a snapshot" quick_add 'Zadanie z kolejki'
+  check "it waits for the app" wait_for 10 ui_has 'Zapisze się w dzienniku po otwarciu Brulionu.*'
+  adb shell input keyevent 4
+  adb shell input keyevent 4
+  start_app '--demo --locale pl --route journals'
+  check "the app wrote the queued entry" wait_for 20 vault_grep "$journal" '^- \[ \] Zadanie z kolejki 📅 '
+  check "the app's own reminder replaced the provisional one" bash -c \
+    "! '$SDK/platform-tools/adb' -s $SERIAL shell run-as $PKG cat shared_prefs/$PKG.android.reminders.xml | grep -q '&quot;provisional&quot;:true'"
+
+  # 5. A tap on a task of the widget opens its note (a cold start).
+  adb shell am force-stop "$PKG"
+  refresh_widgets
+  show_page 'Odebrać paczkę' >/dev/null || true
+  adb logcat -c
+  check "a tap on the widget's task" ui_tap 'Odebrać paczkę' first 20
+  check "Brulion opens" wait_for 20 bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity' | grep -q BrulionActivity"
+  app_shot wg-4-tap-opens-note
+
+  # 6. The calendar: the month grid and its buttons; then the widgets in the dark, bigger and smaller.
+  # (Opened by the tap the app ran in the phone's language: back to Polish, which the widgets follow.)
+  start_app '--demo --locale pl --route journals'
+  home
+  wait_for 15 log_has 'Snapshot published' || true
+  check "the calendar widget shows its month" show_page 'Następny miesiąc'
+  app_shot wg-5-calendar-light
+  months=(Styczeń Luty Marzec Kwiecień Maj Czerwiec Lipiec Sierpień Wrzesień Październik Listopad Grudzień)
+  this_month=$(adb shell date +%-m | tr -d '\r')
+  this_year=$(adb shell date +%Y | tr -d '\r')
+  check "the month's title" ui_has "${months[this_month - 1]} $this_year"
+  check "› shows the next month" ui_tap 'Następny miesiąc'
+  if ((this_month == 12)); then next_title="Styczeń $((this_year + 1))"; else next_title="${months[this_month]} $this_year"; fi
+  check "… $next_title" wait_for 10 ui_has "$next_title"
+  app_shot wg-6-calendar-next-month
+  check "‹ goes back" ui_tap 'Poprzedni miesiąc'
+  check "the notes widget shows the notebook" show_page 'Szybka notatka'
+  app_shot wg-7-notes-light
+  adb shell cmd uimode night yes >/dev/null
+  sleep 2
+  refresh_widgets
+  show_page 'Mój dzień' >/dev/null || true
+  app_shot wg-8-tasks-dark
+  resize_widget 'Mój dzień' $((SCREEN_H * 18 / 100)) || true
+  check "… tomorrow's tasks in the taller tasks widget" wait_for 10 ui_has 'JUTRO · [0-9]+'
+  app_shot wg-9-tasks-tall-dark
+  show_page 'Następny miesiąc' >/dev/null || true
+  app_shot wg-10-calendar-dark
+  resize_widget 'Następny miesiąc' $((-SCREEN_H * 30 / 100)) || true
+  check "the calendar widget made lower shows the agenda only" wait_for 10 ui_has 'Kalendarz'
+  app_shot wg-11-calendar-low-dark
+  show_page 'Szybka notatka' >/dev/null || true
+  app_shot wg-12-notes-dark
+  adb shell cmd uimode night no >/dev/null
+  refresh_widgets
+  show_page 'Kalendarz' >/dev/null || true
+  app_shot wg-13-calendar-low-light
+  show_page 'Mój dzień' >/dev/null || true
+  app_shot wg-14-tasks-tall-light
+
+  adb logcat -d >"$OUT/widgets-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/widgets-logcat.txt'"
+  info "Result"
+  echo "    the journal of $today:"
+  vault_cat "$journal" | tail -n 5 | sed 's/^/      /'
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"
