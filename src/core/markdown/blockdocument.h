@@ -7,6 +7,11 @@
 // together with everything inside it. Each block owns a contiguous range of lines: its own text
 // (`prefix` + `body`) and the blank lines after it (`trailing`).
 //
+// Empty paragraphs (blank blocks: Enter at the start of a paragraph, a document's last empty
+// paragraph) exist only in memory: in the text they are blank lines, which a re-read puts into
+// the blank lines of the block before. blankBlocks() / restoreBlankBlocks() carry them across
+// a re-read of the same text (undo/redo).
+//
 // Round trip: toString() reproduces the original content byte for byte when nothing changed
 // (any mix of blocks, tabs/spaces/numbering, CRLF, BOM, missing final newline). Operations
 // rewrite only the blocks they touch; everything else keeps its exact bytes. The only edits to
@@ -85,6 +90,14 @@ struct RowRange {
     friend bool operator==(const RowRange &, const RowRange &) = default;
 };
 
+/// An empty paragraph (a blank block) of a document: its first line (BlockEntry::line) and how
+/// many lines it spans (more than one with line breaks typed into it).
+struct BlankBlock {
+    int line = -1;
+    int lines = 1;
+    friend bool operator==(const BlankBlock &, const BlankBlock &) = default;
+};
+
 /// Result of BlockDocument::ensureBlockId().
 struct BlockIdResult {
     QString id;      ///< empty when the block cannot carry an id
@@ -124,14 +137,26 @@ public:
     /// "# " makes a heading, "- " a list item, …).
     EditResult setBody(int i, const QString &text);
 
+    /// The blank blocks — empty paragraphs, which exist only in memory: in the text they are blank
+    /// lines, so a document read from text has none. Their lines and line counts, ascending.
+    QList<BlankBlock> blankBlocks() const;
+    /// Make blank blocks of the blank lines at `blocks` (as blankBlocks() returned them for this
+    /// text) again: the text stays byte for byte, only the blocks change (other uids stay). A block
+    /// whose lines are not all blank lines before the first block or after a block is ignored.
+    /// Returns how many were made. Meant for a document just read from text
+    /// (BlockListModel::replaceContent).
+    int restoreBlankBlocks(const QList<BlankBlock> &blocks);
+
     /// Enter at `cursor` in block `i` (list items, paragraphs, headings): the text after the
     /// cursor moves to a new block; line breaks right at the split point are dropped (no blank
     /// lines at the edges of either block). List items: same indentation and marker (numbered lists
     /// continue: 3. -> 4.), tasks continue with `[ ] ` (or TODO/LATER); a block with children
     /// gets the new block as its first child unless `collapsed`. Paragraphs/headings: the new
-    /// block is a paragraph (separated by a blank line). Cursor 0 in a non-empty block inserts an
-    /// empty block before it instead. Focus: the new block (caret after a task marker), or the
-    /// original block for cursor 0.
+    /// block is a paragraph (separated by a blank line). Cursor 0 in a non-empty block, or a
+    /// cursor within or right after the task marker of a task with text, inserts an empty block
+    /// (for a task an empty task: `[ ] ` / `TODO `) before it instead; the original keeps its
+    /// status, children and uid. Focus: the new block (caret after a task marker), or the
+    /// original block for an insertion before it (caret after its task marker, else 0).
     EditResult split(int i, int cursor, bool collapsed = false);
 
     /// Insert a new block after block `i` (-1 = at the start). A list item at `depth` (clamped to

@@ -24,6 +24,12 @@ bool endsWithEol(QStringView s)
     return s.endsWith(u'\n') || s.endsWith(u'\r');
 }
 
+/// Only spaces, tabs and line breaks (blank lines).
+bool isBlankLines(QStringView s)
+{
+    return std::all_of(s.begin(), s.end(), [](QChar c) { return c == u'\n' || c == u'\r' || isSpaceOrTab(c); });
+}
+
 int countLineBreaks(QStringView s)
 {
     int n = 0;
@@ -265,6 +271,73 @@ RowRange BlockDocument::subtreeRange(int i) const
 bool BlockDocument::hasChildren(int i) const
 {
     return i >= 0 && i + 1 < count() && m_items[i + 1].entry.parent == i;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Blank blocks (empty paragraphs)
+// ---------------------------------------------------------------------------------------------
+
+QList<BlankBlock> BlockDocument::blankBlocks() const
+{
+    QList<BlankBlock> out;
+    for (const Item &it : m_items) {
+        if (it.entry.kind == BlockKind::Paragraph && isBlankLines(it.own))
+            out.append({it.entry.line, countLineBreaks(it.own) + 1});
+    }
+    return out;
+}
+
+int BlockDocument::restoreBlankBlocks(const QList<BlankBlock> &blocks)
+{
+    QList<BlankBlock> wanted = blocks;
+    std::sort(wanted.begin(), wanted.end(), [](const BlankBlock &x, const BlankBlock &y) { return x.line < y.line; });
+    int made = 0;
+    for (const BlankBlock &b : std::as_const(wanted)) {
+        if (b.line < 0 || b.lines < 1)
+            continue;
+        // The run of blank lines that holds the block: the blank lines before the first block
+        // (k = -1) or the ones after block k. A block made before (an overlapping or repeated
+        // entry) is block k, its lines are no run.
+        int k = -1;
+        while (k + 1 < count() && m_items[k + 1].entry.line <= b.line)
+            ++k;
+        const int start = k < 0 ? 0
+                                : m_items[k].entry.line + countLineBreaks(m_items[k].own)
+                                          + countLineBreaks(m_items[k].eol);
+        if (b.line < start)
+            continue; // a line of the block's own text
+        QString &run = k < 0 ? m_leading : m_items[k].entry.trailing;
+        const QList<text::Line> runLines = text::splitLines(run);
+        // splitLines() ends with an empty line after a final terminator: no line of the run.
+        const int runCount = int(runLines.size())
+                             - (runLines.last().text.isEmpty() && runLines.last().eol.isEmpty() ? 1 : 0);
+        const int index = b.line - start;
+        const int end = index + b.lines; // one past the block's last line
+        Item x = makeItem(QString(), QString(), QString());
+        if (end <= runCount) {
+            x.own = joinLineRange(runLines, index, end, false);
+            x.eol = runLines[end - 1].eol;
+            x.entry.trailing = joinLineRange(runLines, end, int(runLines.size()), true);
+        } else {
+            // Its last line one past the end of a text that ends with a line break: an empty
+            // paragraph at the very end of a page without a final newline (fixEnds() writes it
+            // that way).
+            const bool last = k == count() - 1;
+            const bool terminated = run.isEmpty() ? (k < 0 || !m_items[k].eol.isEmpty()) : endsWithEol(run);
+            if (!last || end != runCount + 1 || !terminated)
+                continue;
+            x.own = joinLineRange(runLines, index, runCount, true);
+            m_finalNewline = false;
+        }
+        run = joinLineRange(runLines, 0, index, true);
+        x.entry.line = b.line;
+        m_items.insert(k + 1, std::move(x));
+        derive(k + 1);
+        ++made;
+    }
+    if (made > 0)
+        recompute();
+    return made;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -919,7 +992,15 @@ EditResult BlockDocument::split(int i, int cursor, bool collapsed)
         const QString cont = taskContinuation(e.body);
         Item x = makeItem(QString(), m_eol, QString());
         x.entry.kind = BlockKind::ListItem;
-        if (c == 0 && !e.body.isEmpty()) {
+        // A cursor inside or right after the task marker of a task with text counts as the start
+        // (the editor hides the marker, so its caret 0 is after it): the text keeps its status.
+        bool atStart = c == 0;
+        int caret = 0;
+        if (const auto m = matchTaskMarker(e.body, 0); m && c <= m->contentStart && m->contentStart < e.body.size()) {
+            atStart = true;
+            caret = int(m->contentStart);
+        }
+        if (atStart && !e.body.isEmpty()) {
             // Enter at the start: an empty block above, the caret stays in this one.
             x.entry.prefix = e.prefix;
             x.contIndent = m_items[i].contIndent;
@@ -930,7 +1011,7 @@ EditResult BlockDocument::split(int i, int cursor, bool collapsed)
             renumberAround(at(i).uid);
             ensureSeparated(i - 1);
             fixEnds();
-            return finish(before, indexOfUid(e.uid), 0);
+            return finish(before, indexOfUid(e.uid), caret);
         }
         setOwn(i, serializeBody(m_items[i], head));
         const bool asChild = !collapsed && hasChildren(i);

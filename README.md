@@ -296,7 +296,7 @@ usuwa go w całości.
 | `Ctrl+Shift+B` | dokumentacja Brulionu / powrót do poprzedniego notatnika |
 | `Ctrl+Shift+F` | wyszukiwanie |
 | `Alt+←` / `Alt+→` | wstecz / dalej |
-| `Enter` / `Shift+Enter` | nowy blok / nowa linia w bloku |
+| `Enter` / `Shift+Enter` | nowy blok (na początku tekstu: pusty blok nad nim, przy zadaniu puste zadanie) / nowa linia w bloku |
 | `Tab` / `Shift+Tab` | wcięcie / wysunięcie bloku z dziećmi |
 | `Alt+↑` / `Alt+↓` | przeniesienie bloku z dziećmi |
 | `Ctrl+Enter` | zmiana statusu zadania po kolei (brak → do zrobienia → w toku → zrobione → brak) |

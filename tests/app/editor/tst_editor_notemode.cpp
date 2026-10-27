@@ -674,6 +674,51 @@ private Q_SLOTS:
         QCOMPARE(page.blocks()->get(start).value(u"kind"_s).toString(), u"paragraph"_s);
     }
 
+    // The empty paragraph at the end of a document (a click below the last block) stays a row
+    // when an edit elsewhere is undone and redone: it is only a blank line in the text.
+    void undoKeepsTheLastEmptyParagraph_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("edited"); // the row typed into after the empty paragraph is added
+        QTest::newRow("final-newline") << DocKey + u"Akapit źdźbła\n\nDrugi\n"_s << 1;
+        QTest::newRow("no-final-newline") << DocKey + u"Akapit źdźbła\n\nDrugi"_s << 2;
+        QTest::newRow("after-a-list") << DocKey + u"Akapit\n\n- punkt ą\n"_s << 2;
+    }
+
+    void undoKeepsTheLastEmptyParagraph()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, edited);
+        Fixture f(content);
+        const int empty = f.page.appendEmptyBlock();
+        QVERIFY(empty > 0);
+        QCOMPARE(f.kind(empty), u"paragraph"_s);
+        QCOMPARE(f.page.blocks()->editTextAt(empty), QString());
+        const int rows = f.page.blocks()->rowCount();
+        const QString withEmpty = f.text();
+        f.page.startEditing(edited, 0);
+        f.page.setEditText(edited, u"żółw "_s + f.page.blocks()->editTextAt(edited), 5);
+        const QString typed = f.text();
+        for (int round = 0; round < 2; ++round) {
+            f.page.undo();
+            QCOMPARE(f.text(), withEmpty);
+            QCOMPARE(f.page.blocks()->rowCount(), rows);
+            QCOMPARE(f.kind(empty), u"paragraph"_s);
+            QCOMPARE(f.page.blocks()->editTextAt(empty), QString());
+            QCOMPARE(f.page.editingRow(), edited);
+            f.page.redo();
+            QCOMPARE(f.text(), typed);
+            QCOMPARE(f.page.blocks()->rowCount(), rows);
+            QCOMPARE(f.page.blocks()->editTextAt(empty), QString());
+        }
+        // Typing into the empty paragraph after the redo.
+        f.page.startEditing(empty, 0);
+        f.page.setEditText(empty, u"koniec ę"_s, 8);
+        QVERIFY(f.text().startsWith(typed.trimmed()));
+        QVERIFY(f.text().contains(u"koniec ę"_s));
+        QCOMPARE(f.page.blocks()->rowCount(), rows);
+    }
+
     void playgroundDocumentSample()
     {
         // The playground's document sample opens as a document, whatever the vault default.

@@ -394,7 +394,8 @@ void BlockListModel::resetContent(const QString &content)
     Q_EMIT countChanged();
 }
 
-QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
+QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content,
+                                                       const QList<markdown::BlankBlock> &blankBlocks)
 {
     QStringList oldSources;
     QList<quint64> oldUids = m_rows;
@@ -403,6 +404,7 @@ QHash<quint64, quint64> BlockListModel::replaceContent(const QString &content)
         oldSources.append(m_doc.at(i).prefix + m_doc.at(i).body + QString::number(m_doc.at(i).depth));
 
     markdown::BlockDocument fresh(content);
+    fresh.restoreBlankBlocks(blankBlocks);
     QStringList newSources;
     newSources.reserve(fresh.count());
     for (int i = 0; i < fresh.count(); ++i)

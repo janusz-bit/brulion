@@ -26,7 +26,7 @@ Skróty na komputerze. Na telefonie wcięcia, przenoszenie, zadania, linki, tagi
 ## Edycja bloków
 | Skrót | Działanie |
 |---|---|
-| Enter | podziel blok / nowy blok |
+| Enter | podziel blok / nowy blok (na początku tekstu: pusty blok nad nim, przy zadaniu puste zadanie) |
 | Shift+Enter | nowa linia w bloku |
 | Tab / Shift+Tab | wcięcie / wysunięcie z dziećmi |
 | Alt+↑ / Alt+↓ | przeniesienie bloku z dziećmi |

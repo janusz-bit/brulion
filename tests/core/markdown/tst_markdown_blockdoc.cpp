@@ -6,6 +6,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QPoint>
 #include <QRegularExpression>
 #include <QTest>
 
@@ -511,8 +512,8 @@ private Q_SLOTS:
         logseq.split(0, 6);
         QCOMPARE(logseq.toString(), u"- TODO x\n- TODO \n"_s);
         BlockDocument done(u"- [x] zrobione ✅ 2026-10-14\n"_s);
-        done.split(0, 4);
-        QCOMPARE(done.toString(), u"- [x] \n- [ ] zrobione ✅ 2026-10-14\n"_s);
+        done.split(0, 7);
+        QCOMPARE(done.toString(), u"- [x] zro\n- [ ] bione ✅ 2026-10-14\n"_s);
     }
 
     void splitInTheMiddle()
@@ -558,10 +559,92 @@ private Q_SLOTS:
         QCOMPARE(doc.toString(), u"- [ ] \n- [x] zrobione\n"_s);
         QCOMPARE(describe(r.changes), u"inserted 0+1"_s);
         QCOMPARE(r.focus, 1);
-        QCOMPARE(r.cursor, 0);
+        QCOMPARE(r.cursor, 4);
         BlockDocument numbered(u"1. a\n2. b\n"_s);
         numbered.split(1, 0);
         QCOMPARE(numbered.toString(), u"1. a\n2. \n3. b\n"_s);
+    }
+
+    // The editor hides a task's marker, so Enter at the start of its text is a cursor right after
+    // the marker: an empty task above, the text keeps its status, children and uid.
+    void splitAtTaskTextStart_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("cursor");
+        QTest::addColumn<bool>("collapsed");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("focus");
+        QTest::addColumn<int>("caret");
+        QTest::addColumn<bool>("sameBlock"); // the focus is the original block (its uid)
+
+        QTest::newRow("done") << u"- [x] zrobione ✅ 2026-10-14\n"_s << 0 << 4 << false
+                              << u"- [ ] \n- [x] zrobione ✅ 2026-10-14\n"_s << 1 << 4 << true;
+        QTest::newRow("inside-marker") << u"- [x] źdźbło\n"_s << 0 << 2 << false
+                                       << u"- [ ] \n- [x] źdźbło\n"_s << 1 << 4 << true;
+        QTest::newRow("children") << u"- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 0 << 4 << false
+                                  << u"- [ ] \n- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 4 << true;
+        QTest::newRow("children-collapsed") << u"- [x] Kupić ćwikłę\n\t- dziecko\n"_s << 0 << 4 << true
+                                            << u"- [ ] \n- [x] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 4 << true;
+        QTest::newRow("nested") << u"- rodzic\n\t- [x] żółw\n"_s << 1 << 4 << false
+                                << u"- rodzic\n\t- [ ] \n\t- [x] żółw\n"_s << 2 << 4 << true;
+        QTest::newRow("logseq-done") << u"- DONE łódź\n"_s << 0 << 5 << false << u"- TODO \n- DONE łódź\n"_s
+                                     << 1 << 5 << true;
+        QTest::newRow("logseq-now") << u"- NOW ćma\n"_s << 0 << 4 << false << u"- LATER \n- NOW ćma\n"_s
+                                    << 1 << 4 << true;
+        QTest::newRow("logseq-later") << u"- LATER ćma\n"_s << 0 << 6 << false
+                                      << u"- LATER \n- LATER ćma\n"_s << 1 << 6 << true;
+        QTest::newRow("logseq-two-spaces") << u"- DONE  łódź\n"_s << 0 << 5 << false
+                                           << u"- TODO \n- DONE  łódź\n"_s << 1 << 6 << true;
+        QTest::newRow("doing") << u"- [/] w toku\n"_s << 0 << 4 << false << u"- [ ] \n- [/] w toku\n"_s
+                               << 1 << 4 << true;
+        QTest::newRow("cancelled") << u"- [-] porzucone\n"_s << 0 << 4 << false
+                                   << u"- [ ] \n- [-] porzucone\n"_s << 1 << 4 << true;
+        QTest::newRow("numbered") << u"1. [x] ąę\n2. b\n"_s << 0 << 4 << false
+                                  << u"1. [ ] \n2. [x] ąę\n3. b\n"_s << 1 << 4 << true;
+        QTest::newRow("crlf") << u"- [x] źdźbło\r\n- b\r\n"_s << 0 << 4 << false
+                              << u"- [ ] \r\n- [x] źdźbło\r\n- b\r\n"_s << 1 << 4 << true;
+        QTest::newRow("block-id") << u"- [ ] zadanie ^abc123\n"_s << 0 << 4 << false
+                                  << u"- [ ] \n- [ ] zadanie ^abc123\n"_s << 1 << 4 << true;
+        QTest::newRow("multi-line") << u"- [x] pierwsza\n  druga\n"_s << 0 << 4 << false
+                                    << u"- [ ] \n- [x] pierwsza\n  druga\n"_s << 1 << 4 << true;
+        // In the text: an ordinary split (a done task continues as "[ ] ").
+        QTest::newRow("after-first-char") << u"- [x] zrobione\n"_s << 0 << 5 << false
+                                          << u"- [x] z\n- [ ] robione\n"_s << 1 << 4 << false;
+        // An empty task keeps its Enter: a new task below.
+        QTest::newRow("empty-task") << u"- [ ] \n"_s << 0 << 4 << false << u"- [ ] \n- [ ] \n"_s << 1 << 4
+                                    << false;
+        QTest::newRow("empty-done-task") << u"- [x]\n"_s << 0 << 3 << false << u"- [x]\n- [ ] \n"_s << 1 << 4
+                                         << false;
+        // Not a task: brackets without a space are text.
+        QTest::newRow("not-a-task") << u"- [x]tekst\n"_s << 0 << 3 << false << u"- [x]\n- tekst\n"_s << 1 << 0
+                                    << false;
+    }
+
+    void splitAtTaskTextStart()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(int, cursor);
+        QFETCH(bool, collapsed);
+        QFETCH(QString, expected);
+        QFETCH(int, focus);
+        QFETCH(int, caret);
+        QFETCH(bool, sameBlock);
+        BlockDocument doc(content);
+        const quint64 uid = doc.at(row).uid;
+        const EditResult r = doc.split(row, cursor, collapsed);
+        QCOMPARE(doc.toString(), expected);
+        QCOMPARE(r.focus, focus);
+        QCOMPARE(r.cursor, caret);
+        QCOMPARE(doc.at(r.focus).uid == uid, sameBlock);
+        if (sameBlock) {
+            QVERIFY(!r.changes.isEmpty());
+            QCOMPARE(r.changes.first().type, BlockChange::Type::Inserted);
+            QCOMPARE(r.changes.first().first, row);
+            QCOMPARE(r.changes.first().count, 1);
+        }
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
     }
 
     void splitParagraphsAndHeadings()
@@ -576,6 +659,149 @@ private Q_SLOTS:
         QCOMPARE(heading.toString(), u"# Ty\ntuł\n"_s);
         QCOMPARE(entries(heading), QStringList({u"h:0:|# Ty"_s, u"p:0:|tuł"_s}));
         QVERIFY(!BlockDocument(u"```\nx\n```"_s).split(0, 2).changed());
+    }
+
+    // --- blank blocks across a re-read (undo/redo) -----------------------------------------------
+
+    // Operations that leave empty paragraphs ("split row cursor", "insert after", "clear row",
+    // "spaces row"): a document read again from its text gets them back from their lines.
+    void restoreBlankBlocks_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("ops");
+
+        QTest::newRow("first-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("heading") << u"# Tytuł\n- treść\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("after-frontmatter") << u"---\nbrulion: document\n---\nPierwszy akapit\n"_s
+                                           << QStringList{u"split 1 0"_s};
+        QTest::newRow("after-page-properties") << u"tags:: dom\n\nŁąka\n"_s << QStringList{u"split 1 0"_s};
+        QTest::newRow("between-paragraphs") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s};
+        QTest::newRow("two-in-a-row") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s, u"split 2 0"_s};
+        QTest::newRow("between-list-items") << u"- a\n\nĄ\n\n- b\n"_s << QStringList{u"clear 1"_s};
+        QTest::newRow("before-a-list") << u"Akapit\n- a\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("end") << u"Ala ma kota\n"_s << QStringList{u"split 0 11"_s};
+        QTest::newRow("end-no-final-newline") << u"Ala ma kota"_s << QStringList{u"split 0 11"_s};
+        QTest::newRow("heading-end-no-final-newline") << u"# Tytuł"_s << QStringList{u"split 0 7"_s};
+        QTest::newRow("crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"split 0 0"_s, u"split 2 5"_s};
+        QTest::newRow("bom") << u"\uFEFFZażółć\n"_s << QStringList{u"split 0 0"_s};
+        QTest::newRow("document-append") << u"---\nbrulion: document\n---\nTekst"_s << QStringList{u"insert 1"_s};
+        QTest::newRow("empty-page") << QString() << QStringList{u"insert -1"_s};
+        QTest::newRow("cleared-only-block") << u"a"_s << QStringList{u"clear 0"_s};
+        QTest::newRow("spaces") << u"Ala\n\nŁ\n\nOla\n"_s << QStringList{u"spaces 1"_s};
+        QTest::newRow("many") << u"# Tytuł\n\nAla\n\n- a\n\t- b\n\nKoniec"_s
+                              << QStringList{u"split 0 0"_s, u"split 2 0"_s, u"insert 5"_s, u"split 7 6"_s};
+        // Line breaks typed into an empty paragraph (Shift+Enter): one block of several lines.
+        QTest::newRow("soft-break") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                    << QStringList{u"split 0 0"_s, u"lines 0 2"_s};
+        QTest::newRow("three-lines-between") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s, u"lines 1 3"_s};
+        QTest::newRow("multi-line-then-single") << u"Ala\n\nOla\n"_s
+                                                << QStringList{u"split 1 0"_s, u"split 2 0"_s, u"lines 1 2"_s};
+        QTest::newRow("single-then-multi-line") << u"Ala\n\nOla\n"_s
+                                                << QStringList{u"split 1 0"_s, u"split 2 0"_s, u"lines 2 2"_s};
+        QTest::newRow("multi-line-crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"split 0 0"_s, u"lines 0 3"_s};
+        QTest::newRow("multi-line-spaces") << u"Ala\n\nŁ\n\nOla\n"_s << QStringList{u"spaces 1"_s, u"lines 1 2"_s};
+        QTest::newRow("multi-line-end-no-final-newline") << u"Ala ma kota"_s
+                                                         << QStringList{u"split 0 11"_s, u"lines 1 2"_s};
+        QTest::newRow("multi-line-end") << u"Ala ma kota\n"_s << QStringList{u"split 0 11"_s, u"lines 1 3"_s};
+        QTest::newRow("multi-line-empty-page") << QString() << QStringList{u"insert -1"_s, u"lines 0 2"_s};
+    }
+
+    void restoreBlankBlocks()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, ops);
+        const auto run = [](BlockDocument &d, const QString &op) {
+            const QStringList w = op.split(u' ');
+            const int a = w.value(1).toInt();
+            if (w[0] == u"split"_s)
+                return d.split(a, w.value(2).toInt()).changed();
+            if (w[0] == u"insert"_s)
+                return d.insertAfter(a, QString(), 0, false).changed();
+            if (w[0] == u"lines"_s) { // "lines row n": a blank body of n lines ("spaces" kept)
+                const QString first = d.at(a).body.section(u'\n', 0, 0);
+                return d.setBody(a, first + QString(w.value(2).toInt() - 1, u'\n')).changed();
+            }
+            return d.setBody(a, w[0] == u"spaces"_s ? u"   "_s : QString()).changed();
+        };
+        BlockDocument doc(content);
+        for (const QString &op : ops)
+            QVERIFY2(run(doc, op), qPrintable(op));
+        const QList<BlankBlock> blank = doc.blankBlocks();
+        QVERIFY(!blank.isEmpty());
+        if (QTest::currentDataTag() == QByteArrayView("soft-break")
+            || QByteArrayView(QTest::currentDataTag()).startsWith("multi-line"))
+            QVERIFY(std::any_of(blank.begin(), blank.end(), [](const BlankBlock &b) { return b.lines > 1; }));
+        const auto lines = [](const BlockDocument &d) {
+            QList<int> out;
+            for (int i = 0; i < d.count(); ++i)
+                out.append(d.at(i).line);
+            return out;
+        };
+
+        BlockDocument re(doc.toString());
+        QCOMPARE(re.blankBlocks(), QList<BlankBlock>());
+        QCOMPARE(re.restoreBlankBlocks(blank), int(blank.size()));
+        QCOMPARE(re.toString(), doc.toString());
+        QCOMPARE(entries(re), entries(doc));
+        QCOMPARE(lines(re), lines(doc));
+        QVERIFY(re.blankBlocks() == blank);
+        // The same edits give the same text (line breaks, separators and the final newline).
+        for (BlockDocument *d : {&doc, &re}) {
+            const int last = d->blankBlocks().isEmpty() ? -1 : d->indexAtLine(d->blankBlocks().last().line);
+            QVERIFY(last >= 0);
+            d->setBody(last, u"żółć"_s);
+            d->insertAfter(d->count() - 1, QString(), 0, false);
+            d->split(0, 0);
+        }
+        QCOMPARE(re.toString(), doc.toString());
+        QCOMPARE(entries(re), entries(doc));
+        QVERIFY(re.blankBlocks() == doc.blankBlocks());
+    }
+
+    void restoreBlankBlocksIgnoresMalformed_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QList<QPoint>>("blocks"); // (line, line count)
+        QTest::addColumn<int>("made");
+        QTest::addColumn<QStringList>("expected"); // entries() after
+
+        const QString text = u"Ala\n\n\n\nOla\n"_s;
+        const QStringList plain{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
+        QTest::newRow("none") << text << QList<QPoint>{} << 0 << plain;
+        QTest::newRow("negative") << text << QList<QPoint>{{-1, 1}, {-5, 1}} << 0 << plain;
+        QTest::newRow("own-text") << text << QList<QPoint>{{0, 1}, {4, 1}} << 0 << plain;
+        QTest::newRow("past-the-end") << text << QList<QPoint>{{6, 1}, {100, 1}} << 0 << plain;
+        QTest::newRow("unsorted-duplicates") << text << QList<QPoint>{{3, 1}, {1, 1}, {3, 1}, {2, 1}, {1, 1}} << 3
+                                             << QStringList{u"p:0:|Ala"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|Ola"_s};
+        QTest::newRow("multi-line-block") << u"- a\n  b\n\n- c\n"_s << QList<QPoint>{{1, 1}, {2, 1}} << 1
+                                          << QStringList{u"li:0:- |a⏎b"_s, u"p:0:|"_s, u"li:0:- |c"_s};
+        QTest::newRow("code-block-blank-line") << u"```\nx\n\ny\n```\n"_s << QList<QPoint>{{2, 1}} << 0
+                                               << QStringList{u"code:0:|```⏎x⏎⏎y⏎```"_s};
+        QTest::newRow("zero-lines") << text << QList<QPoint>{{1, 0}, {2, -3}} << 0 << plain;
+        QTest::newRow("span-into-own-text") << text << QList<QPoint>{{1, 4}} << 0 << plain;
+        QTest::newRow("span-past-the-end") << u"Ala\n\n"_s << QList<QPoint>{{1, 3}} << 0 << QStringList{u"p:0:|Ala"_s};
+        QTest::newRow("overlapping-spans") << text << QList<QPoint>{{2, 2}, {1, 2}} << 1
+                                           << QStringList{u"p:0:|Ala"_s, u"p:0:|⏎"_s, u"p:0:|Ola"_s};
+        QTest::newRow("multi-line-and-single") << text << QList<QPoint>{{1, 2}, {3, 1}} << 2
+                                               << QStringList{u"p:0:|Ala"_s, u"p:0:|⏎"_s, u"p:0:|"_s, u"p:0:|Ola"_s};
+        QTest::newRow("no-final-newline") << u"Ala\n\nOla"_s << QList<QPoint>{{3, 1}} << 0
+                                          << QStringList{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
+    }
+
+    void restoreBlankBlocksIgnoresMalformed()
+    {
+        QFETCH(QString, content);
+        QFETCH(QList<QPoint>, blocks);
+        QFETCH(int, made);
+        QFETCH(QStringList, expected);
+        QList<BlankBlock> wanted;
+        for (const QPoint &b : std::as_const(blocks))
+            wanted.append({b.x(), b.y()});
+        BlockDocument doc(content);
+        QCOMPARE(doc.blankBlocks(), QList<BlankBlock>());
+        QCOMPARE(doc.restoreBlankBlocks(wanted), made);
+        QCOMPARE(doc.toString(), content);
+        QCOMPARE(entries(doc), expected);
     }
 
     // --- insertAfter -----------------------------------------------------------------------------

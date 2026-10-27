@@ -288,7 +288,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 | Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
 |---|---|---|
-| Enter | split the block at the cursor (task checkboxes continue); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
+| Enter | split the block at the cursor (task checkboxes continue); at the start of the text: an empty block above it, the caret stays in the text (a task: an empty task above; the text keeps its status and children — the hidden marker does not count, `BlockDocument::split`); at the start of a zoomed list item: a new first child inside the zoom (a zoomed heading or paragraph splits as usual and the caret stays in it); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
 | Shift+Enter | soft line break | — |
 | Shift+↑ / Shift+↓ | select text; on the first / last line once the text selection reaches the block's start / end: select this block and the previous / next one | extend or shrink the selection (the end moves over whole subtrees) |
 | Ctrl+A | select the block's text; again (all of it selected, or an empty block): every block | every block (in a zoom the zoomed subtree) |
@@ -355,8 +355,14 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   list, Alt+Up, below a hidden note-mode frontmatter (`tst_editor_controller`
   `undoOfAnInsertionAtTheStart` follows the rows as a view sees them from the model's signals).
   The `line` role (the block's first line in the file) is announced with `dataChanged` for the
-  rows a change above them moved. Still open: an empty paragraph is only blank lines in the
-  file, so redo, which parses the version's text again, loses an inserted one (TODO.md).
+  rows a change above them moved. Empty paragraphs (Enter at the start of a paragraph or
+  heading, a paragraph typed empty, a document's last empty paragraph) are only blank lines in
+  the file, so a re-read text has none: each undo step also remembers the lines of its two
+  versions' empty paragraphs (`BlockDocument::blankBlocks`: their lines, also several for one with
+  line breaks typed into it), and undo / redo split them out
+  of the blank lines again (`restoreBlankBlocks`, the text unchanged byte for byte;
+  `tst_editor_controller` `undoKeepsEmptyParagraphs`). A reload from the file (or an external
+  change) still reads them as blank lines.
 * Code fences (`blocktext.h`, `bodyWithEditText`): a code block ends at its first closing fence,
   exactly as in the parser. Its editor shows the code only — the fence lines are hidden, and so
   are a block id line (`^id`, written by "Kopiuj odwołanie do bloku" and `((` completion) and
@@ -928,7 +934,7 @@ Keys in document mode (the rest as in the block editor table):
 
 | Keys | Paragraph / heading | List item |
 |---|---|---|
-| Enter | a new paragraph after it (also after a heading) | a new list item (checkboxes and numbering continue); on an empty item: leave the list — the item becomes a paragraph, or moves one level out when nested |
+| Enter | a new paragraph after it (also after a heading) | a new list item (checkboxes and numbering continue); at the start of the text: an empty item above it (a task: an empty task; the text keeps its status and children); on an empty item: leave the list — the item becomes a paragraph, or moves one level out when nested |
 | Shift+Enter | a line break inside the block | same |
 | Backspace at the start | merge with the previous block | a task first loses its checkbox; then the list marker goes: the item becomes a paragraph in its place, its children move one level out (Obsidian); a nested item moves one level out instead |
 | Tab / Shift+Tab | nothing (no outline indentation) | indent / outdent with children |

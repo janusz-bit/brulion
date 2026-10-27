@@ -87,15 +87,6 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
-* **Enter na początku tekstu zadania** nie wstawia pustego zadania nad nim, jak w zwykłym punkcie
-  listy: kursor stoi za ukrytym `[ ] `, więc blok dzieli się w tym miejscu. Puste zadanie zostaje
-  na górze, a tekst przechodzi do nowego bloku — przy zadaniu z podpunktami jako jego pierwsze
-  dziecko, a tekst zrobionego zadania (`- [x]`) wraca jako niezrobiony (`- [ ]`; tak dziś
-  zakłada `splitContinuesTasks` w `tst_markdown_blockdoc.cpp`). Cofanie działa poprawnie.
-* **Ponowienie (Ctrl+Shift+Z) gubi wstawiony pusty akapit.** Pusty akapit to w pliku tylko puste
-  wiersze, a ponowienie (i cofnięcie) czyta tekst wersji od nowa (`BlockListModel::replaceContent`),
-  więc go nie odtwarza: po Enterze na początku akapitu albo nagłówka (np. pierwszego na stronie,
-  też w trybie dokumentu) i cofnięciu, Ctrl+Shift+Z zostawia tekst pliku poprawny, ale bez
-  pustego bloku, a kursor trafia na początek następnego bloku. Test: `undoOfAnInsertionAtTheStart`
-  w `tst_editor_controller.cpp` (`QEXPECT_FAIL`). Pomysł: krok cofania zapamiętuje wiersze pustych
-  akapitów, a po odtworzeniu tekstu `BlockDocument` wydziela je z pustych wierszy bez zmiany tekstu.
+* **Enter na końcu przybliżonego nagłówka lub akapitu** (konspekt, „Przybliż” na bloku, który
+  nie jest punktem listy) wstawia nowy punkt listy poza przybliżeniem: kursor trafia do
+  niewidocznego bloku (`PageController::split`, gałąź `row == zoom && cursor == len`).

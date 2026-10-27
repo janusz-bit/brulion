@@ -524,6 +524,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                         << u"- \n- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << 1 << 0;
         QTest::newRow("enter-task") << u"- [ ] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
                                     << u"- [ ] \n- [ ] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
+        // The editor hides a task's marker: its caret 0 is the start of the text. The text keeps
+        // its status and children.
+        QTest::newRow("enter-task-done") << u"- [x] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
+                                         << u"- [ ] \n- [x] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
+        QTest::newRow("enter-task-children") << u"- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << u"enter"_s << 0 << 0
+                                             << u"- [ ] \n- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 0;
+        QTest::newRow("enter-task-logseq") << u"- DONE łódź\n"_s << u"enter"_s << 0 << 0
+                                           << u"- TODO \n- DONE łódź\n"_s << 1 << 0;
+        QTest::newRow("enter-task-crlf") << u"- [x] źdźbło\r\n- b\r\n"_s << u"enter"_s << 0 << 0
+                                         << u"- [ ] \r\n- [x] źdźbło\r\n- b\r\n"_s << 1 << 0;
         QTest::newRow("enter-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 0 << 0
                                          << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1 << 0;
         QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0
@@ -544,6 +554,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const QString document = u"---\nbrulion: document\n---\n"_s;
         QTest::newRow("document-enter") << document + u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 1 << 0
                                         << document + u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 2 << 0;
+        QTest::newRow("document-enter-task") << document + u"- [x] zadanie żółwia\n"_s << u"enter"_s << 1 << 0
+                                             << document + u"- [ ] \n- [x] zadanie żółwia\n"_s << 2 << 0;
         QTest::newRow("document-insert") << document + u"Pierwszy akapit źdźbła\n"_s << u"insert"_s << -1 << -1
                                          << document + u"\n\nPierwszy akapit źdźbła\n"_s << 1 << 0;
         QTest::newRow("document-up") << document + u"Pierwszy\n\nDrugi łęg\n"_s << u"up"_s << 2 << 3
@@ -612,6 +624,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QCOMPARE(textResets.last().at(2).toInt(), f.page.cursorPosition());
         };
 
+        const QVariant uidBefore = editRow >= 0 ? f.role(editRow, "uid") : QVariant();
+        const bool keepsBlock = command == u"enter"_s && editRow >= 0 && !f.edit(editRow).isEmpty();
         if (command == u"enter"_s)
             f.page.split(editRow, editCursor);
         else if (command == u"paste"_s)
@@ -623,12 +637,13 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         check(inserted, rowAfter, cursorAfter, command != u"up"_s);
         if (QTest::currentTestFailed())
             return;
+        // Enter at the start of a text keeps the caret in the same block: its text did not move.
+        if (keepsBlock)
+            QCOMPARE(f.role(rowAfter, "uid"), uidBefore);
         const int afterCursor = f.page.cursorPosition();
+        // An inserted empty paragraph is no Markdown block of its own (just blank lines): the
+        // step remembers its line, so redo, which reads the version's text again, keeps it.
         const QStringList blocksAfter = blocks();
-        // Known gap (TODO.md): an empty paragraph is no Markdown block of its own (just blank
-        // lines), so redo, which parses the version's text again, loses it and the caret lands in
-        // the block after it (the rest of such a row stops there: it would go on from that state).
-        const bool emptyParagraph = blocksAfter.count(u"paragraph:"_s) > blocksBefore.count(u"paragraph:"_s);
 
         for (int round = 0; round < 2; ++round) {
             textResets.clear();
@@ -643,8 +658,6 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             check(inserted, rowAfter, afterCursor);
             if (QTest::currentTestFailed())
                 return;
-            if (emptyParagraph)
-                QEXPECT_FAIL("", "redo loses an inserted empty paragraph (TODO.md)", Abort);
             QCOMPARE(blocks(), blocksAfter);
         }
         f.page.undo();
@@ -655,6 +668,122 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QCOMPARE(f.edit(editRow), typed);
             QCOMPARE(view.stale(), QStringList());
         }
+        verifyReload(f);
+    }
+
+    // Empty paragraphs are blank lines in the text: every undo and redo step brings back the ones
+    // of its version (not only the step that made them), so rows and the caret stay right.
+    // Steps: "enter row cursor", "set row text" (typing), "insert row"; "+" merges the step with
+    // the previous one (typing on in the same block).
+    void undoKeepsEmptyParagraphs_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QStringList>("steps");
+
+        QTest::newRow("typing-elsewhere") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                          << QStringList{u"enter 0 0"_s, u"set 2 Drugi ż"_s};
+        QTest::newRow("typed-away") << u"Ala\n\nŁąka\n\nOla\n"_s
+                                    << QStringList{u"set 1 Łą"_s, u"+set 1"_s, u"insert 1"_s};
+        QTest::newRow("two-in-a-row") << u"Ala\n\nOla\n"_s << QStringList{u"enter 1 0"_s, u"enter 2 0"_s};
+        QTest::newRow("heading-then-list") << u"# Strona\n- treść\n"_s
+                                           << QStringList{u"enter 0 0"_s, u"enter 2 5"_s, u"set 3 ąę"_s};
+        QTest::newRow("end-no-final-newline") << u"Ala ma kota"_s << QStringList{u"enter 0 11"_s, u"set 0 Ala ma psa"_s};
+        QTest::newRow("crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"enter 0 0"_s, u"set 2 Drugi ą"_s};
+        const QString document = u"---\nbrulion: document\n---\n"_s;
+        QTest::newRow("document") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
+                                  << QStringList{u"enter 1 0"_s, u"set 3 Drugi łęgi"_s, u"enter 1 0"_s};
+        // A line break typed into the empty paragraph (Shift+Enter): one block of two lines.
+        QTest::newRow("soft-break") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                    << QStringList{u"enter 0 0"_s, u"set 0 \n"_s, u"set 2 Drugi ż"_s};
+        QTest::newRow("soft-breaks-crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s
+                                          << QStringList{u"enter 0 0"_s, u"set 0 \n\n"_s, u"set 2 Drugi ą"_s};
+        QTest::newRow("document-soft-break") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
+                                             << QStringList{u"enter 1 0"_s, u"set 1 \n"_s, u"set 3 Drugi łęgi"_s};
+    }
+
+    void undoKeepsEmptyParagraphs()
+    {
+        QFETCH(QString, content);
+        QFETCH(QStringList, steps);
+
+        Fixture f(content);
+        const ViewMirror view(f.model());
+        struct State {
+            QString text;
+            QStringList blocks;
+            int editing = -1;
+        };
+        const auto state = [&] {
+            State st{f.text(), {}, f.page.editingRow()};
+            for (int r = 0; r < f.count(); ++r)
+                st.blocks.append(f.role(r, "kind").toString() + u':' + f.edit(r));
+            return st;
+        };
+        const auto check = [&](const State &want, const char *what, int step) {
+            const State now = state();
+            const QByteArray where = QByteArray(what) + " of step " + QByteArray::number(step);
+            QVERIFY2(now.text == want.text, where.constData());
+            QVERIFY2(now.blocks == want.blocks,
+                     qPrintable(QString::fromLatin1(where) + u": "_s + now.blocks.join(u" | "_s) + u" != "_s
+                                + want.blocks.join(u" | "_s)));
+            QVERIFY2(now.editing == want.editing, where.constData());
+            QVERIFY2(view.stale().isEmpty(), qPrintable(view.stale().join(u"; "_s)));
+        };
+
+        QList<std::pair<State, State>> history; // (before, after) of each undo step
+        for (const QString &step : steps) {
+            const bool merge = step.startsWith(u'+');
+            const QStringList w = (merge ? step.sliced(1) : step).split(u' ');
+            const int row = w.value(1).toInt();
+            if (w[0] == u"enter"_s)
+                f.page.startEditing(row, w.value(2).toInt());
+            else if (w[0] == u"set"_s && !merge)
+                f.page.startEditing(row, int(f.edit(row).size()));
+            const State before = state();
+            if (w[0] == u"enter"_s) {
+                f.page.split(row, w.value(2).toInt());
+            } else if (w[0] == u"set"_s) {
+                const QString typed = w.mid(2).join(u' ');
+                f.page.setEditText(row, typed, int(typed.size()));
+            } else {
+                f.page.insertBlockAfter(row);
+            }
+            if (merge)
+                history.last().second = state();
+            else
+                history.append({before, state()});
+        }
+        QVERIFY(std::any_of(history.begin(), history.end(),
+                            [](const auto &h) { return h.second.blocks.contains(u"paragraph:"_s); }));
+
+        for (int round = 0; round < 2; ++round) {
+            for (qsizetype k = history.size() - 1; k >= 0; --k) {
+                f.page.undo();
+                check(history[k].first, "undo", int(k));
+                if (QTest::currentTestFailed())
+                    return;
+            }
+            QVERIFY(!f.page.canUndo());
+            for (qsizetype k = 0; k < history.size(); ++k) {
+                f.page.redo();
+                check(history[k].second, "redo", int(k));
+                if (QTest::currentTestFailed())
+                    return;
+            }
+            QVERIFY(!f.page.canRedo());
+        }
+        // Typing after a redo goes into the block the caret is in.
+        if (f.page.editingRow() >= 0) {
+            const int r = f.page.editingRow();
+            const QString typed = f.edit(r) + u"ź"_s;
+            f.page.setEditText(r, typed, int(typed.size()));
+            QCOMPARE(f.edit(r), typed);
+            QVERIFY(view.stale().isEmpty());
+            f.page.undo();
+        }
+        while (f.page.canUndo())
+            f.page.undo();
+        QCOMPARE(f.text(), content);
         verifyReload(f);
     }
 
@@ -696,6 +825,17 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(r.value(u"row"_s).toInt(), 1);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 0); // after the hidden marker
         QCOMPARE(f.page.editingRow(), 1);
+        // Enter at the start of a task's text: an empty task above, the caret stays in the text.
+        const QVariant uid = f.role(0, "uid");
+        f.page.startEditing(0, 0);
+        r = f.page.split(0, 0);
+        QCOMPARE(f.text(), u"- [ ] \n- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QCOMPARE(f.role(1, "uid"), uid);
+        QCOMPARE(f.edit(1), u"Kup mleko"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
         f.page.startEditing(2, 1);
         r = f.page.split(2, 1);
         QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- a\n- bc\n"_s);
@@ -906,6 +1046,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
         QCOMPARE(r.value(u"row"_s).toInt(), 2);
         QVERIFY(f.role(2, "visible").toBool());
+        // At its start too: a block above the zoom root would be outside the zoom.
+        f.page.startEditing(1, 0);
+        const QVariantMap atStart = f.page.split(1, 0);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
+        QCOMPARE(atStart.value(u"row"_s).toInt(), 2);
+        QCOMPARE(f.page.editingRow(), 2);
+        QVERIFY(f.role(2, "visible").toBool());
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
         // The zoom root cannot be moved or outdented; its children cannot leave it.
         QVERIFY(!f.page.moveUp(1));
         QVERIFY(!f.page.outdent(2));
@@ -915,6 +1064,58 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.zoomBlock(), -1);
         QCOMPARE(f.visible(), QList<bool>(6, true));
         QVERIFY(zoomSpy.size() >= 3);
+    }
+
+    // Enter at the start of a zoomed task: a new first child, the task keeps its text and status.
+    void zoomRootTaskEnterAtTheStart()
+    {
+        Fixture f(u"- a\n\t- [x] zadanie ść\n\t\t- a11\n- b\n"_s);
+        f.page.zoomInto(1);
+        f.page.startEditing(1, 0);
+        const QVariantMap r = f.page.split(1, 0);
+        QCOMPARE(f.text(), u"- a\n\t- [x] zadanie ść\n\t\t- \n\t\t- a11\n- b\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QCOMPARE(f.page.zoomBlock(), 1);
+        QCOMPARE(f.visible(), QList<bool>({false, true, true, true, false}));
+        QCOMPARE(f.role(1, "taskStatus").toString(), u"done"_s);
+    }
+
+    // Enter at the start of a zoomed heading or paragraph (no list item, no children): the old
+    // split, an empty paragraph above, and the caret stays in the zoom root, which stays shown.
+    void zoomRootTextBlockEnterAtTheStart_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QString>("rootText");
+
+        QTest::newRow("heading") << u"# Nagłówek\n\n- a\n"_s << u"\n\n# Nagłówek\n\n- a\n"_s << u"# Nagłówek"_s;
+        QTest::newRow("paragraph") << u"Akapit źdźbła\n\n- a\n"_s << u"\n\nAkapit źdźbła\n\n- a\n"_s
+                                   << u"Akapit źdźbła"_s;
+    }
+
+    void zoomRootTextBlockEnterAtTheStart()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, expected);
+        QFETCH(QString, rootText);
+        Fixture f(content);
+        f.page.zoomInto(0);
+        QCOMPARE(f.page.zoomBlock(), 0);
+        f.page.startEditing(0, 0);
+        const QVariantMap r = f.page.split(0, 0);
+        const int zoom = f.page.zoomBlock();
+        QVERIFY(zoom >= 0);
+        QCOMPARE(f.edit(zoom), rootText);
+        QCOMPARE(f.page.editingRow(), zoom);
+        QCOMPARE(r.value(u"row"_s).toInt(), zoom);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QVERIFY(f.role(zoom, "visible").toBool());
+        QCOMPARE(f.text(), expected);
+        // Typing goes into the shown zoom root.
+        f.page.setEditText(zoom, rootText + u" ż"_s, int(rootText.size()) + 2);
+        QCOMPARE(f.page.zoomBlock(), zoom);
+        QVERIFY(f.text().contains(rootText + u" ż\n"_s));
     }
 
     void zoomFollowsUndo()
