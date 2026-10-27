@@ -10,6 +10,10 @@ import Brulion
 // CSV), what to export (the whole notebook / a folder / a page, with the attachments they use),
 // then "Eksportuj…": the file is produced in the background and saved where the user says.
 //
+// Pictures from the internet (`![](https://…)`): the HTML and Pandoc formats offer "Zostaw
+// adresy" (the export shows them only online) or "Dołącz kopie" (copies from the device's cache,
+// the missing ones fetched first); the choice is remembered on the device (AppSettings).
+//
 // Saving: desktop and Android — FileDialog in save mode (Android: the system's "Save as" document
 // picker; "Zapisz w Pobranych" writes into the Download folder instead); browser — a download.
 // `preset` (route parameters): { format, scope, folder, path (the page) }.
@@ -64,6 +68,7 @@ ColumnLayout {
         id: exporterObject
         objectName: "exportController"
         workspace: Workspace
+        webPictures: AppSettings.exportWebPictures
         onSaved: (message) => AppController.toast(message, "success")
         // The file is ready: ask where to put it right away.
         onStateChanged: if (exporterObject.state === "ready") panel.save()
@@ -237,6 +242,43 @@ ColumnLayout {
                     parts.push(qsTr("%n attachment(s)", "", s.attachments))
                 return parts.join(", ") + " · " + s.sizeText
             }
+        }
+    }
+
+    // ---- Pictures from the internet (HTML, Pandoc) -------------------------------------------------
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: exporterObject.webPicturesApply
+        spacing: Theme.space2
+        BText {
+            Layout.fillWidth: true
+            text: qsTr("Pictures from the internet")
+            variant: "label"
+        }
+        BSegmented {
+            objectName: "exportWebPictures"
+            Layout.fillWidth: Theme.compact
+            fill: Theme.compact
+            enabled: !exporterObject.busy
+            accessibleName: qsTr("Pictures from the internet")
+            model: [
+                { value: "link", text: qsTr("Keep addresses"), icon: Theme.compact ? "" : "link" },
+                { value: "include", text: qsTr("Include copies"), icon: Theme.compact ? "" : "image" }
+            ]
+            currentValue: exporterObject.webPictures
+            onActivated: (value) => {
+                exporterObject.webPictures = value
+                AppSettings.exportWebPictures = value
+            }
+        }
+        BText {
+            Layout.fillWidth: true
+            text: exporterObject.webPictures === "include"
+                  ? qsTr("The export carries the pictures. Brulion fetches the ones this device does not have yet.")
+                  : qsTr("The export shows such pictures only with an internet connection.")
+            variant: "small"
+            color: Theme.fgMuted
+            wrapMode: Text.Wrap
         }
     }
 

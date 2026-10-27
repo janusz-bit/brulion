@@ -41,7 +41,8 @@ qt_add_library(brulion_ioviews STATIC
 target_include_directories(brulion_ioviews PUBLIC ${_brulion_ioviews_dir})
 target_link_libraries(brulion_ioviews
     PUBLIC Qt6::Core Qt6::Gui brulion_shell brulion_core_io brulion_core_sync brulion_core_vault
-    PRIVATE Qt6::Network brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates)
+    PRIVATE Qt6::Network brulion_core_mstodo brulion_core_util brulion_core_markdown brulion_core_index brulion_core_dates
+        brulion_core_webpicture)
 if(ANDROID)
     # "Save to Downloads": MediaStore through the platform's Android bridge.
     target_link_libraries(brulion_ioviews PRIVATE brulion_platform)

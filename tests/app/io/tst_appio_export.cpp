@@ -1,12 +1,17 @@
 // ExportController and selectExportFiles(): what each scope exports (the whole notebook with its
 // config, a folder with the pictures its pages link to from elsewhere, one page with its
 // attachments), the summary and its errors, producing a Markdown ZIP / tasks CSV / single HTML in
-// the background, saving to a picked file and to the export folder, and resetting on changes.
+// the background, saving to a picked file and to the export folder, and resetting on changes;
+// pictures from the internet kept as addresses or included as copies (the device's cache, the
+// missing ones fetched from a tiny HTTP server on 127.0.0.1, failures as warnings).
 #include "exportcontroller.h"
 #include "workspace.h"
 
 #include "io/zip.h"
 #include "vault/vault.h"
+#include "webpicture/picturecache.h"
+
+#include "../minihttpserver.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -348,6 +353,102 @@ private Q_SLOTS:
         QCOMPARE(c.state(), u"error"_s);
         QVERIFY(!c.errorText().isEmpty());
         QVERIFY(!c.saveInBrowser()); // desktop build
+    }
+
+    void webPictures()
+    {
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        const QByteArray gif = QByteArray("GIF89a\x01\x00\x01\x00\x00\x00\x00;", 14);
+        MiniHttpServer server;
+        server.bodies.insert("/kot.png", png);
+        const QString kot = server.url(u"/kot.png"_s);
+        const QString brak = server.url(u"/brak.png"_s);
+        const QString cached = u"https://example.invalid/%C5%82%C4%85ka.gif"_s;
+        const QString page = u"# Zwierzęta\n- ![Mój kot](%1)\n- ![[%2]]\n- ![łąka](%3)\n"_s.arg(kot, brak, cached);
+        auto ws = open({{u"Zwierzęta.md"_s, page.toUtf8()}});
+        const QString cacheDir = m_tmp.filePath(u"cache-%1"_s.arg(m_n));
+        ws->setWebPictureCacheDir(cacheDir);
+        brulion::webpicture::PictureCache cache(cacheDir);
+        QVERIFY(!cache.store(QUrl(cached), gif, u"gif"_s).isEmpty());
+
+        ExportController c;
+        c.setWorkspace(ws.get());
+        QCOMPARE(c.webPictures(), u"link"_s);
+        c.setFormat(u"markdown-zip"_s);
+        QVERIFY(!c.webPicturesApply());
+        c.setFormat(u"html-single"_s);
+        QVERIFY(c.webPicturesApply());
+
+        // "Zostaw adresy": nothing fetched, the URLs as written.
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QString html = QString::fromUtf8(c.result().first().data);
+        QVERIFY2(html.contains(u"<img src=\""_s + kot + u'"'), qPrintable(html));
+        QVERIFY(html.contains(u"<img src=\""_s + cached + u'"'));
+        QVERIFY(server.requests.isEmpty());
+
+        // "Dołącz kopie": the cached one as it is, the missing ones fetched (also from this
+        // device's network: the user asked), a failure keeps its address with a warning.
+        c.setWebPictures(u"include"_s);
+        QCOMPARE(c.state(), u"idle"_s);
+        QStringList texts;
+        connect(&c, &ExportController::progressChanged, &c, [&] { texts.append(c.progressText()); });
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY2(texts.contains(u"Fetching pictures from the internet (1 of 2)…"_s), qPrintable(texts.join(u" | "_s)));
+        html = QString::fromUtf8(c.result().first().data);
+        QVERIFY2(html.contains(u"src=\"data:image/png;base64,"_s + QString::fromLatin1(png.toBase64()) + u'"'),
+                 qPrintable(html));
+        QVERIFY(html.contains(u"src=\"data:image/gif;base64,"_s + QString::fromLatin1(gif.toBase64()) + u'"'));
+        QVERIFY(html.contains(u"<img src=\""_s + brak + u'"'));
+        QCOMPARE(server.requests.size(), 2);
+        QCOMPARE(c.warnings().size(), 1);
+        QVERIFY2(c.warnings().first().contains(u"127.0.0.1"_s) && c.warnings().first().contains(u"404"_s),
+                 qPrintable(c.warnings().first()));
+
+        // Pandoc: the copies are files next to the document; now all from the cache.
+        c.setFormat(u"pandoc"_s);
+        QCOMPARE(c.webPictures(), u"include"_s);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QStringList entries = zipPaths(c.result().first().data);
+        QVERIFY2(entries.join(u'\n').contains(u"/assets/web/kot.png"_s), qPrintable(entries.join(u", "_s)));
+        QVERIFY2(entries.join(u'\n').contains(u"/assets/web/łąka.gif"_s), qPrintable(entries.join(u", "_s)));
+        QCOMPARE(server.requests.size(), 3); // only the missing one asked again
+
+        // Other formats never fetch: the notes' text is exported as written.
+        c.setFormat(u"markdown-zip"_s);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        QCOMPARE(server.requests.size(), 3);
+        entries = zipPaths(c.result().first().data);
+        QVERIFY(!entries.join(u'\n').contains(u"assets/web"_s));
+    }
+
+    void webPicturesCancelWhileFetching()
+    {
+        MiniHttpServer server;
+        server.stalled.insert("/wolny.png");
+        const QString wolny = server.url(u"/wolny.png"_s);
+        auto ws = open({{u"Strona.md"_s, u"![](%1)\n"_s.arg(wolny).toUtf8()}});
+        ws->setWebPictureCacheDir(m_tmp.filePath(u"cache-%1"_s.arg(m_n)));
+        ExportController c;
+        c.setWorkspace(ws.get());
+        c.setFormat(u"html-site"_s);
+        c.setWebPictures(u"include"_s);
+        c.prepare();
+        QTRY_COMPARE(server.requests.size(), 1);
+        QCOMPARE(c.state(), u"preparing"_s);
+        QVERIFY(c.progressText().contains(u"1"_s));
+        c.cancel();
+        QCOMPARE(c.state(), u"idle"_s);
+        QTest::qWait(50);
+        QCOMPARE(c.state(), u"idle"_s);
+        // The next export is not stuck on the old fetch.
+        c.setWebPictures(u"link"_s);
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
     }
 
     void cancelWhileReading()

@@ -3,11 +3,12 @@
 # Nextcloud form (validation, connection test against the core's in-memory WebDAV server, saving
 # into AppSettings), the Microsoft To Do sign-in and download (against the core's FakeMicrosoft),
 # the .stignore helpers and conflict resolution with a version-history base.
-# Real Workspaces over QTemporaryDir vaults; no network.
+# Real Workspaces over QTemporaryDir vaults; no network but a tiny HTTP server on 127.0.0.1 for
+# pictures from the internet (../minihttpserver.h).
 brulion_add_test(tst_appio_import SOURCES tst_appio_import.cpp
     LIBS brulion_ioviews brulion_core_io brulion_core_vault)
-brulion_add_test(tst_appio_export SOURCES tst_appio_export.cpp
-    LIBS brulion_ioviews brulion_core_io brulion_core_vault)
+brulion_add_test(tst_appio_export SOURCES tst_appio_export.cpp ../minihttpserver.h
+    LIBS brulion_ioviews brulion_core_io brulion_core_vault brulion_core_webpicture Qt6::Network)
 brulion_add_test(tst_appio_conflicts SOURCES tst_appio_conflicts.cpp
     LIBS brulion_ioviews brulion_core_sync brulion_core_vault)
 # Microsoft To Do: sign-in and download against the core's FakeMicrosoft, then preview and import.
