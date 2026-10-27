@@ -258,7 +258,7 @@ FocusScope {
                 // A mouse's left drag selects blocks in a day (BlockEditor), it does not scroll: the
                 // wheel and the touchpad do; a finger flicks.
                 acceptedButtons: Theme.touchUi ? Qt.LeftButton : Qt.NoButton
-                T.ScrollBar.vertical: BScrollBar {}
+                BRowScrollBar { list: list }
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Journals")
 

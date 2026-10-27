@@ -834,6 +834,7 @@ void BlockListModel::refresh(bool contentChanged)
             structural.append(row);
     }
     emitRowsChanged(structural, StructuralRoles);
+    m_visibleRows = std::move(visibleRows);
     if (visibleCount != m_visibleCount) {
         m_visibleCount = visibleCount;
         Q_EMIT visibleCountChanged();
@@ -1392,6 +1393,16 @@ QVariant BlockListModel::data(const QModelIndex &idx, int role) const
     case SelectionEdgeRole: return selectionEdgeName(st.selectionEdge);
     default: return {};
     }
+}
+
+int BlockListModel::visibleRowsBefore(int row) const
+{
+    return int(std::lower_bound(m_visibleRows.cbegin(), m_visibleRows.cend(), row) - m_visibleRows.cbegin());
+}
+
+int BlockListModel::visibleRowAt(int n) const
+{
+    return n >= 0 && n < m_visibleRows.size() ? m_visibleRows.at(n) : -1;
 }
 
 QVariantMap BlockListModel::get(int row) const

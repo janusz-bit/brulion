@@ -1694,15 +1694,14 @@ FocusScope {
         // The header (page title) gets its height after the first layout: start at the top.
         // (autoHeight: no scroll bar, the list never scrolls.)
         Component.onCompleted: {
-            if (!editor.autoHeight) {
-                editor.scrollBar = scrollBarComponent.createObject(list) as T.ScrollBar
-                T.ScrollBar.vertical = editor.scrollBar
-            }
+            if (!editor.autoHeight)
+                editor.scrollBar = scrollBarComponent.createObject(list, { list: list }) as T.ScrollBar
             editor.later(() => list.positionViewAtBeginning())
         }
+        // Rows from one line to a table or a picture: the bar counts rows, its thumb does not jump.
         Component {
             id: scrollBarComponent
-            BScrollBar {}
+            BRowScrollBar {}
         }
     }
 

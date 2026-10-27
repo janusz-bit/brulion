@@ -140,6 +140,10 @@ public:
 
     int count() const { return int(m_rows.size()); }
     int visibleCount() const { return m_visibleCount; }
+    /// The shown rows before `row` (the scroll bar counts shown rows: RowScroll, src/app/ui/rowscroll.h).
+    Q_INVOKABLE int visibleRowsBefore(int row) const;
+    /// The row of the `n`-th shown row (from 0); -1 when there is none.
+    Q_INVOKABLE int visibleRowAt(int n) const;
     /// A few roles of `row` by name (view, kind, taskStatus, depth, hasChildren, collapsed,
     /// visible, blockId, headingLevel, plainText); empty for an invalid row.
     Q_INVOKABLE QVariantMap get(int row) const;
@@ -328,6 +332,7 @@ private:
     QSet<quint64> m_collapsed;
     bool m_foldingEnabled = true;
     int m_visibleCount = 0;
+    QList<int> m_visibleRows; ///< the shown rows, in order
     quint64 m_editingUid = 0;
     QSet<quint64> m_selectedUids;
 

@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Templates as T
 import Brulion
 
 // TasksView — route "tasks" ({query?}): every task of the vault (TaskListModel over
@@ -144,7 +143,7 @@ FocusScope {
         boundsBehavior: Flickable.StopAtBounds
         bottomMargin: Theme.narrow ? Theme.space16 + Theme.space8 : Theme.space8
         currentIndex: -1
-        T.ScrollBar.vertical: BScrollBar {}
+        BRowScrollBar { list: list }
         Accessible.role: Accessible.List
         Accessible.name: qsTr("Tasks")
 
