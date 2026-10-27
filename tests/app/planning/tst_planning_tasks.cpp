@@ -205,6 +205,7 @@ private Q_SLOTS:
 
         const QVariantMap call = m.get(m.rowOfKey(u"journals/2026-10-15.md:3"_s));
         QCOMPARE(call.value(u"reminderLabel"_s).toString(), u"jutro 09:00"_s);
+        QCOMPARE(call.value(u"reminderSpec"_s).toString(), u"2026-10-16 09:00"_s); // what its menu names
         QCOMPARE(call.value(u"isJournal"_s).toBool(), true);
         QVERIFY(call.value(u"tags"_s).toStringList().contains(u"praca/telefony"_s));
 

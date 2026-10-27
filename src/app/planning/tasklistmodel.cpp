@@ -215,6 +215,7 @@ QVariant TaskListModel::sectionRowData(const QString &section, int role) const
     case OverdueRole:
     case IsJournalRole:
     case ReminderAlarmRole: return false;
+    case ReminderSpecRole: return QString();
     case TagsRole: return QStringList();
     case TextRole:
     case HtmlRole:
@@ -284,6 +285,7 @@ QVariant TaskListModel::taskRowData(const Item &item, int role) const
     case TagsRole: return item.tags;
     case ReminderLabelRole: return item.reminder ? humanDate(item.reminder->at, loc, today) : QString();
     case ReminderAlarmRole: return item.reminder && item.reminder->alarm;
+    case ReminderSpecRole: return item.reminder ? item.reminder->at.toString() : QString();
     case DoneDateRole: {
         const auto finished = finishedDate(t);
         return finished ? isoDate(*finished) : QString();
@@ -324,6 +326,7 @@ QHash<int, QByteArray> TaskListModel::roleNames() const
             {TagsRole, "tags"},
             {ReminderLabelRole, "reminderLabel"},
             {ReminderAlarmRole, "reminderAlarm"},
+            {ReminderSpecRole, "reminderSpec"},
             {DoneDateRole, "doneDate"},
             {CreatedRole, "created"},
     };

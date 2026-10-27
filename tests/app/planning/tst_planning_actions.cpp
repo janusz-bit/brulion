@@ -112,6 +112,116 @@ private Q_SLOTS:
         QCOMPARE(host.file(u"Dom.md"_s), page);
     }
 
+    void editTokenChoices_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::addColumn<int>("line");     // where the view thinks the task is
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("value"); // as the models give it
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<QVariant>("a");
+        QTest::addColumn<QVariant>("b");
+        QTest::addColumn<QString>("expected"); // "" = nothing written
+
+        const QString page = u"# Dom\r\n- [ ] Zamówić farbę 📅 2026-10-16 ⏳ 2026-10-14 🛫 2026-10-13 ⏫\r\n"
+                             u"- [ ] Zapłacić za żłobek ⏰ 2026-10-15 🔁 every month\r\n"_s;
+        const auto with = [&](const QString &from, const QString &to) { return QString(page).replace(from, to); };
+        QTest::newRow("due a week later") << page << 1 << u"due"_s << u"2026-10-16"_s << u"shift"_s << QVariant(7)
+                                          << QVariant(0) << with(u"📅 2026-10-16"_s, u"📅 2026-10-23"_s);
+        QTest::newRow("scheduled today") << page << 1 << u"scheduled"_s << u"2026-10-14"_s << u"move"_s << QVariant(0)
+                                         << QVariant() << with(u"⏳ 2026-10-14"_s, u"⏳ 2026-10-15"_s);
+        QTest::newRow("start removed") << page << 1 << u"start"_s << u"2026-10-13"_s << u"remove"_s << QVariant()
+                                       << QVariant() << with(u" 🛫 2026-10-13"_s, QString());
+        QTest::newRow("priority") << page << 1 << u"priority"_s << u"high"_s << u"priority"_s << QVariant(u"low"_s)
+                                  << QVariant() << with(u"⏫"_s, u"🔽"_s);
+        // The index gives the reminder the default time (09:00).
+        QTest::newRow("reminder hour later") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"shift"_s
+                                             << QVariant(0) << QVariant(60)
+                                             << with(u"⏰ 2026-10-15"_s, u"⏰ 2026-10-15 10:00"_s);
+        QTest::newRow("reminder alarm") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s << u"alarm"_s
+                                        << QVariant(true) << QVariant() << with(u"⏰ 2026-10-15"_s, u"⏰! 2026-10-15"_s);
+        QTest::newRow("rule") << page << 2 << u"recurrence"_s << u"every month"_s << u"recurrence"_s
+                              << QVariant(u"co tydzień"_s) << QVariant() << with(u"🔁 every month"_s, u"🔁 every week"_s);
+        QTest::newRow("reminder's block priority") << page << 2 << u"reminder"_s << u"2026-10-15 09:00"_s
+                                                   << u"blockPriority"_s << QVariant(u"highest"_s) << QVariant()
+                                                   << with(u"🔁 every month\r\n"_s, u"🔁 every month 🔺\r\n"_s);
+        QTest::newRow("value changed meanwhile") << page << 1 << u"due"_s << u"2026-10-17"_s << u"move"_s << QVariant(1)
+                                                 << QVariant() << QString();
+        QTest::newRow("gone") << page << 1 << u"recurrence"_s << u"every day"_s << u"remove"_s << QVariant()
+                              << QVariant() << QString();
+    }
+
+    void editTokenChoices()
+    {
+        QFETCH(QString, page);
+        QFETCH(int, line);
+        QFETCH(QString, kind);
+        QFETCH(QString, value);
+        QFETCH(QString, action);
+        QFETCH(QVariant, a);
+        QFETCH(QVariant, b);
+        QFETCH(QString, expected);
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        QSignalSpy failed(&actions, &PlanningActions::failed);
+        const bool written = actions.editToken(u"Dom.md"_s, line, u"Zamówić farbę"_s, kind, value, action, a, b);
+        if (expected.isEmpty()) {
+            QVERIFY(!written);
+            QCOMPARE(failed.count(), 1);
+            QCOMPARE(host.file(u"Dom.md"_s), page);
+            return;
+        }
+        QVERIFY(written);
+        QCOMPARE(host.file(u"Dom.md"_s), expected);
+        QVERIFY(actions.undo());
+        QCOMPARE(host.file(u"Dom.md"_s), page);
+    }
+
+    void movedTokenEdit()
+    {
+        FakeEditorHost host;
+        host.setFile(u"Dom.md"_s, u"- nowy wpis\n- [ ] Zamówić farbę 📅 2026-10-16\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        // The view still has the task on line 0.
+        QVERIFY(actions.editToken(u"Dom.md"_s, 0, u"Zamówić farbę"_s, u"due"_s, u"2026-10-16"_s, u"shift"_s, 1, 0));
+        QCOMPARE(host.file(u"Dom.md"_s), u"- nowy wpis\n- [ ] Zamówić farbę 📅 2026-10-17\n"_s);
+    }
+
+    void snoozeAnOccurrence()
+    {
+        FakeEditorHost host;
+        const QString page = u"- Leki ⏰ 2026-10-10 08:00 🔁 every day\n"_s;
+        host.setFile(u"Dom.md"_s, page);
+        PlanningActions actions;
+        actions.setHost(&host);
+        actions.setToday(u"2026-10-15"_s);
+        QVERIFY(actions.snoozeReminder(u"Dom.md"_s, 0, u"2026-10-15 09:00"_s));
+        QCOMPARE(host.file(u"Dom.md"_s), u"- Leki ⏰ 2026-10-10 08:00 🔁 every day\n\t- ⏰ 2026-10-15 09:00\n"_s);
+        QVERIFY(actions.undo());
+        QCOMPARE(host.file(u"Dom.md"_s), page);
+        QVERIFY(!actions.snoozeReminder(u"Dom.md"_s, 0, u"jutro"_s));
+    }
+
+    void copiedLinks()
+    {
+        FakeEditorHost host;
+        host.setFile(u"Projekty/Dom.md"_s, u"- x\n"_s);
+        PlanningActions actions;
+        actions.setHost(&host);
+        QCOMPARE(actions.linkText(u"tag:wa%C5%BCne%20sprawy"_s), u"#[[ważne sprawy]]"_s);
+        QCOMPARE(actions.linkText(u"tag:dom"_s), u"#dom"_s);
+        QCOMPARE(actions.linkText(u"page:Dom#Plan"_s, u"Inne.md"_s), u"[[Dom#Plan]]"_s);
+        QCOMPARE(actions.linkText(u"page:Nowa%20strona"_s), u"[[Nowa strona]]"_s);
+        QCOMPARE(actions.linkText(u"block:abc"_s), u"((abc))"_s);
+        QCOMPARE(actions.linkText(u"ext:https://example.org"_s), u"https://example.org"_s);
+        QCOMPARE(actions.linkText(u"date:1-2"_s), QString());
+    }
+
     void recurringCompletion()
     {
         FakeEditorHost host;

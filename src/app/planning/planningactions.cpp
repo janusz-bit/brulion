@@ -4,10 +4,17 @@
 #include "dates/local.h"
 #include "editorhost.h"
 #include "index/vaultindex.h"
+#include "markdown/blockdocument.h"
 #include "markdown/edit.h"
+#include "markdown/inline.h"
 #include "markdown/parse.h"
+#include "markdown/tokenedit.h"
+#include "notebook/links.h"
 #include "planningutil.h"
+#include "reminders/snooze.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QUrl>
 
 #include <cstdlib>
@@ -238,7 +245,115 @@ bool PlanningActions::appendBlock(const QString &path, const QString &block)
     return writeChange(path, before, after);
 }
 
-bool PlanningActions::openLink(const QString &url, const QString &fromPath)
+bool PlanningActions::editToken(const QString &path, int line, const QString &text, const QString &kind,
+                                const QString &value, const QString &action, const QVariant &a, const QVariant &b)
+{
+    using markdown::TokenKind;
+    static const QHash<QString, TokenKind> kinds{
+            {u"due"_s, TokenKind::Due},           {u"scheduled"_s, TokenKind::Scheduled},
+            {u"start"_s, TokenKind::Start},       {u"created"_s, TokenKind::Created},
+            {u"done"_s, TokenKind::Done},         {u"cancelled"_s, TokenKind::Cancelled},
+            {u"reminder"_s, TokenKind::Reminder}, {u"recurrence"_s, TokenKind::Recurrence},
+            {u"priority"_s, TokenKind::Priority},
+    };
+    if (!m_host || !kinds.contains(kind) || value.isEmpty())
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const VaultConfig cfg = config();
+    markdown::TokenRef ref;
+    ref.kind = kinds.value(kind);
+    ref.value = value;
+    ref.defaultTime = cfg.defaultReminderTime; // the models' reminders have it filled in
+    markdown::TokenEditContext context;
+    context.today = currentDay();
+    context.defaultReminderTime = cfg.defaultReminderTime;
+    context.config = cfg;
+    const auto hasToken = [&](int at) {
+        const markdown::BlockDocument doc(content);
+        const int i = doc.indexAtLine(at);
+        return i >= 0 && markdown::findTokenRef(doc.at(i).body, ref).has_value();
+    };
+    int at = line;
+    if (!hasToken(at)) {
+        // The index was a moment behind: the task with the same text nearest to the line.
+        const int moved = text.isEmpty() ? -1 : locateTask(path, content, line, text);
+        if (moved < 0 || !hasToken(moved)) {
+            Q_EMIT failed(tr("The task was changed in the meantime."));
+            return false;
+        }
+        at = moved;
+    }
+    const QString after = markdown::editBlockToken(content, at, ref, action, a, b, context);
+    if (after == content)
+        return false;
+    return writeChange(path, content, after);
+}
+
+bool PlanningActions::snoozeReminder(const QString &path, int line, const QString &at)
+{
+    const QDateTime when = QDateTime::fromString(at, u"yyyy-MM-dd HH:mm"_s);
+    if (!m_host || !when.isValid())
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const QString after = brulion::snoozeReminder(content, line, when);
+    if (after == content) {
+        Q_EMIT failed(tr("The reminder was changed in the meantime."));
+        return false;
+    }
+    return writeChange(path, content, after);
+}
+
+QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+{
+    const qsizetype colon = url.indexOf(u':');
+    if (colon <= 0)
+        return {};
+    const QString scheme = url.left(colon);
+    const QString rest = url.mid(colon + 1);
+    if (scheme == u"tag")
+        return markdown::tagSyntax(QUrl::fromPercentEncoding(rest.toUtf8()));
+    if (scheme == u"block")
+        return u"(("_s + rest + u"))"_s;
+    if (scheme == u"ext")
+        return rest;
+    if (scheme != u"page")
+        return {};
+    QString target = rest;
+    QString fragment;
+    if (const qsizetype hash = rest.indexOf(u'#'); hash >= 0) {
+        target = rest.left(hash);
+        fragment = u'#' + QUrl::fromPercentEncoding(rest.mid(hash + 1).toUtf8());
+    }
+    target = QUrl::fromPercentEncoding(target.toUtf8());
+    const QString resolved = target.isEmpty() ? fromPath : m_host ? m_host->resolveLink(target, fromPath) : QString();
+    if (resolved.isEmpty())
+        return target.isEmpty() ? QString() : u"[["_s + target + fragment + u"]]"_s;
+    const QString page = notebook::pageLinkTarget(
+            resolved, config(), [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); },
+            [this](const QString &title) { return m_host ? m_host->resolveLink(title, QString()) : QString(); });
+    return u"[["_s + page + fragment + u"]]"_s;
+}
+
+bool PlanningActions::copyText(const QString &text) const
+{
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    if (!clipboard || text.isEmpty())
+        return false;
+    clipboard->setText(text);
+    return clipboard->text() == text; // read back: a refused copy is never reported as copied
+}
+
+bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool newPane)
 {
     const qsizetype colon = url.indexOf(u':');
     if (!m_host || colon <= 0)
@@ -250,11 +365,11 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath)
         return true;
     }
     if (scheme == u"tag") {
-        m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}});
+        m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}}, newPane);
         return true;
     }
     if (scheme == u"block") {
-        m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}});
+        m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
         return true;
     }
     if (scheme == u"page") {
@@ -276,7 +391,7 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath)
             route[u"blockId"_s] = fragment.mid(1);
         else if (!fragment.isEmpty())
             route[u"heading"_s] = fragment;
-        m_host->navigate(route);
+        m_host->navigate(route, newPane);
         return true;
     }
     return false;

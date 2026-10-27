@@ -82,7 +82,7 @@ private:
         const std::optional<DateSpec> reference = seriesReference(task);
         const bool recurring = rule.has_value();
         QString title;
-        const auto add = [&](CalendarItem::Kind kind, const DateSpec &spec) {
+        const auto add = [&](CalendarItem::Kind kind, const DateSpec &spec, const DateSpec &written) {
             if (title.isNull())
                 title = titleFor(task.text, ref.path);
             CalendarItem item;
@@ -94,19 +94,20 @@ private:
             item.line = task.line;
             item.status = task.status;
             item.recurring = recurring;
+            item.written = written;
             m_items.append(std::move(item));
         };
         const auto addSeries = [&](CalendarItem::Kind kind, const std::optional<DateSpec> &anchor) {
             if (!anchor)
                 return;
             for (const DateSpec &spec : datesWithin(*anchor, expand, m_from, m_to, reference))
-                add(kind, spec);
+                add(kind, spec, *anchor);
         };
         addSeries(CalendarItem::Due, task.due);
         addSeries(CalendarItem::Scheduled, task.scheduled);
         addSeries(CalendarItem::Start, task.start);
         if (task.doneDate && *task.doneDate >= m_from && *task.doneDate <= m_to)
-            add(CalendarItem::Done, DateSpec{*task.doneDate, std::nullopt});
+            add(CalendarItem::Done, DateSpec{*task.doneDate, std::nullopt}, DateSpec{*task.doneDate, std::nullopt});
     }
 
     void addReminder(const ReminderRef &ref)
@@ -139,6 +140,7 @@ private:
                 item.status = src.task->status;
             item.recurring = recurring;
             item.alarm = ref.reminder.alarm;
+            item.written = ref.reminder.at;
             m_items.append(std::move(item));
         }
     }
