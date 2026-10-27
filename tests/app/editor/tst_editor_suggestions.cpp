@@ -76,17 +76,19 @@ private Q_SLOTS:
         m.setHost(&m_host);
         m.setMode(u"pages"_s);
         m.setFilter(u"remont"_s);
-        QCOMPARE(titles(m), QStringList({u"Remont kuchni"_s, u"Remont łazienki"_s, u"remont"_s}));
-        QCOMPARE(m.get(2).value(u"kind"_s).toString(), u"create"_s);
-        QCOMPARE(m.get(0).value(u"subtitle"_s).toString(), u"Projekty"_s);
-        QCOMPARE(m.get(1).value(u"insertText"_s).toString(), u"Remont łazienki"_s);
-        QCOMPARE(m.get(1).value(u"path"_s).toString(), u"Projekty/Remont łazienki.md"_s);
+        // "Create page" first (always in view), the best existing match highlighted.
+        QCOMPARE(titles(m), QStringList({u"remont"_s, u"Remont kuchni"_s, u"Remont łazienki"_s}));
+        QCOMPARE(m.get(0).value(u"kind"_s).toString(), u"create"_s);
+        QCOMPARE(m.defaultIndex(), 1);
+        QCOMPARE(m.get(1).value(u"subtitle"_s).toString(), u"Projekty"_s);
+        QCOMPARE(m.get(2).value(u"insertText"_s).toString(), u"Remont łazienki"_s);
+        QCOMPARE(m.get(2).value(u"path"_s).toString(), u"Projekty/Remont łazienki.md"_s);
         // Without diacritics, any case.
         m.setFilter(u"LAZIENKI"_s);
-        QCOMPARE(titles(m).first(), u"Remont łazienki"_s);
+        QCOMPARE(titles(m).at(m.defaultIndex()), u"Remont łazienki"_s);
         // Aliases.
         m.setFilter(u"Łazienka"_s);
-        const QVariantMap alias = m.get(0);
+        const QVariantMap alias = m.get(m.defaultIndex());
         QCOMPARE(alias.value(u"kind"_s).toString(), u"alias"_s);
         QCOMPARE(alias.value(u"insertText"_s).toString(), u"Remont łazienki|Łazienka"_s);
         // An exact match: no "create" item.
@@ -100,6 +102,94 @@ private Q_SLOTS:
         m.setLimit(2);
         m.setFilter(QString());
         QCOMPARE(m.count(), 2);
+    }
+
+    // `[[`: "Create page" is the first row whenever the typed name is no page or alias yet (so a
+    // long list never hides it), but Enter keeps taking the best existing match (defaultIndex).
+    void createPageItem_data()
+    {
+        QTest::addColumn<QString>("filter");
+        QTest::addColumn<QStringList>("expectedTitles");
+        QTest::addColumn<QStringList>("expectedKinds");
+        QTest::addColumn<int>("expectedDefault");
+
+        QTest::newRow("prefix of a page") << u"Proj"_s << QStringList{u"Proj"_s, u"Projekty"_s}
+                                          << QStringList{u"create"_s, u"page"_s} << 1;
+        QTest::newRow("trimmed") << u"  Proj "_s << QStringList{u"Proj"_s, u"Projekty"_s}
+                                 << QStringList{u"create"_s, u"page"_s} << 1;
+        QTest::newRow("no match") << u"Nowa strona ąę"_s << QStringList{u"Nowa strona ąę"_s} << QStringList{u"create"_s}
+                                  << 0;
+        QTest::newRow("exact, other case") << u"zakupy"_s << QStringList{u"Zakupy"_s} << QStringList{u"page"_s} << 0;
+        QTest::newRow("exact, upper case") << u"ZAKUPY"_s << QStringList{u"Zakupy"_s} << QStringList{u"page"_s} << 0;
+        QTest::newRow("exact, diacritics") << u"Łódź"_s << QStringList{u"Łódź"_s} << QStringList{u"page"_s} << 0;
+        QTest::newRow("exact, without diacritics") << u"lodz"_s << QStringList{u"Łódź"_s} << QStringList{u"page"_s} << 0;
+        QTest::newRow("prefix, without diacritics") << u"lod"_s << QStringList{u"lod"_s, u"Łódź"_s}
+                                                    << QStringList{u"create"_s, u"page"_s} << 1;
+        QTest::newRow("exact alias") << u"telefony"_s << QStringList{u"Telefony"_s} << QStringList{u"alias"_s} << 0;
+        QTest::newRow("alias prefix") << u"Tele"_s << QStringList{u"Tele"_s, u"Telefony"_s}
+                                      << QStringList{u"create"_s, u"alias"_s} << 1;
+        QTest::newRow("nothing typed") << QString() << QStringList{u"Kontakty"_s, u"Projekty"_s, u"Zakupy"_s, u"Łódź"_s}
+                                       << QStringList{u"page"_s, u"page"_s, u"page"_s, u"page"_s} << 0;
+    }
+
+    void createPageItem()
+    {
+        QFETCH(QString, filter);
+        QFETCH(QStringList, expectedTitles);
+        QFETCH(QStringList, expectedKinds);
+        QFETCH(int, expectedDefault);
+        FakeEditorHost host;
+        host.setFile(u"Projekty.md"_s, u"- plan\n"_s);
+        host.setFile(u"Zakupy.md"_s, u"- [ ] Mleko\n"_s);
+        host.setFile(u"Łódź.md"_s, u"- Piotrkowska\n"_s);
+        host.setFile(u"Kontakty.md"_s, u"---\naliases: [Telefony]\n---\n- Hydraulik\n"_s);
+        SuggestionModel m;
+        QAbstractItemModelTester tester(&m, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        m.setHost(&host);
+        m.setMode(u"pages"_s);
+        m.setFilter(filter);
+        QCOMPARE(titles(m), expectedTitles);
+        QCOMPARE(values(m, u"kind"_s), expectedKinds);
+        QCOMPARE(m.defaultIndex(), expectedDefault);
+        if (expectedKinds.first() == u"create")
+            QCOMPARE(m.get(0).value(u"insertText"_s).toString(), filter.trimmed());
+    }
+
+    // Many matching pages: the create row is still there (first), on top of `limit` pages; the
+    // default index follows the model (defaultIndexChanged before the QML popup reads it).
+    void createPageItemWithManyMatches()
+    {
+        FakeEditorHost host;
+        for (int i = 1; i <= 20; ++i)
+            host.setFile(u"Projekt %1.md"_s.arg(i, 2, 10, QLatin1Char('0')), QString());
+        SuggestionModel m;
+        m.setHost(&host);
+        m.setMode(u"pages"_s);
+        m.setLimit(12);
+        QSignalSpy defaultSpy(&m, &SuggestionModel::defaultIndexChanged);
+        int defaultAtReset = -1;
+        connect(&m, &QAbstractItemModel::modelReset, this, [&] { defaultAtReset = m.defaultIndex(); });
+        m.setFilter(u"Projekt"_s);
+        QCOMPARE(m.count(), 13);
+        QCOMPARE(m.get(0).value(u"kind"_s).toString(), u"create"_s);
+        QCOMPARE(m.get(0).value(u"title"_s).toString(), u"Projekt"_s);
+        QCOMPARE(m.get(1).value(u"title"_s).toString(), u"Projekt 01"_s);
+        QCOMPARE(m.defaultIndex(), 1);
+        QCOMPARE(defaultAtReset, 1);
+        QCOMPARE(defaultSpy.count(), 1);
+        // An exact name: no create row, the page first.
+        m.setFilter(u"projekt 07"_s);
+        QCOMPARE(titles(m), QStringList({u"Projekt 07"_s}));
+        QCOMPARE(m.defaultIndex(), 0);
+        QCOMPARE(defaultSpy.count(), 2);
+        // Other modes never offer creation: the first row is the default.
+        m.setMode(u"blocks"_s);
+        QCOMPARE(m.defaultIndex(), 0);
+        m.setMode(u"tags"_s);
+        m.setFilter(u"Proj"_s);
+        QVERIFY(m.count() > 0);
+        QVERIFY(!values(m, u"kind"_s).contains(u"create"_s));
+        QCOMPARE(m.defaultIndex(), 0);
     }
 
     // Two pages called "Dom": the one the bare title does not reach is linked by its path (the

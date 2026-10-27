@@ -582,6 +582,27 @@ ApplicationWindow {
             },
             () => { key(Qt.Key_Return) },
             () => check(info(r).plainText.indexOf("Remont kuchni") > 0 && !editor.suggestions.opened, "Enter accepts a suggestion: " + info(r).plainText),
+            // "Create page" leads the list (always in view), but Enter takes the existing page
+            // (above) and Up reaches "Create page".
+            () => {
+                const e = editor.activeEditor
+                e.cursorPosition = e.length
+                e.insert(e.length, " [[Remo")
+            },
+            () => {
+                const popup = editor.suggestions
+                const list = findItem(popup.contentItem, "suggestionList") as ListView
+                check(popup.visible && popup.model.get(0).kind === "create" && popup.model.get(0).title === "Remo"
+                      && popup.model.count > 1 && popup.currentIndex === 1 && popup.model.get(1).kind === "page"
+                      && list.indexAt(1, list.contentY + 1) === 0,
+                      "Create page first, the first page highlighted: " + popup.currentIndex + " "
+                      + JSON.stringify(popup.model.get(0)))
+            },
+            () => { key(Qt.Key_Up) },
+            () => check(editor.suggestions.currentIndex === 0, "Up reaches Create page: " + editor.suggestions.currentIndex),
+            () => { key(Qt.Key_Return) },
+            () => check(editor.activeEditor.text.indexOf("[[Remont kuchni]] [[Remo]]") > 0 && !editor.suggestions.opened,
+                        "Up + Enter links the new page: " + editor.activeEditor.text),
             // `#` offers pages too (a tag names a page, docs/SYNTAX.md §3) — also after a written
             // date on the line (here the merged "⏳ 2026-10-18") —; a name with a space is written
             // #[[…]].

@@ -176,16 +176,24 @@ void SuggestionModel::refresh()
         items = dateItems();
     else if (m_mode == u"templates")
         items = templateItems();
-    if (items.size() > m_limit)
-        items = items.mid(0, m_limit);
-    if (items == m_items)
+    // "Create page" leads the list on top of `limit` matches; Enter takes the first match.
+    const bool create = !items.isEmpty() && items.first().toMap().value(u"kind"_s).toString() == u"create";
+    const int cap = m_limit + (create ? 1 : 0);
+    if (items.size() > cap)
+        items = items.mid(0, cap);
+    const int defaultIndex = create && items.size() > 1 ? 1 : 0;
+    if (items == m_items && defaultIndex == m_defaultIndex)
         return;
     const int oldCount = int(m_items.size());
+    const bool defaultChange = defaultIndex != m_defaultIndex;
     beginResetModel();
     m_items = items;
+    m_defaultIndex = defaultIndex;
     endResetModel();
     if (oldCount != m_items.size())
         Q_EMIT countChanged();
+    if (defaultChange)
+        Q_EMIT defaultIndexChanged();
 }
 
 QDateTime SuggestionModel::currentDateTime() const
@@ -226,10 +234,9 @@ QVariantList SuggestionModel::pageItems() const
         it[u"path"_s] = path;
         out.append(it);
     }
-    if (!typed.isEmpty() && !exact) {
-        QVariantMap it = item(u"create"_s, typed, tr("New page"), u"plus"_s, typed);
-        out.append(it);
-    }
+    // First, so a long list never scrolls it away; the popup still highlights the first match.
+    if (!typed.isEmpty() && !exact)
+        out.prepend(item(u"create"_s, typed, tr("New page"), u"plus"_s, typed));
     return out;
 }
 

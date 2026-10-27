@@ -56,7 +56,7 @@ W edytowanym bloku zaznaczasz tekst jak zwykle. Zaznaczenie, które wychodzi poz
 Wpisz `/` na początku bloku, a pojawi się lista poleceń: zadanie, przypomnienie, alarm, termin, powtarzanie, tabela, obliczenia, zapytanie, nagłówek, cytat, ramka, kod, szablon, obraz, osadzenie i odwołanie do bloku. Polskie znaki w filtrze są opcjonalne.
 
 ## Podpowiedzi podczas pisania
-- `[[` — strony (z możliwością utworzenia nowej),
+- `[[` — strony; pierwsza pozycja, „Utwórz stronę…”, wstawia link do nowej strony o wpisanej nazwie (Enter wybiera podświetloną pasującą stronę, strzałka w górę przechodzi do nowej),
 - `((` — bloki z całego notatnika,
 - `#` — tagi,
 - po `📅`, `⏳`, `⏰` albo `@` — daty słowami: „jutro o 9”, „w piątek 18:00”.

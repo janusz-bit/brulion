@@ -1,5 +1,6 @@
 // SuggestionModel — items of the editor's autocomplete popup (docs/UI.md "Autocomplete popup"):
-//   pages  `[[` — EditorHost::suggestPages, plus "create page" when nothing matches exactly
+//   pages  `[[` — "create page" first when no page or alias has the typed name (so it is always in
+//          view, on top of `limit` pages), then EditorHost::suggestPages
 //   blocks `((` — EditorHost::suggestBlocks (ids are created when one is accepted)
 //   tags   `#`  — EditorHost::suggestTags: tags in use, then pages (a tag names a page)
 //   slash  `/`  — the slash commands (Polish + English names, diacritic-insensitive filter)
@@ -10,7 +11,8 @@
 //
 // Usage from QML: `detect(text, cursor)` gives the trigger at the caret ({ mode, filter, from,
 // to, token, closing }); set `mode`, `filter` and `token` from it; `get(i)` returns an item for
-// PageController.applyCompletion(row, trigger, item).
+// PageController.applyCompletion(row, trigger, item). `defaultIndex` is the row Enter/Tab takes
+// before the arrows move: the best existing match, not "create page" above it.
 //
 // Roles: title, subtitle, icon, insertText, kind ("page" | "alias" | "create" | "block" | "tag" |
 // "command" | "date" | "journal" | "reminder" | "template"), hint (syntax preview, right-aligned),
@@ -45,6 +47,10 @@ class SuggestionModel : public QAbstractListModel {
     Q_PROPERTY(QString currentPath READ currentPath WRITE setCurrentPath NOTIFY currentPathChanged FINAL)
     Q_PROPERTY(int limit READ limit WRITE setLimit NOTIFY limitChanged FINAL)
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
+    /// The row highlighted when the items change (Enter/Tab take it): the first existing match —
+    /// row 1 when "create page" leads the list and a page follows —, else 0. Set before
+    /// modelReset() ends, so a view resetting its highlight reads the new value.
+    Q_PROPERTY(int defaultIndex READ defaultIndex NOTIFY defaultIndexChanged FINAL)
 
 public:
     enum Role {
@@ -84,6 +90,7 @@ public:
     int limit() const { return m_limit; }
     void setLimit(int limit);
     int count() const { return int(m_items.size()); }
+    int defaultIndex() const { return m_defaultIndex; }
 
     /// The completion trigger at `cursor` of `text` ({ mode: "" } when none), see
     /// brulion::editor::completionTriggerAt.
@@ -105,6 +112,7 @@ Q_SIGNALS:
     void currentPathChanged();
     void limitChanged();
     void countChanged();
+    void defaultIndexChanged();
 
 private:
     QDateTime currentDateTime() const;
@@ -124,6 +132,7 @@ private:
     QString m_currentPath;
     int m_limit = 12;
     QVariantList m_items;
+    int m_defaultIndex = 0;
 };
 
 } // namespace brulion::editor

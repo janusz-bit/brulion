@@ -381,7 +381,10 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   a fence in each block). A fence-like line inside a display formula between `$$` lines is part
   of the formula, as in the parser: it opens nothing and gets no closing fence.
 * **Autocomplete popup** while typing (`SuggestionModel`, `SuggestionPopup`): `[[` pages
-  (+ create), `((` blocks (creates the target's block id), `#` tags and pages (a tag names a
+  (+ "Create page “…”" as the first row whenever no page or alias has the typed name — folded
+  for case and diacritics —, on top of the `limit` matches, so a long list never hides it; the
+  highlighted row Enter/Tab take is still the first existing match, `SuggestionModel.defaultIndex`,
+  and Up reaches the create row), `((` blocks (creates the target's block id), `#` tags and pages (a tag names a
   page: tags in use first, with the page they open, then pages no tag names yet with their
   folder — a duplicate base name by the shortest path that names it, `VaultIndex::suggestTags` /
   `tagTarget` —; a name that is no simple tag is written

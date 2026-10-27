@@ -7,7 +7,9 @@ import Brulion
 // after `#`, slash commands after `/`, natural-language dates after ⏰/📅/@), placed under the
 // caret (above it when there is no room). It never takes the keyboard: the inline editor keeps
 // typing and BlockEditor forwards Up/Down/Enter/Tab/Esc (move, move, accept, accept, close).
-// Mouse/touch: a click on an item accepts it.
+// Mouse/touch: a click on an item accepts it. The highlighted row starts at the model's
+// defaultIndex: after `[[` the "Create page" row leads the list (always in view) while the first
+// existing page is highlighted, so Enter links it and Up reaches "Create page".
 T.Popup {
     id: popup
 
@@ -35,7 +37,7 @@ T.Popup {
             return
         place()
         if (!visible)
-            currentIndex = 0
+            currentIndex = model.defaultIndex
         currentIndex = Math.min(currentIndex, Math.max(0, model.count - 1))
         open()
     }
@@ -92,7 +94,7 @@ T.Popup {
 
     Connections {
         target: popup.model
-        function onModelReset() { popup.currentIndex = 0 }
+        function onModelReset() { popup.currentIndex = popup.model.defaultIndex }
     }
 
     enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationFast } }
