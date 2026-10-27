@@ -113,6 +113,8 @@ BDialog {
                     textFormat: Text.PlainText
                     elide: Text.ElideMiddle
                     variant: "label"
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
                 }
             }
             BText {
@@ -126,6 +128,8 @@ BDialog {
                 wrapMode: Text.Wrap
                 maximumLineCount: 6
                 elide: Text.ElideRight
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
             }
         }
     }
@@ -149,5 +153,7 @@ BDialog {
         textFormat: Text.PlainText
         color: Theme.dangerText
         wrapMode: Text.Wrap
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: text
     }
 }

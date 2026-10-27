@@ -17,9 +17,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * "Udostępnij → Brulion" (docs/ANDROID.md): the target of the share sheet for text and text files
- * (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`, `text/*`). A separate exported activity without a UI of
- * its own — the system starts it in the sending app's task, where a second Qt activity cannot
- * live. It copies the shared files to `files/share-in/<stamp>/<n>/<name>` on a background thread
+ * (`ACTION_SEND` / `ACTION_SEND_MULTIPLE`, text MIME types). A separate exported activity
+ * without a UI of its own — the system starts it in the sending app's task, where a second Qt
+ * activity cannot live. It copies the shared files to `files/share-in/<stamp>/<n>/<name>` on a background thread
  * (the sender's read permission ends with this activity), hands the share to C++ through
  * [BrulionAndroid.deliverShare] (in this process: no intent extra any other app could forge) and
  * brings [BrulionActivity] to the front, where the share dialog opens. Everything another app
