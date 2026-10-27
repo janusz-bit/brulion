@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget picker's preview of the notes widget (Android 12+). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        style="@style/BrulionWidget.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_notes_label" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_journal_today"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_pill"
+        android:gravity="center"
+        android:padding="8dp" />
+
+    <TextView
+        style="@style/BrulionWidget.Section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_favorites"
+        android:paddingTop="8dp" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_preview_page_1" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_preview_page_2" />
+</LinearLayout>

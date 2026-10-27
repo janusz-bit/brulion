@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Quick add of the widgets (QuickAddActivity): a dialog over the home screen. The dark one
+         is in values-night. -->
+    <style name="Theme.BrulionQuickAdd" parent="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar">
+        <item name="android:windowMinWidthMajor">90%</item>
+        <item name="android:windowMinWidthMinor">94%</item>
+        <item name="android:windowBackground">@drawable/widget_background</item>
+        <item name="android:colorAccent">@color/widget_accent</item>
+        <item name="android:textColorPrimary">@color/widget_text</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+</resources>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget picker's preview of the tasks widget (Android 12+). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <TextView
+        style="@style/BrulionWidget.Title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_my_day" />
+
+    <TextView
+        style="@style/BrulionWidget.Section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_overdue"
+        android:paddingTop="8dp"
+        android:textColor="@color/widget_overdue" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_preview_task_1" />
+
+    <TextView
+        style="@style/BrulionWidget.Section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_today"
+        android:paddingTop="8dp" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_preview_task_2" />
+
+    <TextView
+        style="@style/BrulionWidget.Row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/brulion_widget_preview_task_3" />
+</LinearLayout>

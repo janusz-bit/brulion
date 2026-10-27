@@ -31,7 +31,7 @@ class ActionReceiver : BroadcastReceiver() {
 
 /**
  * Alarms do not survive a reboot (and are re-evaluated on clock changes): re-arm the stored
- * reminders. Also runs after an app update and when the exact-alarm permission is granted,
+ * reminders, and redraw the widgets for the day it is now. Also runs after an app update and when the exact-alarm permission is granted,
  * which turns inexact alarms into exact ones.
  *
  * Not exported: system broadcasts still reach it (like WorkManager's RescheduleReceiver),
@@ -46,6 +46,14 @@ class BootReceiver : BroadcastReceiver() {
       Intent.ACTION_TIME_CHANGED,
       Intent.ACTION_TIMEZONE_CHANGED,
       ACTION_EXACT_ALARM_PERMISSION_CHANGED -> AlarmScheduler.rearmFromStore(context)
+    }
+    // The widgets' "today" (and their midnight alarm, gone after a reboot) follow the clock.
+    when (intent.action) {
+      Intent.ACTION_BOOT_COMPLETED,
+      ACTION_QUICKBOOT_POWERON,
+      Intent.ACTION_MY_PACKAGE_REPLACED,
+      Intent.ACTION_TIME_CHANGED,
+      Intent.ACTION_TIMEZONE_CHANGED -> WidgetUpdater.refreshAll(context)
     }
   }
 

@@ -41,7 +41,9 @@ import java.lang.ref.WeakReference
  * Shares from other apps ([ShareActivity]) take the same two ways: [takeShare] and [nativeShared].
  *
  * "Zrobione" taps go the same two ways, through a persisted queue ([DoneQueue]): [nativeDoneQueued]
- * while C++ listens, [takeDoneRequests] after its start.
+ * while C++ listens, [takeDoneRequests] after its start. So do the entries of the widgets' quick add
+ * that Kotlin could not write itself ([WidgetInbox]: [nativeWidgetQueued], [takeWidgetActions]);
+ * the widgets' snapshot comes from C++ through [updateWidgets].
  */
 object BrulionAndroid {
   private const val TAG = "BrulionAndroid"
@@ -90,6 +92,12 @@ object BrulionAndroid {
 
   /** "Zrobione" was tapped ([DoneQueue] holds it): C++ takes the queue with [takeDoneRequests]. */
   @JvmStatic external fun nativeDoneQueued()
+
+  /** Quick add of a widget queued an entry ([WidgetInbox]): C++ takes it with [takeWidgetActions]. */
+  @JvmStatic external fun nativeWidgetQueued()
+
+  /** Quick add of a widget wrote the note [path] (absolute) itself: C++ reads the notebook again. */
+  @JvmStatic external fun nativeWidgetWrote(path: String)
 
   /**
    * The ringtone picker of [pickSound] answered for [kind] (0 reminders, 1 alarms): [json] is the
@@ -347,6 +355,67 @@ object BrulionAndroid {
       Log.e(TAG, "takeDoneRequests failed", e)
       "[]"
     }
+
+  // -----------------------------------------------------------------------------------------
+  // Home-screen widgets (docs/ANDROID.md "Widgety")
+  // -----------------------------------------------------------------------------------------
+
+  /**
+   * Keeps the widgets' snapshot [json] (src/app/widgets/widgetsnapshot.h) and redraws every placed
+   * widget. Returns `{"widgets": n}` (how many are placed), or `{"error": "..."}` — then the
+   * stored snapshot is left as it was.
+   */
+  @JvmStatic
+  fun updateWidgets(context: Context, json: String): String =
+    try {
+      // Parsed strictly first: a malformed argument must not replace a good snapshot.
+      JSONObject(json)
+      val app = context.applicationContext
+      WidgetStore.saveSnapshot(app, json)
+      JSONObject().put("widgets", WidgetUpdater.refreshAll(app)).toString()
+    } catch (e: JSONException) {
+      errorJson("updateWidgets: not a JSON object", e)
+    } catch (e: RuntimeException) {
+      errorJson("updateWidgets failed: $e", e)
+    }
+
+  /**
+   * The quick-add entries of notebook [vault] Kotlin could not write itself ([WidgetInbox]): a
+   * JSON array of `{id, kind, text, date, time, alarm, vault, added}`, `[]` when none. Forgets
+   * them; the entries of other notebooks stay queued. Empty [vault]: all of them.
+   */
+  @JvmStatic
+  fun takeWidgetActions(context: Context, vault: String?): String =
+    try {
+      WidgetInbox.take(context, vault ?: "")
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "takeWidgetActions failed", e)
+      "[]"
+    }
+
+  /** Quick add queued an entry ([QuickAdd]): tells C++ when it listens (else its start takes it). */
+  internal fun widgetQueued() {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeWidgetQueued()
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native widget callback not registered", e)
+      }
+    }
+  }
+
+  /** Quick add wrote [path] (absolute) itself: C++, when it runs, reads the notebook again. */
+  internal fun widgetWrote(path: String) {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeWidgetWrote(path)
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native widget callback not registered", e)
+      }
+    }
+  }
 
   // -----------------------------------------------------------------------------------------
   // Picked documents (imports): any thread — C++ lists picked folders on a worker thread

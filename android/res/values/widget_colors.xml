@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colours of the home-screen widgets: the app's "paper" theme (src/app/ui/themepalette.cpp);
+     the dark ones ("slate") are in values-night. -->
+<resources>
+    <color name="widget_background">#FFFBF7EE</color>
+    <color name="widget_surface">#FFF1EBDD</color>
+    <color name="widget_border">#FFE4DCCB</color>
+    <color name="widget_text">#FF1F2430</color>
+    <color name="widget_muted">#FF6B6556</color>
+    <color name="widget_faint">#FFA39A87</color>
+    <color name="widget_accent">#FF2C6AA3</color>
+    <color name="widget_overdue">#FFC8473B</color>
+    <color name="widget_reminder">#FFB7791F</color>
+    <color name="widget_done">#FF8B9283</color>
+    <color name="widget_scheduled">#FF6E8B3D</color>
+    <color name="widget_selected">#4D9FC3E6</color>
+    <color name="widget_button">#FF1F2430</color>
+    <color name="widget_button_text">#FFFBF7EE</color>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Views of QuickAddActivity (built in code): ids for UiAutomator and the saved state. -->
+    <item name="quick_add_text" type="id" />
+    <item name="quick_add_status" type="id" />
+    <item name="quick_add_add" type="id" />
+</resources>

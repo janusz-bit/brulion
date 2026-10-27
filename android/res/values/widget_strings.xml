@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Home-screen widgets (TasksWidget, CalendarWidget, NotesWidget) and their quick add (QuickAddActivity). Shown in the app's language: the widgets pick values or values-en themselves. -->
+    <string name="brulion_widget_tasks_label">Zadania — Mój dzień</string>
+    <string name="brulion_widget_tasks_description">Zaległe i dzisiejsze zadania, dodawanie bez otwierania aplikacji</string>
+    <string name="brulion_widget_calendar_label">Kalendarz</string>
+    <string name="brulion_widget_calendar_description">Miesiąc z kropkami i agenda dnia: najpierw zadania z godziną</string>
+    <string name="brulion_widget_notes_label">Notatki</string>
+    <string name="brulion_widget_notes_description">Dzisiejszy dziennik, szybka notatka, ulubione i ostatnie strony</string>
+    <string name="brulion_widget_my_day">Mój dzień</string>
+    <string name="brulion_widget_overdue">Zaległe</string>
+    <string name="brulion_widget_today">Dziś</string>
+    <string name="brulion_widget_tomorrow">Jutro</string>
+    <!-- %1$d: number of overdue tasks -->
+    <string name="brulion_widget_overdue_count">zaległe: %1$d</string>
+    <string name="brulion_widget_empty_today">Na dziś nic — dodaj zadanie przyciskiem +</string>
+    <string name="brulion_widget_open_app">Otwórz Brulion, aby pokazać tu swój notatnik</string>
+    <string name="brulion_widget_add_task">Dodaj zadanie</string>
+    <string name="brulion_widget_quick_note">Szybka notatka</string>
+    <string name="brulion_widget_journal_today">Dziennik dziś</string>
+    <string name="brulion_widget_favorites">Ulubione</string>
+    <string name="brulion_widget_recent">Ostatnie</string>
+    <string name="brulion_widget_notes_empty">Tu pojawią się ulubione i ostatnio otwierane strony</string>
+    <string name="brulion_widget_previous_month">Poprzedni miesiąc</string>
+    <string name="brulion_widget_next_month">Następny miesiąc</string>
+    <string name="brulion_widget_calendar_empty">Brak wpisów w najbliższych dniach</string>
+    <string name="brulion_widget_calendar_outside">Otwórz Brulion, aby zobaczyć wpisy z tego miesiąca</string>
+    <string name="brulion_quick_add_task">Nowe zadanie</string>
+    <string name="brulion_quick_add_note">Szybka notatka</string>
+    <string name="brulion_quick_add_task_hint">Co jest do zrobienia?</string>
+    <string name="brulion_quick_add_note_hint">Notatka do dzisiejszego dziennika</string>
+    <string name="brulion_quick_add_today">Dziś</string>
+    <string name="brulion_quick_add_tomorrow">Jutro</string>
+    <string name="brulion_quick_add_no_date">Bez terminu</string>
+    <string name="brulion_quick_add_date">Data…</string>
+    <string name="brulion_quick_add_time">Godzina…</string>
+    <string name="brulion_quick_add_alarm">Alarm</string>
+    <string name="brulion_quick_add_add">Dodaj</string>
+    <string name="brulion_quick_add_close">Zamknij</string>
+    <string name="brulion_quick_add_added">Dodano do dzisiejszego dziennika</string>
+    <string name="brulion_quick_add_queued">Zapisze się w dzienniku po otwarciu Brulionu</string>
+    <!-- Sample content of the widget pickers' previews (Android 12+). -->
+    <string name="brulion_widget_preview_task_1">Zadzwonić do hydraulika</string>
+    <string name="brulion_widget_preview_task_2">Kupić żółte jabłka</string>
+    <string name="brulion_widget_preview_task_3">Spotkanie z Łucją</string>
+    <string name="brulion_widget_preview_page_1">Projekty</string>
+    <string name="brulion_widget_preview_page_2">Lista zakupów</string>
+</resources>
