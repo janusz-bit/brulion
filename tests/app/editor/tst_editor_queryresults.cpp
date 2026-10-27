@@ -6,6 +6,7 @@
 #include "queryresultmodel.h"
 
 #include <QAbstractItemModelTester>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -239,6 +240,52 @@ private Q_SLOTS:
         QVERIFY(!pages.results.setTaskStatus(0, u"done"_s));
         QVERIFY(!pages.results.setTaskStatus(-1, u"done"_s));
         QVERIFY(!pages.results.setTaskStatus(99, QString()));
+    }
+
+    void dateMenuOnResults()
+    {
+        // The rendered chips are links naming ranges of the item's `raw` block (its menu); the
+        // change goes to the item's own file, written like a hand edit, and can be undone there.
+        Fixture f(u"type:tasks tag:zakupy"_s);
+        const int r = f.rowOf(u"Mleko"_s);
+        QVERIFY(r >= 0);
+        const QVariantMap item = f.row(r);
+        const QString raw = item.value(u"raw"_s).toString();
+        QVERIFY2(raw.contains(u"📅 2026-10-16"_s), qPrintable(raw));
+        static const QRegularExpression dateLink(u"href=\"(date:\\d+-\\d+)\""_s);
+        const QString url = dateLink.match(item.value(u"html"_s).toString()).captured(1);
+        QVERIFY2(!url.isEmpty(), qPrintable(item.value(u"html"_s).toString()));
+        // A click on the chip opens the item (its menu is the right button's).
+        f.results.activateLink(r, url);
+        QCOMPARE(f.host.lastRoute().value(u"path"_s).toString(), u"Zakupy.md"_s);
+        const QVariantMap chip = f.page.tokenChipIn(raw, url);
+        QCOMPARE(chip.value(u"kind"_s).toString(), u"due"_s);
+        const QVariantMap done = f.page.editTokenIn(item.value(u"path"_s).toString(), item.value(u"line"_s).toInt(),
+                                                    chip.value(u"ref"_s).toMap(), u"move"_s, 0, 0);
+        QVERIFY(done.value(u"ok"_s).toBool());
+        QCOMPARE(f.host.file(u"Zakupy.md"_s),
+                 u"- [ ] Mleko #zakupy 📅 2026-10-15\n- [x] Chleb #zakupy\n- [ ] Śrubki do półki **M6** #zakupy #remont\n"_s);
+        QVERIFY(f.page.undoTokenEdit(done.value(u"undo"_s).toInt()));
+        QCOMPARE(f.host.file(u"Zakupy.md"_s),
+                 u"- [ ] Mleko #zakupy 📅 2026-10-16\n- [x] Chleb #zakupy\n- [ ] Śrubki do półki **M6** #zakupy #remont\n"_s);
+    }
+
+    void dateMenuOnThisPagesResults()
+    {
+        Fixture f(u"type:tasks tag:remont"_s);
+        const int r = f.rowOf(u"Pomalować"_s);
+        QVERIFY(r >= 0);
+        const QVariantMap item = f.row(r);
+        static const QRegularExpression dateLink(u"href=\"(date:\\d+-\\d+)\""_s);
+        const QString url = dateLink.match(item.value(u"html"_s).toString()).captured(1);
+        const QVariantMap chip = f.page.tokenChipIn(item.value(u"raw"_s).toString(), url);
+        const QVariantMap done = f.page.editTokenIn(Page, item.value(u"line"_s).toInt(), chip.value(u"ref"_s).toMap(),
+                                                    u"shift"_s, 7, 0);
+        QVERIFY(done.value(u"ok"_s).toBool());
+        QCOMPARE(done.value(u"undo"_s).toInt(), 0); // the editor's own undo step
+        QVERIFY(f.page.text().startsWith(u"- [ ] Pomalować ścianę #remont 📅 2026-10-21\n"_s));
+        f.page.undo();
+        QVERIFY(f.page.text().startsWith(u"- [ ] Pomalować ścianę #remont 📅 2026-10-14\n"_s));
     }
 
     void followsIndexChanges()
