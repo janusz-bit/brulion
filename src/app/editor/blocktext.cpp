@@ -4,6 +4,7 @@
 #include "markdown/blockclipboard.h"
 #include "markdown/frontmatter.h"
 #include "markdown/inline.h"
+#include "markdown/journal.h"
 #include "markdown/notemode.h"
 #include "markdown/properties.h"
 #include "markdown/tasks.h"
@@ -857,107 +858,93 @@ bool onlyEmbeds(QStringView body, bool transclusions)
 
 // ---------------------------------------------------------------------------------------------
 
-QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, const QString &token)
+QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool isTask, const VaultConfig &config)
 {
-    if (from < 0 || to < from || to > body.size())
-        return body;
-    if (!token.isEmpty())
-        return body.left(from) + token + body.mid(to);
-    // Remove with one adjacent space.
-    qsizetype a = from;
-    qsizetype b = to;
-    if (a > 0 && (body[a - 1] == u' ' || body[a - 1] == u'\t'))
-        --a;
-    else if (b < body.size() && (body[b] == u' ' || body[b] == u'\t'))
-        ++b;
-    return body.left(a) + body.mid(b);
-}
-
-std::optional<markdown::Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to)
-{
-    if (from < 0 || to <= from || to > body.size())
-        return std::nullopt;
-    for (markdown::Token t : markdown::findTokens(QStringView(body).sliced(from, to - from))) {
-        if (!t.hasDate() || t.kind == markdown::TokenKind::Planning || t.valueFrom < 0)
-            continue;
-        t.from += from;
-        t.to += from;
-        t.valueFrom += from;
-        t.valueTo += from;
-        return t;
+    static const QRegularExpression link(u"^(date|reminder|recur|prio|day):(\\d+)-(\\d+)$"_s);
+    const auto m = link.match(url);
+    if (!m.hasMatch())
+        return {};
+    const QString scheme = m.captured(1);
+    const qsizetype from = m.captured(2).toLongLong() + offset;
+    const qsizetype to = m.captured(3).toLongLong() + offset;
+    QVariantMap out{{u"from"_s, int(from)}, {u"to"_s, int(to)},         {u"isTask"_s, isTask}, {u"alarm"_s, false},
+                    {u"rule"_s, QString()}, {u"priority"_s, QString()}, {u"logseq"_s, false}};
+    if (scheme == u"day") {
+        const auto day = markdown::journalLinkAt(body, from, to, config);
+        if (!day)
+            return {};
+        const QString date = day->date.toString(u"yyyy-MM-dd"_s);
+        out.insert({{u"from"_s, int(day->from)},
+                    {u"to"_s, int(day->to)},
+                    {u"kind"_s, u"day"_s},
+                    {u"at"_s, date},
+                    {u"date"_s, date},
+                    {u"time"_s, QString()},
+                    {u"target"_s, day->target}});
+        return out;
     }
-    return std::nullopt;
-}
-
-QString setTokenDate(const QString &body, qsizetype from, qsizetype to, const DateSpec &spec)
-{
-    const auto t = dateTokenAt(body, from, to);
-    if (!t || !spec.isValid())
-        return body;
-    return body.left(t->valueFrom) + spec.toString() + body.mid(t->valueTo);
-}
-
-QString setReminderAlarm(const QString &body, qsizetype from, qsizetype to, bool alarm)
-{
-    const auto t = dateTokenAt(body, from, to);
-    if (!t || (t->kind != markdown::TokenKind::Reminder && t->kind != markdown::TokenKind::ReminderCompat)
-        || (t->kind == markdown::TokenKind::Reminder && t->alarm == alarm))
-        return body;
-    return replaceTokenRange(body, t->from, t->to, markdown::formatReminderToken(t->spec(), alarm));
-}
-
-DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultTime)
-{
-    DateSpec out = spec;
-    out.date = spec.date.addDays(days);
-    if (minutes != 0) {
-        const QTime time = spec.time.value_or(defaultTime);
-        const int total = time.hour() * 60 + time.minute() + minutes;
-        const int dayShift = total >= 0 ? total / 1440 : -((-total + 1439) / 1440);
-        const int inDay = total - dayShift * 1440;
-        out.date = out.date.addDays(dayShift);
-        out.time = QTime(inDay / 60, inDay % 60);
+    const auto t = markdown::tokenAt(body, from, to);
+    if (!t)
+        return {};
+    using markdown::TokenKind;
+    QString kind;
+    switch (t->kind) {
+    case TokenKind::Due: kind = u"due"_s; break;
+    case TokenKind::Scheduled: kind = u"scheduled"_s; break;
+    case TokenKind::Start: kind = u"start"_s; break;
+    case TokenKind::Created: kind = u"created"_s; break;
+    case TokenKind::Done: kind = u"done"_s; break;
+    case TokenKind::Cancelled: kind = u"cancelled"_s; break;
+    case TokenKind::Reminder:
+    case TokenKind::ReminderCompat: kind = u"reminder"_s; break;
+    case TokenKind::Recurrence: kind = u"recurrence"_s; break;
+    case TokenKind::Priority:
+    case TokenKind::LogseqPriority: kind = u"priority"_s; break;
+    default: return {};
     }
+    out.insert({{u"from"_s, int(t->from)}, {u"to"_s, int(t->to)}, {u"kind"_s, kind}});
+    if (t->hasDate()) {
+        out.insert({{u"at"_s, t->spec().toString()},
+                    {u"date"_s, t->date.toString(u"yyyy-MM-dd"_s)},
+                    {u"time"_s, t->time ? t->time->toString(u"HH:mm"_s) : QString()},
+                    {u"alarm"_s, t->alarm}});
+    }
+    if (kind == u"reminder") {
+        const auto [priority, logseq] = markdown::blockPriority(body);
+        out.insert({{u"rule"_s, markdown::blockRecurrence(body)},
+                    {u"priority"_s, markdown::priorityName(priority)},
+                    {u"logseq"_s, logseq}});
+    } else if (kind == u"recurrence") {
+        out.insert(u"rule"_s, t->canonical);
+    } else if (kind == u"priority") {
+        out.insert({{u"priority"_s, markdown::priorityName(t->priority)},
+                    {u"logseq"_s, t->kind == TokenKind::LogseqPriority}});
+    }
+    if (const auto ref = markdown::tokenRefAt(body, t->from, t->to))
+        out.insert(u"ref"_s, tokenRefToMap(*ref));
     return out;
 }
 
-std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, markdown::TokenKind kind)
+QVariantMap tokenRefToMap(const markdown::TokenRef &ref)
 {
-    const QString first = firstLineOf(body).toString();
-    const QString masked = markdown::maskInlineCode(first);
-    for (const markdown::Token &t : markdown::findTokens(masked)) {
-        if (t.kind == kind)
-            return std::pair{t.from, t.to};
-    }
-    return std::nullopt;
+    return {{u"kind"_s, int(ref.kind)},
+            {u"value"_s, ref.value},
+            {u"ordinal"_s, ref.ordinal},
+            {u"defaultTime"_s, ref.defaultTime.isValid() ? ref.defaultTime.toString(u"HH:mm"_s) : QString()}};
 }
 
-QString setFirstLineToken(const QString &body, markdown::TokenKind kind, const QString &token, bool append)
+std::optional<markdown::TokenRef> tokenRefFromMap(const QVariantMap &map)
 {
-    if (!append) {
-        if (const auto range = findFirstLineToken(body, kind))
-            return replaceTokenRange(body, range->first, range->second, token);
-    }
-    if (token.isEmpty())
-        return body;
-    const qsizetype nl = body.indexOf(u'\n');
-    const QString first = nl < 0 ? body : body.left(nl);
-    const QString rest = nl < 0 ? QString() : body.mid(nl);
-    qsizetype at = first.size();
-    // Before a trailing block id (" ^abc").
-    if (const auto id = markdown::blockIdAtEnd(first))
-        at = id->from;
-    // Before trailing whitespace.
-    while (at > 0 && (first[at - 1] == u' ' || first[at - 1] == u'\t'))
-        --at;
-    QString before = first.left(at);
-    const QString after = first.mid(at);
-    const bool needSpace = !before.isEmpty() && !before.endsWith(u' ') && !before.endsWith(u'\t');
-    QString line = before + (needSpace ? u" "_s : QString()) + token;
-    if (!after.isEmpty() && !after.startsWith(u' ') && !after.startsWith(u'\t'))
-        line += u' ';
-    line += after;
-    return line + rest;
+    bool ok = false;
+    const int kind = map.value(u"kind"_s).toInt(&ok);
+    if (!ok || kind < 0 || kind > int(markdown::TokenKind::Planning) || map.value(u"value"_s).toString().isEmpty())
+        return std::nullopt;
+    markdown::TokenRef ref;
+    ref.kind = markdown::TokenKind(kind);
+    ref.value = map.value(u"value"_s).toString();
+    ref.ordinal = std::max(0, map.value(u"ordinal"_s).toInt());
+    ref.defaultTime = QTime::fromString(map.value(u"defaultTime"_s).toString(), u"HH:mm"_s);
+    return ref;
 }
 
 QString insertTokenAt(const QString &text, int cursor, const QString &token, int *newCursor)

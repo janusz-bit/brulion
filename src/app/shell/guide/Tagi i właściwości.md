@@ -16,7 +16,8 @@ Tag nazywa stronę, jak w Logseq: kliknięcie `#praca` otwiera stronę „praca�
 - **Widok tagu** — wszystko, co ma tag razem z podtagami — jest pod nagłówkiem strony („Widok tagu”, obok „Zadania z tym tagiem” i podtagów) i w widoku **Tagi** (przycisk na końcu wiersza; sam wiersz otwiera stronę).
 - **Zmiana nazwy strony** poprawia też tagi, które ją nazywają (`#stara` → `#Nowa` albo `#[[Nowa nazwa]]`), także w `tags::` i w nagłówku strony; podtagi zostają bez zmian. Tak samo filtry `tag:stara` i `#stara` w [[Zapytania|zapytaniach]] (`tag:stara/x` zostaje).
 - Po wpisaniu `#` podpowiedzi pokazują tagi i strony; nazwę ze spacją albo znakami spoza tagu Brulion zapisze jako `#[[Jan Kowalski]]`.
-- W widoku **Zadania** kliknięcie tagu filtruje listę; Ctrl+kliknięcie (na telefonie przytrzymanie) otwiera jego stronę.
+- **Menu tagu** — prawy przycisk myszy na tagu (na telefonie przytrzymanie): „Otwórz stronę tagu”, „Otwórz w panelu bocznym”, „Widok tagu”, „Zadania z tym tagiem”, „Kopiuj tag”.
+- W widoku **Zadania** kliknięcie tagu filtruje listę; Ctrl+kliknięcie otwiera jego stronę, a prawy przycisk (na telefonie przytrzymanie) otwiera menu tagu z „Filtruj po tagu” na początku.
 
 Ta strona ma tag #dokumentacja — kliknij go, żeby zobaczyć jego stronę, a pod nią wszystko, co nim oznaczono.
 

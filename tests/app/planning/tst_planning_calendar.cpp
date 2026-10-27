@@ -337,6 +337,13 @@ private Q_SLOTS:
             QVERIFY2(!items.isEmpty(), qPrintable(d));
             QVERIFY(items.first().toMap().value(u"recurring"_s).toBool());
         }
+        // Each entry names the token as written; the series' other dates are occurrences of it.
+        QCOMPARE(itemsOn(m, u"2026-10-05"_s).first().toMap().value(u"spec"_s).toString(), u"2026-10-05"_s);
+        QVERIFY(!itemsOn(m, u"2026-10-05"_s).first().toMap().value(u"occurrence"_s).toBool());
+        QCOMPARE(itemsOn(m, u"2026-10-12"_s).first().toMap().value(u"spec"_s).toString(), u"2026-10-05"_s);
+        QVERIFY(itemsOn(m, u"2026-10-12"_s).first().toMap().value(u"occurrence"_s).toBool());
+        QCOMPARE(itemsOn(m, u"2026-11-01"_s).first().toMap().value(u"spec"_s).toString(), u"2026-10-01 08:00"_s);
+        QVERIFY(itemsOn(m, u"2026-11-01"_s).first().toMap().value(u"occurrence"_s).toBool());
         // Only the written (current) instance is overdue, not the virtual 12 October one.
         QCOMPARE(kindsOf(itemsOn(m, u"2026-10-05"_s)), QStringList{u"overdue"_s});
         QCOMPARE(kindsOf(itemsOn(m, u"2026-10-12"_s)).first(), u"due"_s);

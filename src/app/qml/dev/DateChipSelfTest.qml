@@ -9,7 +9,10 @@ import Brulion
 // its items tapped or clicked move the date (a day later, today), open the date dialog on the
 // chip's own date, remove the token; on a reminder an hour later and the alarm switch, "Zmień
 // datę i godzinę…" the reminder dialog; each change is one undo step and the rest of the line
-// stays as written; a plain click or tap on the chip still edits the text.
+// stays as written; a plain click or tap on the chip still edits the text. The same gesture on the
+// ⏫ priority, the 🔁 rule (its quick rules), the reminder's "Priorytet" submenu, a [[day]] link (a
+// day later) opens their menus, and on a #tag and a [[link]] the link menu (LinkMenu: "Kopiuj"
+// copies the tag, the link) — never the block menu.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -32,6 +35,18 @@ QtObject {
     function menuOpen() { return editor.dateMenu !== null && editor.dateMenu.opened }
     function blockMenuOpen() { return editor.blockMenu !== null && editor.blockMenu.opened }
     function item(name) { return window.menuItemNamed(editor.dateMenu, name) }
+    function linkMenuOpen() { return editor.linkMenu !== null && editor.linkMenu.opened }
+    function linkItem(name) { return window.menuItemNamed(editor.linkMenu, name) }
+    /// The item of the date menu that opens its submenu `name`.
+    function subMenuItem(name) {
+        const m = editor.dateMenu
+        for (let i = 0; m && i < m.count; ++i) {
+            const it = m.itemAt(i)
+            if (it && it.subMenu && it.subMenu.objectName === name)
+                return it
+        }
+        return null
+    }
 
     /// The block starting with `prefix` in the middle of the view.
     function show(prefix) {
@@ -43,7 +58,7 @@ QtObject {
     }
     /// The context gesture on the chip whose link starts with `scheme`: a right-click, or a finger
     /// held down until the menu shows, then lifted.
-    function chipGesture(scheme) {
+    function chipGesture(scheme, shown) {
         const find = () => {
             const t = text()
             const p = t ? window.linkPointIn(t, scheme) : null
@@ -65,7 +80,7 @@ QtObject {
                 if (t)
                     events.touchEvent(t).press(0, t, at.x, at.y).commit()
             },
-            window.holdStep(menuOpen),
+            window.holdStep(shown || menuOpen),
             () => {
                 const t = text()
                 if (t)
@@ -194,7 +209,92 @@ QtObject {
                  "“Change date and time…” opens the reminder dialog"),
             () => editor.dialogs.reminderDialog.reject(),
             wait(() => !editor.dialogs.reminderDialog.opened, "the dialog closes"),
-            () => check(line("Zadzwonić do hydraulika").indexOf(reminder) > 0, "a cancelled dialog changes nothing")
+            () => check(line("Zadzwonić do hydraulika").indexOf(reminder) > 0, "a cancelled dialog changes nothing"),
+            // ---- ⏫: the priority's menu ----------------------------------------------------------------
+            show("Kupić płytki"),
+            ...chipGesture("prio:"),
+            wait(menuOpen, gesture + " on a priority opens its menu"),
+            () => {
+                check(!blockMenuOpen() && menu().kind === "priority" && menu().priority === "high", "the menu is the priority's")
+                check(item("dateChipPriorityHigh").checked && item("dateChipPriorityLowest").visible
+                      && !item("dateChipToday").visible, "the current priority checked, five levels, no dates")
+            },
+            ...choose("dateChipPriorityLow"),
+            () => {
+                check(line("Kupić płytki").indexOf("Kupić płytki 📅 2026-10-16 🔽 #zakupy") > 0, "“Low”: " + line("Kupić płytki"))
+                page.undo()
+            },
+            () => check(line("Kupić płytki").indexOf(due) > 0, "one undo step puts the priority back"),
+            // ---- #tag and [[link]]: the link menu -------------------------------------------------------
+            ...chipGesture("tag:", linkMenuOpen),
+            wait(linkMenuOpen, gesture + " on a #tag opens the link menu"),
+            () => {
+                check(!blockMenuOpen() && !menuOpen() && editor.linkMenu.kind === "tag", "the tag's menu, no other")
+                check(linkItem("linkMenuOverview").visible && linkItem("linkMenuTasks").visible, "with the tag view and Tasks")
+                check(page.selectionCount === 0 && !editor.selectionMode, "no block is selected")
+            },
+            () => window.tapItem(linkItem("linkMenuCopy")),
+            wait(() => !linkMenuOpen() && page.clipboardText() === "#zakupy", () => "“Kopiuj tag” copies #zakupy: " + page.clipboardText()),
+            show("Sklep:"),
+            ...chipGesture("page:Castorama", linkMenuOpen),
+            wait(linkMenuOpen, gesture + " on a [[link]] opens the link menu"),
+            () => check(!blockMenuOpen() && editor.linkMenu.kind === "page" && editor.linkMenu.unresolved,
+                        "the page link's menu (a page not written yet: “Utwórz stronę”)"),
+            () => window.tapItem(linkItem("linkMenuCopy")),
+            wait(() => !linkMenuOpen() && page.clipboardText() === "[[Castorama]]",
+                 () => "“Kopiuj link” copies the link: " + page.clipboardText()),
+            // ---- 🔁: a quick rule; the reminder's Priority submenu ---------------------------------------
+            show("Podlać kwiaty"),
+            ...chipGesture("recur:"),
+            wait(menuOpen, gesture + " on a 🔁 rule opens its menu"),
+            () => {
+                check(!blockMenuOpen() && menu().kind === "recurrence" && menu().rule === "every week on Friday",
+                      "the menu is the rule's: " + menu().rule)
+                check(item("dateChipRuleDaily").visible && !item("dateChipRuleDaily").checked && !item("dateChipToday").visible,
+                      "its quick rules, no dates")
+            },
+            ...choose("dateChipRuleDaily"),
+            () => {
+                check(line("Podlać kwiaty").indexOf("Podlać kwiaty u sąsiadów ⏰! 2026-10-16 07:30 🔁 every day") > 0,
+                      "“Daily” rewrites the rule: " + line("Podlać kwiaty"))
+                page.undo()
+            },
+            () => check(line("Podlać kwiaty").indexOf("🔁 every week on Friday") > 0, "undo puts the rule back"),
+            ...chipGesture("reminder:"),
+            wait(menuOpen, "the alarm's menu opens"),
+            () => {
+                check(menu().kind === "reminder" && menu().alarm && menu().rule === "every week on Friday" && menu().isTask,
+                      "an alarm of a recurring task")
+                check(subMenuItem("dateChipRepeatMenu") !== null && subMenuItem("dateChipRepeatMenu").visible
+                      && subMenuItem("dateChipPriorityMenu") !== null && subMenuItem("dateChipPriorityMenu").visible,
+                      "with the Repeat and Priority submenus")
+                window.tapItem(subMenuItem("dateChipPriorityMenu"))
+            },
+            wait(() => subMenuItem("dateChipPriorityMenu") && subMenuItem("dateChipPriorityMenu").subMenu.opened,
+                 "the Priority submenu opens"),
+            () => window.tapItem(window.menuItemNamed(subMenuItem("dateChipPriorityMenu").subMenu, "dateChipTaskPriorityHigh")),
+            wait(() => !menuOpen(), "choosing a priority closes the menu"),
+            () => {
+                check(line("Podlać kwiaty").indexOf("Podlać kwiaty u sąsiadów ⏰! 2026-10-16 07:30 🔁 every week on Friday ⏫") > 0,
+                      "the task gets the priority: " + line("Podlać kwiaty"))
+                page.undo()
+            },
+            // ---- [[2026-10-16]]: a day later ----------------------------------------------------------------
+            show("Klucz w skrzynce"),
+            ...chipGesture("day:"),
+            wait(menuOpen, gesture + " on a [[day]] link opens the date menu"),
+            () => {
+                check(!blockMenuOpen() && menu().kind === "day", "the menu is the day's")
+                check(item("dateChipOpenDay").visible && item("dateChipCopyLink").visible && item("dateChipDayLater").visible
+                      && !item("dateChipRemove").visible, "open, copy and move, nothing to remove")
+            },
+            ...choose("dateChipDayLater"),
+            () => {
+                check(line("Klucz w skrzynce").indexOf("Klucz w skrzynce od [[2026-10-17]], kod `4711`") > 0,
+                      "“A day later” moves the link: " + line("Klucz w skrzynce"))
+                page.undo()
+            },
+            () => check(line("Klucz w skrzynce").indexOf("[[2026-10-16]]") > 0, "one undo step puts it back")
         ]
     }
 

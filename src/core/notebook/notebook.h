@@ -21,7 +21,8 @@
 //   links.h      pageLinkTarget(path, config, index) (a daily note's file name, else
 //                VaultIndex::linkTarget(): the one page part of every copied link) and
 //                blockLinks(content, line, page, isTaken) -> {id, ref ((id)), wikiLink
-//                [[Page#^id]], embed, headingLink} — the links the editor copies
+//                [[Page#^id]], embed, headingLink} — the links the editor copies;
+//                copiedLink(url, from, …) -> {text, path}: a link menu's "Kopiuj link"
 //   itemref.h    ItemRef "Dom.md#L12@3f9a01bc" / "Dom.md#^id" / "^id" / "((id))": parse, format,
 //                lineHash, resolve(content, ref) -> Ok | Moved | Stale | NotFound
 //   json.h       QJsonObject of tasks, reminders, blocks, query results, search hits, calendar

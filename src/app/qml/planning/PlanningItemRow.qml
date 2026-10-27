@@ -13,7 +13,10 @@ import Brulion
 //                     onOpened: AppController.openPage(entry.path, entry.line) }
 //
 // Click / Enter opens the note at the entry; the checkbox (Space when focused) toggles the task, a
-// right-click or long press on it opens the status menu (statusRequested()).
+// right-click or long press on it opens the status menu (statusRequested()); a right-click or long
+// press elsewhere on the row asks for the menu of the entry's date token (tokenMenuRequested(): the
+// view's PlanningTokenMenu — its date, a reminder's time and alarm, "Zmień całą serię…" on a
+// series' other dates).
 T.ItemDelegate {
     id: control
 
@@ -25,6 +28,12 @@ T.ItemDelegate {
     /// The checkbox's status menu (right-click / long press): "todo" … "cancelled", "" = none.
     signal statusRequested(string status)
     signal opened()
+    /// A right-click or long press on the row (not on the checkbox): the menu of the entry's token
+    /// at (x, y) of `item`.
+    signal tokenMenuRequested(Item item, real x, real y)
+
+    /// The entry names a token of a note (journals have none).
+    readonly property bool hasTokenMenu: (entry.spec || "") !== "" && entry.kind !== "journal"
 
     readonly property bool isTask: entry.isTask === true
     readonly property bool closed: entry.closed === true
@@ -68,6 +77,7 @@ T.ItemDelegate {
     Accessible.name: [entry.time || "", entry.title || "", kindLabel, subtitle].filter(s => s !== "").join(", ")
 
     onClicked: control.opened()
+    onPressAndHold: if (control.hasTokenMenu) control.tokenMenuRequested(control, control.pressX, control.pressY)
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
     Keys.onSpacePressed: (event) => {
@@ -75,6 +85,14 @@ T.ItemDelegate {
             control.taskToggled()
             event.accepted = true
         }
+    }
+
+    TapHandler {
+        // Right-click only (a finger's long press is the delegate's pressAndHold).
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+        acceptedButtons: Qt.RightButton
+        enabled: control.hasTokenMenu
+        onTapped: (eventPoint) => control.tokenMenuRequested(control, eventPoint.position.x, eventPoint.position.y)
     }
 
     // Laid out with bindings, not Layouts: the row has its final height (a title on two lines)

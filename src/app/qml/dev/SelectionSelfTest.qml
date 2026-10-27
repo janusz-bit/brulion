@@ -477,7 +477,7 @@ QtObject {
             () => {
                 center(rowOf("Plan remontu"))
                 const text = textOf(rowOf("Plan remontu"))
-                rightClick(text, text.width / 2, 10)
+                rightClick(text, 8, 10) // (on "Plan", not on a link: a link has a menu of its own)
             },
             wait(() => editor.blockMenu !== null && editor.blockMenu.opened, "a right-click on a paragraph opens the block menu"),
             () => {

@@ -728,7 +728,7 @@ Plan remontu na październik. Szczegóły w [[Budżet domowy]] i [[Kontakty|kont
 	- [ ] Skuć stare płytki 📅 2026-10-13
 	- [ ] Położyć hydroizolację
 	- [ ] Podlać kwiaty u sąsiadów ⏰! 2026-10-16 07:30 🔁 every week on Friday
-		- Klucz w skrzynce, kod `4711`
+		- Klucz w skrzynce od [[2026-10-16]], kod `4711`
 	- Kolejność: *najpierw* hydraulik, ~~potem~~ elektryk
 - Notatki z rozmowy z ekipą — zobacz ((przyg))
 	- Ekipa może zacząć 20 października, cena ==do negocjacji==

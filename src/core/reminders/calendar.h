@@ -38,6 +38,14 @@ struct CalendarItem {
     std::optional<TaskStatus> status; ///< the task's status (task items, reminders on tasks)
     bool recurring = false;           ///< the item belongs to a series (🔁 rule)
     bool alarm = false;               ///< reminders: `⏰!`
+    /// The date token as written in the note (📅 ⏳ 🛫 ✅, the reminder; a reminder without a time
+    /// with the default reminder time): an expanded series' item (`recurring`) has another
+    /// date than this one — its token menu changes the written date (the whole series).
+    /// Unset for journals.
+    std::optional<DateSpec> written;
+    /// The block's 🔁 rule (canonical; "" = none) and its task's priority (the token menus).
+    QString rule;
+    Priority priority = Priority::None;
 
     friend bool operator==(const CalendarItem &, const CalendarItem &) = default;
 };
@@ -49,7 +57,8 @@ struct CalendarItem {
 ///   repeater) that is not done or cancelled is expanded: its reference date (due, else
 ///   scheduled, else start) with dates::occurrencesBetween() — the written date is the first
 ///   occurrence — and its other dates keep their distance in days to it, like the next
-///   instance written on completion (SYNTAX §5); `recurring` is set on all of them;
+///   instance written on completion (SYNTAX §5); `recurring` is set on all of them, `written` is
+///   the date as written;
 /// * Done: completion dates (✅) of tasks;
 /// * Reminder: every reminder, expanded like in upcomingNotifications() unless its task is done
 ///   or cancelled (those keep only the written date); a bare `- ⏰ …` bullet takes its parent's

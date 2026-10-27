@@ -33,7 +33,8 @@
 // isJournal, due ("YYYY-MM-DD[ HH:mm]"), dueLabel ("jutro", "pt 17 paź"), overdue, scheduled,
 // scheduledLabel, start, startLabel, recurrence (canonical), recurrenceLabel (UI language),
 // priority (0 = none … 5 = highest), priorityName, tags, reminderLabel (next reminder in the
-// block, "jutro 09:00"), reminderAlarm, doneDate, created.
+// block, "jutro 09:00"), reminderAlarm, reminderSpec (that reminder as the index reads it, "YYYY-MM-DD
+// HH:mm": its chip's menu names it), doneDate, created.
 #pragma once
 
 #include "index/vaultindex.h"
@@ -120,6 +121,7 @@ public:
         TagsRole,
         ReminderLabelRole,
         ReminderAlarmRole,
+        ReminderSpecRole,
         DoneDateRole,
         CreatedRole,
     };

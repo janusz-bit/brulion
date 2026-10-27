@@ -30,6 +30,8 @@ FocusScope {
 
     signal itemOpened(var entry)
     signal itemToggled(var entry)
+    /// A right-click or long press on an entry: its token menu (PlanningTokenMenu.openToken).
+    signal itemMenuRequested(var entry, Item item, real x, real y)
     /// A task's status menu: `status` "todo" … "cancelled", "" = none.
     signal itemStatusRequested(var entry, string status)
     signal journalOpened(string date)
@@ -145,6 +147,7 @@ FocusScope {
                     onOpened: root.itemOpened(modelData)
                     onTaskToggled: root.itemToggled(modelData)
                     onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
+                    onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
                 }
             }
 
@@ -174,6 +177,7 @@ FocusScope {
                     onOpened: root.itemOpened(modelData)
                     onTaskToggled: root.itemToggled(modelData)
                     onStatusRequested: (status) => root.itemStatusRequested(modelData, status)
+                    onTokenMenuRequested: (item, x, y) => root.itemMenuRequested(modelData, item, x, y)
                 }
             }
             BEmptyState {

@@ -13,9 +13,12 @@ import Brulion
 //
 // Click / Enter opens the note at the task's line; Space toggles; the context menu — "Otwórz" and
 // the statuses (TaskStatusMenu; "Bez statusu" makes it a plain list item) — opens with a right
-// click or long press on the row or its checkbox, or the Menu key. A click on a #tag is a link
-// (TasksView filters by it); Ctrl+click (mouse) or a long press (touch) on it asks for the tag's
-// page instead (tagPageRequested, docs/SYNTAX.md §3).
+// click or long press on the row or its checkbox, or the Menu key. A right-click or long press on a
+// date, reminder, 🔁 or priority chip asks for that token's menu instead (tokenMenuRequested: the
+// view's PlanningTokenMenu), on a #tag or a link of the text for the link's menu
+// (linkMenuRequested: "Filtruj po tagu" first, "Otwórz stronę tagu", …). A click on a #tag is a
+// link (TasksView filters by it); Ctrl+click (mouse) on it asks for the tag's page instead
+// (tagPageRequested, docs/SYNTAX.md §3).
 T.ItemDelegate {
     id: control
 
@@ -25,9 +28,14 @@ T.ItemDelegate {
     signal taskToggled()
     signal opened()
     signal linkActivated(string url)
-    /// Ctrl+click or a long press on the #tag `tag`: open the page it names.
+    /// Ctrl+click on the #tag `tag`: open the page it names.
     signal tagPageRequested(string tag)
     signal statusRequested(string status)
+    /// A right-click or long press on a chip: the menu of its token `kind` ("due" | "scheduled" |
+    /// "start" | "reminder" | "recurrence" | "priority") at (x, y) of `item`.
+    signal tokenMenuRequested(string kind, Item item, real x, real y)
+    /// A right-click or long press on a link of the text (`url`: tag:, page:, …).
+    signal linkMenuRequested(string url, Item item, real x, real y)
 
     /// A long press opened a tag's page: the release that follows is no click on the link.
     property bool _tagOpened: false
@@ -39,6 +47,24 @@ T.ItemDelegate {
     function openTagPage(tag) {
         control._tagOpened = true
         control.tagPageRequested(tag)
+    }
+    /// The menu of what is at (x, y) of the row: a chip's token, a link of the text; false when
+    /// there is neither (the row's own menu then).
+    function openMenuAt(x, y) {
+        const c = chips.mapFromItem(control, x, y)
+        const chip = chips.childAt(c.x, c.y)
+        if (chip && chip.objectName.startsWith("taskChip_")) {
+            control.tokenMenuRequested(chip.objectName.slice(9), chip, c.x - chip.x, c.y - chip.y)
+            return true
+        }
+        const p = label.mapFromItem(control, x, y)
+        const link = label.linkAt(p.x, p.y)
+        if (link !== "") {
+            control._tagOpened = true // (the release after a long press is no click on the link)
+            control.linkMenuRequested(link, label, p.x, p.y)
+            return true
+        }
+        return false
     }
 
     readonly property bool closed: task.status === "done" || task.status === "cancelled"
@@ -80,12 +106,8 @@ T.ItemDelegate {
 
     onClicked: control.opened()
     onPressAndHold: {
-        const p = label.mapFromItem(control, control.pressX, control.pressY)
-        const tag = control.tagAt(p.x, p.y)
-        if (tag === "")
+        if (!control.openMenuAt(control.pressX, control.pressY))
             control.openMenu()
-        else if (!control._tagOpened) // the text's own long press may have opened it already
-            control.openTagPage(tag)
     }
     Keys.onReturnPressed: control.opened()
     Keys.onEnterPressed: control.opened()
@@ -100,7 +122,10 @@ T.ItemDelegate {
         // tap opened the (modal) menu, which swallowed the release: the task never opened.
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
         acceptedButtons: Qt.RightButton
-        onTapped: (eventPoint) => control.openMenu(eventPoint.position.x, eventPoint.position.y)
+        onTapped: (eventPoint) => {
+            if (!control.openMenuAt(eventPoint.position.x, eventPoint.position.y))
+                control.openMenu(eventPoint.position.x, eventPoint.position.y)
+        }
     }
 
     // Laid out with bindings, not Layouts: the row has its final height (a title on two lines,
@@ -172,13 +197,13 @@ T.ItemDelegate {
                     }
                 }
                 TapHandler {
-                    // A long press on a #tag (touch): its page. The text keeps the press (a link).
+                    // A long press on a link (touch): its menu. The text keeps the press (a link).
                     acceptedDevices: PointerDevice.TouchScreen
                     onPressedChanged: if (pressed) control._tagOpened = false
                     onLongPressed: {
-                        const tag = control.tagAt(point.position.x, point.position.y)
-                        if (tag !== "" && !control._tagOpened)
-                            control.openTagPage(tag)
+                        if (!control._tagOpened)
+                            control.openMenuAt(label.mapToItem(control, point.position.x, point.position.y).x,
+                                               label.mapToItem(control, point.position.x, point.position.y).y)
                     }
                 }
             }
@@ -217,18 +242,21 @@ T.ItemDelegate {
                     text: control.statusLabel
                 }
                 BChip {
+                    objectName: "taskChip_due" // (its token menu: openMenuAt())
                     visible: (control.task.dueLabel || "") !== ""
                     size: "small"
                     variant: control.closed ? "done" : control.task.overdue ? "overdue" : "due"
                     text: control.task.overdue ? qsTr("%1, overdue").arg(control.task.dueLabel) : control.task.dueLabel
                 }
                 BChip {
+                    objectName: "taskChip_scheduled" // (its token menu: openMenuAt())
                     visible: (control.task.scheduledLabel || "") !== ""
                     size: "small"
                     variant: control.closed ? "done" : "scheduled"
                     text: control.task.scheduledLabel
                 }
                 BChip {
+                    objectName: "taskChip_start" // (its token menu: openMenuAt())
                     visible: (control.task.startLabel || "") !== ""
                     size: "small"
                     variant: "neutral"
@@ -236,18 +264,21 @@ T.ItemDelegate {
                     text: qsTr("from %1").arg(control.task.startLabel)
                 }
                 BChip {
+                    objectName: "taskChip_reminder" // (its token menu: openMenuAt())
                     visible: (control.task.reminderLabel || "") !== "" && !control.closed
                     size: "small"
                     variant: control.task.reminderAlarm ? "alarm" : "reminder"
                     text: control.task.reminderLabel
                 }
                 BChip {
+                    objectName: "taskChip_recurrence" // (its token menu: openMenuAt())
                     visible: (control.task.recurrenceLabel || "") !== ""
                     size: "small"
                     variant: "recurrence"
                     text: control.task.recurrenceLabel
                 }
                 BChip {
+                    objectName: "taskChip_priority" // (its token menu: openMenuAt())
                     visible: control.priorityLabel !== ""
                     size: "small"
                     variant: control.task.priority >= 4 && !control.closed ? "overdue" : "neutral"

@@ -12,6 +12,7 @@
 #include "webpicture/webpicture.h"
 
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QUrl>
 
 #include <algorithm>
@@ -149,6 +150,25 @@ bool calcInert(QStringView s)
     return true;
 }
 
+/// `html` (rendered from text that starts `by` code units into the text the ranges name) with the
+/// ranges of its token and day links (`date:`, `reminder:`, `recur:`, `prio:`, `day:`) moved by
+/// `by`. The renderer escapes the note's text, so every `href="` in it is one of its own links.
+QString shiftRangeLinks(const QString &html, qsizetype by)
+{
+    static const QRegularExpression link(u"href=\"(date|reminder|recur|prio|day):(\\d+)-(\\d+)\""_s);
+    QString out;
+    qsizetype last = 0;
+    for (auto it = link.globalMatch(html); it.hasNext();) {
+        const QRegularExpressionMatch m = it.next();
+        out += QStringView(html).sliced(last, m.capturedStart() - last);
+        out += u"href=\""_s + m.captured(1) + u':' + QString::number(m.captured(2).toLongLong() + by) + u'-'
+               + QString::number(m.captured(3).toLongLong() + by) + u'"';
+        last = m.capturedEnd();
+    }
+    out += QStringView(html).sliced(last);
+    return out;
+}
+
 } // namespace
 
 namespace detail {
@@ -175,8 +195,12 @@ QString renderBodyHtml(const markdown::BlockEntry &e, const BlockShape &s, const
             const qsizetype nl = rest.indexOf(u'\n');
             offset = s.editOffset;
             html = renderer.renderBlock(nl < 0 ? rest : rest.left(nl), BlockKind::Heading);
-            if (nl >= 0) // the lines after the heading are text (a "TODO" there is no task marker)
-                html += u"<br/>"_s + renderer.renderBlock(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph);
+            // The lines after the heading are text (a "TODO" there is no task marker); their chips
+            // name ranges of `rest`, as the heading line's do.
+            if (nl >= 0)
+                html += u"<br/>"_s
+                        + shiftRangeLinks(renderer.renderBlock(QStringView(rest).sliced(nl + 1), BlockKind::Paragraph),
+                                          nl + 1);
         }
         break;
     case BlockView::Quote: html = renderer.renderBlock(e.body, BlockKind::Quote); break;
@@ -875,7 +899,8 @@ QVariantMap BlockListModel::computeTableData(int i) const
         if (!renderer) {
             markdown::RenderContext ctx = renderContext(i);
             ctx.hideTransclusions = false; // no embed frames in cells: placeholder links
-            ctx.dateLinks = false;         // a chip's range would be the cell's, not the block's
+            ctx.dateLinks = true;          // ranges in the cell's text (PageController::tableCellChip)
+            ctx.dayLinks = false;          // [[2026-10-20]] stays a page link (its link menu)
             renderer.emplace(ctx);
         }
         const QString html = renderer->renderBlock(cell, BlockKind::Paragraph);
@@ -934,7 +959,9 @@ markdown::RenderContext BlockListModel::renderContext(int docIndex) const
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today); // [[2026-10-13]]: "wt 13 paź"
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // the delegate shows them in frames (`transclusions`)
-    ctx.dateLinks = true;         // date chips have a menu (PageController::dateChip)
+    ctx.dateLinks = true;         // date, 🔁 and priority chips have a menu (PageController::dateChip)
+    ctx.dayLinks = true;          // so have links to days of the journal ([[2026-10-20]])
+    ctx.journalConfig = vaultConfig();
     const QPointer<EditorHost> host = m_host;
     const QString path = m_path;
     if (host) {
@@ -999,6 +1026,7 @@ markdown::RenderContext BlockListModel::renderContextFor(const QString &path, co
     ctx.linkTitle = markdown::journalLinkTitle(vaultConfig(), ctx.locale, m_today);
     ctx.taskCheckbox = false;
     ctx.hideTransclusions = true; // nested embeds get their own rows in a transclusion
+    ctx.dateLinks = true;         // token menus (PageController::tokenChipIn; ranges in the block's body)
     const QPointer<EditorHost> host = m_host;
     if (host) {
         ctx.resolvePage = [host, path](const QString &target) -> std::optional<QString> {

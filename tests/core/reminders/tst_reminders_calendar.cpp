@@ -220,6 +220,41 @@ private Q_SLOTS:
         QCOMPARE(describe(calendarOf(content)), expected);
     }
 
+    void writtenDates()
+    {
+        // Every item names the date as written; an expanded series' items differ from it.
+        const auto items = calendarOf(u"- [ ] Śmieci 🔁 every week 📅 2026-10-06 ⏳ 2026-10-05\n"
+                                      u"- Leki ⏰ 2026-10-07 🔁 every day\n"
+                                      u"- [x] Zrobione 📅 2026-10-02 ✅ 2026-10-03\n"_s,
+                                      QDate(2026, 10, 1), QDate(2026, 10, 14));
+        int occurrences = 0;
+        for (const CalendarItem &item : items) {
+            QVERIFY(item.written.has_value());
+            switch (item.kind) {
+            case CalendarItem::Due:
+                QCOMPARE(*item.written, (DateSpec{item.title == u"Zrobione"_s ? QDate(2026, 10, 2) : QDate(2026, 10, 6),
+                                                  std::nullopt}));
+                break;
+            case CalendarItem::Scheduled: QCOMPARE(*item.written, (DateSpec{QDate(2026, 10, 5), std::nullopt})); break;
+            case CalendarItem::Reminder:
+                // Without a time: the default reminder time, as the index reads it.
+                QCOMPARE(item.written->date, QDate(2026, 10, 7));
+                QVERIFY(item.written->time.has_value());
+                break;
+            case CalendarItem::Done: QCOMPARE(*item.written, (DateSpec{QDate(2026, 10, 3), std::nullopt})); break;
+            default: break;
+            }
+            if (item.date != item.written->date)
+                ++occurrences;
+        }
+        // Due 13th, scheduled 12th, reminders 8th … 14th: series items, not the written dates.
+        QCOMPARE(occurrences, 1 + 1 + 7);
+        const auto journals =
+                calendarOf({{u"journals/2026-10-05.md"_s, u"- dzień"_s}}, QDate(2026, 10, 5), QDate(2026, 10, 5));
+        QCOMPARE(journals.size(), 1);
+        QVERIFY(!journals.first().written.has_value());
+    }
+
     void seriesAreCapped()
     {
         const auto items =

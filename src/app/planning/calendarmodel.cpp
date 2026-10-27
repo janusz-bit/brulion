@@ -583,6 +583,11 @@ QVariantMap CalendarModel::itemMap(const CalendarItem &item, QDate today) const
             {u"recurring"_s, item.recurring},
             {u"alarm"_s, item.alarm},
             {u"date"_s, isoDate(item.date)},
+            // The token as written (its menu), and whether this is another date of its series.
+            {u"spec"_s, item.written ? item.written->toString() : QString()},
+            {u"occurrence"_s, item.written && (item.written->date != item.date || item.written->time != item.time)},
+            {u"rule"_s, item.rule},
+            {u"priority"_s, priorityName(item.priority)},
     };
 }
 
@@ -678,6 +683,10 @@ void CalendarModel::rebuild(bool forceReset)
                     {u"recurring"_s, !e.ref.task.recurrence.isEmpty()},
                     {u"alarm"_s, false},
                     {u"date"_s, isoDate(e.due.date)},
+                    {u"spec"_s, e.due.toString()},
+                    {u"occurrence"_s, false},
+                    {u"rule"_s, e.ref.task.recurrence},
+                    {u"priority"_s, priorityName(e.ref.task.priority)},
             });
         }
     }

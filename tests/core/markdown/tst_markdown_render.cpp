@@ -722,6 +722,61 @@ private Q_SLOTS:
         QCOMPARE(found, kinds);
     }
 
+    void tokenLinksPointIntoTheBody_data()
+    {
+        QTest::addColumn<QString>("body");
+        QTest::addColumn<int>("kind");
+        QTest::addColumn<QStringList>("links"); // "scheme:text of the range", in order
+
+        QTest::newRow("recurrence") << u"[ ] Podlać kwiaty 🔁 co tydzień w poniedziałek 📅 2026-10-20"_s
+                                    << int(BlockKind::ListItem)
+                                    << QStringList{u"recur:🔁 co tydzień w poniedziałek"_s, u"date:📅 2026-10-20"_s};
+        QTest::newRow("recurrence prefix") << u"Zakupy 🔁 co tydzień kupić mleko"_s << int(BlockKind::Paragraph)
+                                           << QStringList{u"recur:🔁 co tydzień"_s};
+        QTest::newRow("no rule is no link") << u"Notatka 🔁 kiedyś tam"_s << int(BlockKind::Paragraph) << QStringList{};
+        QTest::newRow("priorities") << u"[ ] Pilne ⏫ zadanie [#B]"_s << int(BlockKind::ListItem)
+                                    << QStringList{u"prio:⏫"_s, u"prio:[#B]"_s};
+        QTest::newRow("journal days") << u"Spotkanie [[2026-10-20]] i ![[2026-10-21|środa]] oraz [[Strona]]"_s
+                                      << int(BlockKind::Paragraph)
+                                      << QStringList{u"day:[[2026-10-20]]"_s}; // (an embed is a frame of its own)
+        QTest::newRow("journal heading link stays a page")
+                << u"[[2026-10-20#Plan]]"_s << int(BlockKind::Paragraph) << QStringList{};
+        QTest::newRow("heading offsets") << u"## Żółw 🔼 🔁 every day"_s << int(BlockKind::Heading)
+                                         << QStringList{u"prio:🔼"_s, u"recur:🔁 every day"_s};
+        QTest::newRow("quote offsets") << u"> cytat [[2026-10-20]] 🔽"_s << int(BlockKind::Quote)
+                                       << QStringList{u"day:[[2026-10-20]]"_s, u"prio:🔽"_s};
+        QTest::newRow("in code") << u"`⏫ [[2026-10-20]]` 🔺"_s << int(BlockKind::Paragraph)
+                                 << QStringList{u"prio:🔺"_s};
+    }
+
+    void tokenLinksPointIntoTheBody()
+    {
+        QFETCH(QString, body);
+        QFETCH(int, kind);
+        QFETCH(QStringList, links);
+        RenderContext ctx = context();
+        const QString plain = InlineRenderer(ctx).renderBlock(body, BlockKind(kind));
+        for (const QString &scheme : {u"recur:"_s, u"prio:"_s, u"day:"_s})
+            QVERIFY2(!plain.contains(scheme), qPrintable(plain)); // off by default
+        ctx.dateLinks = true;
+        ctx.dayLinks = true;
+        const QString out = InlineRenderer(ctx).renderBlock(body, BlockKind(kind));
+        static const QRegularExpression re(u"href=\"(date|recur|prio|day):(\\d+)-(\\d+)\""_s);
+        QStringList found;
+        for (auto it = re.globalMatch(out); it.hasNext();) {
+            const auto m = it.next();
+            const qsizetype from = m.captured(2).toLongLong();
+            const qsizetype to = m.captured(3).toLongLong();
+            QVERIFY2(from >= 0 && from < to && to <= body.size(), qPrintable(out));
+            found.append(m.captured(1) + u':' + body.sliced(from, to - from));
+        }
+        QCOMPARE(found, links);
+        // Without the flags nothing else changes: the same text, colours and chips.
+        ctx.dateLinks = false;
+        ctx.dayLinks = false;
+        QCOMPARE(InlineRenderer(ctx).renderBlock(body, BlockKind(kind)), plain);
+    }
+
     void onlyWhitelistedTags()
     {
         const QStringList pieces{u"**"_s,

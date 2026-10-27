@@ -423,6 +423,35 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     }
     restore();
 
+    // ---- Tasks: a due date's chip has the date menu (PlanningTokenMenu); "Dzień później" writes it.
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    settle(800);
+    QQuickItem *dueChip =
+            shownWhere(window->contentItem(), [](QQuickItem *item) { return item->objectName() == u"taskChip_due"; });
+    check(dueChip != nullptr, "a task in Tasks shows its due date as a chip");
+    if (dueChip) {
+        QQuickItem *row = dueChip;
+        while (row && !isA(row, "TasksRow"))
+            row = row->parentItem();
+        const QObject *task = row ? row->property("task").value<QObject *>() : nullptr;
+        const QString path = task ? task->property("path").toString() : QString();
+        const QString before = path.isEmpty() ? QString() : ws->readFile(path);
+        if (touch)
+            touchTap(window, pointIn(dueChip), 1000);
+        else
+            mouseClick(window, pointIn(dueChip), Qt::RightButton);
+        QQuickItem *later = nullptr;
+        check(waitFor([&] {
+                  return openMenus(window) == 1 && (later = named(window->contentItem(), u"dateChipDayLater"_s));
+              }),
+              "a long press or right-click on a due date's chip in Tasks opens its date menu");
+        if (later)
+            tapOrClick(window, pointIn(later), touch);
+        check(!path.isEmpty() && waitFor([&] { return openMenus(window) == 0 && ws->readFile(path) != before; }),
+              "“Dzień później” writes the task's new due date into its note");
+        restore();
+    }
+
     // ---- The backlinks under a page: today's "Przejrzeć [[Remont mieszkania]]…" task.
     const QString remont = u"Projekty/Remont mieszkania.md"_s;
     app->openPage(remont);
@@ -514,6 +543,43 @@ void checkTaskStatusMenus(QQuickWindow *window, AppController *app, const Check 
     check(entries && waitFor([&] { return qAbs(entries->height() - rowsHeight()) < 0.5; }),
           "a task written into another note joins today's agenda, inside its day");
     ws->deletePage(chimney);
+    restore();
+
+    // ---- The agenda: tomorrow's time of a reminder repeated every day (an occurrence) has the
+    //      series' menu without a snooze — that time still rings.
+    const QString pills = u"Leki.md"_s;
+    // Late in the day: today's time has not rung yet (no notification during the checks).
+    ws->writeFile(pills, u"- Leki na ciśnienie ⏰ "_s + app->today(0) + u" 23:58 🔁 every day\n"_s);
+    const auto isOccurrence = [](QQuickItem *row) {
+        QVariant entry = row->property("entry");
+        if (entry.canConvert<QJSValue>())
+            entry = entry.value<QJSValue>().toVariant();
+        return entry.toMap().value(u"occurrence"_s).toBool();
+    };
+    QQuickItem *pillsRow = agenda ? shownWhere(agenda,
+                                               [&](QQuickItem *item) {
+                                                   return isA(item, "PlanningItemRow")
+                                                          && entryTitle(item).contains(u"ciśnienie"_s)
+                                                          && isOccurrence(item);
+                                               })
+                                  : nullptr;
+    check(pillsRow != nullptr, "the agenda shows the next times of a repeated reminder");
+    if (pillsRow) {
+        if (touch)
+            touchTap(window, pointIn(pillsRow), 1000);
+        else
+            mouseClick(window, pointIn(pillsRow), Qt::RightButton);
+        const bool opened = waitFor(
+                [&] { return openMenus(window) == 1 && named(window->contentItem(), u"dateChipChange"_s) != nullptr; });
+        const auto shownNow = [window](const QString &name) {
+            return findShown(window->contentItem(), [&name](QQuickItem *item) { return item->objectName() == name; });
+        };
+        check(opened && shownNow(u"dateChipAlarm"_s) && !shownNow(u"dateChipHourLater"_s)
+                      && !shownNow(u"dateChipTomorrowSameTime"_s) && !shownNow(u"dateChipDayLater"_s),
+              "a later time of a repeated reminder in the agenda has the series' menu, without a snooze");
+        closeMenus(window);
+    }
+    ws->deletePage(pills);
     restore();
 
     // ---- A day of the week view: its day panel, beside the week on wide windows and a bottom
@@ -738,7 +804,7 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         check(app->back() && view() == u"journals", "back returns from the tag's page");
     }
 
-    // ---- Tasks: a click filters by the tag, Ctrl+click or a long press opens its page.
+    // ---- Tasks: a click filters by the tag, Ctrl+click opens its page, a long press its menu.
     app->navigate({{u"view"_s, u"tasks"_s}, {u"query"_s, u"zakwas"_s}});
     settle(600);
     QQuickItem *task = onScreenText(u"zakwas"_s);
@@ -753,18 +819,29 @@ void checkTagLinks(QQuickWindow *window, AppController *app, const Check &check)
         if (qEnvironmentVariableIsSet("BRULION_SELFTEST_DEBUG"))
             std::fprintf(stderr, "selftest: tag of a task at %.0f,%.0f in \"%s\"\n", taskTag.x(), taskTag.y(),
                          task ? qPrintable(task->property("text").toString().left(200)) : "");
-        if (touch)
+        if (touch) {
+            // A long press: the tag's menu (LinkMenu), "Filtruj po tagu" first; its "Otwórz stronę tagu".
             touchTap(window, taskTag, 1000);
-        else
+            check(waitFor([&] { return openMenus(window) == 1; }), "a long press on a tag in Tasks opens its menu");
+            const auto menuItem = [window](const QString &name) {
+                return findShown(window->contentItem(), [&](QQuickItem *item) { return item->objectName() == name; });
+            };
+            QQuickItem *filter = menuItem(u"linkMenuFilter"_s);
+            check(filter != nullptr, "the tag's menu offers “Filtruj po tagu”");
+            QQuickItem *open = menuItem(u"linkMenuOpen"_s);
+            if (open)
+                tapOrClick(window, pointIn(open), true);
+        } else {
             mouseClick(window, taskTag, Qt::LeftButton, Qt::ControlModifier);
+        }
         const bool opened =
                 taskTag.x() >= 0 && waitFor([&] { return view() == u"page" && routePath() == u"zakupy.md"; });
         if (!opened)
             std::fprintf(stderr, "selftest: after the gesture on the tag: %s %s\n", qPrintable(view()),
                          qPrintable(routePath()));
-        check(opened, touch ? "a long press on a tag in Tasks opens the tag's page"
+        check(opened, touch ? "the tag menu's “Otwórz stronę tagu” in Tasks opens the tag's page"
                             : "a Ctrl+click on a tag in Tasks opens the tag's page");
-        check(openMenus(window) == 0, "opening the tag's page from Tasks opens no menu");
+        check(waitFor([&] { return openMenus(window) == 0; }), "no menu is left open on the tag's page");
         closeMenus(window);
     }
 

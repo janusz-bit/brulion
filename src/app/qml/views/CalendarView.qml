@@ -11,7 +11,8 @@ import Brulion
 //
 // The selected day's panel (CalendarDayPanel) is a column on the right of wide views and a
 // bottom sheet on phones (tap a day): its entries (tick tasks off — undo in the toast — or open
-// them at their line), the overdue tasks (today), the daily note, and "Add task" / "Add
+// them at their line; a right-click or long press: the menu of the entry's date, reminder or
+// series, PlanningTokenMenu), the overdue tasks (today), the daily note, and "Add task" / "Add
 // reminder", written into that day's journal (CalendarAddDialog, BReminderDialog for more
 // options).
 //
@@ -81,6 +82,14 @@ FocusScope {
         if (actions.setTaskStatus(entry.path, entry.line, status, entry.title))
             toasts.show(qsTr("Status changed"), { actionText: qsTr("Undo"), onAction: () => actions.undo() })
     }
+    /// The menu of an entry's date token (PlanningTokenMenu): the token as written (`spec`); a series'
+    /// other dates change the whole series, a reminder's one time is snoozed.
+    function openEntryMenu(entry, item, x, y) {
+        tokenMenu.openToken({ path: entry.path, line: entry.line, text: entry.title, kind: entry.kind, value: entry.spec,
+                              alarm: entry.alarm, rule: entry.rule, priority: entry.priority,
+                              isTask: entry.isTask === true && (entry.status || "") !== "", occurrence: entry.occurrence,
+                              date: entry.date, time: entry.time }, item, x, y)
+    }
     function openJournal(date) {
         if (daySheet.opened)
             daySheet.close()
@@ -121,6 +130,12 @@ FocusScope {
         today: DatesHelper.today
         weekStart: DatesHelper.weekStart
         locale: DatesHelper.locale
+    }
+    PlanningTokenMenu {
+        id: tokenMenu
+        actions: actions
+        onChanged: (text) => toasts.show(text, { actionText: qsTr("Undo"), onAction: () => actions.undo() })
+        onMessage: (text, kind) => toasts.show(text, { kind: kind })
     }
     PlanningActions {
         id: actions
@@ -204,6 +219,7 @@ FocusScope {
                     onItemOpened: (entry) => root.openEntry(entry)
                     onItemToggled: (entry) => root.toggleEntry(entry)
                     onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
+                    onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
                     onJournalOpened: (date) => root.openJournal(date)
                     onAddTaskRequested: (date) => addDialog.openFor("task", date)
                     onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
@@ -230,6 +246,7 @@ FocusScope {
                     onItemOpened: (entry) => root.openEntry(entry)
                     onItemToggled: (entry) => root.toggleEntry(entry)
                     onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
+                    onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
                     onJournalOpened: (date) => root.openJournal(date)
                     onAddTaskRequested: (date) => addDialog.openFor("task", date)
                     onAddReminderRequested: (date) => addDialog.openFor("reminder", date)
@@ -253,6 +270,7 @@ FocusScope {
     Component {
         id: weekView
         CalendarWeekGrid {
+            onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
             calendar: cal
             swipeEnabled: root.gridSwipe
             focus: true
@@ -269,6 +287,7 @@ FocusScope {
             onItemOpened: (entry) => root.openEntry(entry)
             onItemToggled: (entry) => root.toggleEntry(entry)
             onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
+            onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
             onJournalOpened: (date) => root.openJournal(date)
             onDayTapped: (date) => root.showDay(date)
         }
@@ -300,6 +319,7 @@ FocusScope {
             onItemOpened: (entry) => root.openEntry(entry)
             onItemToggled: (entry) => root.toggleEntry(entry)
             onItemStatusRequested: (entry, status) => root.setEntryStatus(entry, status)
+            onItemMenuRequested: (entry, item, x, y) => root.openEntryMenu(entry, item, x, y)
             onJournalOpened: (date) => root.openJournal(date)
             onAddTaskRequested: (date) => {
                 daySheet.close()

@@ -91,9 +91,17 @@ struct RenderContext {
     /// (`![[photo.png]]`) still render as links.
     bool hideTransclusions = false;
     /// Date chips (📅 ⏳ 🛫 ➕ ✅ ❌, not Logseq planning lines) are `date:<from>-<to>` links naming
-    /// their token, as reminders are (the block editor: their menu changes the date); otherwise
-    /// plain chips.
+    /// their token, as reminders are (`reminder:<from>-<to>`, always), the 🔁 chip a
+    /// `recur:<from>-<to>` link (the range ends with the rule) and priorities (🔺 ⏫ 🔼 🔽 ⏬, Logseq
+    /// `[#A]`) `prio:<from>-<to>` links — their menus change the token (markdown/tokenedit.h);
+    /// otherwise plain chips and text. Ranges are positions in the rendered body (UTF-16).
     bool dateLinks = false;
+    /// Wiki links to a daily note (`[[2026-10-20]]`, journalDateFromLinkTarget() with
+    /// `journalConfig`; not with a `#heading` / `#^id`) are `day:<from>-<to>` links naming the
+    /// link's range — the block editor's date menu on them — instead of `page:` links.
+    bool dayLinks = false;
+    /// The vault's journal settings for `dayLinks`.
+    VaultConfig journalConfig;
 };
 
 /// A RenderContext::linkTitle for daily notes: a link naming a day (journalDateFromLinkTarget():

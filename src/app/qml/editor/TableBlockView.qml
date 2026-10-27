@@ -7,7 +7,9 @@ import Brulion
 // Markdown rendered like block text (bold, links, tags, date chips — the core InlineRenderer, so
 // note text is never interpreted as HTML); formula cells (`=sum(above)`, `=[Cena]*[Ilość]`) show
 // the result (errors as #ERR with the message as tooltip, cycles as #CYCLE). Links in cells work
-// like links in blocks (a click elsewhere edits the cell). Clicking a cell edits its raw text (the formula);
+// like links in blocks (a click elsewhere edits the cell); a right-click or long press on a date,
+// reminder, 🔁 or priority chip of a cell opens its menu (DateChipMenu: the cell's text changes, one
+// undo step), on a link the link's menu. Clicking a cell edits its raw text (the formula);
 // Enter / Tab / Shift+Tab move, Esc cancels the cell's edit. Typing reaches the document at once
 // (PageController.setTableCell with `typing`: one undo step per cell), so a cell left open when
 // the app is suspended or closed is saved like any text. Rows and columns are added with
@@ -80,6 +82,23 @@ Item {
 
     function focusFirstCell() {
         startCell(rows.length > 0 ? 0 : -1, 0)
+    }
+    /// The menu of the token or link at (x, y) of cell (r, c)'s text `text` (r -1 = the header): a
+    /// date, reminder, 🔁 or priority chip's (the cell's text changes), a link's. False: none there.
+    function cellMenu(r, c, text, x, y) {
+        const editor = root.block.editor
+        const link = text.linkAt(x, y)
+        if (link === "")
+            return false
+        if (editor.openCellTokenMenu(root.block.index, r, c, link, text, x, y))
+            return true
+        const index = root.block.index
+        return editor.openLinkMenu(link, "", (newPane) => {
+            if (newPane)
+                editor.controller.activateLink(index, link, true)
+            else
+                editor.activateLink(index, link)
+        }, text, x, y)
     }
     function startCell(r, c) {
         if (c < 0 || c >= columns || r < -1 || r >= rows.length)
@@ -306,11 +325,30 @@ Item {
                                 cursorShape: cellText.linkAt(point.position.x - cellText.x, point.position.y - cellText.y) !== ""
                                              ? Qt.PointingHandCursor : Qt.IBeamCursor
                             }
-                            // A finger held on a cell selects the table (touch UIs).
+                            // A finger held on a cell selects the table (touch UIs) — on a token or a
+                            // link of its text, outside the selection mode, opens its menu.
                             TapHandler {
+                                id: cellHold
                                 enabled: !cell.editingCell && Theme.touchUi
                                 acceptedDevices: PointerDevice.TouchScreen
-                                onLongPressed: root.block.editor.longPressText(root.block.index)
+                                onLongPressed: {
+                                    const p = cellHold.point.position
+                                    if (root.block.editor.selectionMode || !root.cellMenu(rowItem.r, cell.c, cellText, p.x - cellText.x, p.y - cellText.y))
+                                        root.block.editor.longPressText(root.block.index)
+                                }
+                            }
+                            // A right-click on a token or a link of the cell: its menu; elsewhere the
+                            // block menu (as the list's handler opens it).
+                            TapHandler {
+                                enabled: !cell.editingCell
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                acceptedButtons: Qt.RightButton
+                                gesturePolicy: TapHandler.WithinBounds
+                                onTapped: (eventPoint) => {
+                                    const p = eventPoint.position
+                                    if (!root.cellMenu(rowItem.r, cell.c, cellText, p.x - cellText.x, p.y - cellText.y))
+                                        root.block.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                                }
                             }
                             TapHandler {
                                 enabled: !cell.editingCell
@@ -319,10 +357,10 @@ Item {
                                     if (root.block.editor.blockTapped(root.block.index))
                                         return // Shift+click, the touch selection mode
                                     const p = eventPoint.position
-                                    // Reminder chips name ranges of the cell's text, not of the
-                                    // block: those cells are edited like any other.
+                                    // Reminder, date, 🔁 and priority chips name ranges of the cell's
+                                    // text: a click edits the cell (their menu is the right button's).
                                     const link = cellText.linkAt(p.x - cellText.x, p.y - cellText.y)
-                                    if (link !== "" && !link.startsWith("reminder:"))
+                                    if (link !== "" && !link.startsWith("reminder:") && !root.block.editor.editsOnClick(link))
                                         root.block.editor.activateLink(root.block.index, link)
                                     else
                                         root.startCell(rowItem.r, cell.c)

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "markdown/blockdocument.h"
+#include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
 #include "types.h"
 
@@ -191,35 +192,32 @@ QList<Transclusion> transclusionsOf(QStringView body);
 // Token edits (SYNTAX §5-6): content in -> content out, first line of the body
 // ---------------------------------------------------------------------------------------------
 
-/// Replace the token at [from, to) of `body` with `token`; an empty `token` removes it together
-/// with one adjacent space. Out-of-range ranges leave the body unchanged.
-QString replaceTokenRange(const QString &body, qsizetype from, qsizetype to, const QString &token);
+// replaceTokenRange, setFirstLineToken, dateTokenAt, setTokenDate, setReminderAlarm, shiftedSpec
+// and findFirstLineToken live in markdown/tokenedit.h (the planning views and query results edit
+// tokens of other files too); the editor's code uses them from here.
+using markdown::dateTokenAt;
+using markdown::findFirstLineToken;
+using markdown::replaceTokenRange;
+using markdown::setFirstLineToken;
+using markdown::setReminderAlarm;
+using markdown::setTokenDate;
+using markdown::shiftedSpec;
 
-/// Set the token of `kind` on the body's first line: the first existing token of that kind is
-/// replaced (removed when `token` is empty); without one, `token` is appended to the first line
-/// (before a trailing block id) — always appended when `append` is true (reminders: a block may
-/// carry several). Tokens inside inline code are ignored.
-QString setFirstLineToken(const QString &body, markdown::TokenKind kind, const QString &token, bool append = false);
-
-/// The date token at body range [from, to) — a chip's range: 📅 ⏳ 🛫 ➕ ✅ ❌ or a reminder
-/// (⏰, ⏰!, `(@…)`), not a Logseq planning line —, its positions in `body`; nullopt when the
-/// range holds none (the text changed since the chip was drawn).
-std::optional<markdown::Token> dateTokenAt(const QString &body, qsizetype from, qsizetype to);
-
-/// Give the date token at [from, to) another date (and time, or none): only its value is
-/// rewritten — the emoji and everything around it stay byte for byte. No token there: unchanged.
-QString setTokenDate(const QString &body, qsizetype from, qsizetype to, const DateSpec &spec);
-
-/// Turn the reminder at [from, to) into an alarm (`⏰!`) or back into a plain reminder (`⏰`); a
-/// `(@…)` reminder is written as `⏰` / `⏰!`. No reminder there: unchanged.
-QString setReminderAlarm(const QString &body, qsizetype from, qsizetype to, bool alarm);
-
-/// `spec` moved by `days` and `minutes` (wall-clock time, never through UTC): a date without a time
-/// moves by whole days only, unless `minutes` is non-zero — then it gets `defaultTime` first.
-DateSpec shiftedSpec(const DateSpec &spec, int days, int minutes, QTime defaultTime);
-
-/// Range [from, to) of the first token of `kind` on the first line, or nullopt.
-std::optional<std::pair<qsizetype, qsizetype>> findFirstLineToken(const QString &body, markdown::TokenKind kind);
+/// What the menu of a token link needs (DateChipMenu): the `date:`, `reminder:`, `recur:`, `prio:`
+/// or `day:` link `url` of a block's rendered text — its range plus `offset` (where the rendered
+/// text starts in `body`, BlockListModel::renderOffsetAt()) — read in `body`:
+///   { from, to } (body range), kind ("due" | "scheduled" | "start" | "created" | "done" |
+///   "cancelled" | "reminder" | "recurrence" | "priority" | "day"), at ("YYYY-MM-DD[ HH:mm]"),
+///   date, time ("" without one), alarm, rule (canonical: the 🔁 token's, for a reminder the
+///   block's; "" = none), priority (name: the token's, for a reminder the block's), logseq (a
+///   Logseq priority), isTask, target (a day link's target as written), ref ({ kind, value,
+///   ordinal }: the token across copies of the block, markdown::TokenRef; not for day links).
+/// Empty when the link names nothing there (the text changed since it was drawn).
+QVariantMap tokenChip(const QString &body, const QString &url, int offset, bool isTask, const VaultConfig &config);
+/// markdown::TokenRef as a QVariantMap { kind (int), value, ordinal, defaultTime ("HH:mm" or "") }
+/// and back (nullopt for a malformed map).
+QVariantMap tokenRefToMap(const markdown::TokenRef &ref);
+std::optional<markdown::TokenRef> tokenRefFromMap(const QVariantMap &map);
 
 /// Insert `token` at `cursor` of `text` with spaces around it as needed; returns the new text and
 /// sets *newCursor to the position after the token (and its trailing space, if one was added).

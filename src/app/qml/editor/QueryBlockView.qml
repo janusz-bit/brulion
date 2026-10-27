@@ -103,6 +103,23 @@ Rectangle {
         if (r && r.action === "scrollTo")
             root.editor.revealRow(r.row)
     }
+    /// The menu of the token or link at `pos` of a result row (`row`: its delegate); false: none.
+    function resultMenu(row, pos) {
+        const text = row.textItem
+        const p = text.mapFromItem(row, pos.x, pos.y)
+        const link = text.linkAt(p.x, p.y)
+        if (link === "" || link === "open:")
+            return false
+        if (root.editor.openTokenMenuIn(row.path, row.line, row.raw, link, text, p.x, p.y))
+            return true
+        return root.editor.openLinkMenu(link, row.path, (newPane) => {
+            const r = results.activateLink(row.index, link, newPane)
+            if (r && r.action === "scrollTo")
+                root.editor.revealRow(r.row)
+            else if (r && r.action === "notFound")
+                root.editor.noticeNotFound(r)
+        }, text, p.x, p.y)
+    }
     function activateResultLink(index, link) {
         if (link === "open:") {
             openResult(index)
@@ -334,7 +351,10 @@ Rectangle {
                     required property bool showPage
                     required property string journal
                     required property string text
+                    required property int line
+                    required property string raw
                     readonly property bool group: kind === "group"
+                    readonly property Text textItem: itemText
                     readonly property bool closed: status === "done" || status === "cancelled"
                     /// Touch: one line of text centred in a 44 px row (the checkbox's target).
                     readonly property real pad: Theme.touchUi ? Math.max(3, Math.round((Theme.touchTarget - root.itemLineHeight) / 2)) : 1
@@ -431,6 +451,27 @@ Rectangle {
                                 root.activateResultLink(row.index, link)
                             else
                                 root.openResult(row.index)
+                        }
+                    }
+                    // A right-click or a finger held on a token or a link of the item: its menu
+                    // (the change goes to the item's own file); elsewhere the block's own gestures.
+                    TapHandler {
+                        enabled: !row.group
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                        acceptedButtons: Qt.RightButton
+                        gesturePolicy: TapHandler.WithinBounds
+                        onTapped: (eventPoint) => {
+                            if (!root.resultMenu(row, eventPoint.position))
+                                root.editor.openBlockMenuAt(root.block.index, eventPoint.scenePosition)
+                        }
+                    }
+                    TapHandler {
+                        id: resultHold
+                        enabled: !row.group && Theme.touchUi
+                        acceptedDevices: PointerDevice.TouchScreen
+                        onLongPressed: {
+                            if (!root.editor.selectionMode)
+                                root.resultMenu(row, resultHold.point.position)
                         }
                     }
                 }

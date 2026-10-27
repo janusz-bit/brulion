@@ -4,10 +4,17 @@
 #include "dates/local.h"
 #include "editorhost.h"
 #include "index/vaultindex.h"
+#include "markdown/blockdocument.h"
 #include "markdown/edit.h"
+#include "markdown/inline.h"
 #include "markdown/parse.h"
+#include "markdown/tokenedit.h"
+#include "notebook/links.h"
 #include "planningutil.h"
+#include "reminders/snooze.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QUrl>
 
 #include <cstdlib>
@@ -238,7 +245,140 @@ bool PlanningActions::appendBlock(const QString &path, const QString &block)
     return writeChange(path, before, after);
 }
 
-bool PlanningActions::openLink(const QString &url, const QString &fromPath)
+bool PlanningActions::editToken(const QString &path, int line, const QString &text, const QString &kind,
+                                const QString &value, const QString &action, const QVariant &a, const QVariant &b)
+{
+    const auto ref = tokenRefOf(kind, value);
+    if (!m_host || !ref)
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const VaultConfig cfg = config();
+    markdown::TokenEditContext context;
+    context.today = currentDay();
+    context.defaultReminderTime = cfg.defaultReminderTime;
+    context.config = cfg;
+    const int at = tokenBlockLine(path, content, line, text, *ref);
+    if (at < 0) {
+        Q_EMIT failed(tr("The task was changed in the meantime."));
+        return false;
+    }
+    const QString after = markdown::editBlockToken(content, at, *ref, action, a, b, context);
+    if (after == content)
+        return false;
+    return writeChange(path, content, after);
+}
+
+int PlanningActions::tokenBlockLine(const QString &path, const QString &content, int line, const QString &text,
+                                    const markdown::TokenRef &ref) const
+{
+    const markdown::BlockDocument doc(content);
+    const auto hasToken = [&](int at) {
+        const int i = doc.indexAtLine(at);
+        return i >= 0 && markdown::findTokenRef(doc.at(i).body, ref).has_value();
+    };
+    // The task with that text nearest to the line — the line itself while it holds it: the index
+    // may be a moment behind (a line added above, a sync), and the line may hold another task with
+    // an equal token by now. A block that is no task (a reminder of a plain bullet): its line.
+    const int task = text.isEmpty() ? -1 : locateTask(path, content, line, text);
+    if (task >= 0 && hasToken(task))
+        return task;
+    return hasToken(line) ? line : -1;
+}
+
+std::optional<markdown::TokenRef> PlanningActions::tokenRefOf(const QString &kind, const QString &value) const
+{
+    using markdown::TokenKind;
+    static const QHash<QString, TokenKind> kinds{
+            {u"due"_s, TokenKind::Due},           {u"scheduled"_s, TokenKind::Scheduled},
+            {u"start"_s, TokenKind::Start},       {u"created"_s, TokenKind::Created},
+            {u"done"_s, TokenKind::Done},         {u"cancelled"_s, TokenKind::Cancelled},
+            {u"reminder"_s, TokenKind::Reminder}, {u"recurrence"_s, TokenKind::Recurrence},
+            {u"priority"_s, TokenKind::Priority},
+    };
+    if (!kinds.contains(kind) || value.isEmpty())
+        return std::nullopt;
+    markdown::TokenRef ref;
+    ref.kind = kinds.value(kind);
+    ref.value = value;
+    ref.defaultTime = config().defaultReminderTime; // the models' reminders have it filled in
+    return ref;
+}
+
+QVariantMap PlanningActions::tokenMenu(const QString &path, int line, const QString &text, const QString &kind,
+                                       const QString &value) const
+{
+    const auto ref = tokenRefOf(kind, value);
+    if (!m_host || !ref)
+        return {};
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok)
+        return {};
+    const int at = tokenBlockLine(path, content, line, text, *ref);
+    if (at < 0)
+        return {}; // not written as a token (a Logseq SCHEDULED: line, a .+1w repeater) or gone
+    const markdown::BlockDocument doc(content);
+    const QString body = doc.at(doc.indexAtLine(at)).body;
+    const auto range = markdown::findTokenRef(body, *ref);
+    const auto token = range ? markdown::tokenAt(body, range->first, range->second) : std::nullopt;
+    if (!token)
+        return {};
+    QString rule = markdown::blockRecurrence(body);
+    auto [priority, logseq] = markdown::blockPriority(body);
+    if (token->kind == markdown::TokenKind::Recurrence)
+        rule = token->canonical;
+    if (token->kind == markdown::TokenKind::Priority || token->kind == markdown::TokenKind::LogseqPriority) {
+        priority = token->priority;
+        logseq = token->kind == markdown::TokenKind::LogseqPriority;
+    }
+    return {{u"rule"_s, rule}, {u"priority"_s, markdown::priorityName(priority)}, {u"logseq"_s, logseq}};
+}
+
+bool PlanningActions::snoozeReminder(const QString &path, int line, const QString &at)
+{
+    const QDateTime when = QDateTime::fromString(at, u"yyyy-MM-dd HH:mm"_s);
+    if (!m_host || !when.isValid())
+        return false;
+    bool ok = false;
+    const QString content = m_host->read(path, &ok);
+    if (!ok) {
+        Q_EMIT failed(tr("The page could not be read."));
+        return false;
+    }
+    const QString after = brulion::snoozeReminder(content, line, when);
+    if (after == content) {
+        Q_EMIT failed(tr("The reminder was changed in the meantime."));
+        return false;
+    }
+    return writeChange(path, content, after);
+}
+
+QString PlanningActions::linkText(const QString &url, const QString &fromPath) const
+{
+    return notebook::copiedLink(
+                   url, fromPath, config(),
+                   [this](const QString &target, const QString &from) {
+                       return m_host ? m_host->resolveLink(target, from) : QString();
+                   },
+                   [this](const VaultPath &p) { return m_host ? m_host->linkTarget(p, QString()) : QString(); })
+            .text;
+}
+
+bool PlanningActions::copyText(const QString &text) const
+{
+    QClipboard *clipboard = qGuiApp ? QGuiApplication::clipboard() : nullptr;
+    if (!clipboard || text.isEmpty())
+        return false;
+    clipboard->setText(text);
+    return clipboard->text() == text; // read back: a refused copy is never reported as copied
+}
+
+bool PlanningActions::openLink(const QString &url, const QString &fromPath, bool newPane)
 {
     const qsizetype colon = url.indexOf(u':');
     if (!m_host || colon <= 0)
@@ -250,11 +390,11 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath)
         return true;
     }
     if (scheme == u"tag") {
-        m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}});
+        m_host->navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, QUrl::fromPercentEncoding(rest.toUtf8())}}, newPane);
         return true;
     }
     if (scheme == u"block") {
-        m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}});
+        m_host->navigate({{u"view"_s, u"page"_s}, {u"blockId"_s, rest}}, newPane);
         return true;
     }
     if (scheme == u"page") {
@@ -276,7 +416,7 @@ bool PlanningActions::openLink(const QString &url, const QString &fromPath)
             route[u"blockId"_s] = fragment.mid(1);
         else if (!fragment.isEmpty())
             route[u"heading"_s] = fragment;
-        m_host->navigate(route);
+        m_host->navigate(route, newPane);
         return true;
     }
     return false;

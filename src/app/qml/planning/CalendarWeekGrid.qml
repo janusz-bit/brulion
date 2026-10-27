@@ -44,6 +44,8 @@ FocusScope {
     signal dayTapped(string date)
     signal dayOpened(string date)
     signal itemOpened(var entry)
+    /// A right-click or long press on an entry: its token menu (PlanningTokenMenu.openToken).
+    signal itemMenuRequested(var entry, Item item, real x, real y)
 
     /// The keyboard was used last (the focus ring shows only then).
     property bool keyboardActive: false
@@ -221,6 +223,19 @@ FocusScope {
                                     else
                                         root.itemOpened(allDayPill.entry)
                                 }
+                            }
+                            // A right-click or a finger held on it: the entry's token menu.
+                            TapHandler {
+                                enabled: !allDayPill.more
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                acceptedButtons: Qt.RightButton
+                                gesturePolicy: TapHandler.WithinBounds
+                                onTapped: (eventPoint) => root.itemMenuRequested(allDayPill.entry, allDayPill, eventPoint.position.x, eventPoint.position.y)
+                            }
+                            TapHandler {
+                                enabled: !allDayPill.more && Theme.touchUi
+                                acceptedDevices: PointerDevice.TouchScreen
+                                onLongPressed: root.itemMenuRequested(allDayPill.entry, allDayPill, point.position.x, point.position.y)
                             }
                         }
                     }
@@ -405,6 +420,19 @@ FocusScope {
                                     else
                                         root.itemOpened(event.entry)
                                 }
+                            }
+                            // A right-click or a finger held on it: the entry's token menu.
+                            TapHandler {
+                                enabled: true
+                                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.Stylus
+                                acceptedButtons: Qt.RightButton
+                                gesturePolicy: TapHandler.WithinBounds
+                                onTapped: (eventPoint) => root.itemMenuRequested(event.entry, event, eventPoint.position.x, eventPoint.position.y)
+                            }
+                            TapHandler {
+                                enabled: true && Theme.touchUi
+                                acceptedDevices: PointerDevice.TouchScreen
+                                onLongPressed: root.itemMenuRequested(event.entry, event, point.position.x, point.position.y)
                             }
                         }
                     }

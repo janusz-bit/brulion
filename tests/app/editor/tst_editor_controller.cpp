@@ -8,7 +8,9 @@
 #include "fakeeditorhost.h"
 #include "index/vaultindex.h"
 #include "markdown/inline.h"
+#include "markdown/inlinerenderer.h"
 #include "markdown/parse.h"
+#include "markdown/tokenedit.h"
 #include "notebook/links.h"
 #include "pagecontroller.h"
 
@@ -399,7 +401,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const QString nb = QString(QChar(0x00A0));
         const QString html = f.role(0, "html").toString();
         QVERIFY2(html.contains(u"śr"_s + nb + u"14"_s + nb + u"paź"_s), qPrintable(html));
-        QVERIFY(html.contains(u"page:2026-10-14"_s));
+        // A day of the journal is a day: link (its date menu); other pages stay page: links.
+        QVERIFY2(html.contains(u"href=\"day:"_s) && !html.contains(u"page:2026-10-14"_s), qPrintable(html));
+        QVERIFY(html.contains(u"page:Inna"_s));
         QVERIFY(html.contains(u">wtorek<"_s));
         QVERIFY(!html.contains(u">2026-10-14<"_s));
         QCOMPARE(f.text(), u"- Wczoraj: [[2026-10-14]], potem [[2026-10-13|wtorek]] i [[Inna]]\n"_s);
@@ -1294,6 +1298,405 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ^p1\n"_s);
         f.page.undo();
         QCOMPARE(f.text(), u"- [ ] Zapłacić za prąd 📅 2026-11-03 ⏰ 2026-10-15 19:00 ✅ 2026-10-14 ^p1\n"_s);
+    }
+
+    /// The links of a scheme in row `row`'s rendered text, in order.
+    static QStringList linksOf(const Fixture &f, int row, const QString &scheme)
+    {
+        const QString html = f.model()->data(f.model()->index(row), BlockListModel::HtmlRole).toString();
+        const QRegularExpression re(u"href=\"("_s + scheme + u":[^\"]*)\""_s);
+        QStringList out;
+        for (auto it = re.globalMatch(html); it.hasNext();)
+            out.append(it.next().captured(1));
+        return out;
+    }
+
+    void recurrenceChipMenu()
+    {
+        Fixture f(u"- [ ] Podlać kwiaty 🔁 co tydzień w poniedziałek 📅 2026-10-19\r\n- inne\r\n"_s);
+        const QStringList urls = linksOf(f, 0, u"recur"_s);
+        QCOMPARE(urls.size(), 1);
+        QVariantMap c = f.page.dateChip(0, urls.first());
+        QCOMPARE(c.value(u"kind"_s).toString(), u"recurrence"_s);
+        QCOMPARE(c.value(u"rule"_s).toString(), u"every week on Monday"_s);
+        QVERIFY(c.value(u"isTask"_s).toBool());
+        QVERIFY(f.page.activateLink(0, urls.first()).isEmpty()); // a click edits the text
+        const int from = c.value(u"from"_s).toInt();
+        const int to = c.value(u"to"_s).toInt();
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"recurrence"_s, u"co miesiąc"_s));
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 🔁 every month 📅 2026-10-19\r\n- inne\r\n"_s);
+        c = f.page.dateChip(0, linksOf(f, 0, u"recur"_s).first());
+        QVERIFY(f.page.applyTokenAction(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), u"recurrence"_s,
+                                        u"every month when done"_s));
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 🔁 every month when done 📅 2026-10-19\r\n- inne\r\n"_s);
+        c = f.page.dateChip(0, linksOf(f, 0, u"recur"_s).first());
+        QVERIFY(f.page.applyTokenAction(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), u"remove"_s));
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 📅 2026-10-19\r\n- inne\r\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 🔁 every month when done 📅 2026-10-19\r\n- inne\r\n"_s);
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 🔁 co tydzień w poniedziałek 📅 2026-10-19\r\n- inne\r\n"_s);
+        f.page.redo();
+        QCOMPARE(f.text(), u"- [ ] Podlać kwiaty 🔁 every month 📅 2026-10-19\r\n- inne\r\n"_s);
+        QVERIFY(!f.page.applyTokenAction(0, 0, 3, u"recurrence"_s, u"every day"_s)); // no rule there
+    }
+
+    void priorityChipMenu_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("choice");
+        QTest::addColumn<QString>("current");
+        QTest::addColumn<bool>("logseq");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("emoji") << u"- [ ] Zażółć gęślą jaźń ⏫ #praca\n"_s << u"lowest"_s << u"high"_s << false
+                               << u"- [ ] Zażółć gęślą jaźń ⏬ #praca\n"_s;
+        QTest::newRow("logseq") << u"- TODO [#B] Zażółć gęślą jaźń\n"_s << u"high"_s << u"medium"_s << true
+                                << u"- TODO [#A] Zażółć gęślą jaźń\n"_s;
+        QTest::newRow("none") << u"- [ ] Zażółć 🔽 gęślą\n"_s << QString() << u"low"_s << false
+                              << u"- [ ] Zażółć gęślą\n"_s;
+    }
+
+    void priorityChipMenu()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, choice);
+        QFETCH(QString, current);
+        QFETCH(bool, logseq);
+        QFETCH(QString, expected);
+        Fixture f(content);
+        const QStringList urls = linksOf(f, 0, u"prio"_s);
+        QCOMPARE(urls.size(), 1);
+        const QVariantMap c = f.page.dateChip(0, urls.first());
+        QCOMPARE(c.value(u"kind"_s).toString(), u"priority"_s);
+        QCOMPARE(c.value(u"priority"_s).toString(), current);
+        QCOMPARE(c.value(u"logseq"_s).toBool(), logseq);
+        QVERIFY(f.page.applyTokenAction(0, c.value(u"from"_s).toInt(), c.value(u"to"_s).toInt(), u"priority"_s,
+                                        choice));
+        QCOMPARE(f.text(), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), content);
+    }
+
+    void reminderMenuRepeatAndPriority()
+    {
+        Fixture f(u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-16 18:00 #telefon\n"_s);
+        const QStringList urls = linksOf(f, 0, u"reminder"_s);
+        QCOMPARE(urls.size(), 1);
+        QVariantMap c = f.page.dateChip(0, urls.first());
+        QCOMPARE(c.value(u"kind"_s).toString(), u"reminder"_s);
+        QCOMPARE(c.value(u"rule"_s).toString(), QString());
+        QCOMPARE(c.value(u"priority"_s).toString(), QString());
+        QVERIFY(c.value(u"isTask"_s).toBool());
+        const int from = c.value(u"from"_s).toInt();
+        const int to = c.value(u"to"_s).toInt();
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"blockRecurrence"_s, u"every weekday"_s));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-16 18:00 #telefon 🔁 every weekday\n"_s);
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"blockPriority"_s, u"high"_s));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-16 18:00 #telefon 🔁 every weekday ⏫\n"_s);
+        c = f.page.dateChip(0, linksOf(f, 0, u"reminder"_s).first());
+        QCOMPARE(c.value(u"rule"_s).toString(), u"every weekday"_s);
+        QCOMPARE(c.value(u"priority"_s).toString(), u"high"_s);
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"blockRecurrence"_s, QString()));
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-16 18:00 #telefon ⏫\n"_s);
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Zadzwonić do hydraulika ⏰ 2026-10-16 18:00 #telefon\n"_s);
+    }
+
+    void journalLinkMenu()
+    {
+        Fixture f(u"- Spotkanie [[2026-10-20]] w sali\r\n"_s);
+        const QStringList urls = linksOf(f, 0, u"day"_s);
+        QCOMPARE(urls.size(), 1);
+        QVariantMap c = f.page.dateChip(0, urls.first());
+        QCOMPARE(c.value(u"kind"_s).toString(), u"day"_s);
+        QCOMPARE(c.value(u"date"_s).toString(), u"2026-10-20"_s);
+        QCOMPARE(c.value(u"url"_s).toString(), u"page:2026-10-20"_s);
+        QCOMPARE(c.value(u"copyText"_s).toString(), u"[[2026-10-20]]"_s);
+        // A click opens the day; in the side panel too.
+        f.page.activateLink(0, urls.first());
+        QCOMPARE(f.host.lastRoute().value(u"target"_s).toString(), u"2026-10-20"_s);
+        QSignalSpy navigated(&f.host, &FakeEditorHost::navigated);
+        f.page.activateLink(0, urls.first(), true);
+        QCOMPARE(navigated.size(), 1);
+        QCOMPARE(navigated.first().at(1).toBool(), true);
+        const int from = c.value(u"from"_s).toInt();
+        const int to = c.value(u"to"_s).toInt();
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"shift"_s, 7));
+        QCOMPARE(f.text(), u"- Spotkanie [[2026-10-27]] w sali\r\n"_s);
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"move"_s, 1)); // tomorrow (Now: 2026-10-15)
+        QCOMPARE(f.text(), u"- Spotkanie [[2026-10-16]] w sali\r\n"_s);
+        QVERIFY(f.page.applyTokenAction(0, from, to, u"set"_s, u"2026-12-24"_s));
+        QCOMPARE(f.text(), u"- Spotkanie [[2026-12-24]] w sali\r\n"_s);
+        f.page.undo();
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Spotkanie [[2026-10-20]] w sali\r\n"_s);
+    }
+
+    void linkMenuCopyText()
+    {
+        Fixture f(u"- Zobacz [[Inna#Drugi blok]], [[Nowa strona]], #[[ważne sprawy]] i #zakupy\n"_s);
+        QVariantMap m = f.page.linkMenu(u"page:Inna#Drugi%20blok"_s);
+        QCOMPARE(m.value(u"kind"_s).toString(), u"page"_s);
+        QVERIFY(!m.value(u"unresolved"_s).toBool());
+        QCOMPARE(m.value(u"path"_s).toString(), u"Inna.md"_s);
+        QCOMPARE(m.value(u"copyText"_s).toString(), u"[[Inna#Drugi blok]]"_s);
+        m = f.page.linkMenu(u"page:Nowa%20strona"_s);
+        QVERIFY(m.value(u"unresolved"_s).toBool());
+        QCOMPARE(m.value(u"copyText"_s).toString(), u"[[Nowa strona]]"_s);
+        // [[#Heading]] in an item of another page names that page.
+        m = f.page.linkMenu(u"page:#Plan"_s, u"Inna.md"_s);
+        QCOMPARE(m.value(u"copyText"_s).toString(), u"[[Inna#Plan]]"_s);
+        m = f.page.linkMenu(u"tag:wa%C5%BCne%20sprawy"_s);
+        QCOMPARE(m.value(u"kind"_s).toString(), u"tag"_s);
+        QCOMPARE(m.value(u"tag"_s).toString(), u"ważne sprawy"_s);
+        QCOMPARE(m.value(u"copyText"_s).toString(), u"#[[ważne sprawy]]"_s);
+        QCOMPARE(f.page.linkMenu(u"tag:zakupy"_s).value(u"copyText"_s).toString(), u"#zakupy"_s);
+        QCOMPARE(f.page.linkMenu(u"block:abc"_s).value(u"copyText"_s).toString(), u"((abc))"_s);
+        QCOMPARE(f.page.linkMenu(u"ext:https://example.org/a"_s).value(u"copyText"_s).toString(),
+                 u"https://example.org/a"_s);
+        QVERIFY(f.page.linkMenu(u"date:1-2"_s).isEmpty());
+        QVERIFY(f.page.linkMenu(u"nonsense"_s).isEmpty());
+        // The tag view and Tasks are routes through the host.
+        f.page.navigate({{u"view"_s, u"tag"_s}, {u"tag"_s, u"zakupy"_s}, {u"overview"_s, true}});
+        QCOMPARE(f.host.lastRoute().value(u"overview"_s).toBool(), true);
+        QCOMPARE(f.text(), u"- Zobacz [[Inna#Drugi blok]], [[Nowa strona]], #[[ważne sprawy]] i #zakupy\n"_s);
+    }
+
+    void tokenMenusOfOtherFiles()
+    {
+        Fixture f(u"- strona z zapytaniem\n"_s);
+        const QString other =
+                u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-20 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
+        f.host.setFile(u"Plan.md"_s, other);
+        // The item as a query result has it (its block's Markdown) and a link of its rendered text.
+        const QString raw = u"- [ ] Zapłacić za żłobek 📅 2026-10-20 ⏫"_s;
+        markdown::RenderContext ctx = f.model()->renderContextFor(u"Plan.md"_s, other, 2);
+        const QString html = markdown::InlineRenderer(ctx).render(u"[ ] Zapłacić za żłobek 📅 2026-10-20 ⏫"_s);
+        static const QRegularExpression dateLink(u"href=\"(date:\\d+-\\d+)\""_s);
+        const QString url = dateLink.match(html).captured(1);
+        QVERIFY2(!url.isEmpty(), qPrintable(html));
+        const QVariantMap chip = f.page.tokenChipIn(raw, url);
+        QCOMPARE(chip.value(u"kind"_s).toString(), u"due"_s);
+        const QVariantMap ref = chip.value(u"ref"_s).toMap();
+        QVERIFY(!ref.isEmpty());
+        QVERIFY(f.page.tokenChipIn(raw, u"day:1-3"_s).isEmpty());
+
+        QVariantMap r = f.page.editTokenIn(u"Plan.md"_s, 2, raw, ref, u"shift"_s, 1, 0);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        const int undo = r.value(u"undo"_s).toInt();
+        QVERIFY(undo > 0);
+        const QString after =
+                u"# Plan\r\n\r\n- [ ] Zapłacić za żłobek 📅 2026-10-21 ⏫\r\n- [ ] inne 📅 2026-10-20\r\n"_s;
+        QCOMPARE(f.host.file(u"Plan.md"_s), after);
+        // The token moved on: the same ref finds nothing to change (the date is another now).
+        r = f.page.editTokenIn(u"Plan.md"_s, 2, raw, ref, u"shift"_s, 1, 0);
+        QCOMPARE(r.value(u"reason"_s).toString(), u"gone"_s);
+        QVERIFY(f.page.undoTokenEdit(undo));
+        QCOMPARE(f.host.file(u"Plan.md"_s), other);
+        QVERIFY(!f.page.undoTokenEdit(undo)); // once
+
+        // Undo is refused once the file changed again.
+        r = f.page.editTokenIn(u"Plan.md"_s, 2, raw, ref, u"remove"_s);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        f.host.setFile(u"Plan.md"_s, f.host.file(u"Plan.md"_s) + u"- dopisane\r\n"_s);
+        QVERIFY(!f.page.undoTokenEdit(r.value(u"undo"_s).toInt()));
+        QVERIFY(f.host.file(u"Plan.md"_s).endsWith(u"- dopisane\r\n"_s));
+
+        // A block the file does not have any more (its text changed): nothing written.
+        f.host.setFile(u"Plan.md"_s, other);
+        r = f.page.editTokenIn(u"Plan.md"_s, 2, u"- [ ] Zapłacić za żłobek i przedszkole 📅 2026-10-20 ⏫"_s, ref,
+                               u"shift"_s, 1, 0);
+        QVERIFY(!r.value(u"ok"_s).toBool());
+        QCOMPARE(r.value(u"reason"_s).toString(), u"gone"_s);
+        QCOMPARE(f.host.file(u"Plan.md"_s), other);
+        QVERIFY(!f.page.editTokenIn(u"Plan.md"_s, 2, raw, QVariantMap(), u"shift"_s, 1, 0).value(u"ok"_s).toBool());
+
+        // The copy's line is a moment behind (a line was added above, the index does not know yet)
+        // and now holds another block with an equal token: the copy's own block is edited.
+        const QString twins = u"- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-20\n"_s;
+        f.host.setFile(u"Dom.md"_s, u"- nowa linia\n"_s + twins);
+        const QString bill = u"- [ ] Zapłacić rachunek 📅 2026-10-20"_s;
+        const auto billRef = markdown::tokenRefAt(u"[ ] Zapłacić rachunek 📅 2026-10-20"_s, 22, 35);
+        QVERIFY(billRef);
+        r = f.page.editTokenIn(u"Dom.md"_s, 1, bill, tokenRefToMap(*billRef), u"shift"_s, 1, 0);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QCOMPARE(f.host.file(u"Dom.md"_s),
+                 u"- nowa linia\n- [ ] Kupić chleb 📅 2026-10-20\n- [ ] Zapłacić rachunek 📅 2026-10-21\n"_s);
+    }
+
+    void tokenMenusOfThisPage()
+    {
+        // An item of this very page (a query result, an embed): an undo step of the editor.
+        Fixture f(u"- [ ] pierwsze 📅 2026-10-20\n- [ ] drugie ⏰ 2026-10-16 09:00\n"_s);
+        const QString raw = u"- [ ] drugie ⏰ 2026-10-16 09:00"_s;
+        const auto ref = markdown::tokenRefAt(u"[ ] drugie ⏰ 2026-10-16 09:00"_s, 11, 29);
+        QVERIFY(ref);
+        const QVariantMap r = f.page.editTokenIn(Page, 1, raw, tokenRefToMap(*ref), u"alarm"_s, true);
+        QVERIFY(r.value(u"ok"_s).toBool());
+        QCOMPARE(r.value(u"undo"_s).toInt(), 0);
+        QCOMPARE(f.text(), u"- [ ] pierwsze 📅 2026-10-20\n- [ ] drugie ⏰! 2026-10-16 09:00\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] pierwsze 📅 2026-10-20\n- [ ] drugie ⏰ 2026-10-16 09:00\n"_s);
+        QCOMPARE(f.page.tokenChipIn(raw, u"reminder:11-29"_s).value(u"kind"_s).toString(), u"reminder"_s);
+
+        // A block typed above the item (not saved, not in the index): the item's line names the
+        // block before it now, which has an equal date — the item's own block is still the one edited.
+        Fixture twins(u"- [ ] A 📅 2026-10-27\n- [ ] B 📅 2026-10-27\n"_s);
+        twins.page.insertBlockAfter(-1, u"nowy"_s);
+        QCOMPARE(twins.text(), u"- nowy\n- [ ] A 📅 2026-10-27\n- [ ] B 📅 2026-10-27\n"_s);
+        const auto bRef = markdown::tokenRefAt(u"[ ] B 📅 2026-10-27"_s, 6, 19);
+        QVERIFY(bRef);
+        const QVariantMap moved =
+                twins.page.editTokenIn(Page, 1, u"- [ ] B 📅 2026-10-27"_s, tokenRefToMap(*bRef), u"shift"_s, 1, 0);
+        QVERIFY(moved.value(u"ok"_s).toBool());
+        QCOMPARE(twins.text(), u"- nowy\n- [ ] A 📅 2026-10-27\n- [ ] B 📅 2026-10-28\n"_s);
+        // A block whose text changed meanwhile: nothing is edited.
+        const QVariantMap gone =
+                twins.page.editTokenIn(Page, 2, u"- [ ] B 📅 2026-10-27"_s, tokenRefToMap(*bRef), u"shift"_s, 1, 0);
+        QCOMPARE(gone.value(u"reason"_s).toString(), u"gone"_s);
+        QCOMPARE(twins.text(), u"- nowy\n- [ ] A 📅 2026-10-27\n- [ ] B 📅 2026-10-28\n"_s);
+    }
+
+    void tableCellTokens()
+    {
+        Fixture f(u"| Co | Kiedy |\n| --- | --- |\n| Przegląd | 📅 2026-10-20 |\n"_s);
+        const QVariantMap table = f.role(0, "tableData").toMap();
+        const QVariantList rows = table.value(u"rows"_s).toList();
+        const QString cellHtml = rows.at(0).toList().at(1).toMap().value(u"html"_s).toString();
+        static const QRegularExpression dateLink(u"href=\"(date:\\d+-\\d+)\""_s);
+        const QString url = dateLink.match(cellHtml).captured(1);
+        QCOMPARE(url, u"date:0-13"_s); // the cell's own range
+        const QVariantMap chip = f.page.tableCellChip(0, 0, 1, url);
+        QCOMPARE(chip.value(u"kind"_s).toString(), u"due"_s);
+        QVERIFY(f.page.tableCellChip(0, 0, 0, url).isEmpty()); // no date in that cell
+        QVERIFY(f.page.applyTableCellToken(0, 0, 1, chip.value(u"from"_s).toInt(), chip.value(u"to"_s).toInt(),
+                                           u"shift"_s, 7, 0));
+        QCOMPARE(f.text(), u"| Co | Kiedy |\n| --- | --- |\n| Przegląd | 📅 2026-10-27 |\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"| Co | Kiedy |\n| --- | --- |\n| Przegląd | 📅 2026-10-20 |\n"_s);
+    }
+
+    void tableCellTokensKeepTheTable_data()
+    {
+        QTest::addColumn<QString>("table");
+        QTest::addColumn<int>("tableRow");
+        QTest::addColumn<int>("column");
+        QTest::addColumn<QString>("action");
+        QTest::addColumn<QVariant>("a");
+        QTest::addColumn<QString>("expected");
+        // A hand-written table keeps its spacing: only the token's bytes change.
+        const QString compact = u"|Zadanie|Termin|\n|-|-|\n|Faktura|📅 2026-10-20|\n|Raport|x|\n"_s;
+        QTest::newRow("compact, a day later") << compact << 0 << 1 << u"shift"_s << QVariant(1)
+                                              << u"|Zadanie|Termin|\n|-|-|\n|Faktura|📅 2026-10-21|\n|Raport|x|\n"_s;
+        QTest::newRow("compact, removed") << compact << 0 << 1 << u"remove"_s << QVariant()
+                                          << u"|Zadanie|Termin|\n|-|-|\n|Faktura||\n|Raport|x|\n"_s;
+        const QString aligned = u"| Co       | Kiedy                |\n| -------- | -------------------- |\n"
+                                u"| Przegląd | jutro 📅 2026-10-20 ⏫ |\n"_s;
+        QTest::newRow("aligned, a week later")
+                << aligned << 0 << 1 << u"shift"_s << QVariant(7) << QString(aligned).replace(u"20 ⏫"_s, u"27 ⏫"_s);
+        QTest::newRow("aligned, priority")
+                << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s) << 0 << 1 << u"priority"_s
+                << QVariant(u"low"_s)
+                << QString(aligned).replace(u"📅 2026-10-20"_s, u"po obiedzie"_s).replace(u"⏫"_s, u"🔽"_s);
+        const QString header = u"Plan 📅 2026-10-20 | b\n--- | ---\nx | y\n"_s;
+        QTest::newRow("header without outer pipes")
+                << header << -1 << 0 << u"shift"_s << QVariant(1) << u"Plan 📅 2026-10-21 | b\n--- | ---\nx | y\n"_s;
+        const QString escaped = u"| a \\| b ⏰ 2026-10-20 09:00 | c |\n| --- | --- |\n| x | y |\n"_s;
+        QTest::newRow("escaped pipe in the cell")
+                << escaped << -1 << 0 << u"alarm"_s << QVariant(true) << QString(escaped).replace(u"⏰ "_s, u"⏰! "_s);
+    }
+
+    void tableCellTokensKeepTheTable()
+    {
+        QFETCH(QString, table);
+        QFETCH(int, tableRow);
+        QFETCH(int, column);
+        QFETCH(QString, action);
+        QFETCH(QVariant, a);
+        QFETCH(QString, expected);
+        Fixture f(table);
+        const QVariantMap data = f.role(0, "tableData").toMap();
+        const QVariantList cells = tableRow < 0 ? data.value(u"headerHtml"_s).toList()
+                                                : data.value(u"rows"_s).toList().at(tableRow).toList();
+        const QVariant cell = cells.at(column);
+        const QString html = tableRow < 0 ? cell.toString() : cell.toMap().value(u"html"_s).toString();
+        static const QRegularExpression tokenLink(u"href=\"((?:date|reminder|prio):\\d+-\\d+)\""_s);
+        const QString url = tokenLink.match(html).captured(1);
+        QVERIFY2(!url.isEmpty(), qPrintable(html));
+        const QVariantMap chip = f.page.tableCellChip(0, tableRow, column, url);
+        QVERIFY(!chip.isEmpty());
+        QVERIFY(f.page.applyTableCellToken(0, tableRow, column, chip.value(u"from"_s).toInt(),
+                                           chip.value(u"to"_s).toInt(), action, a, 0));
+        QCOMPARE(f.text(), expected);
+        f.page.undo();
+        QCOMPARE(f.text(), table);
+    }
+
+    void tableCellDayLinksArePageLinks()
+    {
+        // A [[day]] in a cell opens the daily note (a page link with the link menu): its range would
+        // name the cell's text, not the table's.
+        Fixture f(u"| Dzień | Notatka |\n|---|---|\n| [[2026-10-20]] | x |\n"_s);
+        const QString html = f.role(0, "tableData")
+                                     .toMap()
+                                     .value(u"rows"_s)
+                                     .toList()
+                                     .at(0)
+                                     .toList()
+                                     .at(0)
+                                     .toMap()
+                                     .value(u"html"_s)
+                                     .toString();
+        QVERIFY2(html.contains(u"href=\"page:2026-10-20\""_s) && !html.contains(u"day:"_s), qPrintable(html));
+    }
+
+    void chipsOnLinesAfterAHeadingInAListItem()
+    {
+        // "- # A …" with a second line: that line's chips name ranges of the body too.
+        Fixture f(u"- # A 📅 2026-10-20\n  B c 📅 2026-10-21 🔁 every day\n"_s);
+        const QString html = f.role(0, "html").toString();
+        static const QRegularExpression link(u"href=\"((?:date|recur):\\d+-\\d+)\""_s);
+        QStringList urls;
+        for (auto it = link.globalMatch(html); it.hasNext();)
+            urls.append(it.next().captured(1));
+        QCOMPARE(urls.size(), 3);
+        const QVariantMap second = f.page.dateChip(0, urls.at(1));
+        QCOMPARE(second.value(u"at"_s).toString(), u"2026-10-21"_s);
+        QCOMPARE(f.page.dateChip(0, urls.at(0)).value(u"at"_s).toString(), u"2026-10-20"_s);
+        QCOMPARE(f.page.dateChip(0, urls.at(2)).value(u"rule"_s).toString(), u"every day"_s);
+        QVERIFY(f.page.applyTokenAction(0, second.value(u"from"_s).toInt(), second.value(u"to"_s).toInt(), u"shift"_s,
+                                        1, 0));
+        QCOMPARE(f.text(), u"- # A 📅 2026-10-20\n  B c 📅 2026-10-22 🔁 every day\n"_s);
+        // The same block as a copy (a query result, an embed).
+        const QVariantMap copy = f.page.tokenChipIn(u"- # A 📅 2026-10-20\n  B c 📅 2026-10-21"_s, urls.at(1));
+        QCOMPARE(copy.value(u"at"_s).toString(), u"2026-10-21"_s);
+    }
+
+    void recurrenceDialogKeepsTheWordsAfterTheRule()
+    {
+        // The block menu's "Powtarzaj" and the reminder menu's "Powtarzanie > Zmień regułę…": only the
+        // rule's text changes; the same rule in another phrasing stays as written.
+        Fixture f(u"- Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy\n"_s);
+        QCOMPARE(f.page.blockDates(0).value(u"recurrence"_s).toString(), u"every week"_s);
+        f.page.setRecurrence(0, u"every week"_s);
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-20 09:00 🔁 co tydzień do mamy\n"_s);
+        f.page.setRecurrence(0, u"codziennie"_s);
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-20 09:00 🔁 every day do mamy\n"_s);
+        f.page.undo();
+        // The reminder dialog with only the time changed keeps the rule as written.
+        const QString body = f.model()->document().at(0).body;
+        const int from = int(body.indexOf(u"⏰"_s));
+        const int to = from + int(u"⏰ 2026-10-20 09:00"_s.size());
+        f.page.setReminder(0, u"2026-10-20 10:00"_s, false, u"every week"_s, from, to);
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-20 10:00 🔁 co tydzień do mamy\n"_s);
+        f.page.setReminder(0, u"2026-10-20 10:00"_s, false, QString(), from, to);
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-20 10:00 do mamy\n"_s);
+        f.page.setRecurrence(0, QString());
+        QCOMPARE(f.text(), u"- Zadzwonić ⏰ 2026-10-20 10:00 do mamy\n"_s);
     }
 
     void dateChipsInHeadingsAndReminderWithoutTime()
