@@ -527,8 +527,9 @@ private Q_SLOTS:
 
         // The reminder's text was edited and another task now sits on its old line: nothing is
         // completed (the other one must not be marked done instead).
+        // (The scheduler plans again after the index change, debounced.)
+        QTRY_COMPARE(ws->reminders()->scheduler()->upcoming().value(0).title, u"Wynieść śmieci"_s);
         const ScheduledNotification other = ws->reminders()->scheduler()->upcoming().first();
-        QCOMPARE(other.title, u"Wynieść śmieci"_s);
         const QString edited =
                 u"- [ ] Zrobić zakupy ⏰ 2026-10-14 16:00\n- [ ] Wynieść śmieci i szkło ⏰ 2026-10-14 14:00\n"_s;
         QVERIFY(ws->write(u"Dom.md"_s, edited));
