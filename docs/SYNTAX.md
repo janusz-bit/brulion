@@ -202,7 +202,9 @@ Pandoc ones show every such picture — `![alt](url)` and `![[url|alt]]` alike �
 `![alt](url)` with the URL as written ("Zostaw adresy", the default) or, with "Dołącz kopie", a copy
 the app takes from the device's cache, fetching the missing ones first: `assets/web/<name>` in the
 site's and Pandoc's ZIP (a free name: `kot 2.jpg`), a `data:` URI in the single HTML file; a picture
-that cannot be fetched keeps its URL (named in the export's warnings). The other exports keep the
+that cannot be fetched keeps its URL (named in the export's warnings), and so does one of this
+device or its private network not in the cache (the export never asks those hosts) and every one
+past 256 MB of copies in all. The other exports keep the
 notes' text, URLs included, as written.
 
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,

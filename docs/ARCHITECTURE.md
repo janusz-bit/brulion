@@ -316,8 +316,10 @@ app; these guards keep data from being lost:
   checked to be a picture. The setting never fetches from this device or its private network
   (a synced note must not send requests to the router or printer), and no redirect leads there
   from a host of the internet. Indexing, sync and import never fetch them; an HTML or Pandoc export
-does only with "Dołącz kopie" (`ExportController`: the cached copies, the missing ones fetched
-through the same Workspace, explicitly asked for like "Zapisz w notatniku"). In the browser the
+does only with "Dołącz kopie" (`ExportController`: the cached copies, read in chunks, the
+missing ones fetched through the same Workspace, explicitly asked for like "Zapisz w notatniku" —
+but never from this device or its private network, which a note alone must not make it ask; at
+most 256 MB of copies in all, the rest keep their addresses). In the browser the
 fetches are CORS "simple" requests the browser itself sends (and redirects itself: the manual
 redirect check does not apply there); a failed one is told as CORS or mixed content.
 

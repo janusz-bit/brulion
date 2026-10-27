@@ -307,7 +307,9 @@ Uwagi:
     content), a Chrome ogranicza zapytania stron z internetu do adresów sieci prywatnej
     (Private Network Access).
   * **Eksport** z „Dołącz kopie” pobiera brakujące zdjęcia tak samo — z tymi samymi
-    ograniczeniami CORS; zdjęcie, którego nie da się pobrać, zostaje w eksporcie adresem.
+    ograniczeniami CORS; zdjęcie, którego nie da się pobrać, zostaje w eksporcie adresem. Kopii
+    jest najwyżej 256 MB łącznie (pamięć karty przeglądarki; jeden plik HTML trzyma je jeszcze
+    jako tekst `data:`), dalsze zostają adresami.
   * Do sprawdzenia w przeglądarce (build wasm z GitHub Actions): zdjęcie z
     `upload.wikimedia.org` (CORS dozwolony) i ze strony bez CORS, adres `http://` na stronie
     `https://` (GitHub Pages).
