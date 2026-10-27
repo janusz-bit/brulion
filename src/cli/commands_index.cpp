@@ -63,6 +63,7 @@ Result info(Call &call)
                   {u"language"_s, call.ctx.language()},
                   {u"config"_s, notebook::vaultConfigJson(v.config())},
                   {u"configWarnings"_s, QJsonArray::fromStringList(v.configWarnings())},
+                  {u"configFromObsidian"_s, QJsonArray::fromStringList(v.configAdoptedFromObsidian())},
                   {u"counts"_s, QJsonObject{{u"pages"_s, int(index.paths().size()) - journals},
                                             {u"journals"_s, journals},
                                             {u"attachments"_s, int(index.attachments().size())},

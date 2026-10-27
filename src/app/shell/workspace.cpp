@@ -835,6 +835,22 @@ QStringList Workspace::configWarnings() const
     return m_vault ? m_vault->configWarnings() : QStringList();
 }
 
+QStringList Workspace::configFromObsidian() const
+{
+    return m_vault ? m_vault->configAdoptedFromObsidian() : QStringList();
+}
+
+bool Workspace::saveAdoptedConfig()
+{
+    if (!m_vault)
+        return false;
+    if (!m_vault->saveConfig(m_vault->config())) {
+        Q_EMIT errorOccurred(tr("Could not save the notebook settings: %1").arg(m_vault->errorString()));
+        return false;
+    }
+    return true;
+}
+
 void Workspace::navigate(const QVariantMap &route, bool newPane)
 {
     Q_EMIT navigationRequested(resolveRoute(route), newPane);

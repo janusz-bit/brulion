@@ -710,7 +710,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="645"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="672"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1139,7 +1139,7 @@
 <context>
     <name>brulion::editor::SuggestionModel</name>
     <message numerus="yes">
-        <location filename="../src/app/editor/suggestionmodel.cpp" line="279"/>
+        <location filename="../src/app/editor/suggestionmodel.cpp" line="291"/>
         <source>%n block(s)</source>
         <translation>
             <numerusform>%n block</numerusform>
