@@ -50,7 +50,7 @@ void stopPool(const std::weak_ptr<detail::JobPool> &pool)
 
 RemoteEntry entryFor(const VaultPath &path, const DavResource &res)
 {
-    return RemoteEntry{path, res.isCollection, res.etag, res.mtime, res.isCollection ? 0 : res.size};
+    return RemoteEntry{path, res.isCollection, res.etag, res.mtime, res.isCollection ? 0 : res.size, res.fileId};
 }
 
 } // namespace

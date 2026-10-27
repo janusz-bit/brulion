@@ -231,10 +231,13 @@ QString SyncRun::summary() const
                          .arg(r.deletedRemote)
                          .arg(r.conflicts.size())
                          .arg(r.errors.size());
-        if (r.foldersCreated + r.foldersDeleted + r.foldersMoved > 0)
-            counts += u", folders: %1 created, %2 deleted, %3 moved"_s.arg(r.foldersCreated)
+        if (r.foldersCreated + r.foldersDeleted + r.foldersMoved + r.foldersMovedHere > 0)
+            counts += u", folders: %1 created, %2 deleted, %3 moved, %4 moved here"_s.arg(r.foldersCreated)
                               .arg(r.foldersDeleted)
-                              .arg(r.foldersMoved);
+                              .arg(r.foldersMoved)
+                              .arg(r.foldersMovedHere);
+        if (r.filesMoved + r.filesMovedHere > 0)
+            counts += u", files moved: %1 on the server, %2 here"_s.arg(r.filesMoved).arg(r.filesMovedHere);
         if (!r.skipped.isEmpty())
             counts += u", skipped %1"_s.arg(r.skipped.size());
         if (r.needsConfirmation)
@@ -480,6 +483,10 @@ void SyncRun::onListed(const QList<RemoteEntry> &entries)
         finish();
         return;
     }
+    // Renames on the server first (folders, then files): a local rename inside a folder the
+    // server renamed is then recognised at its new path.
+    adoptRemoteFolderMoves();
+    adoptRemoteFileMoves();
     m_moves = findFolderMoves();
     endPhase(int(m_states.size()));
     startTransfer();
@@ -517,6 +524,22 @@ void SyncRun::loadStates()
         const VaultPath path = key.mid(folderPrefix.size());
         if (isSyncablePath(path))
             m_folderStates.insert(path);
+    }
+    backfillRemoteIds();
+}
+
+void SyncRun::backfillRemoteIds()
+{
+    // Each state once: the first run after an upgrade, or the run after an upload (whose answer
+    // carries no id). A path changed since the last sync is saved later in this run anyway.
+    for (auto it = m_states.begin(); it != m_states.end(); ++it) {
+        const auto remote = m_remote.constFind(it.key());
+        if (remote == m_remote.cend() || remote->fileId.isEmpty() || remote->fileId == it->remoteId
+            || remoteVersion(*remote) != it->remoteEtag) {
+            continue;
+        }
+        it->remoteId = remote->fileId;
+        store()->set(SyncEngine::stateKey(it.key()), it->toJson());
     }
 }
 
@@ -609,7 +632,8 @@ bool SyncRun::recheckRemoteEmpty()
     }
     QHash<QString, int> arrived = m_downloadedNew;
     const int moved = countMoved(onlyLocal, false, arrived);
-    if (moved * 2 > onlyLocal.size()) {
+    // None left: the files were renamed here as the server had renamed them (adoptRemote…Moves).
+    if (onlyLocal.isEmpty() || moved * 2 > onlyLocal.size()) {
         qCInfo(lcSync).noquote() << u"%1 none of the files synced before exist on the server under their names, but "
                                     u"%2 of %3 under new ones: moved, not lost"_s.arg(tag())
                                             .arg(moved)
@@ -689,8 +713,14 @@ void SyncRun::guardMassDeletion()
 void SyncRun::startTransfer()
 {
     beginPhase(SyncPhase::Transfer);
-    // Folder renames first: what the server moved needs no deletion and no upload.
-    moveFolders(0, [this] { processAll(); });
+    // Folder renames first: what the server moved needs no deletion and no upload. Then the file
+    // renames, recognised once the folder moves are applied (a file moved out of a renamed folder
+    // is then found at the folder's new path on the server).
+    moveFolders(0, [this] {
+        if (!m_cancelled)
+            m_fileMoves = findFileMoves();
+        moveFiles([this] { processAll(); });
+    });
 }
 
 void SyncRun::processAll()
@@ -1072,6 +1102,8 @@ void SyncRun::saveState(const VaultPath &path, const QString &hash, const QStrin
     if (st)
         state.mtime = st->mtime;
     state.syncedAt = now().toMSecsSinceEpoch();
+    // The server's file id as listed (kept on overwrite); a new upload learns it next run.
+    state.remoteId = m_remoteAll.value(path).fileId;
     store()->set(SyncEngine::stateKey(path), state.toJson());
     const bool keepBase = baseText && isSyncTextPath(path) && baseText->toUtf8().size() <= m_engine->maxBaseSize();
     store()->set(SyncEngine::baseKey(path), keepBase ? QJsonValue(*baseText) : QJsonValue(QJsonValue::Undefined));
@@ -1098,6 +1130,9 @@ void SyncRun::record(const VaultPath &path, SyncAction action)
     case SyncAction::DeleteFolderLocal:
     case SyncAction::DeleteFolderRemote: ++m_report.foldersDeleted; break;
     case SyncAction::MoveRemote: ++m_report.foldersMoved; break;
+    case SyncAction::MoveLocal: ++m_report.foldersMovedHere; break;
+    case SyncAction::MoveFileRemote: ++m_report.filesMoved; break;
+    case SyncAction::MoveFileLocal: ++m_report.filesMovedHere; break;
     }
 }
 

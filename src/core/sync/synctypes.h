@@ -26,6 +26,9 @@ struct RemoteEntry {
     QString etag;       ///< normalised ETag; empty when the server sent none
     qint64 mtime = 0;   ///< ms since epoch; 0 when unknown
     qint64 size = 0;    ///< bytes; 0 for folders or when unknown
+    /// oc:fileid (Nextcloud, ownCloud, OCIS): the file's identity, kept when it is renamed,
+    /// moved or overwritten; "" when the server does not send it.
+    QString fileId;
 
     friend bool operator==(const RemoteEntry &, const RemoteEntry &) = default;
 };
@@ -42,6 +45,10 @@ struct SyncFileState {
     qint64 size = 0;             ///< local size in bytes
     std::optional<qint64> mtime; ///< local mtime in ms (quick change check for binary files)
     qint64 syncedAt = 0;         ///< when the path was synced, ms since epoch
+    /// RemoteEntry::fileId of the server's file when the state was saved ("" = unknown: a server
+    /// without oc:fileid, a state of an older version, or an upload not listed yet). Recognises
+    /// the file after a rename or move on the server.
+    QString remoteId;
 
     QJsonObject toJson() const;
     /// std::nullopt when `json` lacks localHash / remoteEtag / size.
@@ -62,22 +69,27 @@ enum class SyncAction {
     DeleteFolderLocal,  ///< a folder deleted on the server and empty here: removed here
     DeleteFolderRemote, ///< a folder deleted here and empty on the server: deleted there
     MoveRemote,         ///< a folder renamed or moved here, moved on the server (WebDAV MOVE)
+    MoveLocal,          ///< a folder renamed or moved on the server, renamed here too
+    MoveFileRemote,     ///< a file renamed or moved here, moved on the server (WebDAV MOVE)
+    MoveFileLocal,      ///< a file renamed or moved on the server, renamed here too
 };
 
 /// "upload", "download", "merge", "conflict", "delete-local", "delete-remote",
 /// "folder-create-local", "folder-create-remote", "folder-delete-local", "folder-delete-remote",
-/// "move-remote".
+/// "move-remote", "move-local", "file-move-remote", "file-move-local".
 QString syncActionName(SyncAction action);
-/// The folder actions (CreateFolderLocal … MoveRemote).
+/// The folder actions (CreateFolderLocal … MoveLocal).
 bool isFolderAction(SyncAction action);
 
 struct SyncChange {
-    VaultPath path; ///< MoveRemote: the folder's new path (SyncReport::folderMoves has both)
+    /// The moves: the new path (SyncReport::folderMoves, localFolderMoves, fileMoves and
+    /// localFileMoves have both)
+    VaultPath path;
     SyncAction action = SyncAction::Upload;
     friend bool operator==(const SyncChange &, const SyncChange &) = default;
 };
 
-/// A folder renamed or moved in the vault and moved on the server (WebDAV MOVE).
+/// A folder (or file) renamed or moved on one side and on the other too.
 struct SyncFolderMove {
     VaultPath from;
     VaultPath to;
@@ -179,6 +191,12 @@ struct SyncReport {
     int foldersDeleted = 0;        ///< emptied folders deleted here or on the server
     int foldersMoved = 0;          ///< folders renamed here and moved on the server (MOVE)
     QList<SyncFolderMove> folderMoves; ///< those moves, in order
+    int foldersMovedHere = 0;      ///< folders renamed on the server, renamed here too
+    QList<SyncFolderMove> localFolderMoves; ///< those renames, in order
+    int filesMoved = 0;            ///< files renamed here and moved on the server (MOVE)
+    QList<SyncFolderMove> fileMoves; ///< those moves, in order
+    int filesMovedHere = 0;        ///< files renamed on the server, renamed here too
+    QList<SyncFolderMove> localFileMoves; ///< those renames, in order
     QList<VaultPath> conflicts;    ///< real conflicts: local kept, remote saved as a copy
     QList<VaultPath> conflictCopies; ///< conflict copies created in this run
     QList<SyncFileError> errors;   ///< per-file failures
@@ -210,7 +228,7 @@ struct SyncReport {
     QString failureMessage() const;
     /// errorCodeName() of remoteError or syncError ("" when the run did not fail).
     QString failureCode() const;
-    /// Number of changes made (uploads, downloads, deletions, merges, conflicts, folders).
+    /// Number of changes made (uploads, downloads, deletions, merges, conflicts, folders, moves).
     int changeCount() const;
 };
 

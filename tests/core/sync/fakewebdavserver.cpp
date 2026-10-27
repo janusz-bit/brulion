@@ -199,14 +199,21 @@ HttpResponse FakeWebDavServer::propfind(const HttpRequest &request, const QStrin
         const QString lastModified = u"<%1getlastmodified>%2</%1getlastmodified>"_s.arg(p, modified);
         QString props;
         QString missing;
+        QString fileId;
+        if (m_options.fileIds)
+            fileId = u"<oc:fileid>%1</oc:fileid>"_s.arg(node.fileId);
+        else if (m_options.fileIdsUnknown)
+            missing += u"<%1propstat><%1prop><oc:fileid/></%1prop><%1status>HTTP/1.1 404 Not Found</%1status></%1propstat>"_s
+                               .arg(p);
         if (node.isDir) {
             props = lastModified + u"<%1resourcetype><%1collection/></%1resourcetype>"_s.arg(p) + etag;
-            missing = u"<%1propstat><%1prop><%1getcontentlength/></%1prop><%1status>HTTP/1.1 404 Not Found</%1status></%1propstat>"_s
+            missing += u"<%1propstat><%1prop><%1getcontentlength/></%1prop><%1status>HTTP/1.1 404 Not Found</%1status></%1propstat>"_s
                           .arg(p);
         } else {
             props = lastModified + u"<%1getcontentlength>%2</%1getcontentlength><%1resourcetype/>"_s.arg(p).arg(node.data.size())
                 + etag;
         }
+        props += fileId;
         body += u"<%1response><%1href>%2</%1href><%1propstat><%1prop>%3</%1prop><%1status>HTTP/1.1 200 OK</%1status></%1propstat>%4</%1response>"_s
                     .arg(p, escapeXml(href), props, missing);
     }
@@ -243,7 +250,8 @@ HttpResponse FakeWebDavServer::put(const HttpRequest &request, const QString &pa
         return response(412);
     const QString etag = nextEtag();
     const int status = exists ? 204 : 201;
-    m_nodes.insert(path, Node{false, request.body, now(), etag});
+    const QString id = exists ? node->fileId : nextFileId(); // Nextcloud keeps it on overwrite
+    m_nodes.insert(path, Node{false, request.body, now(), etag, id});
     QHash<QByteArray, QByteArray> headers;
     if (m_options.putEtag && !m_options.noEtags) {
         headers.insert("etag", quoted(etag));
@@ -271,7 +279,7 @@ HttpResponse FakeWebDavServer::mkcol(const QString &path)
     const auto parent = m_nodes.constFind(parentOf(path));
     if (parent == m_nodes.cend() || !parent->isDir)
         return response(409, "Parent missing");
-    m_nodes.insert(path, Node{true, {}, now(), nextEtag()});
+    m_nodes.insert(path, Node{true, {}, now(), nextEtag(), nextFileId()});
     return response(201);
 }
 
@@ -338,13 +346,18 @@ QString FakeWebDavServer::nextEtag()
     return u"e%1"_s.arg(++m_etagCounter, 6, 16, QLatin1Char('0'));
 }
 
+QString FakeWebDavServer::nextFileId()
+{
+    return u"%1ocfake"_s.arg(++m_fileIdCounter, 8, 10, QLatin1Char('0'));
+}
+
 void FakeWebDavServer::mkdirs(const QString &absPath)
 {
     QString current;
     for (const QString &segment : absPath.split(u'/', Qt::SkipEmptyParts)) {
         current += u'/' + segment;
         if (!m_nodes.contains(current))
-            m_nodes.insert(current, Node{true, {}, now(), nextEtag()});
+            m_nodes.insert(current, Node{true, {}, now(), nextEtag(), nextFileId()});
     }
 }
 
@@ -352,7 +365,9 @@ void FakeWebDavServer::putFile(const QString &rel, const QByteArray &content)
 {
     const QString p = abs(rel);
     mkdirs(parentOf(p));
-    m_nodes.insert(p, Node{false, content, now(), nextEtag()});
+    const auto existing = m_nodes.constFind(p);
+    const QString id = existing != m_nodes.cend() && !existing->isDir ? existing->fileId : nextFileId();
+    m_nodes.insert(p, Node{false, content, now(), nextEtag(), id});
 }
 
 void FakeWebDavServer::mkdir(const QString &rel)
@@ -384,6 +399,11 @@ std::optional<QByteArray> FakeWebDavServer::bytes(const QString &rel) const
 QString FakeWebDavServer::etag(const QString &rel) const
 {
     return m_nodes.value(abs(rel)).etag;
+}
+
+QString FakeWebDavServer::fileId(const QString &rel) const
+{
+    return m_nodes.value(abs(rel)).fileId;
 }
 
 bool FakeWebDavServer::isDir(const QString &rel) const

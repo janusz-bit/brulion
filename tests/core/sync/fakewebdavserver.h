@@ -2,7 +2,8 @@
 // Supports PROPFIND (Depth 0/1; "infinity" is refused like Nextcloud does), GET, PUT
 // (If-Match / If-None-Match, 409 when the parent is missing), DELETE (If-Match), MKCOL
 // (405 if it exists, 409 if the parent is missing), MOVE (Destination, Overwrite; moved files
-// keep their ETags like on Nextcloud) and Basic auth. Responses arrive from the
+// keep their ETags like on Nextcloud) and Basic auth. Every file and folder has an oc:fileid
+// (kept on overwrite and move, like on Nextcloud), listed with Options::fileIds. Responses arrive from the
 // event loop (optionally after a per-method latency). Hooks inject failures, stalls and
 // concurrent changes; every request is logged.
 #pragma once
@@ -39,6 +40,8 @@ public:
         bool noEtags = false;                 ///< no ETags at all (getetag, ETag headers)
         bool supportsMove = true;             ///< false: MOVE answers 405 (a server without it)
         bool moveKeepsEtags = true;           ///< false: moved files get new ETags
+        bool fileIds = false;                 ///< list oc:fileid (Nextcloud, ownCloud)
+        bool fileIdsUnknown = false;          ///< !fileIds: answer oc:fileid with 404 (a generic server)
         std::function<qint64()> now;          ///< clock (ms); default 2026-10-14 08:00:00 UTC
     };
 
@@ -47,6 +50,7 @@ public:
         QByteArray data;
         qint64 mtime = 0;
         QString etag;
+        QString fileId; ///< oc:fileid: new for a new path, kept on overwrite and move
     };
 
     struct LoggedRequest {
@@ -87,6 +91,7 @@ public:
     std::optional<QString> text(const QString &rel) const;
     std::optional<QByteArray> bytes(const QString &rel) const;
     QString etag(const QString &rel) const;
+    QString fileId(const QString &rel) const;
     bool isDir(const QString &rel) const;
     /// New ETag without a content change (Nextcloud does that sometimes).
     void touchEtag(const QString &rel);
@@ -114,6 +119,7 @@ private:
     HttpResponse move(const HttpRequest &request, const QString &path);
     void moveNodes(const QString &fromAbs, const QString &toAbs);
     QString nextEtag();
+    QString nextFileId();
     void mkdirs(const QString &absPath);
     qint64 now() const;
 
@@ -124,6 +130,7 @@ private:
     QHash<QByteArray, int> m_inFlight;
     QHash<QByteArray, int> m_peak;
     int m_etagCounter = 0;
+    int m_fileIdCounter = 0;
 };
 
 } // namespace synctest

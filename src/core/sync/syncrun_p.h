@@ -29,11 +29,14 @@ class JobPool;
 /// keeps it alive (see guarded()) and does nothing once the run finished or the engine called
 /// abandon(). Per-path work runs through a JobPool (one job per group of case-variant paths).
 ///
-/// Order: list both sides, load the states, recognise local folder renames, the empty-side
-/// guard; then (Transfer) the folder renames are moved on the server (MOVE), the groups without
-/// a deletion run first (new, changed and moved files), the mass-deletion guard looks at what
-/// they transferred (content that arrived under a new path is moved, not deleted), the groups
-/// with a deletion follow, and last the folders (syncfolders.cpp).
+/// Order: list both sides, load the states (the server's file ids recorded), adopt the case-only
+/// folder renames of the server, the empty-side guard, adopt the folder and file renames of the
+/// server (renamed here with Vault::rename), recognise local folder renames; then (Transfer) the
+/// folder renames are moved on the server (MOVE), the local file renames are recognised and
+/// moved there too, the groups without a deletion run first (new, changed and moved files), the
+/// mass-deletion guard looks at what they transferred (content that arrived under a new path is
+/// moved, not deleted), the groups with a deletion follow, and last the folders
+/// (syncfolders.cpp).
 class SyncRun : public std::enable_shared_from_this<SyncRun> {
 public:
     SyncRun(SyncEngine *engine, SyncRunOptions options, int number);
@@ -109,7 +112,7 @@ private:
         QString error;
     };
 
-    /// A folder renamed or moved in the vault, recognised by its synced content (MOVE).
+    /// A folder (or file) renamed or moved on one side, recognised by its synced content.
     struct FolderMove {
         VaultPath from;
         VaultPath to;
@@ -160,6 +163,9 @@ private:
     void checkRemoteIdentity();
     void listLocal();
     void loadStates();
+    /// States of files listed unchanged at their path learn the server's file id (states of
+    /// older versions, uploads the server had not listed yet).
+    void backfillRemoteIds();
     bool guardEmptySides();
     /// After the first pass: a server that looked empty only had moved files? (guardEmptySides())
     bool recheckRemoteEmpty();
@@ -195,8 +201,13 @@ private:
                                           const QSet<VaultPath> &taken);
     bool sameContent(const VaultPath &localPath, const SyncFileState &state);
     void moveFolders(qsizetype index, std::function<void()> next);
+    /// File renames in the vault: a synced file missing here (still on the server) whose content
+    /// is, unchanged, in exactly one new local file the server does not have (one-to-one; empty
+    /// files and look-alikes prove nothing).
+    QList<FolderMove> findFileMoves();
+    void moveFiles(std::function<void()> next);
     /// The server moved `move.from` to `move.to`: states, merge bases and the listing follow.
-    void applyFolderMove(const FolderMove &move);
+    void applyRemoteMove(const FolderMove &move, bool folder);
     /// The sync states, merge bases and folder states below `from` move to `to`.
     void rebaseStates(const VaultPath &from, const VaultPath &to);
     /// Case-insensitive storage: a synced folder another device renamed in letter case only
@@ -204,6 +215,27 @@ private:
     /// its notes are unchanged at the new paths — not trashed under the old name while the very
     /// same files are downloaded under the new one.
     void adoptCaseOnlyFolderRenames();
+    /// A synced folder gone from the server, still here, whose synced files are, at least half of
+    /// them, the very files of the server (oc:fileid, else ETag and size) at their places below a
+    /// new server folder nothing here has: renamed here too (Vault::rename), so the notes keep
+    /// their history, favourites and folds instead of being downloaded again and trashed.
+    void adoptRemoteFolderMoves();
+    std::optional<VaultPath> remoteRenameTarget(const VaultPath &from, const QSet<VaultPath> &known,
+                                                const QHash<QString, VaultPath> &byId,
+                                                const QHash<QString, QList<VaultPath>> &byEtag,
+                                                const QSet<VaultPath> &taken);
+    /// The same for single files: a synced file gone from the server, still here, that the server
+    /// has under a new name (oc:fileid, else its ETag and size when one file has them).
+    void adoptRemoteFileMoves();
+    /// The server's file `entry` is the one synced as `state`: the same oc:fileid, or (when
+    /// either has none) the same real ETag and size.
+    static bool sameRemoteFile(const RemoteEntry &entry, const SyncFileState &state);
+    /// Something here at or below `to` in any letter case (files, folders, also ones the vault
+    /// does not list), but `from` itself (a case-only rename).
+    bool takenHere(const VaultPath &to, const VaultPath &from) const;
+    /// Rename the vault's `here` (the synced `from`) to `to` for a rename on the server; the states
+    /// and this run's listing of the vault follow. False (logged) when the vault refuses.
+    bool renameHere(const VaultPath &here, const VaultPath &from, const VaultPath &to, bool folder);
     /// Files and folders written or deleted on the server in this run (m_remoteAll follows).
     void noteRemoteWritten(const VaultPath &path, bool isDir = false);
     void noteRemoteDeleted(const VaultPath &path);
@@ -257,6 +289,7 @@ private:
     QHash<VaultPath, RemoteEntry> m_remoteAll;
     QSet<VaultPath> m_folderStates; ///< folders that existed on both sides after a run
     QList<FolderMove> m_moves;      ///< folder renames recognised in this run
+    QList<FolderMove> m_fileMoves;  ///< file renames recognised in this run (after m_moves)
     /// Content hashes (with counts) of files uploaded / downloaded to paths never synced before
     /// in this run's first pass: moved content, not deleted content.
     QHash<QString, int> m_uploadedNew;

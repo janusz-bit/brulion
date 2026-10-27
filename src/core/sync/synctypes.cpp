@@ -23,6 +23,8 @@ QJsonObject SyncFileState::toJson() const
     };
     if (mtime)
         json.insert(u"mtime"_s, *mtime);
+    if (!remoteId.isEmpty())
+        json.insert(u"remoteId"_s, remoteId);
     return json;
 }
 
@@ -40,6 +42,7 @@ std::optional<SyncFileState> SyncFileState::fromJson(const QJsonObject &json)
     if (const QJsonValue mtime = json.value(u"mtime"_s); mtime.isDouble())
         state.mtime = mtime.toInteger();
     state.syncedAt = json.value(u"syncedAt"_s).toInteger();
+    state.remoteId = json.value(u"remoteId"_s).toString(); // optional (states of 0.4.x have none)
     return state;
 }
 
@@ -57,6 +60,9 @@ QString syncActionName(SyncAction action)
     case SyncAction::DeleteFolderLocal: return u"folder-delete-local"_s;
     case SyncAction::DeleteFolderRemote: return u"folder-delete-remote"_s;
     case SyncAction::MoveRemote: return u"move-remote"_s;
+    case SyncAction::MoveLocal: return u"move-local"_s;
+    case SyncAction::MoveFileRemote: return u"file-move-remote"_s;
+    case SyncAction::MoveFileLocal: return u"file-move-local"_s;
     }
     return {};
 }
@@ -68,7 +74,10 @@ bool isFolderAction(SyncAction action)
     case SyncAction::CreateFolderRemote:
     case SyncAction::DeleteFolderLocal:
     case SyncAction::DeleteFolderRemote:
-    case SyncAction::MoveRemote: return true;
+    case SyncAction::MoveRemote:
+    case SyncAction::MoveLocal: return true;
+    case SyncAction::MoveFileRemote:
+    case SyncAction::MoveFileLocal:
     case SyncAction::Upload:
     case SyncAction::Download:
     case SyncAction::Merge:

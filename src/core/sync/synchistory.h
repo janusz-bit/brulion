@@ -62,6 +62,9 @@ struct SyncRunRecord {
     int foldersCreated = 0; ///< SyncReport::foldersCreated
     int foldersDeleted = 0;
     int foldersMoved = 0;
+    int foldersMovedHere = 0; ///< SyncReport::foldersMovedHere
+    int filesMoved = 0;       ///< SyncReport::filesMoved
+    int filesMovedHere = 0;   ///< SyncReport::filesMovedHere
     QList<SyncPhaseTime> phases;
     SyncStats stats;
     QList<SyncFileError> errors;    ///< at most MaxErrors, redacted

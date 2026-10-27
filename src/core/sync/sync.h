@@ -46,10 +46,13 @@
 //     signals started(), progress(SyncProgress), finished(SyncReport); resetState(),
 //     stateOf(path), mergeBaseOf(path), knowsFolder(path);
 //     setClock/setConcurrency/setMaxFileSize/setMaxBaseSize.
-//     Folders travel too (empty ones, deletions of emptied ones, a folder renamed in the vault
-//     moved on the server with one MOVE); moved content is not counted as deleted by the guards.
+//     Folders travel too (empty ones, deletions of emptied ones, a folder or page renamed in the
+//     vault moved on the server with one MOVE, a folder or page renamed on the server — known by
+//     its oc:fileid, else its ETag — renamed in the vault with Vault::rename); moved content is
+//     not counted as deleted by the guards.
 //     SyncReport{uploaded, downloaded, deletedLocal, deletedRemote, merged, foldersCreated,
-//     foldersDeleted, foldersMoved, folderMoves, conflicts,
+//     foldersDeleted, foldersMoved, folderMoves, foldersMovedHere, localFolderMoves, filesMoved,
+//     fileMoves, filesMovedHere, localFileMoves, conflicts,
 //     conflictCopies, errors (SyncFileError{path, message, code, status}), skipped, changes,
 //     started, finished, cancelled, remoteError, syncError, needsConfirmation, pendingDeletions,
 //     runNumber, trigger, phases (SyncPhaseTime: connect, list-remote, list-local, compare,
