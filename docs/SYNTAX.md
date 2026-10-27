@@ -293,7 +293,9 @@ frontmatter's `tags:`.
   `praca/raporty.md`, a folder; a date-like tag `#2026-10-13` opens that day's journal), named as
   the tag was first written. The tag overview (the pages and blocks carrying the tag, sub-tags,
   "Zadania z tym tagiem") stays one tap away. In Tasks a click on a tag filters the list;
-  Ctrl+click or a long press opens the page.
+  Ctrl+click opens the page; a long press or right-click opens the tag's menu (Filtruj po tagu,
+  Otwórz stronę tagu, Widok tagu, Otwórz w panelu bocznym, Kopiuj tag — `#tag`, or `#[[tag ze
+  spacjami]]`), as in the editor, where the tag's menu has "Zadania z tym tagiem" instead.
 * **References** — a page's "Odnośniki" list the blocks that link to it *and* the blocks tagged
   with a tag naming it (one row per block), and pages tagged as a whole (frontmatter `tags:`,
   leading `tags::`) as a group marked "cała strona"; self-references are excluded. Exactly the
@@ -458,6 +460,15 @@ Polish input is accepted and normalised to canonical form when Brulion rewrites 
 `codziennie`, `co 3 dni`, `w dni robocze`, `co tydzień`, `co 2 tygodnie`,
 `co tydzień w poniedziałek, piątek`, `co miesiąc`, `co miesiąc 15.`,
 `co miesiąc ostatniego`, `co rok`, `co 2 lata`, suffix `po wykonaniu`.
+
+The token menus (a right-click or long press on a chip, docs/UI.md "Token and link menus")
+rewrite only the token they act on: a 🔁 rule gets the canonical text (only the rule's words —
+in `🔁 co tydzień kupić mleko` the rule is `co tydzień`, the rest stays text), a priority gets
+its emoji (a Logseq `[#A]`/`[#B]`/`[#C]` stays Logseq: highest and high → `[#A]`, medium →
+`[#B]`, low and lowest → `[#C]`), a date or reminder only its `YYYY-MM-DD[ HH:mm]` value (`⏰` /
+`⏰!` for an alarm; `(@…)` is written as `⏰` then), a link to a day only the date part of its
+target, in the format it was written in. A token removed takes one adjacent space with it.
+Everything else in the file — other tokens, indentation, line endings — stays byte for byte.
 
 ## 8. Natural-language dates (editor input only)
 

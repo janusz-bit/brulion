@@ -42,7 +42,9 @@ Znaczniki można dopisać gdziekolwiek w pierwszej linii zadania:
 
 Po terminie, zaplanowaniu i początku możesz dopisać godzinę: `📅 2026-10-20 15:00`.
 
-**Zmiana daty bez szukania jej w tekście** — kliknij znacznik daty (📅, ⏳, 🛫, ✅, ➕, ❌) prawym przyciskiem myszy albo przytrzymaj go palcem. Menu ma pozycje „Zmień datę…” (kalendarz z godziną), „Dziś”, „Jutro”, „Dzień później”, „Tydzień później” i „Usuń datę”. Zmienia się tylko ta data — reszta wiersza zostaje, jak była, a zmianę cofniesz (`Ctrl+Z`). Zwykłe kliknięcie znacznika dalej zaczyna edycję tekstu. Menu działa w notatce i w dzienniku (konspekt i dokument).
+**Zmiana daty bez szukania jej w tekście** — kliknij znacznik daty (📅, ⏳, 🛫, ✅, ➕, ❌) prawym przyciskiem myszy albo przytrzymaj go palcem. Menu ma pozycje „Zmień datę…” (kalendarz z godziną), „Dziś”, „Jutro”, „Dzień później”, „Tydzień później” i „Usuń datę”. Zmienia się tylko ta data — reszta wiersza zostaje, jak była, a zmianę cofniesz (`Ctrl+Z`). Zwykłe kliknięcie znacznika dalej zaczyna edycję tekstu.
+
+Menu działa wszędzie, gdzie widać znacznik: w notatce i w dzienniku, w komórkach tabel, w wynikach [[Zapytania|zapytań]] i we wstawionych blokach (zmiana trafia wtedy do notatki, w której zadanie jest zapisane, a powiadomienie ma przycisk **Cofnij**), w widoku **Zadania** (na znacznikach pod zadaniem) i w kalendarzu (na wpisie dnia).
 
 Znaczniki to zwykłe emoji. Gdy system nie ma czcionki z emoji (Brulion w przeglądarce, niektóre Linuksy), Brulion rysuje je własną czcionką — jednokolorowe, w kolorze tekstu.
 
@@ -51,6 +53,8 @@ Nie musisz znać tych znaczników na pamięć. Po wpisaniu `📅` (albo wybraniu
 ## Priorytety
 `🔺` najwyższy, `⏫` wysoki, `🔼` średni, `🔽` niski, `⏬` najniższy. Brak znacznika to zwykły priorytet. Logseqowe `[#A]`, `[#B]`, `[#C]` też są rozumiane.
 
+Priorytet zmienisz z menu: prawy przycisk myszy na znaczniku priorytetu (na telefonie przytrzymanie) daje „Najwyższy” … „Najniższy” i „Bez priorytetu”; bieżący jest zaznaczony. Logseqowy `[#B]` zostaje w zapisie Logseqa (`[#A]`, `[#B]`, `[#C]`).
+
 ## Powtarzanie
 Znacznik `🔁` z regułą: `🔁 every week`, `🔁 every 2 days`, `🔁 every month on the 15th`, `🔁 every weekday`, `🔁 every year`. Dodatek `when done` liczy następny termin od dnia wykonania, a nie od pierwotnego terminu.
 
@@ -58,7 +62,9 @@ Po polsku reguły można wpisać tak: „codziennie”, „co 3 dni”, „w dni
 
 Po odhaczeniu zadania cyklicznego Brulion dopisuje jego następne wystąpienie nad ukończonym.
 
+Regułę zmienisz z menu: prawy przycisk myszy na znaczniku 🔁 (na telefonie przytrzymanie) daje „Zmień regułę…”, gotowe reguły („Codziennie”, „W dni robocze”, „Co tydzień”, „Co 2 tygodnie”, „Co miesiąc”, „Co roku”), przełącznik „Od daty wykonania” (`when done`) i „Nie powtarzaj”. Zmienia się tylko reguła — w `🔁 co tydzień kupić mleko` tekst „kupić mleko” zostaje.
+
 ## Widok Zadania
-Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie (na telefonie przytrzymanie) otwiera stronę tagu.
+Widok **Zadania** zbiera zadania z całego notatnika: pole szybkiego dodawania, filtry i sekcje Zaległe, Dziś, Jutro, W tym tygodniu, Później, Bez daty, Zrobione. „Pokaż jako zapytanie” zamienia bieżące filtry w blok [[Zapytania|zapytania]], który możesz wkleić do notatki. Kliknięcie tagu w zadaniu filtruje listę po tym tagu; Ctrl+kliknięcie otwiera stronę tagu, a prawy przycisk (na telefonie przytrzymanie) — menu tagu: „Filtruj po tagu”, „Otwórz stronę tagu”, „Widok tagu”, „Otwórz w panelu bocznym”, „Kopiuj tag”. Prawy przycisk albo przytrzymanie znacznika pod zadaniem (termin, zaplanowanie, początek, przypomnienie, powtarzanie, priorytet) otwiera jego menu; zmianę cofniesz przyciskiem **Cofnij** w powiadomieniu.
 
 Zadania z terminami pokazuje też kalendarz ([[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]]).

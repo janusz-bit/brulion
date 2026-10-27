@@ -21,6 +21,8 @@ Linki łączą notatki w sieć. Każda strona pokazuje w panelu bocznym (zakład
 
 Przykłady: [[Spis treści|Spis treści]], [[Zadania#Powtarzanie]], oraz strona, która jeszcze nie istnieje: [[Notatka do utworzenia]]. Kliknięcie takiego linku tworzy stronę.
 
+**Menu linku** — prawy przycisk myszy na linku (na telefonie przytrzymanie palcem): „Otwórz” (przy stronie, której jeszcze nie ma: „Utwórz stronę”), „Otwórz w panelu bocznym” (na szerokim oknie) i „Kopiuj link”. Skopiowany link nazywa stronę tak, że zadziała wklejony w dowolnej notatce (`[[Strona#Nagłówek]]`). Na adresie internetowym menu ma „Otwórz w przeglądarce” i „Kopiuj adres”. Link do dnia dziennika (`[[2026-10-20]]`) ma menu daty — zobacz [[Dziennik, kalendarz i szablony#Dziennik|Dziennik]].
+
 ## Jak Brulion znajduje stronę
 Nazwa z linku jest dopasowywana do plików po kolei: pełna ścieżka w notatniku, ścieżka względem bieżącego folderu, sama nazwa pliku (bez względu na wielkość liter), a na końcu aliasy z nagłówka strony (`aliases: [Skrót]`). Przy kilku pasujących wygrywa strona o najkrótszej ścieżce. Gdy dwie strony mają tę samą nazwę w różnych folderach, użyj ścieżki: `[[Projekty/Dom]]`.
 

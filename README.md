@@ -110,7 +110,10 @@
   anulowane albo bez statusu) wybierasz z menu pola wyboru — prawy przycisk myszy lub
   przytrzymanie palcem, wszędzie, gdzie widać zadanie — albo poleceniem `/` w bloku. Tak samo
   na znaczniku daty (📅 ⏳ 🛫 ✅ ➕ ❌) albo ⏰ otwiera się menu do zmiany daty: kalendarz, dziś,
-  jutro, dzień / tydzień później, godzinę później, alarm, usunięcie.
+  jutro, dzień / tydzień później, godzinę później, alarm, powtarzanie, priorytet, usunięcie — w
+  notatce, w wynikach zapytań, we wstawionych blokach, w tabelach, w widoku zadań i w kalendarzu
+  (zmiana trafia do notatki z zadaniem i da się cofnąć). Menu mają też 🔁 (reguła), priorytet,
+  link do dnia `[[2026-10-20]]`, `#tag` i `[[link]]` (otwórz, otwórz w panelu bocznym, kopiuj).
   Przypomnienia, które minęły przy wyłączonym urządzeniu, czekają w dzienniku. Daty wpisujesz
   po polsku: „jutro o 9”, „w piątek 18:00”, „za 2 godziny”.
 * **Obliczenia.** Bloki ` ```calc ` liczą jak kalkulator w notatniku (zmienne, procenty,
@@ -413,7 +416,10 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   exactly those characters in the Markdown source mode (`Ctrl+E`, More → Markdown source).
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,
-  wherever a task is shown — or a `/` command.
+  wherever a task is shown — or a `/` command. The same gesture on a date, reminder, 🔁 rule or
+  priority opens its menu (move the date, snooze, alarm, change the rule or priority) in notes,
+  query results, embeds, tables, Tasks and the calendar — only that token changes, and it can be
+  undone; on a `#tag`, a `[[link]]` or a link to a day: open, open in the side panel, copy.
 * A command line for scripts and AI agents: `brulion-cli` captures, appends to journals, adds
   tasks and reminders, searches, queries and moves pages exactly as the app does (JSON output,
   stable exit codes, every change in the version history, destructive commands behind

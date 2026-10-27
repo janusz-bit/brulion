@@ -5,16 +5,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Funkcje
 
-* **Menu na pozostałych znacznikach i elementach tekstu.** Menu dat działa już w edytorze: prawy
-  przycisk albo przytrzymanie na 📅 ⏳ 🛫 ✅ ➕ ❌ i ⏰ (`DateChipMenu`, docs/UI.md). Brakuje:
-  * tego samego menu dat w wynikach zapytań, osadzeniach, komórkach tabel, w widoku zadań i
-    w kalendarzu (zmiana idzie do pliku zadania, jak status: `QueryResultModel.setTaskStatus`);
-  * 🔁 powtarzania (zmiana reguły), priorytetu i powtarzania w menu przypomnienia;
-  * menu na `#tag` i `[[link]]` (otwórz, otwórz w panelu bocznym, kopiuj link) oraz na datach
-    w tekście (`[[2026-10-20]]`).
-
-  Zmiana zapisuje się w pliku jak edycja ręczna (bajt po bajcie poza zmienionym tokenem) i daje
-  się cofnąć.
 * **Zdjęcia z internetu.** Dziś obraz pokazuje się tylko jako załącznik z folderu notatek
   (`![[plan.png]]`, `![](assets/plan.png)`); `![](https://…/foto.jpg)` jest zwykłym linkiem.
   Brakuje:
