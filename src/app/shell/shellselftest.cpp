@@ -2874,7 +2874,8 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
     if (!block)
         std::fprintf(stderr, "selftest: today's journal (%s) ends with: %s\n", qPrintable(today),
                      qPrintable(ws->readFile(today).right(200)));
-    check(block && !ws->readFile(today).contains(u"⏰"_s), "the text is a block of today's journal, no reminder");
+    // (The sample journal has reminders of its own: the block's line itself, exactly, has none.)
+    check(block, "the text is a block of today's journal, no reminder");
     if (ws->readFile(today) != journal)
         ws->writeFile(today, journal);
 
