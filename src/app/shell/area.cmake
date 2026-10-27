@@ -9,7 +9,8 @@
 # the clipboard's HTML of copied blocks and pasted HTML (core io), reminders — WorkspaceReminders
 # over the notifiers of src/app/notify —, sync —
 # WorkspaceSync: Nextcloud, Syncthing, conflicts — and their wiring to the app,
-# workspaceintegration), CommandModel, FolderTreeModel, the sample vault. SingleInstance is in
+# workspaceintegration), CommandModel, FolderTreeModel, the sample vault, the tray calendar's
+# placement (traypopup.h, pure). SingleInstance is in
 # src/ipc (brulion_ipc, desktop). The app registers them as QML types through the QML_FOREIGN wrappers in
 # shell/shellqml.h (the src/app/ui pattern; the library's extracted metatypes give qmllint and
 # qmlcachegen their full API).
@@ -46,6 +47,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/demovault.h ${_brulion_shell_dir}/demovault.cpp
     ${_brulion_shell_dir}/foldertreemodel.h ${_brulion_shell_dir}/foldertreemodel.cpp
     ${_brulion_shell_dir}/navigation.h ${_brulion_shell_dir}/navigation.cpp
+    ${_brulion_shell_dir}/traypopup.h ${_brulion_shell_dir}/traypopup.cpp
     ${_brulion_shell_dir}/workspace.h ${_brulion_shell_dir}/workspace.cpp
     ${_brulion_shell_dir}/workspacequery.cpp
     ${_brulion_shell_dir}/workspacehistory.cpp
@@ -122,6 +124,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/shell/ShellSplash.qml
     qml/shell/ShellSyncFooter.qml
     qml/shell/ShellTopBar.qml
+    qml/shell/ShellTrayCalendar.qml
 )
 
 include(${_brulion_shell_dir}/views.cmake)

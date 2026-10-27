@@ -4,6 +4,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "traypopup.h"
 #include "uidriver.h"
 #include "workspace.h"
 #include "workspacesync.h"
@@ -39,8 +40,10 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QTimer>
 #include <QWheelEvent>
+#include <QWindow>
 
 #include <algorithm>
 #include <cstdio>
@@ -2913,6 +2916,147 @@ void checkShare(QQuickWindow *window, AppController *app, const Check &check)
         QMetaObject::invokeMethod(toasts, "clear");
 }
 
+/// The tray calendar (ShellTrayCalendar, AppController::showTrayCalendar; desktop): a frameless
+/// tool window without an owner, placed inside the work area next to the icon; today's date, a
+/// day's tasks and reminders from the sample notebook; Escape, a second click on the icon and the
+/// activation going elsewhere hide it, a click right after such a hide keeps it closed; "Open
+/// journal" hides it and shows that day in the main window; with the main window hidden in the
+/// tray, opening and closing it (also Alt+F4's close) never ends the app.
+QQuickWindow *trayCalendarWindow()
+{
+    const QList<QWindow *> windows = QGuiApplication::topLevelWindows();
+    for (QWindow *w : windows) {
+        if (w->objectName() == u"trayCalendar")
+            return qobject_cast<QQuickWindow *>(w);
+    }
+    return nullptr;
+}
+
+void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &check)
+{
+    QScreen *screen = window->screen() ? window->screen() : QGuiApplication::primaryScreen();
+    const QRect area = screen->availableGeometry();
+    // The icon in the work area's bottom-right corner (offscreen has no taskbar).
+    const QRect icon(area.right() - 40, area.bottom() - 30, 24, 24);
+    app->showTrayCalendar(icon, {});
+    QQuickWindow *popup = nullptr;
+    check(waitFor([&] {
+              popup = trayCalendarWindow();
+              return popup && popup->isVisible() && popup->isActive();
+          }),
+          "the tray calendar opens and takes the activation");
+    if (!popup)
+        return;
+    const QRect frame(popup->position(), popup->size());
+    if (!area.contains(frame))
+        std::fprintf(stderr, "selftest: tray calendar at %d,%d %dx%d, work area %d,%d %dx%d\n", frame.x(), frame.y(),
+                     frame.width(), frame.height(), area.x(), area.y(), area.width(), area.height());
+    check(area.contains(frame) && frame.bottom() < icon.top() && frame.right() >= icon.left(),
+          "it sits above the icon, inside the work area");
+    check(popup->flags().testFlag(Qt::FramelessWindowHint) && popup->flags().testFlag(Qt::WindowStaysOnTopHint)
+                  && (popup->flags() & Qt::WindowType_Mask) == Qt::Tool && !popup->transientParent(),
+          "it is a frameless tool window on top, owned by no window");
+    QQuickItem *todayText = shownNamed(popup->contentItem(), u"trayCalendarToday"_s);
+    check(todayText && todayText->property("text").toString().contains(u"2026"_s), "its header shows today's date");
+
+    // A day with entries (the sample notebook's tomorrow: reminders): listed under the month.
+    QQuickItem *month = shownNamed(popup->contentItem(), u"trayCalendarMonth"_s);
+    const QString tomorrow = app->today(1);
+    QStringList titles;
+    for (const QVariant &v : app->workspace()->calendarItems(tomorrow, tomorrow)) {
+        if (v.toMap().value(u"kind"_s).toString() != u"journal")
+            titles.append(v.toMap().value(u"title"_s).toString());
+    }
+    if (month)
+        month->setProperty("selectedDate", tomorrow);
+    const auto listed = [&](const QString &title) {
+        for (QQuickItem *item : uidriver::allItems(popup->contentItem())) {
+            if (isA(item, "BListItem") && item->isVisible() && item->property("text").toString() == title)
+                return true;
+        }
+        return false;
+    };
+    check(month && !titles.isEmpty() && waitFor([&] { return std::all_of(titles.begin(), titles.end(), listed); }),
+          "a day's tasks and reminders are listed");
+
+    sendKey(popup, Qt::Key_Escape);
+    check(waitFor([&] { return !popup->isVisible(); }), "Escape hides the tray calendar");
+    app->showTrayCalendar(icon, {}, true);
+    check(waitFor([&] { return popup->isVisible() && popup->isActive(); }) && month
+                  && month->property("selectedDate").toString() == app->today(0),
+          "a click on the icon opens it again, on today");
+    app->showTrayCalendar(icon, {}, true);
+    check(waitFor([&] { return !popup->isVisible(); }), "a second click on the icon closes it");
+
+    // The activation going elsewhere (a click outside) hides it; the click on the icon that did
+    // it arrives right after and must not reopen it.
+    app->showTrayCalendar(icon, {}, true);
+    waitFor([&] { return popup->isVisible() && popup->isActive(); });
+    window->requestActivate();
+    QElapsedTimer sinceHide;
+    check(waitFor([&] { return !popup->isVisible(); }, 3000), "it hides when another window takes the activation");
+    sinceHide.start();
+    app->showTrayCalendar(icon, {}, true);
+    settle(30);
+    if (sinceHide.elapsed() < TrayPopupReopenGuardMs - 50)
+        check(!popup->isVisible(), "a click on the icon right after that keeps it closed");
+    settle(TrayPopupReopenGuardMs + 50);
+    if (!popup->isVisible())
+        app->showTrayCalendar(icon, {}, true);
+    check(waitFor([&] { return popup->isVisible(); }), "a later click opens it again");
+
+    // "Open journal" on a day: the popup goes, the main window shows that day.
+    app->navigate({{u"view"_s, u"tasks"_s}});
+    waitFor([&] { return popup->isActive(); });
+    if (month)
+        month->setProperty("selectedDate", tomorrow);
+    settle(50);
+    QQuickItem *openJournal = shownNamed(popup->contentItem(), u"miniCalendarOpenJournal"_s);
+    if (openJournal)
+        mouseClick(popup, pointIn(openJournal));
+    check(openJournal && waitFor([&] {
+              return !popup->isVisible() && window->isVisible() && app->currentView() == u"journal"
+                     && app->currentRoute().value(u"date"_s).toString() == tomorrow;
+          }),
+          "“Open journal” hides the calendar and shows that day in the window");
+
+    // The main window hidden in the tray: the calendar opens and closes, the app stays.
+    bool lastClosed = false;
+    const auto connection = QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, app,
+                                             [&lastClosed] { lastClosed = true; });
+    window->hide();
+    app->showTrayCalendar(icon, {}, true);
+    check(waitFor([&] { return popup->isVisible() && popup->isActive(); }), "it opens with the window hidden");
+    sendKey(popup, Qt::Key_Escape);
+    waitFor([&] { return !popup->isVisible(); });
+    app->showTrayCalendar(icon, {});
+    waitFor([&] { return popup->isVisible(); });
+    popup->close(); // Alt+F4
+    settle(200);
+    check(!popup->isVisible() && !lastClosed && !app->quitting(),
+          "closing it with the window hidden hides it and never ends the app");
+    QObject::disconnect(connection);
+    QObject *quickCapture = window->findChild<QObject *>(u"shellCapture"_s);
+    app->showTrayCalendar(icon, {});
+    waitFor([&] { return popup->isVisible() && popup->isActive(); });
+    QQuickItem *capture = shownNamed(popup->contentItem(), u"trayCalendarCapture"_s);
+    if (capture)
+        mouseClick(popup, pointIn(capture));
+    check(capture && quickCapture && waitFor([&] {
+              return !popup->isVisible() && window->isVisible() && quickCapture->property("opened").toBool();
+          }),
+          "“Quick capture…” brings the window up with quick capture");
+    if (quickCapture && quickCapture->property("visible").toBool()) {
+        window->requestActivate();
+        waitFor([window] { return window->isActive(); }, 2000);
+        sendKey(window, Qt::Key_Escape);
+        waitFor([&] { return !quickCapture->property("visible").toBool(); });
+    }
+    window->requestActivate();
+    waitFor([window] { return window->isActive(); }, 2000);
+    app->goHome();
+}
+
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
@@ -3827,6 +3971,12 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     // 5h. Ustawienia → Wygląd: accent, sidebar entries, bottom navigation, quick note button.
     checkAppearance(engine, window, app, check);
 
+    // 5j. The tray calendar (desktop).
+    if (!QCoreApplication::arguments().contains(u"--touch"_s)) {
+        checkTrayCalendar(window, app, check);
+        closeMenus(window);
+    }
+
     // 5i. Ustawienia → Aplikacja → "Start when you sign in": Windows only, and disabled in a
     // separate profile (the tests' BRULION_PROFILE: a Run entry would start the default one).
     {
@@ -3846,6 +3996,15 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
 #else
         check(startAtLogin && !startAtLogin->isVisible(), "starting at sign-in is offered on Windows only");
 #endif
+        // What a click on the tray icon does: desktops only, while there is a tray.
+        QQuickItem *trayClick = nullptr;
+        for (QQuickItem *item : uidriver::allItems(window->contentItem())) {
+            if (item->objectName() == u"settingsTrayClick")
+                trayClick = item;
+        }
+        check(trayClick && trayClick->isVisible() == app->isDesktop()
+                      && (!app->isDesktop() || trayClick->isEnabled() == app->trayAvailable()),
+              "the tray click setting is shown on desktops (enabled with a tray)");
         app->goHome();
     }
 
@@ -3853,6 +4012,26 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     QTimer::singleShot(0, app, [app] { app->closeVault(); });
     check(waitFor([app] { return app->status() == u"onboarding" && !app->workspace()->isOpen(); }),
           "closing the notebook shows onboarding and closes the vault");
+
+    // 6b. The tray calendar without a notebook: the month and a hint, no entries.
+    if (!QCoreApplication::arguments().contains(u"--touch"_s)) {
+        app->showTrayCalendar(QRect(), {});
+        QQuickWindow *popup = nullptr;
+        check(waitFor([&] {
+                  popup = trayCalendarWindow();
+                  return popup && popup->isVisible();
+              }),
+              "the tray calendar opens without a notebook");
+        const QString hint = QCoreApplication::translate("ShellTrayCalendar",
+                                                         "Open a notebook to see its tasks and reminders.");
+        QQuickItem *month = popup ? shownNamed(popup->contentItem(), u"trayCalendarMonth"_s) : nullptr;
+        check(month && month->property("placeholder").toString() == hint
+                      && renderedTextContaining(popup->contentItem(), hint) != nullptr
+                      && !shownNamed(popup->contentItem(), u"miniCalendarOpenJournal"_s),
+              "without a notebook it shows the month and asks for a notebook");
+        if (popup)
+            popup->hide();
+    }
     return failures;
 }
 

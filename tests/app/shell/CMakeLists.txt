@@ -5,6 +5,9 @@ brulion_add_test(tst_shell_navigation SOURCES tst_navigation.cpp LIBS brulion_sh
 # "Udostępnij → Brulion" on AppController (appshare.cpp; the --share option): the share dialog's
 # data, saving to the journal or to new pages, waiting for the notebook, the copies removed.
 brulion_add_test(tst_shell_share SOURCES tst_share.cpp LIBS brulion_shell brulion_platform)
+# The tray calendar's placement next to the tray icon and its reopen guard (traypopup.h; offscreen
+# QGuiApplication for the screen lookup).
+brulion_add_test(tst_shell_traypopup SOURCES tst_traypopup.cpp LIBS brulion_shell Qt6::Gui)
 brulion_add_test(tst_shell_settings SOURCES tst_settings.cpp LIBS brulion_shell brulion_core_text)
 brulion_add_test(tst_shell_workspace SOURCES tst_workspace.cpp LIBS brulion_shell brulion_core_vault brulion_core_markdown)
 brulion_add_test(tst_shell_demovault SOURCES tst_demovault.cpp

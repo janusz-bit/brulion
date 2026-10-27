@@ -101,6 +101,9 @@ class AppSettings : public QObject {
     // ---- Application --------------------------------------------------------------------
     /// Desktop: closing the window keeps Brulion running in the system tray (reminders fire).
     Q_PROPERTY(bool closeToTray READ closeToTray WRITE setCloseToTray NOTIFY closeToTrayChanged FINAL)
+    /// Desktop: what a single left click on the tray icon does — "window" (show or hide the
+    /// window) or "calendar" (the tray calendar, ShellTrayCalendar). Default: defaultTrayClick().
+    Q_PROPERTY(QString trayClick READ trayClick WRITE setTrayClick NOTIFY trayClickChanged FINAL)
 
     // ---- Reminders ----------------------------------------------------------------------
     Q_PROPERTY(bool remindersEnabled READ remindersEnabled WRITE setRemindersEnabled NOTIFY remindersEnabledChanged FINAL)
@@ -211,6 +214,11 @@ public:
 
     bool closeToTray() const;
     void setCloseToTray(bool on);
+    QString trayClick() const;
+    /// Anything but "window" / "calendar" stores the default.
+    void setTrayClick(const QString &action);
+    /// "calendar" on Windows (where a click on the clock opens a calendar too), else "window".
+    static QString defaultTrayClick();
 
     bool remindersEnabled() const;
     void setRemindersEnabled(bool on);
@@ -308,6 +316,7 @@ Q_SIGNALS:
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();
+    void trayClickChanged();
     void remindersEnabledChanged();
     void snoozeMinutesChanged();
     void alarmRingMinutesChanged();

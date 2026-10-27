@@ -8,7 +8,8 @@ import Brulion
 // onboarding (no vault yet), an error screen (the vault could not be opened) or the AppShell
 // (docs/UI.md). Applies the user's settings to the design system (theme, fonts, motion) and
 // the window size to Theme (narrow/compact layouts), hosts the toasts and handles window
-// requests: show/raise (tray, second launch, notification tap), close to the tray, quit.
+// requests: show/raise (tray, second launch, notification tap), close to the tray, quit, the
+// tray calendar (ShellTrayCalendar, created on first use).
 //
 // Edge-to-edge (Android): the window draws behind the status and navigation bars — its top and
 // bottom padding is 0 and the shell's bars pad themselves with the SafeArea margins. The on-screen
@@ -125,6 +126,40 @@ ApplicationWindow {
 
     readonly property AppShell shell: stage.item as AppShell
 
+    // The tray calendar (desktop): its own window, created on first use; never on Android or in
+    // the browser (no tray asks for it there).
+    Loader {
+        id: trayCalendar
+        active: false
+        sourceComponent: ShellTrayCalendar {}
+    }
+    readonly property ShellTrayCalendar trayCalendarWindow: trayCalendar.item as ShellTrayCalendar
+
+    function hideTrayCalendar() {
+        if (window.trayCalendarWindow && window.trayCalendarWindow.visible)
+            window.trayCalendarWindow.hide()
+    }
+    /// "trayCalendar" (the tray menu) opens it; "toggleTrayCalendar" (a click on the icon)
+    /// closes an open one, and right after it hid itself because that click took its activation
+    /// keeps it closed.
+    function showTrayCalendar(toggle: bool) {
+        trayCalendar.active = true
+        const popup = window.trayCalendarWindow
+        if (!popup)
+            return
+        if (popup.visible) {
+            if (toggle)
+                popup.hide()
+            else
+                popup.open()
+            return
+        }
+        if (toggle && popup.autoHiddenAt >= 0
+                && !AppController.trayPopupShouldReopen(Date.now() - popup.autoHiddenAt))
+            return
+        popup.open()
+    }
+
     // The focused form field (settings, onboarding, dialogs) above the on-screen keyboard.
     BKeyboardFocusKeeper { window: window }
 
@@ -172,6 +207,7 @@ ApplicationWindow {
                                    onAction: () => { if (typeof onAction === "function") onAction() } })
         }
         function onShowWindowRequested() {
+            window.hideTrayCalendar()
             window.showAndRaise()
         }
         function onUiActionRequested(action) {
@@ -180,10 +216,15 @@ ApplicationWindow {
                 AppSettings.themeMode = Theme.dark ? "light" : "dark"
                 return
             case "toggleWindow":
+                window.hideTrayCalendar()
                 if (window.visible && window.active)
                     window.hide()
                 else
                     window.showAndRaise()
+                return
+            case "trayCalendar":
+            case "toggleTrayCalendar":
+                window.showTrayCalendar(action === "toggleTrayCalendar")
                 return
             }
             // The other actions open the shell's popups (AppShell); without a vault there is none.
@@ -197,6 +238,8 @@ ApplicationWindow {
     // handles it when it has the focus; this catches it when nothing focused took it); at home
     // the app goes to the background like any Android 12+ app instead of ending its process.
     onClosing: (close) => {
+        // A shown tray calendar would keep a really closed window's app running.
+        window.hideTrayCalendar()
         if (AppController.isAndroid && !AppController.quitting) {
             close.accepted = false
             if (AppController.status !== "ready" || !AppController.handleBackKey())

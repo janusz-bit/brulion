@@ -668,6 +668,25 @@ private Q_SLOTS:
         QCOMPARE(quit.size(), 1);
     }
 
+    void trayCalendar()
+    {
+        // The tray's calendar: the menu entry opens it, a click on the icon toggles it; Main.qml
+        // places it from the anchor given here (traypopup.h; tst_shell_traypopup has the
+        // geometry: without a QGuiApplication there is no screen, so the anchor comes back).
+        auto app = makeApp();
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        app->showTrayCalendar(QRect(1800, 1040, 24, 24), {});
+        QCOMPARE(ui.size(), 1);
+        QCOMPARE(ui.takeFirst().first().toString(), u"trayCalendar"_s);
+        QCOMPARE(app->trayPopupPosition(320, 460), QRect(1800, 1040, 24, 24).center());
+        app->showTrayCalendar(QRect(), QPoint(640, 1070), true);
+        QCOMPARE(ui.takeFirst().first().toString(), u"toggleTrayCalendar"_s);
+        QCOMPARE(app->trayPopupPosition(320, 460), QPoint(640, 1070));
+        QVERIFY(!app->trayPopupShouldReopen(120));
+        QVERIFY(app->trayPopupShouldReopen(450));
+        QVERIFY(app->trayPopupShouldReopen(-1));
+    }
+
     // ---- commands ---------------------------------------------------------------------------
 
     void documentationNotebook()

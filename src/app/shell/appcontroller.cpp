@@ -5,6 +5,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "traypopup.h"
 #include "workspace.h"
 #include "workspaceintegration.h"
 
@@ -1137,6 +1138,24 @@ bool AppController::capture(const QString &text)
 void AppController::showWindow()
 {
     Q_EMIT showWindowRequested();
+}
+
+void AppController::showTrayCalendar(const QRect &icon, const QPoint &cursor, bool toggle)
+{
+    m_trayIcon = icon;
+    m_trayCursor = cursor.isNull() ? std::nullopt : std::optional(cursor);
+    Q_EMIT uiActionRequested(toggle ? u"toggleTrayCalendar"_s : u"trayCalendar"_s);
+}
+
+QPoint AppController::trayPopupPosition(int width, int height) const
+{
+    // 8 px from the taskbar and the screen's sides, as Windows' own flyouts.
+    return trayPopupPositionOnScreen(m_trayIcon, m_trayCursor, QSize(width, height), 8);
+}
+
+bool AppController::trayPopupShouldReopen(double ms) const
+{
+    return shell::trayPopupShouldReopen(qint64(ms));
 }
 
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)

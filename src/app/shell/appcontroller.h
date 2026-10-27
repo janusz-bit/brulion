@@ -51,7 +51,9 @@
 #include <QJSValue>
 #include <QJsonObject>
 #include <QObject>
+#include <QPoint>
 #include <QPointer>
+#include <QRect>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -320,8 +322,20 @@ public:
     /// Append `text` to today's journal (Workspace::quickCapture: a date in it makes a task with
     /// a ⏰ reminder or 📅 due date); false when nothing was saved (also in the documentation).
     Q_INVOKABLE bool capture(const QString &text);
-    /// Bring the main window to the front (tray, second launch, notification tap).
+    /// Bring the main window to the front (tray, second launch, notification tap). Hides the
+    /// tray calendar (Main.qml).
     Q_INVOKABLE void showWindow();
+    /// The tray calendar (ShellTrayCalendar, docs/UI.md "Window layout") next to the tray icon
+    /// `icon` (QSystemTrayIcon::geometry(); empty when unknown) or the cursor `cursor` (a null
+    /// point: unknown). `toggle` (a click on the icon): a second click closes it, and a click
+    /// right after it hid itself keeps it closed (trayPopupShouldReopen) — uiActionRequested
+    /// "toggleTrayCalendar"; else (the tray menu) it opens — "trayCalendar".
+    Q_INVOKABLE void showTrayCalendar(const QRect &icon, const QPoint &cursor, bool toggle = false);
+    /// Where the tray calendar of this size goes (traypopup.h): next to the anchor of the last
+    /// showTrayCalendar(), inside the work area of its screen.
+    Q_INVOKABLE QPoint trayPopupPosition(int width, int height) const;
+    /// traypopup.h's guard for a click on the tray icon `ms` after the calendar hid itself.
+    Q_INVOKABLE bool trayPopupShouldReopen(double ms) const;
     /// A message of a second launch or brulion-cli over the single-instance socket
     /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today` and `open {"route",
     /// "vault"}` show the window and do their part; false for any other verb, which changes
@@ -342,7 +356,9 @@ public:
     Q_INVOKABLE void toastAction(const QString &text, const QString &kind, const QString &actionText,
                                  const QJSValue &onAction);
     /// Ask the shell to open one of its popups: "palette", "switcher", "capture", "newPage",
-    /// "about", "share" (the share dialog for pendingShare), "toggleTheme", "toggleSidePanel".
+    /// "about", "share" (the share dialog for pendingShare), "toggleTheme", "toggleSidePanel";
+    /// Main.qml: "toggleWindow" (the tray), "trayCalendar" / "toggleTrayCalendar"
+    /// (showTrayCalendar()).
     Q_INVOKABLE void requestUiAction(const QString &action);
     /// Ask the shell to act on a page or folder of the tree from any view (its dialogs live in
     /// the shell): "move" (Przenieś do…), "rename", "delete" (the confirmation), "newPage" /
@@ -463,6 +479,8 @@ private:
     bool m_sidePanelAllowed = true;
     bool m_sourceModeShown = false;
     bool m_trayAvailable = false;
+    QRect m_trayIcon;                  ///< showTrayCalendar()'s anchor
+    std::optional<QPoint> m_trayCursor;
     bool m_startHidden = false;
     bool m_quitting = false;
     bool m_started = false;

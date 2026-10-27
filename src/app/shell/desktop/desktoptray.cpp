@@ -1,9 +1,11 @@
 #include "desktoptray.h"
 
 #include "appcontroller.h"
+#include "appsettings.h"
 
 #include <QAction>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QEvent>
 #include <QIcon>
 #include <QMenu>
@@ -37,11 +39,15 @@ bool DesktopTray::create()
 
     m_menu = new QMenu;
     m_show = m_menu->addAction(QString());
+    m_calendar = m_menu->addAction(QString());
     m_today = m_menu->addAction(QString());
     m_capture = m_menu->addAction(QString());
     m_menu->addSeparator();
     m_quit = m_menu->addAction(QString());
     connect(m_show, &QAction::triggered, app, &AppController::showWindow);
+    connect(m_calendar, &QAction::triggered, app, [this, app] {
+        app->showTrayCalendar(m_tray->geometry(), QCursor::pos());
+    });
     connect(m_today, &QAction::triggered, app, [app] {
         app->showWindow();
         app->openToday(); // waits while the notebook is opening; nothing without one
@@ -51,8 +57,14 @@ bool DesktopTray::create()
 
     m_tray = new QSystemTrayIcon(QIcon(u":/images/logo.svg"_s), this);
     m_tray->setContextMenu(m_menu);
-    connect(m_tray, &QSystemTrayIcon::activated, app, [app](QSystemTrayIcon::ActivationReason reason) {
-        if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick)
+    connect(m_tray, &QSystemTrayIcon::activated, app, [this, app](QSystemTrayIcon::ActivationReason reason) {
+        // Windows sends Trigger and then DoubleClick for a double click: the calendar opens for
+        // a moment, then the window comes up (and hides it), as with the system clock.
+        if (reason == QSystemTrayIcon::DoubleClick)
+            app->showWindow();
+        else if (reason == QSystemTrayIcon::Trigger && app->settings()->trayClick() == u"calendar")
+            app->showTrayCalendar(m_tray->geometry(), QCursor::pos(), true);
+        else if (reason == QSystemTrayIcon::Trigger)
             app->requestUiAction(u"toggleWindow"_s);
     });
     connect(app, &AppController::notificationRequested, this, [this](const QString &title, const QString &body) {
@@ -93,6 +105,7 @@ void DesktopTray::retranslate()
         return;
     m_tray->setToolTip(tr("Brulion"));
     m_show->setText(tr("Show Brulion"));
+    m_calendar->setText(tr("Calendar"));
     m_today->setText(tr("Today's journal"));
     m_capture->setText(tr("Quick capture…"));
     m_quit->setText(tr("Quit"));
