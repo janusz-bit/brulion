@@ -291,6 +291,15 @@ Rectangle {
                     bar.editor.dialogs.pickImage(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
                 }
             }
+            ToolButton {
+                objectName: "toolbarDrawing"
+                iconName: "pen-tool"
+                label: qsTr("Drawing")
+                onClicked: {
+                    bar.commitComposition()
+                    bar.editor.insertDrawing(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                }
+            }
             Separator {}
             ToolButton {
                 iconName: "undo-2"

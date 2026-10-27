@@ -1255,8 +1255,9 @@ void BlockListModel::ensureEmbeds(int row) const
         // A picture whose format this device has no decoder for (WebP, AVIF without Qt's image
         // plugins) is named as such instead of failing to load (EmbedView).
         bool decodable = em.image;
+        QString path; // the attachment's vault path
         if (m_host) {
-            QString path = m_host->resolveLink(em.target, m_path);
+            path = m_host->resolveLink(em.target, m_path);
             if (path.isEmpty()) {
                 const QString decoded = QUrl::fromPercentEncoding(em.target.toUtf8());
                 path = decoded.contains(u'/') ? paths::normalize(decoded) : paths::join(attachments, decoded);
@@ -1272,6 +1273,8 @@ void BlockListModel::ensureEmbeds(int row) const
             size = localPictureSize(url.toLocalFile());
         if (!size.isValid())
             size = QSize(0, 0);
+        // A drawing (docs/SYNTAX.md §2 "Drawings"): a click opens the drawing editor at `path`.
+        const bool drawing = em.image && m_host && path.endsWith(u".svg"_s, Qt::CaseInsensitive) && m_host->isDrawing(path);
         st.embeds.append(QVariantMap{{u"target"_s, em.target},
                                      {u"alt"_s, em.alt},
                                      {u"image"_s, em.image},
@@ -1279,9 +1282,29 @@ void BlockListModel::ensureEmbeds(int row) const
                                      {u"format"_s, em.image ? pictureFormatName(em.target) : QString()},
                                      {u"url"_s, url},
                                      {u"name"_s, paths::basename(em.target)},
+                                     {u"path"_s, path},
+                                     {u"drawing"_s, drawing},
                                      {u"width"_s, size.width()},
                                      {u"height"_s, size.height()}});
     }
+}
+
+void BlockListModel::attachmentChanged(const QString &path)
+{
+    QList<int> rows;
+    for (int row = 0; row < m_rows.size(); ++row) {
+        RowState &st = stateFor(m_rows[row]);
+        if (!st.embedsValid)
+            continue; // computed when asked for
+        const bool shows = std::any_of(st.embeds.cbegin(), st.embeds.cend(), [&path](const QVariant &v) {
+            return v.toMap().value(u"path"_s).toString() == path;
+        });
+        if (!shows)
+            continue;
+        st.embedsValid = false;
+        rows.append(row);
+    }
+    emitRowsChanged(rows, {EmbedsRole});
 }
 
 QVariantMap BlockListModel::webEmbed(const Embed &em) const

@@ -8,6 +8,8 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "drawing/drawing.h"
+#include "drawing/svgwrite.h"
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
@@ -19,6 +21,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -27,6 +30,7 @@
 #include <QInputDevice>
 #include <QInputMethodEvent>
 #include <QJSValue>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -2600,6 +2604,154 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// the field keeps following the notebook's config afterwards — a value synced from another
 /// device shows (assigning the picked text once ended that binding: the field kept the old value
 /// and wrote it back with the next edit).
+/// 5i. A drawing (docs/UI.md "Drawing editor"): a tap / click on its embed opens the drawing
+/// editor; a stroke drawn with real input — a finger on the phone run ("Rysuj palcem" is on until a
+/// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
+/// back is the editor's own, not a change to merge); an undo (the bar's button / Ctrl+Z) is saved
+/// too; back on the page, the embed loads the drawing saved again (its URL's version).
+void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    const QString path = workspace->saveAttachment(u"Szkic z wykładu.svg"_s, drawing::toSvg(drawing::Drawing()));
+    const QString page = u"Wykład z rysunkiem.md"_s;
+    check(!path.isEmpty() && workspace->writeFile(page, u"- Notatki z tablicy: ![[Szkic z wykładu.svg]]\n"_s),
+          "a page embeds a new drawing");
+    const auto strokesInFile = [&] {
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        return d ? int(d->strokes.size()) : -1;
+    };
+    const auto embedImage = [window]() -> QQuickItem * {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"embedImage" && item->property("source").toUrl().path().endsWith(u".svg"_s)
+                   && item->property("source").toUrl().fileName() == u"Szkic z wykładu.svg";
+        });
+    };
+    app->openPage(page);
+    check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
+          "the drawing's embed is shown");
+    QQuickItem *image = embedImage();
+    if (!image)
+        return;
+    const QUrl before = image->property("source").toUrl();
+    check(before.query().startsWith(u"v="_s), "a drawing's URL carries its version");
+    check(uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"embedDrawingBadge"; })
+                  != nullptr,
+          "a drawing's embed has the pen in its corner");
+    tapOrClick(window, pointIn(image), touch);
+    check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"drawing"; }),
+          "a tap / click on the drawing opens the drawing editor");
+    check(app->currentRoute().value(u"path"_s).toString() == path, "on that drawing");
+    QQuickItem *canvas = nullptr;
+    waitFor([&] {
+        canvas = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingCanvas"; });
+        return canvas && canvas->width() > 100;
+    });
+    if (!canvas) {
+        check(false, "the drawing editor shows its paper");
+        return;
+    }
+    settle(100);
+    const QPointF from = pointIn(canvas, 0.25, 0.4);
+    const QPointF to = pointIn(canvas, 0.7, 0.45);
+    if (touch)
+        touchDrag(window, from, to - from);
+    else
+        mouseDrag(window, from, to);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 1; }),
+          touch ? "a finger draws a stroke (no stylus seen yet)" : "the mouse draws a stroke");
+    check(waitFor([&] { return strokesInFile() == 1 && !canvas->property("modified").toBool(); }, 5000),
+          "the stroke is saved by itself");
+    check(canvas->property("canUndo").toBool(), "its own save keeps the undo history (no merge)");
+    if (touch) {
+        QQuickItem *undo = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingUndo"; });
+        if (undo)
+            touchTap(window, pointIn(undo));
+        check(undo != nullptr, "the bar at the bottom has Cofnij");
+    } else {
+        sendKey(window, Qt::Key_Z, Qt::ControlModifier);
+    }
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 0; }), "Cofnij takes the stroke back");
+    check(waitFor([&] { return strokesInFile() == 0; }, 5000), "the undo is saved too");
+    QMetaObject::invokeMethod(canvas, "redo");
+    check(waitFor([&] { return strokesInFile() == 1; }, 5000), "the redo is saved");
+
+    // Another device's version on disk the vault has not reported yet (a missed folder watch,
+    // Android's shared storage): the save reads the file first and merges, never writes over it.
+    QQuickItem *view = canvas;
+    while (view && view->metaObject()->indexOfMethod("save()") < 0)
+        view = view->parentItem();
+    const auto writeBehind = [&](const drawing::Drawing &d) {
+        QFile f(workspace->vault()->absolutePath(path));
+        const bool ok = f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(drawing::toSvg(d)) > 0;
+        f.close();
+        return ok;
+    };
+    const auto drawStroke = [&](double y) {
+        const QPointF a = pointIn(canvas, 0.25, y);
+        const QPointF b = pointIn(canvas, 0.6, y + 0.02);
+        if (touch)
+            touchDrag(window, a, b - a);
+        else
+            mouseDrag(window, a, b);
+    };
+    drawing::Drawing theirs = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    drawing::Stroke remote;
+    remote.id = u"kreskaZdalna"_s;
+    remote.points = {{40, 400, 0.5}, {240, 420, 0.5}};
+    theirs.strokes.append(remote);
+    drawStroke(0.6);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 2; }) && view
+                  && canvas->property("modified").toBool() && writeBehind(theirs),
+          "a stroke drawn here, another device's version written behind the vault's back");
+    QVariant saved;
+    if (view)
+        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+    {
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        const bool kept = d && std::any_of(d->strokes.cbegin(), d->strokes.cend(),
+                                           [](const drawing::Stroke &s) { return s.id == u"kreskaZdalna"; });
+        check(d && d->strokes.size() == 3 && kept && canvas->property("strokeCount").toInt() == 3,
+              "the save merges a version not reported yet: both devices' strokes are in the file");
+    }
+
+    // A version Brulion cannot edit (a rectangle added in excalidraw.com): shown as it is, never
+    // written over; what was drawn here is kept in a new file beside it.
+    drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"rectangle"_s}, {u"id"_s, u"prostokąt"_s}, {u"x"_s, 10},
+                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}});
+    const QByteArray shapesBytes = drawing::toSvg(shapes);
+    drawStroke(0.8);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),
+          "a stroke drawn here, an Excalidraw version with a shape written behind the vault's back");
+    if (view)
+        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+    check(workspace->readAttachment(path) == shapesBytes, "the version with the shape is not written over");
+    check(view && view->property("status").toString() == u"readonly"_s, "and the editor shows it as it is");
+    {
+        const QString folder = paths::dirname(path);
+        const QString stem = QFileInfo(path).completeBaseName();
+        int copies = 0;
+        for (const QString &name : QDir(workspace->vault()->absolutePath(folder)).entryList({u"*.svg"_s}, QDir::Files)) {
+            const QString other = folder.isEmpty() ? name : folder + u'/' + name;
+            if (other == path || !name.startsWith(stem))
+                continue;
+            const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(other));
+            if (d && d->strokes.size() == 4 && drawing::editable(*d))
+                ++copies;
+        }
+        check(copies == 1, "what was drawn here is kept in a copy beside it");
+    }
+    app->back();
+    check(waitFor([&] {
+              QQuickItem *again = embedImage();
+              return again && again->property("source").toUrl() != before && again->property("status").toInt() == 1;
+          },
+                  5000),
+          "back on the page, the embed shows the drawing saved again");
+    app->goHome();
+}
+
 void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &check)
 {
     Workspace *workspace = app->workspace();
@@ -3570,6 +3722,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkBlockLinks(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
+            // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
+            checkDrawing(window, app, check);
             // 5e. The default reminder time set on a clock in the settings.
             checkSettingsClock(window, app, check);
             // 5f. The on-screen keyboard (phones).

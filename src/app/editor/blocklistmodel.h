@@ -29,8 +29,10 @@
 //                rows: [[{ text, display, html, plain, error, formula }]] } with table formulas
 //                evaluated; `html` is the cell's Markdown rendered by the InlineRenderer (formula
 //                results and errors escaped), `plain` its visible text (column widths)
-//   embeds       [{ target, alt, image, url, width, height }] attachment embeds (url from
-//                EditorHost::assetUrl; width × height: a local picture's pixel size, 0 × 0 unknown)
+//   embeds       [{ target, alt, image, url, path, drawing, width, height }] attachment embeds
+//                (url from EditorHost::assetUrl; path: the attachment's vault path; drawing: an SVG
+//                drawing, EditorHost::isDrawing; width × height: a local picture's pixel size, 0 × 0
+//                unknown)
 //   onlyEmbeds   the block consists of embeds only — attachments, pages, sections, blocks (html is "")
 //   transclusions  page / section / block embeds (`![[Page]]`, `![[Page#Heading]]`, `![[Page#^id]]`,
 //                `!((id))`) with their content rendered read-only: [{ kind: "page" | "heading" |
@@ -200,6 +202,9 @@ public:
     /// The host's picture from the internet at `url` changed state ("" — all of them): the
     /// embeds of the blocks naming it are computed again (EditorHost::webPictureChanged).
     void webPictureChanged(const QString &url);
+    /// The attachment at vault path `path` changed (a drawing saved again): the embeds showing it
+    /// are computed again (a drawing's URL carries its version, EditorHost::assetUrl).
+    void attachmentChanged(const QString &path);
     EditorHost *host() const { return m_host; }
     void setPath(const QString &path) { m_path = path; }
     QString path() const { return m_path; }

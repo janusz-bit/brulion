@@ -10,7 +10,7 @@ QStringList routeViews()
 {
     return {u"journals"_s, u"journal"_s,  u"page"_s,     u"calendar"_s, u"tasks"_s, u"graph"_s,
             u"search"_s,   u"allPages"_s, u"tags"_s,     u"tag"_s,      u"sync"_s,  u"importExport"_s,
-            u"history"_s,  u"trash"_s,    u"settings"_s, u"logs"_s};
+            u"history"_s,  u"trash"_s,    u"settings"_s, u"logs"_s, u"drawing"_s};
 }
 
 QVariantMap normalizeRoute(const QVariantMap &route)
@@ -40,7 +40,7 @@ QVariantMap normalizeRoute(const QVariantMap &route)
         out.insert(it.key(), v);
     }
     // Views that need a parameter.
-    if ((view == u"page" || view == u"history") && out.value(u"path"_s).toString().isEmpty())
+    if ((view == u"page" || view == u"history" || view == u"drawing") && out.value(u"path"_s).toString().isEmpty())
         return {};
     if (view == u"journal") {
         const QDate d = QDate::fromString(out.value(u"date"_s).toString(), Qt::ISODate);

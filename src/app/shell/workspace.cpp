@@ -563,6 +563,47 @@ bool Workspace::canDecodePicture(const QString &path) const
     return paths::isPicturePath(path) && editor::canDecodePictureFormat(path);
 }
 
+bool Workspace::isDrawing(const QString &rawPath) const
+{
+    if (!m_vault || rawPath.isEmpty())
+        return false;
+    // The vault's own file (also in the browser: IDBFS is a folder of files there too).
+    const QString path = paths::normalize(rawPath);
+    return path.endsWith(u".svg"_s, Qt::CaseInsensitive) && m_vault->exists(path)
+           && editor::localFileIsDrawing(m_vault->absolutePath(path));
+}
+
+QByteArray Workspace::readAttachment(const QString &path) const
+{
+    if (!m_vault || path.isEmpty())
+        return {};
+    bool ok = false;
+    const QByteArray bytes = m_vault->readBinary(paths::normalize(path), &ok);
+    return ok ? bytes : QByteArray();
+}
+
+bool Workspace::writeAttachment(const QString &rawPath, const QByteArray &data)
+{
+    if (!m_vault || rawPath.isEmpty() || data.isEmpty())
+        return false;
+    const QString path = paths::normalize(rawPath);
+    if (m_vault->writeBinary(path, data, ChangeSource::User))
+        return true;
+    Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
+    return false;
+}
+
+QString Workspace::createAttachment(const QString &rawPath, const QByteArray &data)
+{
+    if (!m_vault || rawPath.isEmpty() || data.isEmpty())
+        return {};
+    const QString path = paths::normalize(rawPath);
+    const VaultPath created = m_vault->createBinary(path, data, ChangeSource::User);
+    if (created.isEmpty())
+        Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
+    return created;
+}
+
 QString Workspace::journalDate(const QString &path) const
 {
     if (!m_vault)
@@ -710,8 +751,18 @@ QUrl Workspace::assetUrl(const QString &path) const
 {
     if (!m_vault || path.isEmpty())
         return {};
-    if (!m_dataUrlAssets)
-        return QUrl::fromLocalFile(m_vault->absolutePath(paths::normalize(path)));
+    if (!m_dataUrlAssets) {
+        const QString key = paths::normalize(path);
+        QUrl url = QUrl::fromLocalFile(m_vault->absolutePath(key));
+        // A drawing changes under the same name (the drawing editor's saves): its version in the
+        // URL, as Qt's pixmap cache keys by the URL — the embeds and the picture view load the
+        // new one, the file is still found (a local file's query is not part of its path).
+        if (key.endsWith(u".svg"_s, Qt::CaseInsensitive) && isDrawing(key)) {
+            if (const std::optional<FileStat> st = m_vault->stat(key))
+                url.setQuery(u"v="_s + QString::number(st->mtime) + u'-' + QString::number(st->size));
+        }
+        return url;
+    }
     const QString key = paths::normalize(path);
     const auto cached = m_dataUrls.constFind(key);
     if (cached != m_dataUrls.constEnd())

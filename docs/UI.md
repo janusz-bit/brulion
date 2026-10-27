@@ -359,6 +359,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control") | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
+| `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing attachment ("Drawing editor" below); title: the file's name without `.svg` | `path` |
 
 `OnboardingView` is shown before a notebook is open (pick or create a folder, or the sample
 notebook "Przykładowy brulion").
@@ -439,7 +440,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   ("Task: to do" … "Task: no status"; also found as todo, doing, done, czeka, odłożone, waiting,
   anulowane, cancel, bez statusu…), Przypomnienie…, Alarm…, Termin…, Zaplanuj…, Powtarzaj…, Dziś,
   Jutro, Data…, Tabela, Obliczenia, Zapytanie, Nagłówek 1–3, Cytat, Callout, Kod, Wzór
-  matematyczny, Szablon…, Obraz…, Osadź, Odwołanie do bloku, Priorytet wysoki / niski, Linia
+  matematyczny, Szablon…, Obraz…, Rysunek (a new drawing, opened in the drawing editor), Osadź,
+  Odwołanie do bloku, Priorytet wysoki / niski, Linia
   pozioma, Aktualna godzina. Under each name: the syntax it writes ("⏰ data godzina", "- [ ]
   zadanie", "blok ```calc"). A status command sets the status of the block being edited
   (`PageController.applySlashCommand` → `setTaskStatus`) in the same undo step that removes the
@@ -455,7 +457,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   selection mode), Przybliż and Zwiń / Rozwiń (outline), **Kopiuj odnośnik** ▸ —
   Odwołanie do bloku `((…))` (Ctrl+Shift+C), Link do bloku `[[…#^…]]`, on headings Link do
   nagłówka `[[…#…]]`, Osadzenie (`!((…))`, a heading's section `![[…#…]]`); what each writes:
-  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Zwiększ / Zmniejsz wcięcie
+  docs/SYNTAX.md §2 "Headings and blocks in links" —, Wstaw obraz…, Wstaw rysunek, Zwiększ / Zmniejsz wcięcie
   (outline, list items in a document), Przenieś w górę / w dół, Usuń blok. It opens for every
   block in both note modes: a right-click anywhere on a block — text, heading, a code, calc, table,
   query or callout frame, an embed — with a mouse, touchpad or stylus, never a finger (one
@@ -601,6 +603,17 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   the cursor and a long press selects the word under the finger (a TapHandler on an item above
   the TextEdit, which leaves a finger's taps alone too when it does not select by dragging; the
   system's selection handles take a selection on where the platform has them).
+* Drawings (an SVG with an embedded scene, docs/SYNTAX.md §2 "Drawings"; the embeds' `drawing` and
+  `path`, `EditorHost::isDrawing`): shown at their own size (one scene unit a pixel, never enlarged
+  as other SVGs are) with a pen in the corner; a click opens the drawing editor
+  (`PageController.openDrawing`: the page is saved, route `drawing`), so does "Edytuj rysunek" in
+  the picture view's bar. "/Rysunek", the touch toolbar's Rysunek and the block menu's "Wstaw
+  rysunek" (`BlockEditor.insertDrawing` → `PageController.insertDrawing`: an empty drawing stored as
+  `Rysunek <yyyy-MM-dd HH.mm>.svg`, embedded at the caret, one undo step) open the editor on a new
+  one. A drawing saved again is shown again at once: its URL carries its version
+  (`Workspace::assetUrl` adds `?v=<mtime>-<size>`; Qt's pixmap cache keys by the URL, the file
+  itself is found without the query) and the embeds of the page follow the file's change
+  (`PageController` on `fileChanged` → `BlockListModel::attachmentChanged`).
 * Pictures: Ctrl+V pastes a copied picture as an attachment, files dropped on the page are
   stored in the attachments folder and embedded, "/Obraz…" and the toolbar pick files (the
   pictures: `paths::pictureExtensions()`, docs/SYNTAX.md §2). Opening one (a click on the embed,
@@ -690,7 +703,7 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
-  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Cofnij, Ponów,
+  do strony (`[[`), Tag (`#`), Polecenia (`/`), Termin, Przypomnienie, Wstaw obraz, Rysunek, Cofnij, Ponów,
   Zaznacz (the edited block becomes the selection: the touch selection mode), Więcej (the block
   menu of the edited block, above the toolbar: copying links to it, …), Ukryj
   klawiaturę; for a table cell Cofnij, Ponów, Następna komórka, Więcej (the table's block menu: the
@@ -862,6 +875,95 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   on a desktop, `_touch` on a phone); the playground's `selectiontest`
   with real keys, mouse and touch (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` —
   "Pojedynczo"); the journal stream's self-test; `scripts/android-emulator-test.sh --selection`.
+
+## Drawing editor (`qml/drawing`, `src/app/drawing`)
+
+Route `drawing` (`{path}`): `DrawingView` on a drawing attachment (docs/SYNTAX.md §2 "Drawings":
+an SVG with an embedded Excalidraw scene, core module `drawing`). For handwritten notes on a
+tablet (lectures, sketches), on every platform.
+
+* **The paper** (`DrawingCanvas`, a `QQuickPaintedItem`): white in every theme (the file's paper,
+  `appState.viewBackgroundColor`), plain, lined (32 px) or squared (24 px), endless in every
+  direction; the picture written covers the strokes plus a margin. Opened: the strokes from their
+  top left at 100 %, zoomed out to the view's width when they are wider (a phone); a zoom other
+  than 100 % is shown in the corner.
+* **Input:**
+  * a **stylus** draws with its pressure (the line widens as it presses harder; a stylus that
+    reports one pressure only draws like a mouse); its **eraser end**, or the barrel button held,
+    erases whatever tool is chosen. Qt Quick hands an item no tablet events (only pointer handlers
+    get them, and Qt makes mouse events of the unhandled ones only on some platforms — not on
+    Android), so the canvas takes the stylus's tablet events from its window (an event filter) when
+    it is the topmost item taking input under the pen: a menu, a popup, a toast or a bar over it
+    gets the pen as before, and so does any modal popup that is open (the drawer opened). Qt Quick
+    Controls' popup layer (`QQuickOverlay`), visible over the whole window whenever a Drawer exists
+    and taking every button, counts only where an open popup is (`tst_drawingcanvas`
+    `popupsOfQtQuickControls`). Mouse events the system makes of the pen itself (Windows) are
+    recognised by their time and place and left alone;
+  * a **mouse** draws with the left button; the middle or right button — or the left one with
+    Space held — moves the paper; the wheel scrolls it (Shift: sideways), Ctrl+wheel and a
+    touchpad's pinch zoom at the pointer (10 %–1000 %);
+  * **fingers:** with "Rysuj palcem" one finger draws (the eraser tool: erases), else it moves the
+    paper; two fingers move and zoom — a second finger that lands while a stroke has just begun
+    makes it the gesture (the stroke is dropped). "Rysuj palcem" is on by default until a stylus
+    has touched the paper on this device (AppSettings `drawing/stylusSeen`): from then on a palm
+    or a finger never draws; the toggle (the tool bar on wide touch screens, Więcej on phones)
+    makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`);
+  * **palm rejection:** while the pen is down every touch is ignored — it neither draws, moves
+    the paper, nor ends, cuts or erases the pen's stroke —, and so is a hand that stays after the
+    pen lifts, until every finger has lifted. A pen that lands while fingers move the paper or
+    draw ends their gesture (a finger stroke just begun is dropped) and draws.
+* **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — the
+  bottom navigation makes way, `toolbarDocked` —, scrolling sideways when it does not fit): Cofnij,
+  Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
+  as Excalidraw draws it alike), **Gumka** (E: removes every stroke it touches, one undo step per
+  gesture, a ring follows the pointer), the current tool's colours (pen: atrament, niebieski,
+  czerwony, zielony, pomarańczowy, fioletowy; highlighter: żółty, zielony, różowy, niebieski,
+  pomarańczowy) and widths (cienka / średnia / gruba; wąska / średnia / szeroka) — on phones
+  behind one swatch, a popup above the bar —, Papier (gładki, w linie, w kratkę: an undo step),
+  Rysuj palcem (touch screens), Pokaż cały rysunek (Ctrl+0; Ctrl++ / Ctrl+- zoom) and **Gotowe**
+  (saved, back). Colours and widths are remembered on the device (`drawing/…`). Undo: Ctrl+Z,
+  Ctrl+Shift+Z / Ctrl+Y; the history is the session's (a reload clears it).
+* **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
+  (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
+  atomic, the replaced version kept in History as for notes). A failed write is said by the
+  shell's error toast. Every save reads the file first: a change another program made that has
+  not been reported yet (a folder watch that missed it, Android's shared storage) is taken in as
+  below, never written over.
+* **Changes from elsewhere** (Syncthing, Nextcloud, another program) while the drawing is open:
+  with nothing changed here the other version is shown; else they are merged stroke by stroke
+  (`DrawingCanvas.takeExternal`: the other version, plus the strokes drawn here since the last
+  load or save, minus the ones erased here; the paper's pattern theirs unless it was changed here)
+  and saved, with a toast. A stroke or an erasing gesture in progress goes on and ends on the
+  new version. A version Brulion cannot edit any more (shapes or text added in excalidraw.com) is
+  shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
+  urządzenie).svg", `Workspace.createAttachment`), with a toast naming it. The canvas's own saves
+  coming back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
+  event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
+  … nie ma w notatniku").
+* **Files Brulion does not edit** are shown as the picture they are, with why and "Otwórz jako
+  obraz" (the picture view): an Excalidraw drawing with shapes, arrows, text or pictures (Brulion
+  would lose them: "edytuje tylko pismo odręczne"), an SVG without a scene, a scene that cannot be
+  read, and freehand lines farther than 10⁶ units from the origin (`drawing::CoordinateLimit`:
+  the paper's lines and the file's size stay bounded; the editor's own strokes stay within it).
+  Nothing is written for them.
+* **Rendering:** the committed strokes are rendered on the GUI thread into a cached image of the
+  view (600 strokes of 60 points: ~7 ms on the laptop); while the paper moves the cached image is
+  drawn moved and scaled and rendered again once the gesture rests; the stroke being drawn is
+  drawn on top, only its area repainted. `paint()` (maybe on the render thread) draws a snapshot
+  taken in `updatePaintNode()`, while the GUI thread waits.
+* View contract: `title`, `editing` (no capture button over the paper), `toolbarDocked` (phones),
+  `edgeSwipe` (no drawer edge strip: a stroke from the left edge stays a stroke).
+
+Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG),
+`tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
+events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
+undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper —,
+far-away strokes, painting), `tst_drawing_qml` (the route and its notices, embeds and
+the picture view in the real app; nothing written by looking), `tst_editor_controller`
+(`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
+(`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
+its embed, drawn with a finger / the mouse, saved, undone; a version written behind the vault's
+back merged by the save; one with a shape not written over, the strokes kept in a copy).
 
 ## Scrolling performance
 
@@ -1521,7 +1623,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--accent <name\|#rrggbb>`, `--surface paper\|white\|slate\|black`, `--density compact\|comfortable` | the appearance settings for this run (screenshots; the settings themselves stay): accent preset or custom colour, light or dark background, density |
 | `--keyboard <px>` | a simulated on-screen keyboard of that height (`KeyboardInsets.simulated`; 0 = none, and a real one is ignored), drawn as a grey block of keys |
 | `--journey <dir>` (`--journey-theme`, `--journey-empty`) | walk the real app like a first-time user with real input events, a screenshot per step (`src/app/shell/shelljourney.h`; desktop builds) |
-| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
+| `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); a drawing (a tap / click on its embed opens the drawing editor, a stroke drawn with a finger — `--touch` — or the mouse is saved by itself with its undo kept, Cofnij / Ctrl+Z is saved too, the page's embed shows the drawing saved again); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back); Settings → Wygląd (the logo's colours by default, a tap on an accent swatch recolours the app and is saved, a colour typed in the accent dialog, a sidebar entry unticked leaves the sidebar — the drawer on phones — and stays in the palette, a bottom navigation slot takes a view from its menu and the phone's bar shows it — the view it already has, picked again, stays checked —, the quick note button switched off and on, "Przywróć domyślny wygląd"; Edytor → Czcionka → "Inna…" cancelled leaves the selection where it was and opens the picker again, a missing family names the serif or sans-serif font used instead) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
 | `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-row-bar`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — or the thumb of the view's `BRowScrollBar` jumps (against the content, or while it stands still) — with `--probe-row-bar` also when the view has no such bar over it —, ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
@@ -1553,6 +1655,10 @@ touched; `SIZES`, `THEMES`, `LOCALE`, `OUT_DIR` select what to render; output in
   `newpage-folder`, `newpage-root`, `newfolder`, `allpages`, `allpages-folder`); with a simulated
   keyboard (`--keyboard 300`) the guide being edited (`page-editing-keyboard`), today in the
   journal stream (`journals-editing-keyboard`) and quick capture's sheet (`capture-keyboard`).
+* `tests/app/drawing/screenshots.sh` — the drawing editor (`editor`: a page of handwritten notes on
+  lined paper, written by `tst_drawingcanvas handwritingSample`), the page embedding it (`page`), its
+  picture view with "Edytuj rysunek" (`picture`), an Excalidraw drawing with text (`readonly`) and
+  a new drawing (`new`).
 * `tests/app/content/screenshots.sh`, `tests/app/planning/screenshots.sh`,
   `tests/app/io/screenshots.sh` — content views, calendar/tasks/graph, sync center and
   import/export with prepared notebooks; the io script also seeds a sync history and an earlier

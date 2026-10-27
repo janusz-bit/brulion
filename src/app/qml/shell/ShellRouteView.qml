@@ -67,6 +67,7 @@ Item {
         case "trash": return trashView
         case "settings": return settingsView
         case "logs": return logsView
+        case "drawing": return drawingView
         default: return null
         }
     }
@@ -107,4 +108,5 @@ Item {
     Component { id: trashView; TrashView { route: root.route } }
     Component { id: settingsView; SettingsView { route: root.route } }
     Component { id: logsView; LogsView { route: root.route } }
+    Component { id: drawingView; DrawingView { route: root.route; inSidePanel: root.inSidePanel } }
 }

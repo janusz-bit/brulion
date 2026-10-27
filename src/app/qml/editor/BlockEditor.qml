@@ -936,6 +936,16 @@ FocusScope {
         }
     }
 
+    /// A new drawing at the caret `cursor` of `row` (-1: a block of its own after it), opened in the
+    /// drawing editor (Rysunek: the slash command, the touch toolbar, the block menu).
+    function insertDrawing(row, cursor) {
+        if (!controller)
+            return
+        const r = controller.insertDrawing(row, cursor, cursor)
+        if (r.path)
+            controller.openDrawing(r.path)
+    }
+
     /// Run the result of PageController.applySlashCommand / applyCompletion.
     function handleCommandResult(row, result) {
         if (!result)
@@ -950,6 +960,7 @@ FocusScope {
         case "template": dialogs.pickTemplate(row); break
         case "image": dialogs.pickImage(row, result.cursor); break
         case "webImage": dialogs.pickWebImage(row, result.cursor); break
+        case "drawing": insertDrawing(row, result.cursor); break
         case "table":
             list.forceActiveFocus()
             break

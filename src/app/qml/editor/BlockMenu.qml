@@ -192,6 +192,12 @@ BMenu {
         iconName: "image"
         onTriggered: menu.act((r) => menu.editor.dialogs.pickImage(r, -1))
     }
+    BMenuItem {
+        objectName: "blockMenuDrawing"
+        text: qsTr("Insert drawing")
+        iconName: "pen-tool"
+        onTriggered: menu.act((r) => menu.editor.insertDrawing(r, -1))
+    }
     BMenuSeparator {}
     OptionalItem {
         shown: !menu.documentMode || menu.listItem

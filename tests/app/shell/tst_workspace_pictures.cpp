@@ -7,12 +7,15 @@
 #include "workspace.h"
 
 #include "blocklistmodel.h"
+#include "drawing/drawing.h"
+#include "drawing/svgwrite.h"
 
 #include "../minihttpserver.h"
 
 #include <QBuffer>
 #include <QDateTime>
 #include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QHash>
 #include <QImage>
@@ -180,6 +183,58 @@ private Q_SLOTS:
         QCOMPARE(other.webPictureData(pies, &format), pngBytes());
         QCOMPARE(format, u"png"_s);
         QCOMPARE(other.webPicture(u"ftp://example.com/a.png"_s).value(u"state"_s).toString(), u"failed"_s);
+    }
+
+    void drawingsAreSavedAndShownAgain()
+    {
+        // A drawing (an SVG with an embedded scene) on the real Workspace: known as a drawing, read
+        // and written as bytes, its URL carrying its version (Qt's pixmap cache keys by the URL:
+        // the embed shows the drawing saved again), the page's embed computed again after a save.
+        const QString root = m_tmp.filePath(u"Rysunki"_s);
+        brulion::drawing::Drawing d;
+        QVERIFY(writeFile(root + u"/assets/Rysunek — wykład z łączności ćw. 3.svg"_s, brulion::drawing::toSvg(d)));
+        QVERIFY(writeFile(root + u"/assets/logo.svg"_s, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"/>"));
+        QVERIFY(writeFile(root + u"/Wykład.md"_s, "- ![[Rysunek — wykład z łączności ćw. 3.svg]] ![[logo.svg]]\n"));
+        Workspace ws;
+        QVERIFY(ws.open(root, m_tmp.filePath(u"state-drawings"_s)));
+        ws.finishIndexing();
+        const QString path = u"assets/Rysunek — wykład z łączności ćw. 3.svg"_s;
+        QVERIFY(ws.isDrawing(path));
+        QVERIFY(!ws.isDrawing(u"assets/logo.svg"_s));
+        QVERIFY(!ws.isDrawing(u"Wykład.md"_s));
+        QVERIFY(!ws.isDrawing(u"assets/brak.svg"_s));
+        const QUrl before = ws.assetUrl(path);
+        QVERIFY(before.isLocalFile());
+        QVERIFY(before.query().startsWith(u"v="_s));
+        QCOMPARE(QFileInfo(before.toLocalFile()).fileName(), u"Rysunek — wykład z łączności ćw. 3.svg"_s);
+        QVERIFY(!ws.assetUrl(u"assets/logo.svg"_s).hasQuery()); // other pictures as they were
+        QCOMPARE(ws.readAttachment(path), brulion::drawing::toSvg(d));
+        QVERIFY(ws.readAttachment(u"assets/brak.svg"_s).isEmpty());
+
+        PageController page;
+        page.setSaveDelay(0);
+        page.setHost(&ws);
+        page.setPath(u"Wykład.md"_s);
+        QVERIFY(embedOf(page, 0).value(u"drawing"_s).toBool());
+        QCOMPARE(embedOf(page, 0).value(u"width"_s).toInt(), brulion::drawing::EmptyWidth);
+
+        // Saved again (the drawing editor): a new URL, the embed follows.
+        brulion::drawing::Stroke s;
+        s.id = u"kreska"_s;
+        s.points = {{0, 0, 0.5}, {600, 100, 0.5}};
+        d.strokes = {s};
+        QSignalSpy changed(&ws, &Workspace::fileChanged);
+        QTest::qWait(20); // a later modification time
+        QVERIFY(ws.writeAttachment(path, brulion::drawing::toSvg(d)));
+        QVERIFY(changed.size() >= 1);
+        QCOMPARE(changed.first().first().toString(), path);
+        QVERIFY(ws.assetUrl(path) != before);
+        QCOMPARE(ws.readAttachment(path), brulion::drawing::toSvg(d));
+        QTRY_VERIFY(embedOf(page, 0).value(u"width"_s).toInt() > 600);
+        QCOMPARE(embedOf(page, 0).value(u"url"_s).toUrl(), ws.assetUrl(path));
+        // Nothing to write, or nowhere: refused.
+        QVERIFY(!ws.writeAttachment(path, QByteArray()));
+        QVERIFY(!ws.writeAttachment(QString(), "x"));
     }
 
     void automaticFetchesLimits();

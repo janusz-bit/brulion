@@ -30,6 +30,11 @@ QSize pictureSize(QIODevice *device, const QString &fileName);
 /// The size of a local picture file, cached per file, modification time and file size.
 QSize localPictureSize(const QString &file);
 
+/// The local file is a drawing (docs/SYNTAX.md §2 "Drawings"): an SVG whose first 4 KB name an
+/// embedded Excalidraw scene (drawing::looksLikeExcalidrawSvg). Cached per file, modification time
+/// and size, like localPictureSize(): the editor asks for every embedded SVG it shows.
+bool localFileIsDrawing(const QString &file);
+
 /// This device has a decoder for the picture format of `fileName`, by its extension: one of
 /// QImageReader's formats — WebP and AVIF need Qt's image plugins, which Android, the browser and
 /// some desktops lack. Whether the file is an attachment picture at all is the caller's question

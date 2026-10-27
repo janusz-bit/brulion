@@ -13,6 +13,9 @@ import Brulion
 // header), and the view's height is a binding, not the Column's own (a positioner sets it only in
 // its next polish): a block that grew when its picture had loaded moved everything below it while
 // the page or the journal scrolled (docs/UI.md "Scrolling performance").
+// A drawing (the embed's `drawing`: an SVG with an embedded scene, docs/SYNTAX.md §2) is shown at
+// its own size, never enlarged like other SVGs (it is handwriting, drawn at one unit a pixel), with
+// a pen in its corner; a click on it emits drawingClicked(path): the drawing editor.
 // A picture whose format this device cannot decode (the model's `decodable`: WebP or AVIF without
 // Qt's image plugins, EditorHost::canDecodePicture) is not loaded: its frame names the file and
 // the format, like the picture view (ContentPictureView), instead of a load error.
@@ -29,6 +32,8 @@ Column {
 
     property var embeds: []
     signal clicked(string target)
+    /// A click on a drawing (`drawing`: an SVG with an embedded scene): the drawing editor.
+    signal drawingClicked(string path)
     /// A picture from the internet: "Pokaż" / "Spróbuj ponownie", "Zapisz w notatniku", its menu.
     signal showWeb(string url)
     signal downloadWeb(string url)
@@ -85,6 +90,11 @@ Column {
                 const h = modelData.height || 0
                 if (w <= 0 || h <= 0)
                     return null
+                if (modelData.drawing === true) {
+                    // A drawing at its own size (one unit a pixel, as drawn), never enlarged.
+                    const s = Math.min(1, 1024 / w, 420 / h)
+                    return { width: Math.floor(w * s), height: Math.floor(h * s) }
+                }
                 const dpr = scalable && Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
                 const box = scalable ? [1024 * dpr, 420 * dpr] : [2048, 2048]
                 const k = scalable || w > box[0] || h > box[1] ? Math.min(box[0] / w, box[1] / h) : 1
@@ -256,6 +266,8 @@ Column {
                     onTapped: {
                         if (embed.web)
                             root.webOpen(embed.modelData)
+                        else if (embed.modelData.drawing === true)
+                            root.drawingClicked(embed.modelData.path)
                         else
                             root.clicked(embed.modelData.target)
                     }
@@ -275,6 +287,26 @@ Column {
                                                       point.position.x, point.position.y)
                 }
                 HoverHandler { cursorShape: Qt.PointingHandCursor; enabled: !Theme.touchUi && !embed.webPending }
+                // A drawing: a pen in the corner says a click edits it.
+                Rectangle {
+                    objectName: "embedDrawingBadge"
+                    visible: embed.modelData.drawing === true && picture.loaded && picture.width >= 72 && picture.height >= 48
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Theme.space2
+                    width: Theme.iconSizeSm + 2 * Theme.space1 + 2
+                    height: width
+                    radius: Theme.radiusSm
+                    color: Theme.alpha(Theme.bgElevated, 0.9)
+                    border.width: 1
+                    border.color: Theme.borderSubtle
+                    BIcon {
+                        anchors.centerIn: parent
+                        name: "pen-tool"
+                        size: Theme.iconSizeSm
+                        color: Theme.fgMuted
+                    }
+                }
             }
 
             BChip {

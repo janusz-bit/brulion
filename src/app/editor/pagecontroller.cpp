@@ -8,6 +8,8 @@
 #include "calc/table.h"
 #include "dates/local.h"
 #include "dates/recurrence.h"
+#include "drawing/drawing.h"
+#include "drawing/svgwrite.h"
 #include "markdown/inline.h"
 #include "markdown/journal.h"
 #include "markdown/linkformat.h"
@@ -813,6 +815,8 @@ void PageController::showFile(EditorHost *host, const QString &path)
 
 void PageController::onFileChanged(const QString &path)
 {
+    if (path != m_path && m_model && !paths::isMarkdown(path))
+        m_model->attachmentChanged(path); // a drawing saved again: its embeds load it again
     if (path != m_path || !m_host || !m_loaded)
         return;
     bool ok = false;
@@ -2908,7 +2912,8 @@ QVariantMap PageController::applySlashCommand(int row, int from, int to, const Q
         const int r = currentRow();
         focus = {r, r >= 0 ? caretThroughEdit(before, m_model->editTextAt(r), cursor) : -1};
     } else if (cmd == u"reminder" || cmd == u"alarm" || cmd == u"due" || cmd == u"scheduled" || cmd == u"recurrence"
-               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage") {
+               || cmd == u"date" || cmd == u"template" || cmd == u"image" || cmd == u"webImage"
+               || cmd == u"drawing") {
         action = cmd;
     } else if (cmd == u"today" || cmd == u"tomorrow") {
         insertAt(journalLink(today().addDays(cmd == u"tomorrow" ? 1 : 0).toString(u"yyyy-MM-dd"_s)));
@@ -3634,6 +3639,27 @@ QVariantMap PageController::insertAttachment(int row, int from, int to, const QS
         return {{u"row"_s, -1}, {u"cursor"_s, -1}};
     }
     return insertEmbeds(row, from, to, {path});
+}
+
+QVariantMap PageController::insertDrawing(int row, int from, int to)
+{
+    const QString name = tr("Drawing %1").arg(currentDateTime().toString(u"yyyy-MM-dd HH.mm"_s)) + u".svg"_s;
+    const QString path = m_host ? m_host->saveAttachment(name, drawing::toSvg(drawing::Drawing())) : QString();
+    if (path.isEmpty()) {
+        Q_EMIT attachmentFailed(name);
+        return {{u"row"_s, -1}, {u"cursor"_s, -1}};
+    }
+    QVariantMap out = insertEmbeds(row, from, to, {path});
+    out.insert(u"path"_s, path);
+    return out;
+}
+
+void PageController::openDrawing(const QString &path)
+{
+    if (!m_host || path.isEmpty())
+        return;
+    flush();
+    m_host->navigate({{u"view"_s, u"drawing"_s}, {u"path"_s, path}});
 }
 
 QVariantMap PageController::insertFiles(int row, int from, int to, const QList<QUrl> &urls)
