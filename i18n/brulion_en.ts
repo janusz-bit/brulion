@@ -592,6 +592,14 @@
             <numerusform>%n Trilium notes of a kind Brulion does not have (saved searches, note maps, rendered notes, launchers) were skipped: %1</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <location filename="../src/core/io/import_mstodo.cpp" line="275"/>
+        <source>%n empty list(s) were skipped.</source>
+        <translation>
+            <numerusform>%n empty list was skipped.</numerusform>
+            <numerusform>%n empty lists were skipped.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>JournalsView</name>
@@ -620,6 +628,17 @@
         <translation>
             <numerusform>New entry (%n)</numerusform>
             <numerusform>New entries (%n)</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>MsTodoSignIn</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/io/MsTodoSignIn.qml" line="191"/>
+        <source>The code expires in %n minute(s).</source>
+        <translation>
+            <numerusform>The code expires in %n minute.</numerusform>
+            <numerusform>The code expires in %n minutes.</numerusform>
         </translation>
     </message>
 </context>
@@ -1191,6 +1210,17 @@
         <translation>
             <numerusform>Import finished: %n file saved.</numerusform>
             <numerusform>Import finished: %n files saved.</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::ioviews::MsTodoImport</name>
+    <message numerus="yes">
+        <location filename="../src/app/io/mstodoimport.cpp" line="205"/>
+        <source>%n task(s)</source>
+        <translation>
+            <numerusform>%n task</numerusform>
+            <numerusform>%n tasks</numerusform>
         </translation>
     </message>
 </context>

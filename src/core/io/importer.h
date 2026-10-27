@@ -62,8 +62,8 @@ class Importer {
 public:
     virtual ~Importer() = default;
 
-    /// Stable identifier: "obsidian", "logseq", "notion", "evernote", "keep", "joplin",
-    /// "simplenote", "roam", "trilium", "bear", "markdown", "html", "ics".
+    /// Stable identifier: "obsidian", "logseq", "notion", "evernote", "keep", "mstodo",
+    /// "joplin", "simplenote", "roam", "trilium", "bear", "markdown", "html", "ics".
     virtual QString id() const = 0;
     /// Display name of the app or format ("Obsidian", "Google Keep", "iCalendar").
     virtual QString name() const = 0;

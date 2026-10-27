@@ -1,7 +1,8 @@
 # Tests of the sync and import/export controllers (library brulion_ioviews, src/app/io): the
 # import collision policy and preview, reading picked folders, export scopes and saving, the
 # Nextcloud form (validation, connection test against the core's in-memory WebDAV server, saving
-# into AppSettings), the .stignore helpers and conflict resolution with a version-history base.
+# into AppSettings), the Microsoft To Do sign-in and download (against the core's FakeMicrosoft),
+# the .stignore helpers and conflict resolution with a version-history base.
 # Real Workspaces over QTemporaryDir vaults; no network.
 brulion_add_test(tst_appio_import SOURCES tst_appio_import.cpp
     LIBS brulion_ioviews brulion_core_io brulion_core_vault)
@@ -9,6 +10,11 @@ brulion_add_test(tst_appio_export SOURCES tst_appio_export.cpp
     LIBS brulion_ioviews brulion_core_io brulion_core_vault)
 brulion_add_test(tst_appio_conflicts SOURCES tst_appio_conflicts.cpp
     LIBS brulion_ioviews brulion_core_sync brulion_core_vault)
+# Microsoft To Do: sign-in and download against the core's FakeMicrosoft, then preview and import.
+if(TARGET brulion_mstodo_testsupport)
+    brulion_add_test(tst_appio_mstodo SOURCES tst_appio_mstodo.cpp
+        LIBS brulion_ioviews brulion_mstodo_testsupport brulion_core_vault)
+endif()
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_appio_syncsetup SOURCES tst_appio_syncsetup.cpp
         LIBS brulion_ioviews brulion_sync_testsupport brulion_core_vault)

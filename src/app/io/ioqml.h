@@ -3,6 +3,7 @@
 // src/app/ui pattern). All are creatable; give them the shell's singletons:
 //
 //   ImportController { workspace: Workspace }
+//   MsTodoImport { settings: AppSettings; importer: importController }
 //   ExportController { workspace: Workspace }
 //   NextcloudSetup { settings: AppSettings }
 //   SyncthingSetup { settings: AppSettings; workspace: Workspace }
@@ -12,6 +13,7 @@
 #include "conflictresolver.h"
 #include "exportcontroller.h"
 #include "importcontroller.h"
+#include "mstodoimport.h"
 #include "syncsetup.h"
 
 #include <QtQml/qqmlregistration.h>
@@ -22,6 +24,12 @@ struct ImportControllerForeign {
     Q_GADGET
     QML_FOREIGN(brulion::ioviews::ImportController)
     QML_NAMED_ELEMENT(ImportController)
+};
+
+struct MsTodoImportForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::ioviews::MsTodoImport)
+    QML_NAMED_ELEMENT(MsTodoImport)
 };
 
 struct ExportControllerForeign {

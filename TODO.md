@@ -29,11 +29,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   oznacza zadanie z przypomnieniem jako zrobione (`[x]` z datą ✅, jak zmiana statusu w edytorze),
   bez otwierania notatki; na Linuksie, Androidzie i Windows.
 
-## Import i synchronizacja
-
-* **Import zadań z Microsoft To Do** (link z researchem:
-  https://share.google/aimode/IkspZGTIWv9OVFLLT).
-
 ## Android i telefon
 
 * **„Udostępnij → Brulion”** — plik `.md`/`.txt` albo tekst z innej aplikacji trafia do

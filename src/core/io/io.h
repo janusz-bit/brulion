@@ -14,7 +14,8 @@
 //                  class Importer { id(), name(), fileTypes(), detect(files) -> 0..100,
 //                    run(files, options) }
 //                  importers()  — obsidian, logseq, notion, evernote, keep (Google Keep Takeout),
-//                    joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON), trilium (ZIP
+//                    mstodo (Microsoft To Do: Graph JSON — the mstodo module's download or Graph
+//                    Explorer's lists?$expand=tasks), joplin (JEX / RAW / MD+Front Matter), simplenote, roam (JSON), trilium (ZIP
 //                    export, HTML or Markdown), bear (TextBundle / .bear2bk), markdown
 //                    (md/markdown/txt + attachments), html, ics
 //                  importerById(id), detectImporter(files) -> best importer or nullptr
