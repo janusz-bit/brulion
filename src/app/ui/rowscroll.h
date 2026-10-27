@@ -41,12 +41,17 @@
 
 namespace brulion::ui {
 
-/// One created row, in content coordinates: from its top to the next row's top (spacing and the
-/// next row's section header belong to it).
+/// One created row, in content coordinates: its delegate, from its top to its bottom. What lies
+/// between two rows (spacing, the next row's section header) is the boundary between them.
 struct RowSpan {
     int index = -1;
     qreal top = 0;
     qreal bottom = 0;
+    /// The row before it (after it) is not created. ListView creates every row that reaches into
+    /// the view, so the view's edge above this row's top (below its bottom) is in the gap before
+    /// it (after it): the boundary, as when that row exists.
+    bool openAbove = false;
+    bool openBelow = false;
 };
 
 /// What the view shows: the rows around its edges and the edges themselves (content coordinates).
@@ -81,9 +86,10 @@ public:
     static bool valid(const RowEdges &edges);
     /// The position of `y` in row units: the header is unit 0 (when there is one), row i unit
     /// i + 1 (or i), the footer the last unit; inside a unit the fraction of its span. Between two
-    /// spans of consecutive units (a section header above the first row, a gap before the footer)
-    /// the boundary; above the first unit 0, below the last one units(). nullopt without the span
-    /// that holds `y`, or with unusable edges.
+    /// spans of consecutive units (spacing, a section header, a gap before the footer) the
+    /// boundary, and so above a row that is `openAbove` (below one `openBelow`); above the first
+    /// unit 0, below the last one units(). nullopt without the span that holds `y`, or with
+    /// unusable edges.
     static std::optional<qreal> unitAt(const RowEdges &edges, qreal y);
     /// The units between the view's edges.
     static std::optional<qreal> visibleUnits(const RowEdges &edges);
@@ -162,6 +168,9 @@ private:
     int rowAt(qreal y, qreal viewTop, qreal viewBottom) const;
     /// The span of a created row, its index in units; nullopt for a hidden (zero-height) row.
     std::optional<RowSpan> span(int row, int count) const;
+    /// From `row` in `step` (-1, 1) over created rows: the first shown one (-1: none, or a row
+    /// that is not created first).
+    int shownRow(int row, int step, int count) const;
     QQuickItem *itemAt(int index) const;
     int unitCount(int count) const;
     int unitOfRow(int row) const;

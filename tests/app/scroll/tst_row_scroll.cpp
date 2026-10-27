@@ -3,7 +3,8 @@
 // rendering) with 400 rows of 18 to 600 px and a 300 px header, its cache off (every row created
 // at the view's edge, as in scroll-jumps.sh): the progress moves with the content only — while
 // Qt's own visibleArea, what an attached bar shows, jumps (the canary: when it stops failing, Qt
-// estimates differently and docs/UI.md "The scroll bar: RowScroll" needs a look) — the size stays
+// estimates differently and docs/UI.md "The scroll bar: RowScroll" needs a look) — also across
+// section headers and spacing whose row on the other side is not created — the size stays
 // while the list moves, dragging a free bar and the wheel over it, rows inserted above the view,
 // and a fold of 100 hidden rows in a model that says which rows it shows.
 #include "rowscroll.h"
@@ -33,7 +34,7 @@ constexpr int Slowdown = BRULION_TEST_SLOWDOWN;
 constexpr qreal NaN = std::numeric_limits<qreal>::quiet_NaN();
 
 /// A list laid out like ListView does: the header, rows (a section header of `gap` px above every
-/// third row), the footer; `rows` the created ones (empty: all).
+/// third row), the footer; `rows` the created ones (empty: all), not marked open.
 RowEdges layout(qreal header, const QList<qreal> &heights, qreal gap, qreal footer, qreal viewTop, qreal viewBottom,
                 const QList<int> &rows = {})
 {
@@ -58,8 +59,7 @@ RowEdges layout(qreal header, const QList<qreal> &heights, qreal gap, qreal foot
     for (qsizetype i = 0; i < heights.size(); ++i) {
         if (!rows.isEmpty() && !rows.contains(int(i)))
             continue;
-        const qreal bottom = i + 1 < heights.size() ? tops.at(i + 1) : tops.at(i) + heights.at(i);
-        e.rows.append(RowSpan{int(i), tops.at(i), bottom});
+        e.rows.append(RowSpan{int(i), tops.at(i), tops.at(i) + heights.at(i)});
     }
     if (footer > 0) {
         e.hasFooter = true;
@@ -89,16 +89,28 @@ ListView {
     reuseItems: false
     boundsBehavior: Flickable.StopAtBounds
     readonly property var heights: [18, 240, 40, 600, 22, 75, 130, 18, 300, 55]
+    // A section header above every third row (as in the history and the logs) when > 0.
+    property real sectionHeight: 0
+    property real headerHeight: 300
     model: ListModel { id: rowsModel }
     function fill(n) {
         for (let i = 0; i < n; ++i)
-            rowsModel.append({ h: heights[i % heights.length], label: "Zażółć gęślą jaźń — dzień " + i })
+            rowsModel.append({ h: heights[i % heights.length], label: "Zażółć gęślą jaźń — dzień " + i,
+                               day: "dzień " + Math.floor(i / 3) })
     }
     function insertAt(at, n) {
         for (let i = 0; i < n; ++i)
-            rowsModel.insert(at, { h: 50, label: "Wstawiony wiersz " + i })
+            rowsModel.insert(at, { h: 50, label: "Wstawiony wiersz " + i, day: "wstawiony" })
     }
-    header: Rectangle { width: list.width; height: 300; color: "#eee" }
+    header: Rectangle { width: list.width; height: list.headerHeight; color: "#eee" }
+    section.property: sectionHeight > 0 ? "day" : ""
+    section.delegate: Rectangle {
+        required property string section
+        width: list.width
+        height: list.sectionHeight
+        color: "#ccd"
+        Text { text: parent.section }
+    }
     delegate: Rectangle {
         id: row
         required property real h
@@ -191,6 +203,7 @@ private:
     QQuickItem *m_view = nullptr;
     RowScroll *m_rows = nullptr;
     QQuickItem *m_bar = nullptr;
+    bool m_pump = false; // sweep(): let the cache's rows be made (asynchronously) after each step
 
     bool makeScene(int rows = 400)
     {
@@ -230,6 +243,8 @@ private:
     void setContentY(qreal y)
     {
         m_view->setProperty("contentY", y);
+        if (m_pump)
+            QCoreApplication::processEvents();
         settle();
     }
     qreal qtProgress() const
@@ -300,8 +315,10 @@ private Q_SLOTS:
                                        << 2.5 / 6;
         QTest::newRow("a row taller than the view") << 0.0 << QList<qreal>{100, 2000, 100} << 0.0 << 0.0 << 500.0
                                                     << 900.0 << false << false << QList<int>{} << 1.2 / 2.8;
-        QTest::newRow("section headers inside the spans") << 0.0 << repeated(100, 6) << 20.0 << 0.0 << 280.0 << 580.0
-                                                          << false << false << QList<int>{} << 2.5 / 3.1;
+        QTest::newRow("section headers between the spans") << 0.0 << repeated(100, 6) << 20.0 << 0.0 << 280.0 << 580.0
+                                                           << false << false << QList<int>{} << 2.6 / 3.2;
+        QTest::newRow("the top edge in a section header") << 0.0 << repeated(100, 6) << 20.0 << 0.0 << 330.0 << 590.0
+                                                          << false << false << QList<int>{} << 3.0 / 3.5;
         QTest::newRow("a header and a footer") << 200.0 << repeated(100, 4) << 0.0 << 300.0 << 450.0 << 750.0 << false
                                                << false << QList<int>{} << 0.875;
         QTest::newRow("only the rows at the edges")
@@ -342,6 +359,66 @@ private Q_SLOTS:
         }
         QVERIFY(t);
         QVERIFY2(std::abs(*t - expected) < 1e-9, qPrintable(u"%1 != %2"_s.arg(*t).arg(expected)));
+    }
+
+    /// An edge in a gap (spacing, a section header) whose row on the other side is not created:
+    /// the boundary, the same unit as with that row — when the created row is marked open there.
+    /// Six rows of 100 px, a 20 px section header above rows 0 and 3 (row 2 ends at 320, row 3
+    /// starts at 340).
+    void openGaps_data()
+    {
+        QTest::addColumn<qreal>("header");
+        QTest::addColumn<QList<int>>("rows");
+        QTest::addColumn<QList<int>>("openAbove");
+        QTest::addColumn<QList<int>>("openBelow");
+        QTest::addColumn<qreal>("y");
+        QTest::addColumn<qreal>("expected"); // -1: none
+
+        const QList<int> none;
+        QTest::newRow("all rows: the boundary") << 0.0 << none << none << none << 330.0 << 3.0;
+        QTest::newRow("the row above not created, open")
+                << 0.0 << QList<int>{3, 4} << QList<int>{3} << none << 330.0 << 3.0;
+        QTest::newRow("the row above not created, not open")
+                << 0.0 << QList<int>{3, 4} << none << none << 330.0 << -1.0;
+        QTest::newRow("the row below not created, open")
+                << 0.0 << QList<int>{1, 2} << none << QList<int>{2} << 330.0 << 3.0;
+        QTest::newRow("the row below not created, not open")
+                << 0.0 << QList<int>{1, 2} << none << none << 330.0 << -1.0;
+        QTest::newRow("with a header, the row above open")
+                << 50.0 << QList<int>{3, 4} << QList<int>{3} << none << 380.0 << 3.0;
+        QTest::newRow("open on both sides of missing rows (a relayout)")
+                << 0.0 << QList<int>{0, 4} << QList<int>{4} << QList<int>{0} << 330.0 << -1.0;
+        QTest::newRow("open below, the next created row further down")
+                << 0.0 << QList<int>{2, 5} << none << QList<int>{2} << 330.0 << 3.0;
+        QTest::newRow("open above, the previous created row further up")
+                << 0.0 << QList<int>{0, 3} << QList<int>{3} << none << 330.0 << 3.0;
+        QTest::newRow("below the last row") << 0.0 << QList<int>{5} << QList<int>{5} << none << 650.0 << 6.0;
+        QTest::newRow("inside a row, open or not")
+                << 0.0 << QList<int>{3} << QList<int>{3} << QList<int>{3} << 365.0 << 3.25;
+    }
+
+    void openGaps()
+    {
+        QFETCH(qreal, header);
+        QFETCH(QList<int>, rows);
+        QFETCH(QList<int>, openAbove);
+        QFETCH(QList<int>, openBelow);
+        QFETCH(qreal, y);
+        QFETCH(qreal, expected);
+        RowEdges e = layout(header, repeated(100, 6), 20, 0, y - 1, y + 1, rows);
+        for (RowSpan &r : e.rows) {
+            r.openAbove = openAbove.contains(r.index);
+            r.openBelow = openBelow.contains(r.index);
+        }
+        QVERIFY(RowFraction::valid(e));
+        const std::optional<qreal> unit = RowFraction::unitAt(e, y);
+        if (expected < 0) {
+            QVERIFY2(!unit, qPrintable(QString::number(unit.value_or(0))));
+            return;
+        }
+        QVERIFY(unit);
+        const qreal h = header > 0 ? 1 : 0;
+        QVERIFY2(std::abs(*unit - (expected + h)) < 1e-9, qPrintable(u"%1 != %2"_s.arg(*unit).arg(expected + h)));
     }
 
     void unsortedRows()
@@ -471,6 +548,65 @@ private Q_SLOTS:
             QVERIFY2(worst <= bound, qPrintable(u"largest step %1 > %2"_s.arg(worst).arg(bound)));
             // The canary: why RowScroll exists. Fails when Qt stops re-estimating the content.
             QVERIFY2(qtJumps > 0, "visibleArea no longer jumps: see docs/UI.md \"The scroll bar: RowScroll\"");
+        }
+    }
+
+    /// The view's edges in the gaps between rows — section headers (the history, the logs) and
+    /// spacing — whose row above was never created (ListView creates a row only when its end is in
+    /// the view or the cache): the edge is the boundary before the next row, as when that row
+    /// above exists. Swept in 37 px steps both ways: never Qt's estimate, never backwards.
+    void sweepAcrossGaps_data()
+    {
+        QTest::addColumn<qreal>("section");
+        QTest::addColumn<qreal>("spacing");
+        QTest::addColumn<qreal>("header");
+        QTest::addColumn<int>("cache"); // px; -1: Qt's default (rows made ahead, asynchronously)
+        QTest::newRow("section headers, cache off") << 30.0 << 0.0 << 300.0 << 0;
+        QTest::newRow("section headers, no header, cache off") << 30.0 << 0.0 << 0.0 << 0;
+        QTest::newRow("section headers, cache on") << 30.0 << 0.0 << 300.0 << -1;
+        QTest::newRow("spacing 8, cache off") << 0.0 << 8.0 << 0.0 << 0;
+        QTest::newRow("spacing 40, cache on") << 0.0 << 40.0 << 0.0 << -1;
+        QTest::newRow("spacing 40 and section headers, cache off") << 30.0 << 40.0 << 300.0 << 0;
+    }
+
+    void sweepAcrossGaps()
+    {
+        QFETCH(qreal, section);
+        QFETCH(qreal, spacing);
+        QFETCH(qreal, header);
+        QFETCH(int, cache);
+        QVERIFY(makeScene(0));
+        m_view->setProperty("sectionHeight", section);
+        m_view->setProperty("spacing", spacing);
+        m_view->setProperty("headerHeight", header);
+        m_view->setProperty("cacheBuffer", cache < 0 ? 320 : cache);
+        m_pump = cache < 0;
+        QMetaObject::invokeMethod(m_view, "fill", Q_ARG(QVariant, 400));
+        settle();
+        QVERIFY(m_rows->scrollable());
+        const int units = 400 + (header > 0 ? 1 : 0);
+        constexpr qreal Step = 37;
+        const qreal bound = 1.05 * (Step / MinRow) / (units - m_view->height() / MinRow);
+        for (const bool down : {true, false}) {
+            const QList<Sample> samples = sweep(Step, down);
+            QVERIFY(samples.size() > 300);
+            QCOMPARE(samples.constLast().progress, down ? 1.0 : 0.0);
+            int estimated = 0, backwards = 0;
+            qreal worst = 0;
+            for (qsizetype i = 1; i < samples.size(); ++i) {
+                const Sample &a = samples.at(i - 1);
+                const Sample &b = samples.at(i);
+                estimated += b.estimated ? 1 : 0;
+                const qreal d = down ? b.progress - a.progress : a.progress - b.progress;
+                backwards += d < -1e-9 ? 1 : 0;
+                worst = std::max(worst, d);
+            }
+            QVERIFY2(estimated == 0 && backwards == 0,
+                     qPrintable(u"%1: %2 of %3 steps estimated, %4 backwards"_s.arg(down ? u"down"_s : u"up"_s)
+                                        .arg(estimated)
+                                        .arg(samples.size() - 1)
+                                        .arg(backwards)));
+            QVERIFY2(worst <= bound, qPrintable(u"largest step %1 > %2"_s.arg(worst).arg(bound)));
         }
     }
 
@@ -616,6 +752,7 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        m_pump = false;
         m_rows = nullptr;
         m_bar = nullptr;
         m_view = nullptr;

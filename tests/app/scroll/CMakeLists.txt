@@ -1,7 +1,8 @@
 # RowScroll (src/app/ui/rowscroll.h, library brulion_ui_scroll): the row arithmetic of the scroll
 # bar of long lists (pure, data-driven), and a live ListView with rows of 18 to 600 px — offscreen,
 # software rendering: the thumb's progress moves with the content only (while Qt's own visibleArea
-# jumps), its size stays while the list moves, dragging and the wheel over a free bar, rows
+# jumps) — also with section headers and spacing, whose row above the view is not created —, its
+# size stays while the list moves, dragging and the wheel over a free bar, rows
 # inserted above the view, and folded (hidden) rows of a model that says which rows it shows.
 get_filename_component(_brulion_qt_qml_root "${Qt6Qml_DIR}/../../../${QT6_INSTALL_QML}" ABSOLUTE)
 if(TARGET brulion_ui_scroll AND EXISTS "${_brulion_qt_qml_root}/QtQuick/Templates")

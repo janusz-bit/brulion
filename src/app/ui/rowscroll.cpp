@@ -22,6 +22,8 @@ struct Segment {
     qreal unit = 0;
     qreal top = 0;
     qreal bottom = 0;
+    bool openAbove = false;
+    bool openBelow = false;
 };
 
 QList<Segment> segments(const RowEdges &e)
@@ -32,7 +34,7 @@ QList<Segment> segments(const RowEdges &e)
     if (e.hasHeader)
         out.append({0, e.headerTop, e.headerBottom});
     for (const RowSpan &r : e.rows)
-        out.append({qreal(h + r.index), r.top, r.bottom});
+        out.append({qreal(h + r.index), r.top, r.bottom, r.openAbove, r.openBelow});
     if (e.hasFooter)
         out.append({qreal(h + e.count), e.footerTop, e.footerBottom});
     return out;
@@ -83,15 +85,22 @@ std::optional<qreal> RowFraction::unitAt(const RowEdges &e, qreal y)
     for (qsizetype i = 0; i < s.size(); ++i) {
         const Segment &seg = s.at(i);
         if (y < seg.top) {
+            // In the gap before this unit: its top boundary, when nothing can lie between.
             if (i == 0)
-                return seg.unit == 0 ? std::optional<qreal>(0) : std::nullopt;
-            return s.at(i - 1).unit + 1 == seg.unit ? std::optional<qreal>(seg.unit) : std::nullopt;
+                return seg.unit == 0 || seg.openAbove ? std::optional<qreal>(seg.unit) : std::nullopt;
+            const Segment &prev = s.at(i - 1);
+            if (prev.unit + 1 == seg.unit || (seg.openAbove && !prev.openBelow))
+                return seg.unit;
+            if (prev.openBelow && !seg.openAbove)
+                return prev.unit + 1;
+            return std::nullopt;
         }
         if (y < seg.bottom)
             return seg.unit + (y - seg.top) / (seg.bottom - seg.top);
     }
     const qreal units = e.units();
-    return s.constLast().unit + 1 == units ? std::optional<qreal>(units) : std::nullopt;
+    const Segment &last = s.constLast();
+    return last.unit + 1 == units || last.openBelow ? std::optional<qreal>(last.unit + 1) : std::nullopt;
 }
 
 std::optional<qreal> RowFraction::visibleUnits(const RowEdges &e)
@@ -334,17 +343,40 @@ int RowScroll::rowAt(qreal y, qreal viewTop, qreal viewBottom) const
 std::optional<RowSpan> RowScroll::span(int row, int count) const
 {
     QQuickItem *item = itemAt(row);
-    if (!item)
+    // A hidden row (zero height) is no unit.
+    if (!item || !(item->height() > 0))
         return std::nullopt;
     RowSpan s;
     s.index = unitOfRow(row);
     s.top = item->y();
-    QQuickItem *next = row + 1 < count ? itemAt(row + 1) : nullptr;
-    s.bottom = next ? next->y() : item->y() + item->height() + (row + 1 < count ? real("spacing") : 0);
-    // A hidden row (zero height) is no unit.
-    if (!(s.bottom > s.top))
-        return std::nullopt;
+    // The delegate only: spacing and a section header are the gap to the next row, a boundary
+    // whether or not the row on its other side is created (it is not once its end left the view).
+    s.bottom = item->y() + item->height();
+    s.openAbove = shownRow(row - 1, -1, count) < 0;
+    s.openBelow = shownRow(row + 1, 1, count) < 0;
     return s;
+}
+
+int RowScroll::shownRow(int row, int step, int count) const
+{
+    if (row < 0 || row >= count)
+        return -1;
+    if (m_hidden && m_model) {
+        // The model knows: no walk over a fold of many rows.
+        const int unit = unitOfRow(row);
+        const int first = rowOfUnit(unit); // the first shown row at or after `row`
+        const int shown = step > 0 || first == row ? first : rowOfUnit(unit - 1);
+        QQuickItem *item = shown >= 0 && shown < count ? itemAt(shown) : nullptr;
+        return item && item->height() > 0 ? shown : -1;
+    }
+    for (; row >= 0 && row < count; row += step) {
+        QQuickItem *item = itemAt(row);
+        if (!item)
+            return -1;
+        if (item->height() > 0)
+            return row;
+    }
+    return -1;
 }
 
 RowEdges RowScroll::edges() const
@@ -370,17 +402,33 @@ RowEdges RowScroll::edges() const
         e.footerTop = footer->y();
         e.footerBottom = footer->y() + footer->height();
     }
+    // Keeps e.rows sorted and without duplicates (the edges' rows and their neighbours).
+    const auto add = [&e](const RowSpan &s) {
+        const auto it = std::lower_bound(e.rows.begin(), e.rows.end(), s.index,
+                                         [](const RowSpan &r, int index) { return r.index < index; });
+        if (it == e.rows.end() || it->index != s.index)
+            e.rows.insert(it, s);
+    };
     for (const qreal y : {e.viewTop, e.viewBottom}) {
         if ((e.hasHeader && y < e.headerBottom) || (e.hasFooter && y >= e.footerTop))
             continue;
-        const int row = rowAt(y, e.viewTop, e.viewBottom);
+        const int at = rowAt(y, e.viewTop, e.viewBottom);
+        if (at < 0)
+            continue;
+        // The shown row at or above y (folded rows have no height), else the first one below it.
+        int row = shownRow(at, -1, count);
+        if (row < 0)
+            row = shownRow(at, 1, count);
         const std::optional<RowSpan> s = row >= 0 ? span(row, count) : std::nullopt;
         if (!s)
             continue;
-        if (e.rows.isEmpty() || e.rows.constLast().index < s->index)
-            e.rows.append(*s);
-        else if (e.rows.constLast().index > s->index)
-            e.rows.prepend(*s);
+        add(*s);
+        // Past its end, in the gap to the next row: that one too, when it is created.
+        if (y >= s->bottom) {
+            const int next = shownRow(row + 1, 1, count);
+            if (const std::optional<RowSpan> n = next >= 0 ? span(next, count) : std::nullopt)
+                add(*n);
+        }
     }
     return e;
 }

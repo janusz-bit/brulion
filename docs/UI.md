@@ -980,9 +980,12 @@ journal) and go stale with every width change.
 geometry comes from `RowScroll` (library `brulion_ui_scroll`, Qt Quick's public API only):
 
 * **Progress in rows.** t = above / (above + below): `above` the rows above the view's top edge
-  plus the fraction of the row at the edge (from its `y` to the next row's `y`, so spacing and a
-  section header belong to the row before it), `below` the same under the bottom edge; the
-  header and the footer count as one row each; exactly 0 / 1 at `atYBeginning` / `atYEnd`.
+  plus the fraction of the delegate at the edge, `below` the same under the bottom edge; the
+  header and the footer count as one row each; exactly 0 / 1 at `atYBeginning` / `atYEnd`. An
+  edge in a gap between rows (`spacing`, a section header — HistoryView, LogsView) is the
+  boundary before the next row, whether or not the row on the gap's other side is created
+  (ListView releases a row once its end left the view and the cache: an edge in a section
+  header often has no row above it), so the thumb stands still while a gap passes the edge.
   Creating rows off screen or ListView moving `originY` changes neither the row at an edge nor
   where in it the edge is, so the thumb moves only with the content, or when the row count
   changes (a fold, a new block, a new day at midnight). Its speed follows rows, not pixels: a
