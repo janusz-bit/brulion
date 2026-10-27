@@ -140,13 +140,15 @@ ApplicationWindow {
             window.trayCalendarWindow.hide()
     }
     /// "trayCalendar" (the tray menu) opens it; "toggleTrayCalendar" (a click on the icon)
-    /// closes an open one, and right after it hid itself because that click took its activation
-    /// keeps it closed.
+    /// closes an open one, and keeps it closed when it has just hidden itself because that very
+    /// click took its activation (AppController.trayPopupShouldReopen, asked on every tray action
+    /// so that an old hide never swallows a later click).
     function showTrayCalendar(toggle: bool) {
         trayCalendar.active = true
         const popup = window.trayCalendarWindow
         if (!popup)
             return
+        const reopen = AppController.trayPopupShouldReopen()
         if (popup.visible) {
             if (toggle)
                 popup.hide()
@@ -154,8 +156,7 @@ ApplicationWindow {
                 popup.open()
             return
         }
-        if (toggle && popup.autoHiddenAt >= 0
-                && !AppController.trayPopupShouldReopen(Date.now() - popup.autoHiddenAt))
+        if (toggle && !reopen)
             return
         popup.open()
     }

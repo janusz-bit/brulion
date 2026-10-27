@@ -99,9 +99,18 @@ QPoint trayPopupPositionOnScreen(const QRect &icon, std::optional<QPoint> cursor
     return trayPopupPosition(icon, cursor, screen->availableGeometry(), popup, margin);
 }
 
-bool trayPopupShouldReopen(qint64 msSinceHiddenByDeactivation)
+bool trayPopupShouldReopen(qint64 msSinceHiddenByDeactivation, std::optional<QPoint> cursorAtHide,
+                           const QRect &icon, std::optional<QPoint> cursorAtClick)
 {
-    return msSinceHiddenByDeactivation < 0 || msSinceHiddenByDeactivation >= TrayPopupReopenGuardMs;
+    if (msSinceHiddenByDeactivation < 0)
+        return true;
+    if (msSinceHiddenByDeactivation < TrayPopupReopenGuardMs)
+        return false;
+    const bool sameClick = cursorAtHide
+                           && ((!icon.isEmpty() && icon.contains(*cursorAtHide))
+                               || (cursorAtClick
+                                   && (*cursorAtClick - *cursorAtHide).manhattanLength() <= TrayPopupClickSlopPx));
+    return !sameClick || msSinceHiddenByDeactivation >= TrayPopupHeldClickMs;
 }
 
 } // namespace brulion::shell

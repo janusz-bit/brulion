@@ -134,20 +134,48 @@ private Q_SLOTS:
 
     void reopen_data()
     {
+        // A click on the icon after the popup hid itself on losing the activation. Unknown
+        // cursors are (-1, -1) here.
         QTest::addColumn<qint64>("ms");
+        QTest::addColumn<QPoint>("cursorAtHide");
+        QTest::addColumn<QRect>("icon");
+        QTest::addColumn<QPoint>("cursorAtClick");
         QTest::addColumn<bool>("reopens");
-        QTest::newRow("nigdy nie schowane") << qint64(-1) << true;
-        QTest::newRow("ta sama chwila") << qint64(0) << false;
-        QTest::newRow("tuż przed granicą") << qint64(TrayPopupReopenGuardMs - 1) << false;
-        QTest::newRow("na granicy") << qint64(TrayPopupReopenGuardMs) << true;
-        QTest::newRow("po pięciu sekundach") << qint64(5000) << true;
+        const QPoint none(-1, -1);
+        const QRect icon(1800, 1040, 24, 24);
+        const QPoint onIcon(1810, 1050);
+        const QPoint desktop(400, 300); // a click elsewhere took the activation
+        const int held = TrayPopupHeldClickMs;
+        QTest::newRow("nigdy nie schowane") << qint64(-1) << none << QRect() << none << true;
+        QTest::newRow("ta sama chwila") << qint64(0) << none << QRect() << none << false;
+        QTest::newRow("tuż przed granicą") << qint64(TrayPopupReopenGuardMs - 1) << none << QRect() << none << false;
+        QTest::newRow("na granicy") << qint64(TrayPopupReopenGuardMs) << none << QRect() << none << true;
+        QTest::newRow("po pięciu sekundach") << qint64(5000) << none << QRect() << none << true;
+        QTest::newRow("kliknięcie obok, zaraz potem ikona") << qint64(100) << desktop << icon << onIcon << false;
+        QTest::newRow("kliknięcie obok, po chwili ikona") << qint64(400) << desktop << icon << onIcon << true;
+        // Windows: the press on the icon hides it, Trigger comes on the release.
+        QTest::newRow("przytrzymane 0,4 s na ikonie") << qint64(400) << onIcon << icon << onIcon << false;
+        QTest::newRow("przytrzymane prawie do granicy") << qint64(held - 1) << onIcon << icon << onIcon << false;
+        QTest::newRow("przytrzymane do granicy") << qint64(held) << onIcon << icon << onIcon << true;
+        QTest::newRow("na ikonie, kursor przy kliknięciu nieznany") << qint64(900) << onIcon << icon << none << false;
+        // X11: no icon rectangle, only the cursor; a few pixels of movement are still that click.
+        QTest::newRow("bez prostokąta, ten sam punkt") << qint64(900) << onIcon << QRect() << onIcon << false;
+        QTest::newRow("bez prostokąta, drgnięcie o 8 px")
+            << qint64(900) << onIcon << QRect() << onIcon + QPoint(5, 3) << false;
+        QTest::newRow("bez prostokąta, 9 px dalej") << qint64(900) << onIcon << QRect() << onIcon + QPoint(5, 4) << true;
+        QTest::newRow("bez prostokąta i kursora") << qint64(900) << onIcon << QRect() << none << true;
+        QTest::newRow("kursor przy schowaniu nieznany") << qint64(900) << none << icon << onIcon << true;
     }
 
     void reopen()
     {
         QFETCH(qint64, ms);
+        QFETCH(QPoint, cursorAtHide);
+        QFETCH(QRect, icon);
+        QFETCH(QPoint, cursorAtClick);
         QFETCH(bool, reopens);
-        QCOMPARE(trayPopupShouldReopen(ms), reopens);
+        const auto known = [](QPoint p) { return p == QPoint(-1, -1) ? std::nullopt : std::optional(p); };
+        QCOMPARE(trayPopupShouldReopen(ms, known(cursorAtHide), icon, known(cursorAtClick)), reopens);
     }
 };
 

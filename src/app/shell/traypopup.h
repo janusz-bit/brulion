@@ -37,12 +37,21 @@ QPoint trayPopupPosition(const QRect &icon, std::optional<QPoint> cursor, const 
 QPoint trayPopupPositionOnScreen(const QRect &icon, std::optional<QPoint> cursor, QSize popup, int margin);
 
 /// A click on the tray icon first takes the activation from the open popup, which hides itself;
-/// the click itself arrives a moment later. Within this many milliseconds after such a hide the
-/// click means "close", so the popup stays closed.
+/// the click itself (QSystemTrayIcon::Trigger) arrives a moment later — on Windows only when the
+/// button is released. Within this many milliseconds after such a hide a click always means
+/// "close", so the popup stays closed.
 inline constexpr int TrayPopupReopenGuardMs = 300;
+/// Longer, up to this many milliseconds, when the hide happened where the click comes from (the
+/// cursor on the tray icon, or the click's cursor within TrayPopupClickSlopPx of it): the same
+/// click, its button held down (a slow click, a touchpad's tap-and-hold).
+inline constexpr int TrayPopupHeldClickMs = 3000;
+inline constexpr int TrayPopupClickSlopPx = 8;
 
 /// Whether a click on the tray icon may open the popup `msSinceHiddenByDeactivation` ms after it
-/// hid itself on losing the activation (negative: it never did).
-bool trayPopupShouldReopen(qint64 msSinceHiddenByDeactivation);
+/// hid itself on losing the activation (negative: it did not since the last click), the cursor
+/// then at `cursorAtHide`; the click's icon rectangle `icon` (empty when unknown) and cursor
+/// `cursorAtClick` (both unknown on some platforms).
+bool trayPopupShouldReopen(qint64 msSinceHiddenByDeactivation, std::optional<QPoint> cursorAtHide = std::nullopt,
+                           const QRect &icon = {}, std::optional<QPoint> cursorAtClick = std::nullopt);
 
 } // namespace brulion::shell

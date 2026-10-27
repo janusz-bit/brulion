@@ -48,6 +48,7 @@
 #include "notebook/share.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QJSValue>
 #include <QJsonObject>
 #include <QObject>
@@ -334,8 +335,16 @@ public:
     /// Where the tray calendar of this size goes (traypopup.h): next to the anchor of the last
     /// showTrayCalendar(), inside the work area of its screen.
     Q_INVOKABLE QPoint trayPopupPosition(int width, int height) const;
-    /// traypopup.h's guard for a click on the tray icon `ms` after the calendar hid itself.
-    Q_INVOKABLE bool trayPopupShouldReopen(double ms) const;
+    /// The tray calendar hid itself on losing the activation (ShellTrayCalendar): the time and
+    /// the cursor (QCursor::pos(); unknown without a QGuiApplication) for the next click's
+    /// trayPopupShouldReopen().
+    Q_INVOKABLE void trayPopupHidItself();
+    /// trayPopupHidItself() with the cursor given (tests).
+    void trayPopupHidItselfAt(std::optional<QPoint> cursor);
+    /// traypopup.h's guard for the click on the tray icon of the last showTrayCalendar(): false
+    /// when it is the click that has just taken the activation from the calendar (it then
+    /// closes it). Forgets that hide — asked once per tray action (Main.qml).
+    Q_INVOKABLE bool trayPopupShouldReopen();
     /// A message of a second launch or brulion-cli over the single-instance socket
     /// (ipc/appmessage.h, parsed by main()): `activate`, `capture`, `today` and `open {"route",
     /// "vault"}` show the window and do their part; false for any other verb, which changes
@@ -481,6 +490,8 @@ private:
     bool m_trayAvailable = false;
     QRect m_trayIcon;                  ///< showTrayCalendar()'s anchor
     std::optional<QPoint> m_trayCursor;
+    QElapsedTimer m_trayPopupHidden;   ///< since trayPopupHidItself() (invalid: not since the last click)
+    std::optional<QPoint> m_trayPopupHiddenCursor;
     bool m_startHidden = false;
     bool m_quitting = false;
     bool m_started = false;

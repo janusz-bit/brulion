@@ -17,6 +17,7 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
@@ -1153,9 +1154,24 @@ QPoint AppController::trayPopupPosition(int width, int height) const
     return trayPopupPositionOnScreen(m_trayIcon, m_trayCursor, QSize(width, height), 8);
 }
 
-bool AppController::trayPopupShouldReopen(double ms) const
+void AppController::trayPopupHidItself()
 {
-    return shell::trayPopupShouldReopen(qint64(ms));
+    trayPopupHidItselfAt(qobject_cast<QGuiApplication *>(QCoreApplication::instance()) ? std::optional(QCursor::pos())
+                                                                                       : std::nullopt);
+}
+
+void AppController::trayPopupHidItselfAt(std::optional<QPoint> cursor)
+{
+    m_trayPopupHidden.start();
+    m_trayPopupHiddenCursor = cursor;
+}
+
+bool AppController::trayPopupShouldReopen()
+{
+    const qint64 ms = m_trayPopupHidden.isValid() ? m_trayPopupHidden.elapsed() : -1;
+    m_trayPopupHidden.invalidate();
+    return shell::trayPopupShouldReopen(ms, std::exchange(m_trayPopupHiddenCursor, std::nullopt), m_trayIcon,
+                                        m_trayCursor);
 }
 
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)
