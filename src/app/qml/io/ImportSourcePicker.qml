@@ -11,6 +11,7 @@ import Brulion
 //   ImportSourcePicker { importer: importController; phone: true; onPickFiles: …; onPickFolder: … }
 //
 // `phone`: also the chosen app's steps on a phone (phoneHowTo) and how the system's picker works.
+// Microsoft To Do adds its sign-in (MsTodoSignIn) above the file buttons.
 ColumnLayout {
     id: picker
 
@@ -137,6 +138,14 @@ ColumnLayout {
                 text: picker.current ? picker.current.phoneHowTo : ""
                 wrapMode: Text.Wrap
             }
+        }
+
+        // Microsoft To Do: sign in and download, or a file from Graph Explorer.
+        Loader {
+            Layout.fillWidth: true
+            active: picker.current !== null && picker.current.id === "mstodo"
+            visible: active
+            sourceComponent: MsTodoSignIn { importer: picker.importer }
         }
 
         Flow {

@@ -46,6 +46,16 @@ ImporterInfo ImportController::importerInfo(const QString &id)
                 u"files"_s, u"list-checks"_s,
                 tr("Takeout works in the phone's browser too: open takeout.google.com, export only Keep and download "
                    "the ZIP. Pick it with “Choose files…” (in Downloads or Google Drive).")};
+    if (id == u"mstodo")
+        return {tr("Sign in to Microsoft and Brulion downloads every list: tasks with their steps, notes, due dates, "
+                   "reminders, repeats, links and attachments; each list becomes a page. Signing in needs your own "
+                   "free app registration in Microsoft Entra – the guide explains it step by step. Without one, "
+                   "save the answer of Graph Explorer to …/me/todo/lists?$expand=tasks as a JSON file and choose it "
+                   "(without steps and attachments)."),
+                u"files"_s, u"list-todo"_s,
+                tr("Signing in works on the phone too: tap “Sign in to Microsoft”, open the address in the "
+                   "browser, enter the code and come back – the lists download by themselves. A JSON file saved "
+                   "from Graph Explorer can be picked with “Choose files…”.")};
     if (id == u"joplin")
         return {tr("In Joplin choose File → Export all → “JEX – Joplin Export File” and choose that .jex file. "
                    "A folder exported as “MD – Markdown + Front Matter” works too."),
