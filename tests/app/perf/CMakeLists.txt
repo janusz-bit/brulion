@@ -3,7 +3,8 @@
 # touchpad deltas (desktop size) and touch drags (phone size), mostly with the list's cache off (every row created at the edge of
 # the view, so a row that grows after it was placed fails every run, not only on a loaded machine);
 # the scroll probe (`--probe-check`, src/app/ui/scrollprobe.h) fails a run when the content moves
-# more than the input explains or shifts inside the list. Geometry only, no timing thresholds: the
+# more than the input explains or shifts inside the list, or the thumb of the list's row scroll bar
+# jumps (or the list has none, --probe-row-bar). Geometry only, no timing thresholds: the
 # sanitizer build runs two cases with more time and only scrolls less far (BRULION_TEST_SLOWDOWN).
 # Alone (RUN_SERIAL): other GUI tests next to it would only make it slower (the other GUI tests run
 # side by side, two cores each). Every app run has its

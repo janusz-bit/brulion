@@ -25,6 +25,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Poprawki**
 - Eksport HTML i Pandoc: zdjęcie wstawione jako `![[https://…/kot.jpg]]` było „brakującym załącznikiem” — teraz jest zdjęciem.
 - Wersja w przeglądarce: zdjęcie z internetu, którego strona nie pozwala pobrać innym witrynom (CORS) albo spod `http://` w Brulionie otwartym przez `https://`, pokazuje ten powód zamiast „Brak połączenia”. Zapytania o zdjęcia nie wysyłają już nagłówków, przez które część serwerów odrzucała je w przeglądarce.
+- **Pasek przewijania nie skacze** — w długich stronach, w dzienniku, w widoku **Zadania**, w agendzie kalendarza, w historii wersji i w rejestrze zdarzeń suwak paska przesuwa się tylko razem z treścią, zamiast skakać tam i z powrotem podczas przewijania. Jego położenie liczy się w blokach (w dzienniku: w dniach), więc przez bardzo długi dzień przesuwa się wolniej niż przez krótki, a zwinięte bloki się nie liczą.
 
 ## 0.4.5 — 26 października 2026
 

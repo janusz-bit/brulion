@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import QtQuick.Templates as T
 import Brulion
 
 // LogsView — route "logs" ({group?, level?, search?, fromMs?, toMs?, run?}): the event log
@@ -265,7 +264,7 @@ FocusScope {
                 model: logModel
                 boundsBehavior: Flickable.StopAtBounds
                 cacheBuffer: 400
-                T.ScrollBar.vertical: BScrollBar {}
+                BRowScrollBar { list: list }
                 Accessible.role: Accessible.List
                 Accessible.name: root.title
                 section.property: "day"

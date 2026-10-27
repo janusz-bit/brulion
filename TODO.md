@@ -53,8 +53,6 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 
 ## Poprawki
 
-* **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
-  wierszy (docs/UI.md, „Still there”).
 * **Enter na końcu przybliżonego nagłówka lub akapitu** (konspekt, „Przybliż” na bloku, który
   nie jest punktem listy) wstawia nowy punkt listy poza przybliżeniem: kursor trafia do
   niewidocznego bloku (`PageController::split`, gałąź `row == zoom && cursor == len`).

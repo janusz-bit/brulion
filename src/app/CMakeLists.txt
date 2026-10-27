@@ -66,6 +66,7 @@ set(BRULION_UI_QML
     qml/components/BProgressBar.qml
     qml/components/BQuickSwitcher.qml
     qml/components/BReminderDialog.qml
+    qml/components/BRowScrollBar.qml
     qml/components/BScrollBar.qml
     qml/components/BSearchField.qml
     qml/components/BSectionHeader.qml
@@ -118,7 +119,7 @@ set(BRULION_UI_SOURCES
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The generated QML type registration includes the helper headers by file name.
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
-target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_network brulion_ui_fonts)
+target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_scroll brulion_ui_network brulion_ui_fonts)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon; the logo as
 # :/images/logo.svg.
 file(GLOB _brulion_icons CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/assets/icons/*.svg)

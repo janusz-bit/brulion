@@ -1,4 +1,5 @@
 #include "scrollprobe.h"
+#include "rowscroll.h"
 #include "touchflick.h"
 
 #include <QCoreApplication>
@@ -129,6 +130,23 @@ double percentile(QList<double> values, double p)
     return values.at(i);
 }
 
+/// The thumb of the view's BRowScrollBar (RowScroll) jumped between two frames of a scroll: it
+/// moved against the content (by more than 1 px of the view's height) or by more than 3 px while
+/// the content stood still. Only while the view moves in both frames (the thumb's size, which
+/// changes only when it stops, is the same) and away from its ends.
+template<typename F>
+bool rowThumbJump(const F &prev, const F &f)
+{
+    if (std::isnan(f.rowThumb) || std::isnan(prev.rowThumb) || !f.moving || !prev.moving || f.atBound || prev.atBound
+        || f.rowSize != prev.rowSize)
+        return false;
+    const double thumb = (f.rowThumb - prev.rowThumb) * f.height;
+    const double dy = f.contentY - prev.contentY;
+    if (std::abs(dy) <= 0.5)
+        return std::abs(thumb) > 3;
+    return dy > 0 ? thumb < -1 : thumb > 1;
+}
+
 struct DelegateState {
     int index = -1;
     double y = 0;
@@ -144,6 +162,7 @@ struct Frame {
     double gui = 0;      // ms the previous frame's update request took on the GUI thread
     double contentY = 0, originY = 0, contentHeight = 0, height = 0;
     double visPos = 0, visRatio = 0;
+    double rowThumb = kNaN, rowSize = kNaN; // the view's BRowScrollBar (position, size), if it has one
     bool moving = false, dragging = false, flicking = false, atBound = false;
     double velocity = 0;
     int inputEvents = 0;
@@ -205,6 +224,7 @@ public:
         m_speed = std::max(50, intAfter(args, u"--probe-speed"_s, 1500));
         m_checkTolerance = valueAfter(args, u"--probe-check"_s).toDouble();
         m_cache = intAfter(args, u"--probe-cache"_s, -1);
+        m_requireRowBar = args.contains(u"--probe-row-bar"_s);
         m_observe = m_script == u"observe";
         m_direct = m_script == u"drag" || m_script == u"touchpad";
         m_input.setTimerType(Qt::PreciseTimer);
@@ -501,6 +521,13 @@ private:
         m_contentItem = m_target->property("contentItem").value<QQuickItem *>();
         m_hasItemAtIndex = m_target->metaObject()->indexOfMethod("itemAtIndex(int)") >= 0;
         m_visibleArea = m_target->property("visibleArea").value<QObject *>();
+        // A BRowScrollBar over the view (RowScroll, rowscroll.h): its thumb is checked too.
+        m_rowScroll = nullptr;
+        const QList<QQuickItem *> children = m_target->childItems();
+        for (QQuickItem *child : children) {
+            if (child->objectName() == u"rowScrollBar"_s)
+                m_rowScroll = child->findChild<brulion::ui::RowScroll *>();
+        }
         m_lastContentY = num(m_target, "contentY");
         connect(m_target.data(), SIGNAL(contentYChanged()), this, SLOT(onContentYChanged()));
         m_delegates.clear();
@@ -926,6 +953,12 @@ private:
             f.visPos = num(m_visibleArea, "yPosition");
             f.visRatio = num(m_visibleArea, "heightRatio");
         }
+        if (m_rowScroll) {
+            // Now, not when its own refresh comes (this frame, before or after this handler).
+            m_rowScroll->refresh();
+            f.rowThumb = m_rowScroll->position();
+            f.rowSize = m_rowScroll->size();
+        }
         f.moving = m_target->property("moving").toBool();
         f.dragging = m_target->property("dragging").toBool();
         f.flicking = m_target->property("flicking").toBool();
@@ -1238,7 +1271,7 @@ private:
         QList<const Frame *> jumps;
         QList<const Frame *> other;
         int frames = 0, createdFrames = 0, created = 0, blocksCreated = 0, originChanges = 0, heightChanges = 0;
-        int thumbJumps = 0;
+        int thumbJumps = 0, rowThumbJumps = 0;
         double originTotal = 0, jumpTotal = 0, jumpMax = 0, otherTotal = 0, frameDyDirect = 0, shiftTotal = 0;
         double animTotal = 0;
         int shifts = 0, heldFrames = 0;
@@ -1269,6 +1302,8 @@ private:
                     if (std::abs(thumb - expected) > 3)
                         ++thumbJumps;
                 }
+                if (rowThumbJump(*prev, f))
+                    ++rowThumbJumps;
             }
             if (active && f.interval > 0) {
                 ++frames;
@@ -1337,11 +1372,13 @@ private:
                      .arg(otherTotal, 0, 'f', 0)
                      .arg(frameDyDirect, 0, 'f', 0)
                      .arg(animTotal, 0, 'f', 0));
-        line(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb jumps > 3 px %4"_s
-                     .arg(originChanges)
+        line(u"VIEW originY changes %1 (total %2 px), contentHeight changes while moving %3, scroll bar thumb "
+             u"jumps > 3 px %4 (visibleArea, an attached bar's), %5"_s.arg(originChanges)
                      .arg(originTotal, 0, 'f', 0)
                      .arg(heightChanges)
-                     .arg(thumbJumps));
+                     .arg(thumbJumps)
+                     .arg(m_rowScroll ? u"row scroll bar thumb jumps %1"_s.arg(rowThumbJumps)
+                                      : u"no row scroll bar"_s));
         line(u"DELEGATES created %1 (in %2 frames), nested blocks created %3; probe cost per frame p50 %4 ms, max %5 ms"_s
                      .arg(created)
                      .arg(createdFrames)
@@ -1399,14 +1436,23 @@ private:
     /// the end).
     void check() const
     {
-        int jumps = 0, shifts = 0;
+        int jumps = 0, shifts = 0, thumbJumps = 0;
         double worst = 0;
         const Frame *prev = nullptr;
         for (const Frame &f : m_frames) {
             const bool atBound = f.atBound || (prev && prev->atBound);
+            const Frame *before = prev;
             prev = &f;
             if (f.phase == u"end")
                 continue;
+            if (before && rowThumbJump(*before, f)) {
+                ++thumbJumps;
+                log(u"THUMB JUMP #%1: row scroll bar %2 -> %3 while contentY %4 -> %5"_s.arg(f.n)
+                            .arg(before->rowThumb, 0, 'f', 5)
+                            .arg(f.rowThumb, 0, 'f', 5)
+                            .arg(before->contentY, 0, 'f', 1)
+                            .arg(f.contentY, 0, 'f', 1));
+            }
             if (m_direct && f.jump && !atBound && std::abs(f.unexplained) > m_checkTolerance) {
                 ++jumps;
                 worst = std::max(worst, std::abs(f.unexplained));
@@ -1416,13 +1462,19 @@ private:
                 worst = std::max(worst, std::abs(f.anchorShift));
             }
         }
-        m_checkFailed = jumps > 0 || shifts > 0 || m_frames.size() < 10;
-        log(u"CHECK %1: %2 jumps and %3 layout shifts over %4 px (worst %5 px) in %6 frames"_s
+        // --probe-row-bar: the view must have its BRowScrollBar (a bar left in the content item
+        // scrolls away with the rows, and its thumb would go unchecked).
+        const bool noBar = m_requireRowBar && !m_rowScroll;
+        m_checkFailed = jumps > 0 || shifts > 0 || thumbJumps > 0 || noBar || m_frames.size() < 10;
+        log(u"CHECK %1: %2 jumps and %3 layout shifts over %4 px (worst %5 px), %6 in %7 frames"_s
                     .arg(m_checkFailed ? u"FAIL"_s : u"PASS"_s)
                     .arg(jumps)
                     .arg(shifts)
                     .arg(m_checkTolerance)
                     .arg(worst, 0, 'f', 0)
+                    .arg(noBar        ? u"no row scroll bar over the view (--probe-row-bar)"_s
+                         : m_rowScroll ? u"%1 row scroll bar thumb jumps"_s.arg(thumbJumps)
+                                       : u"no row scroll bar"_s)
                     .arg(m_frames.size()));
     }
 
@@ -1560,6 +1612,7 @@ private:
     QPointer<QQuickItem> m_target;
     QPointer<QQuickItem> m_contentItem;
     QPointer<QObject> m_visibleArea;
+    QPointer<brulion::ui::RowScroll> m_rowScroll;
     QString m_targetSpec;
     QString m_script;
     QString m_outFile;
@@ -1572,6 +1625,7 @@ private:
     bool m_finished = false;
     double m_checkTolerance = 0;   // --probe-check: px (0: no check)
     int m_cache = -1;              // --probe-cache: the target's cacheBuffer (-1: its own)
+    bool m_requireRowBar = false;  // --probe-row-bar: the target must have a BRowScrollBar
     bool m_hasItemAtIndex = false; // the target is an item view (ListView, GridView)
     mutable bool m_checkFailed = false;
     mutable QStringList m_logLines;

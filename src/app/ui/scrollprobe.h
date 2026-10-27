@@ -23,9 +23,13 @@
 //   --probe-speed <px/s>      finger / touchpad speed of drag and touchpad (default 1500)
 //   --probe-check <px>        fail (exit code 1, "CHECK FAIL" line) when the content jumps by more
 //                             than <px>: moves on screen more than the input explains (drag,
-//                             touchpad) or shifts inside the list (any script) — geometry only, no
-//                             timing, so it also holds in slow sanitizer runs (ctest
-//                             tst_scroll_jumps_qml)
+//                             touchpad) or shifts inside the list (any script), or when the
+//                             thumb of the view's BRowScrollBar (RowScroll) moves against the
+//                             content or while it stands still — geometry only, no timing, so it
+//                             also holds in slow sanitizer runs (ctest tst_scroll_jumps_qml)
+//   --probe-row-bar           with --probe-check: also fail when the view has no BRowScrollBar
+//                             over it (one of the view's own children, not left in its
+//                             scrolling content item), so a lost bar is not a skipped check
 //   --probe-cache <px>        set the target's cacheBuffer first (0: every row is created at the
 //                             edge of the view — as on a phone whose cache cannot keep ahead —
 //                             so a row that grows after the list placed it moves the content

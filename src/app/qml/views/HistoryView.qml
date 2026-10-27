@@ -164,7 +164,7 @@ FocusScope {
                     font.weight: Theme.weightSemiBold
                     color: Theme.fgFaint
                 }
-                T.ScrollBar.vertical: BScrollBar {}
+                BRowScrollBar { list: versions }
                 Accessible.role: Accessible.List
                 Accessible.name: qsTr("Versions")
                 onCurrentIndexChanged: if (currentIndex >= 0 && currentIndex !== root.selected && root.wide) root.selected = currentIndex

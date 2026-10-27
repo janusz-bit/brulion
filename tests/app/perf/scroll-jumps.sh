@@ -4,7 +4,10 @@
 # and the calendar agenda down to the end and back up with synthetic input: touchpad pixel deltas at
 # the desktop size, touch drags at the phone size. The scroll probe (src/app/ui/scrollprobe.h, --probe-check) fails a run
 # when the content moves on screen more than the input explains or shifts inside the list — a day or
-# a block growing after the list had placed it, a block changing its height under the mouse pointer.
+# a block growing after the list had placed it, a block changing its height under the mouse pointer —
+# or when the thumb of the list's row scroll bar (BRowScrollBar) moves against the content or while
+# it stands still, or the list has no such bar over it (--probe-row-bar: every view here has one;
+# a bar left in the list's scrolling content item would otherwise only skip that check).
 #
 # Deterministic: most cases run with the list's cache off (`:0`, --probe-cache 0), so every row is
 # created at the edge of the view and a row whose height is not final when it is created moves the
@@ -122,13 +125,13 @@ run_case() { # run_case <case>
     timeout -k 10 "$run_timeout" "$bin" --vault "$own/Przykładowy brulion" --route "$route" "${geometry[@]}" --now "$now" \
     --locale pl --no-single-instance \
     --scroll-probe auto --scroll-script "$script" --probe-speed 3000 --probe-max "$max_ms" \
-    --probe-wait "$wait_ms" --probe-check "$tolerance" ${cache_args[@]+"${cache_args[@]}"} --probe-out "$work/$name.csv" \
+    --probe-wait "$wait_ms" --probe-check "$tolerance" --probe-row-bar ${cache_args[@]+"${cache_args[@]}"} --probe-out "$work/$name.csv" \
     > "$work/$name.log" 2>&1; then
     echo "ok: $name — $(grep -E '^scroll-probe: CHECK' "$work/$name.log" | cut -c15-)" > "$work/$name.result"
   else
     {
       echo "FAIL: $name"
-      grep -E "^scroll-probe: (target|phase|CHECK|JUMPS|  jump)" "$work/$name.log" | head -30
+      grep -E "^scroll-probe: (target|phase|CHECK|JUMPS|VIEW|THUMB|  jump)" "$work/$name.log" | head -30
       tail -5 "$work/$name.log"
     } > "$work/$name.result"
   fi

@@ -18,7 +18,8 @@ import Brulion
 //     in-block Ctrl+C / Ctrl+X keeping no-break spaces, the edited text's right-click menu, the block
 //     menu of a selected and of another block, the floating tools, a mouse drag over three paragraphs
 //     of a document (the list does not scroll), a drag to the view's edge (the list scrolls, the
-//     selection follows), the band after scrolling far away and back, and the floating tools' Więcej
+//     selection follows), the band after scrolling far away and back, the scroll bar's thumb dragged
+//     (the list scrolls, nothing selected) and the wheel over it, and the floating tools' Więcej
 //     with no indents for a document's paragraphs;
 //   touch: a long press on a block's text (the selection mode, its tools docked), a tap extending
 //     it, Kopiuj, "Pojedynczo" (no grips; taps leave a block out and pick another one with a gap,
@@ -41,6 +42,8 @@ QtObject {
     property int rowB: -1
     property int rowC: -1
     property real contentBefore: 0
+    /// Where the scroll bar's thumb was pressed (in the bar).
+    property point barPress
     property string textBefore: ""
     /// A toast's Cofnij kept after its edit was undone another way.
     property var staleUndo: null
@@ -543,6 +546,31 @@ QtObject {
                       "the release ends the drag, nothing is edited")
                 key(Qt.Key_Escape)
             },
+            // ---- The scroll bar (BRowScrollBar): its thumb dragged, the wheel over it --------------------
+            () => list.positionViewAtBeginning(),
+            () => {
+                const bar = editor.scrollBar
+                check(bar !== null && bar.objectName === "rowScrollBar" && bar.visible && bar.size < 1,
+                      "the page has a row scroll bar")
+                test.contentBefore = list.contentY
+                test.barPress = bar.mapFromItem(bar.contentItem, bar.contentItem.width / 2, bar.contentItem.height / 2)
+                events.mousePress(bar, test.barPress.x, test.barPress.y, Qt.LeftButton, Qt.NoModifier, -1)
+            },
+            () => events.mouseMove(editor.scrollBar, test.barPress.x, test.barPress.y + 30, -1, Qt.LeftButton, Qt.NoModifier),
+            () => events.mouseMove(editor.scrollBar, test.barPress.x, test.barPress.y + 60, -1, Qt.LeftButton, Qt.NoModifier),
+            wait(() => list.contentY > test.contentBefore + 30, "dragging the scroll bar's thumb scrolls the list"),
+            () => {
+                check(editor.scrollBar.pressed && page.selectionCount === 0 && !editor.dragSelecting && page.editingRow < 0,
+                      "and selects nothing")
+                events.mouseRelease(editor.scrollBar, test.barPress.x, test.barPress.y + 60, Qt.LeftButton, Qt.NoModifier, -1)
+            },
+            () => {
+                check(!editor.scrollBar.pressed && page.selectionCount === 0, "the release selects nothing either")
+                test.contentBefore = list.contentY
+                const bar = editor.scrollBar
+                events.mouseWheel(bar, bar.width / 2, bar.height / 2, Qt.NoButton, Qt.NoModifier, 0, -120, -1)
+            },
+            wait(() => list.contentY > test.contentBefore + 10, "the wheel over the scroll bar scrolls the list"),
             // ---- A document: a drag over three paragraphs --------------------------------------------------
             () => { page.path = host.documentPath },
             wait(() => page.loaded && page.documentMode && rowOf("Pierwszego dnia") > 0, "the document is open"),
