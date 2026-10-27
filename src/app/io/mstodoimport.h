@@ -2,7 +2,9 @@
 // `MsTodoImport { settings: AppSettings; importer: importController }`): the device-code sign-in
 // (mstodo::DeviceCodeLogin) with the user's own app registration, the download of every list
 // (mstodo::TodoDownload), then the bundle goes to the ImportController (setInput), whose preview,
-// collision policy and report do the rest — exactly as for a picked Graph Explorer file.
+// collision policy and report do the rest — exactly as for a picked Graph Explorer file. Input
+// that reaches the ImportController another way while signing in (picked files, a typed path)
+// cancels the sign-in.
 //
 //   clientId, authority   the app registration's Application (client) ID and the authority
 //                         ("consumers" by default), remembered on this device in AppSettings

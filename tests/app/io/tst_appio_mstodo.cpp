@@ -12,6 +12,9 @@
 #include <QDirIterator>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -248,6 +251,53 @@ private Q_SLOTS:
         QTest::qWait(30);
         QCOMPARE(ms.requests.size(), sent);
         QCOMPARE(c.state(), u"empty"_s);
+    }
+
+    void pickingAFileCancelsTheSignIn()
+    {
+        // Sign-in started, then the user picks a Graph Explorer file instead: the sign-in stops,
+        // so finishing the code later can never swap the file's preview for a download.
+        QString root;
+        auto ws = open(&root);
+        FakeMicrosoft ms;
+        ms.addSampleData();
+        ms.pollScript = QStringList(100, u"authorization_pending"_s);
+        ImportController c;
+        c.setWorkspace(ws.get());
+        MsTodoImport m;
+        m.setTransport(&ms);
+        m.setTimeUnitMs(1);
+        m.setImporter(&c);
+        m.setClientId(ms.clientId);
+        QSignalSpy downloaded(&m, &MsTodoImport::downloaded);
+        m.signIn();
+        QVERIFY(waitState(m, u"waiting"_s));
+
+        const QString file = m_tmp.filePath(u"Wybrane zadania.json"_s);
+        {
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            const QJsonObject task{{u"title"_s, u"Z pliku"_s}, {u"status"_s, u"notStarted"_s}};
+            const QJsonObject list{{u"id"_s, u"a"_s},
+                                   {u"displayName"_s, u"Z pliku ąę"_s},
+                                   {u"wellknownListName"_s, u"none"_s},
+                                   {u"tasks"_s, QJsonArray{task}}};
+            f.write(QJsonDocument(QJsonObject{{u"value"_s, QJsonArray{list}}}).toJson());
+        }
+        c.addPaths({file});
+        QCOMPARE(m.state(), u"idle"_s);
+        QVERIFY(!m.busy());
+        QCOMPARE(m.userCode(), QString());
+        QVERIFY(waitState(c, u"ready"_s));
+        QVERIFY2(c.sourceName().contains(u"Wybrane zadania"_s), qPrintable(c.sourceName()));
+        const auto sent = ms.requests.size();
+        ms.pollScript.clear(); // the code would be entered now
+        QTest::qWait(50);
+        QCOMPARE(ms.requests.size(), sent);
+        QCOMPARE(downloaded.size(), 0);
+        QCOMPARE(c.state(), u"ready"_s);
+        QVERIFY2(c.sourceName().contains(u"Wybrane zadania"_s), qPrintable(c.sourceName()));
+        QCOMPARE(c.preview().value(u"pages"_s).toInt(), 1);
     }
 };
 

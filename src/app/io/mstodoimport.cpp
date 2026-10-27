@@ -59,7 +59,17 @@ void MsTodoImport::setImporter(ImportController *importer)
 {
     if (m_importer == importer)
         return;
+    if (m_importer)
+        disconnect(m_importer, nullptr, this, nullptr);
     m_importer = importer;
+    if (m_importer) {
+        // The user went the file way meanwhile (picked files, typed a path): the sign-in stops,
+        // so its download can never replace that input later or be dropped during its import.
+        connect(m_importer, &ImportController::stateChanged, this, [this] {
+            if (busy() && m_importer->state() != u"empty")
+                cancel();
+        });
+    }
     Q_EMIT importerChanged();
 }
 
