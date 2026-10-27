@@ -46,8 +46,10 @@ BScrollBar {
         }
     }
 
-    // Declared inside the ListView, the bar landed in its content item (which scrolls): over the
-    // view instead, like an attached bar.
+    // Over the view, like an attached bar, never in its content item (which scrolls): declared
+    // inside a ListView it is already the list's own child (Qt 6.11), created elsewhere (the
+    // editor's createObject) it is put there. The scroll probe's --probe-row-bar (ctest
+    // tst_scroll_jumps_qml) fails when a view's bar is not among the list's children.
     Component.onCompleted: {
         if (parent !== list)
             parent = list

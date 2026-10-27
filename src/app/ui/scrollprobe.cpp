@@ -224,6 +224,7 @@ public:
         m_speed = std::max(50, intAfter(args, u"--probe-speed"_s, 1500));
         m_checkTolerance = valueAfter(args, u"--probe-check"_s).toDouble();
         m_cache = intAfter(args, u"--probe-cache"_s, -1);
+        m_requireRowBar = args.contains(u"--probe-row-bar"_s);
         m_observe = m_script == u"observe";
         m_direct = m_script == u"drag" || m_script == u"touchpad";
         m_input.setTimerType(Qt::PreciseTimer);
@@ -1461,14 +1462,19 @@ private:
                 worst = std::max(worst, std::abs(f.anchorShift));
             }
         }
-        m_checkFailed = jumps > 0 || shifts > 0 || thumbJumps > 0 || m_frames.size() < 10;
-        log(u"CHECK %1: %2 jumps and %3 layout shifts over %4 px (worst %5 px), %6 row scroll bar thumb jumps in %7 frames"_s
+        // --probe-row-bar: the view must have its BRowScrollBar (a bar left in the content item
+        // scrolls away with the rows, and its thumb would go unchecked).
+        const bool noBar = m_requireRowBar && !m_rowScroll;
+        m_checkFailed = jumps > 0 || shifts > 0 || thumbJumps > 0 || noBar || m_frames.size() < 10;
+        log(u"CHECK %1: %2 jumps and %3 layout shifts over %4 px (worst %5 px), %6 in %7 frames"_s
                     .arg(m_checkFailed ? u"FAIL"_s : u"PASS"_s)
                     .arg(jumps)
                     .arg(shifts)
                     .arg(m_checkTolerance)
                     .arg(worst, 0, 'f', 0)
-                    .arg(thumbJumps)
+                    .arg(noBar        ? u"no row scroll bar over the view (--probe-row-bar)"_s
+                         : m_rowScroll ? u"%1 row scroll bar thumb jumps"_s.arg(thumbJumps)
+                                       : u"no row scroll bar"_s)
                     .arg(m_frames.size()));
     }
 
@@ -1619,6 +1625,7 @@ private:
     bool m_finished = false;
     double m_checkTolerance = 0;   // --probe-check: px (0: no check)
     int m_cache = -1;              // --probe-cache: the target's cacheBuffer (-1: its own)
+    bool m_requireRowBar = false;  // --probe-row-bar: the target must have a BRowScrollBar
     bool m_hasItemAtIndex = false; // the target is an item view (ListView, GridView)
     mutable bool m_checkFailed = false;
     mutable QStringList m_logLines;
