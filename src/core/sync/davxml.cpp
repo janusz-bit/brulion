@@ -34,7 +34,7 @@ bool isSuccess(const QString &status)
 
 /// Properties of one <prop>; a property element present but empty counts as present.
 struct Props {
-    std::optional<QString> etag, lastModified, contentLength;
+    std::optional<QString> etag, lastModified, contentLength, fileId;
     std::optional<bool> collection;
 
     void mergeFrom(const Props &other)
@@ -47,6 +47,8 @@ struct Props {
             contentLength = other.contentLength;
         if (other.collection)
             collection = other.collection;
+        if (other.fileId)
+            fileId = other.fileId;
     }
 };
 
@@ -79,6 +81,8 @@ Props readProp(QXmlStreamReader &reader)
             props.contentLength = elementText(reader);
         else if (name == u"resourcetype"_s)
             props.collection = readResourceType(reader);
+        else if (name == u"fileid"_s)
+            props.fileId = elementText(reader);
         else
             reader.skipCurrentElement();
     }
@@ -147,6 +151,7 @@ std::optional<DavResource> readResponse(QXmlStreamReader &reader)
     res.etag = normalizeEtag(props.etag.value_or(QString()));
     res.mtime = props.lastModified ? parseHttpDate(*props.lastModified) : 0;
     res.size = parseSize(props.contentLength);
+    res.fileId = props.fileId.value_or(QString()).trimmed();
     return res;
 }
 
@@ -195,12 +200,13 @@ int fullYear(int year, qsizetype digits)
 QByteArray propfindBody()
 {
     return QByteArrayLiteral("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
-                             "<d:propfind xmlns:d=\"DAV:\">\n"
+                             "<d:propfind xmlns:d=\"DAV:\" xmlns:oc=\"http://owncloud.org/ns\">\n"
                              "  <d:prop>\n"
                              "    <d:getetag/>\n"
                              "    <d:getlastmodified/>\n"
                              "    <d:getcontentlength/>\n"
                              "    <d:resourcetype/>\n"
+                             "    <oc:fileid/>\n"
                              "  </d:prop>\n"
                              "</d:propfind>\n");
 }

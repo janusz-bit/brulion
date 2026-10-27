@@ -167,9 +167,13 @@ rename and move").
   default, remembered per device: `allPages/subfolders`), and the top bar's breadcrumb
   ("Wszystkie strony › Projekty › …").
 * **Sync**: Nextcloud carries folders faithfully — new empty folders, deletions (only of folders
-  that hold nothing unsynced), and moves: a folder renamed or moved here is moved on the server
-  with one WebDAV MOVE, other devices see the move, not a mass deletion ("Sync visibility" below).
-  Syncthing syncs folders itself.
+  that hold nothing unsynced), and moves: a folder or page renamed or moved here is moved on the
+  server with one WebDAV MOVE, and one renamed or moved on another device or in the Nextcloud web
+  UI is renamed here too (Vault::rename from the sync: the version history, favourites, recent
+  pages and folds of its pages follow their `Renamed` changes, open editors follow `pathRenamed`,
+  the tree and an open "All pages" of the folder follow `Workspace.folderRenamed`), never a mass
+  deletion nor a download plus the trash ("Sync visibility" below). Syncthing syncs folders
+  itself.
 
 ## On-screen keyboard (`KeyboardInsets`)
 
@@ -1097,13 +1101,17 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
   folders and pages never asks: content that arrives under a new path in the same run is a move,
   not a deletion (`SyncEngine`, docs/ARCHITECTURE.md "Sync guards").
 * **Folders** (Nextcloud): empty folders travel both ways, an emptied folder deleted on one side
-  goes on the other, a folder renamed in the app is moved on the server (one MOVE). The status
-  card, the history row ("1 przeniesiony folder", "2 nowe foldery") and the run's details
-  ("Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze"; `WorkspaceSync.folderCountsText`)
-  name them; folders a run created or removed here reach the tree at once
-  (`WorkspaceSync.foldersChanged` -> `Workspace.notifyFolderChange`: folders make no Vault change
-  of their own), and a folder the user creates, deletes or renames starts a sync after the
-  debounce like an edit (`WorkspaceSync.notifyLocalChange`).
+  goes on the other, a folder or page renamed in the app is moved on the server (one MOVE), and
+  one renamed on the server is renamed here too. The status card, the history row ("1
+  przeniesiony folder", "2 przeniesione pliki", "2 nowe foldery") and the run's details
+  ("Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze, 1 przeniesiony tutaj";
+  `WorkspaceSync.folderCountsText`, and "Pliki: 3 przeniesione na serwerze, 1 przeniesiony
+  tutaj"; `WorkspaceSync.fileMovesText`) name them; folders a run created or removed here reach the
+  tree at once (`WorkspaceSync.foldersChanged` -> `Workspace.notifyFolderChange`: folders make no
+  Vault change of their own), a folder the run renamed here as the server had renamed it follows
+  in the tree and the routes (`WorkspaceSync.folderMovedHere` -> `Workspace.folderRenamed`), and
+  a folder the user creates, deletes or renames starts a sync after the debounce like an edit
+  (`WorkspaceSync.notifyLocalChange`).
 * **History** (`SyncHistoryList.qml`, card "Historia synchronizacji"): the last runs (20 kept,
   5 shown, "Pokaż wszystkie"), quiet ones folded ("Bez zmian ×3, 09:25–09:55"); each row: the
   result in words with a coloured icon (never colour alone), when, why ("ręcznie", "po zmianie

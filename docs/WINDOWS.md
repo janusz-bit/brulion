@@ -80,6 +80,10 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
   używany. Tak samo Syncthing, gdy przenosi folder przemianowany na innym urządzeniu: zgłosi błąd
   i spróbuje ponownie. W Brulionie (pasek boczny, „Zmień nazwę”, „Przenieś do…”) działa normalnie;
   usuwanie folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
+  Folder przemianowany na innym urządzeniu albo w Nextcloudzie synchronizacja Nextcloud
+  przemianowuje tu sama; gdy inny program trzyma otwarty plik z tego folderu, Windows na to nie
+  pozwala i notatki są przenoszone pojedynczo, a ta otwarta jest pobierana pod nową nazwą (stara
+  trafi do kosza, gdy program ją zwolni) — nic nie ginie.
 * **Nazwy, których Windows nie dopuszcza:** notatka z innego urządzenia o nazwie ze znakiem
   `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
   synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
@@ -164,7 +168,9 @@ z wyjątkami:
   `tst_vault_edge`, `tst_vault_safety`, `tst_shell_settings`, `tst_shell_nextcloud`; z
   **uprawnieniami uniksowymi** (folder bez prawa odczytu, plik tylko dla właściciela; Windows ma
   tylko atrybut „tylko do odczytu”, a resztę załatwiają listy dostępu profilu) — w
-  `tst_vault_safety`, `tst_sync_engine`, `tst_log_logger`, `tst_shell_settings`; z **dwoma
+  `tst_vault_safety`, `tst_sync_engine`, `tst_sync_folders` (`renameHereRefusedFallsBack`: folder
+  tylko do odczytu, którego synchronizacja nie może przemianować), `tst_log_logger`,
+  `tst_shell_settings`; z **dwoma
   plikami różniącymi się tylko wielkością liter** (NTFS ich nie odróżnia) — w `tst_vault`,
   `tst_notebook_journals`, `tst_shell_workspace`, `tst_sync_folders` (tam na takim systemie plików
   test sprawdza zamiast tego, że folder, któremu inne urządzenie zmieniło wielkość liter, dostaje

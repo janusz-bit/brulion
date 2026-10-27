@@ -123,6 +123,10 @@ public:
     static QString baseKey(const VaultPath &path);
     /// A folder that existed on both sides after a run ("sync/folder/<path>").
     static QString folderKey(const VaultPath &path);
+    /// A synced file renamed in the vault since the last run ("sync/renamed/<new path>" ->
+    /// {"from": synced path}): the rename journal, the proof of a rename whatever was written to
+    /// the file afterwards (renamedFrom()).
+    static QString renamedKey(const VaultPath &path);
     static QString metaKey();
 
     /// Mass-deletion guard: a side loses more than this share of its files ...
@@ -181,6 +185,11 @@ public:
     /// The folder existed on both sides after a run (so its absence on one side later is a
     /// deletion there).
     bool knowsFolder(const VaultPath &path) const;
+    /// The synced path `path` was renamed from in the vault (Vault::rename() by the user or the
+    /// app, folder renames file by file, a chain of renames followed to its start) since it was
+    /// last synced; empty when none is recorded. Renames by the sync itself and ones the vault
+    /// only guessed from content (ChangeSource::Sync, External) are not recorded.
+    VaultPath renamedFrom(const VaultPath &path) const;
 
 Q_SIGNALS:
     void started();
@@ -191,6 +200,8 @@ private:
     friend class SyncRun;
     void runFinished(const SyncReport &report);
     void dependencyDestroyed();
+    /// The rename journal follows the vault's renames and deletions (renamedKey()).
+    void onVaultChanged(const QList<brulion::VaultChange> &changes);
 
     QPointer<Vault> m_vault;
     QPointer<WebDavClient> m_client;

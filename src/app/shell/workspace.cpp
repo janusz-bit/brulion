@@ -104,6 +104,13 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     connect(m_sync, &WorkspaceSync::errorOccurred, this, &Workspace::errorOccurred);
     connect(m_sync, &WorkspaceSync::foldersChanged, this,
             [this](const QStringList &paths) { notifyFolderChange(paths, false); });
+    // A folder the server renamed, renamed here by the sync: its pages followed already (Vault
+    // changes); the tree and an open "All pages" of the folder follow it. Nothing is rewritten:
+    // the device that renamed it updated the links, and those edits arrive as downloads.
+    connect(m_sync, &WorkspaceSync::folderMovedHere, this, [this](const QString &from, const QString &to) {
+        notifyFolderChange({from, to}, false);
+        Q_EMIT folderRenamed(from, to);
+    });
     if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
         connect(app, &QGuiApplication::applicationStateChanged, this, &Workspace::applicationStateChanged);
 }

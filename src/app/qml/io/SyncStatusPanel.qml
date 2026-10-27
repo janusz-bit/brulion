@@ -280,7 +280,7 @@ IoCard {
     BText {
         readonly property string folders: panel.hasReport && panel.sync
             ? panel.sync.folderCountsText(panel.report.foldersCreated || 0, panel.report.foldersDeleted || 0,
-                                          panel.report.foldersMoved || 0)
+                                          panel.report.foldersMoved || 0, panel.report.foldersMovedHere || 0)
             : ""
         Layout.fillWidth: true
         visible: folders !== ""
@@ -288,6 +288,18 @@ IoCard {
         color: Theme.fgMuted
         wrapMode: Text.Wrap
         text: folders
+    }
+
+    BText {
+        readonly property string files: panel.hasReport && panel.sync
+            ? panel.sync.fileMovesText(panel.report.filesMoved || 0, panel.report.filesMovedHere || 0)
+            : ""
+        Layout.fillWidth: true
+        visible: files !== ""
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+        text: files
     }
 
     RowLayout {

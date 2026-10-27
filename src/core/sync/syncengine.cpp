@@ -8,6 +8,7 @@
 #include "vault/vault.h"
 #include "vault/vaultconfig.h"
 
+#include <QJsonObject>
 #include <QSet>
 
 #include <algorithm>
@@ -138,6 +139,11 @@ QString SyncEngine::folderKey(const VaultPath &path)
     return u"sync/folder/"_s + path;
 }
 
+QString SyncEngine::renamedKey(const VaultPath &path)
+{
+    return u"sync/renamed/"_s + path;
+}
+
 QString SyncEngine::metaKey()
 {
     return u"sync/meta"_s;
@@ -155,6 +161,35 @@ SyncEngine::SyncEngine(Vault *vault, WebDavClient *client, LocalStore *store, co
     for (QObject *dependency : std::initializer_list<QObject *>{vault, client, store}) {
         if (dependency)
             connect(dependency, &QObject::destroyed, this, &SyncEngine::dependencyDestroyed);
+    }
+    if (vault)
+        connect(vault, &Vault::changed, this, &SyncEngine::onVaultChanged);
+}
+
+void SyncEngine::onVaultChanged(const QList<VaultChange> &changes)
+{
+    if (!m_store)
+        return;
+    for (const VaultChange &change : changes) {
+        if (change.type == ChangeType::Deleted) {
+            m_store->remove(renamedKey(change.path));
+            continue;
+        }
+        if (change.type != ChangeType::Renamed)
+            continue;
+        // A chain (A -> B -> C) is recorded from its start; renamed back, nothing is left.
+        const QJsonValue earlier = m_store->get(renamedKey(change.oldPath));
+        m_store->remove(renamedKey(change.oldPath));
+        // The sync's own renames follow the server; a rename the vault guessed from content (a
+        // rescan) proves no more than the content itself, which the run compares anyway.
+        if (change.source == ChangeSource::Sync || change.source == ChangeSource::External)
+            continue;
+        const VaultPath origin = earlier.isObject() ? earlier.toObject().value(u"from"_s).toString() : change.oldPath;
+        if (origin.isEmpty() || origin == change.path || !isSyncablePath(change.path)
+            || !m_store->contains(stateKey(origin))) {
+            continue; // never synced: the run sees a new file anyway
+        }
+        m_store->set(renamedKey(change.path), QJsonObject{{u"from"_s, origin}});
     }
 }
 
@@ -277,6 +312,7 @@ void SyncEngine::resetState()
     m_store->removePrefix(stateKey(QString()));
     m_store->removePrefix(baseKey(QString()));
     m_store->removePrefix(folderKey(QString()));
+    m_store->removePrefix(renamedKey(QString()));
     m_store->remove(metaKey());
 }
 
@@ -293,6 +329,13 @@ std::optional<QString> SyncEngine::mergeBaseOf(const VaultPath &path) const
         return std::nullopt;
     const QJsonValue base = m_store->get(baseKey(paths::normalize(path)));
     return base.isString() ? std::optional<QString>(base.toString()) : std::nullopt;
+}
+
+VaultPath SyncEngine::renamedFrom(const VaultPath &path) const
+{
+    if (!m_store)
+        return {};
+    return m_store->get(renamedKey(paths::normalize(path))).toObject().value(u"from"_s).toString();
 }
 
 bool SyncEngine::knowsFolder(const VaultPath &path) const

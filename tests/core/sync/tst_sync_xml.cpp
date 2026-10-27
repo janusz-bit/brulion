@@ -20,7 +20,7 @@ qint64 utc(int y, int m, int d, int h = 0, int min = 0, int s = 0)
 
 DavResource resource(const QString &href, bool collection, const QString &etag, qint64 mtime, qint64 size)
 {
-    return DavResource{href, collection, etag, mtime, size};
+    return DavResource{href, collection, etag, mtime, size, {}};
 }
 
 const QByteArray kNextcloud = "<?xml version=\"1.0\"?>\n"
@@ -208,6 +208,49 @@ private Q_SLOTS:
         for (const char *p : {"getetag", "getlastmodified", "getcontentlength", "resourcetype"})
             QVERIFY(body.contains(QByteArray("<d:" + QByteArray(p) + "/>")));
         QVERIFY(body.contains("xmlns:d=\"DAV:\""));
+        QVERIFY(body.contains("<oc:fileid/>"));
+        QVERIFY(body.contains("xmlns:oc=\"http://owncloud.org/ns\""));
+    }
+
+    void fileIds_data()
+    {
+        QTest::addColumn<QByteArray>("xml");
+        QTest::addColumn<QString>("expected");
+        const QByteArray head = "<d:multistatus xmlns:d=\"DAV:\" xmlns:oc=\"http://owncloud.org/ns\"><d:response>"
+                                "<d:href>/Zażółć.md</d:href>";
+        const QByteArray tail = "</d:response></d:multistatus>";
+        QTest::newRow("oc:") << head
+                        + "<d:propstat><d:prop><d:getetag>\"x\"</d:getetag><oc:fileid>00000123ocabc</oc:fileid>"
+                          "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                        + tail << u"00000123ocabc"_s;
+        QTest::newRow("OC: and spaces") << head
+                        + "<d:propstat><d:prop><OC:fileid xmlns:OC=\"http://owncloud.org/ns\"> 42 </OC:fileid>"
+                          "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                        + tail << u"42"_s;
+        QTest::newRow("default namespace")
+                << QByteArray("<multistatus xmlns=\"DAV:\"><response><href>/a.md</href><propstat><prop>"
+                              "<fileid xmlns=\"http://owncloud.org/ns\">7</fileid></prop>"
+                              "<status>HTTP/1.1 200 OK</status></propstat></response></multistatus>")
+                << u"7"_s;
+        QTest::newRow("in a 404 propstat (a generic server)") << head
+                        + "<d:propstat><d:prop><d:getetag>\"x\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status>"
+                          "</d:propstat><d:propstat><d:prop><oc:fileid/></d:prop>"
+                          "<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>"
+                        + tail << QString();
+        QTest::newRow("missing") << head
+                        + "<d:propstat><d:prop><d:getetag>\"x\"</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status>"
+                          "</d:propstat>"
+                        + tail << QString();
+    }
+
+    void fileIds()
+    {
+        QFETCH(QByteArray, xml);
+        QFETCH(QString, expected);
+        const MultistatusResult r = parseMultistatus(xml);
+        QVERIFY2(r.ok(), qPrintable(r.error));
+        QCOMPARE(r.resources.size(), 1);
+        QCOMPARE(r.resources.first().fileId, expected);
     }
 
     void httpDates_data()

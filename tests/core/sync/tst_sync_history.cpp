@@ -205,11 +205,18 @@ void TestSyncHistory::jsonRoundTrip()
     r.stats.longestStallMs = 48'000;
     r.foldersCreated = 2;
     r.foldersMoved = 1;
+    r.foldersMovedHere = 2;
+    r.filesMoved = 3;
+    r.filesMovedHere = 4;
     SyncRunRecord rec = SyncRunRecord::fromReport(r);
     QCOMPARE(rec.foldersCreated, 2);
     QCOMPARE(rec.foldersDeleted, 0);
     QCOMPARE(rec.foldersMoved, 1);
-    QCOMPARE(rec.changeCount(), 3 + 1 + 1 + 2 + 1); // up, down, the conflict, the folders
+    QCOMPARE(rec.foldersMovedHere, 2);
+    QCOMPARE(rec.filesMoved, 3);
+    QCOMPARE(rec.filesMovedHere, 4);
+    // up, down, the conflict, the folders, the moves
+    QCOMPARE(rec.changeCount(), 3 + 1 + 1 + 2 + 1 + 2 + 3 + 4);
     rec.repeats = 3;
     rec.firstStarted = kStart;
     const QJsonObject json = rec.toJson();
@@ -224,7 +231,20 @@ void TestSyncHistory::jsonRoundTrip()
     QCOMPARE(back->skipped, 1);
     QCOMPARE(back->foldersCreated, 2);
     QCOMPARE(back->foldersMoved, 1);
+    QCOMPARE(back->foldersMovedHere, 2);
+    QCOMPARE(back->filesMoved, 3);
+    QCOMPARE(back->filesMovedHere, 4);
     QVERIFY(!json.contains(u"foldersDel"_s)); // only counts that happened are written
+    // Records of older versions have no move counts: 0.
+    QJsonObject old = json;
+    for (const QString &key : {u"foldersMovedHere"_s, u"filesMoved"_s, u"filesMovedHere"_s})
+        old.remove(key);
+    const std::optional<SyncRunRecord> older = SyncRunRecord::fromJson(old);
+    QVERIFY(older);
+    QCOMPARE(older->foldersMovedHere, 0);
+    QCOMPARE(older->filesMoved, 0);
+    QCOMPARE(older->filesMovedHere, 0);
+    QVERIFY(!SyncRunRecord::fromReport(changed(18)).toJson().contains(u"filesMovedHere"_s));
 }
 
 void TestSyncHistory::malformedRecordsAreSkipped()
@@ -324,6 +344,21 @@ void TestSyncHistory::foldsQuietRuns()
     QCOMPARE(history.runs().first().number, 10);
     QCOMPARE(history.runs().first().repeats, 1);
     QVERIFY(!history.runs().first().isQuiet());
+    // Nor one that only renamed a folder or a page as the server had.
+    for (int i = 0; i < 2; ++i) {
+        history.add(report(11 + 2 * i));
+        SyncReport here = report(12 + 2 * i);
+        if (i == 0) {
+            here.foldersMovedHere = 1;
+            here.changes = {SyncChange{u"Archiwum/Projekty ąę"_s, SyncAction::MoveLocal}};
+        } else {
+            here.filesMovedHere = 1;
+            here.changes = {SyncChange{u"Archiwum/Notatka ż.md"_s, SyncAction::MoveFileLocal}};
+        }
+        history.add(here);
+        QCOMPARE(history.runs().first().number, 12 + 2 * i);
+        QVERIFY(!history.runs().first().isQuiet());
+    }
 }
 
 void TestSyncHistory::numbers()

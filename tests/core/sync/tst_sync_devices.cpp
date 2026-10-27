@@ -1,6 +1,6 @@
 // Two devices syncing through one WebDAV server: edits, deletions, concurrent journal appends,
 // real conflicts (text and binary), first sync with content on both sides, the vault config,
-// line endings, parallel transfers, files that are not UTF-8, failing conflict uploads.
+// line endings, parallel transfers, files that are not UTF-8, failing conflict uploads, renames.
 #include "synctest.h"
 
 #include "vault/vaultconfig.h"
@@ -514,15 +514,45 @@ private Q_SLOTS:
         QCOMPARE(counts(p.b.sync()), Counts{});
     }
 
-    void renamesTravelAsDeleteAndCreate()
+    void renamesTravelAsRenames_data()
     {
-        Pair p({{u"Stara nazwa.md"_s, u8(u"treść ąę\n"_s)}, {u"inna.md"_s, "x\n"}});
+        QTest::addColumn<bool>("supportsMove");
+        QTest::addColumn<bool>("fileIds");
+        QTest::newRow("Nextcloud: MOVE, fileid") << true << true;
+        QTest::newRow("MOVE, ETags only") << true << false;
+        QTest::newRow("no MOVE: upload and delete") << false << true;
+    }
+
+    void renamesTravelAsRenames()
+    {
+        // A page renamed on one device is moved on the server (one MOVE) and renamed on the other
+        // (its version history, favourites and folds follow it there); a server without MOVE gets
+        // an upload and a deletion, and the other device a download and the trash.
+        QFETCH(bool, supportsMove);
+        QFETCH(bool, fileIds);
+        FakeWebDavServer::Options options;
+        options.supportsMove = supportsMove;
+        options.fileIds = fileIds;
+        Pair p({{u"Stara nazwa.md"_s, u8(u"treść ąę\n"_s)}, {u"inna.md"_s, "x\n"}}, {}, options);
         p.a.sync();
         p.b.sync();
         QVERIFY(p.a.vault->rename(u"Stara nazwa.md"_s, u"Projekty/Nowa nazwa.md"_s));
-        QCOMPARE(counts(p.a.sync()), (Counts{.up = 1, .delR = 1}));
-        QCOMPARE(counts(p.b.sync()), (Counts{.down = 1, .delL = 1}));
+        const SyncReport r = p.a.sync();
+        QCOMPARE(counts(r), (supportsMove ? Counts{} : Counts{.up = 1, .delR = 1}));
+        QCOMPARE(r.filesMoved, supportsMove ? 1 : 0);
+        p.b.changes.clear();
+        const SyncReport rb = p.b.sync();
+        QCOMPARE(counts(rb), (supportsMove ? Counts{} : Counts{.down = 1, .delL = 1}));
+        QCOMPARE(rb.filesMovedHere, supportsMove ? 1 : 0);
+        QCOMPARE(p.b.trash().size(), supportsMove ? 0 : 1);
+        const bool renamed = std::any_of(p.b.changes.cbegin(), p.b.changes.cend(), [](const VaultChange &c) {
+            return c.type == ChangeType::Renamed && c.source == ChangeSource::Sync
+                   && c.oldPath == u"Stara nazwa.md"_s && c.path == u"Projekty/Nowa nazwa.md"_s;
+        });
+        QCOMPARE(renamed, supportsMove);
         QCOMPARE(p.b.files(), (QMap<QString, QString>{{u"Projekty/Nowa nazwa.md"_s, u"treść ąę\n"_s}, {u"inna.md"_s, u"x\n"_s}}));
+        QCOMPARE(counts(p.a.sync()), Counts{});
+        QCOMPARE(counts(p.b.sync()), Counts{});
     }
 };
 

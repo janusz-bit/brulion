@@ -607,6 +607,59 @@ private Q_SLOTS:
         QCOMPARE(sync->folderCountsText(2, 1, 1), u"Folders: 2 new, 1 deleted, 1 moved on the server"_s);
     }
 
+    void serverRenamesKeepHistoryFavouritesAndFolds()
+    {
+        // A folder and a page renamed on the server (another device, the Nextcloud web page): the
+        // sync renames them here too, so the version history, the favourites and the folded
+        // blocks of the pages follow, and the folder tree hears of the folder's new name.
+        synctest::FakeWebDavServer::Options options = synctest::serverOptions(m_clock);
+        options.fileIds = true;
+        FakeWebDavServer server(options);
+        auto ws = open(&server, {{u"Projekty/Plan ąę.md"_s, u"- plan\n  - szczegół\n"_s},
+                                 {u"Projekty/Inne.md"_s, u"- inne\n"_s},
+                                 {u"Luźna strona.md"_s, u"- luźna\n"_s},
+                                 {u"Dziennik.md"_s, u"- dziś\n"_s}});
+        WorkspaceSync *sync = ws->sync();
+        sync->setNextcloud(account(server));
+        QVERIFY(syncAndWait(sync));
+        const QString plan = u"Projekty/Plan ąę.md"_s;
+        QVERIFY(ws->write(plan, u"- plan poprawiony\n  - szczegół\n"_s));
+        QCOMPARE(ws->vault()->history()->list(plan).size(), 1);
+        ws->setFavorite(plan, true);
+        ws->setFavorite(u"Luźna strona.md"_s, true);
+        ws->setFoldState(plan, {0});
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        QVERIFY(server.moveNode(u"Brulion/Projekty"_s, u"Brulion/Archiwum/Projekty 2026"_s));
+        QVERIFY(server.moveNode(u"Brulion/Luźna strona.md"_s, u"Brulion/Archiwum/Strona ż.md"_s));
+        QSignalSpy folderRenamed(ws.get(), &Workspace::folderRenamed);
+        m_clock.advance(60'000);
+        QVERIFY(syncAndWait(sync));
+        const QString moved = u"Archiwum/Projekty 2026/Plan ąę.md"_s;
+        QVERIFY(ws->exists(moved));
+        QVERIFY(!ws->exists(plan));
+        QCOMPARE(ws->vault()->history()->list(moved).size(), 1);
+        QVERIFY(ws->isFavorite(moved));
+        QVERIFY(ws->isFavorite(u"Archiwum/Strona ż.md"_s));
+        QVERIFY(!ws->isFavorite(plan));
+        QCOMPARE(ws->foldState(moved), (QVariantList{0}));
+        QVERIFY(ws->vault()->trash().isEmpty());
+        QCOMPARE(folderRenamed.size(), 1);
+        QCOMPARE(folderRenamed.first().at(0).toString(), u"Projekty"_s);
+        QCOMPARE(folderRenamed.first().at(1).toString(), u"Archiwum/Projekty 2026"_s);
+        QCOMPARE(sync->lastReport().value(u"foldersMovedHere"_s).toInt(), 1);
+        QCOMPARE(sync->lastReport().value(u"filesMovedHere"_s).toInt(), 1);
+        QCOMPARE(sync->lastReport().value(u"downloaded"_s).toInt(), 0);
+        const QString summary = sync->history().first().toMap().value(u"summary"_s).toString();
+        QVERIFY2(summary.contains(u"1 folder(s) moved"_s) && summary.contains(u"1 file(s) moved"_s), qPrintable(summary));
+        const QString details = sync->runDetailsText(sync->history().first().toMap().value(u"number"_s).toInt());
+        QVERIFY2(details.contains(u"Folders: 1 moved here"_s), qPrintable(details));
+        QVERIFY2(details.contains(u"Files: 1 moved here"_s), qPrintable(details));
+        QCOMPARE(sync->folderCountsText(0, 0, 0, 1), u"Folders: 1 moved here"_s);
+        QCOMPARE(sync->fileMovesText(0, 0), QString());
+        QCOMPARE(sync->fileMovesText(1, 2), u"Files: 1 moved on the server, 2 moved here"_s);
+    }
+
     void cancelMidSync()
     {
         // A long first sync (slow uploads) stopped with cancelSync(): what is done stays synced,

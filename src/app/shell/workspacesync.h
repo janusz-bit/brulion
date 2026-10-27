@@ -22,7 +22,8 @@
 //   state        "disabled" | "idle" | "syncing" | "error" | "offline" (not set up: "disabled")
 //   statusText   one translated line for the status bar ("Zsynchronizowano o 10:32", …)
 //   lastReport   { uploaded, downloaded, merged, deletedLocal, deletedRemote, foldersCreated,
-//                  foldersDeleted, foldersMoved, conflicts, conflictPaths,
+//                  foldersDeleted, foldersMoved, foldersMovedHere, filesMoved, filesMovedHere,
+//                  conflicts, conflictPaths,
 //                  errors: [{ path, message }], skipped, changes, started, finished, cancelled,
 //                  failed, failure }
 //   pendingDeletions  [{ path, action: "delete-local" | "delete-remote" }]
@@ -292,8 +293,13 @@ public:
     Q_INVOKABLE QVariantMap runDetails(int number) const;
     /// The same as plain text ("Kopiuj szczegóły"): translated labels, technical values.
     Q_INVOKABLE QString runDetailsText(int number) const;
-    /// "Foldery: 2 nowe, 1 usunięty, 1 przeniesiony" (the counts > 0 only; "" when none).
-    Q_INVOKABLE QString folderCountsText(int created, int deleted, int moved) const;
+    /// "Foldery: 2 nowe, 1 usunięty, 1 przeniesiony na serwerze, 1 przeniesiony tutaj" (the
+    /// counts > 0 only; "" when none). `moved`: renamed here, moved on the server; `movedHere`:
+    /// renamed on the server (or another device), renamed here too.
+    Q_INVOKABLE QString folderCountsText(int created, int deleted, int moved, int movedHere = 0) const;
+    /// "Pliki: 1 przeniesiony na serwerze, 2 przeniesione tutaj" — the pages and files renamed or
+    /// moved (the counts > 0 only; "" when none).
+    Q_INVOKABLE QString fileMovesText(int moved, int movedHere) const;
     /// Forget the kept runs.
     Q_INVOKABLE void clearHistory();
 
@@ -310,6 +316,10 @@ Q_SIGNALS:
     /// A sync created or removed folders in the vault (folders produce no Vault change of their
     /// own): the tree and the lists refresh.
     void foldersChanged(const QStringList &paths);
+    /// A sync renamed a folder of the vault as it had been renamed on the server (or on another
+    /// device): its pages followed with their own Vault changes, the folder tree and the routes
+    /// showing the folder follow this (Workspace::folderRenamed).
+    void folderMovedHere(const QString &from, const QString &to);
     /// Something failed that the user should know about (translated).
     void errorOccurred(const QString &message);
     /// The open notebook's server folder is another notebook's too, so it does not sync (a

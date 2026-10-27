@@ -37,8 +37,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 * **Import zadań z Microsoft To Do** (link z researchem:
   https://share.google/aimode/IkspZGTIWv9OVFLLT).
-* **Zmiana nazwy folderu w Nextcloud** — zrobiona na serwerze dociera do innych urządzeń jako
-  pobranie i kosz, więc historia wersji, ulubione i zwinięcia nie idą za stroną.
 
 ## Android i telefon
 

@@ -152,6 +152,9 @@ SyncRunRecord SyncRunRecord::fromReport(const SyncReport &report, bool stalled)
     r.foldersCreated = report.foldersCreated;
     r.foldersDeleted = report.foldersDeleted;
     r.foldersMoved = report.foldersMoved;
+    r.foldersMovedHere = report.foldersMovedHere;
+    r.filesMoved = report.filesMoved;
+    r.filesMovedHere = report.filesMovedHere;
     r.phases = report.phases;
     r.stats = report.stats;
     for (const SyncFileError &e : report.errors) {
@@ -174,7 +177,7 @@ bool SyncRunRecord::isQuiet() const
 int SyncRunRecord::changeCount() const
 {
     return uploaded + downloaded + merged + deletedLocal + deletedRemote + conflicts + foldersCreated + foldersDeleted
-           + foldersMoved;
+           + foldersMoved + foldersMovedHere + filesMoved + filesMovedHere;
 }
 
 QJsonObject toJson(const SyncPhaseTime &phase)
@@ -300,13 +303,19 @@ QJsonObject SyncRunRecord::toJson() const
             {u"phases"_s, phaseArray},
             {u"stats"_s, sync::toJson(stats)},
     };
-    // Folder counts only when there were any (records of older versions have none).
+    // Folder and move counts only when there were any (records of older versions have none).
     if (foldersCreated > 0)
         json.insert(u"foldersNew"_s, foldersCreated);
     if (foldersDeleted > 0)
         json.insert(u"foldersDel"_s, foldersDeleted);
     if (foldersMoved > 0)
         json.insert(u"foldersMoved"_s, foldersMoved);
+    if (foldersMovedHere > 0)
+        json.insert(u"foldersMovedHere"_s, foldersMovedHere);
+    if (filesMoved > 0)
+        json.insert(u"filesMoved"_s, filesMoved);
+    if (filesMovedHere > 0)
+        json.insert(u"filesMovedHere"_s, filesMovedHere);
     if (!errorCode.isEmpty())
         json.insert(u"code"_s, errorCode);
     if (!errorMessage.isEmpty())
@@ -353,6 +362,9 @@ std::optional<SyncRunRecord> SyncRunRecord::fromJson(const QJsonObject &json)
     r.foldersCreated = qMax(0, intOf(json, u"foldersNew"_s));
     r.foldersDeleted = qMax(0, intOf(json, u"foldersDel"_s));
     r.foldersMoved = qMax(0, intOf(json, u"foldersMoved"_s));
+    r.foldersMovedHere = qMax(0, intOf(json, u"foldersMovedHere"_s));
+    r.filesMoved = qMax(0, intOf(json, u"filesMoved"_s));
+    r.filesMovedHere = qMax(0, intOf(json, u"filesMovedHere"_s));
     for (const QJsonValue &v : json.value(u"phases"_s).toArray()) {
         if (const std::optional<SyncPhaseTime> p = phaseTimeFromJson(v.toObject()))
             r.phases.append(*p);

@@ -20,6 +20,7 @@ struct DavResource {
     QString etag;              ///< normalised (no quotes, no W/); empty if missing
     qint64 mtime = 0;          ///< ms since epoch; 0 if missing or unparsable
     qint64 size = 0;           ///< bytes; 0 if missing or invalid
+    QString fileId;            ///< oc:fileid (Nextcloud, ownCloud), trimmed; empty if missing
 
     friend bool operator==(const DavResource &, const DavResource &) = default;
 };
@@ -31,7 +32,8 @@ struct MultistatusResult {
     bool ok() const { return error.isEmpty(); }
 };
 
-/// PROPFIND body asking for getetag, getlastmodified, getcontentlength and resourcetype.
+/// PROPFIND body asking for getetag, getlastmodified, getcontentlength, resourcetype and
+/// oc:fileid (a server that does not know it answers it in a 404 propstat, which is dropped).
 QByteArray propfindBody();
 
 /// Parse a 207 Multi-Status body. Responses with a non-2xx status or without <href> are
