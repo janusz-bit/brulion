@@ -1,5 +1,7 @@
 #include "picturesize.h"
 
+#include "drawing/excalidraw.h"
+
 #include <QBuffer>
 #include <QByteArray>
 #include <QDateTime>
@@ -122,6 +124,36 @@ QSize localPictureSize(const QString &file)
         cache.clear();
     cache.insert(file, Entry{modified, info.size(), size});
     return size;
+}
+
+bool localFileIsDrawing(const QString &file)
+{
+    if (!hasSuffix(file, ".svg"_L1))
+        return false;
+    const QFileInfo info(file);
+    if (!info.isFile())
+        return false;
+    struct Entry {
+        QDateTime modified;
+        qint64 bytes = -1;
+        bool drawing = false;
+    };
+    static QMutex mutex;
+    static QHash<QString, Entry> cache;
+    const QDateTime modified = info.lastModified();
+    {
+        const QMutexLocker lock(&mutex);
+        const auto it = cache.constFind(file);
+        if (it != cache.constEnd() && it->modified == modified && it->bytes == info.size())
+            return it->drawing;
+    }
+    QFile f(file);
+    const bool drawing = f.open(QIODevice::ReadOnly) && brulion::drawing::looksLikeExcalidrawSvg(f.read(brulion::drawing::HeadBytes));
+    const QMutexLocker lock(&mutex);
+    if (cache.size() > 2000)
+        cache.clear();
+    cache.insert(file, Entry{modified, info.size(), drawing});
+    return drawing;
 }
 
 bool canDecodePictureFormat(const QString &fileName)

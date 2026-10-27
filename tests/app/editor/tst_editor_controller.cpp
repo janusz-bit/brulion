@@ -5,6 +5,8 @@
 #include "blocklistmodel.h"
 #include "blocktext.h"
 #include "dayclock.h"
+#include "drawing/drawing.h"
+#include "drawing/svgwrite.h"
 #include "fakeeditorhost.h"
 #include "index/vaultindex.h"
 #include "markdown/inline.h"
@@ -3840,6 +3842,89 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QVERIFY2(filter.contains(u"*."_s + ext + u' ') || filter.contains(u"*."_s + ext + u')'),
                      qPrintable(filter));
         QVERIFY(!f.page.pickImageInBrowser(0, 0, 0)); // a FileDialog outside the browser
+    }
+
+    void drawingSlashCommand()
+    {
+        // "/rysunek": an empty drawing stored as an attachment, embedded where the command was,
+        // and the drawing editor opened on it (route "drawing").
+        Fixture f(u"- Wykład z łączności /rys\n"_s);
+        QVariantMap r = f.page.applySlashCommand(0, 19, 23, u"drawing"_s);
+        QCOMPARE(r.value(u"action"_s).toString(), u"drawing"_s);
+        QCOMPARE(f.text(), u"- Wykład z łączności \n"_s);
+        const int cursor = r.value(u"cursor"_s).toInt();
+        QCOMPARE(cursor, 19);
+        r = f.page.insertDrawing(0, cursor, cursor);
+        const QString path = r.value(u"path"_s).toString();
+        QCOMPARE(path, u"assets/Drawing 2026-10-15 10.00.svg"_s);
+        QCOMPARE(f.text(), u"- Wykład z łączności ![[Drawing 2026-10-15 10.00.svg]]\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        // The file: a picture (its size on the root) carrying an empty scene.
+        QFile file(f.host.assetUrl(path).toLocalFile());
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray svg = file.readAll();
+        QVERIFY(svg.contains("width=\"320\" height=\"180\""));
+        const std::optional<brulion::drawing::Drawing> d = brulion::drawing::readDrawing(svg);
+        QVERIFY(d);
+        QVERIFY(d->strokes.isEmpty());
+        // Its embed is a drawing at that path.
+        const QVariantMap embed = f.role(0, "embeds").toList().value(0).toMap();
+        QVERIFY(embed.value(u"image"_s).toBool());
+        QVERIFY(embed.value(u"drawing"_s).toBool());
+        QCOMPARE(embed.value(u"path"_s).toString(), path);
+        QCOMPARE(embed.value(u"width"_s).toInt(), 320);
+        // A second one in the same minute gets a free name.
+        r = f.page.insertDrawing(0, -1, -1);
+        QCOMPARE(r.value(u"path"_s).toString(), u"assets/Drawing 2026-10-15 10.00 2.svg"_s);
+        // Opening it saves the page first, then asks for the drawing route.
+        f.page.openDrawing(path);
+        QCOMPARE(f.host.file(Page), f.text());
+        QCOMPARE(f.host.lastRoute(), (QVariantMap{{u"view"_s, u"drawing"_s}, {u"path"_s, path}}));
+        // Undo takes the embed away (the file stays, as with pictures).
+        f.page.undo();
+        f.page.undo();
+        QCOMPARE(f.text(), u"- Wykład z łączności \n"_s);
+    }
+
+    void drawingEmbedsFollowTheirFile()
+    {
+        // A plain SVG is a picture; an SVG with an embedded scene is a drawing. A drawing saved
+        // again (the drawing editor) has its embed computed again (its size here; its URL's
+        // version in the Workspace).
+        FakeEditorHost host;
+        host.setTextAsset(u"assets/logo.svg"_s, u"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"/>"_s);
+        brulion::drawing::Drawing d;
+        host.setTextAsset(u"assets/szkic ćwiczeń.svg"_s, QString::fromUtf8(brulion::drawing::toSvg(d)));
+        host.setFile(Page, u"- ![[logo.svg]] ![[szkic ćwiczeń.svg]]\n"_s);
+        PageController page;
+        page.setNow(Now);
+        page.setHost(&host);
+        page.setPath(Page);
+        const auto embeds = [&] {
+            const QHash<int, QByteArray> roles = page.blocks()->roleNames();
+            return page.blocks()->data(page.blocks()->index(0), roles.key("embeds")).toList();
+        };
+        QCOMPARE(embeds().size(), 2);
+        QVERIFY(!embeds().at(0).toMap().value(u"drawing"_s).toBool());
+        QVERIFY(embeds().at(1).toMap().value(u"drawing"_s).toBool());
+        QCOMPARE(embeds().at(1).toMap().value(u"width"_s).toInt(), 320);
+        brulion::drawing::Stroke s;
+        s.id = u"a"_s;
+        s.points = {{0, 0, 0.5}, {500, 200, 0.5}};
+        d.strokes = {s};
+        const QByteArray bigger = brulion::drawing::toSvg(d);
+        // The file rewritten in place, reported as a file change (Workspace::fileChanged).
+        QFile out(host.assetUrl(u"assets/szkic ćwiczeń.svg"_s).toLocalFile());
+        QVERIFY(out.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        out.write(bigger);
+        out.close();
+        QSignalSpy changed(page.blocks(), &QAbstractItemModel::dataChanged);
+        Q_EMIT host.fileChanged(u"assets/szkic ćwiczeń.svg"_s);
+        QCOMPARE(changed.size(), 1);
+        QVERIFY(embeds().at(1).toMap().value(u"width"_s).toInt() > 500);
+        // Another attachment changing leaves the row alone.
+        Q_EMIT host.fileChanged(u"assets/inne.png"_s);
+        QCOMPARE(changed.size(), 1);
     }
 
     void tableCellTypingIsSavedAndOneUndoStep()

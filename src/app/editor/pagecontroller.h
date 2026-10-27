@@ -675,6 +675,13 @@ public:
     /// Like insertFiles(), always as a new block after `row` (-1: at the end of the page) — files
     /// dropped on a block that is not being edited.
     Q_INVOKABLE QVariantMap insertFilesAfter(int row, const QList<QUrl> &urls);
+    /// A new drawing (docs/SYNTAX.md §2 "Drawings"): an empty drawing stored as the attachment
+    /// "Rysunek <yyyy-MM-dd HH.mm>.svg" (a free name: " 2", " 3" …) and embedded like
+    /// insertAttachment(). Returns { row, cursor, path } (row -1: it could not be stored).
+    Q_INVOKABLE QVariantMap insertDrawing(int row, int from, int to);
+    /// Open the drawing editor on the drawing at vault path `path` (route "drawing"); the page is
+    /// saved first.
+    Q_INVOKABLE void openDrawing(const QString &path);
     /// Browser (WebAssembly): the browser's file picker for a picture, inserted asynchronously like
     /// insertAttachment() into the row (tracked while the picker is open). False elsewhere — use
     /// a FileDialog and insertFiles() there.

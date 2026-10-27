@@ -270,6 +270,14 @@ public:
     /// Qt's image plugins, which Android, the browser and some desktops lack); false for files
     /// that are no picture. The picture view and the editor's embeds name a format it cannot show.
     Q_INVOKABLE bool canDecodePicture(const QString &path) const override;
+    /// The attachment is a drawing (an SVG whose start names an embedded Excalidraw scene,
+    /// docs/SYNTAX.md §2 "Drawings"): its embed and its picture view open the drawing editor.
+    Q_INVOKABLE bool isDrawing(const QString &path) const override;
+    /// An attachment's bytes (the drawing editor); empty when missing or unreadable.
+    Q_INVOKABLE QByteArray readAttachment(const QString &path) const;
+    /// Write an attachment (the drawing editor's saves): atomic, what it replaces kept in History
+    /// as for notes, fileChanged follows. False (and errorOccurred) when it could not be written.
+    Q_INVOKABLE bool writeAttachment(const QString &path, const QByteArray &data);
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
     /// header has none): the picture view's own-pixels size, without decoding the picture.
     Q_INVOKABLE QSize pictureSize(const QString &path) const;

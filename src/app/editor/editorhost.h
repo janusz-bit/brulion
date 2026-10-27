@@ -112,6 +112,13 @@ public:
     /// embeds name a format it cannot show (WebP, AVIF without Qt's image plugins) instead of
     /// failing to load it. Hosts (tests) may say less.
     virtual bool canDecodePicture(const QString &path) const { return editor::canDecodePictureFormat(path); }
+    /// The attachment at `path` is a drawing (an SVG with an embedded scene, docs/SYNTAX.md §2):
+    /// its embed opens the drawing editor. Default: assetUrl()'s local file, read by its start.
+    virtual bool isDrawing(const QString &path) const
+    {
+        const QUrl url = assetUrl(path);
+        return url.isLocalFile() && editor::localFileIsDrawing(url.toLocalFile());
+    }
     /// Store pasted/dropped bytes in the attachments folder; returns the new vault path.
     virtual QString saveAttachment(const QString &fileName, const QByteArray &data) = 0;
 

@@ -20,6 +20,8 @@ import Brulion
 // name no room).
 // A picture whose format this device cannot decode (WebP or AVIF without Qt's image plugins:
 // Workspace.canDecodePicture) is named so instead of a load error.
+// A drawing (Workspace.isDrawing) has "Edytuj rysunek" in the bar (the drawing editor, route
+// "drawing"); the picture follows the file when it is saved again.
 // The text view reads at most `textLimit` bytes of the file (Workspace.readTextStart: a photo is
 // never read whole for it), again whenever the file changes (sync, another program).
 //
@@ -67,7 +69,20 @@ Item {
         const i = root.fileName.lastIndexOf(".")
         return i < 0 ? "" : root.fileName.slice(i + 1).toUpperCase()
     }
-    readonly property url source: root.decodable ? Workspace.assetUrl(root.path) : ""
+    /// Grows when the file changes on disk (a drawing saved again): its URL is asked for again
+    /// (a drawing's carries its version, Workspace.assetUrl).
+    property int fileRevision: 0
+    readonly property url source: root.decodable && root.fileRevision >= 0 ? Workspace.assetUrl(root.path) : ""
+    /// A drawing (docs/SYNTAX.md §2 "Drawings"): the bar offers the drawing editor.
+    readonly property bool drawing: root.scalable && root.fileRevision >= 0 && Workspace.isDrawing(root.path)
+
+    Connections {
+        target: Workspace
+        function onFileChanged(path) {
+            if (path === root.path)
+                root.fileRevision++
+        }
+    }
     /// The picture's pixels from its header (≤ 0: not in the header — the loaded picture's then).
     readonly property size headerSize: Workspace.pictureSize(root.path)
     readonly property bool headerKnown: headerSize.width > 0 && headerSize.height > 0
@@ -183,6 +198,16 @@ Item {
                 label: root.sizeToggleText
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.toggleSize()
+            }
+            BButton {
+                objectName: "pictureDrawingButton"
+                visible: root.drawing && !root.asText
+                size: "small"
+                variant: "secondary"
+                iconName: "pen-tool"
+                text: root.iconSizeToggle ? qsTr("Edit") : qsTr("Edit drawing")
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: AppController.navigate({ view: "drawing", path: root.path })
             }
             BButton {
                 objectName: "pictureTextButton"
