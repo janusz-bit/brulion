@@ -928,11 +928,18 @@ QVariantMap PageController::pasteClipboard(int row, int from, int to)
         const int urlTo = out.value(u"cursor"_s).toInt() - tail;
         const int urlFrom = urlTo - int(address.size());
         const QString edit = m_model->editTextAt(row);
-        bool bare = urlFrom >= 0 && edit.mid(urlFrom, address.size()) == address;
-        // Pasted into a link (`![](…)`, `[x](…)`): it is one already.
-        for (const Link &link : markdown::extractInline(edit).links) {
-            if (bare && link.kind != LinkKind::Url && link.from < urlTo && link.to > urlFrom)
-                bare = false;
+        // Only where the text reads it as a bare address of its own: not in a link (`![](…)`,
+        // `[x](…)`: it is one already), an autolink `<…>`, inline code, a comment or a formula.
+        bool bare = false;
+        if (urlFrom >= 0 && edit.mid(urlFrom, address.size()) == address) {
+            for (const Link &link : markdown::extractInline(edit).links) {
+                if (link.kind == LinkKind::Url && link.from == urlFrom && link.to == urlTo)
+                    bare = true;
+                else if (link.from < urlTo && link.to > urlFrom) {
+                    bare = false;
+                    break;
+                }
+            }
         }
         if (bare) {
             out.insert(u"pictureUrl"_s, address);

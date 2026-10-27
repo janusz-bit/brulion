@@ -957,6 +957,9 @@ private:
     /// Insert `inserted` (embeds) into [from, to) of a text row with blanks around it, else as a
     /// block of its own after the row (at the end for -1); { row, cursor }.
     QVariantMap insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock);
+    /// insertWebPicture(); `inPlace`: [from, to) holds the address already (urlToPicture()), it is
+    /// replaced in any block showing pictures (a quote, a callout too), never moved to a new block.
+    QVariantMap placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace);
     /// Store the ready (or failed) picture `url` of m_webDownloads.
     void finishWebDownload(const QString &url, bool ready);
     QString m_commandBefore;

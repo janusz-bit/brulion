@@ -1110,6 +1110,70 @@ private Q_SLOTS:
         QGuiApplication::clipboard()->clear();
     }
 
+    // Pasted where the text does not read it as a bare address: nothing is offered (accepting
+    // would rewrite code, a formula, a comment or an autolink).
+    void pastedPictureAddressNotBare_data()
+    {
+        QTest::addColumn<QString>("before"); ///< the row's text before the cursor
+        QTest::addColumn<QString>("after");  ///< after it
+        QTest::newRow("inline code") << u"Użyj `curl "_s << u"` tutaj"_s;
+        QTest::newRow("empty code span") << u"Przykład: `"_s << u"`"_s;
+        QTest::newRow("autolink") << u"Źródło <"_s << u"> koniec"_s;
+        QTest::newRow("formula") << u"Wzór $x = "_s << u"$ żółw"_s;
+        QTest::newRow("comment") << u"Ślad %%"_s << u"%% dalej"_s;
+        QTest::newRow("HTML comment") << u"Łąka <!-- "_s << u" -->"_s;
+        QTest::newRow("glued to a word") << u"zdjęcie:"_s << QString();
+    }
+    void pastedPictureAddressNotBare()
+    {
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        const QString url = u"https://example.com/kot.jpg"_s;
+        Fixture f(u"- "_s + before + after + u"\n"_s);
+        const int at = int(before.size());
+        QCOMPARE(f.page.blocks()->editTextAt(0), before + after);
+        QGuiApplication::clipboard()->setText(url);
+        f.page.startEditing(0, at);
+        const QVariantMap r = f.page.pasteClipboard(0, at, at);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.page.blocks()->editTextAt(0), before + url + after);
+        QVERIFY2(!r.contains(u"pictureUrl"_s), qPrintable(f.text()));
+        QGuiApplication::clipboard()->clear();
+    }
+
+    // A quote and a callout show pictures: "Zapisz w notatniku" turns the pasted address into the
+    // picture where it is, not a copy in a new block below.
+    void pastePictureAddressIntoAQuote_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::newRow("quote") << u"> Cytat: \n\nDalej\n"_s;
+        QTest::newRow("callout") << u"> [!note] Uwaga\n> Zdjęcie żółwia: \n\nDalej\n"_s;
+    }
+    void pastePictureAddressIntoAQuote()
+    {
+        QFETCH(QString, page);
+        const QString url = u"https://example.com/żółw.png"_s;
+        Fixture f(page);
+        const int rows = f.page.blocks()->rowCount();
+        const QString edit = f.page.blocks()->editTextAt(0);
+        const int at = int(edit.size());
+        QGuiApplication::clipboard()->setText(url);
+        f.page.startEditing(0, at);
+        const QVariantMap r = f.page.pasteClipboard(0, at, at);
+        QCOMPARE(r.value(u"pictureUrl"_s).toString(), url);
+        const QString pasted = f.text();
+        const QVariantMap done = f.page.urlToPicture(0, r.value(u"pictureFrom"_s).toInt(),
+                                                     r.value(u"pictureTo"_s).toInt(), url, false);
+        QCOMPARE(done.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.page.blocks()->rowCount(), rows);
+        QCOMPARE(f.page.blocks()->editTextAt(0), edit + u"![]("_s + url + u")"_s);
+        QCOMPARE(f.text().count(url), 1);
+        QVERIFY2(f.text().endsWith(u"\n\nDalej\n"_s), qPrintable(f.text()));
+        f.page.undo();
+        QCOMPARE(f.text(), pasted);
+        QGuiApplication::clipboard()->clear();
+    }
+
     void urlToPictureChecksTheText()
     {
         Fixture f(u"- Adres https://example.com/kot.jpg i dalej\n"_s);

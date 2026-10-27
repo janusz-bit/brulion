@@ -3451,6 +3451,11 @@ bool PageController::isWebPictureUrl(const QString &url) const
 
 QVariantMap PageController::insertWebPicture(int row, int from, int to, const QString &url, bool download)
 {
+    return placeWebPicture(row, from, to, url, download, false);
+}
+
+QVariantMap PageController::placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace)
+{
     const QString target = url.trimmed();
     if (!webpicture::isWebUrl(target))
         return {{u"row"_s, -1}, {u"cursor"_s, -1}};
@@ -3459,7 +3464,17 @@ QVariantMap PageController::insertWebPicture(int row, int from, int to, const QS
     QString dest = target;
     if (angle)
         dest = u'<' + dest.replace(u'<', u"%3C"_s).replace(u'>', u"%3E"_s) + u'>';
-    const QVariantMap out = insertEmbedText(row, from, to, u"![]("_s + dest + u')', false);
+    const QString picture = u"![]("_s + dest + u')';
+    QVariantMap out;
+    if (inPlace && validRow(row) && showsEmbeds(m_model->shapeAt(row).view)) {
+        // The address is in the text already (a quote or callout too): it becomes the picture there.
+        const int cursor = replaceRange(row, from, to, picture);
+        if (editingRow() == row)
+            setFocus({row, cursor}, true);
+        out = {{u"row"_s, row}, {u"cursor"_s, cursor}};
+    } else {
+        out = insertEmbedText(row, from, to, picture, false);
+    }
     if (download && out.value(u"row"_s).toInt() >= 0) {
         for (const QString &onPage : webPictureUrls()) {
             if (webpicture::webUrl(onPage) == webpicture::webUrl(target)) {
@@ -3479,7 +3494,7 @@ QVariantMap PageController::urlToPicture(int row, int from, int to, const QStrin
     const QString edit = m_model->editTextAt(row);
     if (to > edit.size() || QStringView(edit).sliced(from, to - from) != url)
         return none;
-    return insertWebPicture(row, from, to, url, download);
+    return placeWebPicture(row, from, to, url, download, true);
 }
 
 bool PageController::copyWebPictureUrl(const QString &url)
