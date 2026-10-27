@@ -895,12 +895,16 @@ std::optional<QByteArray> VaultPrivate::readObsidianSetting(const QString &path,
     return bytes;
 }
 
-bool VaultPrivate::loadConfig(bool quiet)
+bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
 {
     ParsedVaultConfig parsed;
     QStringList adopted;
     const QString path = vaultConfigPath();
     const auto known = files.constFind(path);
+    const bool obsidianVault = known == files.cend()
+            && (rereadObsidian ? isDirOnDisk(u".obsidian"_s) : obsidianFiles.has_value());
+    if (!obsidianVault)
+        obsidianFiles.reset();
     if (known != files.cend() && known->size > kMaxConfigBytes) {
         parsed.warnings.append(u"%1 is too big (%2 bytes); using the defaults"_s.arg(path).arg(known->size));
     } else if (known != files.cend()) {
@@ -910,15 +914,19 @@ bool VaultPrivate::loadConfig(bool quiet)
             parsed = parseVaultConfig(bytes);
         else
             parsed.warnings.append(u"Cannot read %1"_s.arg(path));
-    } else if (isDirOnDisk(u".obsidian"_s)) {
+    } else if (obsidianVault) {
         // An Obsidian vault Brulion has no settings for yet: its journal, template and
         // attachment settings are the defaults (in memory; saveConfig() makes them the file's).
-        ObsidianVaultFiles obsidian;
-        obsidian.dailyNotes = readObsidianSetting(obsidianDailyNotesPath(), parsed.warnings);
-        obsidian.app = readObsidianSetting(obsidianAppPath(), parsed.warnings);
-        obsidian.templates = readObsidianSetting(obsidianTemplatesPath(), parsed.warnings);
-        obsidian.corePlugins = readObsidianSetting(obsidianCorePluginsPath(), parsed.warnings);
-        ObsidianAdoption adoption = adoptObsidianSettings(obsidian, files.keys());
+        if (rereadObsidian) {
+            ObsidianRead read;
+            read.files.dailyNotes = readObsidianSetting(obsidianDailyNotesPath(), read.warnings);
+            read.files.app = readObsidianSetting(obsidianAppPath(), read.warnings);
+            read.files.templates = readObsidianSetting(obsidianTemplatesPath(), read.warnings);
+            read.files.corePlugins = readObsidianSetting(obsidianCorePluginsPath(), read.warnings);
+            obsidianFiles = std::move(read);
+        }
+        parsed.warnings += obsidianFiles->warnings;
+        ObsidianAdoption adoption = adoptObsidianSettings(obsidianFiles->files, files.keys());
         parsed.config = adoption.config;
         parsed.warnings += adoption.warnings;
         adopted = adoption.adoptedKeys;
@@ -929,7 +937,8 @@ bool VaultPrivate::loadConfig(bool quiet)
     }
     if (!adopted.isEmpty() && adopted != configFromObsidian)
         qCInfo(lcVault).noquote() << u"Settings taken from .obsidian/: %1"_s.arg(adopted.join(u", "_s));
-    const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian;
+    const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian
+            || parsed.warnings != configWarnings;
     config = parsed.config;
     rawConfig = parsed.raw;
     configWarnings = parsed.warnings;
@@ -945,7 +954,16 @@ void VaultPrivate::finish(const QList<VaultChange> &changes)
     const bool configTouched = std::any_of(changes.cbegin(), changes.cend(), [&](const VaultChange &c) {
         return c.path == configPath || c.oldPath == configPath;
     });
-    const bool configDiffers = configTouched && loadConfig();
+    // Without config.json the settings taken from .obsidian/ depend on the tracked files (the
+    // guards of adoptObsidianSettings, the day at the top): checked again when files come or go
+    // — say, Brulion's journals/ arriving on a new device after .obsidian/.
+    const bool guardedFilesCameOrWent = obsidianFiles && scanStatus.isOk()
+            && std::any_of(changes.cbegin(), changes.cend(), [](const VaultChange &c) {
+                   return c.type != ChangeType::Modified
+                           && (obsidianAdoptionDependsOn(c.path)
+                               || (!c.oldPath.isEmpty() && obsidianAdoptionDependsOn(c.oldPath)));
+               });
+    const bool configDiffers = configTouched ? loadConfig() : guardedFilesCameOrWent && loadConfig(true, false);
     Q_EMIT q->changed(changes);
     if (configDiffers)
         Q_EMIT q->configChanged();

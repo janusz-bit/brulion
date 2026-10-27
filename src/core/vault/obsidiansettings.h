@@ -24,7 +24,9 @@
 //  * Guard for notebooks Brulion already used with its defaults (they have no config.json
 //    either): nothing journal-related is taken while the default journals folder holds a
 //    Markdown file, the attachments folder while the default one holds a file, the templates
-//    folder while the default one holds a file.
+//    folder while the default one holds a file. Files in Obsidian's own folder for that setting
+//    do not count (Obsidian's days in "journals/" or "Journals/" are no sign of Brulion's use;
+//    Brulion's folders match in any letter case).
 //  * Invalid JSON, a non-object or a value of the wrong type: a warning, that value is skipped.
 //    Warnings are English (shown on the settings page like config.json's).
 #pragma once
@@ -71,5 +73,9 @@ struct ObsidianAdoption {
 /// `trackedFiles`: the vault's tracked file paths (for the guards).
 ObsidianAdoption adoptObsidianSettings(const ObsidianVaultFiles &files, const QStringList &trackedFiles,
                                        const VaultConfig &base = {});
+
+/// True when a tracked file at `path` coming or going can change what adoptObsidianSettings()
+/// takes with that `base` (a file at the top of the notebook or in one of the guarded folders).
+bool obsidianAdoptionDependsOn(const QString &path, const VaultConfig &base = {});
 
 } // namespace brulion

@@ -2,6 +2,7 @@
 // config), vaultmove.cpp (rename, trash) and vaultscan.cpp (listing, diffing, watching).
 #pragma once
 
+#include "vault/obsidiansettings.h"
 #include "vault/vault.h"
 #include "vault/vaultutil_p.h"
 
@@ -162,9 +163,11 @@ public:
 
     // --- config (vault.cpp)
     /// Loads .brulion/config.json — or, without it, the settings of `.obsidian/` — into
-    /// `config`; true when config() or configAdoptedFromObsidian() changed. `quiet`: warnings
-    /// already reported by the previous load are not logged again (periodic rescans).
-    bool loadConfig(bool quiet = false);
+    /// `config`; true when config(), configAdoptedFromObsidian() or configWarnings() changed.
+    /// `quiet`: warnings already reported by the previous load are not logged again (periodic
+    /// rescans). `rereadObsidian` false: Obsidian's settings as last read (`obsidianFiles`),
+    /// for the guards after files came or went.
+    bool loadConfig(bool quiet = false, bool rereadObsidian = true);
     std::optional<QByteArray> readObsidianSetting(const QString &path, QStringList &warnings) const;
     void finish(const QList<VaultChange> &changes);
 
@@ -269,6 +272,13 @@ public:
     QJsonObject rawConfig;
     QStringList configWarnings;
     QStringList configFromObsidian; ///< config.json keys adopted from .obsidian/ (no config.json)
+    /// Obsidian's settings files as last read by loadConfig() and the problems reading them;
+    /// nullopt while config.json is there or the vault has no `.obsidian/`.
+    struct ObsidianRead {
+        ObsidianVaultFiles files;
+        QStringList warnings;
+    };
+    std::optional<ObsidianRead> obsidianFiles;
 
     std::unique_ptr<History> history;
     LocalStore *store = nullptr; ///< child of q

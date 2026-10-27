@@ -39,22 +39,29 @@ std::optional<QString> convertMoment(const QString &moment, bool *names)
     if (moment.contains(u'\''))
         return std::nullopt;
     QString out;
+    // Adjacent literals ([a][b], \a\b) form one quoted run: "'a''b'" would write a "'".
+    QString literal;
+    const auto flush = [&] {
+        out += qtLiteral(literal);
+        literal.clear();
+    };
     for (qsizetype i = 0; i < moment.size();) {
         const QChar c = moment[i];
         if (c == u'[') {
             const qsizetype close = moment.indexOf(u']', i + 1);
             if (close < 0)
                 return std::nullopt;
-            out += qtLiteral(moment.sliced(i + 1, close - i - 1));
+            literal += moment.sliced(i + 1, close - i - 1);
             i = close + 1;
             continue;
         }
         if (c == u'\\') { // moment's escape of one character
             if (i + 1 < moment.size())
-                out += qtLiteral(moment.sliced(i + 1, 1));
+                literal += moment[i + 1];
             i += 2;
             continue;
         }
+        flush();
         if (!c.isLetter()) {
             out += c;
             ++i;
@@ -82,6 +89,7 @@ std::optional<QString> convertMoment(const QString &moment, bool *names)
         }
         i += n;
     }
+    flush();
     return out;
 }
 
@@ -104,28 +112,49 @@ std::optional<QJsonDocument> parseSettings(QByteArray bytes, const QString &path
     return doc;
 }
 
-/// The string at `key`, trimmed; "" when missing or null, "" with a warning when not a string.
-QString stringValue(const QJsonObject &o, QLatin1StringView key, const QString &path, QStringList &warnings)
+/// The string at `key`, trimmed; "" when missing or null (Obsidian's default), nullopt with a
+/// warning when not a string (the value is skipped).
+std::optional<QString> stringValue(const QJsonObject &o, QLatin1StringView key, const QString &path,
+                                   QStringList &warnings)
 {
     const QJsonValue v = o.value(key);
     if (v.isUndefined() || v.isNull())
-        return {};
+        return QString();
     if (!v.isString()) {
         const QByteArray json = QJsonDocument(QJsonArray{v}).toJson(QJsonDocument::Compact);
         warnings.append(u"Invalid value for \"%1\" in %2: %3"_s.arg(key, path, QString::fromUtf8(json.mid(1, json.size() - 2))));
-        return {};
+        return std::nullopt;
     }
     return v.toString().trimmed();
 }
 
-/// True when a tracked file (a Markdown file when `markdownOnly`) lies in `folder` or below.
-bool holdsFiles(const QStringList &tracked, const QString &folder, bool markdownOnly)
+/// The settings object of `bytes` (nullopt when absent or invalid, with a warning).
+std::optional<QJsonObject> settingsObject(const std::optional<QByteArray> &bytes, const QString &path,
+                                          QStringList &warnings)
+{
+    if (!bytes)
+        return std::nullopt;
+    const auto doc = parseSettings(*bytes, path, false, warnings);
+    return doc ? std::optional<QJsonObject>(doc->object()) : std::nullopt;
+}
+
+/// True when a tracked file (a Markdown file when `markdownOnly`) lies in `folder` or below,
+/// not counting those in Obsidian's own folder `obsidianFolder` or below when it is not the
+/// top of the notebook: the guards of adoptObsidianSettings() stand for files Brulion wrote
+/// with its defaults, and Obsidian's days in "journals/" (or "Journals/" — Brulion's folders
+/// match in any letter case) are no such files.
+bool holdsFiles(const QStringList &tracked, const QString &folder, bool markdownOnly,
+                const QString &obsidianFolder = {})
 {
     const QString prefix = folder + u'/';
+    const QString obsidianPrefix = obsidianFolder + u'/';
     for (const QString &p : tracked) {
         const bool inside = folder.isEmpty() ? !p.contains(u'/') : p.startsWith(prefix, Qt::CaseInsensitive);
-        if (inside && (!markdownOnly || paths::isMarkdown(p)))
-            return true;
+        if (!inside || (markdownOnly && !paths::isMarkdown(p)))
+            continue;
+        if (!obsidianFolder.isEmpty() && p.startsWith(obsidianPrefix, Qt::CaseInsensitive))
+            continue;
+        return true;
     }
     return false;
 }
@@ -182,63 +211,81 @@ ObsidianAdoption adoptObsidianSettings(const ObsidianVaultFiles &files, const QS
     QStringList &w = out.warnings;
 
     // Journals. Days already written into Brulion's journals folder keep it (and its names).
-    if (!holdsFiles(trackedFiles, base.journalsFolder, true)) {
-        if (files.dailyNotes) {
-            const QString path = obsidianDailyNotesPath();
-            if (const auto doc = parseSettings(*files.dailyNotes, path, false, w)) {
-                const QJsonObject o = doc->object();
-                c.journalsFolder = paths::normalize(stringValue(o, "folder"_L1, path, w));
-                const QString moment = stringValue(o, "format"_L1, path, w);
-                bool names = false;
-                const std::optional<QString> format =
-                        moment.isEmpty() ? std::optional<QString>(u"yyyy-MM-dd"_s) : convertMoment(moment, &names);
-                if (format && isUsableJournalFormat(*format)) {
-                    c.journalFileFormat = *format;
-                    if (names)
-                        w.append(u"Obsidian's daily note format %1 has month or day names: Brulion writes them in English"_s
-                                         .arg(moment));
-                } else {
-                    w.append(u"Obsidian's daily note format %1 has no Brulion equivalent; set the journal file names in the settings"_s
-                                     .arg(moment));
+    {
+        const QString path = obsidianDailyNotesPath();
+        QStringList found; // warnings, reported unless the guard keeps Brulion's settings
+        const std::optional<QJsonObject> daily = settingsObject(files.dailyNotes, path, found);
+        const std::optional<QString> folder = daily ? stringValue(*daily, "folder"_L1, path, found) : std::nullopt;
+        const QString obsidianFolder = folder ? paths::normalize(*folder) : QString();
+        if (!holdsFiles(trackedFiles, base.journalsFolder, true, obsidianFolder)) {
+            w += found;
+            if (daily) {
+                if (folder)
+                    c.journalsFolder = obsidianFolder;
+                if (const std::optional<QString> moment = stringValue(*daily, "format"_L1, path, w)) {
+                    bool names = false;
+                    const std::optional<QString> format = moment->isEmpty() ? std::optional<QString>(u"yyyy-MM-dd"_s)
+                                                                            : convertMoment(*moment, &names);
+                    if (format && isUsableJournalFormat(*format)) {
+                        c.journalFileFormat = *format;
+                        if (names)
+                            w.append(u"Obsidian's daily note format %1 has month or day names: Brulion writes them in English"_s
+                                             .arg(*moment));
+                    } else {
+                        w.append(u"Obsidian's daily note format %1 has no Brulion equivalent; set the journal file names in the settings"_s
+                                         .arg(*moment));
+                    }
                 }
-                const QString templ = paths::normalize(stringValue(o, "template"_L1, path, w));
-                if (!templ.isEmpty())
-                    c.journalTemplate = paths::isMarkdown(templ) ? templ : templ + u".md"_s;
-                else if (!trackedFiles.contains(base.journalTemplate))
-                    c.journalTemplate.clear(); // Obsidian: no template
-            }
-        } else if (dailyNotesPluginEnabled(files.corePlugins, w)) {
-            // Obsidian's defaults (top of the notebook, YYYY-MM-DD), when a day is written there.
-            static const QRegularExpression day(u"^\\d{4}-\\d{2}-\\d{2}\\.md$"_s);
-            const bool dayAtTop = std::any_of(trackedFiles.cbegin(), trackedFiles.cend(),
-                                              [](const QString &p) { return day.match(p).hasMatch(); });
-            if (dayAtTop) {
-                c.journalsFolder.clear();
-                c.journalFileFormat = u"yyyy-MM-dd"_s;
+                if (const std::optional<QString> value = stringValue(*daily, "template"_L1, path, w)) {
+                    const QString templ = paths::normalize(*value);
+                    if (!templ.isEmpty())
+                        c.journalTemplate = paths::isMarkdown(templ) ? templ : templ + u".md"_s;
+                    else if (!trackedFiles.contains(base.journalTemplate))
+                        c.journalTemplate.clear(); // Obsidian: no template
+                }
+            } else if (!files.dailyNotes && dailyNotesPluginEnabled(files.corePlugins, w)) {
+                // Obsidian's defaults (top of the notebook, YYYY-MM-DD), when a day is written there.
+                static const QRegularExpression day(u"^\\d{4}-\\d{2}-\\d{2}\\.md$"_s);
+                const bool dayAtTop = std::any_of(trackedFiles.cbegin(), trackedFiles.cend(),
+                                                  [](const QString &p) { return day.match(p).hasMatch(); });
+                if (dayAtTop) {
+                    c.journalsFolder.clear();
+                    c.journalFileFormat = u"yyyy-MM-dd"_s;
+                }
             }
         }
     }
 
     // Templates folder (the Templates core plugin).
-    if (files.templates && !holdsFiles(trackedFiles, base.templatesFolder, false)) {
+    {
         const QString path = obsidianTemplatesPath();
-        if (const auto doc = parseSettings(*files.templates, path, false, w)) {
-            const QString folder = paths::normalize(stringValue(doc->object(), "folder"_L1, path, w));
+        QStringList found;
+        const std::optional<QJsonObject> o = settingsObject(files.templates, path, found);
+        const std::optional<QString> value = o ? stringValue(*o, "folder"_L1, path, found) : std::nullopt;
+        const QString folder = value ? paths::normalize(*value) : QString();
+        if (!holdsFiles(trackedFiles, base.templatesFolder, false, folder)) {
+            w += found;
             if (!folder.isEmpty())
                 c.templatesFolder = folder;
         }
     }
 
     // Attachments folder: "" or "/" = the top of the notebook, "./…" = next to the note.
-    if (files.app && !holdsFiles(trackedFiles, base.attachmentsFolder, false)) {
+    {
         const QString path = obsidianAppPath();
-        if (const auto doc = parseSettings(*files.app, path, false, w)) {
-            const QString folder = stringValue(doc->object(), "attachmentFolderPath"_L1, path, w);
-            if (folder == u"."_s || folder.startsWith(u"./"_s))
+        QStringList found;
+        const std::optional<QJsonObject> o = settingsObject(files.app, path, found);
+        const std::optional<QString> value =
+                o ? stringValue(*o, "attachmentFolderPath"_L1, path, found) : std::nullopt;
+        const bool nextToNote = value && (*value == u"."_s || value->startsWith(u"./"_s));
+        const QString folder = value && !nextToNote ? paths::normalize(*value) : QString();
+        if (!holdsFiles(trackedFiles, base.attachmentsFolder, false, folder)) {
+            w += found;
+            if (nextToNote)
                 w.append(u"Obsidian keeps attachments next to the note (%1); Brulion puts them into one folder: %2"_s
-                                 .arg(folder, base.attachmentsFolder.isEmpty() ? u"/"_s : base.attachmentsFolder));
-            else
-                c.attachmentsFolder = paths::normalize(folder);
+                                 .arg(*value, base.attachmentsFolder.isEmpty() ? u"/"_s : base.attachmentsFolder));
+            else if (value)
+                c.attachmentsFolder = folder;
         }
     }
 
@@ -253,6 +300,17 @@ ObsidianAdoption adoptObsidianSettings(const ObsidianVaultFiles &files, const QS
     if (c.attachmentsFolder != base.attachmentsFolder)
         out.adoptedKeys.append(kAttachmentsFolder);
     return out;
+}
+
+bool obsidianAdoptionDependsOn(const QString &path, const VaultConfig &base)
+{
+    if (!path.contains(u'/'))
+        return true; // a day at the top of the notebook
+    for (const QString *folder : {&base.journalsFolder, &base.templatesFolder, &base.attachmentsFolder}) {
+        if (folder->isEmpty() || path.startsWith(*folder + u'/', Qt::CaseInsensitive))
+            return true;
+    }
+    return path == base.journalTemplate;
 }
 
 } // namespace brulion

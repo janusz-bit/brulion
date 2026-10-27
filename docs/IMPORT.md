@@ -81,7 +81,12 @@ gdy ten sam notatnik otwierasz w przeglądarce przez Nextcloud: synchronizacja n
 Folder, którego Brulion już używał z ustawieniami domyślnymi (bez `config.json`), nie zmienia się
 po aktualizacji: dziennika nie przejmie, gdy w `journals/` leży już jakaś notatka, folderu
 załączników — gdy w `assets/` leży jakiś plik, folderu szablonów — gdy w `templates/` leży jakiś
-plik.
+plik. Nie liczą się przy tym pliki w folderze, który dla tego ustawienia wybrał sam Obsidian (np.
+dni Obsidiana w `journals/` albo `Journals/`): wtedy Brulion przejmie wzór nazw i szablon, a
+swoje dawne dni `RRRR-MM-DD.md` dalej rozpozna. Brulion sprawdza to ponownie, gdy pliki w tych
+folderach się pojawiają albo znikają (np. z synchronizacji na nowym urządzeniu, która przysłała
+`.obsidian/` przed `journals/`). Wartość złego typu w plikach Obsidiana (np. liczba zamiast
+ścieżki) Brulion pomija z ostrzeżeniem i zostaje przy swojej.
 
 **Co ustawić raz** (*Ustawienia → Notatnik*):
 

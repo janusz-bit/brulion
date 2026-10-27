@@ -53,6 +53,12 @@ private Q_SLOTS:
                                          << u"Notatka z 07.10.26"_s;
         QTest::newRow("backslash escape") << u"YYYY-MM-DD \\Ż"_s << u"yyyy-MM-dd 'Ż'"_s << u"2026-10-07 Ż"_s;
         QTest::newRow("empty literal") << u"YYYY[]-MM-DD"_s << u"yyyy-MM-dd"_s << u"2026-10-07"_s;
+        // Adjacent literals form one quoted run ("'a''b'" would write a "'").
+        QTest::newRow("adjacent literals") << u"[Dzień][ z] DD.MM.YYYY"_s << u"'Dzień z' dd.MM.yyyy"_s
+                                           << u"Dzień z 07.10.2026"_s;
+        QTest::newRow("adjacent escapes") << u"\\D\\z DD.MM.YYYY"_s << u"'Dz' dd.MM.yyyy"_s << u"Dz 07.10.2026"_s;
+        QTest::newRow("literal then escape") << u"[Ł]\\ó YYYY-MM-DD"_s << u"'Łó' yyyy-MM-dd"_s << u"Łó 2026-10-07"_s;
+        QTest::newRow("literals apart") << u"[a]-[b] YYYY-MM-DD"_s << u"'a'-'b' yyyy-MM-dd"_s << u"a-b 2026-10-07"_s;
         QTest::newRow("ordinal") << u"Do MMMM YYYY"_s << QString() << QString();
         QTest::newRow("iso week") << u"gggg-[W]ww"_s << QString() << QString();
         QTest::newRow("week number") << u"YYYY-[W]WW"_s << QString() << QString();
@@ -145,10 +151,14 @@ private Q_SLOTS:
                                       << QStringList() << 1;
         QTest::newRow("JSON array") << bytes(R"(["Dziennik"])") << none << none << none << noFiles << defaults
                                     << QStringList() << 1;
+        // A value of the wrong type is skipped: Brulion's value stays (not Obsidian's default).
         QTest::newRow("wrong types")
                 << bytes(R"({"folder":5,"format":true,"template":["a"]})") << none << none << none << noFiles
-                << u"journals=|format=yyyy-MM-dd|template=|templates=templates|attachments=assets"_s
-                << QStringList{u"journalsFolder"_s, u"journalTemplate"_s} << 3;
+                << defaults << QStringList() << 3;
+        QTest::newRow("wrong type of the folder only")
+                << bytes(R"({"folder":{"a":1},"format":"DD.MM.YYYY","template":""})") << none << none << none
+                << noFiles << u"journals=journals|format=dd.MM.yyyy|template=|templates=templates|attachments=assets"_s
+                << QStringList{u"journalFileFormat"_s, u"journalTemplate"_s} << 1;
         QTest::newRow("BOM") << bytes("\xEF\xBB\xBF{\"folder\":\"Dziennik\",\"format\":\"YYYY-MM-DD\"}") << none
                              << none << none << noFiles
                              << u"journals=Dziennik|format=yyyy-MM-dd|template=|templates=templates|attachments=assets"_s
@@ -159,6 +169,24 @@ private Q_SLOTS:
         QTest::newRow("guard: case of the folder")
                 << bytes(R"({"folder":"Dziennik"})") << none << none << none
                 << QStringList{u"Journals/2026-10-01.md"_s} << defaults << QStringList() << 0;
+        // Obsidian's own days in Brulion's folder (any letter case) are no sign of Brulion's use.
+        QTest::newRow("Obsidian's days in journals/")
+                << bytes(R"({"folder":"journals","format":"DD.MM.YYYY","template":"Szablony/Dzień"})") << none
+                << none << none << QStringList{u"journals/26.10.2026.md"_s}
+                << u"journals=journals|format=dd.MM.yyyy|template=Szablony/Dzień.md|templates=templates|attachments=assets"_s
+                << QStringList{u"journalFileFormat"_s, u"journalTemplate"_s} << 0;
+        QTest::newRow("Obsidian's days in Journals/")
+                << bytes(R"({"folder":"Journals"})") << none << none << none
+                << QStringList{u"Journals/2026-10-01.md"_s}
+                << u"journals=Journals|format=yyyy-MM-dd|template=|templates=templates|attachments=assets"_s
+                << QStringList{u"journalsFolder"_s, u"journalTemplate"_s} << 0;
+        QTest::newRow("guard: Brulion's days next to Obsidian's subfolder")
+                << bytes(R"({"folder":"journals/Obsidian","format":"DD.MM.YYYY"})") << none << none << none
+                << QStringList{u"journals/Obsidian/26.10.2026.md"_s, u"journals/2026-10-01.md"_s} << defaults
+                << QStringList() << 0;
+        QTest::newRow("guard: wrong folder type")
+                << bytes(R"({"folder":7,"format":"DD.MM.YYYY"})") << none << none << none
+                << QStringList{u"journals/2026-10-01.md"_s} << defaults << QStringList() << 0;
         QTest::newRow("guard ignores other files")
                 << bytes(R"({"folder":"Dziennik"})") << none << none << none
                 << QStringList{u"journals/zdjęcie.png"_s, u"journalsy/a.md"_s}
@@ -210,6 +238,11 @@ private Q_SLOTS:
         QTest::newRow("guard: Brulion's assets") << none << bytes(R"({"attachmentFolderPath":"Załączniki"})") << none
                                                  << none << QStringList{u"assets/zdjęcie.png"_s} << defaults
                                                  << QStringList() << 0;
+        QTest::newRow("Obsidian's attachments in Assets/")
+                << none << bytes(R"({"attachmentFolderPath":"Assets"})") << none << none
+                << QStringList{u"Assets/żaba.png"_s} << top + u"Assets"_s << QStringList{u"attachmentsFolder"_s} << 0;
+        QTest::newRow("attachments number") << none << bytes(R"({"attachmentFolderPath":3})") << none << none
+                                            << noFiles << defaults << QStringList() << 1;
         QTest::newRow("app.json invalid") << none << bytes("[1, 2") << none << none << noFiles << defaults
                                           << QStringList() << 1;
 
@@ -222,6 +255,12 @@ private Q_SLOTS:
         QTest::newRow("guard: Brulion's templates") << none << none << bytes(R"({"folder":"Szablony"})") << none
                                                     << QStringList{u"templates/spotkanie.md"_s} << defaults
                                                     << QStringList() << 0;
+
+        QTest::newRow("Obsidian's templates in Templates/")
+                << none << none << bytes(R"({"folder":"Templates"})") << none
+                << QStringList{u"Templates/Spotkanie.md"_s}
+                << u"journals=journals|format=yyyy-MM-dd|template=templates/journal.md|templates=Templates|attachments=assets"_s
+                << QStringList{u"templatesFolder"_s} << 0;
 
         QTest::newRow("everything")
                 << bytes(R"({"folder":"Dziennik","format":"YYYY/MM/DD.MM.YYYY","template":"Szablony/Dzień"})")
@@ -256,6 +295,26 @@ private Q_SLOTS:
         QCOMPARE(a.config.newPagesFolder, VaultConfig{}.newPagesFolder);
         QCOMPARE(a.config.defaultReminderTime, VaultConfig{}.defaultReminderTime);
         QCOMPARE(a.config.weekStartsOn, VaultConfig{}.weekStartsOn);
+    }
+
+    void dependsOn_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<bool>("depends");
+        QTest::newRow("day at the top") << u"2026-10-27.md"_s << true;
+        QTest::newRow("journals") << u"journals/2026-10-27.md"_s << true;
+        QTest::newRow("Journals") << u"Journals/Październik/27.10.2026.md"_s << true;
+        QTest::newRow("assets") << u"assets/żaba.png"_s << true;
+        QTest::newRow("templates") << u"templates/journal.md"_s << true;
+        QTest::newRow("other folder") << u"Dziennik/27.10.2026.md"_s << false;
+        QTest::newRow("prefix only") << u"journalsy/a.md"_s << false;
+    }
+
+    void dependsOn()
+    {
+        QFETCH(QString, path);
+        QFETCH(bool, depends);
+        QCOMPARE(obsidianAdoptionDependsOn(path), depends);
     }
 
     void adoptKeepsOtherBaseFields()
@@ -391,6 +450,49 @@ private Q_SLOTS:
         QCOMPARE(f.vault->config().journalsFolder, u"Dziennik"_s);
         QCOMPARE(f.vault->configAdoptedFromObsidian(), (QStringList{u"journalsFolder"_s, u"journalTemplate"_s}));
         QCOMPARE(configSpy.count(), 1);
+    }
+
+    void arrivingFilesCheckTheGuardAgain()
+    {
+        // A new device: .obsidian/ synced before Brulion's journals/ (finding: the settings
+        // flipped back only at the next rescan, after days were written to Obsidian's folder).
+        Fixture f;
+        f.write(u".obsidian/daily-notes.json"_s, R"({"folder":"Dziennik","format":"DD.MM.YYYY"})");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->config().journalsFolder, u"Dziennik"_s);
+        QSignalSpy configSpy(f.vault.get(), &Vault::configChanged);
+        // A file elsewhere: nothing to check.
+        QVERIFY(!f.vault->create(u"Projekty/Dom.md"_s, u"- ściana"_s, ChangeSource::Sync).isEmpty());
+        QCOMPARE(configSpy.count(), 0);
+        QCOMPARE(f.vault->config().journalsFolder, u"Dziennik"_s);
+        // Brulion's day arrives: the guard, at once (no rescan).
+        QVERIFY(!f.vault->create(u"journals/2026-10-26.md"_s, u"- wczoraj"_s, ChangeSource::Sync).isEmpty());
+        QCOMPARE(configSpy.count(), 1);
+        QVERIFY(sameVaultConfig(f.vault->config(), VaultConfig{}));
+        QVERIFY(f.vault->configAdoptedFromObsidian().isEmpty());
+        // And goes: Obsidian's settings again.
+        QVERIFY(f.vault->removePermanently(u"journals/2026-10-26.md"_s, ChangeSource::Sync));
+        QCOMPARE(configSpy.count(), 2);
+        QCOMPARE(f.vault->config().journalsFolder, u"Dziennik"_s);
+        QCOMPARE(f.vault->config().journalFileFormat, u"dd.MM.yyyy"_s);
+    }
+
+    void warningOnlyChangeIsSignalled()
+    {
+        Fixture f;
+        f.write(u".obsidian/daily-notes.json"_s, R"({"folder":"Dziennik","format":"YYYY-MM-DD"})");
+        QVERIFY(f.open());
+        QVERIFY(f.vault->configWarnings().isEmpty());
+        QSignalSpy configSpy(f.vault.get(), &Vault::configChanged);
+        // The same config (the format falls back to yyyy-MM-dd), only a new warning.
+        f.write(u".obsidian/daily-notes.json"_s, R"({"folder":"Dziennik","format":"Do MMMM YYYY"})");
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(u"no Brulion equivalent"_s));
+        QVERIFY(f.vault->rescan().isEmpty());
+        QCOMPARE(configSpy.count(), 1);
+        QCOMPARE(f.vault->config().journalFileFormat, u"yyyy-MM-dd"_s);
+        QCOMPARE(f.vault->configWarnings().size(), 1);
+        QVERIFY(f.vault->rescan().isEmpty());
+        QCOMPARE(configSpy.count(), 1); // nothing new
     }
 
     void rescanTakesInObsidianChanges()

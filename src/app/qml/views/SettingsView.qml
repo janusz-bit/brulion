@@ -528,7 +528,8 @@ Item {
                 BText {
                     id: warnings
                     width: parent.width
-                    text: Workspace.revision >= 0 ? Workspace.configWarnings().join("\n") : ""
+                    // (config: also Obsidian's settings, which no file revision follows)
+                    text: Workspace.config && Workspace.revision >= 0 ? Workspace.configWarnings().join("\n") : ""
                     wrapMode: Text.Wrap
                 }
             }
