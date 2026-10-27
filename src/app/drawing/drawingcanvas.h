@@ -131,7 +131,8 @@ public:
     /// and nothing can be drawn — "readonly" (shapes, text, pictures … from Excalidraw, which
     /// Brulion would lose: QML shows the file as a picture), "notDrawing" (no scene: a picture),
     /// "corrupt" (a scene that cannot be read). Clears the undo history and `modified`; the view
-    /// shows the strokes from their top left at zoom 1, or all of them when they do not fit.
+    /// shows the strokes from their top left at zoom 1, zoomed out to the view's width when they
+    /// are wider.
     Q_INVOKABLE QString load(const QByteArray &bytes);
     /// Take in a version of the file another program wrote while this one is open (Syncthing):
     /// with no changes here it replaces the drawing; else the strokes are merged by their ids —
@@ -149,7 +150,7 @@ public:
     Q_INVOKABLE bool isKnownFile(const QByteArray &bytes) const { return !bytes.isEmpty() && bytes == m_known; }
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
-    /// The whole drawing in view (at most zoom 1 when it fits).
+    /// The whole drawing in view (at most zoom 1), centred across, from its top.
     Q_INVOKABLE void fitAll();
     Q_INVOKABLE void zoomBy(qreal factor, qreal x = -1, qreal y = -1);
     Q_INVOKABLE void panBy(qreal dx, qreal dy);

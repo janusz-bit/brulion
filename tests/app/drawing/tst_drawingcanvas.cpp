@@ -506,13 +506,20 @@ private Q_SLOTS:
         const QRectF b = canvas->contentBounds();
         const QPointF topLeft = canvas->toItem(b.topLeft());
         QVERIFY(std::abs(topLeft.x() - 24) < 0.5 && std::abs(topLeft.y() - 24) < 0.5);
-        // … else fitted.
+        // … zoomed out to the view's width when wider (a phone), still from the top left …
         canvas->setSize(QSizeF(120, 90));
         QCOMPARE(canvas->load(fixture(u"excalidraw_freedraw.svg"_s)), QString());
         QVERIFY(canvas->zoom() < 1);
-        const QPointF a = canvas->toItem(b.topLeft());
-        const QPointF z = canvas->toItem(b.bottomRight());
-        QVERIFY(a.x() >= 23 && a.y() >= 0 && z.x() <= 97 && z.y() <= 90);
+        QPointF a = canvas->toItem(b.topLeft());
+        QPointF z = canvas->toItem(b.bottomRight());
+        QVERIFY(std::abs(a.x() - 24) < 0.5 && std::abs(a.y() - 24) < 0.5);
+        QVERIFY(std::abs(z.x() - 96) < 0.5);
+        // … and "the whole drawing" fits both ways, centred across, from the top.
+        canvas->fitAll();
+        a = canvas->toItem(b.topLeft());
+        z = canvas->toItem(b.bottomRight());
+        QVERIFY(a.x() >= 23.5 && z.x() <= 96.5 && std::abs(a.y() - 24) < 0.5 && z.y() <= 66.5);
+        QVERIFY(std::abs((a.x() + z.x()) / 2 - 60) < 0.5);
     }
 
     void externalChangesMerge()
@@ -606,6 +613,100 @@ private Q_SLOTS:
         canvas->render(&p, QSizeF(800, 600));
         qInfo("600 strokes: load %lld ms, render %.1f ms", loadMs, canvas->lastRenderMs());
         QVERIFY(canvas->lastRenderMs() < 1000.0 * BRULION_TEST_SLOWDOWN);
+    }
+
+    void handwritingSample()
+    {
+        // A page of lecture notes as a stylus writes them: script-like words, an underline, a
+        // circle, an arrow, a highlighter swipe, a small chart, on lined paper. Checked as a
+        // picture; `BRULION_DRAWING_SAMPLE=<file>` writes it there (tests/app/drawing/screenshots.sh).
+        using brulion::drawing::Stroke;
+        using brulion::drawing::StrokePoint;
+        brulion::drawing::Drawing d;
+        d.background = brulion::drawing::Background::Lines;
+        int n = 0;
+        const auto add = [&](QList<StrokePoint> points, const QString &color, double width,
+                             brulion::drawing::Tool tool = brulion::drawing::Tool::Pen) {
+            Stroke s;
+            s.id = u"probka-%1"_s.arg(++n);
+            s.points = std::move(points);
+            s.color = color;
+            s.width = width;
+            s.tool = tool;
+            s.opacity = tool == brulion::drawing::Tool::Highlighter ? DrawingCanvas::HighlighterOpacity : 100;
+            s.simulatePressure = false;
+            brulion::drawing::normalizeStroke(s);
+            d.strokes.append(s);
+        };
+        // Script-like words: loops along a line, the pressure rising and falling.
+        const auto word = [&](double x0, double y0, int loops, double height, const QString &color, double width) {
+            QList<StrokePoint> pts;
+            const int steps = loops * 16;
+            for (int i = 0; i <= steps; ++i) {
+                const double t = double(i) / 16 * 2 * M_PI;
+                // A prolate cycloid: loops like joined-up writing.
+                const double x = x0 + t * 3.4 - 6 * std::sin(t);
+                const double y = y0 - height * (0.5 - 0.5 * std::cos(t)) * (0.75 + 0.25 * std::sin(t * 0.37));
+                pts.append({x, y, 0.35 + 0.35 * std::sin(i * 0.21) * std::sin(i * 0.05 + 1)});
+            }
+            add(pts, color, width);
+        };
+        word(40, 70, 7, 26, u"#1f2430"_s, 1.0);   // a title
+        word(240, 70, 4, 26, u"#1f2430"_s, 1.0);
+        for (int line = 0; line < 4; ++line) {
+            double x = 40;
+            for (int w = 0; w < 4; ++w) {
+                const int loops = 2 + (line * 3 + w) % 4;
+                word(x, 134 + line * 32, loops, 14, u"#1f2430"_s, 0.5);
+                x += loops * 21.4 + 20;
+            }
+        }
+        // An underline (blue), a circle (red), an arrow.
+        QList<StrokePoint> under;
+        for (int i = 0; i <= 60; ++i)
+            under.append({40 + i * 5.2, 82 + 2 * std::sin(i * 0.3), 0.4 + 0.3 * i / 60.0});
+        add(under, u"#2f6fdd"_s, 1.0);
+        QList<StrokePoint> circle;
+        for (int i = 0; i <= 64; ++i) {
+            const double a = i / 60.0 * 2 * M_PI - 0.4;
+            circle.append({330 + 58 * std::cos(a), 165 + 26 * std::sin(a), 0.5 + 0.3 * std::sin(a * 2)});
+        }
+        add(circle, u"#e03131"_s, 1.0);
+        QList<StrokePoint> shaft;
+        for (int i = 0; i <= 30; ++i)
+            shaft.append({392 + i * 3.0, 160 - i * 1.6 - 0.02 * i * i, 0.5});
+        add(shaft, u"#e03131"_s, 1.0);
+        add({{470, 106, 0.6}, {482, 107, 0.6}, {490, 110, 0.5}, {484, 120, 0.5}, {479, 130, 0.4}}, u"#e03131"_s, 1.0);
+        // A highlighter over the second line.
+        QList<StrokePoint> swipe;
+        for (int i = 0; i <= 40; ++i)
+            swipe.append({36 + i * 6.0, 160 + 0.8 * std::sin(i * 0.4), 0.5});
+        add(swipe, u"#ffd43b"_s, 3, brulion::drawing::Tool::Highlighter);
+        // A small chart: axes and a curve (green).
+        QList<StrokePoint> axisY, axisX;
+        for (int i = 0; i <= 34; ++i)
+            axisY.append({560 + 0.6 * std::sin(i * 0.5), 60 + i * 5.0, 0.45 + 0.004 * i});
+        for (int i = 0; i <= 40; ++i)
+            axisX.append({560 + i * 5.0, 230 + 0.6 * std::sin(i * 0.4), 0.55});
+        add(axisY, u"#1f2430"_s, 0.5);
+        add(axisX, u"#1f2430"_s, 0.5);
+        QList<StrokePoint> curve;
+        for (int i = 0; i <= 50; ++i) {
+            const double x = i / 50.0;
+            curve.append({565 + x * 185, 225 - 160 * x * x + 20 * std::sin(x * 9) * x, 0.3 + 0.5 * x});
+        }
+        add(curve, u"#2f9e44"_s, 1.0);
+        const QByteArray svg = brulion::drawing::toSvg(d);
+        QSvgRenderer renderer(svg);
+        QVERIFY(renderer.isValid());
+        QVERIFY(darkPixels(renderSvg(svg, renderer.defaultSize())) > 2000);
+        QCOMPARE(canvas->load(svg), QString());
+        QCOMPARE(canvas->strokeCount(), int(d.strokes.size()));
+        if (const QByteArray out = qgetenv("BRULION_DRAWING_SAMPLE"); !out.isEmpty()) {
+            QFile f(QString::fromLocal8Bit(out));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(svg);
+        }
     }
 
     void localFileUrlWithAQueryLoads()

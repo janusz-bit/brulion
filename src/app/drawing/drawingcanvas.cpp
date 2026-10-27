@@ -451,13 +451,11 @@ void DrawingCanvas::placeView()
     if (b.isNull()) {
         m_zoom = 1;
         m_center = QPointF(width() / 2, height() / 2); // the scene's origin at the top left
-    } else if (b.width() + 2 * margin <= width() && b.height() + 2 * margin <= height()) {
-        m_zoom = 1;
-        m_center = b.topLeft() - QPointF(margin, margin) + QPointF(width() / 2, height() / 2);
     } else {
-        m_viewSet = true;
-        fitAll();
-        return;
+        // From the top left of the strokes, at zoom 1 — or as wide as the view (notes are read
+        // down the page: a tall page is scrolled, not shrunk).
+        m_zoom = std::clamp(std::min(1.0, (width() - 2 * margin) / std::max(1.0, b.width())), MinZoom, MaxZoom);
+        m_center = b.topLeft() + (QPointF(width() / 2, height() / 2) - QPointF(margin, margin)) / m_zoom;
     }
     m_viewSet = true;
     invalidateCache();
@@ -475,7 +473,8 @@ void DrawingCanvas::fitAll()
         const double z = std::min({(width() - 2 * margin) / std::max(1.0, b.width()),
                                    (height() - 2 * margin) / std::max(1.0, b.height()), 1.0});
         m_zoom = std::clamp(z, MinZoom, MaxZoom);
-        m_center = b.center();
+        // Centred across, from the top down (room left over stays below, where writing goes on).
+        m_center = QPointF(b.center().x(), b.top() - margin / m_zoom + height() / (2 * m_zoom));
     }
     viewMoved(false);
 }

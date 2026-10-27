@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import Brulion
 
 // DrawingView — route "drawing" ({path}): the drawing editor (docs/UI.md "Drawing editor") on a
@@ -267,8 +268,9 @@ FocusScope {
     }
 
     Rectangle {
+        // The paper; the view's own background around a notice.
         anchors.fill: parent
-        color: canvas.paperColor
+        color: root.status === "" || root.status === "loading" ? canvas.paperColor : Theme.bg
     }
 
     ColumnLayout {
@@ -323,10 +325,6 @@ FocusScope {
                 boundsBehavior: Flickable.StopAtBounds
                 clip: true
 
-                Rectangle {
-                    anchors.fill: parent
-                    color: Theme.bg
-                }
                 Column {
                     id: noticeColumn
                     x: Theme.space4
@@ -361,23 +359,28 @@ FocusScope {
                             return ""
                         }
                     }
-                    Image {
-                        objectName: "drawingNoticePicture"
-                        visible: root.status !== "missing" && status === Image.Ready
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: Math.min(parent.width, implicitWidth)
-                        height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
-                        fillMode: Image.PreserveAspectFit
-                        sourceSize: Qt.size(Math.min(1600, notice.width * 2), 0)
-                        source: root.status !== "missing" && root.loadedPath !== "" ? Workspace.assetUrl(root.loadedPath) : ""
-                        asynchronous: true
-                    }
                     BButton {
                         visible: root.status !== "missing"
                         anchors.horizontalCenter: parent.horizontalCenter
                         iconName: "image"
                         text: qsTr("Open as a picture")
                         onClicked: AppController.navigate({ view: "page", path: root.loadedPath })
+                    }
+                    Image {
+                        id: noticePicture
+                        objectName: "drawingNoticePicture"
+                        /// The picture's own size (its SVG root), shown at most as wide as the view.
+                        readonly property size natural: root.loadedPath !== "" && notice.visible
+                                                        ? Workspace.pictureSize(root.loadedPath) : Qt.size(0, 0)
+                        visible: root.status !== "missing" && status === Image.Ready
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Math.min(parent.width, natural.width > 0 ? natural.width : parent.width)
+                        height: natural.width > 0 ? width * natural.height / natural.width : implicitHeight
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize: Qt.size(Math.ceil(width * Screen.devicePixelRatio), 0)
+                        source: notice.visible && root.status !== "missing" && root.loadedPath !== ""
+                                ? Workspace.assetUrl(root.loadedPath) : ""
+                        asynchronous: true
                     }
                 }
             }
