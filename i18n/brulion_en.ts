@@ -123,7 +123,15 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="626"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="672"/>
+        <source>Copied %n block(s) from several days</source>
+        <translation>
+            <numerusform>Copied %n block from several days</numerusform>
+            <numerusform>Copied %n blocks from several days</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="674"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -131,7 +139,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="637"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="685"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -139,7 +147,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="653"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="701"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -147,7 +155,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1387"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1453"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -588,7 +596,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="256"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="287"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
@@ -699,7 +707,7 @@
 <context>
     <name>SelectionToolbar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="80"/>
+        <location filename="../src/app/qml/editor/SelectionToolbar.qml" line="96"/>
         <source>%n block(s) selected</source>
         <translation>
             <numerusform>%n block selected</numerusform>
