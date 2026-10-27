@@ -19,6 +19,9 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 **Zmiany**
 - **Szybsze kopiowanie bloków na komputerze z Linuksem** — sformatowana wersja kopii (dla poczty i edytorów dokumentów) powstaje dopiero wtedy, gdy wklejasz ją do takiego programu. Skopiowanie całej strony z 5000 bloków zajmuje teraz kilka milisekund zamiast około 40, a wklejenie do Brulionu, edytora kodu czy terminala w ogóle jej nie tworzy.
 
+**Poprawki**
+- **Pasek przewijania nie skacze** — w długich stronach, w dzienniku, w widoku **Zadania**, w agendzie kalendarza, w historii wersji i w rejestrze zdarzeń suwak paska przesuwa się tylko razem z treścią, zamiast skakać tam i z powrotem podczas przewijania. Jego położenie liczy się w blokach (w dzienniku: w dniach), więc przez bardzo długi dzień przesuwa się wolniej niż przez krótki, a zwinięte bloki się nie liczą.
+
 ## 0.4.5 — 26 października 2026
 
 **Nowe**

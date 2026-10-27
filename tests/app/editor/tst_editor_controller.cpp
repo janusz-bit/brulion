@@ -1144,6 +1144,18 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.foldState(), QVariantList{0});
         QCOMPARE(f.page.nextVisibleRow(0), 3);
         QCOMPARE(f.page.previousVisibleRow(3), 0);
+        // The shown rows the scroll bar counts (RowScroll): a, b, b1.
+        QCOMPARE(f.model()->visibleCount(), 3);
+        QCOMPARE(f.model()->visibleRowsBefore(0), 0);
+        QCOMPARE(f.model()->visibleRowsBefore(1), 1);
+        QCOMPARE(f.model()->visibleRowsBefore(3), 1);
+        QCOMPARE(f.model()->visibleRowsBefore(4), 2);
+        QCOMPARE(f.model()->visibleRowsBefore(5), 3);
+        QCOMPARE(f.model()->visibleRowAt(0), 0);
+        QCOMPARE(f.model()->visibleRowAt(1), 3);
+        QCOMPARE(f.model()->visibleRowAt(2), 4);
+        QCOMPARE(f.model()->visibleRowAt(3), -1);
+        QCOMPARE(f.model()->visibleRowAt(-1), -1);
         f.page.toggleFold(1); // hidden but has children: folds too
         f.page.toggleFold(0);
         QCOMPARE(f.visible(), QList<bool>({true, true, false, true, true}));
@@ -1154,6 +1166,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.visible(), QList<bool>({true, false, false, true, false}));
         f.page.foldAll(false);
         QCOMPARE(f.visible(), QList<bool>(5, true));
+        QCOMPARE(f.model()->visibleRowsBefore(4), 4);
+        QCOMPARE(f.model()->visibleRowAt(4), 4);
         f.page.setFoldState({3, 99});
         QCOMPARE(f.visible(), QList<bool>({true, true, true, true, false}));
         QVERIFY(foldSpy.size() >= 5);

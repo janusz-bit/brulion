@@ -819,8 +819,8 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
 Long pages, the journal stream, Tasks and the calendar agenda are lazy `ListView`s: a row is
 created when it scrolls into the list's cache and destroyed when it leaves, on the GUI thread,
 while the list moves. Measured with `--scroll-probe` (see "Dev tools"); ctest
-`tst_scroll_jumps_qml` fails on jumps, `tst_touch_flick` / `tst_touch_flick_compressed` on Qt's
-touch faults.
+`tst_scroll_jumps_qml` fails on jumps (also of the scroll bar's thumb), `tst_touch_flick` /
+`tst_touch_flick_compressed` on Qt's touch faults, `tst_row_scroll` on the scroll bar.
 
 ### Rules for contributors
 
@@ -853,7 +853,10 @@ or agenda row) follows these; the reasons are below.
    ("Show more" adds the rest).
 6. **Every list scrolled by touch gets `TouchFlick.enabled: true`** (not for lists with a
    `snapMode` or `StrictlyEnforceRange`, where it does nothing).
-7. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
+7. **A long list whose rows differ in height uses `BRowScrollBar { list: … }`**, not the attached
+   `BScrollBar` (its thumb jumps: "The scroll bar: `RowScroll`" below). A model that hides rows as
+   zero-height delegates offers `visibleCount`, `visibleRowsBefore()` and `visibleRowAt()`.
+8. **Measure, before and after:** `tests/app/perf/scroll-probe.sh` (also `CACHE=0`: every row
    created at the edge of the view), `VAULT=big` for long journals, a Raspberry Pi for ARM times
    (`PLATFORM=offscreen`), `tests/app/perf/android-scroll.sh` on the emulator or a phone; ctest
    `tst_scroll_jumps_qml` and the QML self-tests.
@@ -962,6 +965,62 @@ compression and 1–3 moves per frame (the first version of the catch gave 10, 3
 Its rows without TouchFlick fail when a Qt update changes either fault. Upstream bug report
 drafts: both faults are unfixed in qtbase / qtdeclarative dev.
 
+### The scroll bar: `RowScroll` (`src/app/ui/rowscroll.h`)
+
+Qt's attached scroll bar (`T.ScrollBar.vertical: BScrollBar {}`) takes its position and size
+from Flickable's `visibleArea` — `contentY`, `originY` and `contentHeight` — and ListView
+estimates those from the mean height of the rows it has created at the moment. Blocks and days
+differ a lot in height, so as rows come and go while the list scrolls the estimate changes and
+the thumb jumps, back and forth, although the content moves smoothly (ListView keeps it in
+place). ListView takes no per-row size hints, and a cache of measured heights would still move
+the thumb the first time each row is measured (every new day of a first pass through the
+journal) and go stale with every width change.
+
+`BRowScrollBar { list: list }` (`qml/components/BRowScrollBar.qml`) is a `BScrollBar` whose
+geometry comes from `RowScroll` (library `brulion_ui_scroll`, Qt Quick's public API only):
+
+* **Progress in rows.** t = above / (above + below): `above` the rows above the view's top edge
+  plus the fraction of the row at the edge (from its `y` to the next row's `y`, so spacing and a
+  section header belong to the row before it), `below` the same under the bottom edge; the
+  header and the footer count as one row each; exactly 0 / 1 at `atYBeginning` / `atYEnd`.
+  Creating rows off screen or ListView moving `originY` changes neither the row at an edge nor
+  where in it the edge is, so the thumb moves only with the content, or when the row count
+  changes (a fold, a new block, a new day at midnight). Its speed follows rows, not pixels: a
+  tall day takes longer to cross than a short one.
+* **Hidden rows are no rows.** A model that hides rows as zero-height delegates says which it
+  shows — `visibleCount`, `visibleRowsBefore(row)`, `visibleRowAt(n)` (the editor's
+  `BlockListModel`: folded blocks, a zoom) — and then counts only those: crossing a fold of 100
+  blocks is not a jump of 100 rows.
+* **Size from ListView's estimate, frozen while the list moves** (`moving`) or the bar is held,
+  so the thumb never "breathes" while scrolling; it is updated when the list stands still, where
+  the bar has faded out. position = t · (1 − size) keeps the thumb in the track and reaching both
+  ends exactly.
+* **Dragging** inverts it: the row for t is put at the view's top edge (`positionViewAtIndex`,
+  then the fraction through `contentY`; twice, with the visible row count at the new place), at
+  most once a frame (`RowScroll.ScrollIntervalMs`): dragging over a year of the journal creates
+  the days on the way like "Przejdź do dnia" does, not at every mouse move. While the bar is held
+  its position is not pushed back; on the release it settles where the list is.
+* Recomputed once a frame after the list's polish (`QQuickWindow::afterAnimating`; a 0 ms timer
+  without frames): a few `indexAt` / `itemAtIndex` calls. Without a row at an edge (an empty list,
+  the middle of a relayout) it falls back to Qt's estimate (`estimated`).
+* The bar is not attached (an attached bar's position and size are overwritten from
+  `visibleArea`): it places itself over the list's right edge between its margins, reparents
+  itself to the list when declared inside it, shows while the list moves (`BScrollBar.listMoving`;
+  hover and press as before), and passes the wheel on to the list (a ScrollBar takes no wheel
+  events). Touch UIs: an indicator, as `BScrollBar`.
+
+Used by the block editor's list (not with `autoHeight`: the journal's days have none), the
+journal stream, Tasks, the calendar agenda, the event log and the version history; short or
+uniform lists keep `BScrollBar`. ctest `tst_row_scroll`: the row arithmetic (data-driven: header,
+end, boundaries from both sides, sections, a row taller than the view, missing rows, NaN), and a
+live ListView of 400 rows of 18–600 px with its cache off — the progress moves only in the sweep's
+direction and by at most the rows crossed, while `visibleArea` jumps (the canary: when it stops
+jumping, Qt changed), the size stays during a flick, dragging and the wheel over the bar, rows
+inserted above, a fold with and without the model's help. The scroll probe checks the thumb too
+("row scroll bar thumb jumps", `THUMB JUMP` lines; `tst_scroll_jumps_qml` fails on them) next
+to the jumps of `visibleArea` it reports; `SelectionSelfTest` drags the editor's thumb (nothing is
+selected) and turns the wheel over it.
+
 ### Measured (before → after this work)
 
 Scroll probe, phone 412×915 touch and desktop 1280×800 touchpad; "big" = 120–365 generated
@@ -991,12 +1050,6 @@ journal days (`make-vault.py`); before = v0.1.1 with the probe added.
   animations advance after the sync (`QSGThreadedRenderLoop::polishAndSync`), so the fling's
   first step reaches the screen a frame later. No public API advances a Flickable's timeline;
   moving the content ahead through `contentY` stops the flick and emits movement signals.
-* **The scroll bar's thumb jumps** — the content does not. ListView estimates the height of the
-  rows it has not created from the average of those it has (`originPosition` / `lastPosition`),
-  and blocks and days differ a lot in height, so `contentHeight` and `originY` change as rows come
-  and go (ListView keeps the content in place; only the thumb's position and size move). ListView
-  takes no per-row size hints, and the model knows a block's text, not its laid-out height, so a
-  better estimate would need a list view of our own; not done.
 * **Creating a day of the journal is one step**: ~10 ms plus ~1 ms per block on a laptop, 7–9 ms
   per block on a Raspberry Pi 4 (a day of 27–42 blocks: 0.25–0.28 s; with a query block in it
   more). See "a day of the journal stream is created whole" above for why it is not spread over
@@ -1191,7 +1244,9 @@ why — and be able to send us the log (docs/ARCHITECTURE.md "Logging").
 `BSectionHeader`, `BKbd`, `BText`, `BDialog` (bottom sheet on narrow windows),
 `BConfirmDialog`, `BMenu`/`BMenuItem`/`BMenuSeparator`, `BToast` (+ `BToastHost`; the message is
 plain text),
-`BToolTip`, `BEmptyState`, `BProgressBar`, `BSpinner`, `BScrollBar`, `BSplitHandle`,
+`BToolTip`, `BEmptyState`, `BProgressBar`, `BSpinner`, `BScrollBar`, `BRowScrollBar` (long
+lists with rows of different heights: the thumb from the rows at the view's edges, `RowScroll`),
+`BSplitHandle`,
 `BShadow`, `BFocusRing`, `BDatePicker` (month grid, Polish names, natural-language input with
 live preview; its clock dialog is created on first use), `BTimePicker`/`BTimePickerDialog` (a
 round 24-hour clock: tap or drag hours and minutes — the face takes every press, so a drag may
@@ -1402,7 +1457,7 @@ default, leaves it out of the shipped Android and browser builds (Release / MinS
 | `--selftest-shell` | key routing and focus checks of the real shell, and rows with context menus with real input — taps and long presses (`--touch`: the drawer, All pages, tasks, bullets) or left and right clicks; the drawer's edge swipe (`--touch`: a finger from the left edge opens it, to the left closes it, with a simulated gesture-navigation zone (`GestureInsets.simulate`) from beyond it; a vertical scroll and a swipe farther in leave it closed, a tap in the strip reaches the button under it, no strip while blocks are selected or the keyboard is up, so the selection's start grip at the left edge keeps its drag — the drawer opened by its button still closes with a swipe —, nor on the calendar's week and month grids, whose swipe from the left edge — not a fast flick — shows the previous period, and the drawer opened over them closes with a swipe); the task status menu on the checkboxes of Tasks (and its Menu key: the status highlighted, Up to "Otwórz", Enter), a page's linked references, the calendar's agenda, its day panel (on a phone a bottom sheet, left open) and a journal day, and a "/" status command typed into the journal; links to blocks and headings (a link to a block moved to another page opens that page with the block selected, a missing heading is said — from the text and as a route; a heading named with tags quoted as plain text —, the palette's "Kopiuj odwołanie do bloku" copies the edited block's `((id))`, read back from the clipboard, a right-click on a paragraph opens the block menu, the side panel's outline copies a heading's link — the last two on the desktop); tags as page links (a tap / click on a `#tag` in the journal opens its page — not created by looking at it — with the tagged blocks among its references and the tag strip in its header, back returns; in Tasks a click filters, Ctrl+click opens the tag's page, a long press its menu — "Filtruj po tagu", its "Otwórz stronę tagu" opens the page; a row of the tag list opens the page, its button the overview); in Tasks a due date's chip has the date menu, whose "Dzień później" writes the task's note; a picture attachment (its view, its bar on a phone and in a narrow view beside the side panel, no live tooltip outliving its hidden button, the text view read-only and scrolled by a finger or the wheel, its byte limit cutting before a character, a change on disk shown at once, Ctrl+E both ways, its references, a small picture, a name with markup, a format without a decoder, the top bar's Więcej menu there, the same picture embedded in a note); the Markdown source scrolled by a finger, a tap and a long press in it (`--touch`); the default reminder time set on the clock in the settings; the event log page (a logged line arrives without its secret, the search ignores diacritics, an area chip filters, the detailed switch) and a sync run's details from the history ("Pokaż w rejestrze"); folders (the page opened revealed and highlighted in the tree, a row's "⋯" (`--touch`) or right-click menu, "Przenieś do…" moving a page with the dialog, a root folder from the "Strony" header's "+" typed with real keys, an empty folder deleted leaving the tree, with the mouse a page dragged onto a folder and onto the header, a closed folder opening under a held drag and Escape cancelling it, All pages' folder rows and the breadcrumb back) (ctest `tst_shell_qml`, `tst_shell_qml_capture`; desktop builds) |
 | `--selftest-import` (with `--onboarding`) | the ways to the import screen (onboarding, empty journal, drawer, Więcej) and an import from a typed path, with real taps / clicks (`src/app/io/ioselftest.h`, ctest `tst_appio_import_qml*`; desktop builds) |
 | `--selftest-sounds` (with `--demo`) | Settings → Reminders: the sounds of reminders and alarms (Silent, Ringtone without one → the sound menu, a theme sound, the ringtone back, Play sample), with real taps / clicks (`src/app/notify/notifyselftest.h`, ctest `tst_notify_sounds_qml*`; desktop builds) |
-| `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
+| `--scroll-probe <target>` (`--scroll-script drag\|flick\|wheel\|touchpad\|observe`, `--probe-out <csv>`, `--probe-passes`, `--probe-wait`, `--probe-max`, `--probe-speed`, `--probe-check <px>`, `--probe-cache <px>`) | scroll a view with synthetic input (touch drags / flings, mouse wheel, touchpad) to the end and back — or, with `observe`, record real input (a finger, `adb shell input swipe`) for `--probe-max` ms — record every frame (interval, GUI work, contentY / originY / contentHeight, delegates created (once the view has placed them) — with their kind of block — and resized above / in / below the view, the content's movement on screen against the input, touch moves per frame) and print a summary of stutters, jumps and touch strokes (release speed, fling, its start velocity from its distance; TouchFlick's corrections and caught flings), then quit (`--probe-check <px>`: exit code 1 when the content jumps by more than <px> — at an end of the list only layout shifts count — or the thumb of the view's `BRowScrollBar` jumps (against the content, or while it stands still), ctest `tst_scroll_jumps_qml`; `--probe-cache <px>`: the list's cacheBuffer first, 0 = every row created at the edge of the view); the log also goes to `<csv>.log` (and logcat on Android) (`src/app/ui/scrollprobe.h`; target `auto`, `sidebar`, `name:<objectName>`, `type:<QML type>`). Android: Qt passes the activity's `applicationArguments` string extra only to debuggable APKs (`am start -n io.github.januszbit.brulion/.android.BrulionActivity --es applicationArguments "'--scroll-probe auto --scroll-script observe --probe-out /data/user/0/io.github.januszbit.brulion/files/p.csv'"`). Built unless `BRULION_SCROLL_PROBE=OFF`, the default of the shipped Android and browser builds (Release / MinSizeRel): measure with `BRULION_ANDROID_BUILD_TYPE=RelWithDebInfo` |
 | `--hidden`, `--capture`, `--today`, `--no-single-instance` | start in the tray / open quick capture / today's journal (a second launch asks the running instance — over a socket only in the user's private runtime folder: without one every launch is an instance of its own and the event log says why, docs/CLI.md "The running app") / allow a second instance |
 | `cli …` (the first argument) | the command line instead of the app (`brulion cli capture "…"`, also `Brulion.AppImage cli …`): `brulion-cli`, before anything of the app — no window, log file or single-instance claim; see docs/CLI.md. A running app also takes `brulion-cli app open <ref>` / `app today` / `app capture` (the `open {json}` message of `src/ipc/appmessage.h`, `AppController::openRoute`) |
 | `--remote-control` | AI agents and scripts drive the running app for this run (as the device setting Settings → Application → "Dla programistów" → "Pozwól agentom sterować aplikacją" does; off by default): a request/response socket of its own next to the single-instance one, owner-only — `brulion-cli app state \| navigate \| open \| find \| click \| long-press \| double-click \| drag \| scroll \| type \| key \| command \| capture \| wait \| screenshot \| quit` and the MCP tools of `brulion-cli mcp --app-control` (docs/CLI.md "Remote control"; `src/app/shell/remotecontrol.h`, desktop builds). Input is played on the event loop with the UI driver of the self-test and the journey (`src/app/shell/uidriver.h`), one gesture at a time, answered once the window settled; ctest `tst_remote_control_qml` drives the real app offscreen through it |
