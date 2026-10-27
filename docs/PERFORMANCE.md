@@ -37,7 +37,7 @@ benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsk
   Przeciąganie strony lub folderu w drzewie już nie przycina się nad kolejnymi folderami:
   podpowiedź „Zaktualizowane linki: …” liczy się po kawałku, w tle między klatkami.
   Otwarcie strony, którą nazywa popularny tag, jest do 2 razy szybsze.
-* **Kopiowanie bloków na komputerze** (2026-10-27): Ctrl+C na całej stronie z 5000 bloków
+* **Kopiowanie bloków na komputerze z Linuksem** (2026-10-27): Ctrl+C na całej stronie z 5000 bloków
   zajmuje ok. 4 ms zamiast ok. 40 ms (do odświeżenia ekranu 13–15 zamiast 46–50 ms). Wersja
   sformatowana dla poczty i edytorów dokumentów powstaje dopiero przy wklejeniu do nich.
 
@@ -326,8 +326,10 @@ asks for it (`LazyHtmlMimeData`, docs/UI.md "Selecting and copying"; a paste int
 editor or a terminal never renders it): Ctrl+C on the same pages takes ~4 ms of handling and
 13–15 ms to the frame — 10× / 3–4× less (2026-10-27, `select-copy`, base `102920e` against this
 change, two rounds of 5 runs each, the second on an idle laptop: the numbers above). The cost
-moves to the first paste into a mail or office app (34.5 ms at 5000 blocks, once). Android and the
-browser take the clipboard's data at once, so they still render it while copying.
+moves to the first paste into a mail or office app (34.5 ms at 5000 blocks, once). Android, the
+browser and Windows take the clipboard's data at once (Windows: `OleSetClipboard` enumerates the
+formats, and Qt's CF_HTML converter asks for `html()` to offer its format), so they still render
+it while copying.
 
 ### Budgets
 

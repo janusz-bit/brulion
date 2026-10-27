@@ -16,7 +16,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 - **Zmiana nazwy na serwerze dociera jako zmiana nazwy** — folder albo strona, którym zmieniono nazwę albo które przeniesiono na innym urządzeniu albo w Nextcloudzie w przeglądarce, dostają tu tę samą nową nazwę. Notatki nie są pobierane od nowa i nie trafiają do kosza, a ich historia wersji, ulubione i zwinięte bloki idą za nimi. Stronę, której nazwę zmienisz w Brulionie, synchronizacja przenosi na serwerze jednym poleceniem, tak jak folder — także gdy zaraz potem piszesz w niej dalej. Zobacz [[Synchronizacja#Foldery|Foldery]].
 
 **Zmiany**
-- **Szybsze kopiowanie bloków na komputerze** — sformatowana wersja kopii (dla poczty i edytorów dokumentów) powstaje dopiero wtedy, gdy wklejasz ją do takiego programu. Skopiowanie całej strony z 5000 bloków zajmuje teraz kilka milisekund zamiast około 40, a wklejenie do Brulionu, Obsidiana czy zwykłego pola tekstowego w ogóle jej nie tworzy.
+- **Szybsze kopiowanie bloków na komputerze z Linuksem** — sformatowana wersja kopii (dla poczty i edytorów dokumentów) powstaje dopiero wtedy, gdy wklejasz ją do takiego programu. Skopiowanie całej strony z 5000 bloków zajmuje teraz kilka milisekund zamiast około 40, a wklejenie do Brulionu, edytora kodu czy terminala w ogóle jej nie tworzy.
 
 ## 0.4.5 — 26 października 2026
 

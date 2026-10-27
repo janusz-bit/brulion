@@ -2,21 +2,22 @@
 // the Markdown as text/plain, and a text/html flavour that is advertised at once but rendered
 // only when an application asks for it (a paste into a mail or office app reads it; a paste into
 // a code editor, a terminal or Brulion itself never does). A whole 5000-block page copies in
-// ~4 instead of ~40 ms of key handling on a desktop (docs/PERFORMANCE.md).
+// ~4 instead of ~40 ms of key handling on Linux (X11, Wayland; docs/PERFORMANCE.md).
 //
 //   auto *mime = new LazyHtmlMimeData(markdown, [host, markdown, path] { return host->renderHtml(markdown, path); });
 //   QGuiApplication::clipboard()->setMimeData(mime);
 //
 // The render function runs at most once (its result is kept) on the GUI thread — inside the
-// platform's request for the data: X11's SelectionRequest, Wayland's send, OLE's GetData. It must
+// platform's request for the data: X11's SelectionRequest, Wayland's send. It must
 // capture copies (the Markdown is a snapshot) and must not rely on objects that may be gone by then
 // (EditorHost through a QPointer: "" without one). When the application quits while this is still
 // the clipboard's content, the HTML is rendered first (materialize()): X11's hand-over to a
-// clipboard manager and Windows' OleFlushClipboard read every format during shutdown, when the
-// notebook may already be closed. An empty render gives no data for text/html.
+// clipboard manager reads every format during shutdown, when the notebook may already be closed.
+// An empty render gives no data for text/html.
 //
 // Platforms that read the data inside setMimeData() (Android builds its ClipData there, the
-// browser writes navigator.clipboard in the same gesture) gain nothing: clipboardReadsAtOnce()
+// browser writes navigator.clipboard in the same gesture, Windows' OleSetClipboard enumerates the
+// formats and Qt offers CF_HTML only for a non-empty html()) gain nothing: clipboardReadsAtOnce()
 // tells the editor to render there before it decides what goes on the clipboard.
 #pragma once
 
@@ -55,7 +56,7 @@ private:
 };
 
 /// The platform's clipboard takes every format inside QClipboard::setMimeData() (Android, the
-/// browser): a lazy flavour would be rendered right there anyway, so the editor renders first and
+/// browser, Windows): a lazy flavour would be rendered right there anyway, so the editor renders first and
 /// keeps the size rule (PageController::ClipboardLimit for both flavours together).
 bool clipboardReadsAtOnce();
 

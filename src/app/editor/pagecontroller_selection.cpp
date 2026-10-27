@@ -433,7 +433,7 @@ QVariantMap PageController::writeClipboard(const QString &text, const LazyHtmlMi
         return failure(u"noClipboard"_s);
     QMimeData *mime = nullptr;
     if (html && clipboardReadsAtOnce()) {
-        // Android / the browser take every flavour now: the formatted one only while both fit (the
+        // Android, the browser and Windows take every flavour now: the formatted one only while both fit (the
         // Markdown alone is never cut short).
         mime = new QMimeData;
         mime->setText(text);
@@ -441,7 +441,7 @@ QVariantMap PageController::writeClipboard(const QString &text, const LazyHtmlMi
         if (!rendered.isEmpty() && bytes + rendered.toUtf8().size() <= ClipboardLimit)
             mime->setHtml(rendered);
     } else if (html) {
-        // Desktops: rendered when an application asks for it (a paste into a mail or office app);
+        // Linux desktops (X11, Wayland): rendered when an application asks for it (a paste into a mail or office app);
         // their clipboards take megabytes, so the HTML has no limit of its own.
         mime = new LazyHtmlMimeData(text, html);
     } else {

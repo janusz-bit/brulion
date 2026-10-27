@@ -716,15 +716,19 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   line of its own and a blank line (`[[2026-10-27]]`; plain text: the day's long date,
   "wtorek, 27 października 2026"), a blank line between days, one HTML flavour rendered on
   request, the same 800 KB rule; the toast says "Skopiowano %n bloków z kilku dni". Wytnij, Usuń,
-  Pojedynczo, the indents, moves and task statuses are shown unavailable (`unavailable`, the
-  reason as tooltip / description), and they, Delete, Ctrl+X, Ctrl+V, Tab, Alt+↑/↓ and
+  Pojedynczo, the indents, moves and task statuses are shown unavailable (`BIconButton` /
+  `BMenuItem.unavailable`, the reason as tooltip / description) — so are Wytnij, Usuń, the
+  indents and moves of the block menu of a block in the span, whose Kopiuj / Kopiuj jako tekst
+  copy the whole span (its count in the label) —, and they, Delete, Ctrl+X, Ctrl+V, Tab, Alt+↑/↓ and
   Ctrl+Enter say "Na kilku dniach naraz działa tylko kopiowanie"; Zaznacz wszystko / Ctrl+A select
   the day's own blocks. The tools show on one day only — the focus day's (`toolsController`; the
   anchor day's while the focus day is away), which becomes the active day; the grips are hidden.
   Using one day on its own ends the span and clears the other days: a click or tap that edits,
   Ctrl+click, a selection made in that day alone, folding (any selection change the stream did not
   make), and a day leaving the list with an end of the span; Esc, Gotowe, × and Back clear every
-  day. Shift+↑/↓ with the focus day scrolled away scrolls there first (`revealRequested`).
+  day. Shift+↑/↓ with the focus day scrolled away scrolls there first (`revealRequested`). With
+  every day of the span scrolled away (no tools shown: `toolsController` null) a tap edits as
+  usual, which ends the span — no tap grows a span the user cannot see.
 * **The band**: one band over the range from the editor's left edge (a block alone keeps its
   outline: from its own level, framed), rounded at its ends, a line down its left edge — blocks
   picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
@@ -750,12 +754,13 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   is Markdown. The text/html flavour is advertised at once but rendered only when an application
   asks for it (`LazyHtmlMimeData`: `retrieveData()`, once, kept; a paste into Brulion, a code
   editor or a terminal never renders it; Ctrl+C on a whole 5000-block page takes ~4 instead of
-  ~40 ms, docs/PERFORMANCE.md) — on desktops (xcb, Wayland, Windows) without a size limit of its own; the
+  ~40 ms, docs/PERFORMANCE.md) — on Linux desktops (xcb, Wayland) without a size limit of its own; the
   Markdown is a snapshot, `((id))` texts and links are resolved when the HTML is made, and when the
-  app quits while the copy is still the clipboard's, it is made first (X11's clipboard manager and
-  Windows' `OleFlushClipboard` read every flavour during shutdown). Android and the browser take
-  the data inside `setMimeData()` (`clipboardReadsAtOnce()`): rendered at once there, kept only
-  while both flavours fit 800 KB. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
+  app quits while the copy is still the clipboard's, it is made first (X11's hand-over to a
+  clipboard manager reads every flavour during shutdown). Android, the browser and Windows take
+  the data inside `setMimeData()` (`clipboardReadsAtOnce()`; Windows: `OleSetClipboard` enumerates
+  the formats and Qt offers CF_HTML only for a non-empty `html()`): rendered at once there, kept
+  only while both flavours fit 800 KB. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
   numbers, ☐ / ☑ / ☒, emphasis marks in pairs gone, code spans verbatim, `((id))` as its block's
   text). A copy is read back (never "Skopiowano" for a clipboard that did not take it — except in
   the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes

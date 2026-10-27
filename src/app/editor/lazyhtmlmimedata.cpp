@@ -16,7 +16,7 @@ LazyHtmlMimeData::LazyHtmlMimeData(const QString &text, Render render)
     : m_render(std::move(render))
 {
     setText(text);
-    // Shutdown reads every format (X11's clipboard manager, OleFlushClipboard): rendered while the
+    // Shutdown reads every format (X11's hand-over to a clipboard manager): rendered while the
     // notebook is still open. Only while this is still what the clipboard holds.
     if (m_render && QCoreApplication::instance()) {
         connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this] {
@@ -61,7 +61,9 @@ QVariant LazyHtmlMimeData::retrieveData(const QString &mimeType, QMetaType type)
 bool clipboardReadsAtOnce()
 {
     const QString platform = QGuiApplication::platformName();
-    return platform == u"android" || platform == u"wasm";
+    // Windows: OleSetClipboard() enumerates the formats, and Qt's CF_HTML converter offers its
+    // format only for non-empty html() — the render runs inside setMimeData() there too.
+    return platform == u"android" || platform == u"wasm" || platform == u"windows";
 }
 
 } // namespace brulion::editor
