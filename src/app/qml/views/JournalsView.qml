@@ -116,7 +116,12 @@ FocusScope {
                 const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
                 const y = Math.max(list.contentY, Math.min(list.contentY + list.height - 1, p.y))
                 const item = list.itemAt(Math.max(0, Math.min(list.width - 1, p.x)), y)
-                return item ? item.day : null
+                for (let i = 0; item && i < item.children.length; ++i) {
+                    const day = item.children[i] as ContentJournalDay
+                    if (day)
+                        return day
+                }
+                return null
             }
             /// Where the list scrolls (the autocomplete popup of a day follows it).
             readonly property real contentY: list.contentY

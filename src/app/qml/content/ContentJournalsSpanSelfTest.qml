@@ -45,7 +45,12 @@ Item {
     }
     function dayAt(row) {
         const item = row >= 0 ? list.itemAtIndex(row) : null
-        return item ? item.day : null
+        for (let i = 0; item && i < item.children.length; ++i) {
+            const day = item.children[i] as ContentJournalDay
+            if (day)
+                return day
+        }
+        return null
     }
     function loaded(row) {
         const d = dayAt(row)
