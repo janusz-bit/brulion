@@ -38,5 +38,29 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache;XDG_STATE_HOME=${_journals_home}/state${_profile}"
             FIXTURES_REQUIRED content_journals_home TIMEOUT 300 PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
+
+        # Blocks selected across several days (`--editor-script journals-span-selftest`,
+        # qml/content/ContentJournalsSpanSelfTest.qml): Shift+click, Shift+arrows past a day's
+        # edge, a mouse drag, Esc on a desktop; a long press, taps, the docked tools and Back on a
+        # phone; copying with the days' links, other tools changing nothing, days scrolled away and
+        # back. QtTest's TestEvent gives it real mouse and touch input.
+        if(EXISTS "${_brulion_qt_qml_root}/QtTest")
+            foreach(_span "tst_content_journals_span_qml;1280x800;" "tst_content_journals_span_qml_touch;412x915;--touch")
+                list(GET _span 0 _span_test)
+                list(GET _span 1 _span_size)
+                list(GET _span 2 _span_touch)
+                set(_span_home ${CMAKE_CURRENT_BINARY_DIR}/${_span_test}-home)
+                brulion_test_profile(_span_profile ${_span_test})
+                add_test(NAME ${_span_test}_home COMMAND ${CMAKE_COMMAND} -E rm -rf ${_span_home} ${_span_profile_DIRS})
+                set_tests_properties(${_span_test}_home PROPERTIES FIXTURES_SETUP ${_span_test}_home)
+                add_test(NAME ${_span_test}
+                    COMMAND brulion --demo --route journals --editor-script journals-span-selftest --no-single-instance
+                        --size ${_span_size} ${_span_touch} --now "2026-10-14 10:00" --locale pl)
+                set_tests_properties(${_span_test} PROPERTIES
+                    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${_brulion_qt_qml_root};XDG_DATA_HOME=${_span_home}/data;XDG_CONFIG_HOME=${_span_home}/config;XDG_CACHE_HOME=${_span_home}/cache;XDG_STATE_HOME=${_span_home}/state${_span_profile}"
+                    FIXTURES_REQUIRED ${_span_test}_home TIMEOUT 300 PROCESSORS 2
+                    FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
+            endforeach()
+        endif()
     endif()
 endif()

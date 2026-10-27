@@ -13,6 +13,9 @@ import Brulion
 //     toolbar's slot, on the keyboard's place (BlockEditor.toolbarMode);
 //   * floating: desktops, a compact bar at the top of the editor while two or more blocks are
 //     selected (BlockEditor).
+// Blocks selected across several days of the journal stream (BlockEditor.inSpan): the count is the
+// stream's, Kopiuj and Kopiuj jako tekst copy them all; the other tools are shown unavailable and
+// a tap says that only copying works there; Zaznacz wszystko selects the day's own blocks.
 // Buttons never take the keyboard: it stays with the selection (the editor's list).
 //
 //   SelectionToolbar { editor: editor; docked: true }
@@ -23,10 +26,14 @@ Row {
     /// In the touch toolbar's slot (else the desktop's floating bar).
     property bool docked: false
     readonly property PageController controller: editor ? editor.controller : null
-    readonly property int count: controller ? controller.selectionCount : 0
+    /// Blocks of several days are selected (the journal stream's StreamSelection).
+    readonly property bool span: editor !== null && editor.inSpan
+    readonly property int count: span ? editor.stream.count : controller ? controller.selectionCount : 0
+    /// Why a tool does nothing now ("" when it works): a selection over several days.
+    readonly property string spanBlocked: span ? editor.spanReason : ""
     /// One block selected (its two ends are the same block, nothing picked besides it): the
     /// block's own tools apply.
-    readonly property bool singleBlock: controller !== null && controller.selectedRow >= 0
+    readonly property bool singleBlock: !span && controller !== null && controller.selectedRow >= 0
                                         && controller.selectedRow === controller.selectionAnchorRow
                                         && !controller.selectionPicked
     /// The selection can be indented (PageController.canIndentSelection: in a document only list
@@ -42,16 +49,25 @@ Row {
         else
             action()
     }
+    /// The task status menu: not over several days.
+    function setStatus(status) {
+        if (!editor.spanRefuses())
+            controller.setSelectionTaskStatus(status)
+    }
 
     spacing: 0
     Accessible.role: Accessible.ToolBar
     Accessible.name: qsTr("Selection tools")
 
     component Tool: BIconButton {
+        /// Shown but not possible now (drawn disabled, the reason as its description): a tap says why.
+        property string unavailable: ""
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
         focusPolicy: Qt.NoFocus
         size: "small"
         enabled: bar.count > 0
+        opacity: unavailable === "" ? 1 : Theme.disabledOpacity
+        Accessible.description: unavailable !== "" ? unavailable : shortcut
     }
 
     // Docked: "Gotowe" first (Android's contextual bars), always on screen however narrow.
@@ -99,6 +115,7 @@ Row {
         iconName: "scissors"
         label: qsTr("Cut")
         shortcut: "Ctrl+X"
+        unavailable: bar.spanBlocked
         onClicked: bar.editor.cutSelection()
     }
     Tool {
@@ -106,6 +123,7 @@ Row {
         iconName: "trash-2"
         label: qsTr("Delete")
         shortcut: "Delete"
+        unavailable: bar.spanBlocked
         onClicked: bar.editor.deleteSelection()
     }
     Tool {
@@ -127,7 +145,8 @@ Row {
         Accessible.checkable: true
         Accessible.checked: checked
         enabled: true
-        onClicked: bar.editor.pickMode = !bar.editor.pickMode
+        unavailable: bar.spanBlocked
+        onClicked: if (!bar.editor.spanRefuses()) bar.editor.pickMode = !bar.editor.pickMode
     }
     Tool {
         id: moreButton
@@ -154,7 +173,7 @@ Row {
             menu = menuComponent.createObject(bar) as BMenu
         // A document's paragraphs and headings have no outline: no Zwiększ / Zmniejsz wcięcie.
         indentable = controller !== null && controller.canIndentSelection()
-        unmovable = controller !== null && !controller.selectionContiguous ? editor.gapReason : ""
+        unmovable = span ? editor.spanReason : controller !== null && !controller.selectionContiguous ? editor.gapReason : ""
         // "Kopiuj odnośnik" only for one block (its item in the menu, made for the submenu).
         for (let i = 0; i < menu.count; ++i) {
             const entry = menu.itemAt(i) as T.MenuItem
@@ -260,13 +279,13 @@ Row {
                 objectName: "selectionTaskMenu"
                 title: qsTr("Task status")
                 iconName: "square-check-big"
-                BMenuItem { text: qsTr("To do"); onTriggered: bar.controller.setSelectionTaskStatus("todo") }
-                BMenuItem { text: qsTr("In progress"); onTriggered: bar.controller.setSelectionTaskStatus("doing") }
-                BMenuItem { text: qsTr("Done", "task status"); onTriggered: bar.controller.setSelectionTaskStatus("done") }
-                BMenuItem { text: qsTr("Waiting"); onTriggered: bar.controller.setSelectionTaskStatus("deferred") }
-                BMenuItem { text: qsTr("Cancelled"); onTriggered: bar.controller.setSelectionTaskStatus("cancelled") }
+                BMenuItem { text: qsTr("To do"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("todo") }
+                BMenuItem { text: qsTr("In progress"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("doing") }
+                BMenuItem { text: qsTr("Done", "task status"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("done") }
+                BMenuItem { text: qsTr("Waiting"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("deferred") }
+                BMenuItem { text: qsTr("Cancelled"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("cancelled") }
                 BMenuSeparator {}
-                BMenuItem { text: qsTr("No status"); onTriggered: bar.controller.setSelectionTaskStatus("") }
+                BMenuItem { text: qsTr("No status"); unavailable: bar.spanBlocked; onTriggered: bar.setStatus("") }
             }
         }
     }

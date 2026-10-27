@@ -24,8 +24,9 @@ import Brulion
 //     runaway scrolling, one toolbar when another day is edited;
 //   * selecting blocks in a day (docs/UI.md "Selecting and copying"): a finger's long press (the
 //     selection mode; the stream holds still while the finger extends it, scrolls at the frame's
-//     edge, the selection tools dock on the frame, Kopiuj), another day's selection ending it,
-//     Back; a mouse drag from a block into the next ones, the stream scrolled at its edge.
+//     edge and the selection goes on into the next day — StreamSelection —, the selection tools
+//     dock on the frame, Kopiuj with the days' links), another day's selection ending it, Back; a
+//     mouse drag from a block into the next ones, the stream scrolled at its edge.
 // Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
 Item {
     id: test
@@ -33,6 +34,7 @@ Item {
     /// The journal list (ListView over `days`) and its model.
     property ListView list
     property JournalListModel days
+    property StreamSelection stream
 
     property int failures: 0
     property int stepIndex: 0
@@ -416,7 +418,10 @@ Item {
                 test.check(test.list.contentY > test.contentBefore + 50,
                            "at the frame's bottom edge the stream scrolls: " + test.list.contentY + " > " + test.contentBefore)
                 test.check(c.selectionAnchorRow === 1 && c.selectedRow === c.lastVisibleRow(),
-                           "the selection reaches the day's last block (it stays in its day): " + c.selectedRow)
+                           "the selection reaches the day's last block: " + c.selectedRow)
+                test.check(test.stream.active && test.stream.anchorPath === test.tracked.path && test.stream.pageCount >= 2
+                           && test.stream.focusPath !== test.days.get(test.linkRow - 1).path,
+                           "and goes on into the days below: " + test.stream.focusPath)
                 test.events.touchEvent(test.list).release(0, test.list, test.list.width / 2, test.list.height - 8).commit()
             },
             () => {
@@ -432,10 +437,11 @@ Item {
             },
             () => {
                 const text = test.tracked.controller.clipboardText()
-                test.check(text.indexOf("- Dzień 45, punkt 0\n- Dzień 45, punkt 1\n") === 0 && text.endsWith("- Zobacz [[#Cel podróży]]"),
-                           "Kopiuj copies the day's selected blocks: " + text.slice(0, 50))
-                // Another day's selection ends this one's (one selection in the stream).
-                const other = test.dayAt(test.linkRow - 1)
+                test.check(text.indexOf("[[") === 0 && text.indexOf("]]\n\n- Dzień 45, punkt 0\n- Dzień 45, punkt 1\n") > 0
+                           && text.indexOf("- Zobacz [[#Cel podróży]]\n\n[[") > 0,
+                           "Kopiuj copies the selected blocks of both days after their links: " + text.slice(0, 50))
+                // Another day's own selection ends this one (one selection in the stream).
+                const other = test.dayAt(test.linkRow + 1)
                 test.check(other !== null, "the next day is there")
                 if (other)
                     other.controller.selectRange(0, 1)
@@ -443,7 +449,7 @@ Item {
             () => {
                 test.check(test.tracked.controller.selectionCount === 0 && !test.tracked.editor.selectionMode,
                            "selecting in another day ends this day's selection")
-                const other = test.dayAt(test.linkRow - 1)
+                const other = test.dayAt(test.linkRow + 1)
                 if (other) {
                     other.controller.clearSelection()
                     test.tracked.editor.selectBlock(2)
