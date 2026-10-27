@@ -24,6 +24,12 @@ bool endsWithEol(QStringView s)
     return s.endsWith(u'\n') || s.endsWith(u'\r');
 }
 
+/// Only spaces, tabs and line breaks (blank lines).
+bool isBlankLines(QStringView s)
+{
+    return std::all_of(s.begin(), s.end(), [](QChar c) { return c == u'\n' || c == u'\r' || isSpaceOrTab(c); });
+}
+
 int countLineBreaks(QStringView s)
 {
     int n = 0;
@@ -271,57 +277,60 @@ bool BlockDocument::hasChildren(int i) const
 // Blank blocks (empty paragraphs)
 // ---------------------------------------------------------------------------------------------
 
-QList<int> BlockDocument::blankBlockLines() const
+QList<BlankBlock> BlockDocument::blankBlocks() const
 {
-    QList<int> out;
+    QList<BlankBlock> out;
     for (const Item &it : m_items) {
-        if (it.entry.kind == BlockKind::Paragraph && isBlank(it.own) && countLineBreaks(it.own) == 0)
-            out.append(it.entry.line);
+        if (it.entry.kind == BlockKind::Paragraph && isBlankLines(it.own))
+            out.append({it.entry.line, countLineBreaks(it.own) + 1});
     }
     return out;
 }
 
-int BlockDocument::restoreBlankBlocks(const QList<int> &lines)
+int BlockDocument::restoreBlankBlocks(const QList<BlankBlock> &blocks)
 {
-    QList<int> wanted = lines;
-    std::sort(wanted.begin(), wanted.end());
-    wanted.erase(std::unique(wanted.begin(), wanted.end()), wanted.end());
+    QList<BlankBlock> wanted = blocks;
+    std::sort(wanted.begin(), wanted.end(), [](const BlankBlock &x, const BlankBlock &y) { return x.line < y.line; });
     int made = 0;
-    for (const int line : wanted) {
-        if (line < 0)
+    for (const BlankBlock &b : std::as_const(wanted)) {
+        if (b.line < 0 || b.lines < 1)
             continue;
-        // The run of blank lines that holds the line: the blank lines before the first block
-        // (k = -1) or the ones after block k.
+        // The run of blank lines that holds the block: the blank lines before the first block
+        // (k = -1) or the ones after block k. A block made before (an overlapping or repeated
+        // entry) is block k, its lines are no run.
         int k = -1;
-        while (k + 1 < count() && m_items[k + 1].entry.line <= line)
+        while (k + 1 < count() && m_items[k + 1].entry.line <= b.line)
             ++k;
         const int start = k < 0 ? 0
                                 : m_items[k].entry.line + countLineBreaks(m_items[k].own)
                                           + countLineBreaks(m_items[k].eol);
-        if (line < start)
+        if (b.line < start)
             continue; // a line of the block's own text
         QString &run = k < 0 ? m_leading : m_items[k].entry.trailing;
         const QList<text::Line> runLines = text::splitLines(run);
         // splitLines() ends with an empty line after a final terminator: no line of the run.
         const int runCount = int(runLines.size())
                              - (runLines.last().text.isEmpty() && runLines.last().eol.isEmpty() ? 1 : 0);
-        const int index = line - start;
+        const int index = b.line - start;
+        const int end = index + b.lines; // one past the block's last line
         Item x = makeItem(QString(), QString(), QString());
-        if (index < runCount) {
-            x.own = runLines[index].text;
-            x.eol = runLines[index].eol;
-            x.entry.trailing = joinLineRange(runLines, index + 1, int(runLines.size()), true);
-            run = joinLineRange(runLines, 0, index, true);
+        if (end <= runCount) {
+            x.own = joinLineRange(runLines, index, end, false);
+            x.eol = runLines[end - 1].eol;
+            x.entry.trailing = joinLineRange(runLines, end, int(runLines.size()), true);
         } else {
-            // One line past the end of a text that ends with a line break: an empty paragraph
-            // at the very end of a page without a final newline (fixEnds() writes it that way).
+            // Its last line one past the end of a text that ends with a line break: an empty
+            // paragraph at the very end of a page without a final newline (fixEnds() writes it
+            // that way).
             const bool last = k == count() - 1;
             const bool terminated = run.isEmpty() ? (k < 0 || !m_items[k].eol.isEmpty()) : endsWithEol(run);
-            if (!last || index != runCount || !terminated)
+            if (!last || end != runCount + 1 || !terminated)
                 continue;
+            x.own = joinLineRange(runLines, index, runCount, true);
             m_finalNewline = false;
         }
-        x.entry.line = line;
+        run = joinLineRange(runLines, 0, index, true);
+        x.entry.line = b.line;
         m_items.insert(k + 1, std::move(x));
         derive(k + 1);
         ++made;

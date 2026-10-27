@@ -6,6 +6,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QPoint>
 #include <QRegularExpression>
 #include <QTest>
 
@@ -689,6 +690,20 @@ private Q_SLOTS:
         QTest::newRow("spaces") << u"Ala\n\nŁ\n\nOla\n"_s << QStringList{u"spaces 1"_s};
         QTest::newRow("many") << u"# Tytuł\n\nAla\n\n- a\n\t- b\n\nKoniec"_s
                               << QStringList{u"split 0 0"_s, u"split 2 0"_s, u"insert 5"_s, u"split 7 6"_s};
+        // Line breaks typed into an empty paragraph (Shift+Enter): one block of several lines.
+        QTest::newRow("soft-break") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                    << QStringList{u"split 0 0"_s, u"lines 0 2"_s};
+        QTest::newRow("three-lines-between") << u"Ala\n\nOla\n"_s << QStringList{u"split 1 0"_s, u"lines 1 3"_s};
+        QTest::newRow("multi-line-then-single") << u"Ala\n\nOla\n"_s
+                                                << QStringList{u"split 1 0"_s, u"split 2 0"_s, u"lines 1 2"_s};
+        QTest::newRow("single-then-multi-line") << u"Ala\n\nOla\n"_s
+                                                << QStringList{u"split 1 0"_s, u"split 2 0"_s, u"lines 2 2"_s};
+        QTest::newRow("multi-line-crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s << QStringList{u"split 0 0"_s, u"lines 0 3"_s};
+        QTest::newRow("multi-line-spaces") << u"Ala\n\nŁ\n\nOla\n"_s << QStringList{u"spaces 1"_s, u"lines 1 2"_s};
+        QTest::newRow("multi-line-end-no-final-newline") << u"Ala ma kota"_s
+                                                         << QStringList{u"split 0 11"_s, u"lines 1 2"_s};
+        QTest::newRow("multi-line-end") << u"Ala ma kota\n"_s << QStringList{u"split 0 11"_s, u"lines 1 3"_s};
+        QTest::newRow("multi-line-empty-page") << QString() << QStringList{u"insert -1"_s, u"lines 0 2"_s};
     }
 
     void restoreBlankBlocks()
@@ -702,13 +717,20 @@ private Q_SLOTS:
                 return d.split(a, w.value(2).toInt()).changed();
             if (w[0] == u"insert"_s)
                 return d.insertAfter(a, QString(), 0, false).changed();
+            if (w[0] == u"lines"_s) { // "lines row n": a blank body of n lines ("spaces" kept)
+                const QString first = d.at(a).body.section(u'\n', 0, 0);
+                return d.setBody(a, first + QString(w.value(2).toInt() - 1, u'\n')).changed();
+            }
             return d.setBody(a, w[0] == u"spaces"_s ? u"   "_s : QString()).changed();
         };
         BlockDocument doc(content);
         for (const QString &op : ops)
             QVERIFY2(run(doc, op), qPrintable(op));
-        const QList<int> blank = doc.blankBlockLines();
+        const QList<BlankBlock> blank = doc.blankBlocks();
         QVERIFY(!blank.isEmpty());
+        if (QTest::currentDataTag() == QByteArrayView("soft-break")
+            || QByteArrayView(QTest::currentDataTag()).startsWith("multi-line"))
+            QVERIFY(std::any_of(blank.begin(), blank.end(), [](const BlankBlock &b) { return b.lines > 1; }));
         const auto lines = [](const BlockDocument &d) {
             QList<int> out;
             for (int i = 0; i < d.count(); ++i)
@@ -717,15 +739,15 @@ private Q_SLOTS:
         };
 
         BlockDocument re(doc.toString());
-        QCOMPARE(re.blankBlockLines(), QList<int>());
+        QCOMPARE(re.blankBlocks(), QList<BlankBlock>());
         QCOMPARE(re.restoreBlankBlocks(blank), int(blank.size()));
         QCOMPARE(re.toString(), doc.toString());
         QCOMPARE(entries(re), entries(doc));
         QCOMPARE(lines(re), lines(doc));
-        QCOMPARE(re.blankBlockLines(), blank);
+        QVERIFY(re.blankBlocks() == blank);
         // The same edits give the same text (line breaks, separators and the final newline).
         for (BlockDocument *d : {&doc, &re}) {
-            const int last = d->blankBlockLines().isEmpty() ? -1 : d->indexAtLine(d->blankBlockLines().last());
+            const int last = d->blankBlocks().isEmpty() ? -1 : d->indexAtLine(d->blankBlocks().last().line);
             QVERIFY(last >= 0);
             d->setBody(last, u"żółć"_s);
             d->insertAfter(d->count() - 1, QString(), 0, false);
@@ -733,41 +755,51 @@ private Q_SLOTS:
         }
         QCOMPARE(re.toString(), doc.toString());
         QCOMPARE(entries(re), entries(doc));
-        QCOMPARE(re.blankBlockLines(), doc.blankBlockLines());
+        QVERIFY(re.blankBlocks() == doc.blankBlocks());
     }
 
     void restoreBlankBlocksIgnoresMalformed_data()
     {
         QTest::addColumn<QString>("content");
-        QTest::addColumn<QList<int>>("lines");
+        QTest::addColumn<QList<QPoint>>("blocks"); // (line, line count)
         QTest::addColumn<int>("made");
         QTest::addColumn<QStringList>("expected"); // entries() after
 
         const QString text = u"Ala\n\n\n\nOla\n"_s;
         const QStringList plain{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
-        QTest::newRow("none") << text << QList<int>{} << 0 << plain;
-        QTest::newRow("negative") << text << QList<int>{-1, -5} << 0 << plain;
-        QTest::newRow("own-text") << text << QList<int>{0, 4} << 0 << plain;
-        QTest::newRow("past-the-end") << text << QList<int>{6, 100} << 0 << plain;
-        QTest::newRow("unsorted-duplicates") << text << QList<int>{3, 1, 3, 2, 1} << 3
+        QTest::newRow("none") << text << QList<QPoint>{} << 0 << plain;
+        QTest::newRow("negative") << text << QList<QPoint>{{-1, 1}, {-5, 1}} << 0 << plain;
+        QTest::newRow("own-text") << text << QList<QPoint>{{0, 1}, {4, 1}} << 0 << plain;
+        QTest::newRow("past-the-end") << text << QList<QPoint>{{6, 1}, {100, 1}} << 0 << plain;
+        QTest::newRow("unsorted-duplicates") << text << QList<QPoint>{{3, 1}, {1, 1}, {3, 1}, {2, 1}, {1, 1}} << 3
                                              << QStringList{u"p:0:|Ala"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|"_s, u"p:0:|Ola"_s};
-        QTest::newRow("multi-line-block") << u"- a\n  b\n\n- c\n"_s << QList<int>{1, 2} << 1
+        QTest::newRow("multi-line-block") << u"- a\n  b\n\n- c\n"_s << QList<QPoint>{{1, 1}, {2, 1}} << 1
                                           << QStringList{u"li:0:- |a⏎b"_s, u"p:0:|"_s, u"li:0:- |c"_s};
-        QTest::newRow("code-block-blank-line") << u"```\nx\n\ny\n```\n"_s << QList<int>{2} << 0
+        QTest::newRow("code-block-blank-line") << u"```\nx\n\ny\n```\n"_s << QList<QPoint>{{2, 1}} << 0
                                                << QStringList{u"code:0:|```⏎x⏎⏎y⏎```"_s};
-        QTest::newRow("no-final-newline") << u"Ala\n\nOla"_s << QList<int>{3} << 0
+        QTest::newRow("zero-lines") << text << QList<QPoint>{{1, 0}, {2, -3}} << 0 << plain;
+        QTest::newRow("span-into-own-text") << text << QList<QPoint>{{1, 4}} << 0 << plain;
+        QTest::newRow("span-past-the-end") << u"Ala\n\n"_s << QList<QPoint>{{1, 3}} << 0 << QStringList{u"p:0:|Ala"_s};
+        QTest::newRow("overlapping-spans") << text << QList<QPoint>{{2, 2}, {1, 2}} << 1
+                                           << QStringList{u"p:0:|Ala"_s, u"p:0:|⏎"_s, u"p:0:|Ola"_s};
+        QTest::newRow("multi-line-and-single") << text << QList<QPoint>{{1, 2}, {3, 1}} << 2
+                                               << QStringList{u"p:0:|Ala"_s, u"p:0:|⏎"_s, u"p:0:|"_s, u"p:0:|Ola"_s};
+        QTest::newRow("no-final-newline") << u"Ala\n\nOla"_s << QList<QPoint>{{3, 1}} << 0
                                           << QStringList{u"p:0:|Ala"_s, u"p:0:|Ola"_s};
     }
 
     void restoreBlankBlocksIgnoresMalformed()
     {
         QFETCH(QString, content);
-        QFETCH(QList<int>, lines);
+        QFETCH(QList<QPoint>, blocks);
         QFETCH(int, made);
         QFETCH(QStringList, expected);
+        QList<BlankBlock> wanted;
+        for (const QPoint &b : std::as_const(blocks))
+            wanted.append({b.x(), b.y()});
         BlockDocument doc(content);
-        QCOMPARE(doc.blankBlockLines(), QList<int>());
-        QCOMPARE(doc.restoreBlankBlocks(lines), made);
+        QCOMPARE(doc.blankBlocks(), QList<BlankBlock>());
+        QCOMPARE(doc.restoreBlankBlocks(wanted), made);
         QCOMPARE(doc.toString(), content);
         QCOMPARE(entries(doc), expected);
     }

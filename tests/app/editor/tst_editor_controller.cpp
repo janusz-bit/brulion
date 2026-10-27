@@ -692,6 +692,13 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const QString document = u"---\nbrulion: document\n---\n"_s;
         QTest::newRow("document") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
                                   << QStringList{u"enter 1 0"_s, u"set 3 Drugi łęgi"_s, u"enter 1 0"_s};
+        // A line break typed into the empty paragraph (Shift+Enter): one block of two lines.
+        QTest::newRow("soft-break") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s
+                                    << QStringList{u"enter 0 0"_s, u"set 0 \n"_s, u"set 2 Drugi ż"_s};
+        QTest::newRow("soft-breaks-crlf") << u"Żółw\r\n\r\nDrugi\r\n"_s
+                                          << QStringList{u"enter 0 0"_s, u"set 0 \n\n"_s, u"set 2 Drugi ą"_s};
+        QTest::newRow("document-soft-break") << document + u"Pierwszy akapit\n\nDrugi łęg\n"_s
+                                             << QStringList{u"enter 1 0"_s, u"set 1 \n"_s, u"set 3 Drugi łęgi"_s};
     }
 
     void undoKeepsEmptyParagraphs()

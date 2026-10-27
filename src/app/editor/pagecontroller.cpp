@@ -63,11 +63,11 @@ using markdown::EditResult;
 class EditCommand : public QUndoCommand {
 public:
     /// Made right after the edit: the document is the version `after` (its empty paragraphs).
-    EditCommand(PageController *controller, const QString &before, const QList<int> &blankBefore,
+    EditCommand(PageController *controller, const QString &before, const QList<markdown::BlankBlock> &blankBefore,
                 const QString &after, PageController::Focus focusBefore, PageController::Focus focusAfter,
                 quint64 typingUid)
         : m_controller(controller), m_delta(TextDelta::between(before, after)), m_blankBefore(blankBefore),
-          m_blankAfter(controller->blankLines()), m_focusBefore(focusBefore), m_focusAfter(focusAfter),
+          m_blankAfter(controller->blankBlocks()), m_focusBefore(focusBefore), m_focusAfter(focusAfter),
           m_typingUid(typingUid)
     {
     }
@@ -116,7 +116,7 @@ public:
         if (!before)
             return false;
         m_delta = TextDelta::between(*before, amended);
-        m_blankAfter = m_controller->blankLines();
+        m_blankAfter = m_controller->blankBlocks();
         return true;
     }
     /// Characters held by the step.
@@ -130,8 +130,8 @@ private:
     const quint64 m_serial = ++s_serials;
     PageController *m_controller;
     TextDelta m_delta;
-    QList<int> m_blankBefore; ///< lines of the empty paragraphs before the step (usually none)
-    QList<int> m_blankAfter;  ///< … and after it
+    QList<markdown::BlankBlock> m_blankBefore; ///< the empty paragraphs before the step (usually none)
+    QList<markdown::BlankBlock> m_blankAfter;  ///< … and after it
     PageController::Focus m_focusBefore;
     PageController::Focus m_focusAfter;
     quint64 m_typingUid = 0;
@@ -681,7 +681,7 @@ void PageController::dropEditorSpace(quint64 uid)
     // The file never had the space (textToSave()): the step that wrote it, when it is the last
     // one, ends without it — undo needs no step of its own for a change nobody saw saved.
     const QString before = text();
-    const QList<int> blankBefore = blankLines();
+    const QList<markdown::BlankBlock> blankBefore = blankBlocks();
     const Focus focusBefore = currentFocus();
     if (!applyOp([&](BlockDocument &d) { return d.setBody(row, body); }).changed())
         return;
@@ -721,7 +721,7 @@ void PageController::closeLoneFence(quint64 uid)
     const bool continueTyping =
             m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo() && !m_undo->canRedo();
     const QString before = text();
-    const QList<int> blankBefore = blankLines();
+    const QList<markdown::BlankBlock> blankBefore = blankBlocks();
     const Focus focusBefore = currentFocus();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())
@@ -946,7 +946,7 @@ void PageController::beginCommand()
 {
     if (m_commandDepth++ == 0) {
         m_commandBefore = text();
-        m_commandBlankBefore = blankLines();
+        m_commandBlankBefore = blankBlocks();
         m_commandFocusBefore = currentFocus();
         m_typingOpen = false;
     }
@@ -973,17 +973,17 @@ EditResult PageController::applyOp(const std::function<EditResult(BlockDocument 
     return r;
 }
 
-QList<int> PageController::blankLines() const
+QList<markdown::BlankBlock> PageController::blankBlocks() const
 {
-    return m_model->document().blankBlockLines();
+    return m_model->document().blankBlocks();
 }
 
-void PageController::restore(const QString &snapshot, const Focus &focus, const QList<int> &blankLines)
+void PageController::restore(const QString &snapshot, const Focus &focus, const QList<markdown::BlankBlock> &blankBlocks)
 {
     const QScopedValueRollback undoing(m_undoing, true);
     m_restoring = true;
     m_typingOpen = false;
-    const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankLines);
+    const QHash<quint64, quint64> mapping = m_model->replaceContent(snapshot, blankBlocks);
     m_restoring = false;
     remapBlocks(mapping);
     if (focus.row < 0 && validRow(focus.selectionAnchor) && validRow(focus.selectionFocus)) {
@@ -1271,7 +1271,7 @@ void PageController::setEditText(int row, const QString &edit, int cursor)
     const quint64 uid = entry.uid;
     const QString body = bodyWithEditText(entry, edit);
     const QString before = text();
-    const QList<int> blankBefore = blankLines();
+    const QList<markdown::BlankBlock> blankBefore = blankBlocks();
     const Focus focusBefore = currentFocus();
     const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell.y() == -2 && m_undo->canUndo()
                                 && !m_undo->canRedo();
@@ -2809,7 +2809,7 @@ void PageController::setTableCell(int row, int tableRow, int column, const QStri
     const bool continueTyping = m_typingOpen && m_typingUid == uid && m_typingCell == where && m_undo->canUndo()
                                 && !m_undo->canRedo();
     const QString before = text();
-    const QList<int> blankBefore = blankLines();
+    const QList<markdown::BlankBlock> blankBefore = blankBlocks();
     const Focus focus = currentFocus();
     const EditResult r = applyOp([&](BlockDocument &d) { return d.setBody(row, body); });
     if (!r.changed())

@@ -151,9 +151,9 @@ public:
     void resetContent(const QString &content);
     /// Replace the content keeping rows of unchanged blocks (undo/redo, external changes).
     /// Returns old uid -> new uid for the blocks that were kept. View state (folds, zoom,
-    /// editing, selection) follows the kept blocks. `blankLines`: the lines of that version's
-    /// empty paragraphs (BlockDocument::blankBlockLines(); the text has none of its own).
-    QHash<quint64, quint64> replaceContent(const QString &content, const QList<int> &blankLines = {});
+    /// editing, selection) follows the kept blocks. `blankBlocks`: that version's empty paragraphs
+    /// (BlockDocument::blankBlocks(); the text has none of its own).
+    QHash<quint64, quint64> replaceContent(const QString &content, const QList<markdown::BlankBlock> &blankBlocks = {});
     /// Run a BlockDocument operation and replay its row changes.
     markdown::EditResult apply(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
 

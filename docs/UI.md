@@ -358,7 +358,8 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   rows a change above them moved. Empty paragraphs (Enter at the start of a paragraph or
   heading, a paragraph typed empty, a document's last empty paragraph) are only blank lines in
   the file, so a re-read text has none: each undo step also remembers the lines of its two
-  versions' empty paragraphs (`BlockDocument::blankBlockLines`), and undo / redo split them out
+  versions' empty paragraphs (`BlockDocument::blankBlocks`: their lines, also several for one with
+  line breaks typed into it), and undo / redo split them out
   of the blank lines again (`restoreBlankBlocks`, the text unchanged byte for byte;
   `tst_editor_controller` `undoKeepsEmptyParagraphs`). A reload from the file (or an external
   change) still reads them as blank lines.

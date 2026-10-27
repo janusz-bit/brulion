@@ -719,10 +719,10 @@ private:
     bool inCommand() const { return m_commandDepth > 0; }
     /// setTaskStatus() inside the current command (also the task slash commands).
     void applyTaskStatus(int row, const QString &status);
-    /// Restore a text snapshot (undo/redo), its empty paragraphs (their lines) and focus.
-    void restore(const QString &text, const Focus &focus, const QList<int> &blankLines);
-    /// Lines of the document's empty paragraphs (an undo step keeps them: the text has none).
-    QList<int> blankLines() const;
+    /// Restore a text snapshot (undo/redo), its empty paragraphs and focus.
+    void restore(const QString &text, const Focus &focus, const QList<markdown::BlankBlock> &blankBlocks);
+    /// The document's empty paragraphs (an undo step keeps them: the text has none).
+    QList<markdown::BlankBlock> blankBlocks() const;
     markdown::EditResult applyOp(const std::function<markdown::EditResult(markdown::BlockDocument &)> &op);
     /// Body edit of one row as one command.
     void editBody(int row, const QString &body, int focusCursor = -2);
@@ -876,7 +876,7 @@ private:
     /// Store the ready (or failed) picture `url` of m_webDownloads.
     void finishWebDownload(const QString &url, bool ready);
     QString m_commandBefore;
-    QList<int> m_commandBlankBefore;
+    QList<markdown::BlankBlock> m_commandBlankBefore;
     Focus m_commandFocusBefore;
     bool m_typingOpen = false;
     quint64 m_typingUid = 0;
