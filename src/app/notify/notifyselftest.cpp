@@ -290,21 +290,29 @@ private:
               "the selection stays on “Default”");
     }
 
+    /// The sound the test picks: the sound theme's "bell" (Linux), Windows' "Mail".
+    QString themeSound() const
+    {
+        return m_sounds->themeSounds().contains(u"bell"_s) ? u"bell"_s : u"Mail"_s;
+    }
+
     // 3. A theme sound from the menu.
     void themeSoundForAlarms()
     {
-        QQuickItem *bell = item("alarmThemeSound_bell");
-        check(waitFor([bell] { return shown(bell); }), "the menu lists the sound theme’s “Bell”");
+        const QString name = themeSound();
+        QQuickItem *bell = item((u"alarmThemeSound_"_s + name).toUtf8().constData());
+        check(waitFor([bell] { return shown(bell); }), "the menu lists the sound theme’s “Bell” (Windows: “Mail”)");
         tap(bell);
         check(waitFor([this] { return m_sounds->choice(SoundKind::Alarm).isCustom(); })
-                      && m_sounds->choice(SoundKind::Alarm).uri == u"bell",
+                      && m_sounds->choice(SoundKind::Alarm).uri == name,
               "choosing “Bell” makes it the alarm sound");
-        check(stored("alarm", "mode") == u"custom" && stored("alarm", "uri") == u"bell",
+        check(stored("alarm", "mode") == u"custom" && stored("alarm", "uri") == name,
               "the alarm sound is stored in the settings");
         check(waitFor([this] { return !menuOpen("alarmSoundMenu"); }), "the menu closes");
         check(summary("alarm")
                       == QCoreApplication::translate("ReminderSoundSetting", "Ringtone: %1")
-                                 .arg(QCoreApplication::translate("ReminderSoundSetting", "Bell")),
+                                 .arg(QCoreApplication::translate("ReminderSoundSetting",
+                                                                  name == u"bell" ? "Bell" : "Mail")),
               "the summary names the sound");
         check(item("alarmSoundMode")->property("currentValue").toString() == u"custom",
               "the selection shows “Ringtone”");
@@ -324,7 +332,7 @@ private:
               "“Silent” silences alarms");
         tap(segment("alarmSoundMode", u"custom"_s));
         check(waitFor([this] { return m_sounds->choice(SoundKind::Alarm).isCustom(); })
-                      && m_sounds->choice(SoundKind::Alarm).uri == u"bell",
+                      && m_sounds->choice(SoundKind::Alarm).uri == themeSound(),
               "“Ringtone” brings the chosen sound back");
         settle(300);
         check(!menuOpen("alarmSoundMenu"), "… without the menu");
