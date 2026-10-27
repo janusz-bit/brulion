@@ -109,7 +109,8 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   `AlarmScheduler`, `ReminderNotifier`, `AlarmActivity`, receivers incl. `BOOT_COMPLETED`):
   all-files access, notification permission, exact alarms, full-screen alarm screen,
   `scheduleReminders(json)` (replaces the armed set), notification taps (`activated`,
-  `takeActivation()` after a cold start), "Save to Downloads" (MediaStore), `shareFile()` (the
+  `takeActivation()` after a cold start), "Zrobione" taps (`DoneQueue.kt`, persisted while Qt is
+  not running: `doneRequestsQueued` + `takeDoneRequests()`), "Save to Downloads" (MediaStore), `shareFile()` (the
   system share sheet for a file below filesDir through Qt's FileProvider), picked documents
   for imports (`documentInfo` / `listDocuments`: DocumentsContract, callable from worker
   threads) and the on-screen keyboard (`imeChanged`: how much of Qt's view the IME covers, from

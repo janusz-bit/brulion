@@ -583,7 +583,8 @@ private Q_SLOTS:
 
     void taskLine_data()
     {
-        // Every reminder of the day, in order; the line of the task "Done" would complete.
+        // Every reminder of the day (2026-10-14), in order; the line of the task "Done" would
+        // complete.
         QTest::addColumn<QString>("content");
         QTest::addColumn<QList<int>>("taskLines");
         QTest::newRow("task") << u"- [ ] Zadzwonić do Żanety ⏰ 2026-10-14 09:00"_s << QList<int>{0};
@@ -621,8 +622,10 @@ private Q_SLOTS:
         QFETCH(QString, content);
         QFETCH(QList<int>, taskLines);
         QList<int> actual;
-        for (const ScheduledNotification &n : upcomingOf(content, Now, 0))
-            actual.append(n.taskLine);
+        for (const ScheduledNotification &n : upcomingOf(content, Now, 1)) {
+            if (n.at.date() == Today)
+                actual.append(n.taskLine);
+        }
         QCOMPARE(actual, taskLines);
     }
 
