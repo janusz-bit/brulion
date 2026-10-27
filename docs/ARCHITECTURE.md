@@ -280,9 +280,10 @@ app; these guards keep data from being lost:
   with `ChangeSource::Sync` (history, favourites, folds and open editors follow the `Renamed`
   changes; links are not rewritten — the renaming device did that, and its edits arrive as
   downloads), the states and merge bases follow, and the files are then compared at their new
-  paths as usual (edits on either side merge there). Nothing at the new name here, a refused rename
-  (a file held open on Windows, a read-only folder) or no proof: the files travel one by one as
-  before (downloaded under the new name, the old ones trashed). A page renamed in the vault (its
+  paths as usual (edits on either side merge there). Something at the new name here, a refused
+  rename (a file held open on Windows, a read-only folder) or no proof for the folder: the files
+  proven one by one are renamed singly, the others travel as before (downloaded under the new
+  name, the old ones trashed). A page renamed in the vault (its
   synced content, unchanged, in exactly one new local file — empty files and look-alikes without
   a telling name prove nothing; not when this device looked empty) is moved with one `MOVE` per
   file after the folder moves, so the other devices see the rename too. Concurrent edits are

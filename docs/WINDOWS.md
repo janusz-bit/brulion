@@ -82,7 +82,8 @@ zmieniają) i do wypróbowania czegoś bez ruszania własnego profilu; działa t
   usuwanie folderów i wszystko, co inne programy robią z plikami (Syncthing, edytory), też.
   Folder przemianowany na innym urządzeniu albo w Nextcloudzie synchronizacja Nextcloud
   przemianowuje tu sama; gdy inny program trzyma otwarty plik z tego folderu, Windows na to nie
-  pozwala i notatki są pobierane pod nową nazwą, a stare trafiają do kosza — nic nie ginie.
+  pozwala i notatki są przenoszone pojedynczo, a ta otwarta jest pobierana pod nową nazwą (stara
+  trafi do kosza, gdy program ją zwolni) — nic nie ginie.
 * **Nazwy, których Windows nie dopuszcza:** notatka z innego urządzenia o nazwie ze znakiem
   `< > : " \ | ? *` (albo `CON`, `NUL`, `AUX`… czy kropką na końcu) nie zapisze się na Windows —
   synchronizacja zgłasza ją jako błąd przy każdym przebiegu, aż nazwa zostanie zmieniona na innym
