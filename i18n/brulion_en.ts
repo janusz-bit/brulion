@@ -185,7 +185,7 @@
 <context>
     <name>CalendarDayPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="157"/>
+        <location filename="../src/app/qml/planning/CalendarDayPanel.qml" line="160"/>
         <source>All %n overdue in Tasks</source>
         <translation>
             <numerusform>%n overdue in Tasks</numerusform>
@@ -227,7 +227,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="206"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="208"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -661,7 +661,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="448"/>
+        <location filename="../src/app/qml/editor/QueryBlockView.qml" line="489"/>
         <source>Show %n more</source>
         <translation>
             <numerusform>Show %n more</numerusform>
@@ -710,7 +710,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="672"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="673"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1058,7 +1058,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="180"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="195"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1066,7 +1066,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="182"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="197"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1074,7 +1074,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="184"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="199"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1082,7 +1082,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="267"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="285"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
@@ -1093,7 +1093,7 @@
 <context>
     <name>TransclusionView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/TransclusionView.qml" line="380"/>
+        <location filename="../src/app/qml/editor/TransclusionView.qml" line="422"/>
         <source>%n more block(s) — open the page</source>
         <translation>
             <numerusform>%n more block — open the page</numerusform>
