@@ -22,6 +22,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -3004,6 +3005,17 @@ void checkTrayCalendar(QQuickWindow *window, AppController *app, const Check &ch
     if (!popup->isVisible())
         app->showTrayCalendar(icon, {}, true);
     check(waitFor([&] { return popup->isVisible(); }), "a later click opens it again");
+    // Windows: the press on the icon takes the activation, Trigger comes on the release — a
+    // button held past the 300 ms guard is still that click (the cursor where the hide was).
+    waitFor([&] { return popup->isActive(); });
+    window->requestActivate();
+    check(waitFor([&] { return !popup->isVisible(); }, 3000), "another window takes the activation again");
+    settle(TrayPopupReopenGuardMs + 100);
+    app->showTrayCalendar(icon, QCursor::pos(), true);
+    settle(30);
+    check(!popup->isVisible(), "a held click on the icon that took the activation keeps it closed");
+    app->showTrayCalendar(icon, QCursor::pos(), true);
+    check(waitFor([&] { return popup->isVisible(); }), "the next click opens it");
 
     // "Open journal" on a day: the popup goes, the main window shows that day.
     app->navigate({{u"view"_s, u"tasks"_s}});
@@ -4029,6 +4041,17 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
                       && renderedTextContaining(popup->contentItem(), hint) != nullptr
                       && !shownNamed(popup->contentItem(), u"miniCalendarOpenJournal"_s),
               "without a notebook it shows the month and asks for a notebook");
+        // While a notebook opens (started hidden at login, the tray clicked during indexing):
+        // it says so and keeps quick capture, which waits for the notebook.
+        app->openDemoVault();
+        const QString opening = QCoreApplication::translate("ShellTrayCalendar", "Opening the notebook…");
+        QQuickItem *captureButton = popup ? shownNamed(popup->contentItem(), u"trayCalendarCapture"_s) : nullptr;
+        check(app->status() == u"loading" && month && month->property("placeholder").toString() == opening
+                      && captureButton && captureButton->isVisible(),
+              "while a notebook opens it says so and keeps “Quick capture…”");
+        check(waitFor([&] { return app->status() == u"ready"; }, 10000) && month
+                      && month->property("placeholder").toString().isEmpty(),
+              "once it is open the hint goes");
         if (popup)
             popup->hide();
     }
