@@ -122,8 +122,9 @@ private Q_SLOTS:
         QCOMPARE(pending.value(u"files"_s).toList().size(), 0);
 
         // Saved as edited in the dialog, and never through quick capture's dates.
-        const QVariantMap saved = app->saveShare(
-                {{u"target"_s, u"journal"_s}, {u"text"_s, QString(pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s)}});
+        const QVariantMap saved =
+                app->saveShare({{u"target"_s, u"journal"_s},
+                                {u"text"_s, QString(pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s)}});
         QVERIFY(saved.value(u"ok"_s).toBool());
         QCOMPARE(saved.value(u"count"_s).toInt(), 1);
         QVERIFY(journal(*app).contains(
@@ -285,8 +286,8 @@ private Q_SLOTS:
         // A folder outside the inbox (any JSON may name one) is never removed, nor the inbox itself.
         const QString outside = m_tmp.filePath(u"cudzy folder"_s);
         QVERIFY(writeFile(outside + u"/ważne.md"_s, "ważne\n"));
-        app->receiveShare(
-                {{u"dir"_s, outside}, {u"files"_s, QVariantList{QVariantMap{{u"path"_s, QString(outside + u"/ważne.md"_s)}}}}});
+        app->receiveShare({{u"dir"_s, outside},
+                           {u"files"_s, QVariantList{QVariantMap{{u"path"_s, QString(outside + u"/ważne.md"_s)}}}}});
         app->dismissShare();
         QVERIFY(QFileInfo::exists(outside + u"/ważne.md"_s));
         QVERIFY(writeFile(app->shareInboxPath() + u"/zostaje.md"_s, "x"));
