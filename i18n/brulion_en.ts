@@ -623,7 +623,7 @@
 <context>
     <name>LogsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="215"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="214"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -631,7 +631,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/diag/LogsView.qml" line="385"/>
+        <location filename="../src/app/qml/diag/LogsView.qml" line="384"/>
         <source>New entries (%n)</source>
         <translation>
             <numerusform>New entry (%n)</numerusform>
@@ -745,7 +745,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1025"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1046"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1093,7 +1093,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="195"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="194"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -1101,7 +1101,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="197"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="196"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -1109,7 +1109,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="199"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="198"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -1117,7 +1117,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="285"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="284"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
