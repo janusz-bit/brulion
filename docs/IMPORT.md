@@ -103,7 +103,7 @@ plik.
   bloków** Brulion pamięta na urządzeniu, nie w plikach.
 
 **Co Brulion dopisuje do folderu:** `.brulion/config.json` (dopiero po zmianie ustawień
-notatnika), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
+notatnika albo po *Zapisz w notatniku*), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidian przy opcji
 *Move to Obsidian trash*; obie aplikacje go pomijają), nowe dni dziennika (dopiero po
 pierwszym wpisie — samo oglądanie dnia niczego nie tworzy), wklejone obrazy w folderze
 załączników, klucz `brulion: document`/`outline` w nagłówku YAML notatki, której tryb zmienisz
