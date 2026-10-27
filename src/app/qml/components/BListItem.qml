@@ -32,7 +32,7 @@ T.ItemDelegate {
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Math.max(subtitle !== "" ? Theme.listItemHeightTwoLine : (dense && !Theme.touchUi ? 30 : Theme.listItemHeight),
+    implicitHeight: Math.max(subtitle !== "" ? Theme.listItemHeightTwoLine : (dense && !Theme.touchUi ? Theme.listItemHeightDense : Theme.listItemHeight),
                              implicitContentHeight + topPadding + bottomPadding)
     leftPadding: Theme.touchUi ? 14 : 10
     rightPadding: Theme.touchUi ? 12 : 8

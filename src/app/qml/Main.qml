@@ -35,6 +35,17 @@ ApplicationWindow {
     Binding { target: Theme; property: "windowHeight"; value: window.height }
     // --theme (screenshots) wins over the setting.
     Binding { target: Theme; property: "mode"; value: AppSettings.themeMode; when: DevTools.theme === "" }
+    // --accent / --surface / --density (screenshots) win over the settings too.
+    Binding { target: Theme; property: "accentName"; value: AppSettings.accentColor; when: DevTools.accentName === "" }
+    Binding { target: Theme; property: "customAccent"; value: AppSettings.customAccent; when: DevTools.accentName === "" }
+    Binding { target: Theme; property: "lightSurface"; value: AppSettings.lightSurface; when: DevTools.lightSurface === "" }
+    Binding { target: Theme; property: "darkSurface"; value: AppSettings.darkSurface; when: DevTools.darkSurface === "" }
+    Binding { target: Theme; property: "density"; value: AppSettings.density; when: DevTools.density === "" }
+    // Font families: not in the browser (Qt there knows only its bundled DejaVu fonts).
+    Binding { target: Theme; property: "uiFontFamily"; value: DeviceInfo.platform === "wasm" ? "" : AppSettings.uiFontFamily }
+    Binding { target: Theme; property: "editorFontFamily"; value: DeviceInfo.platform === "wasm" ? "" : AppSettings.editorFontFamily }
+    Binding { target: Theme; property: "monoFontFamily"; value: DeviceInfo.platform === "wasm" ? "" : AppSettings.editorMonoFamily }
+    Binding { target: Theme; property: "lineSpacing"; value: AppSettings.editorLineSpacing }
     Binding { target: Theme; property: "editorFont"; value: AppSettings.editorFont }
     Binding { target: Theme; property: "fontScale"; value: AppSettings.fontScale }
     Binding { target: Theme; property: "editorFontSize"; value: AppSettings.editorFontSize }

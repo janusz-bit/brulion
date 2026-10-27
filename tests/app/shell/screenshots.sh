@@ -4,7 +4,9 @@
 # page-suggest, page-reminder, …; with a simulated on-screen keyboard: page-editing-keyboard,
 # journals-editing-keyboard, capture-keyboard), settings, the command palette, the
 # quick switcher, quick capture, the phone drawer and folders (tree, drawer-tree, move,
-# move-chosen, newpage-folder, newpage-root, newfolder, allpages, allpages-folder) — × {desktop
+# move-chosen, newpage-folder, newpage-root, newfolder, allpages, allpages-folder), the appearance
+# settings and a few looks they make (settings-appearance*, journals-<accent>-<background>,
+# journals-custom, journals-compact, calendar-blue) — × {desktop
 # 1280×800, phone 412×915 --touch} × {light, dark} — into
 # tests/screenshots/shell-<shot>-<size>-<theme>.png.
 #
@@ -43,6 +45,15 @@ declare -A shot_args=(
   [page]="--demo"
   [settings]="--demo --route settings"
   [settings-editor]="--demo --route {\"view\":\"settings\",\"section\":\"editor\"}"
+  # Ustawienia → Wygląd, and the look it makes: a teal accent on white paper / OLED black, the
+  # compact density (desktop; phones keep their sizes), a custom colour derived to stay readable.
+  [settings-appearance]="--demo --route {\"view\":\"settings\",\"section\":\"appearance\"}"
+  [settings-appearance-black]="--demo --route {\"view\":\"settings\",\"section\":\"appearance\"} --accent green --surface black"
+  [journals-teal-white]="--demo --route journals --accent teal --surface white"
+  [journals-violet-black]="--demo --route journals --accent violet --surface black"
+  [journals-custom]="--demo --route journals --accent #ffd400"
+  [journals-compact]="--demo --route journals --density compact --accent graphite"
+  [calendar-blue]="--demo --route calendar --accent blue"
   [settings-vault]="--demo --route {\"view\":\"settings\",\"section\":\"vault\"}"
   [settings-reminders]="--demo --route {\"view\":\"settings\",\"section\":\"reminders\"}"
   [settings-app]="--demo --route {\"view\":\"settings\",\"section\":\"app\"}"
@@ -133,7 +144,8 @@ all_shots=(onboarding journals page page-editing page-editing-keyboard journals-
   page-editing-toast page-toolbar-menu page-tag-new page-suggest page-tags page-slash page-date page-reminder
   page-source page-sidepanel page-new page-empty page-doc-paragraph page-doc-list page-doc-heading page-doc-outline
   page-menu page-project page-selection page-picture page-picture-text page-picture-links doc-long doc-long-paragraph doc-long-list doc-long-task doc-long-outline
-  doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-editor settings-vault settings-reminders settings-app
+  doc-long-heading doc-long-number doc-long-select doc-long-toggle doc-journal doc-journal-mixed settings settings-appearance settings-appearance-black journals-teal-white journals-violet-black
+  journals-custom journals-compact calendar-blue settings-editor settings-vault settings-reminders settings-app
   palette switcher capture newpage about drawer tree drawer-tree move move-chosen newpage-folder newpage-root newfolder
   allpages allpages-folder)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi

@@ -1,6 +1,7 @@
 #include "deviceinfo.h"
 
 #include "platform.h"
+#include "themepalette.h"
 
 #include <QFontDatabase>
 #include <QInputDevice>
@@ -35,6 +36,30 @@ QString DeviceInfo::systemFontFamily() const
 QString DeviceInfo::fixedFontFamily() const
 {
     return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+}
+
+QStringList DeviceInfo::fontFamilies(bool fixedOnly) const
+{
+    QStringList &cache = fixedOnly ? m_fixedFamilies : m_families;
+    if (cache.isEmpty()) {
+        QStringList all = QFontDatabase::families();
+        if (fixedOnly) {
+            all.erase(std::remove_if(all.begin(), all.end(),
+                                     [](const QString &f) { return !QFontDatabase::isFixedPitch(f); }),
+                      all.end());
+            // Some systems report their fixed font without the fixed-pitch flag.
+            const QString fixed = fixedFontFamily();
+            if (!fixed.isEmpty() && !all.contains(fixed))
+                all.append(fixed);
+        }
+        cache = filterFontFamilies(all);
+    }
+    return cache;
+}
+
+bool DeviceInfo::hasFontFamily(const QString &family) const
+{
+    return !family.trimmed().isEmpty() && QFontDatabase::hasFamily(family.trimmed());
 }
 
 bool DeviceInfo::hasTouchScreen() const

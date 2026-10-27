@@ -4,8 +4,12 @@ import QtQuick.Layouts
 import QtQuick.Templates as T
 import Brulion
 
-// SettingsView — route "settings" ({section?}). Sections: Ogólne (language, theme, text size,
-// motion), Edytor (font, size, width, source mode), Notatnik (the vault's shared settings in
+// SettingsView — route "settings" ({section?}). Sections: Ogólne (language), Wygląd (theme,
+// accent colour with presets and BAccentDialog, light and dark backgrounds, text size, interface
+// font, density, reduce motion; Układ: sidebar entries and sections, the bottom navigation's
+// four buttons, the quick note button; back to the default look — AppSettings, Theme inputs),
+// Edytor (font — serif, sans or any installed family —, code font, size, line spacing, width,
+// source mode; font pickers: BFontPickerDialog, not in the browser), Notatnik (the vault's shared settings in
 // .brulion/config.json: the note modes of new pages and of the journal, journal folder and file
 // names, attachments, templates, default reminder time, first day of the week), Przypomnienia (on/off, permissions on Android and in the
 // browser, the sounds of reminders and alarms — qml/notify/ReminderSoundSetting —, snooze, alarm
@@ -49,6 +53,7 @@ Item {
 
     readonly property var sections: [
         { id: "general", title: qsTr("General"), icon: "settings" },
+        { id: "appearance", title: qsTr("Appearance"), icon: "palette" },
         { id: "editor", title: qsTr("Editor"), icon: "pencil" },
         { id: "vault", title: qsTr("Notebook"), icon: "notebook-pen" },
         { id: "reminders", title: qsTr("Reminders"), icon: "bell" },
@@ -58,6 +63,7 @@ Item {
 
     function sectionComponent(id) {
         switch (id) {
+        case "appearance": return appearanceSection
         case "editor": return editorSection
         case "vault": return vaultSection
         case "reminders": return remindersSection
@@ -65,6 +71,96 @@ Item {
         case "app": return appSection
         default: return generalSection
         }
+    }
+
+    /// Font families can be chosen (not in the browser: Qt there has only its bundled fonts).
+    readonly property bool fontChoice: DeviceInfo.platform !== "wasm"
+    /// Accent presets with their names.
+    readonly property var accents: [
+        { value: "red", text: qsTr("Red") },
+        { value: "blue", text: qsTr("Blue") },
+        { value: "green", text: qsTr("Green") },
+        { value: "teal", text: qsTr("Teal") },
+        { value: "violet", text: qsTr("Violet") },
+        { value: "graphite", text: qsTr("Graphite") }
+    ]
+    /// The sidebar's navigation entries and sections (AppSettings.sidebarItems()).
+    readonly property var sidebarItems: [
+        { id: "journals", title: qsTr("Journals") },
+        { id: "calendar", title: qsTr("Calendar") },
+        { id: "tasks", title: qsTr("Tasks") },
+        { id: "allPages", title: qsTr("All pages") },
+        { id: "tags", title: qsTr("Tags") },
+        { id: "graph", title: qsTr("Graph") },
+        { id: "search", title: qsTr("Search") },
+        { id: "favorites", title: qsTr("Favorites section") },
+        { id: "recent", title: qsTr("Recent section") }
+    ]
+    /// Views the bottom navigation offers (AppSettings.bottomNavViews()).
+    readonly property var bottomNavViews: [
+        { value: "journals", text: qsTr("Journal"), icon: "book-open" },
+        { value: "calendar", text: qsTr("Calendar"), icon: "calendar" },
+        { value: "search", text: qsTr("Search"), icon: "search" },
+        { value: "tasks", text: qsTr("Tasks"), icon: "list-todo" },
+        { value: "allPages", text: qsTr("All pages"), icon: "files" },
+        { value: "tags", text: qsTr("Tags"), icon: "tags" },
+        { value: "graph", text: qsTr("Graph"), icon: "waypoints" }
+    ]
+    function viewInfo(value) {
+        return bottomNavViews.find(v => v.value === value) || { value: value, text: value, icon: "" }
+    }
+    /// The bottom navigation slot whose menu is open.
+    property int navSlot: 0
+
+    BFontPickerDialog {
+        id: fontPicker
+        /// "ui" | "editor" | "mono"
+        property string target
+        function openTarget(which) {
+            target = which
+            fixedOnly = which === "mono"
+            title = which === "ui" ? qsTr("Interface font") : which === "mono" ? qsTr("Code font") : qsTr("Font of notes")
+            defaultLabel = which === "ui" ? qsTr("System font") : which === "mono" ? qsTr("System monospaced font")
+                                                                                    : qsTr("Serif (default)")
+            defaultFamily = which === "ui" ? DeviceInfo.systemFontFamily : which === "mono" ? DeviceInfo.fixedFontFamily
+                                                                                            : Theme.fontSerif
+            openFor(which === "ui" ? AppSettings.uiFontFamily : which === "mono" ? AppSettings.editorMonoFamily
+                                                                                : AppSettings.editorFontFamily)
+        }
+        onChosen: (family) => {
+            if (target === "ui")
+                AppSettings.uiFontFamily = family
+            else if (target === "mono")
+                AppSettings.editorMonoFamily = family
+            else if (family === "")
+                AppSettings.editorFontFamily = "" // serif / sans decide again
+            else
+                AppSettings.editorFontFamily = family
+        }
+    }
+    BAccentDialog {
+        id: accentDialog
+        onChosen: (color) => {
+            AppSettings.customAccent = color
+            AppSettings.accentColor = "custom"
+        }
+    }
+    BMenu {
+        id: navSlotMenu
+        objectName: "bottomNavSlotMenu"
+    }
+    Instantiator {
+        model: root.bottomNavViews
+        delegate: BMenuItem {
+            required property var modelData
+            text: modelData.text
+            iconName: modelData.icon
+            checkable: true
+            checked: AppSettings.bottomNavTabs[root.navSlot] === modelData.value
+            onTriggered: AppSettings.setBottomNavTab(root.navSlot, modelData.value)
+        }
+        onObjectAdded: (index, object) => navSlotMenu.insertItem(index, object)
+        onObjectRemoved: (index, object) => navSlotMenu.removeItem(object)
     }
 
     // ---- Building blocks --------------------------------------------------------------------
@@ -260,42 +356,219 @@ Item {
                     onActivated: (value) => AppSettings.language = value
                 }
             }
-            ShellSettingRow {
-                title: qsTr("Theme")
-                description: qsTr("Light like paper, dark for the evening, or following the system.")
-                BSegmented {
-                    accessibleName: qsTr("Theme")
-                    model: [
-                        { value: "system", text: qsTr("System"), icon: "monitor" },
-                        { value: "light", text: qsTr("Light"), icon: "sun" },
-                        { value: "dark", text: qsTr("Dark"), icon: "moon" }
-                    ]
-                    currentValue: AppSettings.themeMode
-                    onActivated: (value) => AppSettings.themeMode = value
+        }
+    }
+
+    Component {
+        id: appearanceSection
+        ColumnLayout {
+            spacing: Theme.space8
+
+            SettingsGroup {
+                objectName: "settingsAppearance"
+                heading: qsTr("Appearance")
+
+                ShellSettingRow {
+                    title: qsTr("Theme")
+                    description: qsTr("Light like paper, dark for the evening, or following the system.")
+                    BSegmented {
+                        accessibleName: qsTr("Theme")
+                        model: [
+                            { value: "system", text: qsTr("System"), icon: "monitor" },
+                            { value: "light", text: qsTr("Light"), icon: "sun" },
+                            { value: "dark", text: qsTr("Dark"), icon: "moon" }
+                        ]
+                        currentValue: AppSettings.themeMode
+                        onActivated: (value) => AppSettings.themeMode = value
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Accent colour")
+                    description: qsTr("Marks today, the current tab and highlights. Warnings and deleting stay red.")
+                    Flow {
+                        objectName: "accentSwatches"
+                        Layout.maximumWidth: 7 * (Theme.touchUi ? Theme.touchTarget : 34)
+                        spacing: 0
+                        Repeater {
+                            model: root.accents
+                            delegate: BColorSwatch {
+                                required property var modelData
+                                objectName: "accentSwatch_" + modelData.value
+                                color: ThemePalette.accentSwatch(modelData.value, "", Theme.dark,
+                                                                 Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                                label: modelData.text
+                                // Theme: the setting, or a screenshot's --accent.
+                                selected: Theme.accentName === modelData.value
+                                onClicked: AppSettings.accentColor = modelData.value
+                            }
+                        }
+                        BColorSwatch {
+                            objectName: "accentSwatch_custom"
+                            readonly property string custom: Theme.accentName === "custom" ? Theme.customAccent
+                                                                                           : AppSettings.customAccent
+                            color: custom !== "" ? ThemePalette.accentSwatch("custom", custom, Theme.dark,
+                                                                             Theme.dark ? Theme.darkSurface : Theme.lightSurface)
+                                                 : Theme.bgSunken
+                            iconName: custom !== "" ? "" : "plus"
+                            label: qsTr("Custom…")
+                            selected: Theme.accentName === "custom"
+                            onClicked: accentDialog.openWith(AppSettings.customAccent)
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.themeMode !== "dark"
+                    title: qsTr("Light background")
+                    BSegmented {
+                        objectName: "lightSurfaceSetting"
+                        accessibleName: qsTr("Light background")
+                        model: [
+                            { value: "paper", text: qsTr("Paper") },
+                            { value: "white", text: qsTr("White", "background") }
+                        ]
+                        currentValue: Theme.lightSurface
+                        onActivated: (value) => AppSettings.lightSurface = value
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.themeMode !== "light"
+                    title: qsTr("Dark background")
+                    description: qsTr("Black saves power on OLED screens.")
+                    BSegmented {
+                        objectName: "darkSurfaceSetting"
+                        accessibleName: qsTr("Dark background")
+                        model: [
+                            { value: "slate", text: qsTr("Blue-grey") },
+                            { value: "black", text: qsTr("Black", "background") }
+                        ]
+                        currentValue: Theme.darkSurface
+                        onActivated: (value) => AppSettings.darkSurface = value
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Text size")
+                    description: qsTr("Size of all text in the app.")
+                    BSegmented {
+                        accessibleName: qsTr("Text size")
+                        model: [
+                            { value: 0.9, text: qsTr("Small") },
+                            { value: 1.0, text: qsTr("Normal") },
+                            { value: 1.15, text: qsTr("Large") },
+                            { value: 1.3, text: qsTr("Larger") }
+                        ]
+                        currentValue: [0.9, 1.0, 1.15, 1.3].reduce((best, v) =>
+                            Math.abs(v - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale) ? v : best, 1.0)
+                        onActivated: (value) => AppSettings.fontScale = value
+                    }
+                }
+                ShellSettingRow {
+                    visible: root.fontChoice
+                    title: qsTr("Interface font")
+                    description: AppSettings.uiFontFamily === "" ? qsTr("The system font.")
+                                 : Theme.fontUi === AppSettings.uiFontFamily ? AppSettings.uiFontFamily
+                                 : qsTr("%1 is not installed on this device: the system font is used.").arg(AppSettings.uiFontFamily)
+                    BButton {
+                        objectName: "uiFontButton"
+                        size: "small"
+                        text: qsTr("Choose…")
+                        iconName: "type"
+                        onClicked: fontPicker.openTarget("ui")
+                    }
+                }
+                ShellSettingRow {
+                    // Touch UIs keep their 44 px targets.
+                    visible: !Theme.touchUi
+                    title: qsTr("Density")
+                    description: qsTr("Compact fits more on the screen: smaller buttons and rows.")
+                    BSegmented {
+                        objectName: "densitySetting"
+                        accessibleName: qsTr("Density")
+                        model: [
+                            { value: "comfortable", text: qsTr("Comfortable") },
+                            { value: "compact", text: qsTr("Compact", "density") }
+                        ]
+                        currentValue: Theme.density
+                        onActivated: (value) => AppSettings.density = value
+                    }
+                }
+                BSwitch {
+                    Layout.fillWidth: true
+                    text: qsTr("Reduce motion")
+                    description: qsTr("Turn off animations.")
+                    checked: AppSettings.reducedMotion
+                    onToggled: AppSettings.reducedMotion = checked
                 }
             }
-            ShellSettingRow {
-                title: qsTr("Text size")
-                description: qsTr("Size of all text in the app.")
-                BSegmented {
-                    accessibleName: qsTr("Text size")
-                    model: [
-                        { value: 0.9, text: qsTr("Small") },
-                        { value: 1.0, text: qsTr("Normal") },
-                        { value: 1.15, text: qsTr("Large") },
-                        { value: 1.3, text: qsTr("Larger") }
-                    ]
-                    currentValue: [0.9, 1.0, 1.15, 1.3].reduce((best, v) =>
-                        Math.abs(v - AppSettings.fontScale) < Math.abs(best - AppSettings.fontScale) ? v : best, 1.0)
-                    onActivated: (value) => AppSettings.fontScale = value
+
+            SettingsGroup {
+                objectName: "settingsLayout"
+                heading: qsTr("Layout")
+                note: qsTr("What the sidebar and the phone's navigation show. Hidden views stay in the command palette and their shortcuts.")
+
+                ShellSettingRow {
+                    title: qsTr("Sidebar")
+                    description: qsTr("Entries and sections of the sidebar (and the phone's menu).")
                 }
-            }
-            BSwitch {
-                Layout.fillWidth: true
-                text: qsTr("Reduce motion")
-                description: qsTr("Turn off animations.")
-                checked: AppSettings.reducedMotion
-                onToggled: AppSettings.reducedMotion = checked
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    Repeater {
+                        model: root.sidebarItems
+                        delegate: BCheckBox {
+                            required property var modelData
+                            objectName: "sidebarItem_" + modelData.id
+                            width: Theme.compact ? parent.width : (parent.width - Theme.space2) / 2
+                            text: modelData.title
+                            checked: AppSettings.sidebarHidden.indexOf(modelData.id) < 0
+                            onToggled: AppSettings.setSidebarItemShown(modelData.id, checked)
+                        }
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Bottom navigation")
+                    description: qsTr("The four buttons at the bottom of narrow windows and phones; Menu comes last.")
+                }
+                GridLayout {
+                    objectName: "bottomNavSlots"
+                    Layout.fillWidth: true
+                    columns: Theme.compact ? 2 : 4
+                    columnSpacing: Theme.space2
+                    rowSpacing: Theme.space2
+                    Repeater {
+                        model: 4
+                        delegate: BButton {
+                            id: slotButton
+                            required property int index
+                            readonly property var view: root.viewInfo(AppSettings.bottomNavTabs[index])
+                            objectName: "bottomNavSlot_" + index
+                            Layout.fillWidth: true
+                            size: "small"
+                            iconName: view.icon
+                            text: view.text
+                            Accessible.name: qsTr("Button %1: %2").arg(index + 1).arg(view.text)
+                            onClicked: {
+                                root.navSlot = index
+                                navSlotMenu.popup(slotButton, 0, slotButton.height)
+                            }
+                        }
+                    }
+                }
+                BSwitch {
+                    objectName: "captureButtonSetting"
+                    Layout.fillWidth: true
+                    text: qsTr("Quick note button")
+                    description: qsTr("The round + button over the views of narrow windows and phones. Quick capture stays in the menu, the palette and Ctrl+Shift+Space.")
+                    checked: AppSettings.captureButtonShown
+                    onToggled: AppSettings.captureButtonShown = checked
+                }
+                BButton {
+                    objectName: "resetAppearance"
+                    size: "small"
+                    variant: "ghost"
+                    iconName: "rotate-ccw"
+                    text: qsTr("Restore the default look")
+                    onClicked: AppSettings.resetAppearance()
+                }
             }
         }
     }
@@ -307,12 +580,46 @@ Item {
 
             ShellSettingRow {
                 title: qsTr("Font")
-                description: qsTr("Font of your notes; the rest of the app uses the system font.")
+                description: AppSettings.editorFontFamily === "" || !root.fontChoice
+                             ? qsTr("Font of your notes; the interface font is set in Appearance.")
+                             : Theme.fontEditor === AppSettings.editorFontFamily ? AppSettings.editorFontFamily
+                             : qsTr("%1 is not installed on this device: serif is used.").arg(AppSettings.editorFontFamily)
                 BSegmented {
+                    objectName: "editorFontSetting"
                     accessibleName: qsTr("Font")
-                    model: [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") }]
-                    currentValue: AppSettings.editorFont
-                    onActivated: (value) => AppSettings.editorFont = value
+                    model: root.fontChoice
+                           ? [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") },
+                              { value: "other", text: qsTr("Other…", "font") }]
+                           : [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") }]
+                    currentValue: root.fontChoice && AppSettings.editorFontFamily !== "" ? "other" : AppSettings.editorFont
+                    onActivated: (value) => {
+                        if (value === "other") {
+                            fontPicker.openTarget("editor")
+                        } else {
+                            AppSettings.editorFontFamily = ""
+                            AppSettings.editorFont = value
+                        }
+                    }
+                }
+                BIconButton {
+                    visible: root.fontChoice && AppSettings.editorFontFamily !== ""
+                    iconName: "pencil"
+                    label: qsTr("Choose another font")
+                    onClicked: fontPicker.openTarget("editor")
+                }
+            }
+            ShellSettingRow {
+                visible: root.fontChoice
+                title: qsTr("Code font")
+                description: AppSettings.editorMonoFamily === "" ? qsTr("Code blocks, Markdown source and formulas; now the system's monospaced font.")
+                             : Theme.fontMono === AppSettings.editorMonoFamily ? AppSettings.editorMonoFamily
+                             : qsTr("%1 is not installed on this device: the system's monospaced font is used.").arg(AppSettings.editorMonoFamily)
+                BButton {
+                    objectName: "monoFontButton"
+                    size: "small"
+                    text: qsTr("Choose…")
+                    iconName: "code"
+                    onClicked: fontPicker.openTarget("mono")
                 }
             }
             ShellSettingRow {
@@ -322,6 +629,20 @@ Item {
                     model: [14, 16, 18, 20, 22].map(v => ({ value: v, text: String(v) }))
                     currentValue: AppSettings.editorFontSize
                     onActivated: (value) => AppSettings.editorFontSize = value
+                }
+            }
+            ShellSettingRow {
+                title: qsTr("Line spacing")
+                BSegmented {
+                    objectName: "lineSpacingSetting"
+                    accessibleName: qsTr("Line spacing")
+                    model: [
+                        { value: "compact", text: qsTr("Tight", "line spacing") },
+                        { value: "normal", text: qsTr("Normal", "line spacing") },
+                        { value: "relaxed", text: qsTr("Relaxed", "line spacing") }
+                    ]
+                    currentValue: AppSettings.editorLineSpacing
+                    onActivated: (value) => AppSettings.editorLineSpacing = value
                 }
             }
             ShellSettingRow {
@@ -357,18 +678,34 @@ Item {
             // Preview.
             Rectangle {
                 Layout.fillWidth: true
-                implicitHeight: preview.implicitHeight + 2 * Theme.space4
+                implicitHeight: previewColumn.implicitHeight + 2 * Theme.space4
                 radius: Theme.radius
                 color: Theme.bgSunken
-                BText {
-                    id: preview
-                    anchors.fill: parent
+                Column {
+                    id: previewColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
                     anchors.margins: Theme.space4
-                    text: qsTr("Zażółć gęślą jaźń — a sample of your notes in this font and size.")
-                    font.family: Theme.fontEditor
-                    font.pixelSize: Theme.textEditor // exactly as in the editor
-                    lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightLoose)
-                    wrapMode: Text.Wrap
+                    spacing: Theme.space2
+                    BText {
+                        id: preview
+                        objectName: "editorPreview"
+                        width: parent.width
+                        text: qsTr("Zażółć gęślą jaźń — a sample of your notes in this font and size, with a second line to show the line spacing.")
+                        font.family: Theme.fontEditor
+                        font.pixelSize: Theme.textEditor // exactly as in the editor
+                        lineHeight: Theme.lineHeightPx(font.pixelSize, Theme.lineHeightLoose)
+                        wrapMode: Text.Wrap
+                    }
+                    BText {
+                        width: parent.width
+                        text: "print(\"Zażółć\")  # 0O 1lI {}[]"
+                        font.family: Theme.fontMono
+                        font.pixelSize: Theme.textSm
+                        color: Theme.fgMuted
+                        elide: Text.ElideRight
+                    }
                 }
             }
         }

@@ -67,7 +67,8 @@ T.Pane {
             border.width: 1
             border.color: {
                 switch (control.tone) {
-                case "accent": case "danger": return Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.35)
+                case "accent": return Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.35)
+                case "danger": return Qt.rgba(Theme.marginRed.r, Theme.marginRed.g, Theme.marginRed.b, 0.35)
                 case "warning": return Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.55)
                 case "success": return Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.35)
                 case "sunken": return Theme.borderSubtle

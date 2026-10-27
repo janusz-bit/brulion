@@ -2,6 +2,7 @@
 
 #include "dateshelper.h"
 #include "scrollprobe.h"
+#include "themepalette.h"
 
 #include <QCoreApplication>
 #include <QImage>
@@ -87,6 +88,21 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     const QString theme = valueAfter(arguments, u"--theme"_s);
     if (theme == u"light" || theme == u"dark")
         m_theme = theme;
+    const QString accent = valueAfter(arguments, u"--accent"_s).trimmed().toLower();
+    if (accentNames().contains(accent)) {
+        m_accentName = accent;
+    } else if (const auto color = parseColor(accent)) {
+        m_accentName = u"custom"_s;
+        m_customAccent = toHex(*color);
+    }
+    const QString surface = valueAfter(arguments, u"--surface"_s);
+    if (surfaceNames(false).contains(surface))
+        m_lightSurface = surface;
+    else if (surfaceNames(true).contains(surface))
+        m_darkSurface = surface;
+    const QString density = valueAfter(arguments, u"--density"_s);
+    if (density == u"compact" || density == u"comfortable")
+        m_density = density;
 
     const QString locale = valueAfter(arguments, u"--locale"_s);
     if (locale == u"pl" || locale == u"en")
