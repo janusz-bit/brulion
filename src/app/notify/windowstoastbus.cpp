@@ -136,7 +136,9 @@ void WindowsToastBus::notify(const DesktopNotification &notification, std::funct
             m_lastId = 1;
         id = m_lastId;
     }
-    if (!d->notifier) {
+    // Turned off for Brulion (or all apps): Show() would succeed and show nothing — the tray
+    // shows it instead (DesktopNotifier's fallback for a refused notification).
+    if (!isAvailable()) {
         done(0);
         return;
     }
