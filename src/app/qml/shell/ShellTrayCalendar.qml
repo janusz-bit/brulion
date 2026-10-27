@@ -45,6 +45,10 @@ ApplicationWindow {
         popup.show()
         popup.raise()
         popup.requestActivate()
+        // Still the active window from the last time (a platform that keeps a hidden window
+        // active): no activeChanged will come.
+        if (popup.active)
+            popup.wasActive = true
         content.forceActiveFocus()
     }
 
