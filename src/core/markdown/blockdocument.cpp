@@ -919,7 +919,15 @@ EditResult BlockDocument::split(int i, int cursor, bool collapsed)
         const QString cont = taskContinuation(e.body);
         Item x = makeItem(QString(), m_eol, QString());
         x.entry.kind = BlockKind::ListItem;
-        if (c == 0 && !e.body.isEmpty()) {
+        // A cursor inside or right after the task marker of a task with text counts as the start
+        // (the editor hides the marker, so its caret 0 is after it): the text keeps its status.
+        bool atStart = c == 0;
+        int caret = 0;
+        if (const auto m = matchTaskMarker(e.body, 0); m && c <= m->contentStart && m->contentStart < e.body.size()) {
+            atStart = true;
+            caret = int(m->contentStart);
+        }
+        if (atStart && !e.body.isEmpty()) {
             // Enter at the start: an empty block above, the caret stays in this one.
             x.entry.prefix = e.prefix;
             x.contIndent = m_items[i].contIndent;
@@ -930,7 +938,7 @@ EditResult BlockDocument::split(int i, int cursor, bool collapsed)
             renumberAround(at(i).uid);
             ensureSeparated(i - 1);
             fixEnds();
-            return finish(before, indexOfUid(e.uid), 0);
+            return finish(before, indexOfUid(e.uid), caret);
         }
         setOwn(i, serializeBody(m_items[i], head));
         const bool asChild = !collapsed && hasChildren(i);

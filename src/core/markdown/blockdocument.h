@@ -129,9 +129,11 @@ public:
     /// lines at the edges of either block). List items: same indentation and marker (numbered lists
     /// continue: 3. -> 4.), tasks continue with `[ ] ` (or TODO/LATER); a block with children
     /// gets the new block as its first child unless `collapsed`. Paragraphs/headings: the new
-    /// block is a paragraph (separated by a blank line). Cursor 0 in a non-empty block inserts an
-    /// empty block before it instead. Focus: the new block (caret after a task marker), or the
-    /// original block for cursor 0.
+    /// block is a paragraph (separated by a blank line). Cursor 0 in a non-empty block, or a
+    /// cursor within or right after the task marker of a task with text, inserts an empty block
+    /// (for a task an empty task: `[ ] ` / `TODO `) before it instead; the original keeps its
+    /// status, children and uid. Focus: the new block (caret after a task marker), or the
+    /// original block for an insertion before it (caret after its task marker, else 0).
     EditResult split(int i, int cursor, bool collapsed = false);
 
     /// Insert a new block after block `i` (-1 = at the start). A list item at `depth` (clamped to

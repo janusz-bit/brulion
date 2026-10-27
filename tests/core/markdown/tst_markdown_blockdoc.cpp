@@ -511,8 +511,8 @@ private Q_SLOTS:
         logseq.split(0, 6);
         QCOMPARE(logseq.toString(), u"- TODO x\n- TODO \n"_s);
         BlockDocument done(u"- [x] zrobione ✅ 2026-10-14\n"_s);
-        done.split(0, 4);
-        QCOMPARE(done.toString(), u"- [x] \n- [ ] zrobione ✅ 2026-10-14\n"_s);
+        done.split(0, 7);
+        QCOMPARE(done.toString(), u"- [x] zro\n- [ ] bione ✅ 2026-10-14\n"_s);
     }
 
     void splitInTheMiddle()
@@ -558,10 +558,92 @@ private Q_SLOTS:
         QCOMPARE(doc.toString(), u"- [ ] \n- [x] zrobione\n"_s);
         QCOMPARE(describe(r.changes), u"inserted 0+1"_s);
         QCOMPARE(r.focus, 1);
-        QCOMPARE(r.cursor, 0);
+        QCOMPARE(r.cursor, 4);
         BlockDocument numbered(u"1. a\n2. b\n"_s);
         numbered.split(1, 0);
         QCOMPARE(numbered.toString(), u"1. a\n2. \n3. b\n"_s);
+    }
+
+    // The editor hides a task's marker, so Enter at the start of its text is a cursor right after
+    // the marker: an empty task above, the text keeps its status, children and uid.
+    void splitAtTaskTextStart_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<int>("row");
+        QTest::addColumn<int>("cursor");
+        QTest::addColumn<bool>("collapsed");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<int>("focus");
+        QTest::addColumn<int>("caret");
+        QTest::addColumn<bool>("sameBlock"); // the focus is the original block (its uid)
+
+        QTest::newRow("done") << u"- [x] zrobione ✅ 2026-10-14\n"_s << 0 << 4 << false
+                              << u"- [ ] \n- [x] zrobione ✅ 2026-10-14\n"_s << 1 << 4 << true;
+        QTest::newRow("inside-marker") << u"- [x] źdźbło\n"_s << 0 << 2 << false
+                                       << u"- [ ] \n- [x] źdźbło\n"_s << 1 << 4 << true;
+        QTest::newRow("children") << u"- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 0 << 4 << false
+                                  << u"- [ ] \n- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 4 << true;
+        QTest::newRow("children-collapsed") << u"- [x] Kupić ćwikłę\n\t- dziecko\n"_s << 0 << 4 << true
+                                            << u"- [ ] \n- [x] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 4 << true;
+        QTest::newRow("nested") << u"- rodzic\n\t- [x] żółw\n"_s << 1 << 4 << false
+                                << u"- rodzic\n\t- [ ] \n\t- [x] żółw\n"_s << 2 << 4 << true;
+        QTest::newRow("logseq-done") << u"- DONE łódź\n"_s << 0 << 5 << false << u"- TODO \n- DONE łódź\n"_s
+                                     << 1 << 5 << true;
+        QTest::newRow("logseq-now") << u"- NOW ćma\n"_s << 0 << 4 << false << u"- LATER \n- NOW ćma\n"_s
+                                    << 1 << 4 << true;
+        QTest::newRow("logseq-later") << u"- LATER ćma\n"_s << 0 << 6 << false
+                                      << u"- LATER \n- LATER ćma\n"_s << 1 << 6 << true;
+        QTest::newRow("logseq-two-spaces") << u"- DONE  łódź\n"_s << 0 << 5 << false
+                                           << u"- TODO \n- DONE  łódź\n"_s << 1 << 6 << true;
+        QTest::newRow("doing") << u"- [/] w toku\n"_s << 0 << 4 << false << u"- [ ] \n- [/] w toku\n"_s
+                               << 1 << 4 << true;
+        QTest::newRow("cancelled") << u"- [-] porzucone\n"_s << 0 << 4 << false
+                                   << u"- [ ] \n- [-] porzucone\n"_s << 1 << 4 << true;
+        QTest::newRow("numbered") << u"1. [x] ąę\n2. b\n"_s << 0 << 4 << false
+                                  << u"1. [ ] \n2. [x] ąę\n3. b\n"_s << 1 << 4 << true;
+        QTest::newRow("crlf") << u"- [x] źdźbło\r\n- b\r\n"_s << 0 << 4 << false
+                              << u"- [ ] \r\n- [x] źdźbło\r\n- b\r\n"_s << 1 << 4 << true;
+        QTest::newRow("block-id") << u"- [ ] zadanie ^abc123\n"_s << 0 << 4 << false
+                                  << u"- [ ] \n- [ ] zadanie ^abc123\n"_s << 1 << 4 << true;
+        QTest::newRow("multi-line") << u"- [x] pierwsza\n  druga\n"_s << 0 << 4 << false
+                                    << u"- [ ] \n- [x] pierwsza\n  druga\n"_s << 1 << 4 << true;
+        // In the text: an ordinary split (a done task continues as "[ ] ").
+        QTest::newRow("after-first-char") << u"- [x] zrobione\n"_s << 0 << 5 << false
+                                          << u"- [x] z\n- [ ] robione\n"_s << 1 << 4 << false;
+        // An empty task keeps its Enter: a new task below.
+        QTest::newRow("empty-task") << u"- [ ] \n"_s << 0 << 4 << false << u"- [ ] \n- [ ] \n"_s << 1 << 4
+                                    << false;
+        QTest::newRow("empty-done-task") << u"- [x]\n"_s << 0 << 3 << false << u"- [x]\n- [ ] \n"_s << 1 << 4
+                                         << false;
+        // Not a task: brackets without a space are text.
+        QTest::newRow("not-a-task") << u"- [x]tekst\n"_s << 0 << 3 << false << u"- [x]\n- tekst\n"_s << 1 << 0
+                                    << false;
+    }
+
+    void splitAtTaskTextStart()
+    {
+        QFETCH(QString, content);
+        QFETCH(int, row);
+        QFETCH(int, cursor);
+        QFETCH(bool, collapsed);
+        QFETCH(QString, expected);
+        QFETCH(int, focus);
+        QFETCH(int, caret);
+        QFETCH(bool, sameBlock);
+        BlockDocument doc(content);
+        const quint64 uid = doc.at(row).uid;
+        const EditResult r = doc.split(row, cursor, collapsed);
+        QCOMPARE(doc.toString(), expected);
+        QCOMPARE(r.focus, focus);
+        QCOMPARE(r.cursor, caret);
+        QCOMPARE(doc.at(r.focus).uid == uid, sameBlock);
+        if (sameBlock) {
+            QVERIFY(!r.changes.isEmpty());
+            QCOMPARE(r.changes.first().type, BlockChange::Type::Inserted);
+            QCOMPARE(r.changes.first().first, row);
+            QCOMPARE(r.changes.first().count, 1);
+        }
+        QCOMPARE(entries(BlockDocument(doc.toString())), entries(doc));
     }
 
     void splitParagraphsAndHeadings()

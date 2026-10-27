@@ -87,11 +87,6 @@ Szczegóły w docs/PERFORMANCE.md, „Next steps”:
 
 * **Pasek przewijania w długich listach** skacze, bo ListView szacuje wysokość niewidocznych
   wierszy (docs/UI.md, „Still there”).
-* **Enter na początku tekstu zadania** nie wstawia pustego zadania nad nim, jak w zwykłym punkcie
-  listy: kursor stoi za ukrytym `[ ] `, więc blok dzieli się w tym miejscu. Puste zadanie zostaje
-  na górze, a tekst przechodzi do nowego bloku — przy zadaniu z podpunktami jako jego pierwsze
-  dziecko, a tekst zrobionego zadania (`- [x]`) wraca jako niezrobiony (`- [ ]`; tak dziś
-  zakłada `splitContinuesTasks` w `tst_markdown_blockdoc.cpp`). Cofanie działa poprawnie.
 * **Ponowienie (Ctrl+Shift+Z) gubi wstawiony pusty akapit.** Pusty akapit to w pliku tylko puste
   wiersze, a ponowienie (i cofnięcie) czyta tekst wersji od nowa (`BlockListModel::replaceContent`),
   więc go nie odtwarza: po Enterze na początku akapitu albo nagłówka (np. pierwszego na stronie,

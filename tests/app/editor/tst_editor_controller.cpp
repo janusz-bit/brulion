@@ -524,6 +524,16 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
                                         << u"- \n- Kupić ćwikłę\n\t- dziecko\n- dalej\n"_s << 1 << 0;
         QTest::newRow("enter-task") << u"- [ ] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
                                     << u"- [ ] \n- [ ] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
+        // The editor hides a task's marker: its caret 0 is the start of the text. The text keeps
+        // its status and children.
+        QTest::newRow("enter-task-done") << u"- [x] Kupić ćwikłę\n- dalej\n"_s << u"enter"_s << 0 << 0
+                                         << u"- [ ] \n- [x] Kupić ćwikłę\n- dalej\n"_s << 1 << 0;
+        QTest::newRow("enter-task-children") << u"- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << u"enter"_s << 0 << 0
+                                             << u"- [ ] \n- [ ] Kupić ćwikłę\n\t- dziecko\n"_s << 1 << 0;
+        QTest::newRow("enter-task-logseq") << u"- DONE łódź\n"_s << u"enter"_s << 0 << 0
+                                           << u"- TODO \n- DONE łódź\n"_s << 1 << 0;
+        QTest::newRow("enter-task-crlf") << u"- [x] źdźbło\r\n- b\r\n"_s << u"enter"_s << 0 << 0
+                                         << u"- [ ] \r\n- [x] źdźbło\r\n- b\r\n"_s << 1 << 0;
         QTest::newRow("enter-paragraph") << u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 0 << 0
                                          << u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 1 << 0;
         QTest::newRow("enter-title") << u"# Strona\n- treść\n"_s << u"enter"_s << 0 << 0
@@ -544,6 +554,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         const QString document = u"---\nbrulion: document\n---\n"_s;
         QTest::newRow("document-enter") << document + u"Pierwszy akapit źdźbła\n\nDrugi\n"_s << u"enter"_s << 1 << 0
                                         << document + u"\n\nPierwszy akapit źdźbła\n\nDrugi\n"_s << 2 << 0;
+        QTest::newRow("document-enter-task") << document + u"- [x] zadanie żółwia\n"_s << u"enter"_s << 1 << 0
+                                             << document + u"- [ ] \n- [x] zadanie żółwia\n"_s << 2 << 0;
         QTest::newRow("document-insert") << document + u"Pierwszy akapit źdźbła\n"_s << u"insert"_s << -1 << -1
                                          << document + u"\n\nPierwszy akapit źdźbła\n"_s << 1 << 0;
         QTest::newRow("document-up") << document + u"Pierwszy\n\nDrugi łęg\n"_s << u"up"_s << 2 << 3
@@ -612,6 +624,8 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
             QCOMPARE(textResets.last().at(2).toInt(), f.page.cursorPosition());
         };
 
+        const QVariant uidBefore = editRow >= 0 ? f.role(editRow, "uid") : QVariant();
+        const bool keepsBlock = command == u"enter"_s && editRow >= 0 && !f.edit(editRow).isEmpty();
         if (command == u"enter"_s)
             f.page.split(editRow, editCursor);
         else if (command == u"paste"_s)
@@ -623,6 +637,9 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         check(inserted, rowAfter, cursorAfter, command != u"up"_s);
         if (QTest::currentTestFailed())
             return;
+        // Enter at the start of a text keeps the caret in the same block: its text did not move.
+        if (keepsBlock)
+            QCOMPARE(f.role(rowAfter, "uid"), uidBefore);
         const int afterCursor = f.page.cursorPosition();
         const QStringList blocksAfter = blocks();
         // Known gap (TODO.md): an empty paragraph is no Markdown block of its own (just blank
@@ -696,6 +713,17 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(r.value(u"row"_s).toInt(), 1);
         QCOMPARE(r.value(u"cursor"_s).toInt(), 0); // after the hidden marker
         QCOMPARE(f.page.editingRow(), 1);
+        // Enter at the start of a task's text: an empty task above, the caret stays in the text.
+        const QVariant uid = f.role(0, "uid");
+        f.page.startEditing(0, 0);
+        r = f.page.split(0, 0);
+        QCOMPARE(f.text(), u"- [ ] \n- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 1);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QCOMPARE(f.role(1, "uid"), uid);
+        QCOMPARE(f.edit(1), u"Kup mleko"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- abc\n"_s);
         f.page.startEditing(2, 1);
         r = f.page.split(2, 1);
         QCOMPARE(f.text(), u"- [ ] Kup mleko\n- [ ] \n- a\n- bc\n"_s);
@@ -906,6 +934,15 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
         QCOMPARE(r.value(u"row"_s).toInt(), 2);
         QVERIFY(f.role(2, "visible").toBool());
+        // At its start too: a block above the zoom root would be outside the zoom.
+        f.page.startEditing(1, 0);
+        const QVariantMap atStart = f.page.split(1, 0);
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
+        QCOMPARE(atStart.value(u"row"_s).toInt(), 2);
+        QCOMPARE(f.page.editingRow(), 2);
+        QVERIFY(f.role(2, "visible").toBool());
+        f.page.undo();
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t\t- \n\t\t- a11\n\t- a2\n- b\n"_s);
         // The zoom root cannot be moved or outdented; its children cannot leave it.
         QVERIFY(!f.page.moveUp(1));
         QVERIFY(!f.page.outdent(2));
@@ -915,6 +952,21 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.page.zoomBlock(), -1);
         QCOMPARE(f.visible(), QList<bool>(6, true));
         QVERIFY(zoomSpy.size() >= 3);
+    }
+
+    // Enter at the start of a zoomed task: a new first child, the task keeps its text and status.
+    void zoomRootTaskEnterAtTheStart()
+    {
+        Fixture f(u"- a\n\t- [x] zadanie ść\n\t\t- a11\n- b\n"_s);
+        f.page.zoomInto(1);
+        f.page.startEditing(1, 0);
+        const QVariantMap r = f.page.split(1, 0);
+        QCOMPARE(f.text(), u"- a\n\t- [x] zadanie ść\n\t\t- \n\t\t- a11\n- b\n"_s);
+        QCOMPARE(r.value(u"row"_s).toInt(), 2);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QCOMPARE(f.page.zoomBlock(), 1);
+        QCOMPARE(f.visible(), QList<bool>({false, true, true, true, false}));
+        QCOMPARE(f.role(1, "taskStatus").toString(), u"done"_s);
     }
 
     void zoomFollowsUndo()

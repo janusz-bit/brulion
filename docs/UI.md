@@ -288,7 +288,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 | Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
 |---|---|---|
-| Enter | split the block at the cursor (task checkboxes continue); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
+| Enter | split the block at the cursor (task checkboxes continue); at the start of the text: an empty block above it, the caret stays in the text (a task: an empty task above; the text keeps its status and children — the hidden marker does not count, `BlockDocument::split`); at the start of a zoomed block: a new first child inside the zoom; a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
 | Shift+Enter | soft line break | — |
 | Shift+↑ / Shift+↓ | select text; on the first / last line once the text selection reaches the block's start / end: select this block and the previous / next one | extend or shrink the selection (the end moves over whole subtrees) |
 | Ctrl+A | select the block's text; again (all of it selected, or an empty block): every block | every block (in a zoom the zoomed subtree) |
@@ -928,7 +928,7 @@ Keys in document mode (the rest as in the block editor table):
 
 | Keys | Paragraph / heading | List item |
 |---|---|---|
-| Enter | a new paragraph after it (also after a heading) | a new list item (checkboxes and numbering continue); on an empty item: leave the list — the item becomes a paragraph, or moves one level out when nested |
+| Enter | a new paragraph after it (also after a heading) | a new list item (checkboxes and numbering continue); at the start of the text: an empty item above it (a task: an empty task; the text keeps its status and children); on an empty item: leave the list — the item becomes a paragraph, or moves one level out when nested |
 | Shift+Enter | a line break inside the block | same |
 | Backspace at the start | merge with the previous block | a task first loses its checkbox; then the list marker goes: the item becomes a paragraph in its place, its children move one level out (Obsidian); a nested item moves one level out instead |
 | Tab / Shift+Tab | nothing (no outline indentation) | indent / outdent with children |

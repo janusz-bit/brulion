@@ -25,7 +25,7 @@ Blokiem jest każdy punkt listy, a poza listami — każdy akapit, nagłówek, t
 
 | Klawisze | Działanie |
 |---|---|
-| Enter | podziel blok w miejscu kursora (nowy blok) |
+| Enter | podziel blok w miejscu kursora (nowy blok); na początku tekstu: pusty blok nad nim (przy zadaniu puste zadanie — tekst zostaje ze swoim statusem i podpunktami) |
 | Shift+Enter | nowa linia wewnątrz bloku |
 | Tab / Shift+Tab | wcięcie / wysunięcie bloku razem z dziećmi |
 | Alt+↑ / Alt+↓ | przeniesienie bloku z dziećmi |

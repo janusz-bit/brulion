@@ -941,6 +941,22 @@ ApplicationWindow {
                         && editor.activeEditor.activeFocus && editor.activeEditor.row === 0 && editor.activeEditor.plain() === "jaźń"
                         && editor.activeEditor.cursorPosition === 2,
                         "real Ctrl+Shift+Z moves it to the start again, edited"),
+            // A done task: the hidden "[x] " is no text, so Enter at the start of its text puts an
+            // empty task above it and the text stays done.
+            () => {
+                page.save()
+                host.setFile("Zadanie na początek.md", "- [x] Zrobione źdźbło\n")
+                page.path = "Zadanie na początek.md"
+            },
+            () => editor.startEditing(0, 0),
+            () => realKey(Qt.Key_Return),
+            () => check(page.sourceText === "- [ ] \n- [x] Zrobione źdźbło\n" && info(0).taskStatus === "todo"
+                        && info(0).plainText === "" && info(1).taskStatus === "done"
+                        && info(1).plainText === "Zrobione źdźbło" && page.editingRow === 1
+                        && editor.activeEditor && editor.activeEditor.row === 1
+                        && editor.activeEditor.plain() === "Zrobione źdźbło",
+                        "real Enter at the start of a done task's text puts an empty task above it: "
+                        + JSON.stringify(page.sourceText)),
             // ---- Document mode (docs/UI.md "Note modes"): the trip plan reads as a document --------
             () => { page.save(); page.path = host.documentPath },
             () => {

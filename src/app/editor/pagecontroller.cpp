@@ -1342,8 +1342,9 @@ QVariantMap PageController::split(int row, int cursor)
 
     beginCommand();
     EditResult r;
-    if (row == zoom && cursor == len) {
-        // The zoomed block: a new first child keeps the caret inside the zoom.
+    if (row == zoom && (cursor == len || cursor == 0)) {
+        // The zoomed block: a new first child keeps the caret inside the zoom (at the start too:
+        // a block above the zoom root would be outside the zoom, out of sight).
         r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, QString(), entry.depth + 1); });
     } else {
         const bool collapsed = m_model->isCollapsed(row);
