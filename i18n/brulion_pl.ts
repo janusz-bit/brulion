@@ -2217,7 +2217,7 @@
 <context>
     <name>ContentMissedBanner</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="24"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="25"/>
         <source>Snoozed for %n min</source>
         <translation>
             <numerusform>Odłożono o %n min</numerusform>
@@ -2226,12 +2226,12 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="28"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="29"/>
         <source>Missed reminders</source>
         <translation>Pominięte przypomnienia</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="39"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="40"/>
         <source>%n missed reminder(s)</source>
         <translation>
             <numerusform>%n pominięte przypomnienie</numerusform>
@@ -2240,19 +2240,19 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="48"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="49"/>
         <source>Dismiss all</source>
         <translation>Odrzuć wszystkie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="95"/>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="120"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="96"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="128"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="102"/>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="127"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="103"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="135"/>
         <source>Snooze %n min</source>
         <translation>
             <numerusform>Drzemka %n min</numerusform>
@@ -2261,12 +2261,18 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="108"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="110"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="143"/>
+        <source>Done</source>
+        <translation>Zrobione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="116"/>
         <source>Dismiss</source>
         <translation>Odrzuć</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="135"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="151"/>
         <source>and %n more</source>
         <translation>
             <numerusform>i jeszcze %n</numerusform>
@@ -14288,12 +14294,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/notify/desktopnotifier.cpp" line="40"/>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="41"/>
         <source>Open note</source>
         <translation>Otwórz notatkę</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/notify/desktopnotifier.cpp" line="41"/>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="43"/>
         <source>Snooze %n min</source>
         <translation>
             <numerusform>Drzemka %n min</numerusform>
@@ -14302,7 +14308,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/notify/desktopnotifier.cpp" line="43"/>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="49"/>
+        <source>Done</source>
+        <translation>Zrobione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="50"/>
         <source>OK</source>
         <translation>OK</translation>
     </message>
@@ -15034,27 +15045,32 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="111"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="93"/>
+        <source>“%1” marked done</source>
+        <translation>„%1” — zrobione</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="122"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="114"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="125"/>
         <source>Notifications are turned off for Brulion in Android&apos;s settings.</source>
         <translation>Powiadomienia Brulionu są wyłączone w ustawieniach Androida.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="117"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="128"/>
         <source>No notification service or system tray on this desktop: reminders appear only inside Brulion.</source>
         <translation>Na tym pulpicie nie ma usługi powiadomień ani zasobnika systemowego: przypomnienia pojawiają się tylko w Brulionie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="125"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="136"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="198"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="209"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n notatka zmieniła się jednocześnie na dwóch urządzeniach. Zachowano obie wersje: scal je w centrum synchronizacji.</numerusform>
@@ -15066,14 +15082,24 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceReminders</name>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="385"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="399"/>
         <source>“%1” has changed in the note meanwhile and was not snoozed.</source>
         <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało odłożone.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacereminders.cpp" line="401"/>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="415"/>
         <source>Could not snooze the reminder: %1</source>
         <translation>Nie udało się odłożyć przypomnienia: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="463"/>
+        <source>“%1” has changed in the note meanwhile and was not marked done.</source>
+        <translation>„%1” zmieniło się w międzyczasie w notatce, więc nie zostało oznaczone jako zrobione.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacereminders.cpp" line="479"/>
+        <source>Could not mark the task done: %1</source>
+        <translation>Nie udało się oznaczyć zadania jako zrobionego: %1</translation>
     </message>
 </context>
 <context>

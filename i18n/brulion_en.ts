@@ -298,7 +298,7 @@
 <context>
     <name>ContentMissedBanner</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="24"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="25"/>
         <source>Snoozed for %n min</source>
         <translation>
             <numerusform>Snoozed for %n min</numerusform>
@@ -306,7 +306,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="39"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="40"/>
         <source>%n missed reminder(s)</source>
         <translation>
             <numerusform>%n missed reminder</numerusform>
@@ -314,8 +314,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="102"/>
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="127"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="103"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="135"/>
         <source>Snooze %n min</source>
         <translation>
             <numerusform>Snooze %n min</numerusform>
@@ -323,7 +323,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="135"/>
+        <location filename="../src/app/qml/content/ContentMissedBanner.qml" line="151"/>
         <source>and %n more</source>
         <translation>
             <numerusform>and %n more</numerusform>
@@ -1265,7 +1265,7 @@
 <context>
     <name>brulion::notify::DesktopNotifier</name>
     <message numerus="yes">
-        <location filename="../src/app/notify/desktopnotifier.cpp" line="41"/>
+        <location filename="../src/app/notify/desktopnotifier.cpp" line="43"/>
         <source>Snooze %n min</source>
         <translation>
             <numerusform>Snooze %n min</numerusform>
@@ -1276,7 +1276,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="198"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="209"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>
