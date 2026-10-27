@@ -155,7 +155,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1455"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="770"/>
+        <source>Pasted %n picture(s) from the internet</source>
+        <translation>
+            <numerusform>Pasted %n picture from the internet</numerusform>
+            <numerusform>Pasted %n pictures from the internet</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1495"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -369,7 +377,7 @@
 <context>
     <name>ExportPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="235"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="240"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -377,7 +385,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="237"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="242"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>
