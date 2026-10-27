@@ -16,6 +16,7 @@
 #include <QMetaProperty>
 #include <QSettings>
 #include <QSignalSpy>
+#include <QSysInfo>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -81,6 +82,9 @@ private Q_SLOTS:
         QVERIFY(s.currentVault().isEmpty());
         QVERIFY(s.recentVaults().isEmpty());
         QVERIFY(s.closeToTray());
+        // A click on the tray icon: the calendar on Windows, the window elsewhere.
+        QCOMPARE(s.trayClick(), QSysInfo::productType() == u"windows" ? u"calendar"_s : u"window"_s);
+        QCOMPARE(s.trayClick(), AppSettings::defaultTrayClick());
         QVERIFY(s.remindersEnabled());
         QCOMPARE(s.snoozeMinutes(), 10);
         QCOMPARE(s.alarmRingMinutes(), 10);
@@ -118,6 +122,7 @@ private Q_SLOTS:
             s.setEditorWidth(0);
             s.setEditorSourceMode(true);
             s.setCloseToTray(false);
+            s.setTrayClick(AppSettings::defaultTrayClick() == u"calendar" ? u"window"_s : u"calendar"_s);
             s.setRemindersEnabled(false);
             s.setSnoozeMinutes(15);
             s.setAlarmRingMinutes(5);
@@ -151,6 +156,7 @@ private Q_SLOTS:
         QCOMPARE(s.editorWidth(), 0); // full width
         QVERIFY(s.editorSourceMode());
         QVERIFY(!s.closeToTray());
+        QCOMPARE(s.trayClick(), AppSettings::defaultTrayClick() == u"calendar" ? u"window"_s : u"calendar"_s);
         QVERIFY(!s.remindersEnabled());
         QCOMPARE(s.snoozeMinutes(), 15);
         QCOMPARE(s.alarmRingMinutes(), 5);
@@ -739,6 +745,44 @@ private Q_SLOTS:
         QCOMPARE(s.alarmRingMinutes(), 60);
         s.setSyncIntervalMinutes(-5);
         QCOMPARE(s.syncIntervalMinutes(), 0);
+    }
+
+    void trayClick_data()
+    {
+        QTest::addColumn<QString>("stored");
+        QTest::addColumn<QString>("expected"); // "" = the platform's default
+        QTest::newRow("window") << u"window"_s << u"window"_s;
+        QTest::newRow("calendar") << u"calendar"_s << u"calendar"_s;
+        QTest::newRow("po polsku") << u"kalendarz"_s << QString();
+        QTest::newRow("wielka litera") << u"Calendar"_s << QString();
+        QTest::newRow("pusta") << QString() << QString();
+        QTest::newRow("spacje") << u" window "_s << QString();
+        QTest::newRow("zażółć") << u"zażółć"_s << QString();
+    }
+
+    void trayClick()
+    {
+        QFETCH(QString, stored);
+        QFETCH(QString, expected);
+        const QString want = expected.isEmpty() ? AppSettings::defaultTrayClick() : expected;
+        // A value in the file (an older or newer version, a hand edit) reads as a valid one.
+        const QString file = nextFile();
+        {
+            QSettings raw(file, QSettings::IniFormat);
+            raw.setValue(u"app/trayClick"_s, stored);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.trayClick(), want);
+        }
+        // Set from QML: an unknown value stores the default; signals only on a change.
+        AppSettings s(nextFile(), m_tmp.path());
+        QSignalSpy changed(&s, &AppSettings::trayClickChanged);
+        s.setTrayClick(stored);
+        QCOMPARE(s.trayClick(), want);
+        QCOMPARE(changed.size(), want == AppSettings::defaultTrayClick() ? 0 : 1);
+        s.setTrayClick(want);
+        QCOMPARE(changed.size(), want == AppSettings::defaultTrayClick() ? 0 : 1);
     }
 
     void genericValuesKeepTheirType()

@@ -252,7 +252,7 @@
     <message>
         <location filename="../src/app/qml/shell/AppShell.qml" line="64"/>
         <location filename="../src/app/qml/shell/AppShell.qml" line="132"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2014"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2018"/>
         <source>All pages</source>
         <translation>Wszystkie strony</translation>
     </message>
@@ -1137,7 +1137,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockDelegate.qml" line="300"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1573"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1577"/>
         <source>Zoom into block</source>
         <translation>Przybliż blok</translation>
     </message>
@@ -1192,15 +1192,15 @@
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="460"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2082"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2101"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2086"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2105"/>
         <source>Heading “%1” is not on this page</source>
         <translation>Nagłówka „%1” nie ma na tej stronie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="482"/>
         <location filename="../src/app/qml/editor/BlockEditor.qml" line="2491"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2135"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2139"/>
         <source>Copied %1</source>
         <translation>Skopiowano %1</translation>
     </message>
@@ -2199,17 +2199,17 @@
 <context>
     <name>ContentMiniCalendar</name>
     <message>
-        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="92"/>
+        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="115"/>
         <source>Open journal</source>
         <translation>Otwórz dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="92"/>
+        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="115"/>
         <source>Write in this day&apos;s journal</source>
         <translation>Pisz w dzienniku z tego dnia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="118"/>
+        <location filename="../src/app/qml/content/ContentMiniCalendar.qml" line="147"/>
         <source>No tasks or reminders on this day.</source>
         <translation>Brak zadań i przypomnień tego dnia.</translation>
     </message>
@@ -2492,7 +2492,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPageHeader.qml" line="376"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="795"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="799"/>
         <source>Start writing</source>
         <translation>Zacznij pisać</translation>
     </message>
@@ -2502,14 +2502,14 @@
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="112"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="61"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2313"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2317"/>
         <source>Fit to view</source>
         <translation>Dopasuj do widoku</translation>
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="112"/>
         <location filename="../src/app/qml/editor/WebPictureViewer.qml" line="62"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2305"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2309"/>
         <source>Zoom to actual size</source>
         <translation>Pokaż naturalny rozmiar</translation>
     </message>
@@ -2548,7 +2548,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/content/ContentPictureView.qml" line="362"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2455"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2459"/>
         <source>The start of the file: %1 of %2.</source>
         <translation>Początek pliku: %1 z %2.</translation>
     </message>
@@ -5321,22 +5321,22 @@
 <context>
     <name>Main</name>
     <message>
-        <location filename="../src/app/qml/Main.qml" line="115"/>
+        <location filename="../src/app/qml/Main.qml" line="116"/>
         <source>The notebook could not be opened</source>
         <translation>Nie udało się otworzyć notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/Main.qml" line="117"/>
+        <location filename="../src/app/qml/Main.qml" line="118"/>
         <source>Choose another notebook</source>
         <translation>Wybierz inny notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/Main.qml" line="119"/>
+        <location filename="../src/app/qml/Main.qml" line="120"/>
         <source>Try again</source>
         <translation>Spróbuj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/Main.qml" line="191"/>
+        <location filename="../src/app/qml/Main.qml" line="233"/>
         <source>Open a notebook first.</source>
         <translation>Najpierw otwórz notatnik.</translation>
     </message>
@@ -7230,6 +7230,7 @@
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="90"/>
         <location filename="../src/app/qml/views/SettingsView.qml" line="102"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1030"/>
         <source>Calendar</source>
         <translation>Kalendarz</translation>
     </message>
@@ -7748,37 +7749,53 @@
         <translation>Na tym pulpicie nie znaleziono zasobnika systemowego.</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1024"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1027"/>
+        <source>Click on the tray icon</source>
+        <translation>Kliknięcie ikony w zasobniku</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1025"/>
+        <source>A double click always shows the window. The calendar shows the month with its tasks and reminders; it is also in the icon&apos;s menu.</source>
+        <translation>Podwójne kliknięcie zawsze pokazuje okno. Kalendarz pokazuje miesiąc z zadaniami i przypomnieniami; jest też w menu ikony.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1029"/>
+        <source>Window</source>
+        <translation>Okno</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1043"/>
         <source>Start when you sign in</source>
         <translation>Uruchamiaj po zalogowaniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1027"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1045"/>
         <source>Not in a separate profile (BRULION_PROFILE): Windows starts the default one.</source>
         <translation>Niedostępne w osobnym profilu (BRULION_PROFILE): Windows uruchomiłby profil domyślny.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1029"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1047"/>
         <source>Brulion starts hidden in the tray, so reminders ring from the moment you sign in.</source>
         <translation>Brulion uruchamia się ukryty w zasobniku, więc przypomnienia dzwonią od chwili zalogowania.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1030"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1048"/>
         <source>Brulion starts after you sign in.</source>
         <translation>Brulion uruchamia się po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1040"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1058"/>
         <source>Event log</source>
         <translation>Rejestr zdarzeń</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1041"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1059"/>
         <source>What the app and the sync did, step by step. It stays on this device; share it when something does not work.</source>
         <translation>Co robiła aplikacja i synchronizacja, krok po kroku. Zostaje na tym urządzeniu; udostępnij go, gdy coś nie działa.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1046"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1064"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n ostrzeżenie lub błąd</numerusform>
@@ -7787,83 +7804,83 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1059"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1077"/>
         <source>Detailed log</source>
         <translation>Szczegółowy rejestr</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1060"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1078"/>
         <source>Also writes every request to the server (never note contents or passwords). Turn it on when syncing gives trouble.</source>
         <translation>Zapisuje też każde żądanie do serwera (nigdy treści notatek ani haseł). Włącz, gdy synchronizacja sprawia kłopot.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1066"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1084"/>
         <source>Version</source>
         <translation>Wersja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1067"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1085"/>
         <source>Brulion %1 · %2</source>
         <translation>Brulion %1 · %2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1069"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1087"/>
         <source>About</source>
         <translation>O programie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1077"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1095"/>
         <source>Licence</source>
         <translation>Licencja</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1078"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1096"/>
         <source>Free software: GNU Affero General Public License 3.0 or later (AGPL-3.0). Icons: Lucide (ISC). Emoji and symbols: Noto Emoji, Noto Sans Math (OFL 1.1).</source>
         <translation>Wolne oprogramowanie: GNU Affero General Public License 3.0 lub nowsza (AGPL-3.0). Ikony: Lucide (ISC). Emoji i symbole: Noto Emoji, Noto Sans Math (OFL 1.1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1080"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1098"/>
         <source>Read</source>
         <translation>Czytaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1088"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1106"/>
         <source>Source code</source>
         <translation>Kod źródłowy</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1106"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1124"/>
         <source>For developers</source>
         <translation>Dla programistów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1111"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1129"/>
         <source>Allow agents to control the app (local socket)</source>
         <translation>Pozwól agentom sterować aplikacją (gniazdo lokalne)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1112"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1130"/>
         <source>AI agents and scripts of your user account can then see what Brulion shows, click, type and take screenshots (brulion-cli app …). Any program you run can then read your notes too — turn it on only while you need it.</source>
         <translation>Agenci AI i skrypty Twojego konta mogą wtedy widzieć, co pokazuje Brulion, klikać, pisać i robić zrzuty ekranu (brulion-cli app …). Każdy uruchomiony przez Ciebie program może wtedy też czytać Twoje notatki — włączaj tylko na czas, gdy jest potrzebne.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1127"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1145"/>
         <source>The socket could not be opened: %1</source>
         <translation>Nie udało się otworzyć gniazda: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1130"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1148"/>
         <source>On for this run (started with --remote-control).</source>
         <translation>Włączone na to uruchomienie (opcja --remote-control).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1131"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1149"/>
         <source>Listening at %1</source>
         <translation>Nasłuchuje na %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1050"/>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1091"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1068"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1109"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
@@ -8021,7 +8038,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveDialog.qml" line="125"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1747"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1751"/>
         <source>Move here</source>
         <translation>Przenieś tutaj</translation>
     </message>
@@ -8176,7 +8193,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellMoveWords.qml" line="56"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="982"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="986"/>
         <source>Moved to “%1” as “%2”</source>
         <translation>Przeniesiono do „%1” jako „%2”</translation>
     </message>
@@ -8218,7 +8235,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellNewPageDialog.qml" line="38"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1786"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1790"/>
         <source>Create</source>
         <translation>Utwórz</translation>
     </message>
@@ -8270,7 +8287,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellQuickCapture.qml" line="17"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2967"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="3123"/>
         <source>Add</source>
         <translation>Dodaj</translation>
     </message>
@@ -8406,7 +8423,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2853"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2857"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
@@ -8594,7 +8611,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellSidebar.qml" line="564"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="1418"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="1422"/>
         <source>Empty folder</source>
         <translation>Pusty folder</translation>
     </message>
@@ -8826,7 +8843,7 @@
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="161"/>
         <location filename="../src/app/io/ioselftest.cpp" line="371"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2331"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2335"/>
         <source>More</source>
         <translation>Więcej</translation>
     </message>
@@ -8862,7 +8879,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="211"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2340"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2344"/>
         <source>Markdown source</source>
         <translation>Źródło Markdown</translation>
     </message>
@@ -8878,7 +8895,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="222"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="2339"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="2343"/>
         <source>Toggle note mode</source>
         <translation>Przełącz tryb notatki</translation>
     </message>
@@ -8931,6 +8948,41 @@
         <location filename="../src/app/qml/shell/ShellTopBar.qml" line="268"/>
         <source>Import notes</source>
         <translation>Importuj notatki</translation>
+    </message>
+</context>
+<context>
+    <name>ShellTrayCalendar</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="31"/>
+        <source>Calendar</source>
+        <translation>Kalendarz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="98"/>
+        <source>Close</source>
+        <translation>Zamknij</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="113"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4047"/>
+        <source>Opening the notebook…</source>
+        <translation>Otwieranie notatnika…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="114"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4037"/>
+        <source>Open a notebook to see its tasks and reminders.</source>
+        <translation>Otwórz notatnik, aby zobaczyć zadania i przypomnienia.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="131"/>
+        <source>Open Brulion</source>
+        <translation>Otwórz Brulion</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellTrayCalendar.qml" line="139"/>
+        <source>Quick capture…</source>
+        <translation>Szybka notatka…</translation>
     </message>
 </context>
 <context>
@@ -14514,89 +14566,89 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppController</name>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="253"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="742"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="255"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="744"/>
         <source>The notebook folder %1 is not available.</source>
         <translation>Folder notatnika %1 jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="430"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="432"/>
         <source>The command line asked to open a page of another notebook (%1).</source>
         <translation>Wiersz poleceń chciał otworzyć stronę innego notatnika (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="478"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="486"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="480"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="488"/>
         <source>The note of this reminder no longer exists.</source>
         <translation>Notatka tego przypomnienia już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="626"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="628"/>
         <source>Could not change the start at sign-in.</source>
         <translation>Nie udało się zmienić uruchamiania po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="708"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="710"/>
         <source>Choose a folder for the notebook.</source>
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="890"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="892"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="906"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="908"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="910"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="912"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1068"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1070"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1069"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1071"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1087"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1089"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1089"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1091"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1092"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1094"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1099"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1101"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1119"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1121"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1209"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1244"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1210"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1245"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
     </message>
@@ -14954,27 +15006,32 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::DesktopTray</name>
     <message>
-        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="94"/>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="106"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="95"/>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="107"/>
         <source>Show Brulion</source>
         <translation>Pokaż Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="96"/>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="108"/>
+        <source>Calendar</source>
+        <translation>Kalendarz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="109"/>
         <source>Today&apos;s journal</source>
         <translation>Dzisiejszy dziennik</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="97"/>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="110"/>
         <source>Quick capture…</source>
         <translation>Szybka notatka…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="98"/>
+        <location filename="../src/app/shell/desktop/desktoptray.cpp" line="111"/>
         <source>Quit</source>
         <translation>Zakończ</translation>
     </message>

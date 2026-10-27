@@ -1015,6 +1015,24 @@ Item {
                     checked: AppSettings.closeToTray
                     onToggled: AppSettings.closeToTray = checked
                 }
+                // What a single click on the tray icon does (DesktopTray): the window, or the
+                // tray calendar (ShellTrayCalendar; Windows' default).
+                ShellSettingRow {
+                    objectName: "settingsTrayClick"
+                    visible: AppController.isDesktop
+                    enabled: AppController.trayAvailable
+                    title: qsTr("Click on the tray icon")
+                    description: qsTr("A double click always shows the window. The calendar shows the month with its tasks and reminders; it is also in the icon's menu.")
+                    BSegmented {
+                        accessibleName: qsTr("Click on the tray icon")
+                        model: [
+                            { value: "window", text: qsTr("Window"), icon: "monitor" },
+                            { value: "calendar", text: qsTr("Calendar"), icon: "calendar" }
+                        ]
+                        currentValue: AppSettings.trayClick
+                        onActivated: (value) => AppSettings.trayClick = value
+                    }
+                }
                 // Windows: the Run key (src/platform/autostart.h); with a separate
                 // BRULION_PROFILE shown, but disabled.
                 BSwitch {

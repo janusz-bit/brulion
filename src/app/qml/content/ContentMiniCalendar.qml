@@ -8,12 +8,26 @@ import Brulion
 // day that has a journal and on days with dates or reminders; picking a day lists its entries
 // (calendar items: due / scheduled tasks, reminders) and "Otwórz dziennik" opens that day
 // (created when you write in it). Today and the open page's day are marked by the picker.
+// Also the tray calendar's content (ShellTrayCalendar): `activated()` after an entry or the
+// journal was opened; with a `placeholder` (no notebook open) only the month and that text — no
+// marks, no entries, no Workspace queries.
 //
 //   ContentMiniCalendar { selectedDate: "2026-10-14" }
 Item {
     id: root
 
     property string selectedDate: DatesHelper.today
+    property string placeholder: ""
+    /// The day's journal or one of its entries was opened (the tray calendar then hides).
+    signal activated()
+
+    /// Select `date` and show its month (the tray calendar opens on today's month every time).
+    function showDay(date: string) {
+        root.selectedDate = date
+        picker.showMonthOf(date)
+        picker.focusDate = date
+        flick.contentY = 0
+    }
 
     // Dots for the six weeks shown: journals + calendar entries (Workspace.revision: follows edits;
     // only while the tab is shown — the side panel keeps it while another tab is open, and every
@@ -21,7 +35,7 @@ Item {
     readonly property var marks: {
         // (Read for real: a bare `void Workspace.revision` is compiled away with the dependency.)
         const cells = picker.cells
-        if (!root.visible || !cells || cells.length === 0 || Workspace.revision < 0)
+        if (!root.visible || root.placeholder !== "" || !cells || cells.length === 0 || Workspace.revision < 0)
             return ({})
         const from = cells[0].date
         const to = cells[cells.length - 1].date
@@ -41,12 +55,12 @@ Item {
         return out
     }
     readonly property var dayItems: {
-        if (!root.visible || Workspace.revision < 0)
+        if (!root.visible || root.placeholder !== "" || Workspace.revision < 0)
             return []
         return Workspace.calendarItems(root.selectedDate, root.selectedDate).filter(i => i.kind !== "journal")
     }
     readonly property bool hasJournal: {
-        return root.visible && Workspace.revision >= 0
+        return root.visible && root.placeholder === "" && Workspace.revision >= 0
                && Workspace.journalDates(root.selectedDate, root.selectedDate).length > 0
     }
 
@@ -86,11 +100,23 @@ Item {
                     wrapMode: Text.Wrap
                 }
             }
+            BText {
+                visible: root.placeholder !== ""
+                Layout.fillWidth: true
+                text: root.placeholder
+                variant: "muted"
+                wrapMode: Text.Wrap
+            }
             BButton {
+                objectName: "miniCalendarOpenJournal"
+                visible: root.placeholder === ""
                 Layout.fillWidth: true
                 iconName: "book-open"
                 text: root.hasJournal ? qsTr("Open journal") : qsTr("Write in this day's journal")
-                onClicked: AppController.navigate({ view: "journal", date: root.selectedDate })
+                onClicked: {
+                    AppController.navigate({ view: "journal", date: root.selectedDate })
+                    root.activated()
+                }
             }
 
             Repeater {
@@ -109,11 +135,14 @@ Item {
                               : entry.modelData.status === "done" ? "circle-check"
                               : entry.modelData.kind === "scheduled" ? "hourglass" : "calendar-check"
                     iconColor: entry.modelData.kind === "reminder" ? Theme.warningText : Theme.fgMuted
-                    onClicked: AppController.openPage(entry.modelData.path, entry.modelData.line)
+                    onClicked: {
+                        AppController.openPage(entry.modelData.path, entry.modelData.line)
+                        root.activated()
+                    }
                 }
             }
             BText {
-                visible: root.dayItems.length === 0
+                visible: root.placeholder === "" && root.dayItems.length === 0
                 Layout.fillWidth: true
                 text: qsTr("No tasks or reminders on this day.")
                 variant: "muted"

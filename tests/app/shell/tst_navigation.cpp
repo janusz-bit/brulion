@@ -9,6 +9,7 @@
 #include "demovault.h"
 #include "navigation.h"
 #include "olddocs.h"
+#include "traypopup.h"
 #include "workspace.h"
 
 #include "reminders/notifications.h"
@@ -666,6 +667,43 @@ private Q_SLOTS:
         app->quit();
         QVERIFY(app->quitting());
         QCOMPARE(quit.size(), 1);
+    }
+
+    void trayCalendar()
+    {
+        // The tray's calendar: the menu entry opens it, a click on the icon toggles it; Main.qml
+        // places it from the anchor given here (traypopup.h; tst_shell_traypopup has the
+        // geometry: without a QGuiApplication there is no screen, so the anchor comes back).
+        auto app = makeApp();
+        QSignalSpy ui(app.get(), &AppController::uiActionRequested);
+        app->showTrayCalendar(QRect(1800, 1040, 24, 24), {});
+        QCOMPARE(ui.size(), 1);
+        QCOMPARE(ui.takeFirst().first().toString(), u"trayCalendar"_s);
+        QCOMPARE(app->trayPopupPosition(320, 460), QRect(1800, 1040, 24, 24).center());
+        app->showTrayCalendar(QRect(), QPoint(640, 1070), true);
+        QCOMPARE(ui.takeFirst().first().toString(), u"toggleTrayCalendar"_s);
+        QCOMPARE(app->trayPopupPosition(320, 460), QPoint(640, 1070));
+        // The reopen guard (traypopup.h): nothing hidden → it opens.
+        QVERIFY(app->trayPopupShouldReopen());
+        // Hidden by the click itself → closed; asked once, then forgotten.
+        app->trayPopupHidItselfAt(QPoint(640, 1070));
+        QVERIFY(!app->trayPopupShouldReopen());
+        QVERIFY(app->trayPopupShouldReopen());
+        // Windows: the press on the icon hid it, Trigger comes when the button is released, a
+        // moment after the 300 ms guard — still that click, it stays closed.
+        const QRect icon(1800, 1040, 24, 24);
+        app->trayPopupHidItselfAt(QPoint(1810, 1050));
+        QTest::qWait(TrayPopupReopenGuardMs + 100);
+        app->showTrayCalendar(icon, QPoint(1810, 1050), true);
+        QVERIFY(!app->trayPopupShouldReopen());
+        QVERIFY(app->trayPopupShouldReopen());
+        // A click elsewhere hid it (the cursor away from the icon): a later click opens it.
+        app->trayPopupHidItselfAt(QPoint(400, 300));
+        QTest::qWait(TrayPopupReopenGuardMs + 100);
+        QVERIFY(app->trayPopupShouldReopen());
+        // Without a QGuiApplication the cursor is unknown: the 300 ms guard alone.
+        app->trayPopupHidItself();
+        QVERIFY(!app->trayPopupShouldReopen());
     }
 
     // ---- commands ---------------------------------------------------------------------------

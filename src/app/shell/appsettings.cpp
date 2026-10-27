@@ -15,6 +15,7 @@
 #include <QSaveFile>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSysInfo>
 
 #include <algorithm>
 
@@ -49,6 +50,7 @@ constexpr auto kExportWebPictures = "export/webPictures";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
 constexpr auto kCloseToTray = "app/closeToTray";
+constexpr auto kTrayClick = "app/trayClick";
 constexpr auto kRemindersEnabled = "reminders/enabled";
 constexpr auto kSnooze = "reminders/snoozeMinutes";
 constexpr auto kAlarmRing = "reminders/alarmRingMinutes";
@@ -647,6 +649,24 @@ void AppSettings::setCloseToTray(bool on)
 {
     if (store(key(kCloseToTray), on, closeToTray()))
         Q_EMIT closeToTrayChanged();
+}
+
+QString AppSettings::defaultTrayClick()
+{
+    return QSysInfo::productType() == u"windows" ? u"calendar"_s : u"window"_s;
+}
+
+QString AppSettings::trayClick() const
+{
+    const QString v = m_settings->value(key(kTrayClick)).toString();
+    return v == u"window" || v == u"calendar" ? v : defaultTrayClick();
+}
+
+void AppSettings::setTrayClick(const QString &action)
+{
+    const QString clean = action == u"window" || action == u"calendar" ? action : defaultTrayClick();
+    if (store(key(kTrayClick), clean, trayClick()))
+        Q_EMIT trayClickChanged();
 }
 
 // ---- Reminders ------------------------------------------------------------------------------

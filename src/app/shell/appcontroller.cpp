@@ -5,6 +5,7 @@
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
+#include "traypopup.h"
 #include "workspace.h"
 #include "workspaceintegration.h"
 
@@ -16,6 +17,7 @@
 #include "vault/vault.h"
 
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
@@ -1137,6 +1139,39 @@ bool AppController::capture(const QString &text)
 void AppController::showWindow()
 {
     Q_EMIT showWindowRequested();
+}
+
+void AppController::showTrayCalendar(const QRect &icon, const QPoint &cursor, bool toggle)
+{
+    m_trayIcon = icon;
+    m_trayCursor = cursor.isNull() ? std::nullopt : std::optional(cursor);
+    Q_EMIT uiActionRequested(toggle ? u"toggleTrayCalendar"_s : u"trayCalendar"_s);
+}
+
+QPoint AppController::trayPopupPosition(int width, int height) const
+{
+    // 8 px from the taskbar and the screen's sides, as Windows' own flyouts.
+    return trayPopupPositionOnScreen(m_trayIcon, m_trayCursor, QSize(width, height), 8);
+}
+
+void AppController::trayPopupHidItself()
+{
+    trayPopupHidItselfAt(qobject_cast<QGuiApplication *>(QCoreApplication::instance()) ? std::optional(QCursor::pos())
+                                                                                       : std::nullopt);
+}
+
+void AppController::trayPopupHidItselfAt(std::optional<QPoint> cursor)
+{
+    m_trayPopupHidden.start();
+    m_trayPopupHiddenCursor = cursor;
+}
+
+bool AppController::trayPopupShouldReopen()
+{
+    const qint64 ms = m_trayPopupHidden.isValid() ? m_trayPopupHidden.elapsed() : -1;
+    m_trayPopupHidden.invalidate();
+    return shell::trayPopupShouldReopen(ms, std::exchange(m_trayPopupHiddenCursor, std::nullopt), m_trayIcon,
+                                        m_trayCursor);
 }
 
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)

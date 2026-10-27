@@ -1,7 +1,11 @@
-// DesktopTray — Brulion's system tray icon on the Linux desktop (Qt Widgets: needs QApplication).
+// DesktopTray — Brulion's system tray icon on the desktop, Linux and Windows (Qt Widgets: needs
+// QApplication).
 //
-// Menu: Show Brulion · Today's journal · Quick capture… · Quit. A click on the icon shows (or,
-// when it is in front, hides) the window. With AppSettings.closeToTray the window's close button
+// Menu: Show Brulion · Calendar · Today's journal · Quick capture… · Quit. A single left click on
+// the icon does what AppSettings.trayClick says: "window" shows (or, when it is in front, hides)
+// the window, "calendar" (Windows' default) opens or closes the tray calendar next to the icon
+// (AppController::showTrayCalendar, ShellTrayCalendar.qml); a double click always shows the
+// window (and hides the calendar). With AppSettings.closeToTray the window's close button
 // only hides it (Main.qml) so reminders keep firing; `brulion --hidden` starts in the tray.
 // Also shows AppController::notificationRequested() as tray messages (the test notification;
 // the reminders integration may route its notifications here as a fallback for D-Bus).
@@ -47,6 +51,7 @@ private:
     QSystemTrayIcon *m_tray = nullptr;
     QMenu *m_menu = nullptr;
     QAction *m_show = nullptr;
+    QAction *m_calendar = nullptr;
     QAction *m_today = nullptr;
     QAction *m_capture = nullptr;
     QAction *m_quit = nullptr;

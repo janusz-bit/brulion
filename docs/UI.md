@@ -144,6 +144,33 @@ components — no Material/Fusion look, so all targets look identical.
   (`ShellMoveDialog`), delete confirmation, about; toasts. Views reach the shell's dialogs for a
   page or folder through `AppController.requestItemAction(action, path)` (`move`, `rename`,
   `delete`, `newPage`, `newFolder`, `reveal`).
+* **The tray calendar** (`ShellTrayCalendar`, desktop; docs/WINDOWS.md "Kalendarz z zasobnika"):
+  a window of its own (Qt.Tool, frameless, always on top, no transient parent — owned by a
+  hidden main window it would hide with it on Windows), created on first use by Main.qml's
+  `Loader`, about 336 × 500 px with a 1 px frame: today's long date and a close button,
+  `ContentMiniCalendar` (the month with its dots, the picked day's tasks and reminders, "Otwórz
+  dziennik"; reset to today's month on every open; without a notebook only the month and
+  „Otwórz notatnik, aby zobaczyć zadania i przypomnienia.”), "Otwórz Brulion" and "Szybka
+  notatka…". An entry or "Otwórz dziennik" navigates and calls `AppController.showWindow()`,
+  which hides the calendar (Main.qml hides it on every `showWindowRequested`, on "toggleWindow"
+  and before the main window closes, so a shown calendar never keeps a really closed app
+  running). It opens from the tray (`DesktopTray`): the menu's „Kalendarz” (`uiActionRequested
+  ("trayCalendar")`) and, with Ustawienia → Aplikacja → „Kliknięcie ikony w zasobniku” =
+  Kalendarz (`AppSettings.trayClick`, `app/trayClick`: "calendar" by default on Windows, "window"
+  elsewhere), a single left click ("toggleTrayCalendar": an open calendar closes); a double click
+  always shows the window. Placement: `AppController.trayPopupPosition(w, h)` →
+  `traypopup.h` — against the work area's edge nearest to the tray icon
+  (`QSystemTrayIcon::geometry()`, Windows) or to the cursor (X11, where the icon's rectangle is
+  empty), centred on it along that edge, 8 px away, kept inside the work area of the anchor's
+  screen; Wayland ignores it (the compositor places the window). It hides itself — always
+  `hide()`, never a close: `onClosing` refuses Alt+F4's close — on Escape, the close button, and
+  when it loses the activation after having had it (a click elsewhere; a refused activation keeps
+  it open without the keyboard — no Escape — until the close button, an entry or a click on the
+  icon). That hide records the time and the cursor (`AppController.trayPopupHidItself`); the next
+  click on the icon (`trayPopupShouldReopen`, asked once per tray action) keeps it closed when it
+  is the click that took the activation: within 300 ms, or within 3 s when the hide happened with
+  the cursor on the icon or within 8 px of the click's (Windows hides it on the press, Trigger
+  comes on the release — a held button).
 
 ## Folders (the sidebar's tree, "Przenieś do…")
 
@@ -369,7 +396,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
-| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym"; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
+| `settings` | `SettingsView` — Ogólne, Wygląd (`appearance`), Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop "Działaj dalej w zasobniku systemowym" and "Kliknięcie ikony w zasobniku" Okno | Kalendarz — `AppSettings.trayClick`, the tray calendar above, disabled without a tray; on Windows "Uruchamiaj po zalogowaniu" — `AppController.startAtLogin`, the Run key, shown disabled with a separate `BRULION_PROFILE`, docs/WINDOWS.md "Autostart"; on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control"). Przypomnienia → sounds: on Windows the "Dzwonek" menu lists Windows' notification sounds (Powiadomienie, Alarm 1–10, Połączenie 1–10…) and "Plik dźwiękowy…" is disabled | `section?` |
 | `logs` | `LogsView` — "Rejestr zdarzeń", the event log (see below) | `group?`, `level?`, `fromMs?`, `toMs?`, `run?` |
 | `drawing` | `DrawingView` (`qml/drawing`) — the drawing editor on a drawing attachment ("Drawing editor" below); title: the file's name without `.svg` | `path` |
 
