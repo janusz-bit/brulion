@@ -1,7 +1,9 @@
 # brulion_ui_helpers — the GUI-free C++ helpers of the design system (docs/UI.md): natural-language
 # dates and recurrence for QML (DatesHelper), fuzzy matching (TextHelper), line diffs and
 # conflict hunks (DiffHelper), Qt's own translations (QtTranslations), the on-screen keyboard's
-# height (KeyboardInsets) and the system's gesture zones at the window's edges (GestureInsets) —
+# height (KeyboardInsets), the system's gesture zones at the window's edges (GestureInsets) and the
+# appearance settings' colours with their contrast checks and the font pickers' filter
+# (ThemePalette) —
 # their sources are connected by the app, ui/keyboardsources.cpp. A static
 # library (QtCore + core modules only) so that tests/app links it without the app; the app's QML
 # module "Brulion" registers the classes as QML singletons through QML_FOREIGN wrappers
@@ -14,6 +16,7 @@ qt_add_library(brulion_ui_helpers STATIC
     qttranslations.h qttranslations.cpp
     keyboardinsets.h keyboardinsets.cpp
     gestureinsets.h gestureinsets.cpp
+    themepalette.h themepalette.cpp
 )
 target_include_directories(brulion_ui_helpers PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_ui_helpers PUBLIC Qt6::Core PRIVATE brulion_core_dates brulion_core_text brulion_core_log)
