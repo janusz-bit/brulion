@@ -9,9 +9,9 @@ załączniki do `assets/<folder importu>/`. Nic nie jest nadpisywane: gdy nazwa 
 strona dostaje dopisek „ 2”, a linki do niej są poprawiane. Szczegóły dla telefonu:
 [ANDROID.md](ANDROID.md#import-notatek-obsidian-logseq-notion).
 
-Obsługiwane aplikacje i formaty: Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin,
-Simplenote, Roam Research, **Trilium Notes**, Bear, pliki Markdown/TXT, HTML i kalendarze
-iCalendar.
+Obsługiwane aplikacje i formaty: Obsidian, Logseq, Notion, Evernote, Google Keep,
+**[Microsoft To Do](#microsoft-to-do)** (zadania), Joplin, Simplenote, Roam Research,
+**Trilium Notes**, Bear, pliki Markdown/TXT, HTML i kalendarze iCalendar.
 
 Tekst z aplikacji, które nie piszą w Markdownie (HTML, Evernote, Google Keep, bazy Notion,
 Trilium, kalendarze), zostaje tekstem: znaki, które w Brulionie coś znaczą, dostają `\`.
@@ -137,6 +137,132 @@ które import zapisuje w folderach (`projekt/dom.md`). W Obsidianie tagi i stron
 bloki z tym tagiem. Przy eksporcie: Obsidian i Markdown dostają tagi bez zmian (Obsidian dalej
 trzyma je osobno), Logseq — `#[[Projekty/Dom]]`, gdy strona ma tam inną nazwę niż tag, a w
 eksporcie HTML tag prowadzi do strony, którą nazywa.
+
+## Microsoft To Do
+
+Brulion przenosi listy zadań z Microsoft To Do: każda lista staje się stroną z zadaniami
+w folderze importu (`Import/Microsoft To Do/Zadania.md`, `…/Zakupy.md`). Są dwie drogi:
+
+* **Zaloguj się w Microsoft** (zalecane) — Brulion sam pobiera wszystkie listy razem z krokami,
+  linkami i plikami. Wymaga jednorazowej, bezpłatnej rejestracji własnej aplikacji w Microsoft
+  Entra (opis niżej).
+* **Plik z Graph Explorera** — bez rejestracji, ale bez kroków, linków i plików.
+
+To jednorazowe przeniesienie, a nie synchronizacja: zmiany zrobione później w To Do nie trafią do
+Brulionu, a w To Do nic się nie zmienia. Ponowny import tworzy strony z dopiskiem „ 2”.
+
+### Co się z czym zamienia
+
+| W To Do | W Brulionie |
+|---|---|
+| lista | strona `<folder importu>/<nazwa listy>.md` z `source: Microsoft To Do` we frontmatterze; lista bez zadań — nic (ostrzeżenie podaje, ile ich było) |
+| zadanie | `- [ ] Tytuł`; znaki, które w Brulionie coś znaczą (`#`, `[[`, `*`, `$`), dostają `\` |
+| w toku / czeka na innych, odroczone | `- [/]` / `- [>]` |
+| ukończone | `- [x] … ✅ 2026-10-25` — pod nieukończonymi, od ostatnio ukończonych |
+| ważne / niska ważność | `⏫` / `🔽` |
+| termin, data rozpoczęcia, utworzenia | `📅 2026-10-27`, `🛫 2026-10-20`, `➕ 2026-10-14` |
+| przypomnienie | `⏰ 2026-10-27 08:00` (tylko w nieukończonych zadaniach) |
+| powtarzanie | `🔁 every day`, `every 2 weeks on Monday, Friday`, `every weekday` (dni robocze), `every month on the 15th`, `every year`. „Drugi wtorek miesiąca” i podobne — bez 🔁, zostaje tylko termin (ostrzeżenie); koniec serii (data albo liczba powtórzeń) jest pomijany (ostrzeżenie) |
+| kategorie | tagi: „Praca domowa” → `#Praca-domowa` |
+| notatka | wiersze pod zadaniem (notatka w HTML — zamieniona na Markdown) |
+| kroki | podpunkty `- [ ]` / `- [x]` |
+| linki (np. do wiadomości w Outlooku) | podpunkty `[nazwa](adres)` |
+| pliki | załączniki w `assets/Microsoft To Do/`, osadzone pod zadaniem; większe niż 25 MB są pomijane (ostrzeżenie) |
+
+Daty i godziny Microsoft podaje w UTC — Brulion przelicza je na strefę czasową urządzenia, więc
+termin ustawiony na 27 października zostaje 27 października. Nie przenoszą się: „Mój dzień”,
+ręcznie ułożona kolejność zadań (zadania idą w kolejności, w jakiej poda je Microsoft), grupy
+list, osoby, którym udostępniono listę, i przypisania zadań.
+
+### Logowanie do Microsoft
+
+Microsoft wpuszcza do zadań tylko aplikację zarejestrowaną w Microsoft Entra. Brulion nie ma
+własnego serwera ani wspólnej rejestracji — rejestrujesz „swoją” aplikację raz, za darmo, i
+podajesz jej identyfikator. Rejestracja wymaga katalogu Microsoft Entra: konto służbowe lub
+szkolne Microsoft 365 już go ma (rejestracje może jednak blokować administrator), a dla konta
+osobistego (outlook.com, hotmail.com, live.com) katalog „Katalog domyślny” powstaje po założeniu
+bezpłatnego konta Azure. Od 2024 r. Microsoft nie pozwala rejestrować aplikacji samym kontem
+osobistym bez katalogu.
+
+**Rejestracja aplikacji (raz):**
+
+1. Otwórz [entra.microsoft.com](https://entra.microsoft.com) i zaloguj się.
+2. Wybierz **Aplikacje → Rejestracje aplikacji → Nowa rejestracja** (*Applications → App
+   registrations → New registration*).
+3. Nazwa: np. „Brulion”. **Obsługiwane typy kont** (*Supported account types*):
+   * zadania na koncie osobistym (outlook.com, hotmail.com): **Tylko osobiste konta Microsoft**
+     (*Personal Microsoft accounts only*);
+   * zadania na koncie służbowym: **Konta tylko w tym katalogu organizacyjnym** albo **w dowolnym
+     katalogu organizacyjnym**;
+   * oba rodzaje: **Konta w dowolnym katalogu organizacyjnym i osobiste konta Microsoft**.
+4. **Identyfikator URI przekierowania** (*Redirect URI*) zostaw pusty i kliknij **Zarejestruj**.
+5. **Uwierzytelnianie** (*Authentication*) → **Ustawienia zaawansowane** → **Zezwalaj na przepływy
+   klienta publicznego** (*Allow public client flows*): **Tak**, potem **Zapisz**. Bez tego
+   logowanie kończy się błędem AADSTS7000218.
+6. **Uprawnienia interfejsu API** (*API permissions*) → **Dodaj uprawnienie** → **Microsoft
+   Graph** → **Uprawnienia delegowane** → zaznacz `Tasks.Read` → **Dodaj uprawnienia**.
+   `User.Read`, dodane domyślnie, może zostać.
+7. Na stronie **Przegląd** (*Overview*) skopiuj **Identyfikator aplikacji (klienta)**
+   (*Application (client) ID*), np. `3f2504e0-4f89-41d3-9a0c-0305e82c3301`.
+
+Klucza tajnego (*client secret*) ani certyfikatu nie trzeba — Brulion loguje się jako aplikacja
+publiczna, kodem urządzenia.
+
+**Import:**
+
+1. **Importuj notatki → Microsoft To Do**, wklej identyfikator w pole **Identyfikator aplikacji
+   (klienta)**. Brulion zapamięta go na tym urządzeniu (jedna rejestracja wystarcza dla wszystkich
+   notatników).
+2. Pod **Więcej** jest **urząd** (*authority*): `consumers` (domyślny) dla aplikacji tylko dla
+   kont osobistych, `organizations` albo identyfikator lub domena katalogu
+   (`firma.onmicrosoft.com`) dla kont służbowych, `common`, gdy aplikacja przyjmuje oba rodzaje
+   kont.
+3. Kliknij **Zaloguj się w Microsoft**. Brulion pokaże kod (np. `F7GH2K9QX`). Otwórz
+   [microsoft.com/devicelogin](https://microsoft.com/devicelogin) — na tym samym albo innym
+   urządzeniu, np. w telefonie —, wpisz kod, zaloguj się kontem, na którym są zadania, i zgódź
+   się na odczyt zadań. Kod jest ważny około 15 minut.
+4. Brulion pobiera listy (pasek pokazuje postęp), a potem zwykły podgląd importu. Nic nie jest
+   zapisywane przed zatwierdzeniem.
+
+Bezpieczeństwo: Brulion prosi tylko o odczyt zadań (`Tasks.Read`) i łączy się tylko
+z `login.microsoftonline.com` i `graph.microsoft.com`. Token dostępu jest w pamięci tylko na
+czas pobierania — nie trafia do notatnika, ustawień ani rejestru zdarzeń, a Brulion nie prosi
+o token odświeżania, więc każdy import to nowe logowanie. Zapamiętane są tylko identyfikator
+aplikacji i urząd. Zgodę cofniesz na koncie Microsoft (konto osobiste:
+[account.live.com/consent/Manage](https://account.live.com/consent/Manage)) albo usuwając
+rejestrację aplikacji.
+
+| Błąd | Co zrobić |
+|---|---|
+| AADSTS7000218 | w rejestracji aplikacji włącz **Zezwalaj na przepływy klienta publicznego** (krok 5) |
+| AADSTS700016 | sprawdź identyfikator; aplikacja tylko dla kont osobistych wymaga urzędu `consumers` |
+| AADSTS50059, AADSTS9002331, AADSTS50020 | rodzaj konta nie pasuje do rejestracji albo urzędu: konto osobiste — `consumers` i rejestracja dla kont osobistych; konto służbowe — `organizations` albo katalog firmy |
+| AADSTS65001 | brak zgody na `Tasks.Read`: dodaj uprawnienie (krok 6); w firmie zgodę może musieć dać administrator |
+| „Brulion nie może czytać Twoich zadań” | brak uprawnienia `Tasks.Read` w rejestracji — dodaj je i zaloguj się ponownie |
+| „Microsoft To Do jest niedostępny dla tego konta” | konto nie ma skrzynki Exchange Online, w której To Do trzyma zadania |
+
+### Bez rejestracji: plik z Graph Explorera
+
+[Graph Explorer](https://developer.microsoft.com/graph/graph-explorer) to strona Microsoftu do
+wysyłania zapytań do Microsoft Graph — nie wymaga własnej rejestracji aplikacji.
+
+1. Otwórz Graph Explorera i zaloguj się (**Sign in**) kontem, na którym są zadania.
+2. **Modify permissions** → przy `Tasks.Read` kliknij **Consent** i zgódź się.
+3. Wpisz zapytanie `GET` `https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks`
+   i kliknij **Run query**.
+4. Skopiuj całą odpowiedź (**Response preview**) do pliku tekstowego z rozszerzeniem `.json`
+   (np. `To Do.json`, kodowanie UTF-8).
+5. W Brulionie: **Importuj notatki → Microsoft To Do → Wybierz pliki…** i wskaż ten plik.
+
+Taki plik nie ma kroków, linków ani plików (Brulion powie, że załączniki zostały w To Do).
+Przy dużych listach Microsoft może oddać tylko część zadań — Brulion ostrzeże, że eksport jest
+niepełny. Wtedy pobierz zadania każdej listy osobno: w odpowiedzi znajdź `id` listy, uruchom
+`GET https://graph.microsoft.com/v1.0/me/todo/lists/<id listy>/tasks`, zapisz odpowiedź jako
+`<nazwa listy>.json` (strona dostanie nazwę pliku) i zaimportuj wszystkie pliki naraz — można też
+spakować je do ZIP-a.
+
+W wersji w przeglądarce logowanie do Microsoft nie działa (Microsoft nie pozwala stronom WWW
+logować się kodem urządzenia) — tam użyj pliku z Graph Explorera.
 
 ## Trilium Notes
 

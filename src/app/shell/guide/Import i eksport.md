@@ -7,7 +7,7 @@ brulion: document
 Widok **Import i eksport** otwierasz z menu **Więcej** (⋮) albo z palety poleceń. Import jest też na stronie startowej pustego notatnika („Importuj notatki”).
 
 ## Import
-Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, pliki Markdown, TXT i HTML oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.
+Obsługiwane źródła: Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do, Joplin, Simplenote, Roam, Trilium, Bear, pliki Markdown, TXT i HTML oraz kalendarze iCalendar. Możesz wskazać pliki, archiwum ZIP albo cały folder.
 
 1. Wybierz źródło i pliki.
 2. Obejrzyj **podgląd**: co powstanie, co zostanie pominięte i dlaczego.
@@ -18,6 +18,20 @@ Importowane strony nie nadpisują istniejących — gdy nazwa się powtarza, now
 Tekst z programów, które nie piszą w Markdownie (HTML, Evernote, Google Keep, bazy Notion, Trilium, kalendarze), zostaje tekstem: znaki, które w Brulionie coś znaczą, dostają ukośnik. Tak samo `$` — ale tylko tam, gdzie dwa dolary utworzyłyby [[Wzory matematyczne|wzór]] (`Cena $10, Netflix 15$` zapisze się jako `Cena \$10, Netflix 15$`); pojedyncze ceny, jak `$5 i $10`, zostają bez zmian.
 
 Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po prostu otworzyć ich folder jako notatnik. Notatki z Obsidiana (nagłówki i akapity) otworzą się jako dokumenty, a z Logseqa (same punkty) jako konspekty. Tag to w Brulionie [[Tagi i właściwości#Tag to link do strony|link do strony]], jak w Logsequ: strony tagów z Logseqa łączą się ze swoimi tagami. W Obsidianie tagi i strony są osobne — tag `#projekt` obok strony „Projekt” zacznie do niej prowadzić.
+
+### Microsoft To Do
+Każda lista zadań z Microsoft To Do staje się stroną z [[Zadania|zadaniami]]: stan, ważność (`⏫`, `🔽`), termin `📅`, przypomnienie `⏰`, powtarzanie `🔁`, kategorie jako tagi, notatka pod zadaniem, kroki jako podpunkty, linki i pliki. Daty są przeliczane na strefę czasową urządzenia. To jednorazowe przeniesienie, nie synchronizacja.
+
+**Zaloguj się w Microsoft** pobiera wszystko samo, ale wymaga własnej, bezpłatnej rejestracji aplikacji w Microsoft Entra (raz):
+
+1. Na entra.microsoft.com: **Rejestracje aplikacji → Nowa rejestracja**, nazwa np. „Brulion”, typ kont: **Tylko osobiste konta Microsoft** (dla outlook.com i hotmail.com) albo konta organizacyjne dla konta służbowego. Adres przekierowania zostaw pusty.
+2. **Uwierzytelnianie → Zezwalaj na przepływy klienta publicznego: Tak** — bez tego logowanie kończy się błędem AADSTS7000218.
+3. **Uprawnienia interfejsu API → Dodaj uprawnienie → Microsoft Graph → Uprawnienia delegowane → `Tasks.Read`**.
+4. Skopiuj **Identyfikator aplikacji (klienta)** i wklej go w Brulionie (**Importuj notatki → Microsoft To Do**). Pod **Więcej** jest urząd: `consumers` (domyślny) dla kont osobistych, `organizations` dla służbowych, `common` dla obu.
+
+Potem **Zaloguj się w Microsoft**: otwórz microsoft.com/devicelogin (także na telefonie), wpisz pokazany kod i zaloguj się. Brulion prosi tylko o odczyt zadań, a token logowania trzyma w pamięci tylko na czas pobierania — nic nie zapisuje.
+
+Bez rejestracji: w Graph Explorerze (developer.microsoft.com/graph/graph-explorer) zaloguj się, zgódź się na `Tasks.Read`, uruchom `GET https://graph.microsoft.com/v1.0/me/todo/lists?$expand=tasks`, zapisz odpowiedź jako plik `.json` i wybierz go przyciskiem **Wybierz pliki…** — bez kroków i plików. W przeglądarce działa tylko ta droga.
 
 ### Skarbiec Obsidiana bez importu
 Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu jako notatnik (*Przełącz notatnik → Otwórz inny notatnik…*) na każdym urządzeniu i zostaw synchronizację Syncthingowi; nie włączaj dla niego dodatkowo Nextclouda. Folderu `.obsidian/` Brulion nie pokazuje i nigdy nie zmienia — czyta z niego tylko ustawienia dziennika i załączników.

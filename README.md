@@ -125,8 +125,9 @@
 * **Zapytania.** Blok ` ```query ` pokazuje na żywo np. wszystkie otwarte zadania z tagiem
   `#praca` na najbliższy tydzień: `status:open tag:praca due:<=+7d sort:due` (klucze także po
   polsku: `stan:otwarte termin:jutro`).
-* **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Joplin,
-  Simplenote, Roam, Trilium, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na
+* **Import i eksport.** Import z Obsidiana, Logseq, Notion, Evernote, Google Keep, Microsoft To Do
+  (zadania: logowanie do Microsoft albo plik z Graph Explorera), Joplin, Simplenote, Roam,
+  Trilium, Bear, plików Markdown/TXT, HTML i kalendarzy iCalendar — także na
   telefonie (*Więcej → Importuj notatki*: pliki, ZIP albo cały folder skarbca, z podglądem przed
   zapisem; [docs/IMPORT.md](docs/IMPORT.md) — m.in. jak wyeksportować notatki z Trilium i co się
   z czym zamienia; [docs/ANDROID.md](docs/ANDROID.md#import-notatek-obsidian-logseq-notion)).
@@ -378,7 +379,8 @@ daily journals and block outliner on top of plain Obsidian-compatible `.md` file
 either an Obsidian-like document or a Logseq-like outline, switchable at any time), with a
 calendar, reminders and real alarms, calculation blocks and spreadsheet-like table formulas,
 live queries, version history, and import/export for Obsidian, Logseq, Notion, Evernote,
-Google Keep, Joplin, Simplenote, Roam, Trilium, Bear, HTML and iCalendar (export also as one
+Google Keep, Microsoft To Do (import of tasks), Joplin, Simplenote, Roam, Trilium, Bear, HTML and
+iCalendar (export also as one
 Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 
 * Runs on **NixOS/Linux** (flake + NixOS module, AppImage), **Android** 9+ (APK; native exact

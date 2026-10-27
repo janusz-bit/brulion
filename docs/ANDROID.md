@@ -202,6 +202,12 @@ Przed zapisem Brulion pokazuje, co zaimportuje (strony, notatki dzienne, załąc
 nazwy, ostrzeżenia), potem postęp i raport z przyciskiem **„Otwórz zaimportowany folder”**
 (domyślnie `Import/<aplikacja>`; notatki dzienne trafiają do dziennika).
 
+**Microsoft To Do** działa na telefonie tak samo jak na komputerze: po **„Zaloguj się
+w Microsoft”** Brulion pokazuje kod — stuknij **„Otwórz microsoft.com/devicelogin”** (albo
+otwórz ten adres na innym urządzeniu), wpisz kod (**„Kopiuj kod”** kopiuje go do schowka), zaloguj
+się i wróć do Brulionu; listy pobiorą się same. Identyfikator aplikacji z własnej rejestracji
+w Microsoft Entra wklejasz raz — szczegóły w [IMPORT.md](IMPORT.md#microsoft-to-do).
+
 Jak to działa: okno systemowe zwraca adresy `content://` — pojedynczy dokument albo **drzewo
 dokumentów** (wybrany folder). Brulion przechodzi drzewo folder po folderze przez
 `DocumentsContract` (`Documents.kt`, jedno zapytanie `ContentResolver` na folder; most JNI

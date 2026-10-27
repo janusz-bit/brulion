@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # QML smoke test of the sync and import/export views (ctest tst_appio_qml): SyncView on every tab
 # (with conflict copies and an unreachable Nextcloud account), a conflict opened in the resolver,
-# ImportExportView with a Logseq graph preset (reading, recognising, the preview) and the export
+# ImportExportView with a Logseq graph preset (reading, recognising, the preview), the Microsoft To
+# Do card with its sign-in and the export
 # tab, the settings' sync and application sections and the event log page — at desktop and phone
 # sizes, headless. Fails when the app
 # does not start or QML reports a warning or error from these files (binding loops, type errors,
@@ -30,6 +31,7 @@ routes=(
   importExport
   "{\"view\":\"importExport\",\"files\":\"$work/graf\"}"
   '{"view":"importExport","importer":"notion"}'
+  '{"view":"importExport","importer":"mstodo"}'
   '{"view":"importExport","tab":"export","scope":"folder","folder":"Projekty"}'
   '{"view":"settings","section":"sync"}'
   '{"view":"settings","section":"app"}'

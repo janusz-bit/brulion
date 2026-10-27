@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Screenshots of the sync center and import/export in the real app: SyncView (overview, Syncthing,
 # Nextcloud with an unreachable server and the history of runs, a run's details, conflicts: a
-# two-way merge, a binary file), ImportExportView (choosing the app, a Logseq graph previewed,
+# two-way merge, a binary file), ImportExportView (choosing the app, the Microsoft To Do sign-in, a Logseq graph previewed,
 # export of a folder), the settings' sync and application sections and the event log page
 # (`sync-stalled`, not in the default set: a server that never answers, the stall warning) —
 # × {desktop 1280×800, phone 412×915 --touch} × {light, dark} into
@@ -52,6 +52,7 @@ declare -A shot_routes=(
   [sync-conflict-list]='{"view":"sync","tab":"conflicts"}'
   [import]='importExport'
   [import-notion]='{"view":"importExport","importer":"notion"}'
+  [import-mstodo]='{"view":"importExport","importer":"mstodo"}'
   [import-preview]="{\"view\":\"importExport\",\"files\":\"$graph\"}"
   [export]='{"view":"importExport","tab":"export","scope":"folder","folder":"Projekty"}'
   [settings-sync]='{"view":"settings","section":"sync"}'
@@ -63,7 +64,7 @@ declare -A shot_routes=(
   [settings-app]='{"view":"settings","section":"app"}'
 )
 all_shots=(sync sync-syncthing sync-nextcloud sync-conflicts sync-conflict-merge sync-conflict-binary
-  sync-conflict-list import import-notion import-preview export settings-sync sync-details sync-details-failed
+  sync-conflict-list import import-notion import-mstodo import-preview export settings-sync sync-details sync-details-failed
   logs logs-sync settings-app)
 if [[ $# -gt 0 ]]; then shots=("$@"); else shots=("${all_shots[@]}"); fi
 
