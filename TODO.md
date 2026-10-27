@@ -23,6 +23,9 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * kształty, strzałki, tekst i zaznaczanie lassem (dziś rysunek z Excalidraw z takimi
     elementami Brulion tylko pokazuje);
   * pliki `*.excalidraw.md` wtyczki Excalidraw dla Obsidiana (LZ-String w Markdownie);
+  * import z Trilium: notatka typu „canvas” jako jeden plik SVG ze sceną Excalidraw (dziś
+    importer zapisuje obok siebie SVG i plik `.excalidraw`);
+  * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
   * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
     dociera do Brulionu.
 * **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu
