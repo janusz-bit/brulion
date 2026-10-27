@@ -12,7 +12,9 @@
 // requests into its network), and only once a session (one the cache dropped since waits for
 // "Pokaż" too, not fetched again on every repaint); turning the setting off cancels the fetches
 // it started. In the browser the cache is in the tab's memory (not IndexedDB): smaller, and gone
-// with the tab.
+// with the tab; the requests are ones a page may send to another site, the browser follows
+// redirects itself (no redirected() to check them), and a failed connection is told as what a
+// browser forbids (CORS, http:// on a https:// page).
 #include "workspace.h"
 
 #include "picturesize.h"
@@ -70,6 +72,7 @@ Workspace::WebPictures *Workspace::webPictures() const
     m_webPictures->fetcher = new webpicture::PictureFetcher(nullptr, m_webPictures);
     if (m_webPictureHostCheck)
         m_webPictures->fetcher->setPrivateHostCheck(m_webPictureHostCheck);
+    m_webPictures->fetcher->setSimpleRequests(!m_webPageScheme.isEmpty());
     WebPictures *web = m_webPictures;
     connect(web->fetcher, &webpicture::PictureFetcher::fetched, self,
             [self, web](const QUrl &url, const QByteArray &data, const QString &format) {
@@ -104,7 +107,19 @@ Workspace::WebPictures *Workspace::webPictures() const
                 QString message;
                 const QString host = url.host();
                 switch (error) {
-                case webpicture::FetchError::Network: message = tr("No connection to %1.").arg(host); break;
+                case webpicture::FetchError::Network:
+                    // A browser tells a page no reason: what it forbids is the likely one.
+                    if (self->m_webPageScheme.isEmpty())
+                        message = tr("No connection to %1.").arg(host);
+                    else if (self->m_webPageScheme == u"https" && url.scheme() == u"http")
+                        message = tr("The browser loads no pictures over http:// into a page opened over https://. "
+                                     "Save the picture in the notebook in the app on a computer or phone.");
+                    else
+                        message = tr("%1 does not let other websites load its pictures (CORS), or there is no "
+                                     "connection. Save the picture in the notebook in the app on a computer or "
+                                     "phone.")
+                                          .arg(host);
+                    break;
                 case webpicture::FetchError::Redirect:
                     message = tr("%1 redirected to an address Brulion does not open.").arg(host);
                     break;
@@ -137,6 +152,13 @@ void Workspace::setWebPictureCacheDir(const QString &dir)
         m_webPictures->dataUrls.clear();
         m_webPictures->dataSizes.clear();
     }
+}
+
+void Workspace::setWebPageScheme(const QString &scheme)
+{
+    m_webPageScheme = scheme.toLower();
+    if (m_webPictures)
+        m_webPictures->fetcher->setSimpleRequests(!m_webPageScheme.isEmpty());
 }
 
 bool Workspace::webPicturesShown() const

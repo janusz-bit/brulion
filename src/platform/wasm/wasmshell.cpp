@@ -26,6 +26,12 @@ EM_JS(void, brulion_shell_indexed, (), {
     if (shell && shell.indexed) shell.indexed();
 });
 
+EM_JS(int, brulion_shell_page_scheme, (), {
+    var location = globalThis["location"];
+    var protocol = location ? String(location.protocol) : "";
+    return protocol === "https:" ? 1 : protocol === "http:" ? 2 : 0;
+});
+
 // The keyboard: window.visualViewport's resize and scroll events report
 // innerHeight - height - offsetTop to Module.brulionViewportEvent (below), 0 for a pinch-zoomed
 // page. iOS scrolls the page to the input element Qt keeps for the keyboard: the page is put back
@@ -106,6 +112,15 @@ void hideShellLoadingScreen()
 void reportIndexReady()
 {
     brulion_shell_indexed();
+}
+
+QString pageScheme()
+{
+    switch (brulion_shell_page_scheme()) {
+    case 1: return QStringLiteral("https");
+    case 2: return QStringLiteral("http");
+    default: return {};
+    }
 }
 
 } // namespace brulion::platform

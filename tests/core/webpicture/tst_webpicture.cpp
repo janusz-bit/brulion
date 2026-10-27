@@ -10,6 +10,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QSignalSpy>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -133,6 +136,7 @@ private Q_SLOTS:
 
     void fetchesPicture();
     void sendsNoCookiesAndFollowsRedirects();
+    void simpleRequestsInTheBrowser();
     void failures_data();
     void failures();
     void refusesOtherSchemes();
@@ -533,6 +537,43 @@ void TestWebPicture::sendsNoCookiesAndFollowsRedirects()
         QCOMPARE(r.headers.value("user-agent"), QByteArray("Mozilla/5.0"));
         QCOMPARE(r.headers.value("accept-language"), QByteArray("*"));
     }
+}
+
+void TestWebPicture::simpleRequestsInTheBrowser()
+{
+    // A web page sends other sites only what needs no CORS preflight: no language, no agent of
+    // its own (the browser sends its own; Qt adds its defaults outside a browser).
+    class RecordingManager : public QNetworkAccessManager {
+    public:
+        QList<QNetworkRequest> requests;
+
+    protected:
+        QNetworkReply *createRequest(Operation op, const QNetworkRequest &request, QIODevice *data) override
+        {
+            requests.append(request);
+            return QNetworkAccessManager::createRequest(op, request, data);
+        }
+    };
+    MiniHttpServer server;
+    server.handler = [](const MiniHttpServer::Request &) {
+        return rawResponse(200, pngBytes(), {{"Content-Type", "image/png"}});
+    };
+    RecordingManager manager;
+    PictureFetcher fetcher(&manager);
+    QSignalSpy fetched(&fetcher, &PictureFetcher::fetched);
+    fetcher.fetch(server.url(u"/łąka.png"_s));
+    QVERIFY(fetched.wait(5000));
+    fetcher.setSimpleRequests(true);
+    fetcher.fetch(server.url(u"/żółw.png"_s));
+    QVERIFY(fetched.wait(5000));
+    QCOMPARE(manager.requests.size(), 2);
+    QVERIFY(manager.requests.at(0).hasRawHeader("Accept-Language"));
+    QVERIFY(manager.requests.at(0).hasRawHeader("User-Agent"));
+    const QNetworkRequest simple = manager.requests.at(1);
+    QVERIFY(simple.rawHeader("Accept").startsWith("image/"));
+    QVERIFY(!simple.hasRawHeader("Accept-Language"));
+    QVERIFY(!simple.hasRawHeader("User-Agent"));
+    QCOMPARE(fetched.at(1).at(2).toString(), u"png"_s);
 }
 
 void TestWebPicture::failures_data()

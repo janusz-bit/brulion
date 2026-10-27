@@ -2,6 +2,8 @@
 
 // WebAssembly only (compiled when EMSCRIPTEN is set, see src/platform/CMakeLists.txt).
 
+#include <QString>
+
 #include <functional>
 
 namespace brulion::platform {
@@ -30,5 +32,9 @@ void reportIndexReady();
 /// for the keyboard; iOS Safari also scrolls the page, which is put back). Called once at once and
 /// on every change, in Qt's event loop. Without visualViewport (old browsers) nothing is reported.
 void watchVisualViewport(std::function<void(double overlap)> callback);
+
+/// The scheme of the page the app runs on: "https", "http", or "" (another one, unknown). A
+/// page opened over https cannot fetch anything over http (mixed content).
+QString pageScheme();
 
 } // namespace brulion::platform

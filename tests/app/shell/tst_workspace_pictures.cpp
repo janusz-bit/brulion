@@ -184,6 +184,8 @@ private Q_SLOTS:
 
     void automaticFetchesLimits();
     void browserDataUrlsFollowTheCache();
+    void browserNetworkErrorsNameTheBrowsersLimits_data();
+    void browserNetworkErrorsNameTheBrowsersLimits();
 };
 
 void TestWorkspacePictures::automaticFetchesLimits()
@@ -293,6 +295,39 @@ void TestWorkspacePictures::browserDataUrlsFollowTheCache()
     QCOMPARE(embedOf(page, 0).value(u"state"_s).toString(), u"ready"_s);
     QVERIFY(embedOf(page, 0).value(u"url"_s).toUrl() != first);
     QCOMPARE(embedOf(page, 0).value(u"width"_s).toInt(), 3);
+}
+
+void TestWorkspacePictures::browserNetworkErrorsNameTheBrowsersLimits_data()
+{
+    QTest::addColumn<QString>("pageScheme");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("the app") << QString() << u"No connection to 127.0.0.1."_s;
+    QTest::newRow("a page over http: CORS") << u"http"_s << u"(CORS)"_s;
+    QTest::newRow("a page over https: mixed content") << u"https"_s << u"over http:// into a page opened over https://"_s;
+}
+
+void TestWorkspacePictures::browserNetworkErrorsNameTheBrowsersLimits()
+{
+    // A browser tells a page no reason for a failed request: Brulion names what it forbids.
+    QFETCH(QString, pageScheme);
+    QFETCH(QString, expected);
+    quint16 port = 0;
+    {
+        QTcpServer closed;
+        QVERIFY(closed.listen(QHostAddress::LocalHost));
+        port = closed.serverPort();
+    }
+    const QString url = u"http://127.0.0.1:%1/%C5%82%C4%85ka.png"_s.arg(port);
+    Workspace ws;
+    ws.setWebPictureCacheDir(m_tmp.filePath(u"cache-cors"_s));
+    ws.setWebPageScheme(pageScheme);
+    QSignalSpy changed(&ws, &Workspace::webPictureChanged);
+    ws.loadWebPicture(url);
+    QTRY_COMPARE(ws.webPicture(url).value(u"state"_s).toString(), u"failed"_s);
+    const QString error = ws.webPicture(url).value(u"error"_s).toString();
+    QVERIFY2(error.contains(expected), qPrintable(error));
+    if (!pageScheme.isEmpty())
+        QVERIFY2(error.contains(u"Save the picture in the notebook in the app"_s), qPrintable(error));
 }
 
 QTEST_MAIN(TestWorkspacePictures)

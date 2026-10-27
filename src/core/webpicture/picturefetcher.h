@@ -64,6 +64,11 @@ public:
     void setMaxBytes(qint64 bytes) { m_maxBytes = bytes; }
     qint64 maxBytes() const { return m_maxBytes; }
     void setTimeout(int ms) { m_timeoutMs = ms; }
+    /// Requests a web page may send to another site without asking it first (CORS "simple"
+    /// requests; the browser build): only the Accept header. The browser sends its own agent and
+    /// language anyway, and another header would need a preflight request that most picture
+    /// hosts do not answer. Off by default.
+    void setSimpleRequests(bool simple) { m_simpleRequests = simple; }
 
 Q_SIGNALS:
     /// `data` is a picture in `format` (sniffFormat()).
@@ -90,6 +95,7 @@ private:
     HostCheck m_isPrivate = isPrivateHost;
     qint64 m_maxBytes = MaxBytes;
     int m_timeoutMs = TimeoutMs;
+    bool m_simpleRequests = false;
 };
 
 /// A short English reason of `error` for the log.
