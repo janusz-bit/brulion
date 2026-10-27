@@ -135,7 +135,8 @@ private:
 };
 
 /// Text of a file: UTF-8 (BOM skipped), UTF-16 with BOM, else 8-bit Windows text — windows-1250
-/// when Polish letters dominate (old Notepad files on Polish Windows), otherwise windows-1252.
+/// when Polish letters dominate (old Notepad files on Polish Windows), otherwise windows-1252
+/// (text::decodeText, text/decode.h: files shared from other apps are decoded the same way).
 QString decodeText(const QByteArray &data);
 
 /// "yyyy-MM-dd HH:mm" wall-clock time of `dateTime` in `zone` (empty for invalid input).

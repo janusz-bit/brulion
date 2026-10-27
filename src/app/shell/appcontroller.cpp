@@ -128,6 +128,7 @@ AppController::AppController(const Options &options, QObject *parent)
     m_startCapture = args.contains(u"--capture"_s);
     m_startToday = args.contains(u"--today"_s);
     m_devPopup = argValue(args, u"--popup"_s);
+    m_devShare = argValue(args, u"--share"_s).toUtf8();
     const QString route = argValue(args, u"--route"_s);
     if (route.startsWith(u'{'))
         m_devRoute = normalizeRoute(QJsonDocument::fromJson(route.toUtf8()).object().toVariantMap());
@@ -205,6 +206,8 @@ void AppController::start()
     if (platform::WasmNotifier::takeLaunchActivation(&activation) && !activation.path.isEmpty())
         openNotification(activation.path, activation.line);
 #endif
+    if (!m_devShare.isEmpty())
+        receiveShareJson(std::exchange(m_devShare, {})); // shown once the notebook is ready
     if (m_devDemo && m_devVault.isEmpty()) {
         openDemoVault();
         return;
@@ -939,6 +942,9 @@ void AppController::finishOpening(const QString &path, bool seedDemo)
     setStatus(u"ready"_s);
     routeChanged();
     applyPendingNotification();
+    if (m_share)
+        // After the shell (which owns the dialog) has been created for "ready".
+        QTimer::singleShot(0, this, [this] { applyPendingShare(); });
     if (m_startCapture) {
         // After the shell (which owns the dialog) has been created for "ready".
         m_startCapture = false;

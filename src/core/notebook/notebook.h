@@ -32,6 +32,11 @@
 //                folder, a lazily built VaultIndex kept up to date, lock() (the device's writers),
 //                edit(path, intent, {expectHash, dryRun, mayCreate, initialText}) — compare-and-swap writes
 //                with retries and History; deviceStatePath(appData, root), contentHash()
+//   share.h      what another app shares ("Udostępnij → Brulion"): sharedContentFromJson (the
+//                platform's JSON), composeSharedText(subject, text, url) ("[Tytuł](url) — tekst"),
+//                checkSharedFile / looksBinary (text types only, SharedFileMaxBytes), decodeSharedBytes,
+//                sharedPageTitle / sharedPageContent (a new page) and sharedFileBlock (one
+//                journal block per file)
 #pragma once
 
 #include "notebook/capture.h"
@@ -41,3 +46,4 @@
 #include "notebook/links.h"
 #include "notebook/pages.h"
 #include "notebook/session.h"
+#include "notebook/share.h"

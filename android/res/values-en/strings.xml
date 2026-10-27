@@ -15,4 +15,8 @@
     <string name="brulion_alarm_label">Alarm · %1$s</string>
     <string name="brulion_pick_reminder_sound">Reminder sound</string>
     <string name="brulion_pick_alarm_sound">Alarm sound</string>
+    <!-- The share sheet's entry for Brulion (ShareActivity) -->
+    <string name="brulion_share_label">Brulion</string>
+    <!-- A share with no text and no file -->
+    <string name="brulion_share_nothing">Nothing to save</string>
 </resources>

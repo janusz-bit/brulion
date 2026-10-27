@@ -287,78 +287,78 @@
         <translation>Ustawienia</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="466"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="477"/>
         <source>Added to today&apos;s journal</source>
         <translation>Dodano do dzisiejszego dziennika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="467"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="478"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="499"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="512"/>
         <source>This is the journals folder: new daily notes will create it again.</source>
         <translation>To folder dziennika: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="500"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="513"/>
         <source>It holds the journals folder “%1”: new daily notes will create it again.</source>
         <translation>Zawiera folder dziennika „%1”: nowe notatki dzienne utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="502"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="515"/>
         <source>This is the templates folder: its templates will no longer be offered.</source>
         <translation>To folder szablonów: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="503"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="516"/>
         <source>It holds the templates folder “%1”: its templates will no longer be offered.</source>
         <translation>Zawiera folder szablonów „%1”: jego szablony nie będą już proponowane.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="505"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="518"/>
         <source>This is the attachments folder: the pictures and files in it go too.</source>
         <translation>To folder załączników: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="506"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="519"/>
         <source>It holds the attachments folder “%1”: the pictures and files in it go too.</source>
         <translation>Zawiera folder załączników „%1”: obrazy i pliki z niego też trafią do kosza.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="508"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="521"/>
         <source>This is the folder for new pages: new pages will create it again.</source>
         <translation>To folder nowych stron: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="509"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="522"/>
         <source>It holds the folder for new pages “%1”: new pages will create it again.</source>
         <translation>Zawiera folder nowych stron „%1”: nowe strony utworzą go od nowa.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="511"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="524"/>
         <source>This is the journal template: new daily notes will start empty.</source>
         <translation>To szablon dziennika: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="512"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="525"/>
         <source>It holds the journal template “%1”: new daily notes will start empty.</source>
         <translation>Zawiera szablon dziennika „%1”: nowe notatki dzienne będą zaczynać się puste.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="517"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="530"/>
         <source>Move to trash?</source>
         <translation>Przenieść do kosza?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="521"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="526"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="534"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="539"/>
         <source>“%1” will be moved to the trash. You can restore it from there.</source>
         <translation>Element „%1” trafi do kosza. Możesz go stamtąd przywrócić.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="523"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="536"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>Folder „%1” i %n strona w nim trafią do kosza.</numerusform>
@@ -367,23 +367,23 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="524"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="537"/>
         <source>You can restore them from there.</source>
         <translation>Możesz je stamtąd przywrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="529"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="542"/>
         <source>Move to trash</source>
         <translation>Przenieś do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="534"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="547"/>
         <source>Moved to trash</source>
         <translation>Przeniesiono do kosza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="197"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="535"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="207"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="548"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
@@ -8383,6 +8383,78 @@
     </message>
 </context>
 <context>
+    <name>ShellShareDialog</name>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="25"/>
+        <source>Save to Brulion</source>
+        <translation>Zapisz w Brulionie</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="26"/>
+        <source>%n file(s) shared</source>
+        <translation>
+            <numerusform>Udostępniono %n plik</numerusform>
+            <numerusform>Udostępniono %n pliki</numerusform>
+            <numerusform>Udostępniono %n plików</numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="28"/>
+        <source>Save</source>
+        <translation>Zapisz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="49"/>
+        <source>Nothing to save.</source>
+        <translation>Nie ma nic do zapisania.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="61"/>
+        <source>Save to</source>
+        <translation>Zapisz w</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="62"/>
+        <source>Today&apos;s journal</source>
+        <translation>Dzisiejszy dziennik</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="63"/>
+        <source>New pages</source>
+        <translation>Nowe strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="63"/>
+        <source>New page</source>
+        <translation>Nowa strona</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="78"/>
+        <source>Page title</source>
+        <translation>Tytuł strony</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="90"/>
+        <source>Shared text</source>
+        <translation>Udostępniony tekst</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="140"/>
+        <source>Each file becomes one block at the end of today&apos;s journal.</source>
+        <translation>Każdy plik to jeden blok na końcu dzisiejszego dziennika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="141"/>
+        <source>Goes to the end of today&apos;s journal.</source>
+        <translation>Trafi na koniec dzisiejszego dziennika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="142"/>
+        <source>New pages go to the notebook&apos;s folder for new pages.</source>
+        <translation>Nowe strony trafiają do folderu notatnika na nowe strony.</translation>
+    </message>
+</context>
+<context>
     <name>ShellSidePanel</name>
     <message>
         <location filename="../src/app/qml/shell/ShellSidePanel.qml" line="26"/>
@@ -14430,91 +14502,183 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::AppController</name>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="250"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="739"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="253"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="742"/>
         <source>The notebook folder %1 is not available.</source>
         <translation>Folder notatnika %1 jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="427"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="430"/>
         <source>The command line asked to open a page of another notebook (%1).</source>
         <translation>Wiersz poleceń chciał otworzyć stronę innego notatnika (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="475"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="483"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="478"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="486"/>
         <source>The note of this reminder no longer exists.</source>
         <translation>Notatka tego przypomnienia już nie istnieje.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="623"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="626"/>
         <source>Could not change the start at sign-in.</source>
         <translation>Nie udało się zmienić uruchamiania po zalogowaniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="705"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="708"/>
         <source>Choose a folder for the notebook.</source>
         <translation>Wybierz folder na notatnik.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="887"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="890"/>
         <source>Could not open the notebook %1: %2</source>
         <translation>Nie udało się otworzyć notatnika %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="903"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="906"/>
         <source>Could not update the documentation: %1</source>
         <translation>Nie udało się zaktualizować dokumentacji: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="907"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="910"/>
         <source>Could not write all sample notes: %1</source>
         <translation>Nie udało się zapisać wszystkich przykładowych notatek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1062"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1068"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1063"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1069"/>
         <source>Reminders work. This is how they will look.</source>
         <translation>Przypomnienia działają. Tak będą wyglądać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1081"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1087"/>
         <source>Could not schedule the notification: %1</source>
         <translation>Nie udało się zaplanować powiadomienia: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1083"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1089"/>
         <source>A test notification will appear in a few seconds.</source>
         <translation>Za kilka sekund pojawi się powiadomienie testowe.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1086"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1092"/>
         <source>The browser does not allow notifications for Brulion.</source>
         <translation>Przeglądarka nie zezwala Brulionowi na powiadomienia.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1093"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1099"/>
         <source>No system tray on this desktop: notifications cannot be shown yet.</source>
         <translation>Na tym pulpicie nie ma zasobnika systemowego: powiadomień nie da się jeszcze pokazać.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1113"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1119"/>
         <source>Quick capture writes into your own notebook. Open or create one first.</source>
         <translation>Szybka notatka trafia do Twojego własnego notatnika. Najpierw go otwórz albo utwórz.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1203"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1209"/>
         <source>Brulion is still running</source>
         <translation>Brulion nadal działa</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/appcontroller.cpp" line="1204"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="1210"/>
         <source>Reminders keep working. To quit, use “Quit” in the tray icon&apos;s menu.</source>
         <translation>Przypomnienia nadal działają. Aby zakończyć, wybierz „Zakończ” w menu ikony w zasobniku.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="75"/>
+        <location filename="../src/app/shell/appshare.cpp" line="190"/>
+        <location filename="../src/app/shell/appshare.cpp" line="220"/>
+        <location filename="../src/app/shell/appshare.cpp" line="234"/>
+        <location filename="../src/app/shell/appshare.cpp" line="248"/>
+        <location filename="../src/app/shell/appshare.cpp" line="270"/>
+        <source>Nothing to save.</source>
+        <translation>Nie ma nic do zapisania.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="114"/>
+        <location filename="../src/app/shell/appshare.cpp" line="176"/>
+        <source>Shared note</source>
+        <translation>Udostępniona notatka</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="129"/>
+        <location filename="../src/app/shell/appshare.cpp" line="137"/>
+        <location filename="../src/app/shell/appshare.cpp" line="194"/>
+        <source>Open or create a notebook first to save what you shared.</source>
+        <translation>Najpierw otwórz albo utwórz notatnik, żeby zapisać to, co udostępniasz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="153"/>
+        <source>Too large to save (over %1 MB)</source>
+        <translation>Za duży do zapisania (ponad %1 MB)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="155"/>
+        <source>Not a text file</source>
+        <translation>To nie jest plik tekstowy</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="157"/>
+        <source>Too many files at once (at most %1)</source>
+        <translation>Za dużo plików naraz (najwyżej %1)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="159"/>
+        <source>Could not be read</source>
+        <translation>Nie udało się odczytać</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="165"/>
+        <source>(no name)</source>
+        <translation>(bez nazwy)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="202"/>
+        <source>None of the shared files can be saved.</source>
+        <translation>Żadnego z udostępnionych plików nie da się zapisać.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="226"/>
+        <source>Could not save to today&apos;s journal.</source>
+        <translation>Nie udało się zapisać w dzisiejszym dzienniku.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="230"/>
+        <source>Saved in today&apos;s journal</source>
+        <translation>Zapisano w dzisiejszym dzienniku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="257"/>
+        <location filename="../src/app/shell/appshare.cpp" line="277"/>
+        <source>A page with this name already exists: %1</source>
+        <translation>Strona o tej nazwie już istnieje: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/appshare.cpp" line="269"/>
+        <source>Could not create the page: %1</source>
+        <translation>Nie udało się utworzyć strony: %1</translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appshare.cpp" line="284"/>
+        <source>Saved %n page(s); not saved, a page with this name exists: %1</source>
+        <translation>
+            <numerusform>Zapisano %n stronę; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
+            <numerusform>Zapisano %n strony; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
+            <numerusform>Zapisano %n stron; pominięto, bo strona o tej nazwie już istnieje: %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appshare.cpp" line="288"/>
+        <source>Saved %n page(s)</source>
+        <translation>
+            <numerusform>Zapisano %n stronę</numerusform>
+            <numerusform>Zapisano %n strony</numerusform>
+            <numerusform>Zapisano %n stron</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -15877,12 +16041,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/app/main.cpp" line="380"/>
+        <location filename="../src/app/main.cpp" line="383"/>
         <source>Saving to the browser&apos;s storage failed: %1</source>
         <translation>Nie udało się zapisać w pamięci przeglądarki: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/main.cpp" line="399"/>
+        <location filename="../src/app/main.cpp" line="402"/>
         <source>This browser does not let Brulion store data, so notes last only until this tab is closed. Allow site data (or leave private mode), or export your notes before closing.</source>
         <translation>Ta przeglądarka nie pozwala Brulionowi przechowywać danych, więc notatki przetrwają tylko do zamknięcia tej karty. Zezwól na dane witryny (albo wyjdź z trybu prywatnego) lub wyeksportuj notatki przed zamknięciem.</translation>
     </message>

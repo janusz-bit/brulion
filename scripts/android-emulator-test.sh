@@ -32,7 +32,12 @@
 # (the bottom sheet, the folder searched for, what the move rewrites) moves it there, and the
 # files say so: the page in its new folder, the query filter naming its old folder rewritten.
 # Screenshots of each step (fl-*.png); the same debuggable APK.
-# --selection and --folders find what they tap by its accessible name (UiAutomator reads Qt's
+# With --share instead: "Udostępnij → Brulion" (docs/ANDROID.md) — text shared to ShareActivity
+# while the app runs (the share dialog, "Zapisz": a block of today's journal, no date parsing), a
+# .md file on shared storage shared through MediaStore after a cold start (a new page, its bytes
+# kept, CRLF too), a picture refused (no dialog: ShareActivity accepts text/* only), and the
+# copies in files/share-in removed. Screenshots of each step (sh-*.png); the same debuggable APK.
+# --selection, --folders and --share find what they tap by its accessible name (UiAutomator reads Qt's
 # accessibility tree; the keyboard's keys from its dump of every window),
 # so they work on other screens and Android versions too (checked: Android 16 and 11, Pixel 6).
 #
@@ -40,6 +45,7 @@
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --share [DEBUG_APP_APK]
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
 #   ANDROID_SDK_ROOT         Android SDK (default ~/.cache/brulion-android-sdk); the emulator and
@@ -79,6 +85,7 @@ VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/
 KEYBOARD=0
 SELECTION=0
 FOLDERS=0
+SHARE=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
   shift
@@ -88,11 +95,14 @@ elif [[ ${1:-} == --selection ]]; then
 elif [[ ${1:-} == --folders ]]; then
   FOLDERS=1
   shift
+elif [[ ${1:-} == --share ]]; then
+  SHARE=1
+  shift
 fi
 APP_APK=${1:-dist-android/brulion-$VERSION-x86_64.apk}
 SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
 [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-((KEYBOARD || SELECTION || FOLDERS)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
+((KEYBOARD || SELECTION || FOLDERS || SHARE)) || [[ -f $SELFTEST_APK ]] || die "$SELFTEST_APK not found"
 
 SDK=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/.cache/brulion-android-sdk}}
 IMAGE=${BRULION_EMULATOR_IMAGE:-system-images;android-36;google_apis;x86_64}
@@ -574,6 +584,85 @@ if ((FOLDERS)); then
   grep -E 'qml|brulion' "$OUT/folders-logcat.txt" | tail -n 40 >"$OUT/folders-summary.txt" || true
   info "Result"
   cat "$OUT/folders-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- "Udostępnij → Brulion" (--share) -----------------------------------------------------------
+
+SHARE_ACTIVITY=$PKG/$PKG.android.ShareActivity
+# No copy left in the share inbox (files/share-in/<stamp>/…) once a share is saved.
+inbox_empty() { [[ -z $(adb shell run-as "$PKG" find files/share-in -type f 2>/dev/null | tr -d '\r') ]]; }
+# A notebook file byte for byte as a local file (exec-out: no line ending conversion).
+vault_same() { adb exec-out run-as "$PKG" cat "\"$VAULT/$1\"" 2>/dev/null | cmp -s - "$2"; } # <file> <local>
+# A file pushed to the shared Download folder, as the MediaStore content:// URI another app shares.
+media_uri() { # <file name>
+  local id
+  id=$(adb shell content query --uri content://media/external/file --projection _id \
+    --where "\"_display_name='$1'\"" 2>/dev/null | sed -nE 's/.*_id=([0-9]+).*/\1/p' | head -n 1)
+  [[ -n $id ]] && echo "content://media/external/file/$id"
+}
+
+if ((SHARE)); then
+  info "Share to Brulion: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  # Reading a file another app put on shared storage through MediaStore.
+  adb shell appops set "$PKG" MANAGE_EXTERNAL_STORAGE allow 2>/dev/null || true
+  today_journal="journals/$(adb shell date +%Y-%m-%d | tr -d '\r').md"
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" running
+
+  # 1. Text while the app runs: the dialog, today's journal by default, no date parsing.
+  adb shell am start -n "$SHARE_ACTIVITY" -a android.intent.action.SEND -t text/plain \
+    --es android.intent.extra.SUBJECT "'Artykuł na jutro'" \
+    --es android.intent.extra.TEXT "'Zażółć gęślą jaźń https://example.org/łódź'" >/dev/null
+  check "the share dialog opens" wait_for 20 ui_has 'Zapisz w Brulionie'
+  app_shot sh-1-text-dialog
+  check "Zapisz saves it" ui_tap 'Zapisz' last
+  check "a block of today's journal: the link with the title, no reminder" \
+    wait_for 10 vault_grep "$today_journal" '^- \[Artykuł na jutro\]\(https://example.org/łódź\) — Zażółć gęślą jaźń$'
+  app_shot sh-2-text-saved
+
+  # 2. A .md file after a cold start: a new page by default, its bytes kept.
+  printf '# Lista zakupów\r\n\r\n- [ ] mleko\r\n- [ ] chleb ąę\r\n' >"$OUT/Lista zakupów.md"
+  adb push "$OUT/Lista zakupów.md" "/sdcard/Download/Lista zakupów.md" >/dev/null
+  adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null 2>&1 ||
+    adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+      -d "'file:///sdcard/Download/Lista zakupów.md'" >/dev/null
+  sleep 3
+  uri=$(media_uri 'Lista zakupów.md' || true)
+  echo "    the shared file: ${uri:-not in MediaStore}"
+  check "MediaStore lists the pushed file" test -n "$uri"
+  adb shell am force-stop "$PKG"
+  adb logcat -c
+  adb shell am start -n "$SHARE_ACTIVITY" -a android.intent.action.SEND -t text/markdown \
+    --eu android.intent.extra.STREAM "$uri" --grant-read-uri-permission >/dev/null
+  check "a cold start opens the share dialog" wait_for 40 ui_has 'Zapisz w Brulionie'
+  check "the file is listed" ui_has 'Lista zakupów.md'
+  app_shot sh-3-file-dialog
+  check "Zapisz saves it" ui_tap 'Zapisz' last
+  check "a new page named after the file" wait_for 10 vault_has 'Lista zakupów.md'
+  check "its bytes kept (CRLF too)" vault_same 'Lista zakupów.md' "$OUT/Lista zakupów.md"
+  check "the copies in files/share-in are gone" inbox_empty
+  app_shot sh-4-file-saved
+
+  # 3. A picture: not offered (text/* only), and refused when sent to the activity anyway.
+  adb shell am start -n "$SHARE_ACTIVITY" -a android.intent.action.SEND -t image/png \
+    --es android.intent.extra.TEXT "''" >/dev/null 2>&1 || true
+  sleep 3
+  check "nothing to save: no dialog" ui_lacks 'Zapisz w Brulionie'
+  check "the share sheet offers Brulion for text" bash -c \
+    "'$SDK/platform-tools/adb' -s $SERIAL shell cmd package query-activities -a android.intent.action.SEND -t text/plain | grep -q ShareActivity"
+  check "but not for pictures" bash -c \
+    "! '$SDK/platform-tools/adb' -s $SERIAL shell cmd package query-activities -a android.intent.action.SEND -t image/png | grep -q ShareActivity"
+
+  adb logcat -d >"$OUT/share-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/share-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/share-logcat.txt'"
+  info "Result"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

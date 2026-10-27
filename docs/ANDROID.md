@@ -6,7 +6,9 @@ z natywną częścią w Kotlinie (`android/src/io/github/januszbit/brulion/andro
 * daje dostęp do folderu z notatkami na pamięci współdzielonej („Dostęp do wszystkich plików”),
 * planuje przypomnienia i alarmy w systemie (`AlarmManager`) — działają przy zamkniętej
   aplikacji i po restarcie telefonu,
-* otwiera właściwą notatkę po stuknięciu w powiadomienie.
+* otwiera właściwą notatkę po stuknięciu w powiadomienie,
+* przyjmuje tekst i pliki `.md`/`.txt` z menu **Udostępnij** innych aplikacji
+  ([Udostępnij → Brulion](#udostępnij--brulion)).
 
 C++ rozmawia z nią przez JNI (`src/platform/android/androidbridge.{h,cpp}`), patrz
 [Most JNI](#most-jni-c--kotlin).
@@ -217,9 +219,63 @@ albo wolny dostawca (Dysk Google) nie zawiesza aplikacji. Gdy wywołanie JNI zaw
 korzysta z obsługi adresów `content://` w samym Qt (`QDir`/`QFileInfo`; wolniejsze — wiele zapytań
 na każdy plik). Pliki istniejące tylko w sieci (np. dokumenty Google) są pomijane z ostrzeżeniem.
 
-Do zrobienia: **„Udostępnij → Brulion”** (pliku `.md`/`.txt` z innej aplikacji do dziennika albo
-nowej strony) — wymaga filtra `ACTION_SEND` w manifeście i obsługi intencji w `BrulionActivity`,
-której jeszcze nie ma.
+## Udostępnij → Brulion
+
+W menu **Udostępnij** innej aplikacji (przeglądarka, czytnik, menedżer plików, poczta) jest
+**Brulion**. Przyjmuje:
+
+* **tekst i odnośniki** — np. stronę z przeglądarki: tytuł strony i jej adres stają się
+  `[Tytuł](adres)`, a reszta tekstu idzie po „ — ” („Wideo” + „Zobacz to https://yt.be/abc” →
+  `[Wideo](https://yt.be/abc) — Zobacz to`);
+* **pliki tekstowe** `.md`, `.markdown`, `.txt` (i każdy typ `text/*`), także **kilka naraz** —
+  do 2 MB każdy i do 20 w jednym udostępnieniu. Kodowanie rozpoznaje sam: UTF-8 (z BOM i bez),
+  UTF-16 z BOM, a stare pliki z Notatnika — windows-1250/1252, jak przy imporcie.
+
+Brulion nie zapisuje niczego od razu: otwiera okno **„Zapisz w Brulionie”** z wyborem
+**„Dzisiejszy dziennik”** albo **„Nowa strona”**:
+
+* tekst domyślnie idzie do dziennika (jako jeden blok na końcu dzisiejszej notatki) — można go
+  przed zapisaniem poprawić. **Daty nie są rozpoznawane** (jak w szybkiej notatce): „jutro”
+  w tytule artykułu nie tworzy przypomnienia; datę można dopisać ręcznie;
+* jeden plik domyślnie staje się **nową stroną** — tytuł z nazwy pliku („Lista zakupów.md” →
+  „Lista zakupów”, można go zmienić), treść **dokładnie taka jak w pliku** (końce linii też);
+  zajęta nazwa dostaje „ 2”. Strona różniąca się od istniejącej tylko wielkością liter („lista
+  zakupów” obok „Lista zakupów”) **nie nadpisuje** jej: okno mówi, że taka strona już jest,
+  i można zmienić tytuł albo wybrać dziennik;
+* kilka plików domyślnie idzie do dziennika: **każdy plik to jeden blok** — pogrubiony tytuł,
+  a pod nim treść pliku (wcięta, więc lista z pliku zostaje listą zagnieżdżoną; frontmatter
+  pomijany). Jako „Nowe strony” — strona na plik (bliźniak różniący się wielkością liter jest
+  pomijany z komunikatem);
+* nowe strony trafiają do folderu na nowe strony notatnika (ustawienia notatnika);
+* pliki, których nie da się zapisać (obrazek, za duży, nieczytelny, z bajtami zerowymi), są na
+  liście z powodem. Tekst dołączony do plików (np. temat wiadomości) jest pomijany, gdy choć
+  jeden plik da się zapisać; gdy żadnego, zapisywany jest tekst (link udostępniony razem
+  z obrazkiem albo z załącznikiem, którego nie da się odczytać, to nadal ten link). Miniatura
+  podglądu, którą aplikacja dołącza do udostępnianego tekstu tylko w `ClipData` (bez
+  `EXTRA_STREAM`), w ogóle nie trafia na listę.
+
+„Anuluj” niczego nie zapisuje. Gdy Brulion dopiero otwiera notatnik, okno pojawia się, gdy
+notatnik będzie gotowy; gdy otwarta jest **dokumentacja**, Brulion najpierw wraca do Twojego
+notatnika (udostępnione notatki nigdy nie trafiają do dokumentacji); bez żadnego notatnika
+prosi o otwarcie albo utworzenie notatnika i pokazuje okno potem.
+
+Jak to działa: osobna, eksportowana aktywność **`ShareActivity`** (filtry `ACTION_SEND`
+i `ACTION_SEND_MULTIPLE` dla `text/*`; bez własnego interfejsu, poza „Ostatnimi”, z własnym
+zadaniem — system uruchamia ją w zadaniu aplikacji wysyłającej, gdzie druga aktywność Qt żyć nie
+może). W wątku w tle kopiuje udostępnione pliki do `files/share-in/<czas>-<n>/<n>/<nazwa>`
+(uprawnienie do odczytu od nadawcy kończy się razem z tą aktywnością), odczytuje `EXTRA_SUBJECT`,
+`EXTRA_TEXT`, `EXTRA_STREAM` i `ClipData`, a potem przekazuje JSON udostępnienia
+(`{subject, text, dir, files: [{path, name, mime, size, error}]}`) do C++ **wewnątrz procesu**
+(`BrulionAndroid.deliverShare` → natywna `nativeShared` albo `takeShare` przy zimnym starcie —
+jak stuknięcie w powiadomienie) i wyciąga `BrulionActivity` na wierzch. Udostępnienie nie jedzie
+jako dodatek intencji do `BrulionActivity`: ta jest eksportowana (ikona w launcherze) i każda
+aplikacja mogłaby taki dodatek podrobić. Wszystko od nadawcy jest niezaufane: czytane są tylko
+adresy `content://` innych aplikacji (nie `file://` ani dostawca samego Brulionu — inaczej nadawca
+mógłby kazać Brulionowi przeczytać jego prywatne pliki), dodatki odczytywane z obsługą wyjątków,
+nazwy kopii oczyszczone (`/`, `..`, znaki sterujące, długość). C++ (`AppController::receiveShare`,
+`src/app/shell/appshare.cpp`; czyste funkcje w `src/core/notebook/share.h`) czyta kopie od razu,
+po zapisaniu lub anulowaniu usuwa folder kopii — tylko wewnątrz `files/share-in/` — a resztki
+starsze niż doba usuwa `ShareActivity` przy następnym udostępnieniu.
 
 ## Eksport: „Zapisz w Pobranych”
 
@@ -725,9 +781,9 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 
 | Ścieżka | Zawartość |
 |---|---|
-| `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, ikony |
+| `android/AndroidManifest.xml` | manifest na bazie szablonu Qt 6.11.2 (`androiddeployqt` wypełnia znaczniki `%%INSERT_…%%`: pakiet, wersję, nazwę, bibliotekę i uprawnienia modułów Qt): uprawnienia, `BrulionActivity`, odbiorniki, `AlarmActivity`, `ShareActivity` (filtry `ACTION_SEND`/`ACTION_SEND_MULTIPLE` dla `text/*`), ikony |
 | `android/res/` | teksty (`values` — polski, domyślny; `values-en`), ikona powiadomień `ic_stat_brulion`, ikony aplikacji (`mipmap-*` z logo, adaptacyjna `mipmap-anydpi` z tłem `#283045` i warstwą monochromatyczną), motyw ekranu alarmu |
-| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu) |
+| `android/src/io/github/januszbit/brulion/android/` | Kotlin: `BrulionAndroid` (fasada JNI), `BrulionActivity` (`QtActivity` + stuknięcia/uprawnienia/wybór dzwonka), `ImeInsets` (klawiatura ekranowa: ile widoku Qt zakrywa), `AlarmScheduler` + `WallClock`, `Reminder` + `ReminderStore`, `ReminderNotifier`, `ReminderSounds` (dźwięki: `SoundChoice`, wersje kanałów `SoundChannel`, `SoundStore`, próbka, okno wyboru dzwonka), `RingTimeout`, `Receivers` (fire, przyciski, boot/zmiana czasu), `AlarmActivity`, `Documents` (wybrane dokumenty i drzewa dokumentów do importu), `ShareActivity` + `ShareIntent` („Udostępnij → Brulion”: odbiór, kopie w `files/share-in/`, JSON dla C++) |
 | `android/tests/` | testy jednostkowe Kotlina (JVM) + skrypt init Gradle, który je dołącza |
 | `android/lint.xml` | konfiguracja Android lint (wyjątki dla `res/values/libs.xml` generowanego przez Qt) |
 | `android/settings.gradle`, `android/proguard-rules.pro` | R8 w buildach release i jego reguły (klasy wołane przez JNI) — [Rozmiar APK](#rozmiar-apk) |
@@ -736,7 +792,7 @@ klika, przesuwa i pisze, a `adb exec-out screencap -p > ekran.png` robi zrzut ek
 | `src/platform/android/androidbridge.{h,cpp}` | C++: `brulion::platform::AndroidBridge` (kompilowany tylko gdy `ANDROID`) |
 | `src/platform/android/selftest/` | `brulion_android_selftest` — APK testujący most na urządzeniu/emulatorze (tylko z `-DBRULION_ANDROID_SELFTEST=ON`) |
 | `scripts/android-build.sh`, `scripts/android-new-keystore.sh` | budowanie + podpis, klucz wydań |
-| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem |
+| `scripts/android-emulator-test.sh` | test end-to-end na emulatorze (Android 16, x86_64); `--keyboard`: pasek edycji na klawiaturze; `--selection`: zaznaczanie i kopiowanie palcem; `--folders`: foldery, odnośniki do bloków i tagi palcem; `--share`: „Udostępnij → Brulion” |
 | `nix/android.nix`, `nix/android/` | APK z flake'a: derywacja, Qt for Android (`qt.nix`), podpisywanie (`sign.nix`), locki (`*.json`) i `update-locks.sh` |
 
 `android/` to `QT_ANDROID_PACKAGE_SOURCE_DIR`: `androiddeployqt` kopiuje go na szablon Qt
@@ -763,6 +819,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool canUseFullScreenIntent()` / `void requestFullScreenIntent()` | `canUseFullScreenIntent(Context)` / `requestFullScreenIntent(Context)` |
 | `ScheduleResult scheduleReminders(const QJsonArray &)` | `scheduleReminders(Context, String): String` — `{"scheduled":n,"exact":b}` albo `{"error":…}` |
 | `Activation takeActivation()` | `takeActivation(Context): String` — `{"path":…,"line":n}` albo `{}` |
+| `QByteArray takeShare()` | `takeShare(Context): String` — JSON udostępnienia (`notebook/share.h`) albo `{}` |
 | `static DocumentsResult documentInfo(const QString &uri)` | `documentInfo(Context, String): String` — `{uri, name, dir, size, virtual}` albo `{"error":…}` |
 | `static DocumentsResult listDocuments(const QString &folderUri)` | `listDocuments(Context, String): String` — `{"documents":[…]}` albo `{"error":…}` |
 | `QJsonObject setReminderSounds(const QJsonObject &)` | `setReminderSounds(Context, String): String` — `{"reminderChannel", "alarmChannel"}` albo `{"error":…}` |
@@ -770,6 +827,7 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
 | `bool previewSound(const QJsonObject &)` | `previewSound(Context, String): Boolean` — próbka ~3 s |
 | `void openSoundSettings(int kind)` | `openSoundSettings(Context, Int)` — `ACTION_CHANNEL_NOTIFICATION_SETTINGS` |
 | sygnał `activated(QString path, int line)` | natywna `nativeActivated(String, Int)` |
+| sygnał `shared(QByteArray json)` | natywna `nativeShared(String)` (z `ShareActivity` przez `deliverShare`) |
 | sygnał `permissionsChanged()` | natywna `nativePermissionsChanged()` + powrót aplikacji na pierwszy plan |
 | sygnał `soundPicked(int kind, QJsonObject choice)` | natywna `nativeSoundPicked(Int, String)` (z `BrulionActivity.onActivityResult`) |
 | sygnał `imeChanged(int overlap, bool shown, bool animating)` / `void requestImeState()` | natywna `nativeImeChanged(Int, Boolean, Boolean)` (z `ImeInsets`, piksele fizyczne, każda klatka wysuwania na Androidzie 11+) / `requestImeState()` — raport jeszcze raz |
@@ -806,6 +864,11 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
     jeszcze raz sprawdza `takeActivation()`. Dostęp do celu chroni blokada po stronie Kotlina,
     więc żadne stuknięcie nie ginie ani nie jest dostarczone dwa razy; intencje odtworzone
     z „Ostatnich” są pomijane.
+* **Udostępnienie** z innej aplikacji idzie tą samą drogą: `ShareActivity` woła
+  `BrulionAndroid.deliverShare` (ten sam proces) — gdy C++ słucha, `nativeShared` → sygnał
+  `shared` → `AppController::receiveShareJson`; inaczej JSON czeka na `takeShare()` (konstruktor
+  `AndroidBridge` i każdy powrót na pierwszy plan). Nowsze udostępnienie zastępuje
+  nieodebrane.
 * `nativeActivated` jest wołana w głównym wątku Androida; C++ tylko kolejkuje emisję sygnału.
   Destruktor `AndroidBridge` woła `detach()` (czeka na blokadę), dopiero potem zeruje wskaźnik.
 
@@ -815,7 +878,9 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   dzwonienia, JSON przypomnień, dźwięki — wybór z C++, odpowiedź okna wyboru dzwonka, wersje
   kanałów i usuwanie starych — z polskimi znakami; ile widoku zakrywa klawiatura — okno
   edge-to-edge, zmniejszone, podzielony ekran, klatki wysuwania — i ile z pasa gestów systemu
-  wchodzi na widok Qt: `ImeInsetsTest`):
+  wchodzi na widok Qt: `ImeInsetsTest`; „Udostępnij → Brulion” — które pliki są tekstem, nazwy
+  kopii z `..`, `/`, polskimi znakami i emoji, wiek folderów `share-in`, pomijane miniatury
+  podglądu, JSON dla C++: `ShareIntentTest`):
   `BRULION_ANDROID_UNIT_TESTS=1 scripts/android-build.sh` (uruchamia
   `./gradlew --init-script android/tests/unit-tests.gradle testDebugUnitTest` w wygenerowanym
   projekcie Gradle).
@@ -880,6 +945,31 @@ wywołuje `AndroidBridge`, linker pomija go w `libbrulion_<abi>.so`.
   wyłączone (`typedText`, docs/UI.md „On-screen keyboard”). Zostaje (niepoprawione): gdy menu
   bloku otwiera się z „Więcej”, klawiatura się chowa (menu bierze fokus), pasek edycji zjeżdża
   na dół, a menu zostaje tam, gdzie je ustawiono nad klawiaturą — z przerwą nad paskiem.
+* „Udostępnij → Brulion” (ten sam APK debugowalny):
+  ```sh
+  scripts/android-emulator-test.sh --share
+  ```
+  Przy działającej aplikacji (przykładowy notatnik) `am start` wysyła tekst do `ShareActivity`
+  (`EXTRA_SUBJECT` „Artykuł na jutro”, `EXTRA_TEXT` z polskimi znakami i adresem): okno „Zapisz
+  w Brulionie”, „Zapisz” — blok `[Artykuł na jutro](…) — …` w dzisiejszym dzienniku, bez
+  przypomnienia. Potem plik `Lista zakupów.md` (CRLF) wgrany do `Download`, znaleziony w
+  `MediaStore` i udostępniony jako `content://media/…` po zimnym starcie: okno z plikiem, „Zapisz”
+  — nowa strona bajt w bajt, folder kopii usunięty. Na koniec obrazek: system nie proponuje
+  Brulionu (`cmd package query-activities`), a wysłany wprost nie otwiera okna. Zrzuty
+  `sh-*.png`. **Jeszcze nieuruchomiony** (dodany 2026-10-27 bez hosta z KVM). Ręcznie na telefonie
+  (APK z GitHub Actions `android.yml`):
+  1. Chrome → strona → Udostępnij → Brulion: okno z `[Tytuł](adres)`, „Zapisz” → blok w
+     dzisiejszym dzienniku, nic więcej (bez ⏰ nawet przy „jutro” w tytule);
+  2. Pliki → `.md` z polskimi znakami → Udostępnij → Brulion przy zamkniętej aplikacji (zimny
+     start): okno „Nowa strona” z tytułem z nazwy pliku; strona ma treść pliku bez zmian;
+  3. ten sam plik jeszcze raz → strona „… 2”; tytuł zmieniony na tę samą nazwę innymi literami
+     („LISTA …”) → okno mówi, że strona już jest, nic nie nadpisane;
+  4. trzy pliki naraz (zaznaczone w menedżerze plików, w tym obrazek `.jpg`) → obrazek nie dostaje
+     opcji Brulionu albo jest na liście jako „To nie jest plik tekstowy”; „Dzisiejszy dziennik” →
+     po jednym bloku na plik;
+  5. udostępnienie przy otwartej dokumentacji → Brulion wraca do Twojego notatnika i tam
+     pokazuje okno; „Anuluj” → nic nie zapisane, `adb shell run-as io.github.januszbit.brulion
+     ls files/share-in` pusty (debuggable APK).
 * Klawiatura ekranowa na emulatorze (APK debugowalny — tylko takiemu Qt przekazuje argumenty
   i zmienne środowiska z intencji):
 

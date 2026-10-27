@@ -326,6 +326,9 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_ANDROID
         QObject::connect(androidBridge, &brulion::platform::AndroidBridge::activated, controller.get(),
                          &AppController::openNotification);
+        // "Udostępnij → Brulion" (ShareActivity.kt): the share dialog once a notebook is ready.
+        QObject::connect(androidBridge, &brulion::platform::AndroidBridge::shared, controller.get(),
+                         [ctl = controller.get()](const QByteArray &json) { ctl->receiveShareJson(json); });
 #endif
     };
     const auto startUi = [&] {

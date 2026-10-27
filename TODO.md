@@ -31,11 +31,13 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu
   oznacza zadanie z przypomnieniem jako zrobione (`[x]` z datą ✅, jak zmiana statusu w edytorze),
   bez otwierania notatki; na Linuksie, Androidzie i Windows.
+* **Udostępnianie do Brulionu poza Androidem** — w wersji w przeglądarce cel udostępniania PWA
+  (Web Share Target, jak w poprzedniej aplikacji: `archive/web-v1`), na komputerze „Otwórz
+  w Brulionie” dla plików `.md`/`.txt` (wpis `.desktop` z `MimeType`, skojarzenie plików
+  w Windows) — to samo okno co „Udostępnij → Brulion” na Androidzie (docs/ANDROID.md).
 
 ## Android i telefon
 
-* **„Udostępnij → Brulion”** — plik `.md`/`.txt` albo tekst z innej aplikacji trafia do
-  dziennika lub na nową stronę (docs/ANDROID.md).
 * **Widgety**:
   * z zadaniami: podgląd listy i szybkie dodawanie bez wchodzenia do aplikacji (wzór: widget To Do
     3×2 „My Day”);

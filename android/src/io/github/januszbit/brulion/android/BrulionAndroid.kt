@@ -38,6 +38,7 @@ import java.lang.ref.WeakReference
  *   right after [attach];
  * * app running — `onNewIntent` calls the native method [nativeActivated], which C++ registered
  *   before calling [attach]; it emits `AndroidBridge::activated` on Qt's thread.
+ * Shares from other apps ([ShareActivity]) take the same two ways: [takeShare] and [nativeShared].
  */
 object BrulionAndroid {
   private const val TAG = "BrulionAndroid"
@@ -58,6 +59,9 @@ object BrulionAndroid {
   /** Notification tap not delivered to C++ yet (guarded by [lock]). */
   private var pendingActivation: JSONObject? = null
 
+  /** A share ([ShareActivity]) not delivered to C++ yet, as JSON (guarded by [lock]). */
+  private var pendingShare: String? = null
+
   /** C++ registered the native methods and listens (guarded by [lock]). */
   private var nativeAttached = false
 
@@ -71,6 +75,12 @@ object BrulionAndroid {
 
   /** A notification of the note [path] (reminder on [line]) was tapped while Qt runs. */
   @JvmStatic external fun nativeActivated(path: String, line: Int)
+
+  /**
+   * Another app shared text or files ([ShareActivity]) while Qt runs: [json] as [takeShare] gives
+   * it (`src/core/notebook/share.h`).
+   */
+  @JvmStatic external fun nativeShared(json: String)
 
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
@@ -283,6 +293,39 @@ object BrulionAndroid {
       pendingActivation = null
       (activation ?: JSONObject()).toString()
     }
+
+  /**
+   * The share of another app not delivered yet (cold start: [ShareActivity] started the process
+   * before Qt), as JSON, or `{}`. Forgets it: each share is handed out once.
+   */
+  @JvmStatic
+  @Suppress("UNUSED_PARAMETER") // kept for a stable JNI signature
+  fun takeShare(context: Context): String =
+    synchronized(lock) {
+      val share = pendingShare
+      pendingShare = null
+      share ?: "{}"
+    }
+
+  /**
+   * Hands a share to C++ when it listens, else keeps it for [takeShare] (a newer share replaces
+   * one not taken yet). Called by [ShareActivity] in this process — never from an intent extra,
+   * which any app could send to the exported [BrulionActivity].
+   */
+  internal fun deliverShare(json: String) {
+    synchronized(lock) {
+      if (nativeAttached) {
+        try {
+          nativeShared(json)
+          pendingShare = null
+          return
+        } catch (e: UnsatisfiedLinkError) {
+          Log.w(TAG, "native share callback not registered", e)
+        }
+      }
+      pendingShare = json
+    }
+  }
 
   // -----------------------------------------------------------------------------------------
   // Picked documents (imports): any thread — C++ lists picked folders on a worker thread

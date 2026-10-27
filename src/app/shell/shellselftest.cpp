@@ -2835,6 +2835,84 @@ QQuickItem *toolbarSlotOf(QQuickWindow *window, QQuickItem *editor)
     return nullptr;
 }
 
+/// "Udostępnij → Brulion" (AppController::receiveShare, ShellShareDialog): shared text opens the
+/// dialog, "Zapisz" (a real tap / click) writes one block at the end of today's journal — no
+/// reminder from "jutro" —, a shared .md file is offered as a new page titled after the file and
+/// saved byte for byte, its copy removed; Escape drops a share and writes nothing.
+void checkShare(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    QObject *dialog = window->findChild<QObject *>(u"shellShare"_s);
+    if (!dialog) {
+        check(false, "the share dialog exists");
+        return;
+    }
+    Workspace *ws = app->workspace();
+    const QString today = ws->journalPath(app->today(0));
+    const QString journal = ws->readFile(today);
+    const QString saveText = QCoreApplication::translate("ShellShareDialog", "Save");
+    const auto save = [&] {
+        // The dialog's own "Zapisz" (its footer): a view behind it may have a button of that name.
+        auto *footer = qvariant_cast<QQuickItem *>(dialog->property("footer"));
+        QQuickItem *button = !footer ? nullptr : findShown(footer, [&](QQuickItem *item) {
+            return isA(item, "BButton") && item->property("text").toString() == saveText;
+        });
+        if (!button || !button->isEnabled())
+            return false;
+        tapOrClick(window, button->mapToScene(QPointF(button->width() / 2, button->height() / 2)), touch);
+        return true;
+    };
+    const auto opened = [&] { return waitFor([&] { return dialog->property("opened").toBool(); }); };
+    const auto closed = [&] { return waitFor([&] { return !dialog->property("visible").toBool(); }); };
+
+    // Text (a browser's page): the journal, as one block, without date parsing.
+    app->receiveShare({{u"subject"_s, u"Przepis na żurek jutro"_s}, {u"text"_s, u"https://kuchnia.pl/żurek"_s}});
+    check(opened(), "a share opens the share dialog");
+    check(save() && closed(), "“Zapisz” saves the shared text and closes the dialog");
+    const bool block = waitFor(
+            [&] { return ws->readFile(today).endsWith(u"- [Przepis na żurek jutro](https://kuchnia.pl/żurek)\n"_s); });
+    if (!block)
+        std::fprintf(stderr, "selftest: today's journal (%s) ends with: %s\n", qPrintable(today),
+                     qPrintable(ws->readFile(today).right(200)));
+    // (The sample journal has reminders of its own: the block's line itself, exactly, has none.)
+    check(block, "the text is a block of today's journal, no reminder");
+    if (ws->readFile(today) != journal)
+        ws->writeFile(today, journal);
+
+    // A .md file: a new page named after it, its bytes kept, its copy removed.
+    const QString dir = app->shareInboxPath() + u"/1792000000000-1"_s;
+    const QByteArray bytes = "# Łódź\r\n\r\n- [ ] dworzec\r\n";
+    QDir().mkpath(dir + u"/0"_s);
+    QFile file(dir + u"/0/Łódź.md"_s);
+    const bool written = file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+    file.close();
+    app->receiveShare(
+            {{u"dir"_s, dir},
+             {u"files"_s, QVariantList{QVariantMap{{u"path"_s, file.fileName()}, {u"name"_s, u"Łódź.md"_s}}}}});
+    check(written && opened(), "a shared file opens the share dialog");
+    QQuickItem *title = shownNamed(window->contentItem(), u"shareTitle"_s);
+    check(title && title->property("text").toString() == u"Łódź"_s, "a new page titled after the file is offered");
+    check(save() && closed(), "“Zapisz” saves the page");
+    const QString page = app->currentRoute().value(u"path"_s).toString();
+    check(page.endsWith(u"Łódź.md"_s), "the new page opens");
+    QFile saved(QDir(ws->rootPath()).filePath(page));
+    check(saved.open(QIODevice::ReadOnly) && saved.readAll() == bytes, "its bytes are the file's (CRLF too)");
+    saved.close();
+    check(!QFileInfo::exists(dir), "the shared file's copy is removed");
+    if (page.endsWith(u"Łódź.md"_s))
+        ws->deletePage(page);
+
+    // Escape drops a share: nothing written.
+    app->receiveShare({{u"text"_s, u"Nie zapisuj mnie"_s}});
+    check(opened(), "another share opens the dialog");
+    sendKey(window, Qt::Key_Escape);
+    check(closed() && app->pendingShare().isEmpty() && !ws->readFile(today).contains(u"Nie zapisuj mnie"_s),
+          "Escape drops the share and writes nothing");
+    app->goHome();
+    if (QQuickItem *toasts = findShown(window->contentItem(), [](QQuickItem *item) { return isA(item, "BToastHost"); }))
+        QMetaObject::invokeMethod(toasts, "clear");
+}
+
 /// 5f. The on-screen keyboard (phones; a simulated one, KeyboardInsets.simulated): the bottom
 ///     navigation makes way while it is up, the view ends at its top, toasts and a bottom sheet
 ///     (quick capture) sit above it; the editing toolbar docked after the system hid the keyboard
@@ -3333,6 +3411,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
     //     All pages as a folder browser.
     checkFolders(window, app, check);
     closeMenus(window);
+    // 3f. "Udostępnij → Brulion": the share dialog, to the journal and to a new page.
+    checkShare(window, app, check);
     if (drawer->property("visible").toBool()) {
         QMetaObject::invokeMethod(drawer, "close");
         waitFor([&] { return !isOpen(drawer); });

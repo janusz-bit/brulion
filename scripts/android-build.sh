@@ -395,12 +395,13 @@ for permission in MANAGE_EXTERNAL_STORAGE POST_NOTIFICATIONS SCHEDULE_EXACT_ALAR
 done
 echo "permissions: $(grep -c '^uses-permission:' <<<"$badging") (all required present)"
 manifest=$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$apk")
-for component in BrulionActivity AlarmActivity ReminderReceiver ActionReceiver RingTimeoutReceiver BootReceiver; do
+for component in BrulionActivity AlarmActivity ShareActivity ReminderReceiver ActionReceiver RingTimeoutReceiver BootReceiver; do
   grep -q "io.github.januszbit.brulion.android.$component\"" <<<"$manifest" ||
     die "$component missing from the merged manifest"
 done
 dex_classes=$(unzip -p "$apk" 'classes*.dex' | grep -a -o 'Lio/github/januszbit/brulion/android/[A-Za-z]*;' | sort -u)
-for class in BrulionAndroid BrulionActivity ImeInsets AlarmScheduler ReminderNotifier AlarmActivity BootReceiver; do
+for class in BrulionAndroid BrulionActivity ImeInsets AlarmScheduler ReminderNotifier AlarmActivity BootReceiver \
+  ShareActivity ShareIntent; do
   grep -q "/$class;" <<<"$dex_classes" || die "class $class missing from classes.dex (Kotlin not compiled?)"
 done
 echo "Kotlin classes in dex: $(wc -l <<<"$dex_classes")"

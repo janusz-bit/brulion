@@ -100,6 +100,16 @@ void JNICALL nativeActivated(JNIEnv *env, jclass, jstring path, jint line)
         Qt::QueuedConnection);
 }
 
+/// ShareActivity received a share while Qt runs (BrulionAndroid.deliverShare).
+void JNICALL nativeShared(JNIEnv *env, jclass, jstring json)
+{
+    AndroidBridge *bridge = s_bridge.load();
+    if (!bridge)
+        return;
+    const QByteArray share = fromJString(env, json).toUtf8();
+    QMetaObject::invokeMethod(bridge, [bridge, share] { Q_EMIT bridge->shared(share); }, Qt::QueuedConnection);
+}
+
 void JNICALL nativePermissionsChanged(JNIEnv *, jclass)
 {
     AndroidBridge *bridge = s_bridge.load();
@@ -168,6 +178,7 @@ AndroidBridge::AndroidBridge(QObject *parent)
 
     const JNINativeMethod methods[] = {
             {"nativeActivated", "(Ljava/lang/String;I)V", reinterpret_cast<void *>(&nativeActivated)},
+            {"nativeShared", "(Ljava/lang/String;)V", reinterpret_cast<void *>(&nativeShared)},
             {"nativePermissionsChanged", "()V", reinterpret_cast<void *>(&nativePermissionsChanged)},
             {"nativeSoundPicked", "(ILjava/lang/String;)V", reinterpret_cast<void *>(&nativeSoundPicked)},
             {"nativeImeChanged", "(IZZ)V", reinterpret_cast<void *>(&nativeImeChanged)},
@@ -188,11 +199,13 @@ AndroidBridge::AndroidBridge(QObject *parent)
                         return;
                     Q_EMIT permissionsChanged();
                     deliverPendingActivation();
+                    deliverPendingShare();
                 });
     }
-    // Cold start from a notification: delivered once the event loop runs (after the UI
-    // connected to activated()).
+    // Cold start from a notification or a share: delivered once the event loop runs (after the
+    // UI connected to activated() and shared()).
     QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingActivation, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &AndroidBridge::deliverPendingShare, Qt::QueuedConnection);
 }
 
 AndroidBridge::~AndroidBridge()
@@ -283,6 +296,19 @@ Activation AndroidBridge::takeActivation()
         return {};
     const QJsonObject object = QJsonDocument::fromJson(answer.toString().toUtf8()).object();
     return {object.value("path"_L1).toString(), object.value("line"_L1).toInt()};
+}
+
+QByteArray AndroidBridge::takeShare()
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return {};
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "takeShare", "(Landroid/content/Context;)Ljava/lang/String;", context.object());
+    if (failed("takeShare") || !answer.isValid())
+        return {};
+    const QByteArray json = answer.toString().toUtf8();
+    return json == "{}" ? QByteArray() : json;
 }
 
 namespace {
@@ -612,6 +638,13 @@ void AndroidBridge::deliverPendingActivation()
     const Activation activation = takeActivation();
     if (activation.isValid())
         Q_EMIT activated(activation.path, activation.line);
+}
+
+void AndroidBridge::deliverPendingShare()
+{
+    const QByteArray share = takeShare();
+    if (!share.isEmpty())
+        Q_EMIT shared(share);
 }
 
 } // namespace brulion::platform

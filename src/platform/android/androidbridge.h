@@ -105,6 +105,11 @@ public:
     /// Each tap is handed out once.
     Activation takeActivation();
 
+    /// The share of another app not delivered through shared() yet (cold start: ShareActivity
+    /// started the process), as JSON (notebook/share.h: `{"subject", "text", "dir", "files"}`);
+    /// empty if none. Each share is handed out once.
+    QByteArray takeShare();
+
     /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
      * API 29): no storage permission is needed — with scoped storage a plain file write there
@@ -162,6 +167,9 @@ public:
 Q_SIGNALS:
     /// A reminder notification (or "Otwórz notatkę" on the alarm screen) was tapped.
     void activated(const QString &path, int line);
+    /// Another app shared text or files with Brulion ("Udostępnij → Brulion": ShareActivity.kt
+    /// copied the files to files/share-in/<stamp>/); `json` as takeShare() gives it.
+    void shared(const QByteArray &json);
     /// A permission may have changed (dialog answered, or the app returned to the front).
     void permissionsChanged();
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
@@ -178,6 +186,7 @@ Q_SIGNALS:
 private:
     explicit AndroidBridge(QObject *parent);
     void deliverPendingActivation();
+    void deliverPendingShare();
 };
 
 } // namespace brulion::platform
