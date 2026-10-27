@@ -22,9 +22,10 @@ Brulion jest zgodny z formatem Obsidiana i Logseqa, więc często wystarczy po p
 ### Skarbiec Obsidiana bez importu
 Folder Obsidiana — także synchronizowany Syncthingiem — otwórz po prostu jako notatnik (*Przełącz notatnik → Otwórz inny notatnik…*) na każdym urządzeniu i zostaw synchronizację Syncthingowi; nie włączaj dla niego dodatkowo Nextclouda. Folder `.obsidian/` Brulion pomija.
 
-- W **Ustawienia → Notatnik** wpisz raz folder i format dziennika z notatek dziennych Obsidiana (domyślnie trzyma je na samej górze skarbca, więc zostaw „Folder dziennika” pusty; format `YYYY-MM-DD` z Obsidiana to tu `yyyy-MM-dd`) i folder załączników. Inaczej nowe dni powstaną w `journals/`.
+- W **Ustawienia → Notatnik** wpisz raz folder i format dziennika z notatek dziennych Obsidiana (domyślnie trzyma je na samej górze skarbca, więc usuń `journals` z pola „Folder dziennika” — puste pole to główny folder; format `YYYY-MM-DD` z Obsidiana to tu `yyyy-MM-dd`), szablon dziennika (ścieżka z końcówką `.md`, której Obsidian nie zapisuje) i folder załączników. Inaczej nowe dni powstaną w `journals/`.
 - Do bloków linkuj przez **Kopiuj link do bloku** (`[[Strona#^id]]`) — odwołanie `((id))` Obsidian pokaże jako zwykły tekst. Przypomnienia `⏰`, bloki `calc` i `query` to składnia Brulionu; zadania wtyczki Tasks działają w obu aplikacjach.
 - Nie edytuj tej samej notatki w obu aplikacjach w tej samej chwili; zmiany z dysku Brulion przejmuje na bieżąco, a poprzednie wersje zostają w historii.
+- *Centrum synchronizacji → Syncthing → Utwórz .stignore* dodaje reguły pomijające układ okien Obsidiana (`.obsidian/workspace*.json`) i kosz `.trash`, więc te pliki nie robią konfliktów. Skopiuj `.stignore` na każde urządzenie — Syncthing go nie przesyła.
 
 ## Eksport
 - archiwum **ZIP** z Markdownem, także w układzie Obsidiana lub Logseqa,

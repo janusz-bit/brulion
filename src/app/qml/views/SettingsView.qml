@@ -422,7 +422,7 @@ Item {
             }
             ShellSettingRow {
                 title: qsTr("Journal folder")
-                description: qsTr("Where the daily pages are kept.")
+                description: qsTr("Where the daily pages are kept. Empty: the top of the notebook.")
                 ConfigField { key: "journalsFolder"; leadingIcon: "folder" }
             }
             ShellSettingRow {

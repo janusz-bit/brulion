@@ -50,11 +50,14 @@ urządzenia dostaną to przez Syncthing):
 
 * **Folder dziennika** — Brulion trzyma dni w `journals/`, a Obsidian (wtyczka *Daily notes*)
   domyślnie w głównym folderze skarbca. Wpisz folder z ustawień notatek dziennych Obsidiana
-  (`.obsidian/daily-notes.json`, pole `folder`) albo zostaw pole puste, gdy dni leżą na samej
-  górze — inaczej Brulion założy nowe dni w `journals/`, obok starych.
+  (`.obsidian/daily-notes.json`, pole `folder`), a gdy dni leżą na samej górze, usuń z pola
+  `journals` (puste pole to główny folder skarbca) — inaczej Brulion założy nowe dni
+  w `journals/`, obok starych.
 * **Nazwy plików dziennika** — ten sam wzór co w Obsidianie (pole `format`), ale w zapisie Qt:
   `YYYY-MM-DD` to `yyyy-MM-dd` (domyślny w obu), `DD.MM.YYYY` to `dd.MM.yyyy`.
 * **Szablon dziennika** — np. `Szablony/Dzień.md`, jeśli Obsidian ma szablon notatki dziennej.
+  Wpisz ścieżkę z końcówką `.md` (Obsidian zapisuje pole `template` bez niej) — bez niej nowe
+  dni zaczną się pusto.
   Zmienne `{{date}}`, `{{time}}`, `{{title}}` działają w obu aplikacjach.
 * **Folder załączników** — gdzie trafiają wklejone obrazy (w Brulionie `assets/`; w Obsidianie
   *Settings → Files and links → Default location for new attachments*). Obrazy już wstawione
@@ -82,14 +85,19 @@ notatnika), `.trash/` na usunięte pliki (ten sam folder, którego używa Obsidi
 pierwszym wpisie — samo oglądanie dnia niczego nie tworzy), wklejone obrazy w folderze
 załączników, klucz `brulion: document`/`outline` w nagłówku YAML notatki, której tryb zmienisz
 ręcznie (Obsidian pokaże go jako zwykłą właściwość), i identyfikator ` ^id` na końcu bloku,
-do którego skopiujesz link — w formacie Obsidiana. Historia wersji, indeks i stan
+do którego skopiujesz link — w formacie Obsidiana. Na prośbę (*Utwórz .stignore*, zob. niżej)
+także plik `.stignore` dla Syncthinga. Historia wersji, indeks i stan
 synchronizacji leżą poza folderem, więc Syncthing ich nie przesyła.
 
 **Ryzyko konfliktów:** nie edytuj tej samej notatki w tej samej chwili w obu aplikacjach ani na
 dwóch urządzeniach naraz. Brulion przejmuje zmiany z dysku na bieżąco (także w otwartej
 notatce, scalając je z tym, co właśnie piszesz), a poprzednie wersje zostają w *Historii
 wersji*. Gdy Syncthing mimo to zostawi kopię `*.sync-conflict-*`, scal ją w centrum
-synchronizacji. Konflikty w `.obsidian/` (np. `workspace.json`) dotyczą tylko Obsidiana.
+synchronizacji. Konflikty w `.obsidian/` (np. `workspace.json`) dotyczą tylko Obsidiana;
+zapobiega im zalecany plik `.stignore`: *Centrum synchronizacji → Syncthing → Utwórz .stignore*
+dodaje reguły pomijające układ okien Obsidiana (`.obsidian/workspace*.json`, każde urządzenie ma
+własny) i folder `.trash`. Syncthing nie przesyła samego `.stignore` — skopiuj go na każde
+urządzenie.
 
 ## Tagi a strony
 

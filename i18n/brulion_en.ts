@@ -32,7 +32,7 @@
 <context>
     <name>AppShell</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="515"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="520"/>
         <source>The folder “%1” and %n page(s) in it will be moved to the trash.</source>
         <translation>
             <numerusform>The folder “%1” and %n page in it will be moved to the trash.</numerusform>
@@ -208,7 +208,7 @@
 <context>
     <name>CalendarMonthGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="164"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="167"/>
         <source>%n entries</source>
         <translation>
             <numerusform>%n entry</numerusform>
@@ -216,7 +216,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="264"/>
+        <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="267"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
@@ -227,7 +227,7 @@
 <context>
     <name>CalendarWeekGrid</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="203"/>
+        <location filename="../src/app/qml/planning/CalendarWeekGrid.qml" line="206"/>
         <source>+%n more</source>
         <translation>
             <numerusform>+%n more</numerusform>
