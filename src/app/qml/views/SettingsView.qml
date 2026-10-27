@@ -160,7 +160,12 @@ Item {
             iconName: modelData.icon
             checkable: true
             checked: AppSettings.bottomNavTabs[root.navSlot] === modelData.value
-            onTriggered: AppSettings.setBottomNavTab(root.navSlot, modelData.value)
+            onTriggered: {
+                AppSettings.setBottomNavTab(root.navSlot, modelData.value)
+                // The tap toggled the item itself; the view already in the slot changes nothing
+                // in AppSettings, so the binding would not be evaluated again.
+                checked = Qt.binding(() => AppSettings.bottomNavTabs[root.navSlot] === modelData.value)
+            }
         }
         onObjectAdded: (index, object) => navSlotMenu.insertItem(index, object)
         onObjectRemoved: (index, object) => navSlotMenu.removeItem(object)
@@ -583,13 +588,19 @@ Item {
             heading: qsTr("Editor")
 
             ShellSettingRow {
+                objectName: "editorFontRow"
                 title: qsTr("Font")
+                // A missing family: Theme.fontEditor falls back to the serif / sans-serif choice.
                 description: AppSettings.editorFontFamily === "" || !root.fontChoice
                              ? qsTr("Font of your notes; the interface font is set in Appearance.")
                              : Theme.fontEditor === AppSettings.editorFontFamily ? AppSettings.editorFontFamily
+                             : AppSettings.editorFont === "sans"
+                             ? qsTr("%1 is not installed on this device: sans-serif is used.").arg(AppSettings.editorFontFamily)
                              : qsTr("%1 is not installed on this device: serif is used.").arg(AppSettings.editorFontFamily)
                 BSegmented {
                     objectName: "editorFontSetting"
+                    // "Other…" only opens the picker, which can be cancelled.
+                    controlled: true
                     accessibleName: qsTr("Font")
                     model: root.fontChoice
                            ? [{ value: "serif", text: qsTr("Serif") }, { value: "sans", text: qsTr("Sans-serif") },

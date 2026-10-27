@@ -2914,8 +2914,11 @@ void checkKeyboard(QQmlApplicationEngine *engine, QQuickWindow *window, AppContr
 ///     a tap on an accent swatch recolours Theme at once and is saved, a custom colour from the
 ///     accent dialog too; an entry unticked under "Pasek boczny" leaves the sidebar (the drawer on
 ///     phones) and stays in the command palette; a bottom navigation slot takes another view from
-///     its menu (phones: the bar shows it); the quick note button's switch hides it; "Przywróć
-///     domyślny wygląd" brings the logo's colours back. The settings are put back at the end.
+///     its menu (phones: the bar shows it), and the view it already has stays checked there; the
+///     quick note button's switch hides it; "Przywróć domyślny wygląd" brings the logo's colours
+///     back. Edytor → Czcionka → "Inna…" opens the font picker; cancelled, the selection does not
+///     move; a missing family names the serif or sans-serif font used instead. The settings are
+///     put back at the end.
 void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppController *app, const Check &check)
 {
     const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
@@ -3015,6 +3018,18 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
                       && !findShown(window->contentItem(),
                                     [](QQuickItem *i) { return i->objectName() == u"bottomNav_tasks"; }),
               "the phone's bottom bar shows the view picked");
+    // The view already in the slot, picked again: its menu still shows it checked.
+    closeMenus(window);
+    activate(shownItem(u"bottomNavSlot_3"_s));
+    activate(shownItem(u"bottomNavChoice_graph"_s));
+    closeMenus(window);
+    activate(shownItem(u"bottomNavSlot_3"_s));
+    {
+        QQuickItem *again = shownItem(u"bottomNavChoice_graph"_s);
+        check(again && again->property("checked").toBool(),
+              "picking the slot's own view again keeps it checked in the menu");
+    }
+    closeMenus(window);
 
     // The quick note button.
     check(activate(shownItem(u"captureButtonSetting"_s)) && waitFor([&] { return !settings->captureButtonShown(); }),
@@ -3033,6 +3048,51 @@ void checkAppearance(QQmlApplicationEngine *engine, QQuickWindow *window, AppCon
     check(activate(shownItem(u"resetAppearance"_s))
                   && waitFor([&] { return settings->accentColor() == u"red" && color("accent") == u"#e2574c"; }),
           "\"Restore the default look\" brings the logo's colours back");
+
+    // Settings → Editor → Font → "Other…" opens the picker; cancelled, the selection stays on the
+    // serif / sans-serif choice, and "Other…" opens the picker again. A missing family names the
+    // font used instead.
+    app->navigate({{u"view"_s, u"settings"_s}, {u"section"_s, u"editor"_s}});
+    if (QQuickItem *fontSetting = shownItem(u"editorFontSetting"_s)) {
+        uidriver::scrollIntoView(window, fontSetting);
+        // The picker of the settings view shown (a window can hold more than one settings view).
+        const auto openPicker = [window]() -> QObject * {
+            const QList<QObject *> popups = uidriver::openPopups(window);
+            const auto it = std::find_if(popups.cbegin(), popups.cend(),
+                                         [](QObject *p) { return p->objectName() == u"fontPickerDialog"; });
+            return it != popups.cend() ? *it : nullptr;
+        };
+        QObject *fontPicker = nullptr;
+        bool stays = true;
+        for (int round = 0; round < 2 && stays; ++round) {
+            QMetaObject::invokeMethod(fontSetting, "select", Q_ARG(QVariant, 2));
+            stays = waitFor([&] {
+                fontPicker = openPicker();
+                return fontPicker && fontPicker->property("opened").toBool();
+            });
+            if (fontPicker) {
+                QMetaObject::invokeMethod(fontPicker, "close");
+                stays = waitFor([&] { return !openPicker(); }) && stays;
+            }
+            stays = stays && fontSetting->property("currentValue").toString() == settings->editorFont();
+        }
+        check(stays, "\"Other…\" opens the font picker; cancelled, the font selection does not move");
+        QQuickItem *fontRow = shownItem(u"editorFontRow"_s);
+        settings->setEditorFont(u"serif"_s);
+        settings->setEditorFontFamily(u"Łódź Nieobecna Ś"_s);
+        const QString serifNote = fontRow ? fontRow->property("description").toString() : QString();
+        settings->setEditorFont(u"sans"_s);
+        const QString sansNote = fontRow ? fontRow->property("description").toString() : QString();
+        check(fontRow && serifNote.contains(u"Łódź Nieobecna Ś"_s) && sansNote.contains(u"Łódź Nieobecna Ś"_s)
+                      && serifNote != sansNote && fontSetting->property("currentValue").toString() == u"other",
+              "a missing editor font names the serif or sans-serif font used instead");
+        settings->setEditorFontFamily(QString());
+        settings->setEditorFont(u"serif"_s);
+        check(fontSetting->property("currentValue").toString() == u"serif", "the font selection follows the settings");
+    } else {
+        check(false, "the editor settings show the font choice");
+    }
+
     settings->setSidebarHidden({});
     settings->setBottomNavTabs({});
     settings->setCaptureButtonShown(true);
