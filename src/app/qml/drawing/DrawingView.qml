@@ -52,6 +52,7 @@ FocusScope {
     property string status: "loading"
     /// The file the paper shows (follows renames; "" none).
     property string loadedPath: ""
+    property bool _writing: false
 
     // The tools, remembered on the device.
     property string penColor: AppSettings.value("drawing/penColor", "#1f2430")
@@ -99,7 +100,12 @@ FocusScope {
         if (root.loadedPath === "" || root.status !== "" || !canvas.modified)
             return true
         const bytes = canvas.svg()
-        if (!Workspace.writeAttachment(root.loadedPath, bytes))
+        // The vault reports the write at once (Workspace.fileChanged, below): that is this save,
+        // not another device's change to merge.
+        root._writing = true
+        const written = Workspace.writeAttachment(root.loadedPath, bytes)
+        root._writing = false
+        if (!written)
             return false // (Workspace.errorOccurred: the shell's toast says why)
         canvas.markSaved(bytes)
         return true
@@ -220,7 +226,7 @@ FocusScope {
             root.status = "missing"
         }
         function onFileChanged(path) {
-            if (path !== root.loadedPath || root.status === "missing")
+            if (path !== root.loadedPath || root.status === "missing" || root._writing)
                 return
             const bytes = Workspace.readAttachment(path)
             if (bytes.byteLength === 0 || canvas.isKnownFile(bytes))

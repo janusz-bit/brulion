@@ -8,6 +8,8 @@
 #include "workspace.h"
 #include "workspacesync.h"
 
+#include "drawing/drawing.h"
+#include "drawing/svgwrite.h"
 #include "log/categories.h"
 #include "log/logger.h"
 #include "log/redact.h"
@@ -2600,6 +2602,87 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
 /// the field keeps following the notebook's config afterwards — a value synced from another
 /// device shows (assigning the picked text once ended that binding: the field kept the old value
 /// and wrote it back with the next edit).
+/// 5i. A drawing (docs/UI.md "Drawing editor"): a tap / click on its embed opens the drawing
+/// editor; a stroke drawn with real input — a finger on the phone run ("Rysuj palcem" is on until a
+/// stylus is seen), the mouse on the desktop — is saved by itself, its undo kept (the save coming
+/// back is the editor's own, not a change to merge); an undo (the bar's button / Ctrl+Z) is saved
+/// too; back on the page, the embed loads the drawing saved again (its URL's version).
+void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    Workspace *workspace = app->workspace();
+    const QString path = workspace->saveAttachment(u"Szkic z wykładu.svg"_s, drawing::toSvg(drawing::Drawing()));
+    const QString page = u"Wykład z rysunkiem.md"_s;
+    check(!path.isEmpty() && workspace->writeFile(page, u"- Notatki z tablicy: ![[Szkic z wykładu.svg]]\n"_s),
+          "a page embeds a new drawing");
+    const auto strokesInFile = [&] {
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        return d ? int(d->strokes.size()) : -1;
+    };
+    const auto embedImage = [window]() -> QQuickItem * {
+        return uidriver::topmost(window, [](QQuickItem *item) {
+            return item->objectName() == u"embedImage" && item->property("source").toUrl().path().endsWith(u".svg"_s)
+                   && item->property("source").toUrl().fileName() == u"Szkic z wykładu.svg";
+        });
+    };
+    app->openPage(page);
+    check(waitFor([&] { return embedImage() && embedImage()->property("status").toInt() == 1; }, 5000),
+          "the drawing's embed is shown");
+    QQuickItem *image = embedImage();
+    if (!image)
+        return;
+    const QUrl before = image->property("source").toUrl();
+    check(before.query().startsWith(u"v="_s), "a drawing's URL carries its version");
+    check(uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"embedDrawingBadge"; })
+                  != nullptr,
+          "a drawing's embed has the pen in its corner");
+    tapOrClick(window, pointIn(image), touch);
+    check(waitFor([&] { return app->currentRoute().value(u"view"_s).toString() == u"drawing"; }),
+          "a tap / click on the drawing opens the drawing editor");
+    check(app->currentRoute().value(u"path"_s).toString() == path, "on that drawing");
+    QQuickItem *canvas = nullptr;
+    waitFor([&] {
+        canvas = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingCanvas"; });
+        return canvas && canvas->width() > 100;
+    });
+    if (!canvas) {
+        check(false, "the drawing editor shows its paper");
+        return;
+    }
+    settle(100);
+    const QPointF from = pointIn(canvas, 0.25, 0.4);
+    const QPointF to = pointIn(canvas, 0.7, 0.45);
+    if (touch)
+        touchDrag(window, from, to - from);
+    else
+        mouseDrag(window, from, to);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 1; }),
+          touch ? "a finger draws a stroke (no stylus seen yet)" : "the mouse draws a stroke");
+    check(waitFor([&] { return strokesInFile() == 1 && !canvas->property("modified").toBool(); }, 5000),
+          "the stroke is saved by itself");
+    check(canvas->property("canUndo").toBool(), "its own save keeps the undo history (no merge)");
+    if (touch) {
+        QQuickItem *undo = uidriver::topmost(window, [](QQuickItem *item) { return item->objectName() == u"drawingUndo"; });
+        if (undo)
+            touchTap(window, pointIn(undo));
+        check(undo != nullptr, "the bar at the bottom has Cofnij");
+    } else {
+        sendKey(window, Qt::Key_Z, Qt::ControlModifier);
+    }
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 0; }), "Cofnij takes the stroke back");
+    check(waitFor([&] { return strokesInFile() == 0; }, 5000), "the undo is saved too");
+    QMetaObject::invokeMethod(canvas, "redo");
+    check(waitFor([&] { return strokesInFile() == 1; }, 5000), "the redo is saved");
+    app->back();
+    check(waitFor([&] {
+              QQuickItem *again = embedImage();
+              return again && again->property("source").toUrl() != before && again->property("status").toInt() == 1;
+          },
+                  5000),
+          "back on the page, the embed shows the drawing saved again");
+    app->goHome();
+}
+
 void checkSettingsClock(QQuickWindow *window, AppController *app, const Check &check)
 {
     Workspace *workspace = app->workspace();
@@ -3570,6 +3653,8 @@ int runChecks(QQmlApplicationEngine *engine, AppController *app)
             checkBlockLinks(window, app, check, controllerFor);
             // 5b. A picture opens as a picture (checkPictureView).
             checkPictureView(window, app, check, controllerFor);
+            // 5i. A drawing: opened from its embed, drawn with real input, saved by itself.
+            checkDrawing(window, app, check);
             // 5e. The default reminder time set on a clock in the settings.
             checkSettingsClock(window, app, check);
             // 5f. The on-screen keyboard (phones).
