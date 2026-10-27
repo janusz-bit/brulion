@@ -191,7 +191,8 @@ opens it as a drawing again, Brulion's editor (docs/UI.md "Drawing editor") edit
 payload versions 1 and 2, compressed or not, and `.excalidraw` JSON. An SVG is a drawing when its
 first 4 KB name the payload type (`looksLikeExcalidrawSvg`); one without the scene is a picture only.
 Brulion edits only freehand strokes: a scene with other elements (shapes, arrows, text, pictures,
-rotated or filled freehand lines) is shown, never written. Elements and fields Brulion does not
+rotated or filled freehand lines, freehand lines with a point farther than 10⁶ scene units from the
+origin on either axis — `drawing::CoordinateLimit`) is shown, never written. Elements and fields Brulion does not
 model are written back as they were; deleted elements are dropped (as Excalidraw's own export does).
 
 **Pictures from the internet:** a Markdown picture whose destination is an `http:` / `https:` URL

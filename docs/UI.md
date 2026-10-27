@@ -907,7 +907,11 @@ tablet (lectures, sketches), on every platform.
     makes it the gesture (the stroke is dropped). "Rysuj palcem" is on by default until a stylus
     has touched the paper on this device (AppSettings `drawing/stylusSeen`): from then on a palm
     or a finger never draws; the toggle (the tool bar on wide touch screens, Więcej on phones)
-    makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`).
+    makes it the user's choice (`drawing/finger`: `auto` | `on` | `off`);
+  * **palm rejection:** while the pen is down every touch is ignored — it neither draws, moves
+    the paper, nor ends, cuts or erases the pen's stroke —, and so is a hand that stays after the
+    pen lifts, until every finger has lifted. A pen that lands while fingers move the paper or
+    draw ends their gesture (a finger stroke just begun is dropped) and draws.
 * **Tools** (`DrawingToolbar`; above the paper on wide windows, at the bottom on phones — the
   bottom navigation makes way, `toolbarDocked` —, scrolling sideways when it does not fit): Cofnij,
   Ponów, **Pióro** (P), **Zakreślacz** (H: wide, translucent, an even width — constant pressure,
@@ -922,18 +926,26 @@ tablet (lectures, sketches), on every platform.
 * **Saving:** by itself, 1.2 s after the last change, and when the route changes, the view goes
   (Back, Gotowe, another view) and the app leaves the foreground (`Workspace.writeAttachment`:
   atomic, the replaced version kept in History as for notes). A failed write is said by the
-  shell's error toast.
+  shell's error toast. Every save reads the file first: a change another program made that has
+  not been reported yet (a folder watch that missed it, Android's shared storage) is taken in as
+  below, never written over.
 * **Changes from elsewhere** (Syncthing, Nextcloud, another program) while the drawing is open:
   with nothing changed here the other version is shown; else they are merged stroke by stroke
   (`DrawingCanvas.takeExternal`: the other version, plus the strokes drawn here since the last
-  load or save, minus the ones erased here) and saved, with a toast. The canvas's own saves coming
-  back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
+  load or save, minus the ones erased here; the paper's pattern theirs unless it was changed here)
+  and saved, with a toast. A stroke or an erasing gesture in progress goes on and ends on the
+  new version. A version Brulion cannot edit any more (shapes or text added in excalidraw.com) is
+  shown as it is; what was drawn here and not saved is written to a new file beside it ("… (to
+  urządzenie).svg", `Workspace.createAttachment`), with a toast naming it. The canvas's own saves
+  coming back are recognised (`isKnownFile`). A rename follows the file (the route is applied one
   event-loop turn late, as in PageView); a file deleted while open is never written again ("Rysunku
   … nie ma w notatniku").
 * **Files Brulion does not edit** are shown as the picture they are, with why and "Otwórz jako
   obraz" (the picture view): an Excalidraw drawing with shapes, arrows, text or pictures (Brulion
   would lose them: "edytuje tylko pismo odręczne"), an SVG without a scene, a scene that cannot be
-  read. Nothing is written for them.
+  read, and freehand lines farther than 10⁶ units from the origin (`drawing::CoordinateLimit`:
+  the paper's lines and the file's size stay bounded; the editor's own strokes stay within it).
+  Nothing is written for them.
 * **Rendering:** the committed strokes are rendered on the GUI thread into a cached image of the
   view (600 strokes of 60 points: ~7 ms on the laptop); while the paper moves the cached image is
   drawn moved and scaled and rendered again once the gesture rests; the stroke being drawn is
@@ -944,12 +956,14 @@ tablet (lectures, sketches), on every platform.
 
 Tests: `tst_drawing` (core: the format, Excalidraw's own fixtures, the outline, the SVG),
 `tst_drawingcanvas` (stylus, eraser end, barrel button, a popup over the paper, Windows' mouse
-events of the pen, fingers, a pinch, mouse buttons and the wheel, undo, the SVG checked with Qt's
-SVG renderer, loading, merging, painting), `tst_drawing_qml` (the route and its notices, embeds and
+events of the pen, fingers, a pinch, a palm while the pen is down, mouse buttons and the wheel,
+undo, the SVG checked with Qt's SVG renderer, loading, merging — also during a stroke, the paper —,
+far-away strokes, painting), `tst_drawing_qml` (the route and its notices, embeds and
 the picture view in the real app; nothing written by looking), `tst_editor_controller`
 (`drawingSlashCommand`, `drawingEmbedsFollowTheirFile`), `tst_shell_workspace_pictures`
 (`drawingsAreSavedAndShownAgain`), the shell's self-test (`tst_shell_qml`, `_capture`: opened from
-its embed, drawn with a finger / the mouse, saved, undone).
+its embed, drawn with a finger / the mouse, saved, undone; a version written behind the vault's
+back merged by the save; one with a shape not written over, the strokes kept in a copy).
 
 ## Scrolling performance
 

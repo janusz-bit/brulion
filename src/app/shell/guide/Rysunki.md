@@ -22,14 +22,16 @@ Rysunek w notatce ma w rogu ikonę pióra. Kliknij go albo stuknij, żeby rysowa
 - **Pokaż cały rysunek** (`Ctrl+0`) i **Gotowe** — powrót do notatki.
 
 ## Rysik, palec i mysz
-- **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie.
+- **Rysik** rysuje. **Palce** wtedy nie rysują, tylko przesuwają kartkę (jeden palec) i powiększają ją (dwa palce) — możesz więc oprzeć dłoń na ekranie. Dopóki rysik dotyka ekranu, dłoń niczego nie zmienia: nie przesuwa kartki i nie przerywa linii.
 - Na telefonie bez rysika **palec rysuje**, a kartkę przesuwasz i powiększasz dwoma palcami. Gdy Brulion pierwszy raz zobaczy rysik, przestawia się na rysowanie rysikiem. Sam wybierzesz to przełącznikiem **Rysuj palcem**.
 - **Myszką** rysujesz z wciśniętym lewym przyciskiem. Kartkę przesuwasz środkowym albo prawym przyciskiem, kółkiem lub ze wciśniętą spacją, a powiększasz z `Ctrl` i kółkiem albo gestem na touchpadzie.
 
 ## Zapisywanie i synchronizacja
 Nie trzeba niczego zapisywać: Brulion zapisuje rysunek chwilę po każdej linii, a także gdy wychodzisz z rysunku albo z aplikacji. Notatka od razu pokazuje nowy wygląd.
 
-Gdy ten sam rysunek zmieni się na innym urządzeniu (Syncthing, Nextcloud) w czasie, gdy go rysujesz, Brulion łączy obie wersje: zostają linie dorysowane tu i tam, a znikają te, które zostały starte.
+Gdy ten sam rysunek zmieni się na innym urządzeniu (Syncthing, Nextcloud) w czasie, gdy go rysujesz, Brulion łączy obie wersje: zostają linie dorysowane tu i tam, a znikają te, które zostały starte. Linia, którą właśnie rysujesz, też zostaje.
+
+Jeśli na innym urządzeniu ktoś doda do rysunku kształty albo tekst w excalidraw.com, Brulion pokaże tę wersję tak, jak jest, a linie narysowane tutaj, których jeszcze nie zapisał, zapisze obok w nowym pliku „… (to urządzenie).svg”.
 
 ## Rysunki i inne programy
 Plik rysunku to obraz SVG z ukrytą w środku sceną Excalidraw:
