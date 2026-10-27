@@ -1361,9 +1361,11 @@ QVariantMap PageController::split(int row, int cursor)
 
     beginCommand();
     EditResult r;
-    if (row == zoom && (cursor == len || cursor == 0)) {
-        // The zoomed block: a new first child keeps the caret inside the zoom (at the start too:
-        // a block above the zoom root would be outside the zoom, out of sight).
+    if (row == zoom && (cursor == len || (cursor == 0 && entry.kind == BlockKind::ListItem))) {
+        // The zoomed block: a new first child keeps the caret inside the zoom (at the start of a
+        // list item too: an item above the zoom root would be outside the zoom, out of sight). A
+        // zoomed heading or paragraph splits as usual: the empty paragraph above stays hidden and
+        // the caret stays in the zoom root.
         r = applyOp([&](BlockDocument &d) { return d.insertAfter(row, QString(), entry.depth + 1); });
     } else {
         const bool collapsed = m_model->isCollapsed(row);

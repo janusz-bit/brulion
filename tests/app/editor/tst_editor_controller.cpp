@@ -1074,6 +1074,43 @@ GGML_CUDA_ENABLE_UNIFIED_MEMORY=1 llama serve -m Ternary-Bonsai-2-27B-PTQ1_0.ggu
         QCOMPARE(f.role(1, "taskStatus").toString(), u"done"_s);
     }
 
+    // Enter at the start of a zoomed heading or paragraph (no list item, no children): the old
+    // split, an empty paragraph above, and the caret stays in the zoom root, which stays shown.
+    void zoomRootTextBlockEnterAtTheStart_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::addColumn<QString>("expected");
+        QTest::addColumn<QString>("rootText");
+
+        QTest::newRow("heading") << u"# Nagłówek\n\n- a\n"_s << u"\n\n# Nagłówek\n\n- a\n"_s << u"# Nagłówek"_s;
+        QTest::newRow("paragraph") << u"Akapit źdźbła\n\n- a\n"_s << u"\n\nAkapit źdźbła\n\n- a\n"_s
+                                   << u"Akapit źdźbła"_s;
+    }
+
+    void zoomRootTextBlockEnterAtTheStart()
+    {
+        QFETCH(QString, content);
+        QFETCH(QString, expected);
+        QFETCH(QString, rootText);
+        Fixture f(content);
+        f.page.zoomInto(0);
+        QCOMPARE(f.page.zoomBlock(), 0);
+        f.page.startEditing(0, 0);
+        const QVariantMap r = f.page.split(0, 0);
+        const int zoom = f.page.zoomBlock();
+        QVERIFY(zoom >= 0);
+        QCOMPARE(f.edit(zoom), rootText);
+        QCOMPARE(f.page.editingRow(), zoom);
+        QCOMPARE(r.value(u"row"_s).toInt(), zoom);
+        QCOMPARE(r.value(u"cursor"_s).toInt(), 0);
+        QVERIFY(f.role(zoom, "visible").toBool());
+        QCOMPARE(f.text(), expected);
+        // Typing goes into the shown zoom root.
+        f.page.setEditText(zoom, rootText + u" ż"_s, int(rootText.size()) + 2);
+        QCOMPARE(f.page.zoomBlock(), zoom);
+        QVERIFY(f.text().contains(rootText + u" ż\n"_s));
+    }
+
     void zoomFollowsUndo()
     {
         Fixture f(u"- a\n\t- a1\n- b\n"_s);

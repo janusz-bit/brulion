@@ -288,7 +288,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 
 | Keys | Editing a block | Blocks selected (Esc, Shift+↑/↓, Ctrl+A, a drag, …) |
 |---|---|---|
-| Enter | split the block at the cursor (task checkboxes continue); at the start of the text: an empty block above it, the caret stays in the text (a task: an empty task above; the text keeps its status and children — the hidden marker does not count, `BlockDocument::split`); at the start of a zoomed block: a new first child inside the zoom; a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
+| Enter | split the block at the cursor (task checkboxes continue); at the start of the text: an empty block above it, the caret stays in the text (a task: an empty task above; the text keeps its status and children — the hidden marker does not count, `BlockDocument::split`); at the start of a zoomed list item: a new first child inside the zoom (a zoomed heading or paragraph splits as usual and the caret stays in it); a new line in multi-line blocks (code, calc, query, quote, callout) | edit the block (the focus end) |
 | Shift+Enter | soft line break | — |
 | Shift+↑ / Shift+↓ | select text; on the first / last line once the text selection reaches the block's start / end: select this block and the previous / next one | extend or shrink the selection (the end moves over whole subtrees) |
 | Ctrl+A | select the block's text; again (all of it selected, or an empty block): every block | every block (in a zoom the zoomed subtree) |
