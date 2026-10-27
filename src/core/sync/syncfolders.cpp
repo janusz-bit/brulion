@@ -371,15 +371,14 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
         if (read.snap)
             newByHash[read.snap->hash].append(it.key());
     }
-    // Nothing on the server at or below the new name, in any letter case, but the file itself.
-    const auto free = [this](const VaultPath &from, const VaultPath &to) {
+    // Nothing on the server at or below the new name, in any letter case, but the file itself (the
+    // listing holds every folder: something below a name means the name itself is there).
+    QHash<QString, int> remoteNames;
+    for (auto it = m_remoteAll.keyBegin(); it != m_remoteAll.keyEnd(); ++it)
+        ++remoteNames[it->toLower()];
+    const auto free = [&remoteNames](const VaultPath &from, const VaultPath &to) {
         const QString lower = to.toLower();
-        return std::none_of(m_remoteAll.keyBegin(), m_remoteAll.keyEnd(), [&](const VaultPath &path) {
-            if (path == from)
-                return false;
-            const QString l = path.toLower();
-            return l == lower || (l.startsWith(lower) && l.at(lower.size()) == u'/');
-        });
+        return remoteNames.value(lower) - (from.toLower() == lower ? 1 : 0) <= 0;
     };
     QList<FolderMove> moves;
     for (auto it = goneByHash.cbegin(); it != goneByHash.cend(); ++it) {
@@ -739,6 +738,27 @@ void SyncRun::adoptRemoteFileMoves()
             gone.append(it.key());
     }
     std::sort(gone.begin(), gone.end());
+    // What this device has, lower-cased: its files, their folders and its folders (takenHere() for
+    // many files at once).
+    QSet<QString> here;
+    const auto addHere = [&here](const VaultPath &path) {
+        here.insert(path.toLower());
+        QSet<VaultPath> parents;
+        addAncestors(path, parents);
+        for (const VaultPath &parent : std::as_const(parents))
+            here.insert(parent.toLower());
+    };
+    for (auto it = m_local.keyBegin(); it != m_local.keyEnd(); ++it)
+        addHere(*it);
+    for (const FileStat &folder : vault()->folders())
+        here.insert(folder.path.toLower());
+    const auto takenHereAlready = [&](const VaultPath &to, const VaultPath &from) {
+        const QString lower = to.toLower();
+        if (lower != from.toLower() && here.contains(lower))
+            return true;
+        const QString absTo = vault()->absolutePath(to);
+        return QFileInfo::exists(absTo) && !sameEntryOnDisk(vault()->absolutePath(from), absTo);
+    };
     QSet<VaultPath> taken;
     for (const VaultPath &from : std::as_const(gone)) {
         const SyncFileState state = m_states.value(from);
@@ -756,11 +776,12 @@ void SyncRun::adoptRemoteFileMoves()
             if (same.size() == 1)
                 to = same.first();
         }
-        if (!to || taken.contains(*to) || !sameRemoteFile(m_remote.value(*to), state) || takenHere(*to, from))
+        if (!to || taken.contains(*to) || !sameRemoteFile(m_remote.value(*to), state) || takenHereAlready(*to, from))
             continue;
         if (!renameHere(from, from, *to, false))
             continue;
         taken.insert(*to);
+        addHere(*to);
         m_report.localFileMoves.append(SyncFolderMove{from, *to});
         record(*to, SyncAction::MoveFileLocal);
         qCInfo(lcSync).noquote() << u"%1 %2 renamed on the server to %3: renamed here too"_s.arg(tag(), from, *to);
