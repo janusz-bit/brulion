@@ -161,7 +161,11 @@ public:
     QDateTime now() const;
 
     // --- config (vault.cpp)
-    bool loadConfig();
+    /// Loads .brulion/config.json — or, without it, the settings of `.obsidian/` — into
+    /// `config`; true when config() or configAdoptedFromObsidian() changed. `quiet`: warnings
+    /// already reported by the previous load are not logged again (periodic rescans).
+    bool loadConfig(bool quiet = false);
+    std::optional<QByteArray> readObsidianSetting(const QString &path, QStringList &warnings) const;
     void finish(const QList<VaultChange> &changes);
 
     // --- moving and trash (vaultmove.cpp)
@@ -264,6 +268,7 @@ public:
     VaultConfig config;
     QJsonObject rawConfig;
     QStringList configWarnings;
+    QStringList configFromObsidian; ///< config.json keys adopted from .obsidian/ (no config.json)
 
     std::unique_ptr<History> history;
     LocalStore *store = nullptr; ///< child of q

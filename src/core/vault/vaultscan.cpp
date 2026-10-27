@@ -811,6 +811,10 @@ QList<VaultChange> Vault::rescan()
     scope.trees.insert(QString());
     const QList<VaultChange> changes = d->reconcile(scope, ChangeSource::External);
     d->finish(changes);
+    // Without config.json the settings come from .obsidian/ (ignored, so unwatched) and depend
+    // on the tracked files (the guards of adoptObsidianSettings): taken in again.
+    if (d->scanStatus.isOk() && !d->files.contains(vaultConfigPath()) && d->loadConfig(true))
+        Q_EMIT configChanged();
     slow.setDetail(u"%1 changes, %2 files"_s.arg(changes.size()).arg(d->files.size()));
     return changes;
 }

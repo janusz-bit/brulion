@@ -2,6 +2,7 @@
 // See vaultmove.cpp (rename, trash) and vaultscan.cpp (listing, diffing, watching).
 #include "vault/vault.h"
 #include "vault/vault_p.h"
+#include "vault/obsidiansettings.h"
 
 #include "log/slowscope.h"
 
@@ -876,9 +877,28 @@ VaultPath VaultPrivate::create(const VaultPath &path, const QByteArray &bytes, C
 // VaultPrivate: config and change delivery
 // ---------------------------------------------------------------------------------------------
 
-bool VaultPrivate::loadConfig()
+std::optional<QByteArray> VaultPrivate::readObsidianSetting(const QString &path, QStringList &warnings) const
+{
+    const QFileInfo info(absPath(path));
+    if (!info.isFile())
+        return std::nullopt;
+    if (info.size() > kMaxConfigBytes) {
+        warnings.append(u"%1 is too big (%2 bytes); not used"_s.arg(path).arg(info.size()));
+        return std::nullopt;
+    }
+    bool ok = false;
+    const QByteArray bytes = readDisk(path, &ok);
+    if (!ok) {
+        warnings.append(u"Cannot read %1"_s.arg(path));
+        return std::nullopt;
+    }
+    return bytes;
+}
+
+bool VaultPrivate::loadConfig(bool quiet)
 {
     ParsedVaultConfig parsed;
+    QStringList adopted;
     const QString path = vaultConfigPath();
     const auto known = files.constFind(path);
     if (known != files.cend() && known->size > kMaxConfigBytes) {
@@ -890,13 +910,30 @@ bool VaultPrivate::loadConfig()
             parsed = parseVaultConfig(bytes);
         else
             parsed.warnings.append(u"Cannot read %1"_s.arg(path));
+    } else if (isDirOnDisk(u".obsidian"_s)) {
+        // An Obsidian vault Brulion has no settings for yet: its journal, template and
+        // attachment settings are the defaults (in memory; saveConfig() makes them the file's).
+        ObsidianVaultFiles obsidian;
+        obsidian.dailyNotes = readObsidianSetting(obsidianDailyNotesPath(), parsed.warnings);
+        obsidian.app = readObsidianSetting(obsidianAppPath(), parsed.warnings);
+        obsidian.templates = readObsidianSetting(obsidianTemplatesPath(), parsed.warnings);
+        obsidian.corePlugins = readObsidianSetting(obsidianCorePluginsPath(), parsed.warnings);
+        ObsidianAdoption adoption = adoptObsidianSettings(obsidian, files.keys());
+        parsed.config = adoption.config;
+        parsed.warnings += adoption.warnings;
+        adopted = adoption.adoptedKeys;
     }
-    for (const QString &warning : std::as_const(parsed.warnings))
-        qCWarning(lcVault).noquote() << warning;
-    const bool differs = !sameVaultConfig(config, parsed.config);
+    if (!quiet || parsed.warnings != configWarnings) {
+        for (const QString &warning : std::as_const(parsed.warnings))
+            qCWarning(lcVault).noquote() << warning;
+    }
+    if (!adopted.isEmpty() && adopted != configFromObsidian)
+        qCInfo(lcVault).noquote() << u"Settings taken from .obsidian/: %1"_s.arg(adopted.join(u", "_s));
+    const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian;
     config = parsed.config;
     rawConfig = parsed.raw;
     configWarnings = parsed.warnings;
+    configFromObsidian = adopted;
     return differs;
 }
 
@@ -1040,6 +1077,11 @@ const VaultConfig &Vault::config() const
 QStringList Vault::configWarnings() const
 {
     return d->configWarnings;
+}
+
+QStringList Vault::configAdoptedFromObsidian() const
+{
+    return d->configFromObsidian;
 }
 
 bool Vault::saveConfig(const VaultConfig &config)

@@ -11,6 +11,7 @@
 //                             (can be called again to reload; does not emit changed())
 //     id(), rootPath(), absolutePath(p), errorString()
 //     config(), configWarnings(), saveConfig(cfg)            + signal configChanged()
+//     configAdoptedFromObsidian()  keys taken from .obsidian/ while config.json is missing
 //     files() (sorted, non-ignored), markdownFiles(), folders(), exists(p), stat(p)
 //                             — answered from the cache, no disk access
 //     readText(p, &ok) (UTF-8, BOM stripped), readBinary(p, &ok)
@@ -31,6 +32,7 @@
 //
 //   History (vault/history.h), LocalStore (vault/localstore.h),
 //   parseVaultConfig()/serializeVaultConfig()/vaultConfigPath() (vault/vaultconfig.h),
+//   adoptObsidianSettings()/qtDateFormatFromMoment() (vault/obsidiansettings.h),
 //   changeSourceName(source) — "user", "external", "sync", "import", "system".
 //
 // Semantics
@@ -85,6 +87,11 @@
 //    those are compared by size and mtime like binary files (a touch counts as a
 //    modification) and are not kept in History; the content cache holds at most 64 MB, and a
 //    .brulion/config.json over 1 MB is ignored (defaults + warning).
+//  * Without .brulion/config.json, a vault with an `.obsidian/` folder takes its journal folder,
+//    file name format and template, templates folder and attachments folder from Obsidian's
+//    settings (obsidiansettings.h; files over 1 MB are skipped with a warning) — in memory, never
+//    written: saveConfig() stores them with the rest. `.obsidian/` is not watched; open() and
+//    rescan() read it again (configChanged() when the result differs).
 //  * Scans never turn what they cannot see into deletions (scanStatus() says why):
 //    - the vault folder is missing (unmounted SD card, removed folder): nothing is reconciled
 //      (RootMissing);
@@ -188,8 +195,12 @@ public:
 
     // --- configuration -------------------------------------------------------------------
     const VaultConfig &config() const;
-    /// Problems found in .brulion/config.json when it was last loaded.
+    /// Problems found in .brulion/config.json (or Obsidian's settings) when it was last loaded.
     QStringList configWarnings() const;
+    /// The config.json keys whose values config() took from the Obsidian vault's `.obsidian/`
+    /// folder ("journalsFolder", "journalFileFormat", "journalTemplate", "templatesFolder",
+    /// "attachmentsFolder"); empty when .brulion/config.json exists or nothing was taken.
+    QStringList configAdoptedFromObsidian() const;
     /// Write .brulion/config.json (unknown keys already in the file are preserved).
     bool saveConfig(const VaultConfig &config);
 
@@ -313,7 +324,8 @@ public:
 Q_SIGNALS:
     /// Tracked files changed (by this vault or by other programs).
     void changed(const QList<brulion::VaultChange> &changes);
-    /// config() changed (saveConfig, external edit, deletion of the file, reload).
+    /// config() or configAdoptedFromObsidian() changed (saveConfig, external edit, deletion of
+    /// the file, reload).
     void configChanged();
     /// scanStatus() changed.
     void scanStatusChanged();
