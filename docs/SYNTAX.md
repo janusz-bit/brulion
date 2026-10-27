@@ -178,7 +178,9 @@ unspecified IP addresses, and the names of a home network by their form — one 
 so already this session and dropped from the cache since; turning the setting off cancels the
 fetches it started. The fetch: http(s) only, every redirect checked (`webpicture::redirectAllowed`:
 never https → http, never from a host of the internet to a private one), no cookies, a generic
-`User-Agent: Mozilla/5.0` and `Accept-Language: *`, at most 20 MB, a 30 s stall limit, and the
+`User-Agent: Mozilla/5.0` and `Accept-Language: *` (in the browser neither: the browser sends its
+own, and a page may send other sites only such "simple" requests without a CORS preflight; the
+browser follows redirects itself), at most 20 MB, a 30 s stall limit, and the
 bytes must be a picture by their signature (PNG, JPEG, GIF, WebP, BMP, ICO, AVIF, SVG —
 `webpicture::sniffFormat`); the cache keeps up to 200 MB, the least recently used dropped first
 (a file shown is marked used by its modification time, at most once an hour). In the browser the
@@ -193,7 +195,15 @@ parentheses, `%`, `#`, `<` and `>` of the path percent-encoded (`assets/Mój%20k
 they are); `![[https://…|alias]]` → `![[assets/kot.png|alias]]`. A picture is counted as stored only
 when a note changed (nothing is left in the attachments folder otherwise). Links
 `[x](https://…)`, bare URLs, code and blocks that show no pictures (code fences, formulas, tables,
-HTML) are never fetched or touched. Exports keep the URL as written.
+HTML) are never fetched or touched. A pasted picture address alone (`https://…/kot.jpg`, by its
+form: an http(s) URL whose path ends with a picture extension) stays the bare URL it is until the
+user chooses "Zapisz w notatniku" (docs/UI.md). Exports: the HTML (`html-site`, `html-single`) and
+Pandoc ones show every such picture — `![alt](url)` and `![[url|alt]]` alike — as `<img>` /
+`![alt](url)` with the URL as written ("Zostaw adresy", the default) or, with "Dołącz kopie", a copy
+the app takes from the device's cache, fetching the missing ones first: `assets/web/<name>` in the
+site's and Pandoc's ZIP (a free name: `kot 2.jpg`), a `data:` URI in the single HTML file; a picture
+that cannot be fetched keeps its URL (named in the export's warnings). The other exports keep the
+notes' text, URLs included, as written.
 
 **Display:** a link naming a daily note — `[[2026-10-13]]` or the vault's `journalFileFormat`,
 without an alias — is shown as a readable date in the UI language (`wt 13 paź`, `Tue, Oct 13`;

@@ -15,9 +15,15 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 - **Ustawienia ze skarbca Obsidiana** — folder Obsidiana otwarty jako notatnik sam przejmuje folder, nazwy plików i szablon dziennika, folder szablonów i folder załączników z ustawień Obsidiana (`.obsidian/`), dopóki notatnik nie ma własnych ustawień. **Ustawienia → Notatnik** pokazują, co przejął, a **Zapisz w notatniku** zapisuje to w `.brulion/config.json`. Zobacz [[Import i eksport#Skarbiec Obsidiana bez importu|Skarbiec Obsidiana bez importu]].
 - **Zaznaczanie bloków z kilku dni dziennika** — w widoku **Dziennik** zaznaczysz bloki kilku dni naraz: Shift+kliknięciem w blok innego dnia, przeciągnięciem myszą, Shift+strzałkami za brzeg dnia albo na telefonie stuknięciem w blok innego dnia. Takie zaznaczenie kopiujesz (także jako tekst), a bloki każdego dnia trafiają do schowka po linku do tego dnia. Zobacz [[Dokument i konspekt#Zaznaczanie i kopiowanie|Zaznaczanie i kopiowanie]].
 - **Zmiana nazwy na serwerze dociera jako zmiana nazwy** — folder albo strona, którym zmieniono nazwę albo które przeniesiono na innym urządzeniu albo w Nextcloudzie w przeglądarce, dostają tu tę samą nową nazwę. Notatki nie są pobierane od nowa i nie trafiają do kosza, a ich historia wersji, ulubione i zwinięte bloki idą za nimi. Stronę, której nazwę zmienisz w Brulionie, synchronizacja przenosi na serwerze jednym poleceniem, tak jak folder — także gdy zaraz potem piszesz w niej dalej. Zobacz [[Synchronizacja#Foldery|Foldery]].
+- **Zdjęcia z internetu: powiększenie, wklejanie i eksport** — kliknięcie pokazanego zdjęcia otwiera je na całe okno (dopasowane albo w rzeczywistym rozmiarze). Wklejony adres obrazu („Kopiuj adres obrazu” w przeglądarce) i fragment strony ze zdjęciami Brulion proponuje od razu zapisać w notatniku. Eksport do HTML i Pandoca pyta, czy zostawić adresy zdjęć, czy dołączyć ich kopie. Zobacz [[Linki i odnośniki zwrotne#Zdjęcia z internetu|Zdjęcia z internetu]].
 
 **Zmiany**
+- **Menu zdjęcia z internetu** otwierasz teraz prawym przyciskiem myszy albo przytrzymaniem palca (kliknięcie powiększa zdjęcie). W menu jest nowa pozycja **Powiększ**.
 - **Szybsze kopiowanie bloków na komputerze z Linuksem** — sformatowana wersja kopii (dla poczty i edytorów dokumentów) powstaje dopiero wtedy, gdy wklejasz ją do takiego programu. Skopiowanie całej strony z 5000 bloków zajmuje teraz kilka milisekund zamiast około 40, a wklejenie do Brulionu, edytora kodu czy terminala w ogóle jej nie tworzy.
+
+**Poprawki**
+- Eksport HTML i Pandoc: zdjęcie wstawione jako `![[https://…/kot.jpg]]` było „brakującym załącznikiem” — teraz jest zdjęciem.
+- Wersja w przeglądarce: zdjęcie z internetu, którego strona nie pozwala pobrać innym witrynom (CORS) albo spod `http://` w Brulionie otwartym przez `https://`, pokazuje ten powód zamiast „Brak połączenia”. Zapytania o zdjęcia nie wysyłają już nagłówków, przez które część serwerów odrzucała je w przeglądarce.
 
 ## 0.4.5 — 26 października 2026
 

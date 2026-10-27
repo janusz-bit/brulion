@@ -618,11 +618,18 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   one under the other when they do not fit, centred; a spinner while it loads. A picture fetched
   for the first time has no size until it is there: its row changes height when the fetch ends
   (with the setting below on, also while the journal only scrolls — "Scrolling performance",
-  "Still there"); later the size comes from the cached file. A click,
-  right-click (its own `WithinBounds` handler: the block menu does not open as well) or long
-  press on the shown picture opens `WebPictureMenu` — its first, disabled line "Obraz z <host>"
-  (BMenu shows no title), then Zapisz w notatniku, Otwórz w przeglądarce (the platform's
-  handler), Kopiuj adres obrazu — instead of the picture view. "Zapisz w notatniku"
+  "Still there"); later the size comes from the cached file. A click (a tap) on the shown
+  picture opens it on its own in `WebPictureViewer` (`EmbedView.webOpen` →
+  `BlockEditor.openWebPictureViewer`), as a click on an attachment opens the picture view: a
+  modal popup over the whole window with a bar — "<host> › <file>" (plain text), the size toggle
+  (fitted ↔ its own pixels, dragged around; a click on the picture toggles too), **Zapisz w
+  notatniku**, **⋯** (the menu below, without "Powiększ") and **Zamknij**; Escape and Back
+  (Android) close it. It draws the cached copy as the picture view draws an attachment (fitting
+  only shrinks a raster picture, an SVG fills; decoded at most 2048 px a side) — no references,
+  no text view. A right-click (its own `WithinBounds` handler: the block menu does not open as
+  well) or long press opens `WebPictureMenu` — its first, disabled line "Obraz z <host>" (BMenu
+  shows no title), then Powiększ (the viewer), Zapisz w notatniku, Otwórz w przeglądarce (the
+  platform's handler), Kopiuj adres obrazu. "Zapisz w notatniku"
   (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
   shown —, stores the attachment and points every picture of that URL on the page at it, one undo
   step; a toast says how many were saved or which failed (a picture edited away meanwhile, or whose
@@ -638,6 +645,20 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown` (not for
   private hosts — those keep "ask" —, once a session per picture; turned off, the fetches it
   queued are cancelled and their rows ask again, "Pokaż" / "Zapisz w notatniku" go on).
+  Pasting (`PageController.pasteClipboard`, Ctrl+V and the text menu's Wklej): a picture's address
+  alone (a browser's "Kopiuj adres obrazu": an http(s) URL without blanks whose path ends with a
+  picture extension, `PageController.isPictureAddress` — by its form, nothing is fetched) goes in
+  as the bare address it is, and a toast "Wklejono adres obrazu" offers **Zapisz w notatniku**:
+  `PageController.urlToPicture` turns exactly that text into `![](url)` (only while it is still
+  there — else "Nie zmieniono: adres zmieniono w międzyczasie") and stores the picture
+  (`insertWebPicture` with `download`). Pasted into a link (`![](…)`, `[x](…)`), a code block or
+  a block that shows no pictures, nothing is offered. HTML of a web page (`htmlToMarkdown`) brings
+  its pictures as `![alt](https://…)`; the ones new on the page (not this app's own copy, not
+  `data:` pictures) are named in the result (`webPictures`), and a toast "Wklejono %n obraz(y) z
+  internetu" offers **Zapisz w notatniku** for them (`downloadWebPictures` each; the result toast
+  as usual). The same over selected blocks (`pasteOverSelection`). Nothing is fetched before the
+  user asks. A paste that only the system's keyboard or the browser's own paste delivers
+  (the text arrives as typed text) offers nothing.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link
