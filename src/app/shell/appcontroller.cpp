@@ -8,6 +8,8 @@
 #include "workspace.h"
 #include "workspaceintegration.h"
 
+#include "autostart.h" // src/platform
+
 #include "notebook/session.h"
 #include "sync/syncengine.h"
 #include "vault/localstore.h"
@@ -154,6 +156,14 @@ AppController::AppController(const Options &options, QObject *parent)
                     openNotification(path, line);
             });
 #endif
+
+    // "Start when you sign in" (Windows): only the default profile, whose names main() set —
+    // tests and separate profiles never write the Run key. An entry of a moved portable copy
+    // points to this program again.
+    m_autostart = platform::Autostart::forThisProcess(QCoreApplication::organizationName() != u"Brulion");
+    if (m_autostart->refresh())
+        qCInfo(lcApp).noquote() << u"Start at sign-in: the entry now starts %1"_s.arg(
+                QDir::toNativeSeparators(QCoreApplication::applicationFilePath()));
 
     // Reminders (the platform's notifier) and sync (Nextcloud, Syncthing) of the Workspace,
     // configured from the settings; fills the sync seam below (workspaceintegration.h).
@@ -584,6 +594,44 @@ bool AppController::isDesktop() const
 QString AppController::version() const
 {
     return QStringLiteral(BRULION_VERSION);
+}
+
+QString AppController::autostartAvailability() const
+{
+    switch (m_autostart->availability()) {
+    case platform::Autostart::Availability::Available: return u"available"_s;
+    case platform::Autostart::Availability::SeparateProfile: return u"profile"_s;
+    case platform::Autostart::Availability::Unsupported: break;
+    }
+    return u"unsupported"_s;
+}
+
+bool AppController::startAtLogin() const
+{
+    return m_autostart->enabled();
+}
+
+void AppController::setStartAtLogin(bool on)
+{
+    if (on == startAtLogin())
+        return;
+    QString error;
+    if (m_autostart->setEnabled(on, &error)) {
+        qCInfo(lcApp) << "Start at sign-in" << (on ? "on" : "off");
+    } else {
+        qCWarning(lcApp).noquote() << u"Start at sign-in not changed: %1"_s.arg(error);
+        toast(tr("Could not change the start at sign-in."), u"error"_s);
+    }
+    // Also when it failed: the switch shows the state again.
+    Q_EMIT startAtLoginChanged();
+}
+
+void AppController::setAutostart(std::unique_ptr<platform::Autostart> autostart)
+{
+    if (!autostart)
+        return;
+    m_autostart = std::move(autostart);
+    Q_EMIT startAtLoginChanged();
 }
 
 void AppController::setTrayAvailable(bool available)
@@ -1087,10 +1135,13 @@ void AppController::showWindow()
 
 bool AppController::handleInstanceMessage(const QByteArray &verb, const QJsonObject &payload)
 {
-    if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open") {
+    if (verb != "activate" && verb != "capture" && verb != "today" && verb != "open" && verb != "hidden") {
         qCInfo(lcApp) << "Ignoring an instance message with an unknown verb" << verb;
         return false;
     }
+    // A second start with --hidden (the sign-in's entry while Brulion already runs): nothing.
+    if (verb == "hidden")
+        return true;
     showWindow();
     // They wait for the notebook when it is still opening.
     if (verb == "capture")

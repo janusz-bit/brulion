@@ -49,6 +49,10 @@ add_subdirectory(core)
 if(BRULION_BUILD_APP)
     add_subdirectory(app)
 endif()
+# OS integration (src/platform): the pure parts of autostart and the Windows app identity.
+if(TARGET brulion_platform)
+    add_subdirectory(platform)
+endif()
 # The desktop's single-instance socket (src/ipc) and the command line brulion-cli (src/cli).
 if(TARGET brulion_ipc)
     add_subdirectory(ipc)

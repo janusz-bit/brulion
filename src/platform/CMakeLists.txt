@@ -1,6 +1,11 @@
 # brulion_platform — OS integration (notifications, storage access, WASM persistence).
+#   all builds   platform (target, log folder, device), autostart ("Start when you sign in": the
+#                Windows Run key over any QSettings — the tests use INI files), appidentity (the
+#                Windows AppUserModelID of the toasts; pure helpers everywhere). Tests: tests/platform.
 qt_add_library(brulion_platform STATIC
     platform.h platform.cpp
+    autostart.h autostart.cpp
+    appidentity.h appidentity.cpp
 )
 target_include_directories(brulion_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_platform PUBLIC brulion_core Qt6::Gui)

@@ -10,7 +10,8 @@ import Brulion
 //   * the choice: Default (the system's sound) / Ringtone / Vibrate (Android) / Silent — only
 //     what this platform offers (ReminderSounds.modes);
 //   * "Choose ringtone…": Android opens the system's ringtone picker; the desktop a menu of
-//     sound-theme sounds and "Sound file…" (FileDialog). "Ringtone" without a ringtone chosen
+//     sound-theme sounds (Windows: its notification sounds) and "Sound file…" (FileDialog; not on
+//     Windows, whose toasts cannot play files). "Ringtone" without a ringtone chosen
 //     yet does the same instead of selecting nothing;
 //   * "Play sample" (Android: the sound for three seconds; desktop: a sample notification).
 //
@@ -45,7 +46,20 @@ GridLayout {
         case "complete": return qsTr("Completed")
         case "alarm-clock-elapsed": return qsTr("Alarm clock")
         case "phone-incoming-call": return qsTr("Incoming call")
-        default: return name
+        // Windows' notification sounds (ms-winsoundevent:Notification.<name>, toastxml.h).
+        case "Default": return qsTr("Notification")
+        case "IM": return qsTr("Instant message")
+        case "Mail": return qsTr("Mail")
+        case "Reminder": return qsTr("Reminder")
+        case "SMS": return qsTr("Text message")
+        default: {
+            const looping = /^Looping\.(Alarm|Call)(\d*)$/.exec(name)
+            if (looping) {
+                const number = looping[2] === "" ? 1 : Number(looping[2])
+                return looping[1] === "Alarm" ? qsTr("Alarm %1").arg(number) : qsTr("Call %1").arg(number)
+            }
+            return name
+        }
         }
     }
     /// The shown name of the custom sound: the ringtone's title or file name, else the theme sound's.
@@ -64,9 +78,11 @@ GridLayout {
             if (kind === "alarm")
                 return AppController.isAndroid ? qsTr("The phone's alarm sound")
                      : AppController.isWasm ? qsTr("A beeping tone while Brulion is open in the browser")
+                     : AppController.platform === "windows" ? qsTr("Windows' alarm sound, repeated until you answer")
                      : qsTr("Alarm clock, from the desktop's sound theme")
             return AppController.isAndroid ? qsTr("The phone's notification sound")
                  : AppController.isWasm ? qsTr("The browser's notification sound")
+                 : AppController.platform === "windows" ? qsTr("Windows' notification sound")
                  : qsTr("As the desktop's notifications sound")
         }
     }

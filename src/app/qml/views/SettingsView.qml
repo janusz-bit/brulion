@@ -1015,6 +1015,27 @@ Item {
                     checked: AppSettings.closeToTray
                     onToggled: AppSettings.closeToTray = checked
                 }
+                // Windows: the Run key (src/platform/autostart.h); with a separate
+                // BRULION_PROFILE shown, but disabled.
+                BSwitch {
+                    objectName: "settingsStartAtLogin"
+                    Layout.fillWidth: true
+                    visible: AppController.autostartAvailability !== "unsupported"
+                    enabled: AppController.autostartAvailability === "available"
+                    text: qsTr("Start when you sign in")
+                    description: AppController.autostartAvailability === "profile"
+                                 ? qsTr("Not in a separate profile (BRULION_PROFILE): Windows starts the default one.")
+                                 : AppController.trayAvailable
+                                   ? qsTr("Brulion starts hidden in the tray, so reminders ring from the moment you sign in.")
+                                   : qsTr("Brulion starts after you sign in.")
+                    iconName: "power"
+                    checked: AppController.startAtLogin
+                    onToggled: {
+                        AppController.startAtLogin = checked
+                        // Refused: follow the real state again.
+                        checked = Qt.binding(() => AppController.startAtLogin)
+                    }
+                }
                 ShellSettingRow {
                     title: qsTr("Event log")
                     description: qsTr("What the app and the sync did, step by step. It stays on this device; share it when something does not work.")

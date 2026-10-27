@@ -1,5 +1,7 @@
 // DesktopNotifier — reminders on the Linux desktop through the freedesktop notification service
-// (org.freedesktop.Notifications, https://specifications.freedesktop.org/notification-spec/).
+// (org.freedesktop.Notifications, https://specifications.freedesktop.org/notification-spec/), and
+// on Windows through toast notifications (WindowsToastBus, windowstoastbus.h: the same message
+// mapped onto toast XML by toastxml.h).
 //
 // The message itself is built by the pure function buildDesktopNotification() (tested without a
 // bus); the bus is behind the small NotificationBus interface (DBusNotificationBus is the real
@@ -16,7 +18,8 @@
 //     Shell, KDE Plasma); servers without sounds ignore the hints.
 //
 // An alarm rings: it is sent again (same id, sound again) every ringInterval until the user acts
-// on it, closes it, or its ringMinutes are over. previewSound() sends a short-lived sample
+// on it, closes it, or its ringMinutes are over (a bus that rings itself — Windows' alarm toasts
+// loop their sound — gets it once more, silently, when the ringMinutes are over). previewSound() sends a short-lived sample
 // notification with a sound (Settings → Reminders, "Play sample"). Without a notification
 // service (no session bus, no daemon, or a failed Notify call) the notification goes to the tray
 // instead (trayMessageRequested(), shown by the shell's DesktopTray).
@@ -77,6 +80,18 @@ public:
     /// Close a shown notification.
     virtual void close(uint id) = 0;
 
+    /// The backend's name for Settings and the log (Notifier::backend()): "dbus" (default),
+    /// "toast" (Windows).
+    virtual QString name() const;
+    /// The sounds offered as "custom" sounds (default: desktopThemeSounds()).
+    virtual QStringList themeSounds() const;
+    /// A sound file can be played (default: true; Windows toasts of an unpackaged app cannot).
+    virtual bool supportsSoundFiles() const { return true; }
+    /// An alarm's notification loops its sound itself while it is shown (Windows' alarm toasts):
+    /// DesktopNotifier does not send it again every ring interval, only once silently when its
+    /// ring time is over (sending a toast again would pop it up again).
+    virtual bool ringsItself() const { return false; }
+
 Q_SIGNALS:
     /// The user invoked an action ("default" for a click on the notification).
     void actionInvoked(uint id, const QString &actionKey);
@@ -106,7 +121,7 @@ public:
 
     // Sounds: the default, a theme sound or a sound file, or none (desktops do not vibrate).
     QList<SoundChoice::Mode> soundModes() const override;
-    bool supportsSoundFiles() const override { return true; }
+    bool supportsSoundFiles() const override;
     QStringList themeSounds() const override;
     bool previewSound(SoundKind kind, const SoundChoice &choice) override;
 

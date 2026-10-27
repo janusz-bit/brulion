@@ -3,6 +3,8 @@
 // optional JSON object.
 //
 //   activate                          show the window (a second launch)
+//   hidden                            nothing (a second launch with --hidden: Windows' start at
+//                                     sign-in while Brulion already runs)
 //   capture                           show the window and open quick capture
 //   today                             show the window and open today's journal
 //   open {"route": {...}, "vault": "/abs/path"}

@@ -1,7 +1,9 @@
 // Navigation of the shell: routes (normalisation, equality), the back/forward history and
 // AppController's navigation (side panel, Android back, journals, notifications, renamed and
-// deleted pages), its vault lifecycle and the command palette's commands.
+// deleted pages), its vault lifecycle, the command palette's commands and the switch "Start when
+// you sign in" (over an Autostart on INI files).
 #include "appcontroller.h"
+#include "autostart.h"
 #include "appsettings.h"
 #include "commandmodel.h"
 #include "demovault.h"
@@ -15,6 +17,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJSEngine>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -1066,6 +1069,51 @@ private Q_SLOTS:
         const QJSValue result = carried.call();
         QVERIFY2(!result.isError(), qPrintable(result.toString()));
         QCOMPARE(engine.globalObject().property(u"undone"_s).toInt(), 1);
+    }
+
+    // Settings → Application → "Start when you sign in" (Windows' Run key; here INI files).
+    void startAtLogin()
+    {
+        auto app = makeApp();
+        // Tests run without the default profile's names: the real Run key is never written.
+#ifdef Q_OS_WIN
+        QCOMPARE(app->autostartAvailability(), u"profile"_s);
+#else
+        QCOMPARE(app->autostartAvailability(), u"unsupported"_s);
+#endif
+        QVERIFY(!app->startAtLogin());
+
+        QSettings run(m_tmp.filePath(u"run-%1.ini"_s.arg(++m_counter)), QSettings::IniFormat);
+        QSettings approved(m_tmp.filePath(u"approved-%1.ini"_s.arg(m_counter)), QSettings::IniFormat);
+        const QString exe = u"C:/Users/Łucja Żółć/AppData/Local/Programs/Brulion/brulion.exe"_s;
+        QSignalSpy changed(app.get(), &AppController::startAtLoginChanged);
+        QSignalSpy toasts(app.get(), &AppController::toastRequested);
+        app->setAutostart(std::make_unique<brulion::platform::Autostart>(&run, &approved, exe));
+        QCOMPARE(app->autostartAvailability(), u"available"_s);
+        QCOMPARE(changed.size(), 1);
+
+        app->setStartAtLogin(true);
+        QVERIFY(app->startAtLogin());
+        QCOMPARE(run.value(u"Brulion"_s).toString(), brulion::platform::autostartCommand(exe));
+        QCOMPARE(changed.size(), 2);
+        app->setStartAtLogin(true); // no change, no signal
+        QCOMPARE(changed.size(), 2);
+        app->setStartAtLogin(false);
+        QVERIFY(!app->startAtLogin());
+        QVERIFY(!run.contains(u"Brulion"_s));
+        QCOMPARE(toasts.size(), 0);
+
+        // Not possible (a separate profile): an error toast, the switch goes back.
+        app->setAutostart(std::make_unique<brulion::platform::Autostart>(
+                &run, &approved, exe, brulion::platform::Autostart::Availability::SeparateProfile));
+        QCOMPARE(app->autostartAvailability(), u"profile"_s);
+        changed.clear();
+        app->setStartAtLogin(true);
+        QVERIFY(!app->startAtLogin());
+        QVERIFY(!run.contains(u"Brulion"_s));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(toasts.size(), 1);
+        QCOMPARE(toasts.first().at(1).toString(), u"error"_s);
     }
 
     void commands()

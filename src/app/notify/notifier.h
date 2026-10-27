@@ -6,6 +6,8 @@
 //                      "OK" / click = open, alarms critical + sound + resident and ringing again
 //                      for their ring time); without a notification service the tray shows them
 //                      (trayMessageRequested). In-app timed: firesWhenClosed() = false.
+//                      Windows: the same over toast notifications (WindowsToastBus: buttons,
+//                      alarms on screen with a looping sound); the tray when they are off.
 //   AndroidNotifier    AndroidBridge::scheduleReminders() (AlarmManager: fires while the app is
 //                      closed and after a reboot; firesWhenClosed() = true). Snoozing happens
 //                      in the Android notification itself.
@@ -37,7 +39,7 @@ public:
     explicit Notifier(QObject *parent = nullptr);
     ~Notifier() override;
 
-    /// "dbus", "tray", "android", "browser" or "none".
+    /// "dbus", "toast" (Windows), "tray", "android", "browser" or "none".
     virtual QString backend() const = 0;
     /// Notifications can be shown right now (a notification service or tray exists, the
     /// permission is granted).

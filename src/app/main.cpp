@@ -1,3 +1,4 @@
+#include "appidentity.h" // Windows: the AppUserModelID of the toasts (src/platform)
 #include "platform.h"
 #include "ui/devtools.h"      // design system dev tools: --gallery, --screenshot, --size … (devtools.h)
 #include "ui/fallbackfonts.h" // emoji and symbol fonts where the system has none
@@ -95,6 +96,8 @@ int main(int argc, char *argv[])
     // "Brulion", or a separate profile for BRULION_PROFILE (src/ipc/profile.h): the same names as
     // brulion-cli's.
     brulion::ipc::applyAppNames();
+    // Windows: the toasts' name and icon, also for the portable ZIP (nothing elsewhere).
+    brulion::platform::applyAppIdentity();
 #else
     QGuiApplication::setApplicationName(QStringLiteral("Brulion"));
     QGuiApplication::setOrganizationName(QStringLiteral("Brulion"));
@@ -126,8 +129,10 @@ int main(int argc, char *argv[])
     if (mainUi && !devTools.screenshotMode() && !args.contains(u"--no-single-instance"_s)) {
         singleInstance = std::make_unique<brulion::ipc::SingleInstance>(brulion::ipc::SingleInstance::keyFor(
                 QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
+        // --hidden (Windows' start at sign-in, the running one already there): no window.
         const QByteArray message = args.contains(u"--capture"_s) ? "capture"
                                    : args.contains(u"--today"_s)  ? "today"
+                                   : args.contains(u"--hidden"_s) ? "hidden"
                                                                   : "activate";
         if (singleInstance->sendToPrimary(message)) {
             // The running app keeps its own setting: a second launch cannot switch it on.

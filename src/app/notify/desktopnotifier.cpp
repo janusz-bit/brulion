@@ -77,6 +77,16 @@ DesktopNotification buildSoundPreview(SoundKind kind, const SoundChoice &choice,
 
 NotificationBus::~NotificationBus() = default;
 
+QString NotificationBus::name() const
+{
+    return u"dbus"_s;
+}
+
+QStringList NotificationBus::themeSounds() const
+{
+    return desktopThemeSounds();
+}
+
 // ---- DesktopNotifier --------------------------------------------------------------------------
 
 DesktopNotifier::DesktopNotifier(NotificationBus *bus, QObject *parent) : Notifier(parent), m_bus(bus)
@@ -100,7 +110,7 @@ DesktopNotifier::~DesktopNotifier() = default;
 QString DesktopNotifier::backend() const
 {
     if (m_bus && m_bus->isAvailable())
-        return u"dbus"_s;
+        return m_bus->name();
     return m_trayAvailable ? u"tray"_s : u"none"_s;
 }
 
@@ -170,9 +180,14 @@ QList<SoundChoice::Mode> DesktopNotifier::soundModes() const
     return {SoundChoice::Mode::Default, SoundChoice::Mode::Custom, SoundChoice::Mode::Silent};
 }
 
+bool DesktopNotifier::supportsSoundFiles() const
+{
+    return !m_bus || m_bus->supportsSoundFiles();
+}
+
 QStringList DesktopNotifier::themeSounds() const
 {
-    return desktopThemeSounds();
+    return m_bus ? m_bus->themeSounds() : desktopThemeSounds();
 }
 
 bool DesktopNotifier::previewSound(SoundKind kind, const SoundChoice &choice)
@@ -233,20 +248,26 @@ void DesktopNotifier::ring()
     if (!m_bus)
         return;
     const QDateTime current = now();
+    const bool ringsItself = m_bus->ringsItself();
     QList<QPair<uint, ScheduledNotification>> again;
     for (auto it = m_shown.begin(); it != m_shown.end(); ++it) {
         if (!it->ringUntil.isValid())
             continue;
-        if (current >= it->ringUntil)
+        if (current >= it->ringUntil) {
             it->ringUntil = QDateTime(); // rang long enough: it stays on screen, silently
-        else
+            // A notification looping its own sound is replaced by a silent one.
+            if (ringsItself)
+                again.append({ it.key(), it->notification });
+        } else if (!ringsItself) {
             again.append({ it.key(), it->notification });
+        }
     }
     const QStringList capabilities = m_bus->capabilities();
+    const SoundChoice alarmSound = ringsItself ? SoundChoice{ SoundChoice::Mode::Silent, {}, {} } : sound(SoundKind::Alarm);
     for (const auto &[id, notification] : std::as_const(again)) {
         const QPointer<DesktopNotifier> self(this);
         m_bus->notify(
-                buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, sound(SoundKind::Alarm)),
+                buildDesktopNotification(notification, capabilities, m_snoozeMinutes, id, alarmSound),
                 [self, id](uint newId) {
                     if (!self || newId == id)
                         return;
