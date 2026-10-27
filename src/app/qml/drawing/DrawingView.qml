@@ -19,7 +19,10 @@ import Brulion
 //    "drawing/…").
 //  * A change of the file from elsewhere (Syncthing, Nextcloud) while it is open is taken in: as
 //    it is when nothing changed here, else merged stroke by stroke (DrawingCanvas.takeExternal)
-//    and saved; the canvas's own saves coming back are recognised (isKnownFile).
+//    and saved; the canvas's own saves coming back are recognised (isKnownFile). Every save
+//    first reads the file: a change not reported yet is taken in the same way, never written
+//    over. A version Brulion cannot edit (shapes, text) is shown as it is; what was drawn here
+//    and not saved is kept in a new file beside it ("… (to urządzenie).svg").
 //  * A file Brulion cannot edit is shown as the picture it is, with why: an Excalidraw drawing
 //    with shapes or text ("readonly"), a picture without a scene, a scene that cannot be read; a
 //    missing file says so. Renames follow the file (the route applied one event-loop turn late, as
@@ -99,6 +102,14 @@ FocusScope {
         saveTimer.stop()
         if (root.loadedPath === "" || root.status !== "" || !canvas.modified)
             return true
+        // What the file holds now, on disk: another program may have written it a moment ago,
+        // before its change was reported (a folder watch that missed it, Android's shared
+        // storage) — taken in first, never written over.
+        if (Workspace.exists(root.loadedPath)) {
+            const disk = Workspace.readAttachment(root.loadedPath)
+            if (disk.byteLength > 0 && !canvas.isKnownFile(disk) && !root.takeIn(disk))
+                return true // shown as it is now; what was drawn here kept in a copy beside it
+        }
         const bytes = canvas.svg()
         // The vault reports the write at once (Workspace.fileChanged, below): that is this save,
         // not another device's change to merge.
@@ -109,6 +120,36 @@ FocusScope {
             return false // (Workspace.errorOccurred: the shell's toast says why)
         canvas.markSaved(bytes)
         return true
+    }
+
+    /// Another program's version of the open, editable file: taken in — merged with what was
+    /// drawn here (DrawingCanvas.takeExternal) — or, when it is no drawing Brulion can edit any
+    /// more (shapes or text added in excalidraw.com), shown as it is, with what was drawn here
+    /// and not yet saved kept in a copy beside it. True when the paper still edits the file.
+    function takeIn(bytes) {
+        const merged = canvas.modified
+        if (canvas.takeExternal(bytes)) {
+            if (merged) {
+                AppController.toast(qsTr("The drawing was changed on another device: both versions are kept in it"))
+                saveTimer.restart()
+            }
+            return true
+        }
+        saveTimer.stop()
+        if (canvas.modified)
+            root.keepCopy()
+        root.status = canvas.load(bytes)
+        return false
+    }
+
+    /// What was drawn here, written beside the drawing as a new file ("Rysunek (to urządzenie).svg").
+    function keepCopy() {
+        const slash = root.loadedPath.lastIndexOf("/")
+        const folder = slash < 0 ? "" : root.loadedPath.slice(0, slash + 1)
+        const path = Workspace.createAttachment(folder + qsTr("%1 (this device)").arg(root.title) + ".svg",
+                                                canvas.svg())
+        if (path !== "")
+            AppController.toast(qsTr("The drawing was changed elsewhere into one Brulion cannot edit. What you drew here is kept in %1").arg(path.slice(path.lastIndexOf("/") + 1)))
     }
 
     function load(path) {
@@ -231,19 +272,10 @@ FocusScope {
             const bytes = Workspace.readAttachment(path)
             if (bytes.byteLength === 0 || canvas.isKnownFile(bytes))
                 return // its own save, or a file being written
-            if (root.status === "") {
-                const merged = canvas.modified
-                if (canvas.takeExternal(bytes)) {
-                    if (merged) {
-                        AppController.toast(qsTr("The drawing was changed on another device: both versions are kept in it"))
-                        saveTimer.restart()
-                    }
-                    return
-                }
-                if (canvas.modified)
-                    return // not a drawing any more: this one is written over it (History keeps it)
-            }
-            root.status = canvas.load(bytes)
+            if (root.status === "")
+                root.takeIn(bytes)
+            else
+                root.status = canvas.load(bytes)
         }
     }
     Connections {

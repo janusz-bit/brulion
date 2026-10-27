@@ -23,7 +23,9 @@
 //  * fingers: with `fingerDraws` one finger draws, else it moves the paper; two fingers move and
 //    zoom (a second finger that lands while a stroke has just begun turns the stroke into the
 //    gesture — the stroke is dropped). A stylus seen (`stylusSeen`) is what QML uses to turn
-//    finger drawing off: the palm then never draws.
+//    finger drawing off: the palm then never draws. Palm rejection: while the pen is down every
+//    touch is ignored (until all fingers lift); a pen that lands while fingers move the paper or
+//    draw ends their gesture (a finger stroke just begun is dropped) and takes over.
 // Erasing removes whole strokes the eraser touches (as Excalidraw's eraser), one undo step per
 // gesture. A stroke is one undo step; the background too. Undo history: the strokes of this
 // session (cleared by load()).
@@ -138,8 +140,9 @@ public:
     /// Take in a version of the file another program wrote while this one is open (Syncthing):
     /// with no changes here it replaces the drawing; else the strokes are merged by their ids —
     /// the other version, plus the strokes drawn here since the last load or save, minus the ones
-    /// erased here (`modified` stays). False when `bytes` holds no editable drawing (nothing
-    /// changes then). The undo history is cleared.
+    /// erased here (`modified` stays), the paper's pattern theirs unless it was changed here.
+    /// False when `bytes` holds no editable drawing (nothing changes then). The undo history is
+    /// cleared. A stroke or an erasing gesture in progress goes on and ends on the new drawing.
     Q_INVOKABLE bool takeExternal(const QByteArray &bytes);
     /// The file to write (core drawing::toSvg). Empty while not editable.
     Q_INVOKABLE QByteArray svg() const;
@@ -237,6 +240,9 @@ private:
     /// A mouse event made of a stylus's tablet event the canvas already took (Windows makes them).
     bool fromTablet(const QMouseEvent *event) const;
     void noteStylus();
+    /// A pen lands while fingers move the paper or draw: their gesture ends (a stroke just begun
+    /// is dropped), and touches are ignored until every finger lifts.
+    void yieldTouchToPen();
     void setGesture(Gesture g);
 
     void beginStroke(QPointF itemPos, const Pointer &p);
@@ -279,6 +285,8 @@ private:
     bool m_modified = false;
     /// Stroke ids at the last load or save (takeExternal() merges against them).
     QSet<QString> m_baseIds;
+    /// The paper's pattern at the last load or save (a merge keeps ours only when it changed).
+    drawing::Background m_baseBackground = drawing::Background::Plain;
     /// The file as last loaded, taken in or written.
     QByteArray m_known;
     QList<Op> m_undo;
@@ -319,6 +327,10 @@ private:
     QPointF m_hover{-1, -1};
     /// A stylus gesture taken from the window's tablet events (see the header).
     bool m_tabletGesture = false;
+    /// The gesture in progress is the fingers' (a pen landing ends it: yieldTouchToPen()).
+    bool m_touchGesture = false;
+    /// Touches are left alone until every finger lifts (they were down while the pen drew).
+    bool m_ignoreTouch = false;
     /// The mouse events of the current press are a stylus's the tablet events already gave.
     bool m_ignoreMouse = false;
     quint64 m_lastTabletTime = 0;

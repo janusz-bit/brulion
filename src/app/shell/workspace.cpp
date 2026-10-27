@@ -593,6 +593,17 @@ bool Workspace::writeAttachment(const QString &rawPath, const QByteArray &data)
     return false;
 }
 
+QString Workspace::createAttachment(const QString &rawPath, const QByteArray &data)
+{
+    if (!m_vault || rawPath.isEmpty() || data.isEmpty())
+        return {};
+    const QString path = paths::normalize(rawPath);
+    const VaultPath created = m_vault->createBinary(path, data, ChangeSource::User);
+    if (created.isEmpty())
+        Q_EMIT errorOccurred(tr("Could not save the drawing %1: %2").arg(paths::basename(path), m_vault->errorString()));
+    return created;
+}
+
 QString Workspace::journalDate(const QString &path) const
 {
     if (!m_vault)

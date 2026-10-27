@@ -256,6 +256,7 @@ QString DrawingCanvas::load(const QByteArray &bytes)
     m_baseIds.clear();
     for (const Item &item : std::as_const(m_items))
         m_baseIds.insert(item.stroke.id);
+    m_baseBackground = m_doc.background;
     m_known = bytes;
     const bool hadHistory = canUndo() || canRedo();
     m_undo.clear();
@@ -276,13 +277,18 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
     std::optional<drawing::Drawing> theirs = drawing::readDrawing(bytes);
     if (!theirs || !drawing::editable(*theirs) || !m_editable)
         return false;
-    cancelStroke();
+    // A stroke being drawn goes on (it is added when it ends, on top of the new strokes); the
+    // strokes an erasing gesture has touched so far stay touched, found again by their ids.
+    QSet<QString> erasingIds;
+    for (const int i : std::as_const(m_erasing))
+        erasingIds.insert(m_items.at(i).stroke.id);
+    const drawing::Background theirBackground = theirs->background;
     QSet<QString> theirIds;
     for (const drawing::Stroke &s : std::as_const(theirs->strokes))
         theirIds.insert(s.id);
     if (m_modified) {
         // Merged by stroke id against the last load or save: theirs, plus what was drawn here,
-        // minus what was erased here; the background as chosen here.
+        // minus what was erased here; the background theirs unless it was changed here.
         QSet<QString> ours;
         for (const Item &item : std::as_const(m_items))
             ours.insert(item.stroke.id);
@@ -297,9 +303,15 @@ bool DrawingCanvas::takeExternal(const QByteArray &bytes)
                 merged.append(item.stroke);
         }
         theirs->strokes = std::move(merged);
-        theirs->background = m_doc.background;
+        if (m_doc.background != m_baseBackground)
+            theirs->background = m_doc.background;
     }
+    m_baseBackground = theirBackground;
     setDocument(std::move(*theirs));
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        if (erasingIds.contains(m_items.at(i).stroke.id))
+            m_erasing.insert(int(i));
+    }
     m_baseIds = theirIds;
     m_known = bytes;
     if (canUndo() || canRedo()) {
@@ -326,6 +338,7 @@ void DrawingCanvas::markSaved(const QByteArray &written)
     m_baseIds.clear();
     for (const Item &item : std::as_const(m_items))
         m_baseIds.insert(item.stroke.id);
+    m_baseBackground = m_doc.background;
     setModified(false);
 }
 
@@ -500,6 +513,9 @@ void DrawingCanvas::panBy(qreal dx, qreal dy)
 
 void DrawingCanvas::viewMoved(bool byUser)
 {
+    // The paper ends where strokes may reach (drawing::CoordinateLimit).
+    m_center = QPointF(std::clamp(m_center.x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
+                       std::clamp(m_center.y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
     m_viewSet = true;
     if (m_gesture == Gesture::Draw)
         updateLive();
@@ -578,15 +594,25 @@ void DrawingCanvas::renderCache()
             pen.setCosmetic(true);
             pen.setWidthF(1);
             p.setPen(pen);
-            for (double y = std::ceil(visible.top() / spacing) * spacing; y <= visible.bottom(); y += spacing) {
+            // Counted by index: a step added to a huge coordinate would change nothing. (At most
+            // one line per 6 px of the view.)
+            const auto rules = [spacing](double from, double to, const auto &line) {
+                const double first = std::ceil(from / spacing);
+                const double last = std::floor(to / spacing);
+                if (!std::isfinite(first) || !std::isfinite(last) || last < first || last - first > 10000)
+                    return;
+                for (int i = 0; i <= int(last - first); ++i)
+                    line((first + i) * spacing);
+            };
+            rules(visible.top(), visible.bottom(), [&](double y) {
                 const double iy = std::round(toItem(QPointF(0, y)).y() * dpr) / dpr + 0.5 / dpr;
                 p.drawLine(QPointF(0, iy), QPointF(width(), iy));
-            }
+            });
             if (m_doc.background == drawing::Background::Grid) {
-                for (double x = std::ceil(visible.left() / spacing) * spacing; x <= visible.right(); x += spacing) {
+                rules(visible.left(), visible.right(), [&](double x) {
                     const double ix = std::round(toItem(QPointF(x, 0)).x() * dpr) / dpr + 0.5 / dpr;
                     p.drawLine(QPointF(ix, 0), QPointF(ix, height()));
-                }
+                });
             }
         }
     }
@@ -789,8 +815,15 @@ bool DrawingCanvas::handleTablet(QTabletEvent *event)
             remember();
             return true; // another button of the pen held down
         }
-        if (m_gesture != Gesture::None || !onTop(event->position()))
+        if (!onTop(event->position()))
             return false;
+        if (m_gesture != Gesture::None) {
+            // The palm (or a finger) got there first: the pen wins, the hand is left alone until
+            // it lifts. A gesture of the mouse goes on.
+            if (!m_touchGesture)
+                return false;
+            yieldTouchToPen();
+        }
         remember();
         noteStylus();
         m_tabletGesture = true;
@@ -1027,6 +1060,29 @@ bool DrawingCanvas::event(QEvent *event)
     return QQuickPaintedItem::event(event);
 }
 
+void DrawingCanvas::yieldTouchToPen()
+{
+    switch (m_gesture) {
+    case Gesture::Draw:
+        // A finger's stroke the pen lands in: the palm, unless it has been drawing for a while.
+        if (m_liveClock.elapsed() < 300 || m_live.points.size() < 8)
+            cancelStroke();
+        else
+            finishStroke();
+        break;
+    case Gesture::Erase: finishErase(); break;
+    case Gesture::Pan:
+    case Gesture::Pinch:
+        setGesture(Gesture::None);
+        endViewGesture();
+        break;
+    case Gesture::None: break;
+    }
+    m_touchGesture = false;
+    m_touchDrawId = -1;
+    m_ignoreTouch = true;
+}
+
 void DrawingCanvas::touchEvent(QTouchEvent *event)
 {
     if (event->type() == QEvent::TouchCancel) {
@@ -1039,6 +1095,18 @@ void DrawingCanvas::touchEvent(QTouchEvent *event)
         if (p.state() != QEventPoint::State::Released)
             down.append(&p);
     }
+    if (m_tabletGesture || m_ignoreTouch) {
+        // The pen is drawing, erasing or moving the paper: a hand on the screen (the palm) does
+        // nothing — not even after the pen lifts, until every finger has lifted too.
+        m_ignoreTouch = !down.isEmpty();
+        event->accept();
+        return;
+    }
+    if (m_gesture != Gesture::None && !m_touchGesture) {
+        event->accept(); // the mouse's gesture
+        return;
+    }
+    m_touchGesture = !down.isEmpty();
     if (down.size() >= 2) {
         if (m_gesture == Gesture::Draw) {
             // A second finger right after the first one began: a pinch, not a stroke.
@@ -1113,7 +1181,10 @@ void DrawingCanvas::touchEvent(QTouchEvent *event)
 
 void DrawingCanvas::touchUngrabEvent()
 {
-    mouseUngrabEvent();
+    if (m_touchGesture)
+        mouseUngrabEvent();
+    m_touchGesture = false;
+    m_ignoreTouch = false;
     m_touchDrawId = -1;
 }
 
@@ -1145,7 +1216,8 @@ void DrawingCanvas::extendStroke(QPointF itemPos, const Pointer &p)
 {
     if (m_gesture != Gesture::Draw)
         return;
-    const QPointF scene = toScene(itemPos);
+    const QPointF scene(std::clamp(toScene(itemPos).x(), -drawing::CoordinateLimit, drawing::CoordinateLimit),
+                        std::clamp(toScene(itemPos).y(), -drawing::CoordinateLimit, drawing::CoordinateLimit));
     const double pressure = m_live.tool == drawing::Tool::Highlighter || !m_liveStylus ? 0.5 : p.pressure;
     if (!m_live.points.isEmpty()) {
         const drawing::StrokePoint &last = m_live.points.last();

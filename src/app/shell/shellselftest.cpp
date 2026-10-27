@@ -21,6 +21,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
@@ -29,6 +30,7 @@
 #include <QInputDevice>
 #include <QInputMethodEvent>
 #include <QJSValue>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLocale>
 #include <QQmlApplicationEngine>
@@ -2673,6 +2675,73 @@ void checkDrawing(QQuickWindow *window, AppController *app, const Check &check)
     check(waitFor([&] { return strokesInFile() == 0; }, 5000), "the undo is saved too");
     QMetaObject::invokeMethod(canvas, "redo");
     check(waitFor([&] { return strokesInFile() == 1; }, 5000), "the redo is saved");
+
+    // Another device's version on disk the vault has not reported yet (a missed folder watch,
+    // Android's shared storage): the save reads the file first and merges, never writes over it.
+    QQuickItem *view = canvas;
+    while (view && view->metaObject()->indexOfMethod("save()") < 0)
+        view = view->parentItem();
+    const auto writeBehind = [&](const drawing::Drawing &d) {
+        QFile f(workspace->vault()->absolutePath(path));
+        const bool ok = f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(drawing::toSvg(d)) > 0;
+        f.close();
+        return ok;
+    };
+    const auto drawStroke = [&](double y) {
+        const QPointF a = pointIn(canvas, 0.25, y);
+        const QPointF b = pointIn(canvas, 0.6, y + 0.02);
+        if (touch)
+            touchDrag(window, a, b - a);
+        else
+            mouseDrag(window, a, b);
+    };
+    drawing::Drawing theirs = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    drawing::Stroke remote;
+    remote.id = u"kreskaZdalna"_s;
+    remote.points = {{40, 400, 0.5}, {240, 420, 0.5}};
+    theirs.strokes.append(remote);
+    drawStroke(0.6);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 2; }) && view
+                  && canvas->property("modified").toBool() && writeBehind(theirs),
+          "a stroke drawn here, another device's version written behind the vault's back");
+    QVariant saved;
+    if (view)
+        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+    {
+        const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(path));
+        const bool kept = d && std::any_of(d->strokes.cbegin(), d->strokes.cend(),
+                                           [](const drawing::Stroke &s) { return s.id == u"kreskaZdalna"; });
+        check(d && d->strokes.size() == 3 && kept && canvas->property("strokeCount").toInt() == 3,
+              "the save merges a version not reported yet: both devices' strokes are in the file");
+    }
+
+    // A version Brulion cannot edit (a rectangle added in excalidraw.com): shown as it is, never
+    // written over; what was drawn here is kept in a new file beside it.
+    drawing::Drawing shapes = drawing::readDrawing(workspace->readAttachment(path)).value_or(drawing::Drawing());
+    shapes.foreign.append(QJsonObject{{u"type"_s, u"rectangle"_s}, {u"id"_s, u"prostokąt"_s}, {u"x"_s, 10},
+                                      {u"y"_s, 10}, {u"width"_s, 50}, {u"height"_s, 40}});
+    const QByteArray shapesBytes = drawing::toSvg(shapes);
+    drawStroke(0.8);
+    check(waitFor([&] { return canvas->property("strokeCount").toInt() == 4; }) && writeBehind(shapes),
+          "a stroke drawn here, an Excalidraw version with a shape written behind the vault's back");
+    if (view)
+        QMetaObject::invokeMethod(view, "save", Q_RETURN_ARG(QVariant, saved));
+    check(workspace->readAttachment(path) == shapesBytes, "the version with the shape is not written over");
+    check(view && view->property("status").toString() == u"readonly"_s, "and the editor shows it as it is");
+    {
+        const QString folder = paths::dirname(path);
+        const QString stem = QFileInfo(path).completeBaseName();
+        int copies = 0;
+        for (const QString &name : QDir(workspace->vault()->absolutePath(folder)).entryList({u"*.svg"_s}, QDir::Files)) {
+            const QString other = folder.isEmpty() ? name : folder + u'/' + name;
+            if (other == path || !name.startsWith(stem))
+                continue;
+            const std::optional<drawing::Drawing> d = drawing::readDrawing(workspace->readAttachment(other));
+            if (d && d->strokes.size() == 4 && drawing::editable(*d))
+                ++copies;
+        }
+        check(copies == 1, "what was drawn here is kept in a copy beside it");
+    }
     app->back();
     check(waitFor([&] {
               QQuickItem *again = embedImage();

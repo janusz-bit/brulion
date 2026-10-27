@@ -149,6 +149,30 @@ int darkPixels(const QImage &image)
     return n;
 }
 
+/// A drawing file another device wrote: one horizontal stroke per id ("a" at y 50, "b" at 110,
+/// "c" at 170 …, x 100–300) on the paper `background`.
+QByteArray strokesFile(const QStringList &ids, const QString &background = u"plain"_s)
+{
+    brulion::drawing::Drawing d;
+    d.background = brulion::drawing::backgroundFromName(background);
+    for (const QString &id : ids) {
+        brulion::drawing::Stroke s;
+        s.id = id;
+        const double y = 50 + 60 * double(id.at(0).unicode() - 'a');
+        s.points = {{100, y, 0.5}, {300, y, 0.5}};
+        d.strokes.append(s);
+    }
+    return brulion::drawing::toSvg(d);
+}
+
+QStringList strokeIds(const DrawingCanvas *canvas)
+{
+    QStringList ids;
+    for (const auto &s : canvas->currentDrawing().strokes)
+        ids.append(s.id);
+    return ids;
+}
+
 } // namespace
 
 class TestDrawingCanvas : public QObject {
@@ -756,6 +780,253 @@ private Q_SLOTS:
             QVERIFY(f.open(QIODevice::WriteOnly));
             f.write(svg);
         }
+    }
+
+    // Palm rejection: a hand on the screen while the pen is down does nothing — it neither draws,
+    // nor moves the paper, nor ends, cuts or erases the pen's stroke —, also after the pen lifts
+    // until the hand lifts; then fingers work again.
+    void palmIsIgnoredWhileThePenIsDown_data()
+    {
+        QTest::addColumn<QString>("palm");
+        QTest::addColumn<bool>("fingerDraws");
+        QTest::newRow("a tap, fingers move the paper") << u"tap"_s << false;
+        QTest::newRow("a tap, fingers draw") << u"tap"_s << true;
+        QTest::newRow("two contacts, fingers move the paper") << u"two"_s << false;
+        QTest::newRow("two contacts, fingers draw") << u"two"_s << true;
+        QTest::newRow("a sliding palm") << u"slide"_s << false;
+        QTest::newRow("a palm still down after the pen") << u"stays"_s << false;
+        QTest::newRow("a palm still down after the pen, fingers draw") << u"stays"_s << true;
+    }
+    void palmIsIgnoredWhileThePenIsDown()
+    {
+        QFETCH(QString, palm);
+        QFETCH(bool, fingerDraws);
+        canvas->setFingerDraws(fingerDraws);
+        const QPointF centre(canvas->centerX(), canvas->centerY());
+        Pen pen(window.get());
+        Fingers hand(window.get());
+        using S = QEventPoint::State;
+        pen.send({100, 300}, Qt::LeftButton, 0.3);
+        for (int i = 1; i <= 10; ++i)
+            pen.send({100 + 10.0 * i, 300}, Qt::LeftButton, 0.3 + 0.02 * i);
+        if (palm == u"tap") {
+            hand.send({{1, {S::Pressed, {600, 500}}}});
+            hand.send({{1, {S::Released, {600, 500}}}});
+        } else if (palm == u"two") {
+            hand.send({{1, {S::Pressed, {600, 500}}}, {2, {S::Pressed, {660, 520}}}});
+            for (int i = 1; i <= 5; ++i)
+                hand.send({{1, {S::Updated, {600 - 10.0 * i, 500}}}, {2, {S::Updated, {660 + 10.0 * i, 520}}}});
+            hand.send({{1, {S::Released, {550, 500}}}, {2, {S::Released, {710, 520}}}});
+        } else {
+            hand.send({{1, {S::Pressed, {600, 500}}}});
+            for (int i = 1; i <= 5; ++i)
+                hand.send({{1, {S::Updated, {600 + 8.0 * i, 500 + 4.0 * i}}}});
+            if (palm == u"slide")
+                hand.send({{1, {S::Released, {640, 520}}}});
+        }
+        for (int i = 11; i <= 30; ++i)
+            pen.send({100 + 10.0 * i, 300}, Qt::LeftButton, 0.3 + 0.02 * i / 3);
+        pen.send({400, 300}, Qt::NoButton, 0);
+        if (palm == u"stays") {
+            // The pen lifted; the hand moves on and lifts: still nothing.
+            for (int i = 6; i <= 12; ++i)
+                hand.send({{1, {S::Updated, {600 + 8.0 * i, 500 + 4.0 * i}}}});
+            hand.send({{1, {S::Released, {696, 548}}}});
+        }
+        QCOMPARE(canvas->strokeCount(), 1);
+        const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.first();
+        for (const auto &p : s.points)
+            QVERIFY2(std::abs(p.y - 300) < 0.5, qPrintable(u"%1, %2"_s.arg(p.x).arg(p.y)));
+        QVERIFY2(s.points.last().x > 390, qPrintable(QString::number(s.points.last().x))); // drawn to its end
+        QVERIFY(!s.simulatePressure);
+        QCOMPARE(QPointF(canvas->centerX(), canvas->centerY()), centre);
+        QCOMPARE(canvas->zoom(), 1.0);
+        QVERIFY(!canvas->busy());
+        // The hand lifted: a finger works again.
+        hand.drag({200, 450}, {300, 500}, 10);
+        QCOMPARE(canvas->strokeCount(), fingerDraws ? 2 : 1);
+        if (!fingerDraws)
+            QCOMPARE(QPointF(canvas->centerX(), canvas->centerY()), centre - QPointF(100, 50));
+    }
+
+    void penTakesOverFromTheHand_data()
+    {
+        QTest::addColumn<bool>("fingerDraws");
+        QTest::newRow("the palm was moving the paper") << false;
+        QTest::newRow("the palm had begun a stroke") << true;
+    }
+    void penTakesOverFromTheHand()
+    {
+        // The palm lands first, then the pen writes: the pen draws, the palm's gesture ends.
+        QFETCH(bool, fingerDraws);
+        canvas->setFingerDraws(fingerDraws);
+        const QPointF centre(canvas->centerX(), canvas->centerY());
+        Pen pen(window.get());
+        Fingers hand(window.get());
+        using S = QEventPoint::State;
+        hand.send({{1, {S::Pressed, {600, 500}}}});
+        hand.send({{1, {S::Updated, {601, 500}}}});
+        pen.stroke({100, 300}, {400, 300}, 20, 0.2, 0.8);
+        for (int i = 1; i <= 5; ++i)
+            hand.send({{1, {S::Updated, {601 + 10.0 * i, 500}}}});
+        hand.send({{1, {S::Released, {651, 500}}}});
+        QCOMPARE(canvas->strokeCount(), 1); // the pen's — the palm's begun stroke dropped
+        const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.first();
+        QVERIFY(std::abs(s.points.first().y - 300) < 0.5 && std::abs(s.points.last().y - 300) < 0.5);
+        QVERIFY(!s.simulatePressure);
+        QVERIFY(std::abs(canvas->centerX() - centre.x()) <= 1.01); // (the palm's 1 px before the pen)
+        QCOMPARE(canvas->centerY(), centre.y());
+    }
+
+    void palmDoesNotEraseWithThePen()
+    {
+        mouseStroke(window.get(), {100, 100}, {300, 100}, 10);
+        mouseStroke(window.get(), {500, 500}, {700, 500}, 10);
+        QCOMPARE(canvas->strokeCount(), 2);
+        Pen eraser(window.get(), QPointingDevice::PointerType::Eraser);
+        Fingers hand(window.get());
+        using S = QEventPoint::State;
+        eraser.send({200, 50}, Qt::LeftButton, 0.5);
+        eraser.send({200, 80}, Qt::LeftButton, 0.5);
+        hand.send({{1, {S::Pressed, {600, 500}}}}); // on the second stroke
+        hand.send({{1, {S::Updated, {610, 500}}}});
+        eraser.send({200, 150}, Qt::LeftButton, 0.5);
+        hand.send({{1, {S::Released, {610, 500}}}});
+        eraser.send({200, 150}, Qt::NoButton, 0);
+        QCOMPARE(canvas->strokeCount(), 1);
+        QCOMPARE(canvas->currentDrawing().strokes.first().points.first().y, 500.0);
+    }
+
+    void externalChangeDuringAGesture_data()
+    {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<bool>("modifiedBefore");
+        QTest::newRow("pen, saved") << u"pen"_s << false;
+        QTest::newRow("pen, a stroke not saved") << u"pen"_s << true;
+        QTest::newRow("finger, saved") << u"finger"_s << false;
+        QTest::newRow("mouse, saved") << u"mouse"_s << false;
+    }
+    void externalChangeDuringAGesture()
+    {
+        // Syncthing delivers another device's version while a stroke is being drawn: the stroke
+        // goes on and is kept, on top of the other version.
+        QFETCH(QString, input);
+        QFETCH(bool, modifiedBefore);
+        canvas->setFingerDraws(true);
+        QCOMPARE(canvas->load(strokesFile({u"a"_s})), QString());
+        if (modifiedBefore)
+            mouseStroke(window.get(), {100, 560}, {300, 560}, 6);
+        QCOMPARE(canvas->modified(), modifiedBefore);
+        Pen pen(window.get());
+        Fingers finger(window.get());
+        using S = QEventPoint::State;
+        const auto at = [](int i) { return QPointF(100 + 12.0 * i, 400); };
+        const auto send = [&](int i, int phase) { // 0 press, 1 move, 2 release
+            if (input == u"pen")
+                pen.send(at(i), phase == 2 ? Qt::NoButton : Qt::LeftButton, 0.3 + 0.01 * i);
+            else if (input == u"finger")
+                finger.send({{1, {phase == 0 ? S::Pressed : phase == 1 ? S::Updated : S::Released, at(i)}}});
+            else if (phase == 0)
+                QTest::mousePress(window.get(), Qt::LeftButton, {}, at(i).toPoint());
+            else if (phase == 1)
+                QTest::mouseMove(window.get(), at(i).toPoint());
+            else
+                QTest::mouseRelease(window.get(), Qt::LeftButton, {}, at(i).toPoint());
+        };
+        send(0, 0);
+        for (int i = 1; i <= 10; ++i)
+            send(i, 1);
+        QVERIFY(canvas->busy());
+        QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"c"_s})));
+        QVERIFY(canvas->busy()); // the stroke goes on
+        for (int i = 11; i <= 25; ++i)
+            send(i, 1);
+        send(25, 2);
+        QVERIFY(!canvas->busy());
+        const QStringList ids = strokeIds(canvas);
+        QCOMPARE(ids.size(), modifiedBefore ? 4 : 3);
+        QCOMPARE(ids.mid(0, 2), (QStringList{u"a"_s, u"c"_s}));
+        const brulion::drawing::Stroke s = canvas->currentDrawing().strokes.last();
+        // The whole stroke, from the press to the release.
+        const double first = canvas->toScene(at(0)).x(), last = canvas->toScene(at(25)).x();
+        QVERIFY2(std::abs(s.points.first().x - first) < 1 && std::abs(s.points.last().x - last) < 1,
+                 qPrintable(u"%1 … %2 (%3 … %4)"_s.arg(s.points.first().x).arg(s.points.last().x).arg(first).arg(last)));
+        QVERIFY(canvas->modified());
+        QVERIFY(canvas->canUndo()); // the stroke, after the history was cleared
+    }
+
+    void externalChangeDuringErasing()
+    {
+        // The strokes the eraser has touched so far stay erased on the other version.
+        QCOMPARE(canvas->load(strokesFile({u"a"_s, u"c"_s})), QString());
+        canvas->setTool(u"eraser"_s);
+        QTest::mousePress(window.get(), Qt::LeftButton, {}, QPoint(200, 30));
+        QTest::mouseMove(window.get(), QPoint(200, 70)); // "a" (y 50)
+        QVERIFY(canvas->busy());
+        QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"c"_s, u"d"_s})));
+        QTest::mouseMove(window.get(), QPoint(200, 90));
+        QTest::mouseRelease(window.get(), Qt::LeftButton, {}, QPoint(200, 90));
+        QCOMPARE(strokeIds(canvas), (QStringList{u"c"_s, u"d"_s}));
+        QVERIFY(canvas->modified());
+    }
+
+    void externalPaperMerge_data()
+    {
+        QTest::addColumn<QString>("here");    // the paper chosen here ("" none)
+        QTest::addColumn<bool>("savedHere");  // and saved before the other version came
+        QTest::addColumn<QString>("theirs");  // the other version's paper
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("not changed here: theirs") << QString() << false << u"grid"_s << u"grid"_s;
+        QTest::newRow("changed here: ours") << u"lines"_s << false << u"grid"_s << u"lines"_s;
+        QTest::newRow("changed here and saved: theirs") << u"lines"_s << true << u"grid"_s << u"grid"_s;
+        QTest::newRow("changed back here: theirs") << u"plain"_s << false << u"grid"_s << u"grid"_s;
+    }
+    void externalPaperMerge()
+    {
+        QFETCH(QString, here);
+        QFETCH(bool, savedHere);
+        QFETCH(QString, theirs);
+        QFETCH(QString, expected);
+        QCOMPARE(canvas->load(strokesFile({u"a"_s})), QString());
+        if (here == u"plain") {
+            canvas->setBackground(u"lines"_s);
+            canvas->setBackground(u"plain"_s); // as it was loaded
+        } else if (!here.isEmpty()) {
+            canvas->setBackground(here);
+        }
+        if (savedHere)
+            canvas->markSaved(canvas->svg());
+        mouseStroke(window.get(), {100, 500}, {300, 500}, 6); // a stroke not saved: a merge
+        QVERIFY(canvas->modified());
+        QVERIFY(canvas->takeExternal(strokesFile({u"a"_s, u"ż"_s}, theirs)));
+        QCOMPARE(canvas->background(), expected);
+        QCOMPARE(canvas->strokeCount(), 3);
+    }
+
+    void farAwayStrokesAreNotEdited()
+    {
+        // A synced scene with a stroke at 1e18 on lined paper: shown as a picture (not edited),
+        // so the editor never draws lines out there; the view never goes beyond the limit.
+        const QByteArray scene = R"({"type":"excalidraw","version":2,"elements":[{"type":"freedraw","id":"daleko",)"
+                                 R"("x":1e18,"y":1e18,"points":[[0,0],[1024,1024]]}],)"
+                                 R"("appState":{"brulionBackground":"lines"}})";
+        QCOMPARE(canvas->load(scene), u"readonly"_s);
+        QCOMPARE(canvas->load({}), QString());
+        canvas->setBackground(u"grid"_s);
+        canvas->setCenterY(1e18);
+        canvas->setCenterX(-1e18);
+        QCOMPARE(canvas->centerY(), brulion::drawing::CoordinateLimit);
+        QCOMPARE(canvas->centerX(), -brulion::drawing::CoordinateLimit);
+        QImage image(800, 600, QImage::Format_ARGB32_Premultiplied);
+        {
+            QPainter p(&image);
+            canvas->render(&p, QSizeF(800, 600)); // ends (the lines counted, not stepped)
+        }
+        // A stroke drawn out there stays within the limit: the file can be edited again.
+        mouseStroke(window.get(), {100, 100}, {700, 100}, 10);
+        QCOMPARE(canvas->strokeCount(), 1);
+        DrawingCanvas again;
+        QCOMPARE(again.load(canvas->svg()), QString());
     }
 
     void localFileUrlWithAQueryLoads()

@@ -80,6 +80,10 @@ enum class Background { Plain, Lines, Grid };
 /// Distance between the lines of Background::Lines, between the grid's lines (scene units).
 inline constexpr double LineSpacing = 32;
 inline constexpr double GridSpacing = 24;
+/// How far from the scene's origin a stroke Brulion edits may reach (scene units, either axis):
+/// a freehand line beyond it (a file from elsewhere) stays foreign, so the drawing is shown, not
+/// edited — the paper's lines, the file's size and the view stay bounded.
+inline constexpr double CoordinateLimit = 1e6;
 /// The paper's colour when the scene names none (Excalidraw's white).
 inline constexpr QStringView DefaultPaper = u"#ffffff";
 /// The colour of the lines and the grid on the paper.

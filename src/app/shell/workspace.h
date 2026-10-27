@@ -278,6 +278,10 @@ public:
     /// Write an attachment (the drawing editor's saves): atomic, what it replaces kept in History
     /// as for notes, fileChanged follows. False (and errorOccurred) when it could not be written.
     Q_INVOKABLE bool writeAttachment(const QString &path, const QByteArray &data);
+    /// Write a new attachment at `path`, or at "Name 2.ext", … when that is taken (the drawing
+    /// editor keeps what was drawn here beside a file changed elsewhere into one it cannot edit).
+    /// The path used; "" (and errorOccurred) when it could not be written.
+    Q_INVOKABLE QString createAttachment(const QString &path, const QByteArray &data);
     /// The picture's pixels from its header ("assets/a.png" -> 4000 × 3000; -1 × -1 when the
     /// header has none): the picture view's own-pixels size, without decoding the picture.
     Q_INVOKABLE QSize pictureSize(const QString &path) const;

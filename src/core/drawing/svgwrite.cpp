@@ -35,8 +35,10 @@ QByteArray toSvg(const Drawing &drawing)
         right = std::ceil(content.right() + SvgMargin);
         bottom = std::ceil(content.bottom() + SvgMargin);
     }
-    const int width = std::max(1, int(right - left));
-    const int height = std::max(1, int(bottom - top));
+    // (Strokes stay within CoordinateLimit when read or drawn; the clamp keeps the int in range
+    // whatever the caller passes.)
+    const int width = int(std::clamp(right - left, 1.0, 1e9));
+    const int height = int(std::clamp(bottom - top, 1.0, 1e9));
     const double dx = -left;
     const double dy = -top;
     const QString w = QString::number(width);
@@ -57,13 +59,21 @@ QByteArray toSvg(const Drawing &drawing)
     if (drawing.background != Background::Plain) {
         // The lines at the scene's multiples of the spacing (where the editor draws them).
         const double spacing = drawing.background == Background::Lines ? LineSpacing : GridSpacing;
+        // Counted by index (a step added to a huge coordinate would change nothing), at most
+        // MaxRules lines per direction.
+        constexpr double MaxRules = 100000;
+        const auto rules = [&](double from, double to, const auto &line) {
+            const double first = std::ceil(from / spacing);
+            const double count = std::ceil(to / spacing) - first;
+            if (!std::isfinite(first) || !(count > 0) || count > MaxRules)
+                return;
+            for (int i = 0; i < int(count); ++i)
+                line((first + i) * spacing);
+        };
         QString d;
-        for (double y = std::ceil(top / spacing) * spacing; y < bottom; y += spacing)
-            d += u"M0,"_s + formatNumber(y + dy) + u'H' + w;
-        if (drawing.background == Background::Grid) {
-            for (double x = std::ceil(left / spacing) * spacing; x < right; x += spacing)
-                d += u'M' + formatNumber(x + dx) + u",0V"_s + h;
-        }
+        rules(top, bottom, [&](double y) { d += u"M0,"_s + formatNumber(y + dy) + u'H' + w; });
+        if (drawing.background == Background::Grid)
+            rules(left, right, [&](double x) { d += u'M' + formatNumber(x + dx) + u",0V"_s + h; });
         if (!d.isEmpty())
             svg += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + RuleColor.toString()
                    + u"\" stroke-width=\"1\"/>\n"_s;

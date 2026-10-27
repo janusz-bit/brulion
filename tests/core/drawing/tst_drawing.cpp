@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QRandomGenerator>
+#include <QElapsedTimer>
 #include <QTest>
 #include <QXmlStreamReader>
 #include <QtMath>
@@ -406,6 +407,16 @@ private Q_SLOTS:
                 << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"simulatePressure\":false,\"pressures\":[0.3],"
                               "\"points\":[[0,0],[1,1]]}")
                 << true;
+        // Far away (CoordinateLimit): shown, never edited — the paper's lines stay bounded.
+        QTest::newRow("far away") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":1e18,\"y\":1e18,\"points\":[[0,0],[1024,1024]]}")
+                                  << false;
+        QTest::newRow("a point far away") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":0,\"y\":0,\"points\":[[0,0],[0,1000001]]}")
+                                          << false;
+        QTest::newRow("at the limit") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":-1e6,\"y\":0,\"points\":[[0,0],[2e6,1e6]]}")
+                                      << true;
         QTest::newRow("rectangle") << QByteArray("{\"type\":\"rectangle\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}")
                                    << false;
         QTest::newRow("image") << QByteArray("{\"type\":\"image\",\"x\":1,\"y\":2,\"fileId\":\"abc\"}") << false;
@@ -572,6 +583,37 @@ private Q_SLOTS:
         }
         // Written again from what was read: the same file.
         QCOMPARE(toSvg(*back), svg);
+    }
+
+    void svgOfHugeDrawingIsBounded_data()
+    {
+        QTest::addColumn<double>("far");
+        QTest::addColumn<int>("background");
+        QTest::newRow("the limit, lines") << CoordinateLimit << int(Background::Lines);
+        QTest::newRow("the limit, grid") << CoordinateLimit << int(Background::Grid);
+        // Beyond what is read or drawn (a caller's own drawing): no endless loop, no huge file.
+        QTest::newRow("1e9, lines") << 1e9 << int(Background::Lines);
+        QTest::newRow("1e18, grid") << 1e18 << int(Background::Grid);
+    }
+    void svgOfHugeDrawingIsBounded()
+    {
+        QFETCH(double, far);
+        QFETCH(int, background);
+        Drawing d;
+        d.background = Background(background);
+        d.strokes.append(wavyStroke(u"źdźbło"_s, -far, -far, 5));
+        d.strokes.append(wavyStroke(u"ćma"_s, far - 100, far - 100, 5));
+        QElapsedTimer timer;
+        timer.start();
+        const QByteArray svg = toSvg(d);
+        QVERIFY2(timer.elapsed() < 5000, qPrintable(QString::number(timer.elapsed())));
+        QVERIFY2(svg.size() < 16 * 1024 * 1024, qPrintable(QString::number(svg.size())));
+        const SvgCheck check = checkSvg(svg);
+        QVERIFY(check.wellFormed);
+        QVERIFY(check.root.value(u"width"_s).toInt() >= 1);
+        // At the limit every line is there (2e6 / 32 of them, in one path).
+        if (far == CoordinateLimit)
+            QVERIFY(svg.count("H") >= qsizetype(2 * CoordinateLimit / LineSpacing));
     }
 
     void svgColoursAreSafe_data()

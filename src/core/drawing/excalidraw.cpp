@@ -33,6 +33,7 @@ std::optional<Stroke> strokeFromElement(const QJsonObject &e)
         return std::nullopt;
     if (!finite(e.value(u"x"_s)) || !finite(e.value(u"y"_s)))
         return std::nullopt;
+    const auto inReach = [](double v) { return std::abs(v) <= CoordinateLimit; };
     // Rotated or filled freehand lines: Brulion would draw them otherwise.
     if (e.contains(u"angle"_s) && (!finite(e.value(u"angle"_s)) || std::abs(e.value(u"angle"_s).toDouble()) > 1e-9))
         return std::nullopt;
@@ -60,7 +61,10 @@ std::optional<Stroke> strokeFromElement(const QJsonObject &e)
                 return std::nullopt;
             pressure = std::clamp(pressures.at(i).toDouble(), 0.0, 1.0);
         }
-        s.points.append({x + p.at(0).toDouble(), y + p.at(1).toDouble(), pressure});
+        const StrokePoint point{x + p.at(0).toDouble(), y + p.at(1).toDouble(), pressure};
+        if (!inReach(point.x) || !inReach(point.y))
+            return std::nullopt; // far away (CoordinateLimit): kept as foreign
+        s.points.append(point);
     }
     if (!realPressure)
         s.simulatePressure = true;
