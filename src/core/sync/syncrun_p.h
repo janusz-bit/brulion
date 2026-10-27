@@ -201,15 +201,17 @@ private:
                                           const QSet<VaultPath> &taken);
     bool sameContent(const VaultPath &localPath, const SyncFileState &state);
     void moveFolders(qsizetype index, std::function<void()> next);
-    /// File renames in the vault: a synced file missing here (still on the server) whose content
-    /// is, unchanged, in exactly one new local file the server does not have (one-to-one; empty
-    /// files and look-alikes prove nothing).
+    /// File renames in the vault: a synced file missing here (still on the server) renamed to a
+    /// new local file the server does not have, by the rename journal (m_renamedHere: whatever
+    /// was written to it since), else by its content, unchanged, in exactly one new local file
+    /// (one-to-one; empty files and look-alikes prove nothing).
     QList<FolderMove> findFileMoves();
     void moveFiles(std::function<void()> next);
     /// The server moved `move.from` to `move.to`: states, merge bases and the listing follow.
     void applyRemoteMove(const FolderMove &move, bool folder);
-    /// The sync states, merge bases and folder states below `from` move to `to`.
-    void rebaseStates(const VaultPath &from, const VaultPath &to);
+    /// The sync states, merge bases and folder states below `from` move to `to` (`folder` false:
+    /// the one file's state and base only).
+    void rebaseStates(const VaultPath &from, const VaultPath &to, bool folder = true);
     /// Case-insensitive storage: a synced folder another device renamed in letter case only
     /// ("projekty" -> "Projekty", one folder here) is renamed here too, its states following, so
     /// its notes are unchanged at the new paths — not trashed under the old name while the very
@@ -288,6 +290,8 @@ private:
     /// not synced included), then what the run wrote, deleted and moved there.
     QHash<VaultPath, RemoteEntry> m_remoteAll;
     QSet<VaultPath> m_folderStates; ///< folders that existed on both sides after a run
+    /// The rename journal (SyncEngine::renamedFrom()): new local path -> synced path.
+    QHash<VaultPath, VaultPath> m_renamedHere;
     QList<FolderMove> m_moves;      ///< folder renames recognised in this run
     QList<FolderMove> m_fileMoves;  ///< file renames recognised in this run (after m_moves)
     /// Content hashes (with counts) of files uploaded / downloaded to paths never synced before

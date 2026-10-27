@@ -315,14 +315,18 @@ HttpResponse FakeWebDavServer::move(const HttpRequest &request, const QString &p
 
 void FakeWebDavServer::moveNodes(const QString &fromAbs, const QString &toAbs)
 {
+    // The node and the ones below it (a contiguous range of the sorted map from "<from>/"):
+    // a move costs what it moves, not the whole tree.
     const QString prefix = fromAbs + u'/';
     QList<std::pair<QString, Node>> moved;
-    for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
-        if (it.key() == fromAbs || it.key().startsWith(prefix))
-            moved.append({toAbs + it.key().mid(fromAbs.size()), it.value()});
+    if (const auto self = m_nodes.find(fromAbs); self != m_nodes.end()) {
+        moved.append({toAbs, self.value()});
+        m_nodes.erase(self);
     }
-    m_nodes.removeIf(
-            [&](QMap<QString, Node>::iterator it) { return it.key() == fromAbs || it.key().startsWith(prefix); });
+    for (auto it = m_nodes.lowerBound(prefix); it != m_nodes.end() && it.key().startsWith(prefix);) {
+        moved.append({toAbs + it.key().mid(fromAbs.size()), it.value()});
+        it = m_nodes.erase(it);
+    }
     for (auto &[key, node] : moved) {
         if (!m_options.moveKeepsEtags)
             node.etag = nextEtag();
@@ -417,6 +421,13 @@ void FakeWebDavServer::touchEtag(const QString &rel)
     const auto node = m_nodes.find(abs(rel));
     if (node != m_nodes.end())
         node->etag = nextEtag();
+}
+
+void FakeWebDavServer::setEtag(const QString &rel, const QString &etag)
+{
+    const auto node = m_nodes.find(abs(rel));
+    if (node != m_nodes.end())
+        node->etag = etag;
 }
 
 QMap<QString, QString> FakeWebDavServer::files(const QString &folder) const

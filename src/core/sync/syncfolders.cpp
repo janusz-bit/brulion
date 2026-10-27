@@ -8,8 +8,10 @@
 //    at their new paths as usual: an edit made on the server meanwhile comes down into the renamed
 //    folder, edits on both sides merge, a file deleted since the rename is deleted on the server.
 //    Without MOVE (refused, or the new name taken meanwhile) the files travel one by one. A single
-//    file renamed in the vault (its unchanged content in exactly one new file) is moved the same
-//    way, one MOVE per file.
+//    file renamed in the vault is moved the same way, one MOVE per file: proven by the rename
+//    journal (SyncEngine::renamedFrom(): edits made since are uploaded after the MOVE), else by its
+//    unchanged content in exactly one new file. A folder's evidence is counted by its parts (each
+//    file in it, each subfolder as one): a subfolder moved elsewhere never takes its parent along.
 //  * Renames on the server: a folder or file renamed or moved there (by another device's MOVE, the
 //    Nextcloud web page or its desktop client) is known by the server's file ids (oc:fileid; else
 //    by the ETag a move keeps, and the size) at the same places below the new name. It is renamed
@@ -77,6 +79,54 @@ bool sameEntryOnDisk(const QString &a, const QString &b)
     std::error_code error;
     const bool same = std::filesystem::equivalent(fsPath(a), fsPath(b), error);
     return !error && same;
+}
+
+/// The synced files of `folder` (sorted, `folder` excluded), the ones directly in it first: the new
+/// name they point to is the folder's own; a subfolder may have been moved elsewhere on its own.
+QStringList filesBelow(const QHash<VaultPath, SyncFileState> &states, const VaultPath &folder)
+{
+    QStringList files;
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        if (it.key() != folder && isWithin(it.key(), folder) && it.key() != vaultConfigPath())
+            files.append(it.key());
+    }
+    std::sort(files.begin(), files.end(), [](const VaultPath &a, const VaultPath &b) {
+        const qsizetype da = depthOf(a);
+        const qsizetype db = depthOf(b);
+        return da != db ? da < db : a < b;
+    });
+    return files;
+}
+
+/// The evidence of a folder rename suffices: at least half of the folder's parts are proven at
+/// the new name, where each file directly in `folder` is one part and each subfolder one (proven
+/// when at least half of the files below it are). A big subfolder moved elsewhere on its own
+/// thus never takes its parent along: the parent follows its own files.
+bool mostlyProven(const VaultPath &folder, const QStringList &files, const QSet<VaultPath> &proven)
+{
+    int parts = 0;
+    int provenParts = 0;
+    QHash<QString, std::pair<int, int>> subfolders; // name -> proven files, files
+    for (const VaultPath &file : files) {
+        const QString rel = file.mid(folder.size() + 1);
+        const qsizetype slash = rel.indexOf(u'/');
+        if (slash < 0) {
+            ++parts;
+            if (proven.contains(file))
+                ++provenParts;
+            continue;
+        }
+        std::pair<int, int> &counts = subfolders[rel.left(slash)];
+        ++counts.second;
+        if (proven.contains(file))
+            ++counts.first;
+    }
+    for (const std::pair<int, int> &counts : std::as_const(subfolders)) {
+        ++parts;
+        if (counts.first > 0 && counts.first * 2 >= counts.second)
+            ++provenParts;
+    }
+    return provenParts > 0 && provenParts * 2 >= parts;
 }
 
 } // namespace
@@ -225,14 +275,9 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
                                                const QHash<QString, QList<VaultPath>> &newByName,
                                                const QSet<VaultPath> &taken)
 {
-    QStringList files;
-    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != from && isWithin(it.key(), from) && it.key() != vaultConfigPath())
-            files.append(it.key());
-    }
+    const QStringList files = filesBelow(m_states, from);
     if (files.isEmpty())
         return std::nullopt;
-    std::sort(files.begin(), files.end());
     const auto renamedTo = [&](const VaultPath &to) {
         if (taken.contains(to) || isWithin(to, from) || isWithin(from, to) || !isSyncablePath(to)
             || !localFolders.contains(to)) {
@@ -255,15 +300,16 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
         });
         if (clash)
             return false;
-        // At least half of the synced files of the old folder are at their places in the new one,
-        // unchanged; the others may have been edited (compared as usual at the new path) or
-        // deleted (deleted on the server as usual) since the rename. A file the server no longer
-        // has stays out of it: moved, it would be taken for deleted there, while the rename of a
-        // file wins over its deletion on the other side (it is uploaded again). When this device
-        // had none of its synced files under their names (m_localLookedEmpty), every file found
-        // must be unchanged: an older copy put back after the storage was lost would otherwise
-        // overwrite the newer notes on the server as if they had been edited here.
-        int unchanged = 0;
+        // At least half of the old folder (mostlyProven()) is at its place in the new one,
+        // unchanged or renamed there by the vault (the rename journal); the other files may have
+        // been edited (compared as usual at the new path) or deleted (deleted on the server as
+        // usual) since the rename. A file the server no longer has stays out of it: moved, it
+        // would be taken for deleted there, while the rename of a file wins over its deletion on
+        // the other side (it is uploaded again). When this device had none of its synced files
+        // under their names (m_localLookedEmpty), every file found must be proven: an older copy
+        // put back after the storage was lost would otherwise overwrite the newer notes on the
+        // server as if they had been edited here.
+        QSet<VaultPath> unchanged;
         int found = 0;
         for (const VaultPath &file : std::as_const(files)) {
             const VaultPath target = to + file.mid(from.size());
@@ -272,12 +318,12 @@ std::optional<VaultPath> SyncRun::renameTarget(const VaultPath &from, const QSet
             if (!m_remote.contains(file))
                 return false;
             ++found;
-            if (sameContent(target, m_states.value(file)))
-                ++unchanged;
+            if (m_renamedHere.value(target) == file || sameContent(target, m_states.value(file)))
+                unchanged.insert(file);
         }
-        if (m_localLookedEmpty && unchanged != found)
+        if (m_localLookedEmpty && unchanged.size() != found)
             return false;
-        return unchanged > 0 && unchanged * 2 >= files.size();
+        return mostlyProven(from, files, unchanged);
     };
     QSet<VaultPath> tried;
     for (const VaultPath &file : std::as_const(files)) {
@@ -347,30 +393,14 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
     if (m_states.isEmpty() || m_localLookedEmpty)
         return {};
     const qint64 maxSize = m_engine->maxFileSize();
-    // Synced files gone here that the server still has, by their synced content.
-    QHash<QString, QList<VaultPath>> goneByHash;
-    QSet<qint64> sizes;
-    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() == vaultConfigPath() || m_local.contains(it.key()) || !m_remote.contains(it.key())
-            || it->size <= 0 || it->size > maxSize) {
-            continue; // an empty file proves nothing
-        }
-        goneByHash[it->localHash].append(it.key());
-        sizes.insert(it->size);
-    }
-    if (goneByHash.isEmpty())
-        return {};
-    // New local files (never synced, not on the server) of those sizes, by content.
-    QHash<QString, QList<VaultPath>> newByHash;
-    for (auto it = m_local.cbegin(); it != m_local.cend(); ++it) {
-        if (m_states.contains(it.key()) || m_remote.contains(it.key()) || it.key() == vaultConfigPath()
-            || !sizes.contains(it->size)) {
-            continue;
-        }
-        const ReadResult read = readLocal(it.key(), *it, std::nullopt);
-        if (read.snap)
-            newByHash[read.snap->hash].append(it.key());
-    }
+    const auto goneHere = [this](const VaultPath &path) {
+        return path != vaultConfigPath() && m_states.contains(path) && !m_local.contains(path)
+               && m_remote.contains(path);
+    };
+    const auto newHere = [this](const VaultPath &path) {
+        return path != vaultConfigPath() && m_local.contains(path) && !m_states.contains(path)
+               && !m_remote.contains(path);
+    };
     // Nothing on the server at or below the new name, in any letter case, but the file itself (the
     // listing holds every folder: something below a name means the name itself is there).
     QHash<QString, int> remoteNames;
@@ -381,6 +411,39 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
         return remoteNames.value(lower) - (from.toLower() == lower ? 1 : 0) <= 0;
     };
     QList<FolderMove> moves;
+    // Renamed by the vault (the rename journal): whatever was written to the file since (typing
+    // on, its links rewritten) is uploaded after the MOVE as an edit.
+    QHash<VaultPath, int> origins; // a synced file renamed twice (once as a new file of that name): neither
+    for (auto it = m_renamedHere.cbegin(); it != m_renamedHere.cend(); ++it)
+        ++origins[it.value()];
+    QSet<VaultPath> journaled; // both ends of those moves
+    for (auto it = m_renamedHere.cbegin(); it != m_renamedHere.cend(); ++it) {
+        if (origins.value(it.value()) != 1 || !goneHere(it.value()) || !newHere(it.key()) || !free(it.value(), it.key()))
+            continue;
+        moves.append(FolderMove{it.value(), it.key()});
+        journaled.insert(it.value());
+        journaled.insert(it.key());
+    }
+    // Else synced files gone here, by their synced content.
+    QHash<QString, QList<VaultPath>> goneByHash;
+    QSet<qint64> sizes;
+    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
+        if (!goneHere(it.key()) || journaled.contains(it.key()) || it->size <= 0 || it->size > maxSize)
+            continue; // an empty file proves nothing
+        goneByHash[it->localHash].append(it.key());
+        sizes.insert(it->size);
+    }
+    // New local files of those sizes, by content.
+    QHash<QString, QList<VaultPath>> newByHash;
+    if (!goneByHash.isEmpty()) {
+        for (auto it = m_local.cbegin(); it != m_local.cend(); ++it) {
+            if (!newHere(it.key()) || journaled.contains(it.key()) || !sizes.contains(it->size))
+                continue;
+            const ReadResult read = readLocal(it.key(), *it, std::nullopt);
+            if (read.snap)
+                newByHash[read.snap->hash].append(it.key());
+        }
+    }
     for (auto it = goneByHash.cbegin(); it != goneByHash.cend(); ++it) {
         const QList<VaultPath> arrived = newByHash.value(it.key());
         if (arrived.isEmpty())
@@ -457,14 +520,20 @@ void SyncRun::moveFiles(std::function<void()> next)
     }));
 }
 
-void SyncRun::rebaseStates(const VaultPath &from, const VaultPath &to)
+void SyncRun::rebaseStates(const VaultPath &from, const VaultPath &to, bool isFolder)
 {
     const auto rebased = [&from, &to](const VaultPath &path) { return to + path.mid(from.size()); };
-    // Sync states and merge bases: the files are compared at their new paths.
+    // Sync states and merge bases: the files are compared at their new paths. A file has only its
+    // own (many single renames in one run must not walk every state each).
     QStringList statePaths;
-    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (isWithin(it.key(), from))
-            statePaths.append(it.key());
+    if (!isFolder) {
+        if (m_states.contains(from))
+            statePaths.append(from);
+    } else {
+        for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
+            if (isWithin(it.key(), from))
+                statePaths.append(it.key());
+        }
     }
     for (const VaultPath &path : std::as_const(statePaths)) {
         const VaultPath target = rebased(path);
@@ -474,11 +543,14 @@ void SyncRun::rebaseStates(const VaultPath &from, const VaultPath &to)
         // Removed first: a case-only rename may map a key onto itself in another store.
         store()->remove(SyncEngine::stateKey(path));
         store()->remove(SyncEngine::baseKey(path));
+        store()->remove(SyncEngine::renamedKey(target)); // the rename is synced
         if (!state.isUndefined())
             store()->set(SyncEngine::stateKey(target), state);
         if (!base.isUndefined())
             store()->set(SyncEngine::baseKey(target), base);
     }
+    if (!isFolder)
+        return;
     const QSet<VaultPath> folders = m_folderStates;
     for (const VaultPath &folder : folders) {
         if (!isWithin(folder, from))
@@ -545,7 +617,16 @@ bool SyncRun::renameHere(const VaultPath &here, const VaultPath &from, const Vau
                 tag(), folder ? u"folder"_s : u"file"_s, here, to, vault()->errorString());
         return false;
     }
-    rebaseStates(from, to);
+    rebaseStates(from, to, folder);
+    if (!folder) {
+        if (const auto it = m_local.find(here); it != m_local.end()) {
+            FileStat stat = *it;
+            m_local.erase(it);
+            stat.path = to;
+            m_local.insert(to, stat);
+        }
+        return true;
+    }
     QHash<VaultPath, FileStat> local;
     for (auto it = m_local.cbegin(); it != m_local.cend(); ++it) {
         FileStat stat = *it;
@@ -652,14 +733,9 @@ std::optional<VaultPath> SyncRun::remoteRenameTarget(const VaultPath &from, cons
                                                      const QHash<QString, QList<VaultPath>> &byEtag,
                                                      const QSet<VaultPath> &taken)
 {
-    QStringList files;
-    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != from && isWithin(it.key(), from) && it.key() != vaultConfigPath())
-            files.append(it.key());
-    }
+    const QStringList files = filesBelow(m_states, from);
     if (files.isEmpty())
         return std::nullopt;
-    std::sort(files.begin(), files.end());
     const auto renamedTo = [&](const VaultPath &to) {
         if (taken.contains(to) || isWithin(to, from) || isWithin(from, to) || !isSyncablePath(to))
             return false;
@@ -673,11 +749,11 @@ std::optional<VaultPath> SyncRun::remoteRenameTarget(const VaultPath &from, cons
         // files travel one by one (and meet there as usual).
         if (takenHere(to, from))
             return false;
-        // At least half of the synced files of the old folder are the server's very files at their
-        // places in the new one; the others may have been edited since (compared as usual at the
-        // new path), deleted or moved elsewhere. When the server had none of the synced files under
-        // their names (m_remoteLookedEmpty), every file found there must be proven.
-        int proven = 0;
+        // At least half of the old folder (mostlyProven()) is the server's very files at their
+        // places in the new one; the other files may have been edited since (compared as usual at
+        // the new path), deleted or moved elsewhere. When the server had none of the synced files
+        // under their names (m_remoteLookedEmpty), every file found there must be proven.
+        QSet<VaultPath> proven;
         int found = 0;
         for (const VaultPath &file : std::as_const(files)) {
             const auto remote = m_remote.constFind(to + file.mid(from.size()));
@@ -685,11 +761,11 @@ std::optional<VaultPath> SyncRun::remoteRenameTarget(const VaultPath &from, cons
                 continue;
             ++found;
             if (sameRemoteFile(*remote, m_states.value(file)))
-                ++proven;
+                proven.insert(file);
         }
-        if (m_remoteLookedEmpty && proven != found)
+        if (m_remoteLookedEmpty && proven.size() != found)
             return false;
-        return proven > 0 && proven * 2 >= files.size();
+        return mostlyProven(from, files, proven);
     };
     QSet<VaultPath> tried;
     for (const VaultPath &file : std::as_const(files)) {
@@ -738,6 +814,13 @@ void SyncRun::adoptRemoteFileMoves()
             gone.append(it.key());
     }
     std::sort(gone.begin(), gone.end());
+    // Synced versions by ETag: one that several synced files had (a server whose ETags are mtime
+    // and size on coarse storage) tells neither apart.
+    QHash<QString, int> syncedEtags;
+    for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
+        if (!it->remoteEtag.isEmpty())
+            ++syncedEtags[it->remoteEtag];
+    }
     // What this device has, lower-cased: its files, their folders and its folders (takenHere() for
     // many files at once).
     QSet<QString> here;
@@ -765,9 +848,10 @@ void SyncRun::adoptRemoteFileMoves()
         std::optional<VaultPath> to;
         if (const auto id = byId.constFind(state.remoteId); !state.remoteId.isEmpty() && id != byId.cend()) {
             to = *id;
-        } else if (!m_remoteLookedEmpty) {
-            // Without ids: the one new file with this version and size (a server that looked empty
-            // may hold an older copy put back: no rename on such evidence).
+        } else if (!m_remoteLookedEmpty && syncedEtags.value(state.remoteEtag) == 1) {
+            // Without ids: the one new file with this version and size, the one synced file with
+            // that version (a server that looked empty may hold an older copy put back: no rename
+            // on such evidence).
             QList<VaultPath> same;
             for (const VaultPath &path : byEtag.value(state.remoteEtag)) {
                 if (sameRemoteFile(m_remote.value(path), state))
@@ -790,25 +874,30 @@ void SyncRun::adoptRemoteFileMoves()
 
 void SyncRun::applyRemoteMove(const FolderMove &move, bool folder)
 {
-    const auto rebased = [&move](const VaultPath &path) { return move.to + path.mid(move.from.size()); };
-    rebaseStates(move.from, move.to);
-    // The listing as the server has it now.
-    QHash<VaultPath, RemoteEntry> remote;
-    for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {
-        RemoteEntry entry = *it;
-        if (isWithin(entry.path, move.from))
-            entry.path = rebased(entry.path);
-        remote.insert(entry.path, entry);
-    }
-    m_remote = remote;
-    QHash<VaultPath, RemoteEntry> all;
-    for (auto it = m_remoteAll.cbegin(); it != m_remoteAll.cend(); ++it) {
-        RemoteEntry entry = *it;
-        if (isWithin(entry.path, move.from))
-            entry.path = rebased(entry.path);
-        all.insert(entry.path, entry);
-    }
-    m_remoteAll = all;
+    rebaseStates(move.from, move.to, folder);
+    // The listing as the server has it now (a file: just its own entry, a folder: everything at
+    // or below it).
+    const auto follow = [&move, folder](QHash<VaultPath, RemoteEntry> &listing) {
+        if (!folder) {
+            if (const auto it = listing.find(move.from); it != listing.end()) {
+                RemoteEntry entry = *it;
+                listing.erase(it);
+                entry.path = move.to;
+                listing.insert(move.to, entry);
+            }
+            return;
+        }
+        QHash<VaultPath, RemoteEntry> moved;
+        for (auto it = listing.cbegin(); it != listing.cend(); ++it) {
+            RemoteEntry entry = *it;
+            if (isWithin(entry.path, move.from))
+                entry.path = move.to + entry.path.mid(move.from.size());
+            moved.insert(entry.path, entry);
+        }
+        listing = std::move(moved);
+    };
+    follow(m_remote);
+    follow(m_remoteAll);
     QSet<VaultPath> parents;
     addAncestors(move.to, parents);
     for (const VaultPath &parent : std::as_const(parents)) {

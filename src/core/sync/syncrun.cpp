@@ -525,6 +525,18 @@ void SyncRun::loadStates()
         if (isSyncablePath(path))
             m_folderStates.insert(path);
     }
+    // The rename journal; an entry whose rename was synced (the new path has a state) or whose
+    // old path was forgotten meanwhile is done.
+    const QString renamedPrefix = SyncEngine::renamedKey(QString());
+    const QJsonObject renamed = store()->values(renamedPrefix);
+    for (auto it = renamed.constBegin(); it != renamed.constEnd(); ++it) {
+        const VaultPath to = it.key().mid(renamedPrefix.size());
+        const VaultPath from = it.value().toObject().value(u"from"_s).toString();
+        if (from.isEmpty() || from == to || m_states.contains(to) || !m_states.contains(from))
+            store()->remove(it.key());
+        else
+            m_renamedHere.insert(to, from);
+    }
     backfillRemoteIds();
 }
 
@@ -1105,6 +1117,7 @@ void SyncRun::saveState(const VaultPath &path, const QString &hash, const QStrin
     // The server's file id as listed (kept on overwrite); a new upload learns it next run.
     state.remoteId = m_remoteAll.value(path).fileId;
     store()->set(SyncEngine::stateKey(path), state.toJson());
+    store()->remove(SyncEngine::renamedKey(path)); // a rename to it is synced
     const bool keepBase = baseText && isSyncTextPath(path) && baseText->toUtf8().size() <= m_engine->maxBaseSize();
     store()->set(SyncEngine::baseKey(path), keepBase ? QJsonValue(*baseText) : QJsonValue(QJsonValue::Undefined));
 }

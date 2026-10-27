@@ -95,6 +95,8 @@ public:
     bool isDir(const QString &rel) const;
     /// New ETag without a content change (Nextcloud does that sometimes).
     void touchEtag(const QString &rel);
+    /// Give a file this very ETag (servers whose ETags repeat: mtime and size on coarse storage).
+    void setEtag(const QString &rel, const QString &etag);
     /// Files below `folder` (relative to the user root): path -> text.
     QMap<QString, QString> files(const QString &folder = {}) const;
 
