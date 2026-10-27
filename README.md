@@ -217,7 +217,7 @@ dotarło jeszcze na drugą stronę (folder z nową notatką albo plikiem, które
 synchronizuje, zostaje). Przeniesienie albo zmiana nazwy folderu czy strony to przeniesienie, nie
 usunięcie — ochrona przed masowym usuwaniem wtedy nie pyta, a folder albo stronę, którym zmienisz
 nazwę w Brulionie, Brulion przenosi na serwerze jednym poleceniem (WebDAV MOVE), bez ponownego
-wysyłania plików. Folder albo stronę przemianowane na innym urządzeniu albo w Nextcloudzie
+wysyłania plików (także stronę, w której zaraz potem piszesz dalej). Folder albo stronę przemianowane na innym urządzeniu albo w Nextcloudzie
 w przeglądarce Brulion przemianowuje też u siebie (rozpoznaje je po identyfikatorze pliku
 `oc:fileid`, a bez niego po ETagu), więc historia wersji, ulubione i zwinięte bloki idą za
 notatkami, zamiast trafić do kosza z ich starą kopią. Syncthing synchronizuje foldery sam.
@@ -387,8 +387,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
 * Sync through **Syncthing** (it's just a folder; conflict copies are detected and merged in
   the app; an Obsidian vault synced with Syncthing opens as it is, no import needed) or **Nextcloud/WebDAV** (built-in background sync with 3-way merge and a
   mass-deletion guard; folders travel too — empty ones, deletions of emptied ones, and a folder
-  or page renamed in the app is moved on the server in one WebDAV MOVE, never mistaken for a
-  mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
+  or page renamed in the app is moved on the server in one WebDAV MOVE (also when you keep
+  typing in it right away), never mistaken for a mass deletion; one renamed on another device or in the Nextcloud web UI is renamed here too,
   recognised by its `oc:fileid` or ETag, so its version history, favourites and folds follow).
 * Two note modes: a **document** (Obsidian-like live preview: paragraphs, headings and plain
   lists, edited in place) or an **outline** (Logseq-like: every bullet is a block). Chosen when

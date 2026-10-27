@@ -14196,9 +14196,9 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="294"/>
         <source>%n file(s) moved</source>
         <translation>
-            <numerusform>%n plik przeniesiony</numerusform>
-            <numerusform>%n pliki przeniesione</numerusform>
-            <numerusform>%n plików przeniesionych</numerusform>
+            <numerusform>%n przeniesiony plik</numerusform>
+            <numerusform>%n przeniesione pliki</numerusform>
+            <numerusform>%n przeniesionych plików</numerusform>
         </translation>
     </message>
     <message numerus="yes">

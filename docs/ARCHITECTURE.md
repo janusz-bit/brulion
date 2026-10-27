@@ -262,8 +262,11 @@ app; these guards keep data from being lost:
   listing: the folder stays); while deletions are held back, no folder is deleted
   either. A folder renamed in the vault is moved with `MOVE` and `Overwrite: F` (never over an
   existing name; any refusal falls back to per-file upload and deletion), only when it is a
-  rename (the old folder missing here, still on the server; at least half of its synced files
-  unchanged below a new folder nothing of which was ever synced); an interrupted move is
+  rename (the old folder missing here, still on the server; at least half of it proven below a
+  new folder nothing of which was ever synced — a file unchanged there or recorded by the rename
+  journal; the evidence of a folder is counted by its parts, each file directly in it and each
+  subfolder as one, so a big subfolder moved elsewhere on its own never takes its parent along);
+  an interrupted move is
   recognised next time (identical files on both sides are only recorded). A synced folder
   another device renamed in letter case only, which on case-insensitive storage is the same
   folder on disk under the server's new name, is renamed here too before anything is compared and
@@ -271,22 +274,29 @@ app; these guards keep data from being lost:
   name while being downloaded under the new one. Any other folder renamed or moved on the server
   (another device's MOVE, the Nextcloud web UI or desktop client) is renamed here too after the
   empty-side guard (`adoptRemoteFolderMoves()`): a synced folder still here and gone from the
-  server whose synced files are, at least half of them, the server's very files (the same
+  server of which at least half (counted by parts as above) is the server's very files (the same
   `oc:fileid`; without ids the same real ETag and size) at their places below a new server folder
   of which nothing was ever synced and nothing exists here in any letter case; when the server
   looked empty, every file found there must be proven. Then single files the same way
   (`adoptRemoteFileMoves()`: one new server file with the synced file's id — or, without ids and
-  unless the server looked empty, the one file with its ETag and size). It is `Vault::rename`
+  unless the server looked empty, the one file with its ETag and size, an ETag no other synced
+  file had: servers whose ETags are mtime and size repeat them). It is `Vault::rename`
   with `ChangeSource::Sync` (history, favourites, folds and open editors follow the `Renamed`
   changes; links are not rewritten — the renaming device did that, and its edits arrive as
   downloads), the states and merge bases follow, and the files are then compared at their new
   paths as usual (edits on either side merge there). Something at the new name here, a refused
   rename (a file held open on Windows, a read-only folder) or no proof for the folder: the files
   proven one by one are renamed singly, the others travel as before (downloaded under the new
-  name, the old ones trashed). A page renamed in the vault (its
-  synced content, unchanged, in exactly one new local file — empty files and look-alikes without
-  a telling name prove nothing; not when this device looked empty) is moved with one `MOVE` per
-  file after the folder moves, so the other devices see the rename too. Concurrent edits are
+  name, the old ones trashed). A page renamed in the vault is moved with one `MOVE` per file after
+  the folder moves, so the other devices see the rename too: proven by the rename journal
+  (`SyncEngine` records every `Renamed` change of a synced file that is not the sync's own or a
+  rescan's guess — `ChangeSource::Sync`, `External` — as `sync/renamed/<new path>` → the synced
+  path, chains followed to their start, dropped on deletion, once the new path is synced and by
+  `resetState()`), so text typed or links rewritten after the rename are uploaded after the MOVE
+  as an edit; else by its synced content, unchanged, in exactly one new local file (empty files and
+  look-alikes without a telling name prove nothing); never when this device looked empty. Many
+  single renames in one run cost one step each (the run's listings and states are updated in
+  place, not rebuilt per file). Concurrent edits are
   merged three-way; when that fails both versions stay (conflict copy) for `ConflictResolver`.
 * **Editor**: unsaved edits are merged three-way with external changes; an unresolved conflict
   is saved as a conflict copy, never over the other version. Deleting moves to `.trash/`.

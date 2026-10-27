@@ -11,7 +11,7 @@ Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wyda
 
 **Nowe**
 - **Ustawienia ze skarbca Obsidiana** — folder Obsidiana otwarty jako notatnik sam przejmuje folder, nazwy plików i szablon dziennika, folder szablonów i folder załączników z ustawień Obsidiana (`.obsidian/`), dopóki notatnik nie ma własnych ustawień. **Ustawienia → Notatnik** pokazują, co przejął, a **Zapisz w notatniku** zapisuje to w `.brulion/config.json`. Zobacz [[Import i eksport#Skarbiec Obsidiana bez importu|Skarbiec Obsidiana bez importu]].
-- **Zmiana nazwy na serwerze dociera jako zmiana nazwy** — folder albo strona, którym zmieniono nazwę albo które przeniesiono na innym urządzeniu albo w Nextcloudzie w przeglądarce, dostają tu tę samą nową nazwę. Notatki nie są pobierane od nowa i nie trafiają do kosza, a ich historia wersji, ulubione i zwinięte bloki idą za nimi. Stronę, której nazwę zmienisz w Brulionie, synchronizacja przenosi na serwerze jednym poleceniem, tak jak folder. Zobacz [[Synchronizacja#Foldery|Foldery]].
+- **Zmiana nazwy na serwerze dociera jako zmiana nazwy** — folder albo strona, którym zmieniono nazwę albo które przeniesiono na innym urządzeniu albo w Nextcloudzie w przeglądarce, dostają tu tę samą nową nazwę. Notatki nie są pobierane od nowa i nie trafiają do kosza, a ich historia wersji, ulubione i zwinięte bloki idą za nimi. Stronę, której nazwę zmienisz w Brulionie, synchronizacja przenosi na serwerze jednym poleceniem, tak jak folder — także gdy zaraz potem piszesz w niej dalej. Zobacz [[Synchronizacja#Foldery|Foldery]].
 
 ## 0.4.5 — 26 października 2026
 
