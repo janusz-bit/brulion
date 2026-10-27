@@ -21,7 +21,10 @@ constexpr QByteArrayView PayloadVersion = "<!-- payload-version:";
 constexpr QByteArrayView PayloadStart = "<!-- payload-start -->";
 constexpr QByteArrayView PayloadEnd = "<!-- payload-end -->";
 
-bool finite(const QJsonValue &v) { return v.isDouble() && std::isfinite(v.toDouble()); }
+bool finite(const QJsonValue &v)
+{
+    return v.isDouble() && std::isfinite(v.toDouble());
+}
 
 /// A stroke Brulion draws as Excalidraw does, or nullopt (the element then stays foreign).
 std::optional<Stroke> strokeFromElement(const QJsonObject &e)
@@ -33,8 +36,8 @@ std::optional<Stroke> strokeFromElement(const QJsonObject &e)
     // Rotated or filled freehand lines: Brulion would draw them otherwise.
     if (e.contains(u"angle"_s) && (!finite(e.value(u"angle"_s)) || std::abs(e.value(u"angle"_s).toDouble()) > 1e-9))
         return std::nullopt;
-    if (const QJsonValue bg = e.value(u"backgroundColor"_s); !bg.isUndefined() && !bg.isNull()
-                                                              && bg.toString() != u"transparent")
+    if (const QJsonValue bg = e.value(u"backgroundColor"_s);
+        !bg.isUndefined() && !bg.isNull() && bg.toString() != u"transparent")
         return std::nullopt;
     const QJsonArray points = e.value(u"points"_s).toArray();
     if (points.isEmpty())
@@ -64,8 +67,9 @@ std::optional<Stroke> strokeFromElement(const QJsonObject &e)
     s.color = e.value(u"strokeColor"_s).toString(u"#1e1e1e"_s);
     s.width = finite(e.value(u"strokeWidth"_s)) ? std::clamp(e.value(u"strokeWidth"_s).toDouble(), 0.05, 200.0) : 1;
     s.opacity = finite(e.value(u"opacity"_s)) ? std::clamp(e.value(u"opacity"_s).toInt(), 0, 100) : 100;
-    s.tool = e.value(u"customData"_s).toObject().value(u"brulionTool"_s).toString() == u"highlighter" ? Tool::Highlighter
-                                                                                                   : Tool::Pen;
+    s.tool = e.value(u"customData"_s).toObject().value(u"brulionTool"_s).toString() == u"highlighter"
+                     ? Tool::Highlighter
+                     : Tool::Pen;
     s.seed = e.value(u"seed"_s).toInt(1);
     s.version = e.value(u"version"_s).toInt(1);
     s.versionNonce = e.value(u"versionNonce"_s).toInt();

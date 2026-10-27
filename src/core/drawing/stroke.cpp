@@ -41,15 +41,39 @@ namespace {
 // perfect-freehand's vector helpers (vec.ts) on QPointF.
 using Vec = QPointF;
 
-Vec add(Vec a, Vec b) { return a + b; }
-Vec sub(Vec a, Vec b) { return a - b; }
-Vec mul(Vec a, double n) { return a * n; }
-Vec neg(Vec a) { return -a; }
+Vec add(Vec a, Vec b)
+{
+    return a + b;
+}
+Vec sub(Vec a, Vec b)
+{
+    return a - b;
+}
+Vec mul(Vec a, double n)
+{
+    return a * n;
+}
+Vec neg(Vec a)
+{
+    return -a;
+}
 /// Perpendicular rotation.
-Vec per(Vec a) { return {a.y(), -a.x()}; }
-double dpr(Vec a, Vec b) { return a.x() * b.x() + a.y() * b.y(); }
-double len(Vec a) { return std::hypot(a.x(), a.y()); }
-double dist(Vec a, Vec b) { return len(a - b); }
+Vec per(Vec a)
+{
+    return {a.y(), -a.x()};
+}
+double dpr(Vec a, Vec b)
+{
+    return a.x() * b.x() + a.y() * b.y();
+}
+double len(Vec a)
+{
+    return std::hypot(a.x(), a.y());
+}
+double dist(Vec a, Vec b)
+{
+    return len(a - b);
+}
 double dist2(Vec a, Vec b)
 {
     const Vec d = a - b;
@@ -60,9 +84,15 @@ Vec uni(Vec a)
     const double l = len(a);
     return l > 0 ? a / l : Vec(0, 0);
 }
-Vec lrp(Vec a, Vec b, double t) { return a + (b - a) * t; }
+Vec lrp(Vec a, Vec b, double t)
+{
+    return a + (b - a) * t;
+}
 /// Project a point in direction b by c.
-Vec prj(Vec a, Vec b, double c) { return a + b * c; }
+Vec prj(Vec a, Vec b, double c)
+{
+    return a + b * c;
+}
 Vec rotAround(Vec a, Vec c, double r)
 {
     const double s = std::sin(r);
@@ -71,12 +101,18 @@ Vec rotAround(Vec a, Vec c, double r)
     const double py = a.y() - c.y();
     return {px * co - py * s + c.x(), px * s + py * co + c.y()};
 }
-bool isEqual(Vec a, Vec b) { return a.x() == b.x() && a.y() == b.y(); }
+bool isEqual(Vec a, Vec b)
+{
+    return a.x() == b.x() && a.y() == b.y();
+}
 
 constexpr double RateOfPressureChange = 0.275;
 constexpr double FixedPi = M_PI + 0.0001;
 
-double easing(double t) { return std::sin(t * M_PI / 2); } // Excalidraw's freedraw easing
+double easing(double t)
+{
+    return std::sin(t * M_PI / 2);
+} // Excalidraw's freedraw easing
 
 double strokeRadius(double size, double thinning, double pressure)
 {
@@ -239,7 +275,8 @@ QList<QPointF> outlinePoints(const QList<StrokePt> &points, const OutlineOptions
     const Vec lastPoint = points.size() > 1 ? points.last().point : add(points.at(0).point, Vec(1, 1));
     if (points.size() == 1) {
         // A dot.
-        const Vec start = prj(firstPoint, uni(per(sub(firstPoint, lastPoint))), -(firstRadius >= 0 ? firstRadius : radius));
+        const Vec start =
+                prj(firstPoint, uni(per(sub(firstPoint, lastPoint))), -(firstRadius >= 0 ? firstRadius : radius));
         QList<QPointF> dot;
         constexpr double step = 1.0 / 13;
         for (double t = step; t <= 1; t += step)
@@ -291,9 +328,8 @@ QList<QPointF> strokeOutline(const QList<StrokePoint> &points, const OutlineOpti
         if (!std::isfinite(p.x) || !std::isfinite(p.y))
             continue;
         // Excalidraw passes no pressure when it simulates it (perfect-freehand then uses 0.5).
-        const double pressure = options.simulatePressure || !std::isfinite(p.pressure)
-                                        ? -1
-                                        : std::clamp(p.pressure, 0.0, 1.0);
+        const double pressure =
+                options.simulatePressure || !std::isfinite(p.pressure) ? -1 : std::clamp(p.pressure, 0.0, 1.0);
         input.append({Vec(p.x, p.y), pressure});
     }
     if (input.isEmpty() || !std::isfinite(options.size))

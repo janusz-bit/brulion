@@ -307,7 +307,7 @@ private:
     QElapsedTimer m_liveClock;
     QPainterPath m_livePath; ///< item coordinates
     QRectF m_liveDirty;      ///< item coordinates
-    QSet<int> m_erasing; ///< indices of m_items the erasing gesture removes (hidden meanwhile)
+    QSet<int> m_erasing;     ///< indices of m_items the erasing gesture removes (hidden meanwhile)
     QPointF m_lastItemPos;
     QPointF m_panStart;
     QPointF m_panCenter;

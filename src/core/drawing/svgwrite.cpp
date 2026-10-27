@@ -44,11 +44,11 @@ QByteArray toSvg(const Drawing &drawing)
 
     QString svg;
     svg += u"<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 "_s + w + u' ' + h
-         + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
+           + u"\" width=\""_s + w + u"\" height=\""_s + h + u"\">\n"_s;
     svg += u"<!-- svg-source:excalidraw -->\n"_s;
     svg += u"<metadata><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-version:2 -->"
            "<!-- payload-start -->"_s
-         + QString::fromLatin1(encodePayload(sceneJson(drawing))) + u"<!-- payload-end --></metadata>\n"_s;
+           + QString::fromLatin1(encodePayload(sceneJson(drawing))) + u"<!-- payload-end --></metadata>\n"_s;
 
     const QString paper = safeColor(drawing.paper, QString());
     if (!paper.isEmpty())
@@ -66,7 +66,7 @@ QByteArray toSvg(const Drawing &drawing)
         }
         if (!d.isEmpty())
             svg += u"<path d=\""_s + d + u"\" fill=\"none\" stroke=\""_s + RuleColor.toString()
-                 + u"\" stroke-width=\"1\"/>\n"_s;
+                   + u"\" stroke-width=\"1\"/>\n"_s;
     }
 
     for (const Stroke &s : drawing.strokes) {

@@ -20,6 +20,7 @@
 #include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtMath>
 #include <qpa/qwindowsysteminterface.h>
 
 #include <memory>
@@ -323,7 +324,8 @@ private Q_SLOTS:
             const QPointF p(100 + 20 * i, 100);
             pen.send(p, Qt::LeftButton, 0.4 + i * 0.04);
             QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(
-                    window.get(), pen.time(), p, window->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, QEvent::MouseMove);
+                    window.get(), pen.time(), p, window->mapToGlobal(p), Qt::LeftButton, Qt::NoButton,
+                    QEvent::MouseMove);
         }
         pen.send({300, 100}, Qt::NoButton, 0);
         QWindowSystemInterface::handleMouseEvent<QWindowSystemInterface::SynchronousDelivery>(
@@ -474,9 +476,9 @@ private Q_SLOTS:
         QTest::newRow(".excalidraw") << fixture(u"excalidraw_mixed.excalidraw"_s) << u"readonly"_s << 0;
         QTest::newRow("plain svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"/>") << u"notDrawing"_s << 0;
         QTest::newRow("photo") << QByteArray("\xff\xd8\xff\xe0 zdjęcie") << u"notDrawing"_s << 0;
-        QTest::newRow("broken payload")
-                << QByteArray("<svg><!-- payload-type:application/vnd.excalidraw+json --><!-- payload-start -->@@@<!-- payload-end --></svg>")
-                << u"corrupt"_s << 0;
+        QTest::newRow("broken payload") << QByteArray("<svg><!-- payload-type:application/vnd.excalidraw+json --><!-- "
+                                                      "payload-start -->@@@<!-- payload-end --></svg>")
+                                        << u"corrupt"_s << 0;
     }
     void loadStatuses()
     {
@@ -558,7 +560,7 @@ private Q_SLOTS:
         QCOMPARE(ids.size(), 3);
         QCOMPARE(ids.mid(0, 2), (QStringList{u"c"_s, u"d"_s}));
         QCOMPARE(ids.at(2).size(), 21); // the stroke drawn here, after theirs
-        QVERIFY(canvas->modified()); // still to be written
+        QVERIFY(canvas->modified());    // still to be written
         QVERIFY(!canvas->canUndo());
         // Not a drawing (a half-written file): nothing changes.
         QVERIFY(!canvas->takeExternal("<svg"));
@@ -575,8 +577,8 @@ private Q_SLOTS:
             QPainter p(&image);
             canvas->render(&p, QSizeF(800, 600));
         }
-        QVERIFY(image.pixelColor(200, 100).lightness() < 100);               // ink
-        QCOMPARE(image.pixelColor(400, 50).name(), u"#ffffff"_s);            // paper
+        QVERIFY(image.pixelColor(200, 100).lightness() < 100);                              // ink
+        QCOMPARE(image.pixelColor(400, 50).name(), u"#ffffff"_s);                           // paper
         QCOMPARE(image.pixelColor(400, 64).name(), brulion::drawing::RuleColor.toString()); // a line (32 × 2)
         // The stroke being drawn shows before it ends.
         QTest::mousePress(window.get(), Qt::LeftButton, {}, QPoint(100, 400));
@@ -651,7 +653,7 @@ private Q_SLOTS:
             }
             add(pts, color, width);
         };
-        word(40, 70, 7, 26, u"#1f2430"_s, 1.0);   // a title
+        word(40, 70, 7, 26, u"#1f2430"_s, 1.0); // a title
         word(240, 70, 4, 26, u"#1f2430"_s, 1.0);
         for (int line = 0; line < 4; ++line) {
             double x = 40;

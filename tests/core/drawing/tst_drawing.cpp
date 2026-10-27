@@ -11,6 +11,7 @@
 #include <QRandomGenerator>
 #include <QTest>
 #include <QXmlStreamReader>
+#include <QtMath>
 
 #include <cmath>
 #include <limits>
@@ -33,7 +34,8 @@ Stroke wavyStroke(const QString &id, double x0, double y0, int n, bool pressure 
     Stroke s;
     s.id = id;
     for (int i = 0; i < n; ++i)
-        s.points.append({x0 + i * 4.0, y0 + 12 * std::sin(i / 3.0), pressure ? 0.2 + 0.6 * i / std::max(1, n - 1) : 0.5});
+        s.points.append(
+                {x0 + i * 4.0, y0 + 12 * std::sin(i / 3.0), pressure ? 0.2 + 0.6 * i / std::max(1, n - 1) : 0.5});
     s.simulatePressure = !pressure;
     normalizeStroke(s);
     s.seed = 7;
@@ -259,27 +261,30 @@ private Q_SLOTS:
         QTest::addColumn<bool>("found");
         QTest::addColumn<bool>("corrupt");
         const QByteArray b64 = encodePayload(sceneJson(Drawing()));
-        const QByteArray head = "<svg xmlns=\"http://www.w3.org/2000/svg\"><!-- payload-type:application/vnd.excalidraw+json -->";
-        QTest::newRow("plain svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>") << false << false;
+        const QByteArray head =
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><!-- payload-type:application/vnd.excalidraw+json -->";
+        QTest::newRow("plain svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>") << false
+                                   << false;
         QTest::newRow("png") << QByteArray("\x89PNG\r\n\x1a\n....") << false << false;
-        QTest::newRow("ok") << head + "<!-- payload-version:2 --><!-- payload-start -->" + b64 + "<!-- payload-end --></svg>"
+        QTest::newRow("ok") << head + "<!-- payload-version:2 --><!-- payload-start -->" + b64
+                                       + "<!-- payload-end --></svg>"
                             << true << false;
         QTest::newRow("crlf around") << head + "<!-- payload-version:2 -->\r\n<!-- payload-start -->\r\n  " + b64
-                                                 + "\r\n<!-- payload-end -->\r\n</svg>"
+                                                + "\r\n<!-- payload-end -->\r\n</svg>"
                                      << true << false;
         QTest::newRow("no end marker") << head + "<!-- payload-version:2 --><!-- payload-start -->" + b64 + "</svg>"
                                        << false << true;
-        QTest::newRow("no start marker") << head + "<!-- payload-version:2 -->" + b64 + "<!-- payload-end -->"
-                                         << false << true;
+        QTest::newRow("no start marker") << head + "<!-- payload-version:2 -->" + b64 + "<!-- payload-end -->" << false
+                                         << true;
         QTest::newRow("truncated base64") << head + "<!-- payload-version:2 --><!-- payload-start -->"
                                                      + b64.left(b64.size() - 9) + "<!-- payload-end -->"
                                           << false << true;
         QTest::newRow("wrong json") << head + "<!-- payload-version:2 --><!-- payload-start -->"
                                                + QByteArray("{not json").toBase64() + "<!-- payload-end -->"
                                     << false << true;
-        QTest::newRow("huge version number") << head + "<!-- payload-version:99999999999 --><!-- payload-start -->" + b64
-                                                        + "<!-- payload-end -->"
-                                             << true << false;
+        QTest::newRow("huge version number")
+                << head + "<!-- payload-version:99999999999 --><!-- payload-start -->" + b64 + "<!-- payload-end -->"
+                << true << false;
     }
     void svgPayloads()
     {
@@ -380,21 +385,29 @@ private Q_SLOTS:
     {
         QTest::addColumn<QByteArray>("element");
         QTest::addColumn<bool>("stroke");
-        QTest::newRow("freedraw") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[0,0],[3,4]]}") << true;
-        QTest::newRow("rotated") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"angle\":0.5,\"points\":[[0,0],[3,4]]}")
+        QTest::newRow("freedraw") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[0,0],[3,4]]}")
+                                  << true;
+        QTest::newRow("rotated") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"angle\":0.5,\"points\":[[0,0],[3,4]]}")
                                  << false;
-        QTest::newRow("filled") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"backgroundColor\":\"#ffc9c9\",\"points\":[[0,0]]}")
+        QTest::newRow("filled") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"backgroundColor\":\"#ffc9c9\",\"points\":[[0,0]]}")
                                 << false;
         QTest::newRow("no points") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[]}") << false;
-        QTest::newRow("point of text") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[\"a\",\"b\"]]}") << false;
+        QTest::newRow("point of text") << QByteArray(
+                "{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[\"a\",\"b\"]]}")
+                                       << false;
         QTest::newRow("short point") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"points\":[[1]]}") << false;
         QTest::newRow("no x") << QByteArray("{\"type\":\"freedraw\",\"y\":2,\"points\":[[0,0]]}") << false;
-        QTest::newRow("bad pressure") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"simulatePressure\":false,\"pressures\":[\"x\"],\"points\":[[0,0]]}")
+        QTest::newRow("bad pressure") << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"simulatePressure\":false,"
+                                                    "\"pressures\":[\"x\"],\"points\":[[0,0]]}")
                                       << false;
         QTest::newRow("pressures of another length")
-                << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"simulatePressure\":false,\"pressures\":[0.3],\"points\":[[0,0],[1,1]]}")
+                << QByteArray("{\"type\":\"freedraw\",\"x\":1,\"y\":2,\"simulatePressure\":false,\"pressures\":[0.3],"
+                              "\"points\":[[0,0],[1,1]]}")
                 << true;
-        QTest::newRow("rectangle") << QByteArray("{\"type\":\"rectangle\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}") << false;
+        QTest::newRow("rectangle") << QByteArray("{\"type\":\"rectangle\",\"x\":1,\"y\":2,\"width\":3,\"height\":4}")
+                                   << false;
         QTest::newRow("image") << QByteArray("{\"type\":\"image\",\"x\":1,\"y\":2,\"fileId\":\"abc\"}") << false;
         QTest::newRow("not an object") << QByteArray("42") << false;
     }
@@ -442,15 +455,16 @@ private Q_SLOTS:
     {
         QTest::addColumn<QByteArray>("head");
         QTest::addColumn<bool>("drawing");
-        QTest::newRow("plain svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0,0\"/></svg>") << false;
+        QTest::newRow("plain svg") << QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0,0\"/></svg>")
+                                   << false;
         QTest::newRow("excalidraw export without the scene")
                 << QByteArray("<svg><!-- svg-source:excalidraw --><metadata></metadata></svg>") << false;
         Drawing d;
         d.strokes = {wavyStroke(u"x"_s, 0, 0, 5)};
         QTest::newRow("ours") << toSvg(d).left(HeadBytes) << true;
         QTest::newRow("bom") << "\xEF\xBB\xBF" + toSvg(d).left(HeadBytes) << true;
-        const QByteArray late = "<svg>" + QByteArray(HeadBytes, ' ')
-                                + "<!-- payload-type:application/vnd.excalidraw+json --></svg>";
+        const QByteArray late =
+                "<svg>" + QByteArray(HeadBytes, ' ') + "<!-- payload-type:application/vnd.excalidraw+json --></svg>";
         QTest::newRow("marker after the head") << late.left(HeadBytes) << false;
     }
     void headCheck()

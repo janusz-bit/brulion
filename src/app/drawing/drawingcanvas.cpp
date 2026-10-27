@@ -571,7 +571,8 @@ void DrawingCanvas::renderCache()
     const QRectF visible(toScene(QPointF(0, 0)), toScene(QPointF(width(), height())));
     // The lines or the grid at the scene's multiples of the spacing, as the SVG has them.
     if (m_doc.background != drawing::Background::Plain) {
-        const double spacing = m_doc.background == drawing::Background::Lines ? drawing::LineSpacing : drawing::GridSpacing;
+        const double spacing =
+                m_doc.background == drawing::Background::Lines ? drawing::LineSpacing : drawing::GridSpacing;
         if (spacing * m_zoom >= 6) {
             QPen pen(QColor(drawing::RuleColor.toString()));
             pen.setCosmetic(true);
@@ -760,8 +761,8 @@ bool DrawingCanvas::onTop(QPointF scenePos) const
 bool DrawingCanvas::handleTablet(QTabletEvent *event)
 {
     const QPointF pos = mapFromScene(event->position());
-    const bool eraser = event->pointerType() == QPointingDevice::PointerType::Eraser
-                        || (event->buttons() & Qt::RightButton);
+    const bool eraser =
+            event->pointerType() == QPointingDevice::PointerType::Eraser || (event->buttons() & Qt::RightButton);
     const Pointer p{true, eraser, std::clamp(double(event->pressure()), 0.0, 1.0)};
     const auto remember = [this, event] {
         m_lastTabletTime = event->timestamp();
