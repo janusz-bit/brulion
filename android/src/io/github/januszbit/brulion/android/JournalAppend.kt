@@ -140,13 +140,20 @@ internal object JournalAppend {
 
   /**
    * Appends [block] to the note [path] (vault-relative) of the notebook folder [root]; a missing
-   * note is created with [newText] (the journal template, as the app would). Refused: a path
-   * outside the folder (also through `..` or a symbolic link), not a `.md` note, a note that is
-   * not UTF-8 text, a note changed by another program while this one wrote.
+   * note is created with [newText] (the journal template, as the app would). Refused: a
+   * notebook folder that is not there (moved, deleted, storage not mounted: never re-created —
+   * the app does not make an empty notebook in its place either), a path outside the folder
+   * (also through `..` or a symbolic link), not a `.md` note, a note that is not UTF-8 text, a
+   * note changed by another program while this one wrote.
    */
   fun appendToFile(root: File, path: String, newText: String, block: String): Result {
     if (qtTrim(block).isEmpty()) return Result(false, error = "empty")
     if (!path.endsWith(".md", ignoreCase = true)) return Result(false, error = "not a note")
+    try {
+      if (!root.isDirectory) return Result(false, error = "no notebook folder")
+    } catch (e: SecurityException) {
+      return Result(false, error = e.toString())
+    }
     val target = resolveInside(root, path) ?: return Result(false, error = "outside the notebook")
     try {
       val exists = target.exists()

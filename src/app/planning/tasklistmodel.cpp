@@ -159,19 +159,35 @@ QString TaskListModel::sectionLabel(const QString &key)
     return key;
 }
 
+std::optional<QDate> TaskListModel::filingDate(const Task &task, QDate today, std::optional<QDate> reminder)
+{
+    if (const auto dated = sectionDate(task))
+        return dated->date;
+    if (reminder)
+        return reminder;
+    if (task.start && task.start->date > today)
+        return task.start->date;
+    return std::nullopt;
+}
+
+std::optional<Reminder> TaskListModel::nextReminder(const QList<Reminder> &reminders, QDate today)
+{
+    std::optional<Reminder> next;
+    for (const Reminder &r : reminders) {
+        if (!next || (next->at.date < today && r.at.date >= today)
+            || (r.at.date >= today && dates::compareDateSpecs(r.at, next->at) < 0))
+            next = r;
+    }
+    return next;
+}
+
 QString TaskListModel::sectionOf(const Task &task, QDate today, Qt::DayOfWeek weekStart, std::optional<QDate> reminder)
 {
     if (isClosed(task.status))
         return u"done"_s;
     if (task.due && task.due->date < today)
         return u"overdue"_s;
-    std::optional<QDate> date;
-    if (const auto dated = sectionDate(task))
-        date = dated->date;
-    else if (reminder)
-        date = reminder;
-    else if (task.start && task.start->date > today)
-        date = task.start->date;
+    const std::optional<QDate> date = filingDate(task, today, reminder);
     if (!date)
         return u"noDate"_s;
     if (*date <= today)
@@ -832,12 +848,7 @@ void TaskListModel::rebuild()
                     if (qi.blockIndex >= 0 && qi.blockIndex < note->blocks.size()) {
                         const Block &block = note->blocks.at(qi.blockIndex);
                         item.tags = block.tags;
-                        // The next reminder of the block (else its last one).
-                        for (const Reminder &r : block.reminders) {
-                            if (!item.reminder || (item.reminder->at.date < today && r.at.date >= today)
-                                || (r.at.date >= today && dates::compareDateSpecs(r.at, item.reminder->at) < 0))
-                                item.reminder = r;
-                        }
+                        item.reminder = nextReminder(block.reminders, today);
                     }
                 }
                 item.section = sectionOf(*qi.task, today, ws,

@@ -8,6 +8,7 @@
     android:minHeight="250dp"
     android:minResizeWidth="180dp"
     android:minResizeHeight="110dp"
+    android:previewImage="@drawable/widget_preview_calendar_image"
     android:previewLayout="@layout/widget_preview_calendar"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="4"

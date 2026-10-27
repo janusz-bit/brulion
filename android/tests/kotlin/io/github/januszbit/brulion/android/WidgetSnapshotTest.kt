@@ -67,18 +67,51 @@ class WidgetSnapshotTest {
     for (i in 0 until cases.length()) {
       val c = cases.getJSONObject(i)
       val today = LocalDate.parse(c.getString("today"))
+      val reminder =
+        c.optJSONArray("reminders")?.let { array ->
+          val next = TaskSections.nextReminder((0 until array.length()).map { TaskReminder(array.getString(it), false) }, today)
+          if (c.has("next")) assertEquals(c.getString("name"), c.getString("next"), next?.at ?: "")
+          next?.at ?: ""
+        } ?: c.getString("reminder")
       val section =
         TaskSections.sectionOf(
           "todo",
           WidgetTask.dateOf(c.getString("due")),
           WidgetTask.dateOf(c.getString("scheduled")),
           WidgetTask.dateOf(c.getString("start")),
-          WidgetTask.dateOf(c.getString("reminder")),
+          WidgetTask.dateOf(reminder),
           today,
           c.getInt("weekStart")
         )
       assertEquals(c.getString("name"), c.getString("section"), section)
     }
+  }
+
+  /** A block with several reminders goes by its next one on a later day (TasksView's choice). */
+  @Test
+  fun aLaterDayTakesTheNextReminder() {
+    val task =
+      WidgetTask.fromJson(
+        JSONObject(
+          "{\"path\": \"Ogród.md\", \"line\": 0, \"text\": \"Podlać storczyki\", \"status\": \"todo\"," +
+            " \"reminder\": \"2026-10-27 09:00\", \"alarm\": false, \"section\": \"today\"," +
+            " \"reminders\": [{\"at\": \"2026-10-27 09:00\", \"alarm\": false}, {\"at\": \"2026-10-30 07:15\", \"alarm\": true}, {\"at\": \"zła\"}]}"
+        )
+      )!!
+    assertEquals(2, task.reminders.size)
+    assertEquals(TaskSections.TODAY, task.sectionOn(day, 1))
+    assertEquals("09:00", task.timeOn(day))
+    val friday = LocalDate.of(2026, 10, 30)
+    assertEquals(TaskSections.THIS_WEEK, task.sectionOn(day.plusDays(1), 1))
+    assertEquals(TaskSections.TOMORROW, task.sectionOn(friday.minusDays(1), 1))
+    assertEquals(TaskSections.TODAY, task.sectionOn(friday, 1))
+    assertEquals("⏰! 07:15", taskDetail(task, TaskSections.TODAY, friday, "pl"))
+    assertEquals("", task.timeOn(day.plusDays(1)))
+    // The JSON keeps them (quick add rewrites the stored snapshot).
+    assertEquals(task, WidgetTask.fromJson(task.toJson()))
+    // A task of an older snapshot without "reminders" goes by its one reminder.
+    val single = task.copy(reminders = emptyList())
+    assertEquals(TaskSections.TODAY, single.sectionOn(day.plusDays(1), 1))
   }
 
   @Test
@@ -111,6 +144,19 @@ class WidgetSnapshotTest {
     assertEquals(1, odd.weekStart)
     assertTrue(odd.tasksOn(day, TaskSections.ORDER).isEmpty())
     assertFalse(WidgetSnapshot.EMPTY.hasVault)
+  }
+
+  /** Before the app published a snapshot the widgets speak the language the app starts in. */
+  @Test
+  fun withoutASnapshotThePhonesLanguage() {
+    assertEquals("en", WidgetSnapshot.localeOf("", "en"))
+    assertEquals("pl", WidgetSnapshot.localeOf("", "pl"))
+    assertEquals("pl", WidgetSnapshot.localeOf("", "de"))
+    assertEquals("pl", WidgetSnapshot.localeOf("pl", "en"))
+    assertEquals("en", WidgetSnapshot.localeOf("en", "pl"))
+    assertEquals("pl", WidgetSnapshot.localeOf("fr", "pl"))
+    assertEquals(WidgetSnapshot.localeOf(""), WidgetSnapshot.EMPTY.locale)
+    assertEquals("pl", golden.locale)
   }
 
   @Test
@@ -201,6 +247,21 @@ class WidgetSnapshotTest {
     val dueToday = QuickAdd.optimisticTask(WidgetAction("a3", WidgetAction.KIND_TASK, "Dziś", "2026-10-27"), "j.md", 1, day, 1)
     assertEquals("2026-10-27", dueToday.due)
     assertEquals(TaskSections.TODAY, dueToday.section)
+  }
+
+  /** The day chips resolve when the entry is added: a dialog open past midnight writes the new day. */
+  @Test
+  fun quickAddDayChipsResolveWhenAdded() {
+    val opened = LocalDate.of(2026, 10, 27)
+    val added = LocalDate.of(2026, 10, 28)
+    assertEquals(added, QuickAdd.resolveDay(QuickAdd.DayChoice.TODAY, null, added))
+    assertEquals(LocalDate.of(2026, 10, 29), QuickAdd.resolveDay(QuickAdd.DayChoice.TOMORROW, null, added))
+    assertNull(QuickAdd.resolveDay(QuickAdd.DayChoice.NONE, null, added))
+    assertEquals(LocalDate.of(2026, 11, 5), QuickAdd.resolveDay(QuickAdd.DayChoice.DATE, LocalDate.of(2026, 11, 5), added))
+    assertEquals(added, QuickAdd.resolveDay(QuickAdd.DayChoice.DATE, null, added))
+    // New Year's Eve to 1 January.
+    assertEquals(LocalDate.of(2027, 1, 2), QuickAdd.resolveDay(QuickAdd.DayChoice.TOMORROW, null, LocalDate.of(2027, 1, 1)))
+    assertEquals(opened, QuickAdd.resolveDay(QuickAdd.DayChoice.TODAY, null, opened))
   }
 
   @Test

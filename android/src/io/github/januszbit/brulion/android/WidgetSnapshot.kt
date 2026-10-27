@@ -7,6 +7,9 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.time.LocalDate
 
+/** A reminder of a task's block: "YYYY-MM-DD HH:mm", an alarm (⏰!) or not. */
+internal data class TaskReminder(val at: String, val alarm: Boolean)
+
 /** An open task of the snapshot (src/app/widgets/widgetsnapshot.h). Dates "YYYY-MM-DD[ HH:mm]" or "". */
 internal data class WidgetTask(
   val key: String,
@@ -23,8 +26,16 @@ internal data class WidgetTask(
   val alarm: Boolean,
   val recurring: Boolean,
   /** The section on the snapshot's day. */
-  val section: String
+  val section: String,
+  /** Every reminder of the block ([reminder] is the one that counted on the snapshot's day). */
+  val reminders: List<TaskReminder> = emptyList()
 ) {
+  /** The block's reminder that counts on [day] (TaskListModel::nextReminder), null without one. */
+  fun reminderOn(day: LocalDate): TaskReminder? {
+    val all = reminders.ifEmpty { if (reminder.isEmpty()) emptyList() else listOf(TaskReminder(reminder, alarm)) }
+    return TaskSections.nextReminder(all, day)
+  }
+
   /** The section on [day] (TaskListModel::sectionOf, mirrored by [TaskSections]). */
   fun sectionOn(day: LocalDate, weekStart: Int): String =
     TaskSections.sectionOf(
@@ -32,7 +43,7 @@ internal data class WidgetTask(
       dateOf(due),
       dateOf(scheduled),
       dateOf(start),
-      dateOf(reminder),
+      reminderOn(day)?.let { dateOf(it.at) },
       day,
       weekStart
     )
@@ -41,12 +52,14 @@ internal data class WidgetTask(
    * The time shown in the row on [day]: the reminder's when it is that day, else the due time
    * that day; "" without one.
    */
-  fun timeOn(day: LocalDate): String =
-    when {
-      dateOf(reminder) == day && reminder.length >= 16 -> reminder.substring(11, 16)
+  fun timeOn(day: LocalDate): String {
+    val next = reminderOn(day)?.at ?: ""
+    return when {
+      dateOf(next) == day && next.length >= 16 -> next.substring(11, 16)
       dateOf(due) == day && due.length >= 16 -> due.substring(11, 16)
       else -> ""
     }
+  }
 
   fun toJson(): JSONObject =
     JSONObject()
@@ -64,6 +77,7 @@ internal data class WidgetTask(
       .put("alarm", alarm)
       .put("recurring", recurring)
       .put("section", section)
+      .put("reminders", JSONArray().also { array -> reminders.forEach { array.put(JSONObject().put("at", it.at).put("alarm", it.alarm)) } })
 
   companion object {
     fun fromJson(json: JSONObject): WidgetTask? {
@@ -83,8 +97,20 @@ internal data class WidgetTask(
         reminder = json.optString("reminder", ""),
         alarm = json.optBoolean("alarm", false),
         recurring = json.optBoolean("recurring", false),
-        section = json.optString("section", "")
+        section = json.optString("section", ""),
+        reminders = reminderList(json.optJSONArray("reminders"))
       )
+    }
+
+    private fun reminderList(array: JSONArray?): List<TaskReminder> {
+      if (array == null) return emptyList()
+      val out = ArrayList<TaskReminder>(array.length())
+      for (i in 0 until array.length()) {
+        val item = array.optJSONObject(i) ?: continue
+        val at = item.optString("at", "")
+        if (dateOf(at) != null) out.add(TaskReminder(at, item.optBoolean("alarm", false)))
+      }
+      return out
     }
 
     /** The date of a "YYYY-MM-DD[ HH:mm]" spec, null when there is none or it is broken. */
@@ -130,6 +156,26 @@ internal object TaskSections {
       date <= endOfWeek(today, weekStart) -> THIS_WEEK
       else -> LATER
     }
+  }
+
+  /**
+   * TaskListModel::nextReminder(): of a block's [reminders] the earliest on or after [today],
+   * else the first of them (all past); null without one. Checked against refile-cases.json.
+   */
+  fun nextReminder(reminders: List<TaskReminder>, today: LocalDate): TaskReminder? {
+    var next: TaskReminder? = null
+    var nextDate: LocalDate? = null
+    for (r in reminders) {
+      val date = WidgetTask.dateOf(r.at) ?: continue
+      if (next == null || nextDate == null ||
+        (nextDate < today && date >= today) ||
+        (date >= today && r.at < next.at)
+      ) {
+        next = r
+        nextDate = date
+      }
+    }
+    return next
   }
 
   /** The first day of [date]'s week, weeks starting on [weekStart] (1 = Monday … 7 = Sunday). */
@@ -206,7 +252,8 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
   val built: String = json.optString("built", "")
   val today: LocalDate? = JournalAppend.parseDate(json.optString("today", ""))
   val weekStart: Int = json.optInt("weekStart", 1).let { if (it in 1..7) it else 1 }
-  val locale: String = if (json.optString("locale", "pl") == "en") "en" else "pl"
+  /** The app's language; before the app published one, the phone's ([localeOf]). */
+  val locale: String get() = localeOf(json.optString("locale", ""))
   val vault: VaultInfo? =
     json.optJSONObject("vault")?.let {
       val root = it.optString("root", "")
@@ -294,6 +341,16 @@ internal class WidgetSnapshot private constructor(val json: JSONObject) {
     const val VERSION = 1
 
     val EMPTY = WidgetSnapshot(JSONObject().put("version", VERSION))
+
+    /**
+     * "pl" or "en": the snapshot's [value], else (no snapshot yet) what the app starts in on this
+     * phone — English on an English phone, else Polish (notebook::appLanguage()).
+     */
+    fun localeOf(value: String, system: String = java.util.Locale.getDefault().language): String =
+      when (value) {
+        "pl", "en" -> value
+        else -> if (system == "en") "en" else "pl"
+      }
 
     /** The snapshot in [raw]; [EMPTY] when missing, broken or of another version. */
     fun parse(raw: String?): WidgetSnapshot {

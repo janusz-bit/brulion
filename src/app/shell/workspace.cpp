@@ -34,6 +34,7 @@
 #include <QMimeType>
 #include <QRegularExpression>
 #include <QSet>
+#include <QStringDecoder>
 
 #include <algorithm>
 #include <utility>
@@ -45,6 +46,16 @@ namespace brulion::shell {
 Q_LOGGING_CATEGORY(lcWorkspace, "brulion.workspace")
 
 namespace {
+
+/// The bytes are UTF-8 text (a BOM allowed): a note Brulion may rewrite without losing bytes.
+bool isUtf8Text(const QByteArray &bytes)
+{
+    const QByteArrayView body = bytes.startsWith("\xEF\xBB\xBF") ? QByteArrayView(bytes).sliced(3) : QByteArrayView(bytes);
+    QStringDecoder utf8(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless);
+    const QString decoded = utf8.decode(body); // decoding sets hasError()
+    Q_UNUSED(decoded);
+    return !utf8.hasError();
+}
 
 constexpr auto kFavorites = "ui/favorites";
 constexpr auto kRecentPages = "ui/recentPages";
@@ -1149,8 +1160,18 @@ QString Workspace::appendToTodaysJournal(const QString &block)
     const QString path = ensureJournal(now().date().toString(Qt::ISODate));
     if (path.isEmpty())
         return {};
+    bool ok = false;
+    const QString text = m_vault->readText(path, &ok);
+    if (!ok)
+        return {};
+    // A note that is not UTF-8 (windows-1250 from an old editor, synced in) is left alone: written
+    // back, each of its other bytes would be U+FFFD. Read again only when the text shows one.
+    if (text.contains(QChar::ReplacementCharacter) && !isUtf8Text(m_vault->readBinary(path))) {
+        qCWarning(lcWorkspace) << "Not appending to" << path << "- it is not UTF-8 text";
+        return {};
+    }
     // A template's empty last bullet is filled, the note's line ending kept (notebook/journals.h).
-    const QString content = notebook::appendBlock(m_vault->readText(path), block);
+    const QString content = notebook::appendBlock(text, block);
     return writeFile(path, content) ? path : QString();
 }
 

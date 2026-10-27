@@ -11,7 +11,9 @@
 //     Brulion"); another notebook without reminders (the documentation) leaves the last one.
 // Entries quick add could not write itself (AndroidBridge::takeWidgetActions()) are written into
 // today's journal of that notebook while it is ready (Workspace::appendJournalBlocks), with a
-// toast; a note quick add wrote itself while the app runs is read again (Vault::rescan).
+// toast; one the app cannot write either goes back into the queue (requeueWidgetActions()) for
+// the next try. After quick add wrote a note itself the reminders are handed over again
+// (WorkspaceReminders::resendUpcoming()): its provisional reminder gives way to the app's set.
 #pragma once
 
 #include <QObject>

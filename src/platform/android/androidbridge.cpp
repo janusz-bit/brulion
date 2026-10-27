@@ -393,6 +393,19 @@ QJsonArray AndroidBridge::takeWidgetActions(const QString &vault)
     return QJsonDocument::fromJson(answer.toString().toUtf8()).array();
 }
 
+void AndroidBridge::requeueWidgetActions(const QJsonArray &actions)
+{
+    if (actions.isEmpty())
+        return;
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return;
+    const QJniObject json = QJniObject::fromString(QString::fromUtf8(QJsonDocument(actions).toJson(QJsonDocument::Compact)));
+    QJniObject::callStaticMethod<void>(kClass, "requeueWidgetActions", "(Landroid/content/Context;Ljava/lang/String;)V",
+                                       context.object(), json.object<jstring>());
+    failed("requeueWidgetActions");
+}
+
 namespace {
 
 QJniObject stringField(const char *className, const char *field)

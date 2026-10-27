@@ -179,8 +179,9 @@ internal fun taskDetail(task: WidgetTask, section: String, today: LocalDate, loc
     val day = if (section == TaskSections.TOMORROW) today.plusDays(1) else today
     val time = task.timeOn(day)
     if (time.isNotEmpty()) {
-      val reminderTime = WidgetTask.dateOf(task.reminder) == day
-      parts.add(if (reminderTime) (if (task.alarm) "⏰! $time" else "⏰ $time") else time)
+      val next = task.reminderOn(day)
+      val reminderTime = next != null && WidgetTask.dateOf(next.at) == day
+      parts.add(if (reminderTime) (if (next?.alarm == true) "⏰! $time" else "⏰ $time") else time)
     }
   }
   if (task.recurring) parts.add("🔁")

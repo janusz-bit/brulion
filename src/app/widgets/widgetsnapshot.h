@@ -9,7 +9,9 @@
 //     "vault": { "id", "name", "root" (absolute folder) } | null (no notebook: "Otwórz Brulion"),
 //     "tasks": [ { "key": "path:line", "text", "status", "priority" (0 none … 5 highest), "path",
 //                  "line" (0-based), "page" (title), "due", "scheduled", "start", "reminder"
-//                  ("YYYY-MM-DD[ HH:mm]" or ""), "alarm", "recurring", "section" } ],
+//                  ("YYYY-MM-DD[ HH:mm]" or ""; the block's reminder that counts today), "alarm",
+//                  "reminders" (every reminder of the block: [ { "at": "YYYY-MM-DD HH:mm",
+//                  "alarm" } ], at most 16), "recurring", "section" } ],
 //     "taskCounts": { "overdue", "today", "tomorrow" },
 //     "calendar": { "from", "to", "days": { "YYYY-MM-DD": { "journal" (path or ""), "kinds"
 //                   [due, overdue, scheduled, reminder, alarm, done, journal], "items": [ { "time"
@@ -20,7 +22,8 @@
 //
 // tasks: the open tasks of TasksView (same sections and "due" order, TaskListModel) that are
 // overdue or filed at most taskDays ahead; their raw dates let the widget file them again for a
-// later day (the snapshot survives midnight: WidgetSnapshot.kt mirrors TaskListModel::sectionOf).
+// later day (the snapshot survives midnight: WidgetSnapshot.kt mirrors TaskListModel::sectionOf
+// and TaskListModel::nextReminder — a block with several reminders counts the next one).
 // calendar: CalendarModel's agenda from a week before today to eight weeks ahead (days without
 // entries left out). capture: where the widget's quick add writes while Brulion is closed — the
 // daily note of each of the next days and, for a missing one, the text it starts with (the

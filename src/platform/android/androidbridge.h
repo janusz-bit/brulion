@@ -135,6 +135,9 @@ public:
      * handed out once; widgetActionsQueued() says when there may be new ones.
      */
     QJsonArray takeWidgetActions(const QString &vault);
+    /// Puts entries taken with takeWidgetActions() that the app could not write either back into
+    /// the queue (same JSON; an entry with the same id is replaced), for the next try. Emits nothing.
+    void requeueWidgetActions(const QJsonArray &actions);
 
     /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
@@ -204,8 +207,9 @@ Q_SIGNALS:
     /// Quick add of a widget queued an entry for the app (or the app returned to the front, or
     /// it started): takeWidgetActions() may have some.
     void widgetActionsQueued();
-    /// Quick add of a widget wrote @p path (absolute) itself while the app runs: the notebook
-    /// should read it again.
+    /// Quick add of a widget wrote @p path (absolute) itself while the app runs (delivered when
+    /// Qt's event loop runs again, on return to the front; the notebook is read again then
+    /// anyway): a provisional reminder it armed gives way to the app's set.
     void widgetNoteWritten(const QString &path);
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).

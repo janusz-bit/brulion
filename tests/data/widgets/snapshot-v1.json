@@ -1445,6 +1445,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "overdue",
             "start": "",
@@ -1461,6 +1463,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "2026-10-20",
             "section": "today",
             "start": "",
@@ -1477,6 +1481,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "today",
             "start": "",
@@ -1493,6 +1499,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "today",
             "start": "",
@@ -1509,6 +1517,8 @@
             "priority": 0,
             "recurring": true,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "today",
             "start": "",
@@ -1525,6 +1535,12 @@
             "priority": 0,
             "recurring": false,
             "reminder": "2026-10-27 09:00",
+            "reminders": [
+                {
+                    "alarm": false,
+                    "at": "2026-10-27 09:00"
+                }
+            ],
             "scheduled": "",
             "section": "today",
             "start": "",
@@ -1541,6 +1557,8 @@
             "priority": 4,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "tomorrow",
             "start": "",
@@ -1557,6 +1575,12 @@
             "priority": 0,
             "recurring": false,
             "reminder": "2026-10-28 06:30",
+            "reminders": [
+                {
+                    "alarm": true,
+                    "at": "2026-10-28 06:30"
+                }
+            ],
             "scheduled": "",
             "section": "tomorrow",
             "start": "",
@@ -1573,6 +1597,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "thisWeek",
             "start": "",
@@ -1589,6 +1615,8 @@
             "priority": 0,
             "recurring": false,
             "reminder": "",
+            "reminders": [
+            ],
             "scheduled": "",
             "section": "later",
             "start": "",

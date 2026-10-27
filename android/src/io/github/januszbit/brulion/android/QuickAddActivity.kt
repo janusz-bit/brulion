@@ -41,11 +41,11 @@ class QuickAddActivity : Activity() {
   private var kind = WidgetAction.KIND_TASK
   private var locale = "pl"
 
-  /** The day picked (null: no date), its time (null: none), alarm. */
-  private var day: LocalDate? = LocalDate.now()
+  /** The day chip (resolved to a date only when an entry is added), the date of Data…, the time, alarm. */
+  private var choice = QuickAdd.DayChoice.TODAY
+  private var customDate: LocalDate? = null
   private var time: LocalTime? = null
   private var alarm = false
-  private var customDay = false
 
   override fun attachBaseContext(newBase: Context) {
     locale = WidgetStore.snapshot(newBase).locale
@@ -73,10 +73,10 @@ class QuickAddActivity : Activity() {
       return
     }
     // A new "+": a new entry, today's (as when the dialog opens).
-    day = LocalDate.now()
+    choice = QuickAdd.DayChoice.TODAY
+    customDate = null
     time = null
     alarm = false
-    customDay = false
     refreshChips()
     status.text = ""
     input.setText(intent.getStringExtra(Intent.EXTRA_TEXT) ?: "")
@@ -90,17 +90,17 @@ class QuickAddActivity : Activity() {
 
   override fun onSaveInstanceState(outState: Bundle) {
     super.onSaveInstanceState(outState)
-    outState.putString("day", day?.toString())
+    outState.putString("choice", choice.name)
+    outState.putString("customDate", customDate?.toString())
     outState.putString("time", time?.let { JournalAppend.hhmm(it) })
     outState.putBoolean("alarm", alarm)
-    outState.putBoolean("customDay", customDay)
   }
 
   private fun restore(state: Bundle) {
-    day = JournalAppend.parseDate(state.getString("day"))
+    choice = QuickAdd.DayChoice.values().firstOrNull { it.name == state.getString("choice") } ?: QuickAdd.DayChoice.TODAY
+    customDate = JournalAppend.parseDate(state.getString("customDate"))
     time = JournalAppend.parseTime(state.getString("time"))
     alarm = state.getBoolean("alarm")
-    customDay = state.getBoolean("customDay")
   }
 
   private fun dp(value: Int): Int =
@@ -143,9 +143,9 @@ class QuickAddActivity : Activity() {
     if (kind == WidgetAction.KIND_TASK) {
       // The day, then the time: two rows (each scrolls sideways on a narrow screen).
       val days = chipRow(root)
-      days.addView(chip(CHIP_TODAY, R.string.brulion_quick_add_today) { pick(LocalDate.now()) })
-      days.addView(chip(CHIP_TOMORROW, R.string.brulion_quick_add_tomorrow) { pick(LocalDate.now().plusDays(1)) })
-      days.addView(chip(CHIP_NONE, R.string.brulion_quick_add_no_date) { day = null; time = null; alarm = false; customDay = false; refreshChips() })
+      days.addView(chip(CHIP_TODAY, R.string.brulion_quick_add_today) { pick(QuickAdd.DayChoice.TODAY) })
+      days.addView(chip(CHIP_TOMORROW, R.string.brulion_quick_add_tomorrow) { pick(QuickAdd.DayChoice.TOMORROW) })
+      days.addView(chip(CHIP_NONE, R.string.brulion_quick_add_no_date) { pick(QuickAdd.DayChoice.NONE); time = null; alarm = false; refreshChips() })
       days.addView(chip(CHIP_DATE, R.string.brulion_quick_add_date) { pickDate() })
       val times = chipRow(root)
       times.addView(chip(CHIP_TIME, R.string.brulion_quick_add_time) { pickTime() })
@@ -200,18 +200,27 @@ class QuickAddActivity : Activity() {
     return chip
   }
 
-  private fun pick(date: LocalDate) {
-    day = date
-    customDay = false
+  private fun pick(day: QuickAdd.DayChoice) {
+    choice = day
+    customDate = null
     refreshChips()
   }
 
   private fun pickDate() {
-    val start = day ?: LocalDate.now()
+    val today = LocalDate.now()
+    val start = QuickAdd.resolveDay(choice, customDate, today) ?: today
     DatePickerDialog(this, { _, year, month, dayOfMonth ->
-      day = LocalDate.of(year, month + 1, dayOfMonth)
-      customDay = day != LocalDate.now() && day != LocalDate.now().plusDays(1)
-      refreshChips()
+      val date = LocalDate.of(year, month + 1, dayOfMonth)
+      val now = LocalDate.now()
+      when (date) {
+        now -> pick(QuickAdd.DayChoice.TODAY)
+        now.plusDays(1) -> pick(QuickAdd.DayChoice.TOMORROW)
+        else -> {
+          choice = QuickAdd.DayChoice.DATE
+          customDate = date
+          refreshChips()
+        }
+      }
     }, start.year, start.monthValue - 1, start.dayOfMonth).show()
   }
 
@@ -219,7 +228,7 @@ class QuickAddActivity : Activity() {
     val start = time ?: LocalTime.of(9, 0)
     TimePickerDialog(this, { _, hour, minute ->
       time = LocalTime.of(hour, minute)
-      if (day == null) day = LocalDate.now()
+      if (choice == QuickAdd.DayChoice.NONE) choice = QuickAdd.DayChoice.TODAY
       refreshChips()
     }, start.hour, start.minute, true).show()
   }
@@ -227,12 +236,13 @@ class QuickAddActivity : Activity() {
   private fun refreshChips() {
     if (chips.isEmpty()) return
     val today = LocalDate.now()
-    chips[CHIP_TODAY]?.isSelected = day == today
-    chips[CHIP_TOMORROW]?.isSelected = day == today.plusDays(1)
-    chips[CHIP_NONE]?.isSelected = day == null
+    chips[CHIP_TODAY]?.isSelected = choice == QuickAdd.DayChoice.TODAY
+    chips[CHIP_TOMORROW]?.isSelected = choice == QuickAdd.DayChoice.TOMORROW
+    chips[CHIP_NONE]?.isSelected = choice == QuickAdd.DayChoice.NONE
     chips[CHIP_DATE]?.let {
-      it.isSelected = customDay && day != null
-      it.text = if (customDay && day != null) WidgetDates.short(day!!, locale, today.year) else getString(R.string.brulion_quick_add_date)
+      val date = customDate.takeIf { choice == QuickAdd.DayChoice.DATE }
+      it.isSelected = date != null
+      it.text = if (date != null) WidgetDates.short(date, locale, today.year) else getString(R.string.brulion_quick_add_date)
     }
     chips[CHIP_TIME]?.let {
       it.isSelected = time != null
@@ -250,6 +260,8 @@ class QuickAddActivity : Activity() {
     val text = input.text?.toString() ?: ""
     if (JournalAppend.qtTrim(text).isEmpty()) return
     val now = LocalDateTime.now()
+    // The chip's day now (the dialog may have stayed open past midnight).
+    val day = QuickAdd.resolveDay(choice, customDate, now.toLocalDate())
     val action =
       WidgetAction(
         id = UUID.randomUUID().toString(),

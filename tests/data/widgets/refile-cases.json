@@ -1,5 +1,5 @@
 {
-  "comment": "The section of an open task on a day (TaskListModel::sectionOf in src/app/planning/tasklistmodel.h): the widgets file the snapshot's tasks again when the day changed since it was built. Dates as the snapshot writes them (\"YYYY-MM-DD[ HH:mm]\" or \"\"); weekStart 1 = Monday … 7 = Sunday. Checked by tests/app/widgets/tst_widgets.cpp and android/tests/kotlin/.../WidgetSnapshotTest.kt.",
+  "comment": "The section of an open task on a day (TaskListModel::sectionOf in src/app/planning/tasklistmodel.h): the widgets file the snapshot's tasks again when the day changed since it was built. Dates as the snapshot writes them (\"YYYY-MM-DD[ HH:mm]\" or \"\"); \"reminders\" (a block with several, TaskListModel::nextReminder picks \"next\") stands for \"reminder\"; weekStart 1 = Monday … 7 = Sunday. Checked by tests/app/widgets/tst_widgets.cpp and android/tests/kotlin/.../WidgetSnapshotTest.kt.",
   "cases": [
     { "name": "termin wczoraj", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-26", "scheduled": "", "start": "", "reminder": "", "section": "overdue" },
     { "name": "termin dziś", "today": "2026-10-27", "weekStart": 1, "due": "2026-10-27", "scheduled": "", "start": "", "reminder": "", "section": "today" },
@@ -26,6 +26,12 @@
     { "name": "przełom roku", "today": "2026-12-31", "weekStart": 1, "due": "2027-01-01", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
     { "name": "29 lutego", "today": "2028-02-28", "weekStart": 1, "due": "2028-02-29", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
     { "name": "zmiana czasu (25 października)", "today": "2026-10-24", "weekStart": 1, "due": "2026-10-25", "scheduled": "", "start": "", "reminder": "", "section": "tomorrow" },
-    { "name": "zła data jak brak", "today": "2026-10-27", "weekStart": 1, "due": "2026-02-30", "scheduled": "", "start": "", "reminder": "", "section": "noDate" }
+    { "name": "zła data jak brak", "today": "2026-10-27", "weekStart": 1, "due": "2026-02-30", "scheduled": "", "start": "", "reminder": "", "section": "noDate" },
+    { "name": "dwa przypomnienia: dziś pierwsze", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminders": ["2026-10-27 09:00", "2026-10-30 09:00"], "next": "2026-10-27 09:00", "section": "today" },
+    { "name": "dwa przypomnienia: dzień później następne", "today": "2026-10-28", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminders": ["2026-10-27 09:00", "2026-10-30 09:00"], "next": "2026-10-30 09:00", "section": "thisWeek" },
+    { "name": "przypomnienia nie po kolei", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminders": ["2026-11-20 08:00", "2026-10-28 07:30", "2026-10-29 06:00"], "next": "2026-10-28 07:30", "section": "tomorrow" },
+    { "name": "ten sam dzień: wcześniejsza godzina", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminders": ["2026-10-29 18:00", "2026-10-29 07:00"], "next": "2026-10-29 07:00", "section": "thisWeek" },
+    { "name": "wszystkie minione: pierwsze", "today": "2026-10-27", "weekStart": 1, "due": "", "scheduled": "", "start": "", "reminders": ["2026-10-22 09:00", "2026-10-20 09:00"], "next": "2026-10-22 09:00", "section": "today" },
+    { "name": "termin ważniejszy niż przypomnienia", "today": "2026-10-28", "weekStart": 1, "due": "2026-11-20", "scheduled": "", "start": "", "reminders": ["2026-10-27 09:00", "2026-10-29 09:00"], "next": "2026-10-29 09:00", "section": "later" }
   ]
 }

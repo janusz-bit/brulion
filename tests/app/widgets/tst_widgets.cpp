@@ -118,6 +118,36 @@ std::optional<DateSpec> spec(const QString &text)
     return s;
 }
 
+/// The reminders of a refile case or a snapshot task ("reminders": [spec | {at, alarm}]).
+QList<Reminder> remindersOf(const QJsonArray &array)
+{
+    QList<Reminder> out;
+    for (const QJsonValue &v : array) {
+        const QString at = v.isObject() ? v.toObject().value(u"at"_s).toString() : v.toString();
+        if (const auto s = spec(at)) {
+            Reminder r;
+            r.at = *s;
+            r.alarm = v.toObject().value(u"alarm"_s).toBool();
+            out.append(r);
+        }
+    }
+    return out;
+}
+
+/// The date the task's next reminder on `today` files it by: of "reminders" when given, else "reminder".
+std::optional<QDate> reminderDate(const QJsonObject &c, QDate today, QString *next = nullptr)
+{
+    if (c.contains(u"reminders"_s)) {
+        const auto r = planning::TaskListModel::nextReminder(remindersOf(c.value(u"reminders"_s).toArray()), today);
+        if (next)
+            *next = r ? r->at.toString() : QString();
+        return r ? std::optional<QDate>(r->at.date) : std::nullopt;
+    }
+    if (const auto r = spec(c.value(u"reminder"_s).toString()))
+        return r->date;
+    return std::nullopt;
+}
+
 void writeFile(const QString &file, const QByteArray &bytes)
 {
     QDir().mkpath(QFileInfo(file).absolutePath());
@@ -354,12 +384,39 @@ private Q_SLOTS:
         task.due = spec(c.value(u"due"_s).toString());
         task.scheduled = spec(c.value(u"scheduled"_s).toString());
         task.start = spec(c.value(u"start"_s).toString());
-        std::optional<QDate> reminder;
-        if (const auto r = spec(c.value(u"reminder"_s).toString()))
-            reminder = r->date;
         const QDate today = planning::parseIsoDate(c.value(u"today"_s).toString());
+        QString next;
+        const std::optional<QDate> reminder = reminderDate(c, today, &next);
+        if (c.contains(u"next"_s))
+            QCOMPARE(next, c.value(u"next"_s).toString());
         QCOMPARE(planning::TaskListModel::sectionOf(task, today, Qt::DayOfWeek(c.value(u"weekStart"_s).toInt()), reminder),
                  c.value(u"section"_s).toString());
+    }
+
+    // A block with several reminders: all of them published, the one that counts today chosen
+    // as TasksView does; a later day files it by its next one (the widget, WidgetSnapshot.kt).
+    void snapshotSeveralReminders()
+    {
+        const auto index = makeIndex({{u"Ogród.md"_s,
+                                       u"- [ ] Podlać storczyki ⏰ 2026-10-27 09:00 ⏰! 2026-10-30 07:15\n"
+                                       "- [ ] Przyciąć róże ⏰ 2026-11-25 10:00 ⏰ 2026-10-29 08:00\n"_s}});
+        const QJsonObject snapshot = buildSnapshot(*index, fixtureOptions());
+        const QJsonObject orchids = taskByText(snapshot, u"Podlać storczyki"_s);
+        QCOMPARE(orchids.value(u"reminder"_s).toString(), u"2026-10-27 09:00"_s);
+        QCOMPARE(orchids.value(u"section"_s).toString(), u"today"_s);
+        const QJsonArray reminders = orchids.value(u"reminders"_s).toArray();
+        QCOMPARE(reminders.size(), 2);
+        QCOMPARE(reminders.at(1).toObject().value(u"at"_s).toString(), u"2026-10-30 07:15"_s);
+        QVERIFY(reminders.at(1).toObject().value(u"alarm"_s).toBool());
+        QCOMPARE(reminderDate(orchids, QDate(2026, 10, 28)), std::optional<QDate>(QDate(2026, 10, 30)));
+        Task task;
+        QCOMPARE(planning::TaskListModel::sectionOf(task, QDate(2026, 10, 28), Qt::Monday,
+                                                    reminderDate(orchids, QDate(2026, 10, 28))),
+                 u"thisWeek"_s);
+        // Filed by its next reminder (the 29th, within 14 days), not its first one (beyond).
+        const QJsonObject roses = taskByText(snapshot, u"Przyciąć róże"_s);
+        QCOMPARE(roses.value(u"section"_s).toString(), u"thisWeek"_s);
+        QCOMPARE(roses.value(u"reminder"_s).toString(), u"2026-10-29 08:00"_s);
     }
 
     // The golden snapshot's sections are what sectionOf() gives for its tasks (the Kotlin test
@@ -376,10 +433,7 @@ private Q_SLOTS:
             task.due = spec(t.value(u"due"_s).toString());
             task.scheduled = spec(t.value(u"scheduled"_s).toString());
             task.start = spec(t.value(u"start"_s).toString());
-            std::optional<QDate> reminder;
-            if (const auto r = spec(t.value(u"reminder"_s).toString()))
-                reminder = r->date;
-            QCOMPARE(planning::TaskListModel::sectionOf(task, today, Qt::Monday, reminder),
+            QCOMPARE(planning::TaskListModel::sectionOf(task, today, Qt::Monday, reminderDate(t, today)),
                      t.value(u"section"_s).toString());
         }
     }
@@ -448,6 +502,16 @@ private Q_SLOTS:
         QCOMPARE(widgetActionBlock(actions.at(0)), u"- [ ] Kupić ser ⏰! 2026-10-28 07:15"_s);
         QCOMPARE(widgetActionBlock(actions.at(1)), u"- Myśl"_s);
         QCOMPARE(actions.at(2).kind, WidgetAction::Kind::Task);
+        // An entry the app could not write goes back as WidgetInbox.kt keeps it, unchanged.
+        const QJsonObject note{{u"id"_s, u"n-ż"_s}, {u"kind"_s, u"note"_s}, {u"text"_s, u"Myśl\ndruga linia"_s},
+                               {u"date"_s, u""_s}, {u"time"_s, u""_s}, {u"alarm"_s, false},
+                               {u"vault"_s, u"v1"_s}, {u"added"_s, u"2026-10-27T23:58"_s}};
+        QCOMPARE(widgetActionToJson(*widgetActionFromJson(note)), note);
+        const QJsonObject requeued = widgetActionToJson(actions.at(0));
+        QCOMPARE(requeued.value(u"date"_s).toString(), u"2026-10-28"_s);
+        QCOMPARE(requeued.value(u"time"_s).toString(), u"07:15"_s);
+        QVERIFY(requeued.value(u"alarm"_s).toBool());
+        QCOMPARE(widgetActionBlock(*widgetActionFromJson(requeued)), widgetActionBlock(actions.at(0)));
         QVERIFY(widgetActionsAddedMessage(3).contains(u'3'));
         QVERIFY(widgetActionFailedMessage(u"Kupić\nser"_s).contains(u"Kupić ser"_s));
     }

@@ -13,15 +13,31 @@ import java.time.ZoneId
  * Quick add of the widgets ([QuickAddActivity]): the entry goes into today's daily note at once —
  * Kotlin writes it ([JournalAppend]: the note and, for a missing one, its template text from the
  * snapshot; atomic, only inside the notebook's folder), also while Brulion runs (it reads the
- * note again: [BrulionAndroid.widgetWrote]). The widgets show a new task at once (the stored
- * snapshot gets it), and a task with a time gets a provisional native reminder until the app
- * arms its own. Without a snapshot that knows today's note, or when writing fails, the entry
+ * notebook again on its return to the front and hands its reminders over again:
+ * [BrulionAndroid.widgetWrote]). The widgets show a new task at once (the stored snapshot gets
+ * it), and a task with a time gets a provisional native reminder until the app's next set
+ * replaces it. Without a snapshot that knows today's note, or when writing fails, the entry
  * waits in [WidgetInbox] for the app (it writes it at its next start).
  */
 internal object QuickAdd {
   private const val TAG = "BrulionWidgets"
 
   enum class Outcome { WRITTEN, QUEUED, EMPTY }
+
+  /** The day chip of the dialog: Dziś, Jutro, Bez terminu, Data… (a fixed [customDate]). */
+  enum class DayChoice { TODAY, TOMORROW, NONE, DATE }
+
+  /**
+   * The date of [choice] when the entry is added on [today] — not when the dialog opened: one
+   * left open past midnight writes the new day's "Dziś".
+   */
+  fun resolveDay(choice: DayChoice, customDate: LocalDate?, today: LocalDate): LocalDate? =
+    when (choice) {
+      DayChoice.TODAY -> today
+      DayChoice.TOMORROW -> today.plusDays(1)
+      DayChoice.NONE -> null
+      DayChoice.DATE -> customDate ?: today
+    }
 
   fun add(context: Context, action: WidgetAction, now: LocalDateTime = LocalDateTime.now()): Outcome {
     val block = JournalAppend.actionBlock(action)

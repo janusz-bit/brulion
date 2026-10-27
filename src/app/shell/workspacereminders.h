@@ -87,6 +87,9 @@ public:
     bool isRunning() const;
     /// Cancel everything the platform has armed (sink->schedule({})).
     void cancelAll();
+    /// Hand the running scheduler's set to the platform again, even when it is unchanged:
+    /// reminders the platform armed on its own (the Android widgets' provisional ones) give way.
+    void resendUpcoming();
     /// The scheduler (nullptr when not running); tests.
     ReminderScheduler *scheduler() const { return m_scheduler.get(); }
 

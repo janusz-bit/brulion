@@ -32,7 +32,22 @@ std::optional<WidgetAction> widgetActionFromJson(const QJsonObject &json)
         action.time = time;
     action.alarm = json.value(u"alarm"_s).toBool() && action.time.has_value();
     action.vault = json.value(u"vault"_s).toString();
+    action.added = json.value(u"added"_s).toString();
     return action;
+}
+
+QJsonObject widgetActionToJson(const WidgetAction &action)
+{
+    return QJsonObject{
+            {u"id"_s, action.id},
+            {u"kind"_s, action.kind == WidgetAction::Kind::Note ? u"note"_s : u"task"_s},
+            {u"text"_s, action.text},
+            {u"date"_s, action.date.isValid() ? planning::isoDate(action.date) : QString()},
+            {u"time"_s, action.time ? action.time->toString(u"HH:mm"_s) : QString()},
+            {u"alarm"_s, action.alarm},
+            {u"vault"_s, action.vault},
+            {u"added"_s, action.added},
+    };
 }
 
 QList<WidgetAction> widgetActions(const QJsonArray &array)
@@ -71,7 +86,8 @@ QString widgetActionsAddedMessage(int count)
 QString widgetActionFailedMessage(const QString &text)
 {
     return QCoreApplication::translate("brulion::widgets::WidgetActions",
-                                       "Could not add “%1” from the widget to today's journal.")
+                                       "Could not add “%1” from the widget to today's journal; it is kept "
+                                       "and tried again later.")
             .arg(text.simplified());
 }
 

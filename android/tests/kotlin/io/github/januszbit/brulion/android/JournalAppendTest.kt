@@ -110,6 +110,20 @@ class JournalAppendTest {
     assertTrue(bytes.contentEquals(note.readBytes()))
   }
 
+  /** A notebook folder that is gone (moved, deleted, not mounted) is never re-created. */
+  @Test
+  fun neverRecreatesAMissingNotebookFolder() {
+    val root = File(tmp.root, "Notatki")
+    val result = JournalAppend.appendToFile(root, "journals/2026-10-28.md", "# środa\n\n- ", "- [ ] Zadzwonić do Łucji")
+    assertFalse(result.ok)
+    assertEquals("no notebook folder", result.error)
+    assertFalse(root.exists())
+    // A file in its place is no notebook either.
+    root.writeText("nie folder")
+    assertFalse(JournalAppend.appendToFile(root, "journals/2026-10-28.md", "", "- x").ok)
+    assertEquals("nie folder", root.readText())
+  }
+
   @Test
   fun refusesAFolderAndABlankBlock() {
     val root = tmp.newFolder("Brulion")

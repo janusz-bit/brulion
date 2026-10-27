@@ -43,6 +43,26 @@ class WidgetInboxTest {
     assertEquals(listOf("3", "4", "5"), WidgetInbox.parse(many).map { it.id })
   }
 
+  /** Entries the app took but could not write go back (as widgets::widgetActionToJson writes them). */
+  @Test
+  fun requeuedEntriesWaitForTheNextTry() {
+    val queue = JSONArray().put(action("1", "dom").toJson()).put(action("2", "praca").toJson()).toString()
+    val (taken, kept) = WidgetInbox.split(queue, "dom")
+    assertEquals(listOf("1"), taken.map { it.id })
+    // The C++'s JSON of the entry it could not write.
+    val fromApp =
+      "[{\"id\":\"1\",\"kind\":\"task\",\"text\":\"Zadanie 1\",\"date\":\"2026-10-28\",\"time\":\"07:15\"," +
+        "\"alarm\":true,\"vault\":\"dom\",\"added\":\"2026-10-27T22:10\"}]"
+    val requeued = WidgetInbox.parse(fromApp)
+    assertEquals(taken, requeued)
+    val raw = WidgetInbox.appendedAll(JSONArray().put(kept.single().toJson()).toString(), requeued)
+    assertEquals(listOf("2", "1"), WidgetInbox.parse(raw).map { it.id })
+    assertEquals(listOf("1"), WidgetInbox.split(raw, "dom").first.map { it.id })
+    // Twice: still once.
+    assertEquals(2, WidgetInbox.parse(WidgetInbox.appendedAll(raw, requeued)).size)
+    assertEquals(WidgetInbox.parse(raw), WidgetInbox.parse(WidgetInbox.appendedAll(null, WidgetInbox.parse(raw))))
+  }
+
   @Test
   fun eachNotebookTakesItsOwn() {
     val raw =

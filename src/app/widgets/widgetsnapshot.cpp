@@ -18,27 +18,20 @@ namespace brulion::widgets {
 
 namespace {
 
-/// The date of a "YYYY-MM-DD[ HH:mm]" spec (invalid for "").
-QDate specDate(const QString &spec)
-{
-    return planning::parseIsoDate(spec.left(10));
-}
+/// Reminders of a task's block published for the widgets to pick the next one on a later day.
+constexpr int MaxTaskReminders = 16;
 
-/// The date TaskListModel::sectionOf() files an open task under (due/scheduled, else the
-/// reminder, else a future start); invalid when it has none.
-QDate fileDate(const QString &due, const QString &scheduled, const QString &reminder, const QString &start, QDate today)
+/// The block of the task at `line` of `path` (nullptr when the index has none).
+const Block *taskBlock(const VaultIndex &index, const QString &path, int line)
 {
-    QDate date = specDate(due);
-    const QDate s = specDate(scheduled);
-    if (s.isValid() && (!date.isValid() || s < date))
-        date = s;
-    if (date.isValid())
-        return date;
-    if (const QDate r = specDate(reminder); r.isValid())
-        return r;
-    if (const QDate st = specDate(start); st.isValid() && st > today)
-        return st;
-    return {};
+    const ParsedNote *note = index.note(path);
+    if (!note)
+        return nullptr;
+    for (const Block &block : note->blocks) {
+        if (block.task && block.task->line == line)
+            return &block;
+    }
+    return nullptr;
 }
 
 QJsonArray pagesJson(const QList<PageRef> &pages, int max)
@@ -76,28 +69,39 @@ QJsonObject tasksJson(VaultIndex *index, const SnapshotOptions &options, QDate t
         if (section == u"noDate" || section == u"done")
             continue;
         ++counts[section];
-        const QString due = model.data(idx, Model::DueRole).toString();
-        const QString scheduled = model.data(idx, Model::ScheduledRole).toString();
-        const QString start = model.data(idx, Model::StartRole).toString();
-        const QString reminder = model.data(idx, Model::ReminderSpecRole).toString();
-        const QDate filed = fileDate(due, scheduled, reminder, start, today);
-        if (section != u"overdue" && (!filed.isValid() || filed > last))
+        const QString path = model.data(idx, Model::PathRole).toString();
+        const int line = model.data(idx, Model::LineRole).toInt();
+        const Block *block = taskBlock(*index, path, line);
+        if (!block)
+            continue;
+        // Filed by TaskListModel's own rule (the 14-day cut follows any change of it).
+        const std::optional<Reminder> next = Model::nextReminder(block->reminders, today);
+        const std::optional<QDate> filed =
+                Model::filingDate(*block->task, today, next ? std::optional<QDate>(next->at.date) : std::nullopt);
+        if (section != u"overdue" && (!filed || *filed > last))
             continue;
         if (tasks->size() >= options.maxTasks)
             continue;
+        QJsonArray reminders;
+        for (const Reminder &r : block->reminders) {
+            if (reminders.size() >= MaxTaskReminders)
+                break;
+            reminders.append(QJsonObject{{u"at"_s, r.at.toString()}, {u"alarm"_s, r.alarm}});
+        }
         tasks->append(QJsonObject{
                 {u"key"_s, model.data(idx, Model::KeyRole).toString()},
                 {u"text"_s, model.data(idx, Model::TextRole).toString()},
                 {u"status"_s, model.data(idx, Model::StatusRole).toString()},
                 {u"priority"_s, model.data(idx, Model::PriorityRole).toInt()},
-                {u"path"_s, model.data(idx, Model::PathRole).toString()},
-                {u"line"_s, model.data(idx, Model::LineRole).toInt()},
+                {u"path"_s, path},
+                {u"line"_s, line},
                 {u"page"_s, model.data(idx, Model::PageTitleRole).toString()},
-                {u"due"_s, due},
-                {u"scheduled"_s, scheduled},
-                {u"start"_s, start},
-                {u"reminder"_s, reminder},
+                {u"due"_s, model.data(idx, Model::DueRole).toString()},
+                {u"scheduled"_s, model.data(idx, Model::ScheduledRole).toString()},
+                {u"start"_s, model.data(idx, Model::StartRole).toString()},
+                {u"reminder"_s, model.data(idx, Model::ReminderSpecRole).toString()},
                 {u"alarm"_s, model.data(idx, Model::ReminderAlarmRole).toBool()},
+                {u"reminders"_s, reminders},
                 {u"recurring"_s, !model.data(idx, Model::RecurrenceRole).toString().isEmpty()},
                 {u"section"_s, section},
         });

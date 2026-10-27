@@ -80,6 +80,16 @@ internal object WidgetInbox {
     }
   }
 
+  /** Queues [actions] in order (the app could not write them: back for its next try). */
+  @SuppressLint("ApplySharedPref")
+  fun addAll(context: Context, actions: List<WidgetAction>) {
+    if (actions.isEmpty()) return
+    synchronized(AlarmScheduler.lock) {
+      val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      prefs.edit().putString(KEY_QUEUE, appendedAll(prefs.getString(KEY_QUEUE, null), actions)).commit()
+    }
+  }
+
   /** The queued entries of notebook [vault] (see [split]) as a JSON array, removed from the queue. */
   @SuppressLint("ApplySharedPref")
   fun take(context: Context, vault: String = ""): String =
@@ -111,6 +121,10 @@ internal object WidgetInbox {
     val items = parse(raw).filterNot { it.id == action.id } + action
     return toJson(items.takeLast(max.coerceAtLeast(1)))
   }
+
+  /** [raw] with each of [actions] appended in order (see [appended]). */
+  fun appendedAll(raw: String?, actions: List<WidgetAction>, max: Int = MAX_ENTRIES): String =
+    actions.fold(raw ?: "[]") { queue, action -> appended(queue, action, max) }
 
   /** The entries of the JSON array [raw], skipping broken ones (never throws). */
   fun parse(raw: String?): List<WidgetAction> {

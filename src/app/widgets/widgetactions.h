@@ -30,12 +30,16 @@ struct WidgetAction {
     std::optional<QTime> time; ///< "Godzina…": a reminder on `date`
     bool alarm = false;        ///< the reminder is an alarm (⏰!)
     QString vault;             ///< the notebook's id ("" = any)
+    QString added;             ///< when it was added ("YYYY-MM-DDTHH:mm", local), as given
 };
 
 /// One entry; nullopt without an id or with an unknown kind. A time without a date is dropped.
 std::optional<WidgetAction> widgetActionFromJson(const QJsonObject &json);
 /// The entries of `array` in order, broken ones and repeated ids skipped.
 QList<WidgetAction> widgetActions(const QJsonArray &array);
+/// The entry as WidgetInbox.kt keeps it (widgetActionFromJson() reads it back unchanged): an
+/// entry the app could not write goes back into the queue (AndroidBridge::requeueWidgetActions()).
+QJsonObject widgetActionToJson(const WidgetAction &action);
 
 /// The block an entry writes ("" for blank text): a task is planning::taskLine() — "- [ ] text"
 /// with " 📅 <date>" for a day without a time, " ⏰ <date> <time>" (" ⏰! …" for an alarm) with
@@ -45,7 +49,7 @@ QString widgetActionBlock(const WidgetAction &action);
 
 /// Toasts after the app wrote queued entries (translated).
 QString widgetActionsAddedMessage(int count);
-/// The entry with `text` could not be written (it is gone from the queue: the toast names it).
+/// The entry with `text` could not be written; it stays queued for the next try (the toast names it).
 QString widgetActionFailedMessage(const QString &text);
 
 } // namespace brulion::widgets

@@ -13,7 +13,7 @@
 #include "vault/vault.h"
 
 #include <QDir>
-#include <QFileInfo>
+#include <QJsonArray>
 #include <QDateTime>
 #include <QGuiApplication>
 #include <QLoggingCategory>
@@ -82,18 +82,14 @@ WidgetPublisher::WidgetPublisher(shell::AppController *app) : QObject(app), m_ap
 
     auto *bridge = platform::AndroidBridge::instance();
     connect(bridge, &platform::AndroidBridge::widgetActionsQueued, this, &WidgetPublisher::takeActions);
+    // Quick add wrote a note itself and may have armed a provisional reminder (Kotlin): the app
+    // hands its set over again even when unchanged, so that one gives way (the app arms the task's
+    // reminder itself once it reads the note — Workspace reads the notebook again on resume).
     connect(bridge, &platform::AndroidBridge::widgetNoteWritten, this, [this](const QString &path) {
         if (!m_app)
             return;
-        Vault *vault = m_app->workspace()->vault();
-        if (!vault)
-            return;
-        // Symbolic links on the way (/data/user/0 is /data/data) do not matter.
-        const QString root = QFileInfo(vault->rootPath()).canonicalFilePath() + u'/';
-        if (root.size() < 2 || !QFileInfo(path).canonicalFilePath().startsWith(root))
-            return;
-        qCInfo(lcWidgets) << "Quick add wrote" << path << "- reading the notebook again";
-        vault->rescan();
+        qCInfo(lcWidgets) << "Quick add wrote" << path << "- handing the reminders over again";
+        m_app->workspace()->reminders()->resendUpcoming();
     });
 }
 
@@ -149,21 +145,26 @@ void WidgetPublisher::takeActions()
     const QString vault = target();
     if (!m_app || vault.isEmpty())
         return; // kept in the persisted queue until the notebook is ready
-    const QList<WidgetAction> actions = widgetActions(platform::AndroidBridge::instance()->takeWidgetActions(vault));
+    auto *bridge = platform::AndroidBridge::instance();
+    const QList<WidgetAction> actions = widgetActions(bridge->takeWidgetActions(vault));
     if (actions.isEmpty())
         return;
     int added = 0;
+    QJsonArray failed;
     for (const WidgetAction &action : actions) {
         const QString block = widgetActionBlock(action);
         if (block.isEmpty())
             continue;
         if (m_app->workspace()->appendJournalBlocks(block).isEmpty()) {
-            qCWarning(lcWidgets) << "Could not write the widget's entry" << action.id;
+            // Never lost: back into the queue for the next try (the next start or return).
+            qCWarning(lcWidgets) << "Could not write the widget's entry" << action.id << "- queued again";
+            failed.append(widgetActionToJson(action));
             m_app->toast(widgetActionFailedMessage(action.text), u"error"_s);
         } else {
             ++added;
         }
     }
+    bridge->requeueWidgetActions(failed);
     if (added > 0)
         m_app->toast(widgetActionsAddedMessage(added), u"success"_s);
 }

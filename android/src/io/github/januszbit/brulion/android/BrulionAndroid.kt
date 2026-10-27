@@ -96,7 +96,7 @@ object BrulionAndroid {
   /** Quick add of a widget queued an entry ([WidgetInbox]): C++ takes it with [takeWidgetActions]. */
   @JvmStatic external fun nativeWidgetQueued()
 
-  /** Quick add of a widget wrote the note [path] (absolute) itself: C++ reads the notebook again. */
+  /** Quick add of a widget wrote the note [path] (absolute) itself: C++ hands its reminders over again. */
   @JvmStatic external fun nativeWidgetWrote(path: String)
 
   /**
@@ -393,6 +393,20 @@ object BrulionAndroid {
       "[]"
     }
 
+  /**
+   * Puts entries C++ took with [takeWidgetActions] but could not write either back into
+   * [WidgetInbox] (the same JSON array), for its next try. Tells nobody: C++ tries again when it
+   * returns to the front or starts.
+   */
+  @JvmStatic
+  fun requeueWidgetActions(context: Context, json: String?) {
+    try {
+      WidgetInbox.addAll(context, WidgetInbox.parse(json))
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "requeueWidgetActions failed", e)
+    }
+  }
+
   /** Quick add queued an entry ([QuickAdd]): tells C++ when it listens (else its start takes it). */
   internal fun widgetQueued() {
     synchronized(lock) {
@@ -405,7 +419,10 @@ object BrulionAndroid {
     }
   }
 
-  /** Quick add wrote [path] (absolute) itself: C++, when it runs, reads the notebook again. */
+  /**
+   * Quick add wrote [path] (absolute) itself: C++, once its loop runs again, hands its reminder set
+   * over again ([scheduleReminders] even when unchanged) — a provisional reminder gives way.
+   */
   internal fun widgetWrote(path: String) {
     synchronized(lock) {
       if (!nativeAttached) return

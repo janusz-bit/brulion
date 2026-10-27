@@ -173,6 +173,30 @@ private Q_SLOTS:
         QCOMPARE(titles(result.value(u"items"_s).toList(), u"text"_s), QStringList{ u"Kupić mleko"_s });
     }
 
+    // A daily note that is not UTF-8 (windows-1250, synced in) is never rewritten by an append:
+    // its bytes stay and the caller hears of it (the widgets' entry goes back into their queue).
+    void appendLeavesANoteThatIsNotUtf8Alone()
+    {
+        const QString root = newRoot();
+        const QString file = root + u"/journals/2026-10-14.md"_s;
+        const QByteArray cp1250("- Zak\xB3" "ad \xBF\xF3\xB3w\r\n");
+        QVERIFY(writeRaw(file, cp1250));
+        auto ws = reopen(root);
+        QVERIFY(ws->appendJournalBlocks(u"- [ ] Kupić żółty ser"_s).isEmpty());
+        QVERIFY(ws->captureToJournal(u"Kupić żółty ser"_s).isEmpty());
+        QVERIFY(ws->quickCapture(u"Kupić żółty ser"_s).isEmpty());
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), cp1250);
+        f.close();
+
+        // A UTF-8 note with a real U+FFFD (and a BOM) is UTF-8 text: appended.
+        QVERIFY(writeRaw(file, "\xEF\xBB\xBF- znak \xEF\xBF\xBD\n"));
+        ws->vault()->rescan();
+        QCOMPARE(ws->appendJournalBlocks(u"- [ ] Kupić ser"_s), u"journals/2026-10-14.md"_s);
+        QCOMPARE(ws->readFile(u"journals/2026-10-14.md"_s), u"- znak \uFFFD\n- [ ] Kupić ser\n"_s);
+    }
+
     // ---- Index queries ----------------------------------------------------------------------------
 
     void indexQueries()
@@ -829,6 +853,25 @@ private Q_SLOTS:
         QCOMPARE(fired.first().first().toMap().value(u"when"_s).toString(), u"dziś 12:00"_s);
         QTest::qWait(60);
         QCOMPARE(sink.shown.size(), 1); // once
+    }
+
+    // The set handed over again even when unchanged (the Android widgets' provisional reminders
+    // give way); nothing while the scheduler does not run.
+    void resendUpcomingRepeatsTheSet()
+    {
+        FakeSink sink;
+        sink.closedFiring = true;
+        auto ws = open({ { u"a.md"_s, u"- [ ] Dentysta ⏰ 2026-10-20 09:00\n"_s } }, nullptr, &sink);
+        QVERIFY(ws->reminders()->isRunning());
+        const qsizetype before = sink.scheduled.size();
+        QVERIFY(before >= 1);
+        ws->reminders()->resendUpcoming();
+        QCOMPARE(sink.scheduled.size(), before + 1);
+        QCOMPARE(sink.lastScheduledTitles(), QStringList{ u"Dentysta"_s });
+        ws->reminders()->setEnabled(false);
+        const qsizetype off = sink.scheduled.size();
+        ws->reminders()->resendUpcoming();
+        QCOMPARE(sink.scheduled.size(), off);
     }
 
     void remindersWithoutSink()
