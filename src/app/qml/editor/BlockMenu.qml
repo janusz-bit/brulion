@@ -8,7 +8,10 @@ import Brulion
 // Zwiń / Rozwiń (outline), Kopiuj odnośnik ▸ (Odwołanie do bloku ((…)), Link do bloku [[…#^…]],
 // on headings Link do nagłówka [[…#…]], Osadzenie — what `BlockEditor.copyLink` puts on the
 // clipboard, docs/SYNTAX.md §2 "Copied links"), Wstaw obraz…, Zwiększ / Zmniejsz wcięcie,
-// Przenieś w górę / w dół, Usuń blok. One menu per editor, made when first opened
+// Przenieś w górę / w dół, Usuń blok. A block that is part of a selection over several days of
+// the journal stream (BlockEditor.inSpan): Kopiuj and Kopiuj jako tekst copy the whole span (its
+// count), Wytnij, indenting, moving and Usuń are shown unavailable — a tap says that only copying
+// works there (docs/UI.md "Across journal days"). One menu per editor, made when first opened
 // (BlockEditor.openBlockMenu): from a block's bullet or number (a right-click, a long press), a
 // right-click anywhere on a block (mouse, touchpad, stylus — never a finger: a long press on text
 // is left for selecting it), the touch toolbar's "Więcej". The block is tracked while the menu is
@@ -32,9 +35,11 @@ BMenu {
     /// deleting act on all of them.
     property bool inSelection: false
     property int selectionCount: 0
-    /// Why that selection is not indented or moved (blocks picked with gaps between them; "" when
-    /// it can be): the items are shown disabled, a tap says why.
+    /// Why that selection is not indented or moved (blocks picked with gaps between them, a
+    /// selection over several days; "" when it can be): the items are shown disabled, a tap says why.
     property string unmovable: ""
+    /// Why that selection is not cut or deleted (a selection over several days; "" when it can be).
+    property string uncuttable: ""
     readonly property bool documentMode: editor !== null && editor.documentMode
 
     /// Follow the block at `row` (until the next openFor) and take its shape.
@@ -49,9 +54,12 @@ BMenu {
         heading = controller.isHeading(row)
         hasChildren = info.hasChildren
         collapsed = info.collapsed
-        inSelection = controller.multiSelection && controller.selectedRows().indexOf(row) >= 0
-        selectionCount = inSelection ? controller.selectionCount : 1
-        unmovable = inSelection && !controller.selectionContiguous ? editor.gapReason : ""
+        // Over several days even one block of this day is part of the span.
+        const span = editor.inSpan
+        inSelection = (controller.multiSelection || span) && controller.selectedRows().indexOf(row) >= 0
+        selectionCount = !inSelection ? 1 : span ? editor.stream.count : controller.selectionCount
+        unmovable = !inSelection ? "" : span ? editor.spanReason : !controller.selectionContiguous ? editor.gapReason : ""
+        uncuttable = inSelection && span ? editor.spanReason : ""
     }
     /// Indent or move: the selection the block is part of (`selection`), else the block (`one`) —
     /// a selection with gaps says why not instead.
@@ -115,6 +123,7 @@ BMenu {
         text: menu.inSelection ? qsTr("Cut %n block(s)", "", menu.selectionCount) : qsTr("Cut")
         iconName: "scissors"
         shortcut: "Ctrl+X"
+        unavailable: menu.uncuttable
         onTriggered: menu.act((r) => { menu.selectFor(r); menu.editor.cutSelection() })
     }
     BMenuItem {
@@ -221,6 +230,7 @@ BMenu {
         text: menu.inSelection ? qsTr("Delete %n block(s)", "", menu.selectionCount) : qsTr("Delete block")
         iconName: "trash-2"
         danger: true
+        unavailable: menu.uncuttable
         onTriggered: menu.act((r) => menu.inSelection ? menu.editor.deleteSelection() : menu.controller.deleteBlock(r))
     }
 }

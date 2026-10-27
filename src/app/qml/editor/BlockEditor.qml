@@ -51,7 +51,10 @@ import Brulion
 // grips adjust the ends, the selection tools are docked where the editing toolbar is ("Gotowe" and
 // Back leave). Ctrl+C / Ctrl+X / Ctrl+V / Delete / Ctrl+Enter act on the whole selection, Tab and
 // Alt+↑/↓ on one without gaps (else a toast says why not); desktops show a
-// compact SelectionToolbar at the top when two or more blocks are selected. In an edited block
+// compact SelectionToolbar at the top when two or more blocks are selected. A day of the journal
+// stream (`stream`, StreamSelection) selects across days too: Shift+click, Shift+↑/↓ past its edge,
+// a drag into another day, a tap in the touch selection mode; such a selection is only copied
+// (spanRefuses() tells so for the other tools). In an edited block
 // Ctrl+C / Ctrl+X copy its exact characters and a right-click opens Wytnij / Kopiuj / Wklej / Zaznacz
 // wszystko.
 // Input methods: a word still being composed (preedit — Android keyboards compose every word)
@@ -122,7 +125,7 @@ FocusScope {
                                           : controller.sourceMode ? (sourceEditing ? "source" : "")
                                           : controller.editingRow >= 0 ? "block"
                                           : editingTable !== null ? "cell"
-                                          : selectionMode && selectionCount > 0 ? "selection" : ""
+                                          : (inSpan ? spanTools : selectionMode && selectionCount > 0) ? "selection" : ""
     readonly property bool toolbarVisible: toolbarMode !== ""
     readonly property real toolbarHeight: Theme.editToolbarHeight
     /// Where the toolbar docks: an item that does not scroll with the blocks and whose bottom
@@ -201,11 +204,42 @@ FocusScope {
     /// The band's grips are shown (the touch selection mode, its blocks without gaps, not picking
     /// one by one).
     readonly property bool selectionGrips: selectionMode && touch && !pickMode && controller !== null
-                                           && controller.selectionContiguous
+                                           && controller.selectionContiguous && !inSpan
     readonly property int selectionCount: controller !== null ? controller.selectionCount : 0
     /// Why a selection with gaps between its blocks is not indented or moved (a toast, the tools'
     /// tooltips).
     readonly property string gapReason: qsTr("Only blocks selected without gaps can be indented or moved")
+    /// A day of the journal stream: the stream's selection over several days (null elsewhere).
+    property StreamSelection stream: null
+    /// Blocks of several days are selected (this day may hold a part of them, or none).
+    readonly property bool inSpan: stream !== null && stream.active
+    /// This editor shows the tools of the selection over several days.
+    readonly property bool spanTools: inSpan && stream.toolsController === controller
+    /// Why a tool does nothing on a selection over several days (a toast, the tools' tooltips).
+    readonly property string spanReason: qsTr("Only copying works across several days")
+    /// A selection over several days holds the selection: say that only copying works there. True
+    /// when it did (the caller does nothing else).
+    function spanRefuses() {
+        if (!inSpan)
+            return false
+        notice(spanReason, "info")
+        return true
+    }
+    /// The end of a selection over several days moved into this day (StreamSelection.focusMoved):
+    /// the keys come here, a touch UI is in the selection mode, `reveal` scrolls to `row`.
+    function spanFocusHere(row, reveal) {
+        if (!controller)
+            return
+        closeSuggestions()
+        if (touch) {
+            Qt.inputMethod.hide()
+            selectionMode = true
+        }
+        if (!list.activeFocus)
+            list.forceActiveFocus()
+        if (reveal)
+            ensureRowVisible(row)
+    }
 
     // The title above the properties panel (BlockDelegate trades their places on screen): set by
     // those two delegates.
@@ -533,7 +567,9 @@ FocusScope {
     }
     function leaveSelectionMode() {
         selectionMode = false
-        if (controller)
+        if (inSpan)
+            stream.clear() // every day's part
+        else if (controller)
             controller.clearSelection()
     }
     /// A tap or click that would start editing `row` (its text, a code or table frame, a query, an
@@ -556,11 +592,17 @@ FocusScope {
             toggleBlock(row)
             return true
         }
-        if (!selectionMode)
+        // Touch: the selection mode of another day (or a selection over several days) — a tap here
+        // moves the selection's end into this day. A span none of whose days is on screen any more
+        // shows no tools: a tap edits (and ends it), as after scrolling away from one day's selection.
+        const spanTap = touch && stream !== null
+                        && (stream.active ? stream.toolsController !== null : stream.othersSelected(controller))
+        if (!selectionMode && !spanTap)
             return false
-        if (pickMode)
+        if (pickMode && !inSpan)
             toggleBlock(row)
-        else if (controller.blocks.get(row).view !== "frontmatter")
+        else if (controller.blocks.get(row).view !== "frontmatter"
+                 && !(stream !== null && stream.extendTo(controller, row)))
             controller.extendSelectionTo(row)
         return true
     }
@@ -595,6 +637,10 @@ FocusScope {
     function extendSelectionTo(row) {
         if (!controller || row < 0)
             return
+        // From a block selected or edited in another day of the journal stream (a selection over
+        // several days), or back into the day its anchor is in.
+        if (stream !== null && controller.blocks.get(row).view !== "frontmatter" && stream.extendTo(controller, row))
+            return
         const anchor = controller.selectionAnchorRow >= 0 ? controller.selectionAnchorRow : controller.editingRow
         leaveEditingForSelection()
         controller.selectRange(anchor >= 0 ? anchor : row, row)
@@ -604,6 +650,8 @@ FocusScope {
     function selectAllBlocks() {
         if (!controller)
             return
+        if (inSpan)
+            stream.clear() // this day's blocks only
         leaveEditingForSelection()
         controller.selectAll()
         if (touch && controller.selectionCount > 0)
@@ -621,15 +669,17 @@ FocusScope {
     function copySelection(plainText) {
         if (!controller)
             return false
-        const r = controller.copySelection(plainText === true)
-        if (r.ok)
+        const r = inSpan ? stream.copy(plainText === true) : controller.copySelection(plainText === true)
+        if (r.ok && inSpan)
+            notice(qsTr("Copied %n block(s) from several days", "", r.count), "success")
+        else if (r.ok)
             notice(qsTr("Copied %n block(s)", "", r.count), "success")
         else
             notice(selectionCopyFailure(r.reason), r.reason === "empty" ? "info" : "error")
         return r.ok
     }
     function cutSelection() {
-        if (!controller)
+        if (!controller || spanRefuses())
             return false
         const before = controller.undoToken()
         const r = controller.cutSelection()
@@ -643,7 +693,7 @@ FocusScope {
         return r.ok
     }
     function deleteSelection() {
-        if (!controller)
+        if (!controller || spanRefuses())
             return
         const count = Math.max(1, controller.selectionCount)
         const multiple = controller.multiSelection
@@ -656,7 +706,7 @@ FocusScope {
     }
     /// Ctrl+V with blocks selected: the clipboard's text replaces them.
     function pasteOverSelection() {
-        if (!controller)
+        if (!controller || spanRefuses())
             return
         const r = controller.pasteOverSelection()
         if (r.row < 0)
@@ -1147,9 +1197,12 @@ FocusScope {
         }
         const row = edit.row
         closeSuggestions()
-        // From the edited block (the controller stops editing).
-        if (!controller.extendSelection(step))
+        // From the edited block (the controller stops editing); at the day's edge into the next /
+        // previous day of the journal stream.
+        if (!controller.extendSelection(step) && !(stream !== null && stream.extendBy(controller, step)))
             controller.selectRange(row, row)
+        if (inSpan)
+            return true // (the day the selection's end went to takes over: StreamSelection.focusMoved)
         list.forceActiveFocus()
         if (touch && controller.selectionCount > 0)
             selectionMode = true
@@ -1204,6 +1257,13 @@ FocusScope {
         // children).
         const range = row >= 0 && ((controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row)
                                    || controller.selectionPicked)
+        // Blocks of several days: copying only (Ctrl+X, Ctrl+V, Delete say so in their functions).
+        if (inSpan && ((ctrl && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
+                       || (!ctrl && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab))
+                       || (alt && (event.key === Qt.Key_Up || event.key === Qt.Key_Down)))) {
+            spanRefuses()
+            return true
+        }
         if (ctrl) {
             switch (event.key) {
             case Qt.Key_Z: undoStep(shift); return true
@@ -1263,13 +1323,21 @@ FocusScope {
         if (shift && !alt) {
             switch (event.key) {
             case Qt.Key_Up:
-            case Qt.Key_Down:
-                controller.extendSelection(event.key === Qt.Key_Down ? 1 : -1)
+            case Qt.Key_Down: {
+                // Past the day's edge (or over several days already): the journal stream's.
+                const step = event.key === Qt.Key_Down ? 1 : -1
+                if (inSpan) {
+                    stream.extendBy(controller, step)
+                    return true
+                }
+                if (!controller.extendSelection(step) && stream !== null && stream.extendBy(controller, step))
+                    return true
                 // A touch UI with a keyboard: the range has the selection's tools and grips.
                 if (touch && controller.selectionCount > 0)
                     selectionMode = true
                 ensureRowVisible(controller.selectedRow)
                 return true
+            }
             case Qt.Key_Insert: pasteOverSelection(); return true
             case Qt.Key_Delete: cutSelection(); return true
             }
@@ -1586,14 +1654,14 @@ FocusScope {
         Keys.onPressed: (event) => {
             // Android's Back leaves the selection mode (before the shell goes back).
             if (event.key === Qt.Key_Back) {
-                event.accepted = editor.selectionMode
+                event.accepted = editor.selectionMode || editor.spanTools
                 return
             }
             if (editor.forwardToEditingRow(event) || editor.handleSelectionKey(event))
                 event.accepted = true
         }
         Keys.onReleased: (event) => {
-            if (event.key === Qt.Key_Back && editor.selectionMode) {
+            if (event.key === Qt.Key_Back && (editor.selectionMode || editor.spanTools)) {
                 editor.leaveSelectionMode()
                 event.accepted = true
             }
@@ -1690,8 +1758,9 @@ FocusScope {
         if (!drag.active) {
             if (drag.startRow < 0 || (!drag.mouse && !drag.armed))
                 return
-            const row = rowNear(drag.scene)
-            if (row < 0 || row === drag.startRow || controller.blocks.get(drag.startRow).view === "frontmatter")
+            const target = dragTarget()
+            if (target.row < 0 || (target.editor === editor && target.row === drag.startRow)
+                    || controller.blocks.get(drag.startRow).view === "frontmatter")
                 return
             drag.active = true
             drag.selected = true
@@ -1717,13 +1786,34 @@ FocusScope {
                 selectionMode = true
         }
     }
-    /// The selection from the fixed end to the block under the pointer.
+    /// The selection from the fixed end to the block under the pointer (in another day of the
+    /// journal stream: a selection over several days).
     function updateDragSelection() {
         if (!drag.active || !controller || drag.fixedRow < 0)
             return
-        const row = rowNear(drag.scene)
-        if (row >= 0 && controller.blocks.get(row).view !== "frontmatter")
-            controller.selectRange(drag.fixedRow, row)
+        const target = dragTarget()
+        if (target.row < 0 || target.editor.controller.blocks.get(target.row).view === "frontmatter")
+            return
+        if (target.editor !== editor)
+            stream.extendFrom(controller, drag.fixedRow, target.editor.controller, target.row)
+        else
+            controller.selectRange(drag.fixedRow, target.row) // (back in this day: a span ends)
+    }
+    /// The block under the pointer: { editor, row } — this editor's nearest block, or, below or
+    /// above this day of the journal stream, the block of the day there.
+    function dragTarget() {
+        const local = { editor: editor, row: rowNear(drag.scene) }
+        if (stream === null || !scroller || !scroller.dayAt)
+            return local
+        const p = editor.mapFromItem(null, drag.scene.x, drag.scene.y)
+        if (p.y >= 0 && p.y < editor.height)
+            return local
+        const day = scroller.dayAt(drag.scene)
+        const other = day ? day.editor : null
+        if (!other || other === editor || !other.controller || !other.controller.loaded)
+            return local
+        const row = other.rowNear(drag.scene)
+        return row >= 0 ? { editor: other, row: row } : local
     }
     /// The block at a scene point, the nearest one when the point is above or below the blocks (the
     /// header, the footer, outside a day of the journal stream) or outside the view.
@@ -1761,11 +1851,15 @@ FocusScope {
             drag.speed = Math.min(40, (y - (bottom - zone)) / 2 + 2)
         else
             drag.speed = 0
-        // A day of the journal stream: the selection stays in it, so the stream scrolls only while
-        // the day goes on beyond the edge (scrolled further, the day would be destroyed).
+        // A day of the journal stream: the stream scrolls while the day goes on beyond the edge —
+        // and, selecting into the days around it (`stream`), while it is still near enough to stay
+        // in the list's cache (scrolled further, it would be destroyed and the drag with it).
         if (scroller && host !== editor) {
             const dayTop = editor.mapToItem(host, 0, 0).y
-            if ((drag.speed > 0 && dayTop + editor.height <= bottom) || (drag.speed < 0 && dayTop >= top))
+            const reach = stream !== null && scroller.selectionReach !== undefined ? scroller.selectionReach : 0
+            const past = reach > 0 ? top - reach : bottom
+            const before = reach > 0 ? bottom + reach : top
+            if ((drag.speed > 0 && dayTop + editor.height <= past) || (drag.speed < 0 && dayTop >= before))
                 drag.speed = 0
         }
     }
@@ -2496,8 +2590,8 @@ FocusScope {
         id: floatingSelectionBar
         objectName: "floatingSelectionBar"
         parent: editor.dockHost
-        active: !editor.touch && editor.controller !== null && editor.controller.multiSelection
-                && !editor.controller.sourceMode
+        active: !editor.touch && editor.controller !== null && !editor.controller.sourceMode
+                && (editor.inSpan ? editor.spanTools : editor.controller.multiSelection)
         visible: active
         z: 11
         anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined

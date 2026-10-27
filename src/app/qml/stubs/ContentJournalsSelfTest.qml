@@ -8,4 +8,5 @@ import Brulion
 Item {
     property ListView list
     property JournalListModel days
+    property StreamSelection stream
 }

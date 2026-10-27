@@ -2,6 +2,7 @@
 // Part of the dates module — see dates/dates.h for the module overview.
 #pragma once
 
+#include <QDate>
 #include <QString>
 #include <QStringView>
 
@@ -30,6 +31,10 @@ QString polishMonthName(int month, NameForm form = NameForm::Nominative);
 QString weekdayName(int dayOfWeek, UiLocale locale, NameForm form = NameForm::Nominative);
 /// Localised month name: "października" (Genitive) / "October", "paź" / "Oct" (Short).
 QString monthName(int month, UiLocale locale, NameForm form = NameForm::Nominative);
+
+/// The long date of a day's heading (the journal stream, a copy of blocks over several days):
+/// "wtorek, 27 października 2026" / "Tuesday, October 27, 2026"; "" for an invalid date.
+QString longDate(QDate date, UiLocale locale);
 
 /// English ordinal: 1st 2nd 3rd 4th 11th 12th 13th 21st 22nd 101st 111th.
 QString englishOrdinal(int n);

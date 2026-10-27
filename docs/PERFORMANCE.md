@@ -37,6 +37,9 @@ benchmarkami; jak je uruchomić — w części dla współtwórców (po angielsk
   Przeciąganie strony lub folderu w drzewie już nie przycina się nad kolejnymi folderami:
   podpowiedź „Zaktualizowane linki: …” liczy się po kawałku, w tle między klatkami.
   Otwarcie strony, którą nazywa popularny tag, jest do 2 razy szybsze.
+* **Kopiowanie bloków na komputerze z Linuksem** (2026-10-27): Ctrl+C na całej stronie z 5000 bloków
+  zajmuje ok. 4 ms zamiast ok. 40 ms (do odświeżenia ekranu 13–15 zamiast 46–50 ms). Wersja
+  sformatowana dla poczty i edytorów dokumentów powstaje dopiero przy wklejeniu do nich.
 
 ### Jak jest teraz
 
@@ -312,12 +315,21 @@ Ctrl+C, Escape, three rounds per run):
 | | outline 5000 blocks | document 5000 blocks |
 |---|---:|---:|
 | select every block (2nd Ctrl+A): key handling / key → frame | 8.1 / 18 ms (p95 44 ms) | 8.6 / 18 ms (p95 43 ms) |
-| copy (Ctrl+C): key handling / key → frame | 53 / 62 ms | 59 / 68 ms |
+| copy (Ctrl+C): key handling / key → frame | 3.8 / 15 ms (p95 4.5 / 16 ms) | 4.1 / 13 ms (p95 5.4 / 16 ms) |
+| … before the lazy HTML flavour (same laptop and session) | 38 / 46 ms | 44 / 50 ms |
 | copied | 478 190 characters | 597 309 characters |
 
-A copy of a whole 5000-block page costs about 55 ms on the desktop, two thirds of it the HTML
-flavour (`io::clipboardHtml`, linear: 3.5 / 34.5 / 140 ms for 500 / 5000 / 20 000 blocks); see
-"Next steps".
+A copy of a whole 5000-block page cost about 55 ms on the desktop when measured first (53 / 62 and
+59 / 68 ms then), two thirds of it the HTML flavour (`io::clipboardHtml`, linear: 3.5 / 34.5 /
+140 ms for 500 / 5000 / 20 000 blocks). The flavour is now rendered only when another application
+asks for it (`LazyHtmlMimeData`, docs/UI.md "Selecting and copying"; a paste into Brulion, a code
+editor or a terminal never renders it): Ctrl+C on the same pages takes ~4 ms of handling and
+13–15 ms to the frame — 10× / 3–4× less (2026-10-27, `select-copy`, base `102920e` against this
+change, two rounds of 5 runs each, the second on an idle laptop: the numbers above). The cost
+moves to the first paste into a mail or office app (34.5 ms at 5000 blocks, once). Android, the
+browser and Windows take the clipboard's data at once (Windows: `OleSetClipboard` enumerates the
+formats, and Qt's CF_HTML converter asks for `html()` to offer its format), so they still render
+it while copying.
 
 ### Budgets
 
@@ -359,9 +371,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L12 | sync: size + mtime quick check for unchanged text files | no-change sync ≥ 3× faster (laptop 10k 419 ms, Pi 5k 1.35 s) |
 | L18 | search indexing of big documents in bounded slices | no stall > 16 ms after ready |
 
-Also open: the HTML flavour of a copy made only when another app asks for it (a `QMimeData`
-whose `text/html` is rendered in `retrieveData()`; a whole 5000-block page copies in ~20 instead
-of ~55 ms; Android takes the data at once), serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
+Also open: serving brotli for the web build (9.4 instead of 13.7 MB; GitHub Pages serves gzip
 only) and the ~90 ms later content on a desktop first start (above).
 
 ### How to run the benchmarks

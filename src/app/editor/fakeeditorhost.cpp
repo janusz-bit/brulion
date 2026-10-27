@@ -638,6 +638,7 @@ void FakeEditorHost::openUrl(const QUrl &url)
 QString FakeEditorHost::renderHtml(const QString &markdown, const QString &fromPath) const
 {
     Q_UNUSED(fromPath);
+    ++renderCalls;
     return u"<pre>"_s + markdown.toHtmlEscaped() + u"</pre>"_s;
 }
 

@@ -417,8 +417,9 @@ do pola tekstowego, przez które Qt odbiera pisanie; powłoka przewija ją z pow
   Tak samo kopiowanie zaznaczonych bloków (docs/UI.md „Selecting and copying”: Ctrl+C / Ctrl+X,
   „Kopiuj” w pasku zaznaczenia i w menu bloku): `QClipboard` dostaje Markdown
   jako text/plain i — gdy przeglądarka przyjmie (Clipboard API z `ClipboardItem`; Firefox i Safari
-  różnie) — HTML jako text/html; kopiowanie odbywa się w obsłudze klawisza albo kliknięcia, więc
-  liczy się jako gest użytkownika. Odczyt kontrolny po kopiowaniu (na pulpicie i Androidzie
+  różnie) — HTML jako text/html, tworzony od razu (na Linuksie dopiero na prośbę innej aplikacji:
+  przeglądarka bierze dane przy samym kopiowaniu, `clipboardReadsAtOnce()`); kopiowanie odbywa
+  się w obsłudze klawisza albo kliknięcia, więc liczy się jako gest użytkownika. Odczyt kontrolny po kopiowaniu (na pulpicie i Androidzie
   chroni przed „Skopiowano” bez kopii) w przeglądarce niczego nie gwarantuje: Qt zapisuje do
   schowka przeglądarki asynchronicznie i zwraca własną kopię danych, a odmowę (brak gestu, http,
   Safari, Firefox bez `ClipboardItem` z HTML) tylko loguje — toast „Skopiowano” może wtedy być

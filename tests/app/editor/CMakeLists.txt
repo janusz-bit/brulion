@@ -19,10 +19,16 @@ set_tests_properties(tst_editor_controller PROPERTIES TIMEOUT ${_controller_time
 brulion_add_test(tst_editor_calc
     SOURCES tst_editor_calc.cpp
     LIBS brulion_editor brulion_core_markdown brulion_core_calc brulion_core_text)
-# The block selection: ranges, Shift+arrows, copy / cut / paste with the real clipboard, range
-# operations and their undo steps, ids on paste, HTML from other apps.
+# The block selection: ranges, Shift+arrows, copy / cut / paste with the real clipboard (the HTML
+# flavour rendered only when asked for: LazyHtmlMimeData), range operations and their undo steps,
+# ids on paste, HTML from other apps.
 brulion_add_test(tst_editor_selection
     SOURCES tst_editor_selection.cpp
+    LIBS brulion_editor brulion_core_markdown)
+# A selection over several days of the journal stream (StreamSelection): each day's part, keys,
+# taps, drags across the days' edges, days destroyed and created again, the copy with day links.
+brulion_add_test(tst_editor_streamselection
+    SOURCES tst_editor_streamselection.cpp
     LIBS brulion_editor brulion_core_markdown)
 brulion_add_test(tst_editor_suggestions
     SOURCES tst_editor_suggestions.cpp

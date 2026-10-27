@@ -23,10 +23,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 * **Rysunki w notatkach** — sprawdzić, czy da się dodać rysowanie (coś jak Excalidraw
   w Obsidianie, ale wygodniejsze na tablecie). Przypadek użycia: Natalia na studia,
   z synchronizacją przez Syncthing.
-* **Kopiowanie bloków**:
-  * format HTML tworzony dopiero wtedy, gdy inna aplikacja o niego poprosi (kopia dużej strony
-    ~3× szybsza);
-  * zaznaczanie bloków z kilku dni dziennika naraz.
 * **Dostosowanie wyglądu interfejsu** — własne ustawienia UI (do doprecyzowania, np. kolory
   i motywy, czcionka i jej rozmiar, układ i widoczność elementów).
 * **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu

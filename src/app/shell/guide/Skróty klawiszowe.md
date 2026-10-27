@@ -47,7 +47,7 @@ Po Esc, Shift+strzałkach, Ctrl+A, Shift+kliknięciu albo przeciągnięciu mysz�
 
 | Skrót | Działanie |
 |---|---|
-| Shift+↑ / Shift+↓ | powiększ albo zmniejsz zaznaczenie |
+| Shift+↑ / Shift+↓ | powiększ albo zmniejsz zaznaczenie (w dzienniku także za brzeg dnia — na kilka dni naraz, wtedy tylko do kopiowania) |
 | Ctrl+A | zaznacz wszystkie bloki |
 | Ctrl+C | kopiuj (Markdown; w poczcie i edytorach dokumentów wkleja się sformatowane) |
 | Ctrl+X | wytnij (kopiuj i usuń jednym krokiem cofania) |

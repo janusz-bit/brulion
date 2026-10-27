@@ -1,12 +1,14 @@
 // The block selection of PageController (docs/UI.md "Selecting and copying"): ranges with their
 // subtrees (folded children too), Shift+↑/↓ steps, select all (also in a zoom), the selection
 // following edits, undo / redo and external changes, copying (Markdown, the host's HTML, plain
-// text, the size limit, exact characters of an edited block), cut and delete as one undo step,
+// text, the size limit, exact characters of an edited block; the HTML rendered only when another
+// application asks for it), cut and delete as one undo step,
 // indenting, moving and task statuses of a range in both note modes, a paste over a selection,
 // block ids a paste must not duplicate (kept after a cut: a move) and HTML pasted from other
 // apps. Offscreen QGuiApplication: a real clipboard in the process.
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"
+#include "lazyhtmlmimedata.h"
 #include "pagecontroller.h"
 
 #include <QAbstractItemModelTester>
@@ -241,6 +243,101 @@ private Q_SLOTS:
         QCOMPARE(clipboardText(), u"☐ Kupić żółć i\u00a0źdźbło\n  ☑ mleko ✅ 2026-10-15\n• chleb"_s);
         // The page is untouched by copying.
         QCOMPARE(f.page.canUndo(), false);
+    }
+
+    void copyRendersHtmlOnlyWhenAsked_data()
+    {
+        QTest::addColumn<QString>("content");
+        QTest::newRow("outline") << u"- Zażółć\n\t- gęślą jaźń\n- łódź\n"_s;
+        QTest::newRow("document") << u"---\nbrulion: document\n---\n# Nagłówek\n\nAkapit o\u00a0źdźble.\n\n- punkt\n"_s;
+        QTest::newRow("table") << u"| Imię | Wiek |\n|---|---|\n| Łucja | 7 |\n"_s;
+        QTest::newRow("markup to escape") << u"- <b>nie HTML</b> & \"cudzysłów\" 📅 2026-10-28\n"_s;
+    }
+    void copyRendersHtmlOnlyWhenAsked()
+    {
+        QFETCH(QString, content);
+        Fixture f(content);
+        QVERIFY(!clipboardReadsAtOnce()); // offscreen: as desktops
+        f.page.selectAll();
+        const QString md = f.page.selectionMarkdown();
+        QVERIFY(!md.isEmpty());
+        f.host.renderCalls = 0;
+        QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
+        QCOMPARE(f.host.renderCalls, 0);
+        const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
+        QVERIFY(mime->formats().contains(u"text/plain"_s));
+        QVERIFY(mime->formats().contains(u"text/html"_s));
+        QVERIFY(mime->hasHtml());
+        QCOMPARE(mime->text(), md);
+        QCOMPARE(clipboardText(), md);
+        QCOMPARE(f.host.renderCalls, 0); // offered, not made
+        const QString html = u"<pre>"_s + md.toHtmlEscaped() + u"</pre>"_s;
+        QCOMPARE(mime->html(), html);
+        QCOMPARE(f.host.renderCalls, 1);
+        QCOMPARE(mime->html(), html);
+        QCOMPARE(mime->data(u"text/html"_s), html.toUtf8());
+        QCOMPARE(f.host.renderCalls, 1); // once
+    }
+
+    void pastingOwnCopyDoesNotRender()
+    {
+        Fixture f(u"- Zażółć\n- gęślą\n- jaźń\n"_s);
+        f.page.selectRange(0, 1);
+        QVERIFY(f.page.copySelection().value(u"ok"_s).toBool());
+        f.host.renderCalls = 0;
+        QCOMPARE(f.page.clipboardText(), u"- Zażółć\n- gęślą"_s);
+        f.page.startEditing(2, 4);
+        QVERIFY(f.page.pasteClipboard(2, 4, 4).value(u"row"_s).toInt() >= 0);
+        QCOMPARE(f.host.renderCalls, 0);
+    }
+
+    void hostGoneLeavesTheMarkdown()
+    {
+        auto host = std::make_unique<FakeEditorHost>();
+        host->setFile(Page, u"- Zażółć gęślą jaźń\n"_s);
+        PageController page;
+        page.setSaveDelay(0);
+        page.setHost(host.get());
+        page.setPath(Page);
+        page.selectRange(0, 0);
+        QVERIFY(page.copySelection().value(u"ok"_s).toBool());
+        host.reset(); // the notebook closed before another app asked for the HTML
+        const QMimeData *mime = QGuiApplication::clipboard()->mimeData();
+        QVERIFY(mime->hasHtml());
+        QCOMPARE(mime->html(), QString());
+        QCOMPARE(mime->text(), u"- Zażółć gęślą jaźń"_s);
+    }
+
+    void lazyMimeData()
+    {
+        int calls = 0;
+        LazyHtmlMimeData mime(u"Zażółć"_s, [&calls] {
+            ++calls;
+            return u"<p>gęślą jaźń</p>"_s;
+        });
+        QCOMPARE(mime.formats(), QStringList({u"text/plain"_s, u"text/html"_s}));
+        QVERIFY(mime.hasFormat(u"text/html"_s));
+        QVERIFY(mime.hasFormat(u"text/plain"_s));
+        QVERIFY(!mime.hasFormat(u"image/png"_s));
+        QCOMPARE(mime.text(), u"Zażółć"_s);
+        QCOMPARE(calls, 0);
+        QVERIFY(!mime.rendered());
+        mime.materialize(); // the app quits: made while the notebook is open
+        QCOMPARE(calls, 1);
+        QVERIFY(mime.rendered());
+        QCOMPARE(mime.html(), u"<p>gęślą jaźń</p>"_s);
+        QCOMPARE(mime.data(u"text/html"_s), u"<p>gęślą jaźń</p>"_s.toUtf8());
+        QCOMPARE(calls, 1);
+        // No render function: no HTML at all.
+        LazyHtmlMimeData plain(u"łódź"_s, {});
+        QCOMPARE(plain.formats(), QStringList({u"text/plain"_s}));
+        QVERIFY(!plain.hasHtml());
+        QCOMPARE(plain.html(), QString());
+        // One that renders nothing: offered, but no data.
+        LazyHtmlMimeData empty(u"łódź"_s, [] { return QString(); });
+        QVERIFY(empty.hasHtml());
+        QCOMPARE(empty.html(), QString());
+        QVERIFY(empty.data(u"text/html"_s).isEmpty());
     }
 
     void tooLargeIsRefusedNotCut()
@@ -999,6 +1096,7 @@ private Q_SLOTS:
         QVERIFY(f.page.copyEditText(0, 18, 5).value(u"ok"_s).toBool()); // either order
         QCOMPARE(f.page.copyEditText(0, 3, 3).value(u"reason"_s).toString(), u"empty"_s);
         QCOMPARE(f.page.copyEditText(9, 0, 3).value(u"reason"_s).toString(), u"empty"_s);
+        QVERIFY(!QGuiApplication::clipboard()->mimeData()->hasHtml()); // characters: no HTML
     }
 };
 

@@ -9,7 +9,8 @@ import Brulion
 // prompt; the first edit creates the file — from the vault's journal template when there is one.
 //
 //   ContentJournalDay { date: model.date; path: model.path; exists: model.exists;
-//                       isToday: model.isToday; scroller: journals; toolbarHost: journals }
+//                       isToday: model.isToday; scroller: journals; toolbarHost: journals;
+//                       stream: stream }
 //
 // Caret visibility is the journal list's job (scroller.ensureVisible(item, rect)): the embedded
 // editor asks it instead of its own list (BlockEditor.scroller). The touch toolbar docks on
@@ -19,7 +20,8 @@ import Brulion
 // inside the list. Fold state is kept per day like in PageView. Each day is shown in its own note
 // mode (its `brulion:` key, else the notebook's journal mode — outline by default): a day switched
 // to a document reads like one in the stream too, on the outline days' left edge (its editor's
-// documentInset) unless the journal is a document by default.
+// documentInset) unless the journal is a document by default. Blocks may be selected across
+// several days at once (`stream`, StreamSelection: copying only).
 FocusScope {
     id: day
 
@@ -31,6 +33,18 @@ FocusScope {
     property var scroller: null
     /// Where the editor's touch toolbar docks (BlockEditor.toolbarHost); null: the day's editor.
     property Item toolbarHost: null
+    /// The stream's selection over several days (JournalsView): the day's controller is attached
+    /// to it while the day exists.
+    property StreamSelection stream: null
+    /// This day shows the tools of a selection over several days (it becomes the active day).
+    readonly property bool spanTools: stream !== null && stream.active && stream.toolsController === page
+    // (Also a day created again while scrolling: the keys, Back and the selection mode come here.)
+    onSpanToolsChanged: {
+        if (spanTools) {
+            activated()
+            editor.spanFocusHere(stream.focusRow, false)
+        }
+    }
     property bool compactHeader: Theme.compact
 
     /// This day's editor got the caret (JournalsView stops editing in the others).
@@ -93,8 +107,9 @@ FocusScope {
             if (day._foldsRestored && page.loaded && !page.loading)
                 Workspace.setFoldState(page.path, page.foldState)
         }
-        // A block selection in this day: the other days' selections end (one at a time).
-        onSelectionChanged: if (page.selectionCount > 0) day.activated()
+        // A block selection in this day: the other days' selections end (one at a time) — not the
+        // part of a selection over several days the stream gives it.
+        onSelectionChanged: if (page.selectionCount > 0 && !(day.stream && day.stream.applying)) day.activated()
         onEditingRowChanged: {
             if (page.editingRow >= 0) {
                 day.activated()
@@ -115,9 +130,29 @@ FocusScope {
                 AppController.toast(qsTr("Merged changes made elsewhere into this day"), "info")
         }
     }
-    Component.onCompleted: restoreFolds()
+    Component.onCompleted: {
+        restoreFolds()
+        if (day.stream)
+            day.stream.attach(page)
+    }
     // The editor's delegates go first, while the editor still exists (they read its geometry).
-    Component.onDestruction: editor.controller = null
+    Component.onDestruction: {
+        if (day.stream)
+            day.stream.detach(page)
+        editor.controller = null
+    }
+
+    // The end of a selection over several days moved into this day: it is the active one, its
+    // editor has the keyboard (and on touch UIs the selection mode); the keys scroll to it.
+    Connections {
+        target: day.stream
+        function onFocusMoved(controller, row, reveal) {
+            if (controller !== page)
+                return
+            day.activated()
+            day.editor.spanFocusHere(row, reveal)
+        }
+    }
 
     Connections {
         target: Workspace
@@ -282,6 +317,7 @@ FocusScope {
         autoHeight: true
         scroller: day.scroller
         toolbarHost: day.toolbarHost
+        stream: day.stream
         // A table cell being edited makes this the active day too (its toolbar shows).
         onEditingTableChanged: if (editingTable) day.activated()
         // The editor has its width from the start (a binding, not a layout's polish), so its

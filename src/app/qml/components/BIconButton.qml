@@ -12,6 +12,8 @@ import Brulion
 // variant: "ghost" (default) | "secondary" (outlined) | "primary" | "danger"
 // size:    "small" | "normal" (default) | "large"
 // A checked (toggle) button gets a tinted background and the link colour.
+// `unavailable`: shown but not possible now — drawn disabled, the reason as its tooltip and
+// description; it still clicks, so the click can say why with a toast (as BMenuItem).
 // On touch UIs the hit area is at least Theme.touchTarget (44 px) square.
 T.Button {
     id: control
@@ -23,6 +25,9 @@ T.Button {
     property string shortcut
     property bool showToolTip: true
     property bool toolTipBelow: false
+    property string unavailable: ""
+    /// What the tooltip says: the label, or why the button does nothing now.
+    readonly property string toolTipText: unavailable !== "" ? unavailable : label
     property color iconColor: {
         if (!enabled)
             return Theme.fgMuted
@@ -51,7 +56,7 @@ T.Button {
 
     Accessible.role: Accessible.Button
     Accessible.name: label
-    Accessible.description: shortcut
+    Accessible.description: unavailable !== "" ? unavailable : shortcut
 
     contentItem: Item {
         BIcon {
@@ -97,7 +102,7 @@ T.Button {
         }
     }
 
-    opacity: enabled ? 1 : Theme.disabledOpacity
+    opacity: enabled && unavailable === "" ? 1 : Theme.disabledOpacity
 
     // Touch: a long press shows the label (there is no hover).
     property bool _touchTip: false
@@ -109,8 +114,8 @@ T.Button {
                 && (control.hovered || control.visualFocus || control._touchTip)
         sourceComponent: BToolTip {
             parent: control
-            text: control.label
-            shortcut: control.shortcut
+            text: control.toolTipText
+            shortcut: control.unavailable === "" ? control.shortcut : ""
             below: control.toolTipBelow
             visible: ((control.hovered && !control.down) || control.visualFocus) && !Theme.touchUi || control._touchTip
             onClosed: control._touchTip = false

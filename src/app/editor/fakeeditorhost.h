@@ -89,6 +89,8 @@ public:
     void openUrl(const QUrl &url) override;
     /// The clipboard's HTML for tests: the Markdown escaped in a <pre> (the real app renders it).
     QString renderHtml(const QString &markdown, const QString &fromPath) const override;
+    /// How many times renderHtml() ran (a copy's HTML is rendered only when asked for).
+    mutable int renderCalls = 0;
     /// Pasted HTML as Markdown through QTextDocument (the real app has the io module's converter).
     QString htmlToMarkdown(const QString &html) const override;
 

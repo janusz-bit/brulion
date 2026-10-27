@@ -95,7 +95,8 @@
   stuknięciami po włączeniu „Pojedynczo” w narzędziach zaznaczenia. Zaznaczone bloki (z dziećmi)
   kopiujesz, wycinasz i usuwasz razem — wcinasz i przenosisz, gdy są zaznaczone bez przerw: w
   schowku są jako Markdown, a w poczcie czy edytorze dokumentów wklejają się sformatowane;
-  „Kopiuj jako tekst” daje zwykły tekst z punktorami. Kawałki kilku akapitów (koniec jednego
+  „Kopiuj jako tekst” daje zwykły tekst z punktorami. W dzienniku zaznaczysz i skopiujesz bloki
+  z kilku dni naraz (każdy dzień poprzedzony linkiem do niego). Kawałki kilku akapitów (koniec jednego
   i początek następnego) skopiujesz, zaznaczając całe bloki, albo co do znaku w trybie źródła
   Markdown (`Ctrl+E`, *Więcej* → *Źródło Markdown*).
 * **Dokument albo konspekt.** Każda notatka ma swój tryb: **dokument** jak w Obsidianie
@@ -416,7 +417,8 @@ Pandoc Markdown document for Word, LibreOffice, PDF or EPUB).
   grips); pick single ones with gaps between them (bullets 1, 3 and 5) with Ctrl+click, or with
   taps after "One by one" on phones. Copy, cut or delete them together — indent or move them when
   there are no gaps: the clipboard gets Markdown plus formatted HTML for mail and office apps
-  ("Copy as plain text" too). For part of several paragraphs, select the whole blocks, or select
+  ("Copy as plain text" too). In the journal, blocks of several days can be selected and copied at
+  once (each day after its link). For part of several paragraphs, select the whole blocks, or select
   exactly those characters in the Markdown source mode (`Ctrl+E`, More → Markdown source).
 * Tasks compatible with Obsidian Tasks and Logseq markers; any status (to do, in progress, done,
   waiting, cancelled, or none) from the checkbox's menu — a right-click or a long press,

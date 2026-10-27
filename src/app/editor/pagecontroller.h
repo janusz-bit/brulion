@@ -54,6 +54,7 @@
 #pragma once
 
 #include "blocklistmodel.h"
+#include "lazyhtmlmimedata.h"
 #include "markdown/tokenedit.h"
 
 #include <QDateTime>
@@ -205,6 +206,12 @@ public:
     /// The most a copy puts on the clipboard (UTF-8 bytes): Android's clipboard takes about 1 MB
     /// per transaction. A larger copy is refused ("tooLarge"), never cut short.
     static constexpr qsizetype ClipboardLimit = 800 * 1024;
+    /// Put `text` on the clipboard (refused over ClipboardLimit; on Linux the primary selection too;
+    /// read back: { ok, reason: "tooLarge" | "noClipboard" }) with a text/html flavour that `html`
+    /// renders when an application asks for it (LazyHtmlMimeData; none without `html`). Android and
+    /// the browser take the data at once (clipboardReadsAtOnce()): rendered here, kept only while
+    /// both flavours fit ClipboardLimit. Also the journal stream's copy (StreamSelection).
+    static QVariantMap writeClipboard(const QString &text, const LazyHtmlMimeData::Render &html);
     bool canUndo() const;
     bool canRedo() const;
     bool conflict() const { return m_conflict; }
@@ -417,8 +424,8 @@ public:
     /// top blocks in document order, each with its subtree (a selection with gaps too).
     Q_INVOKABLE QString selectionMarkdown() const;
     Q_INVOKABLE QString selectionPlainText() const;
-    /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml),
-    /// or `plainText`; on Linux also the primary selection. Returns { ok, count (visible blocks),
+    /// Copy the selection: Markdown as text/plain plus the host's text/html (EditorHost::renderHtml,
+    /// rendered when another application asks for it: writeClipboard()), or `plainText`; on Linux also the primary selection. Returns { ok, count (visible blocks),
     /// reason: "empty" | "tooLarge" | "noClipboard" }.
     Q_INVOKABLE QVariantMap copySelection(bool plainText = false);
     /// Copy, then delete the selection (one undo step). The cut blocks' ids are kept by the next
@@ -810,8 +817,6 @@ private:
         m_selectedUid = m_anchorUid = 0;
         m_pickedUids.clear();
     }
-    /// Put `text` (and `html`) on the clipboard (ClipboardLimit, primary selection, read back).
-    QVariantMap writeClipboard(const QString &text, const QString &html);
     /// `text` (pasted Markdown) without the block ids that already resolve elsewhere; ids in
     /// `freed` (blocks cut or replaced) are kept unless this page still has them. Completes the
     /// host's index first unless `indexed` (it signals: not inside a command).

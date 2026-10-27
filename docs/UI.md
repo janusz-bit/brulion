@@ -696,8 +696,39 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   grips meanwhile; off again, a tap moves the end from the block picked last); "Gotowe" and Back
   leave it (and "Pojedynczo" with it). The editing toolbar's "Zaznacz" and the bullet menu's "Zaznacz"
   enter it too, and so does a hardware keyboard's Esc or Shift+↑/↓ on a touch UI (the same tools
-  whichever way the selection was made). The journal stream: one selection per day (selecting in another day ends it); while
-  a finger or the mouse selects, the stream scrolls only as long as the day goes on beyond the edge.
+  whichever way the selection was made).
+* **Across journal days**: the journal stream selects blocks of several days at once
+  (`StreamSelection`, brulion_editor, one per stream; each day's `PageController` is attached
+  while its delegate exists). Ways in: Shift+click on a block of another day (from the block
+  selected or edited in one day); Shift+↑/↓ past a day's first / last block — also from an edited
+  block's first / last line — into the previous / next day (days with nothing to select are
+  passed); a mouse or finger drag from one day into another (`BlockEditor.dragTarget()` asks the
+  stream's `dayAt(scene)`); in the touch selection mode a tap on a block of another day. The span
+  runs from the anchor block to the focus block: the anchor's day from the anchor to its end (the
+  focus below) or from its start to the anchor (above), the focus day symmetric, the days between
+  whole — never page properties; each attached day selects its part (its own band), `count` and
+  "Zaznaczono %n" are the stream's. It is paths and rows, not controllers: a day scrolled far away
+  is destroyed and gets its part again when it comes back (`attach()` once loaded); meanwhile a
+  copy reads it from its file. While dragging, the stream scrolls past the pressed day only as far
+  as that day stays in the list's cache (half of it: `journals.selectionReach`) — longer spans:
+  the wheel and Shift+click. **Copy only**: Kopiuj / Ctrl+C / Ctrl+Insert and Więcej → Kopiuj
+  jako tekst take every day's blocks (`StreamSelection.copy()`), each day's after its link on a
+  line of its own and a blank line (`[[2026-10-27]]`; plain text: the day's long date,
+  "wtorek, 27 października 2026"), a blank line between days, one HTML flavour rendered on
+  request, the same 800 KB rule; the toast says "Skopiowano %n bloków z kilku dni". Wytnij, Usuń,
+  Pojedynczo, the indents, moves and task statuses are shown unavailable (`BIconButton` /
+  `BMenuItem.unavailable`, the reason as tooltip / description) — so are Wytnij, Usuń, the
+  indents and moves of the block menu of a block in the span, whose Kopiuj / Kopiuj jako tekst
+  copy the whole span (its count in the label) —, and they, Delete, Ctrl+X, Ctrl+V, Tab, Alt+↑/↓ and
+  Ctrl+Enter say "Na kilku dniach naraz działa tylko kopiowanie"; Zaznacz wszystko / Ctrl+A select
+  the day's own blocks. The tools show on one day only — the focus day's (`toolsController`; the
+  anchor day's while the focus day is away), which becomes the active day; the grips are hidden.
+  Using one day on its own ends the span and clears the other days: a click or tap that edits,
+  Ctrl+click, a selection made in that day alone, folding (any selection change the stream did not
+  make), and a day leaving the list with an end of the span; Esc, Gotowe, × and Back clear every
+  day. Shift+↑/↓ with the focus day scrolled away scrolls there first (`revealRequested`). With
+  every day of the span scrolled away (no tools shown: `toolsController` null) a tap edits as
+  usual, which ends the span — no tap grows a span the user cannot see.
 * **The band**: one band over the range from the editor's left edge (a block alone keeps its
   outline: from its own level, framed), rounded at its ends, a line down its left edge — blocks
   picked with gaps between them: a band for each run; made only for selected blocks (a `Loader`:
@@ -720,7 +751,16 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   tables, dates, recurrence and priorities of any block; links to notes as their text, pictures as
   links to their files, never data: URLs; marked `<meta name="generator" content="Brulion">`), so
   a paste into mail or an office app is formatted and one into Obsidian, a plain field or Brulion
-  is Markdown. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
+  is Markdown. The text/html flavour is advertised at once but rendered only when an application
+  asks for it (`LazyHtmlMimeData`: `retrieveData()`, once, kept; a paste into Brulion, a code
+  editor or a terminal never renders it; Ctrl+C on a whole 5000-block page takes ~4 instead of
+  ~40 ms, docs/PERFORMANCE.md) — on Linux desktops (xcb, Wayland) without a size limit of its own; the
+  Markdown is a snapshot, `((id))` texts and links are resolved when the HTML is made, and when the
+  app quits while the copy is still the clipboard's, it is made first (X11's hand-over to a
+  clipboard manager reads every flavour during shutdown). Android, the browser and Windows take
+  the data inside `setMimeData()` (`clipboardReadsAtOnce()`; Windows: `OleSetClipboard` enumerates
+  the formats and Qt offers CF_HTML only for a non-empty `html()`): rendered at once there, kept
+  only while both flavours fit 800 KB. On Linux also the primary selection. "Kopiuj jako tekst": plain text ("• ",
   numbers, ☐ / ☑ / ☒, emphasis marks in pairs gone, code spans verbatim, `((id))` as its block's
   text). A copy is read back (never "Skopiowano" for a clipboard that did not take it — except in
   the browser, docs/WEB.md "Schowek") and refuses more than 800 KB (Android's clipboard takes
@@ -765,8 +805,12 @@ the Markdown source (Ctrl+E, Więcej → Źródło Markdown).
   Więcej → Źródło Markdown) and copy them there.
 * **Browser**: docs/WEB.md "Schowek".
 * **Tests**: core `tst_markdown_blockclipboard`, `tst_markdown_blockdoc` (ranges), `tst_io_html`;
-  controller `tst_editor_selection` (the real clipboard read back; blocks picked one by one, their
-  copy, cut, delete, paste, undo, statuses, no moves with gaps); the playground's `selectiontest`
+  controller `tst_editor_selection` (the real clipboard read back; the HTML rendered only when
+  asked for, once; blocks picked one by one, their copy, cut, delete, paste, undo, statuses, no
+  moves with gaps); `tst_editor_streamselection` (the parts of a selection across days, keys,
+  taps and drags over the days' edges, days destroyed and created again, the copy with the days'
+  links); the journal stream's `journals-span-selftest` with real input (`tst_content_journals_span_qml`
+  on a desktop, `_touch` on a phone); the playground's `selectiontest`
   with real keys, mouse and touch (`tst_editor_qml_selection` — Ctrl+clicks —, `_touch` —
   "Pojedynczo"); the journal stream's self-test; `scripts/android-emulator-test.sh --selection`.
 

@@ -17,6 +17,9 @@ import Brulion
 //     is created by the first change (never just by looking at it).
 // The touch toolbar of the day being edited docks on the stream's frame (`journals`), which the
 // shell keeps on the keyboard: it never scrolls with the days, and the caret is kept above it.
+// Blocks may be selected across several days (StreamSelection `stream`, docs/UI.md "Selecting
+// and copying"): Shift+click, Shift+↑/↓ past a day's edge, a drag, a tap in the touch selection
+// mode; such a selection is copied only.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, `inSidePanel`; offers `title`
 // (one day: its date), `sidePanel`, `editing`, `toolbarDocked` and `sourceMode`.
 FocusScope {
@@ -105,6 +108,21 @@ FocusScope {
 
             /// The toolbar of the day being edited is docked on this frame's bottom edge.
             readonly property bool toolbarDocked: root.activeDay !== null && root.activeDay.editor.toolbarVisible
+            /// How far a drag selection may scroll the stream past the day it started in (that day
+            /// must stay in the list's cache: destroyed, it would end the drag).
+            readonly property real selectionReach: list.dayCache / 2
+            /// The day (ContentJournalDay) at a scene point, null in a gap or outside the days.
+            function dayAt(scene) {
+                const p = list.contentItem.mapFromItem(null, scene.x, scene.y)
+                const y = Math.max(list.contentY, Math.min(list.contentY + list.height - 1, p.y))
+                const item = list.itemAt(Math.max(0, Math.min(list.width - 1, p.x)), y)
+                for (let i = 0; item && i < item.children.length; ++i) {
+                    const day = item.children[i] as ContentJournalDay
+                    if (day)
+                        return day
+                }
+                return null
+            }
             /// Where the list scrolls (the autocomplete popup of a day follows it).
             readonly property real contentY: list.contentY
 
@@ -140,6 +158,24 @@ FocusScope {
                 const row = days.rowOfDate(date)
                 if (row >= 0)
                     list.positionViewAtIndex(row, ListView.Beginning)
+            }
+
+            // One selection over several days: the days' controllers attach while they exist.
+            StreamSelection {
+                id: stream
+                objectName: "journalStreamSelection"
+                host: Workspace
+                model: days
+                locale: DatesHelper.locale
+                // The selection's end is in a day scrolled far away (Shift+↑/↓): scroll there.
+                onRevealRequested: (path) => {
+                    for (let i = 0; i < days.count; ++i) {
+                        if (days.get(i).path === path) {
+                            list.positionViewAtIndex(i, ListView.Contain)
+                            return
+                        }
+                    }
+                }
             }
 
             JournalListModel {
@@ -304,8 +340,10 @@ FocusScope {
                         isToday: dayItem.isToday
                         scroller: journals
                         toolbarHost: journals
+                        stream: stream
                         onActivated: {
-                            if (root.activeDay && root.activeDay !== dayView) {
+                            // (A selection over several days keeps the other days' parts.)
+                            if (root.activeDay && root.activeDay !== dayView && !stream.active) {
                                 root.activeDay.controller.stopEditing()
                                 root.activeDay.controller.selectedRow = -1
                             }
@@ -352,6 +390,16 @@ FocusScope {
                 sourceComponent: ContentJournalsSelfTest {
                     list: list
                     days: days
+                    stream: stream
+                }
+            }
+            // Dev: selecting blocks across several days (ctest tst_content_journals_span_qml*).
+            Loader {
+                active: DevTools.editorScript === "journals-span-selftest"
+                sourceComponent: ContentJournalsSpanSelfTest {
+                    list: list
+                    days: days
+                    stream: stream
                 }
             }
 
