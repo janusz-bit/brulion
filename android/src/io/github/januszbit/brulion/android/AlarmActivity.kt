@@ -30,7 +30,7 @@ import java.util.Date
  *
  * The screen also closes when the alarm stops some other way: its ring time is over
  * ([RingTimeout]: at the deadline while it is shown, or when the AlarmManager deadline fires
- * first), a reaction in the notification ("OK", "Drzemka 10 min", a tap — all through
+ * first), a reaction in the notification ("OK", "Drzemka 10 min", "Zrobione", a tap — all through
  * [ReminderNotifier.cancel]), and when it comes back to the front with its alarm no longer
  * ringing.
  */
@@ -142,6 +142,16 @@ class AlarmActivity : Activity() {
       },
       wide(dp(40))
     )
+    if (reminder.canComplete) {
+      root.addView(
+        button(R.string.brulion_action_done) {
+          handled = true
+          ReminderActions.done(this, reminder)
+          finish()
+        },
+        wide(dp(12))
+      )
+    }
     root.addView(
       button(R.string.brulion_action_ok) {
         handled = true

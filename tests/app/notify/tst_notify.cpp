@@ -1,9 +1,10 @@
 // Notifier adapters: the freedesktop Notify message of a reminder or alarm, DesktopNotifier
-// against a fake notification bus (snooze / open / OK actions, foreign notifications, replacing,
+// against a fake notification bus (snooze / done / open / OK actions, foreign notifications, replacing,
 // ringing alarms, the tray fallback, Wayland activation tokens), the sounds (freedesktop hints of
 // every choice, the sample notification), the Windows toast XML (scenarios, buttons, sounds,
 // escaping) and its activation arguments, a bus that rings itself (Windows' alarm toasts), the
-// JSON for Android's alarm scheduler and sound channels, and the platform factory.
+// JSON for Android's alarm scheduler, its "Zrobione" requests and sound channels, and the platform
+// factory.
 #include "androidpayload.h"
 #include "desktopnotifier.h"
 #include "notifier.h"
@@ -32,6 +33,17 @@ ScheduledNotification reminder()
     n.at = QDateTime(QDate(2026, 10, 14), QTime(18, 0));
     n.path = u"journals/2026-10-14.md"_s;
     n.line = 3;
+    return n;
+}
+
+/// A task's reminder: its notification offers "Done".
+ScheduledNotification taskReminder()
+{
+    ScheduledNotification n = reminder();
+    n.id = u"aaaabbbbccccdddd"_s;
+    n.nativeId = 5151;
+    n.title = u"Zapłacić za źródło wody"_s;
+    n.taskLine = 2;
     return n;
 }
 
@@ -151,6 +163,24 @@ private Q_SLOTS:
         QCOMPARE(d.expireTimeout, -1);
     }
 
+    void messageForTaskReminder()
+    {
+        // Done between Snooze and OK (GNOME shows three buttons).
+        const DesktopNotification d = buildDesktopNotification(taskReminder(), {u"actions"_s}, 10);
+        QCOMPARE(d.actions, (QStringList{u"default"_s, u"Open note"_s, u"snooze"_s, u"Snooze 10 min"_s, u"done"_s,
+                                         u"Done"_s, u"ok"_s, u"OK"_s}));
+        QVERIFY(buildDesktopNotification(taskReminder(), {}, 10).actions.isEmpty());
+        // Not a task: no "Done".
+        QVERIFY(!buildDesktopNotification(reminder(), {u"actions"_s}, 10).actions.contains(u"done"_s));
+
+        // The Windows toast: three buttons, "Done" activates action=done.
+        const Toast toast = readToast(buildToastXml(buildDesktopNotification(taskReminder(), ToastCaps, 10), 12));
+        QVERIFY(toast.wellFormed);
+        QCOMPARE(toast.labels, (QStringList{u"Snooze 10 min"_s, u"Done"_s, u"OK"_s}));
+        QCOMPARE(toast.arguments.at(1), u"brulion-toast:id=12&action=done"_s);
+        QCOMPARE(parseToastArguments(toast.arguments.at(1)).action, u"done"_s);
+    }
+
     void messageForAlarm()
     {
         const DesktopNotification d = buildDesktopNotification(alarm(), { u"actions"_s }, 5, 33);
@@ -226,6 +256,46 @@ private Q_SLOTS:
         notifier.showNow(reminder());
         bus->dismiss(bus->nextId);
         QCOMPARE(notifier.shownCount(), 0);
+    }
+
+    void doneAction()
+    {
+        auto *bus = new FakeBus;
+        DesktopNotifier notifier(bus);
+        QSignalSpy done(&notifier, &Notifier::doneRequested);
+        QSignalSpy snoozed(&notifier, &Notifier::snoozeRequested);
+        QSignalSpy activated(&notifier, &Notifier::activated);
+
+        ScheduledNotification task = taskReminder();
+        task.vault = u"/home/ewa/Zeszyt ąę"_s; // stamped by the shell, handed back with the action
+        notifier.showNow(task);
+        const uint id = bus->nextId;
+        bus->invoke(4711, u"done"_s); // another program's notification
+        QVERIFY(done.isEmpty());
+
+        bus->invoke(id, u"done"_s);
+        QCOMPARE(done.size(), 1);
+        const ScheduledNotification n = qvariant_cast<ScheduledNotification>(done.first().at(0));
+        QCOMPARE(n.id, taskReminder().id);
+        QCOMPARE(n.taskLine, 2);
+        QCOMPARE(n.vault, task.vault);
+        QVERIFY(!done.first().at(1).toDate().isValid()); // today's date, chosen by the shell
+        QCOMPARE(bus->closed, (QList<uint>{id}));
+        QCOMPARE(notifier.shownCount(), 0);
+        QVERIFY(snoozed.isEmpty());
+        QVERIFY(activated.isEmpty());
+        bus->invoke(id, u"done"_s); // handled once
+        QCOMPARE(done.size(), 1);
+
+        // "Done" on a ringing alarm of a task stops it.
+        ScheduledNotification taskAlarm = alarm();
+        taskAlarm.taskLine = 0;
+        notifier.showNow(taskAlarm);
+        QCOMPARE(notifier.ringingCount(), 1);
+        QVERIFY(bus->sent.last().actions.contains(u"done"_s));
+        bus->invoke(bus->nextId, u"done"_s);
+        QCOMPARE(notifier.ringingCount(), 0);
+        QCOMPARE(done.size(), 2);
     }
 
     void sameReminderReplacesItsNotification()
@@ -429,7 +499,7 @@ private Q_SLOTS:
 
     void toastXmlActionsAndSamples()
     {
-        // Every known action becomes a button ("done": TODO notifydone); unknown ones do not.
+        // Every known action becomes a button; unknown ones do not.
         DesktopNotification d = buildDesktopNotification(reminder(), ToastCaps, 5);
         d.actions << u"done"_s << u"Zrobione"_s << u"rm -rf"_s << u"Zło"_s;
         Toast toast = readToast(buildToastXml(d, 4294967295u));
@@ -694,6 +764,73 @@ private Q_SLOTS:
         QCOMPARE(second.value(u"ringMinutes"_s).toInt(), 60);
         QCOMPARE(second.value(u"line"_s).toInt(), 0);
         QVERIFY(androidReminderPayload({}).isEmpty());
+
+        // The occurrence ("Zrobione" names it): its id and wall-clock time, and whether it is on
+        // a task.
+        QCOMPARE(first.value(u"key"_s).toString(), a.id);
+        QCOMPARE(first.value(u"local"_s).toString(), u"2026-10-14T18:00"_s);
+        QCOMPARE(first.value(u"task"_s).toBool(), false);
+        ScheduledNotification task = taskReminder();
+        task.at = QDateTime(QDate(2026, 10, 25), QTime(2, 30)); // the night the clocks go back
+        const QJsonObject item = androidReminderItem(task);
+        QCOMPARE(item.value(u"task"_s).toBool(), true);
+        QCOMPARE(item.value(u"local"_s).toString(), u"2026-10-25T02:30"_s);
+        // The notebook (stamped by the shell): Android keeps a tap queued until it is open.
+        QCOMPARE(first.value(u"vault"_s).toString(), QString());
+        task.vault = u"/home/ewa/Notatki-źródła"_s;
+        QCOMPARE(androidReminderItem(task).value(u"vault"_s).toString(), u"/home/ewa/Notatki-źródła"_s);
+    }
+
+    void androidDoneRequestsParsed()
+    {
+        const QJsonArray array{
+                QJsonObject{{u"key"_s, u"aaaabbbbccccdddd"_s},
+                            {u"local"_s, u"2026-10-25T02:30"_s},
+                            {u"path"_s, u"dziennik/Łódź.md"_s},
+                            {u"line"_s, 4},
+                            {u"title"_s, u"Zapłacić za źródło wody"_s},
+                            {u"day"_s, u"2026-10-26"_s},
+                            {u"vault"_s, u"zeszyt-ąę"_s}},
+                // No day (or a broken one): completed with today's date.
+                QJsonObject{{u"key"_s, u"k2"_s},
+                            {u"local"_s, u"2026-10-14T09:00"_s},
+                            {u"path"_s, u"a.md"_s},
+                            {u"line"_s, -3},
+                            {u"day"_s, u"wczoraj"_s}},
+                // Broken: no key, no note, no or a malformed time, not an object.
+                QJsonObject{{u"local"_s, u"2026-10-14T09:00"_s}, {u"path"_s, u"a.md"_s}},
+                QJsonObject{{u"key"_s, u"k"_s}, {u"local"_s, u"2026-10-14T09:00"_s}},
+                QJsonObject{{u"key"_s, u"k"_s}, {u"path"_s, u"a.md"_s}},
+                QJsonObject{{u"key"_s, u"k"_s}, {u"local"_s, u"2026-13-14T09:00"_s}, {u"path"_s, u"a.md"_s}},
+                7,
+        };
+        const QList<AndroidDoneRequest> requests = androidDoneRequests(array);
+        QCOMPARE(requests.size(), 2);
+        const ScheduledNotification &n = requests.at(0).notification;
+        QCOMPARE(n.id, u"aaaabbbbccccdddd"_s);
+        QCOMPARE(n.at, QDateTime(QDate(2026, 10, 25), QTime(2, 30))); // local wall-clock time
+        QCOMPARE(n.at.timeSpec(), Qt::LocalTime);
+        QCOMPARE(n.path, u"dziennik/Łódź.md"_s);
+        QCOMPARE(n.line, 4);
+        QCOMPARE(n.title, u"Zapłacić za źródło wody"_s);
+        QCOMPARE(requests.at(0).day, QDate(2026, 10, 26));
+        QCOMPARE(n.vault, u"zeszyt-ąę"_s);
+        QCOMPARE(requests.at(1).notification.line, 0);
+        QCOMPARE(requests.at(1).notification.vault, QString()); // queued by an older version
+        QVERIFY(!requests.at(1).day.isValid());
+        QVERIFY(androidDoneRequests({}).isEmpty());
+
+        // What the payload sends comes back as the same occurrence.
+        ScheduledNotification task = taskReminder();
+        task.vault = u"zeszyt-ąę"_s;
+        QJsonObject tapped = androidReminderItem(task);
+        tapped.insert(u"day"_s, u"2026-10-14"_s);
+        const AndroidDoneRequest back = androidDoneRequests({tapped}).value(0);
+        QCOMPARE(back.notification.id, task.id);
+        QCOMPARE(back.notification.at, task.at);
+        QCOMPARE(back.notification.path, task.path);
+        QCOMPARE(back.notification.line, task.line);
+        QCOMPARE(back.notification.vault, task.vault);
     }
 
     void soundChoiceKeys()

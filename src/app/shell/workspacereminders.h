@@ -2,7 +2,8 @@
 // core's ReminderScheduler over the Workspace's VaultIndex and LocalStore and feeds the
 // platform's notifier (a reminders::NotificationSink from src/app/notify, set by the shell's
 // integration; tests use a fake). Missed reminders (due while the app/device was off) are
-// exposed for the banner, snoozing writes the new time into the note through the Vault.
+// exposed for the banner, snoozing writes the new time into the note through the Vault, "Done"
+// (a notification's or the banner's) marks the reminder's task done there.
 //
 //   lifecycle   Workspace: attach(vault, index) on open, start() once the index holds every
 //               note (a half-built index must not swallow reminders), detach() on close.
@@ -11,16 +12,19 @@
 //   settings    enabled (off: stopped and the armed set cancelled), alarmRingMinutes,
 //               snoozeMinutes, notifyMissed (off: the missed list stays empty), language
 //   QML         missed / missedCount / dismissMissed(id) / clearMissed() / openMissed(id),
-//               upcoming (next 20) / next, snooze(id, minutes), backend, firesWhenClosed,
+//               upcoming (next 20) / next, snooze(id, minutes), complete(id), backend, firesWhenClosed,
 //               canShow, signal fired(notification) for in-app toasts
 //
 // Notification maps (missed, upcoming, next, fired): { id, title, body, at ("YYYY-MM-DD HH:mm"),
-// when (human: "dziś 09:00", "wt 13 paź 18:00"), alarm, path, line }.
+// when (human: "dziś 09:00", "wt 13 paź 18:00"), alarm, path, line, task (the reminder is on an
+// open task: "Done" can complete it) }.
 #pragma once
 
 #include "reminders/notifications.h"
 
+#include <QDate>
 #include <QDateTime>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QVariantList>
@@ -29,6 +33,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace brulion {
 class ReminderScheduler;
@@ -118,6 +123,24 @@ public:
     /// Same for a notification the platform handed back (path/line from when it was scheduled;
     /// the line is looked up again by id when the note changed meanwhile).
     bool snoozeNotification(const ScheduledNotification &notification, int minutes = 0);
+    /// "Done" on the reminder occurrence `id` (upcoming or missed): its task is marked done in
+    /// the note (markdown::setTaskStatus, ✅ today — as the editor's status change) and the
+    /// missed entry dismissed. False when it is not found, not on a task or the note cannot be
+    /// written.
+    Q_INVOKABLE bool complete(const QString &id);
+    /// Same for a notification the platform handed back: the occurrence is looked up again by id
+    /// (its task's line may have moved; not found — edited, moved, completed elsewhere or deleted
+    /// meanwhile — errorOccurred() and false). ✅ `day` (invalid: today; Android: the day of the
+    /// tap). Before start() (the index is not complete yet) the request is kept and applied by
+    /// start(), then it returns true; detach() forgets such requests. A notification of another
+    /// notebook (`vault` set and not this one's id) is refused. Every failure is reported by
+    /// errorOccurred(): the platform has closed the notification already.
+    bool completeNotification(const ScheduledNotification &notification, QDate day = {});
+    /// The id (Vault::id()) of the notebook whose "Done" requests are applied right away: set
+    /// from start() to detach(), empty otherwise (no notebook, still indexing, reminders paused).
+    /// The shell hands it to the notifier (Notifier::setDoneTarget(): Android keeps the taps
+    /// queued while Brulion was closed until their notebook is ready). doneTargetChanged().
+    QString doneTarget() const;
     /// Show a notification now through the sink (the settings page's test notification).
     bool sendTestNotification(const QString &title, const QString &body);
 
@@ -136,12 +159,37 @@ Q_SIGNALS:
     void navigationRequested(const QVariantMap &route);
     /// Something failed that the user should know about (translated).
     void errorOccurred(const QString &message);
+    /// A task was marked done from a notification or the missed banner (its reminder's title).
+    void taskCompleted(const QString &title);
+    void doneTargetChanged();
 
 private:
     class Proxy;
     void restart();
+    void startScheduler();
     void stopScheduler();
     std::optional<ScheduledNotification> find(const QString &id) const;
+    /// The occurrence `notification` names, as the index has it now (nullopt: gone or changed).
+    std::optional<ScheduledNotification> current(const ScheduledNotification &notification) const;
+    enum class EditResult {
+        Written,   ///< the note holds the edit
+        Gone,      ///< the occurrence is not in the note any more (edited, moved, deleted)
+        Unchanged, ///< the edit changes nothing at the occurrence
+        Failed,    ///< the note cannot be read or written (Vault::errorString())
+    };
+    /// Apply `edit` (content and the occurrence as the content has it → new content) to the
+    /// note of `notification`'s occurrence, looked up again by id. The edit works on the content
+    /// the index has and is written only when the file still holds it (compare-and-swap): another
+    /// program's change the vault has not taken in yet (an in-place save, a sync while Brulion
+    /// was in the background) is taken in first and the occurrence looked up again in it — a
+    /// line number from a stale index never lands on another line. `target` receives the
+    /// occurrence edited.
+    EditResult editOccurrence(const ScheduledNotification &notification,
+                              const std::function<QString(const QString &, const ScheduledNotification &)> &edit,
+                              ScheduledNotification *target);
+    /// The notification belongs to another notebook than the open one.
+    bool foreign(const ScheduledNotification &notification) const;
+    bool applyCompletion(const ScheduledNotification &notification, QDate day);
     QDateTime now() const;
 
     Clock m_clock;
@@ -159,6 +207,8 @@ private:
     QString m_language = QStringLiteral("pl");
     int m_testHeartbeatMs = 0;
     int m_testDebounceMs = 0;
+    /// "Done" requests that came after attach(), before start() (applied by it, dropped by detach()).
+    QList<std::pair<ScheduledNotification, QDate>> m_pendingDone;
 };
 
 } // namespace brulion::shell

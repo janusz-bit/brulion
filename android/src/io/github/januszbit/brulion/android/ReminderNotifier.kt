@@ -188,6 +188,13 @@ internal object ReminderNotifier {
     actionIntent(context, reminder, Actions.SNOOZE)?.let {
       builder.addAction(0, context.getString(R.string.brulion_action_snooze), it)
     }
+    // A task's reminder: "Zrobione" marks the task done without opening the note (3 buttons, the
+    // most a notification shows).
+    if (reminder.canComplete) {
+      actionIntent(context, reminder, Actions.DONE)?.let {
+        builder.addAction(0, context.getString(R.string.brulion_action_done), it)
+      }
+    }
     val dismiss = actionIntent(context, reminder, Actions.DISMISS)
     dismiss?.let { builder.addAction(0, context.getString(R.string.brulion_action_ok), it) }
 

@@ -34,19 +34,25 @@ internal object Actions {
   const val SNOOZE = "io.github.januszbit.brulion.android.action.SNOOZE"
   const val DISMISS = "io.github.januszbit.brulion.android.action.DISMISS"
 
+  /** "Zrobione": the reminder's task is marked done in the note ([DoneQueue]). */
+  const val DONE = "io.github.januszbit.brulion.android.action.DONE"
+
   /** The ring time of an alarm is over (see [RingTimeout]). */
   const val RING_TIMEOUT = "io.github.januszbit.brulion.android.action.RING_TIMEOUT"
 }
 
 /**
  * One native reminder. The C++ side (`AndroidBridge::scheduleReminders`) sends them as a JSON
- * array of `{id, title, body, at, alarm, ringMinutes, path, line}`; the same JSON (plus
- * `snoozed`) is the persisted form.
+ * array of `{id, title, body, at, alarm, ringMinutes, path, line, key, local, task, vault}`; the same
+ * JSON (plus `snoozed`) is the persisted form.
  *
  * [at] is epoch ms. [ringMinutes] (alarms only) is how long the alarm rings before it turns into
  * a silent "Przegapiony alarm", already resolved by [RingTimeout.minutes]. [snoozed] marks a
  * reminder re-armed natively by "Drzemka 10 min": the app does not know about it, so it
- * survives `scheduleReminders` replacing the set.
+ * survives `scheduleReminders` replacing the set. [key] is the occurrence's id in Brulion and
+ * [local] its wall-clock time (`yyyy-MM-ddTHH:mm`, unchanged by a snooze): with them "Zrobione"
+ * names the occurrence whose [task] (the reminder is on an open task) is to be completed in the
+ * notebook [vault] (its id in Brulion; empty when armed by an older version).
  */
 internal data class Reminder(
   val id: Int,
@@ -57,8 +63,16 @@ internal data class Reminder(
   val path: String,
   val line: Int,
   val snoozed: Boolean = false,
-  val ringMinutes: Int = RingTimeout.DEFAULT_MINUTES
+  val ringMinutes: Int = RingTimeout.DEFAULT_MINUTES,
+  val key: String = "",
+  val local: String = "",
+  val task: Boolean = false,
+  val vault: String = ""
 ) {
+  /** The notification and the alarm screen offer "Zrobione". */
+  val canComplete: Boolean
+    get() = task && key.isNotEmpty() && local.isNotEmpty() && path.isNotEmpty()
+
   fun toJson(): JSONObject {
     val json = JSONObject()
     json.put("id", id)
@@ -70,6 +84,10 @@ internal data class Reminder(
     json.put("line", line)
     json.put("snoozed", snoozed)
     json.put("ringMinutes", ringMinutes)
+    json.put("key", key)
+    json.put("local", local)
+    json.put("task", task)
+    json.put("vault", vault)
     return json
   }
 
@@ -90,7 +108,12 @@ internal data class Reminder(
           line = json.optInt("line", 0),
           snoozed = json.optBoolean("snoozed", false),
           // Absent (older stored reminders, plain reminders from C++): the default.
-          ringMinutes = RingTimeout.minutes((json.opt("ringMinutes") as? Number)?.toLong())
+          ringMinutes = RingTimeout.minutes((json.opt("ringMinutes") as? Number)?.toLong()),
+          // Absent (stored by an older version): no "Zrobione".
+          key = json.optString("key", ""),
+          local = json.optString("local", ""),
+          task = json.optBoolean("task", false),
+          vault = json.optString("vault", "")
         )
       } catch (e: JSONException) {
         null
@@ -166,6 +189,18 @@ internal class ReminderStore(context: Context) {
       save(items, zone() ?: TimeZone.getDefault().id)
     }
   }
+
+  /**
+   * Forgets a natively snoozed copy of reminder [id] ("Zrobione" on it: it must not come back).
+   * Returns whether there was one; its alarm is the caller's to cancel.
+   */
+  fun removeSnoozed(id: Int): Boolean =
+    synchronized(AlarmScheduler.lock) {
+      val items = load()
+      val kept = items.filterNot { it.id == id && it.snoozed }
+      if (kept.size != items.size) save(kept, zone() ?: TimeZone.getDefault().id)
+      kept.size != items.size
+    }
 
   /** Forgets reminder [id] once it fired (a later entry with the same id is kept). */
   fun removeFired(id: Int, now: Long) {

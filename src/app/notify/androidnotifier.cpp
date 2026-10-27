@@ -36,6 +36,26 @@ AndroidNotifier::AndroidNotifier(QObject *parent) : Notifier(parent)
         }
         Q_EMIT soundPicked(kind == 1 ? SoundKind::Alarm : SoundKind::Reminder, picked);
     });
+    // Taps queued while Brulion was closed are taken once a notebook is ready (setDoneTarget()).
+    connect(bridge, &platform::AndroidBridge::doneRequestsQueued, this, &AndroidNotifier::takeDoneRequests);
+}
+
+void AndroidNotifier::setDoneTarget(const QString &vault)
+{
+    m_doneTarget = vault;
+    takeDoneRequests();
+}
+
+void AndroidNotifier::takeDoneRequests()
+{
+    if (m_doneTarget.isEmpty())
+        return; // kept in the persisted queue until a notebook can write them
+    const QList<AndroidDoneRequest> requests =
+            androidDoneRequests(platform::AndroidBridge::instance()->takeDoneRequests(m_doneTarget));
+    for (const AndroidDoneRequest &request : requests) {
+        qCInfo(lcAndroidNotify) << "Done tapped for" << request.notification.path << "on" << request.day;
+        Q_EMIT doneRequested(request.notification, request.day);
+    }
 }
 
 AndroidNotifier::~AndroidNotifier() = default;

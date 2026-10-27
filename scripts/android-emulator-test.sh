@@ -6,7 +6,8 @@
 #   2. the bridge self-test APK (src/platform/android/selftest): JNI calls work, reminders are
 #      armed in AlarmManager (the past one skipped), the reminder and the alarm notification
 #      fire on their channels, the alarm turns into "Przegapiony alarm" after its ring time,
-#      notification taps reach C++ (cold start and while running, Polish path).
+#      notification taps reach C++ (cold start and while running, Polish path), "Zrobione" in the
+#      task reminder's notification reaches C++ with the day of the tap and removes it.
 # Needs an x86_64 Linux host with KVM. Build both APKs first:
 #   BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh
 # With --keyboard instead: the editing toolbar on the on-screen keyboard (docs/ANDROID.md,
@@ -704,6 +705,15 @@ adb shell dumpsys alarm >"$OUT/dumpsys-alarm.txt"
 check "AlarmManager holds Brulion's alarms" bash -c "grep -q '$PKG' '$OUT/dumpsys-alarm.txt'"
 adb shell input keyevent 3 # home: the notifications are posted while the app is in the background
 check "reminder 101 fired on channel 'reminders'" wait_for $((60 - (SECONDS - started))) notification_on 101 reminders
+# "Zrobione" in the notification of the task reminder 101 (app in the background, C++ listens):
+# the tap is queued natively and taken by C++ at once, the notification goes.
+adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+sleep 2
+check "'Zrobione' tapped in the notification of 101" ui_tap 'Zrobione|ZROBIONE|Done|DONE'
+adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+check "'Zrobione' reached C++ (key, note, line, the day of the tap)" wait_for 10 log_has \
+  "SELFTEST done key=selftest-101 local=.* path=dziennik/2026-10-14.md line=3 day=$(adb shell date +%Y-%m-%d | tr -d '\r')"
+check "notification 101 removed by 'Zrobione'" bash -c "! adb shell dumpsys notification --noredact | grep -qE 'pkg=$PKG .*id=101 '"
 check "alarm 102 rings on channel 'alarms'" wait_for $((95 - (SECONDS - started))) notification_on 102 alarms
 adb exec-out screencap -p >"$OUT/alarm.png" || true
 check "alarm 102 became 'missed-alarms' after its ring time (1 min)" wait_for $((170 - (SECONDS - started))) notification_on 102 missed-alarms

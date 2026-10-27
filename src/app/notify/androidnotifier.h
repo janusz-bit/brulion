@@ -9,6 +9,14 @@
 // go alone. A tapped notification arrives as AndroidBridge::activated() and is forwarded as
 // activated() (main.cpp also hands it to AppController::openNotification()).
 //
+// "Zrobione" in a task reminder's notification or on the alarm screen: the Kotlin side queues
+// the tap (DoneQueue.kt; the app may be closed, the tap is persisted at once) and tells
+// AndroidBridge (doneRequestsQueued(), also on every return to the front). The queue is taken
+// only while a notebook is ready (setDoneTarget(): indexed, reminders running) and only that
+// notebook's taps (and those of reminders armed before notebooks were told apart); the others
+// stay queued for their notebook. They are forwarded as doneRequested() with the day of the tap
+// and written by WorkspaceReminders right away — a tap is never held only in memory.
+//
 // Sounds: every mode (default, a ringtone from the system picker, vibration only, silent);
 // setSounds() goes to AndroidBridge::setReminderSounds() — the Kotlin side recreates the
 // notification channel of a kind whose sound changed (a channel's sound is fixed once created)
@@ -38,12 +46,17 @@ public:
     bool pickSound(SoundKind kind) override;
     bool previewSound(SoundKind kind, const SoundChoice &choice) override;
     bool openSystemSoundSettings(SoundKind kind) override;
+    void setDoneTarget(const QString &vault) override;
 
 protected:
     void soundsChanged() override;
 
 private:
+    void takeDoneRequests();
     void arm(const QList<ScheduledNotification> &notifications);
+
+    /// setDoneTarget(): the queue is taken only while a notebook is ready for it.
+    QString m_doneTarget;
 };
 
 } // namespace brulion::notify

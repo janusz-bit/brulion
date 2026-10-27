@@ -322,6 +322,42 @@ private Q_SLOTS:
         QCOMPARE(spy.size(), 2);
     }
 
+    void missedTaskLineFollowsTheNote()
+    {
+        // The missed banner's "Done" needs the task's current line: it is stored with the entry
+        // and follows edits above it.
+        Env env(dt(2026, 10, 14, 16, 0));
+        env.store.set(KeyLastSeen, stamp(dt(2026, 10, 14, 8, 0)));
+        fill(env.index, {{u"a.md"_s, lines({u"- [ ] Zażółcić ⏰ 2026-10-14 09:00"_s, u"- Inne ⏰ 2026-10-14 09:30"_s})},
+                         {u"b.md"_s, u"- notatka"_s}});
+        auto s = env.scheduler();
+        s->start();
+        QCOMPARE(s->missed().size(), 2);
+        QCOMPARE(s->missed().at(0).taskLine, 0);
+        QCOMPARE(s->missed().at(1).taskLine, -1);
+
+        QSignalSpy spy(s.get(), &ReminderScheduler::missedChanged);
+        env.index.update(u"a.md"_s, lines({u"# Nagłówek"_s, u""_s, u"- [ ] Zażółcić ⏰ 2026-10-14 09:00"_s,
+                                           u"- Inne ⏰ 2026-10-14 09:30"_s}));
+        s->refresh();
+        QCOMPARE(spy.size(), 1);
+        QCOMPARE(s->missed().at(0).taskLine, 2);
+        QCOMPARE(s->missed().at(1).taskLine, -1);
+        const QJsonArray stored = env.store.get(KeyMissed).toArray();
+        QCOMPARE(stored.size(), 2);
+        QCOMPARE(stored.at(0).toObject().value(u"taskLine"_s).toInt(), 2);
+        QVERIFY(!stored.at(1).toObject().contains(u"taskLine"_s));
+
+        // Kept across a restart while the vault loads (the index is empty then).
+        s.reset();
+        VaultIndex empty;
+        ReminderScheduler again(&empty, &env.sink, &env.store, env.clock.fn());
+        again.start();
+        QCOMPARE(again.missed().size(), 2);
+        QCOMPARE(again.missed().at(0).taskLine, 2);
+        QCOMPARE(again.missed().at(1).taskLine, -1);
+    }
+
     void missedKeptWhileIndexIsEmpty()
     {
         Env env(dt(2026, 10, 14, 16, 0));
@@ -345,6 +381,7 @@ private Q_SLOTS:
         QVERIFY(n.alarm);
         QCOMPARE(n.path, u"Dzień.md"_s);
         QCOMPARE(n.line, 3);
+        QCOMPARE(n.taskLine, -1); // stored without one (an older version, or not a task)
         QVERIFY(n.nativeId > 0);
     }
 

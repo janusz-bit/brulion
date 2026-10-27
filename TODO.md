@@ -28,9 +28,6 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
   * notatki na slajdach i PDF-ach z wykładu: rysowanie na obrazie w tle (strona PDF, slajd);
   * sprawdzić na tablecie z rysikiem (Android, Natalia) i w przeglądarce, czy nacisk rysika
     dociera do Brulionu.
-* **„Zrobione” w powiadomieniu przypomnienia** — przycisk obok „Odłóż” i „OK”, który od razu
-  oznacza zadanie z przypomnieniem jako zrobione (`[x]` z datą ✅, jak zmiana statusu w edytorze),
-  bez otwierania notatki; na Linuksie, Androidzie i Windows.
 * **Udostępnianie do Brulionu poza Androidem** — w wersji w przeglądarce cel udostępniania PWA
   (Web Share Target, jak w poprzedniej aplikacji: `archive/web-v1`), na komputerze „Otwórz
   w Brulionie” dla plików `.md`/`.txt` (wpis `.desktop` z `MimeType`, skojarzenie plików

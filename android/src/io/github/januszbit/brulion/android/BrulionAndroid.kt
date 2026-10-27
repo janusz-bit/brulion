@@ -39,6 +39,9 @@ import java.lang.ref.WeakReference
  * * app running — `onNewIntent` calls the native method [nativeActivated], which C++ registered
  *   before calling [attach]; it emits `AndroidBridge::activated` on Qt's thread.
  * Shares from other apps ([ShareActivity]) take the same two ways: [takeShare] and [nativeShared].
+ *
+ * "Zrobione" taps go the same two ways, through a persisted queue ([DoneQueue]): [nativeDoneQueued]
+ * while C++ listens, [takeDoneRequests] after its start.
  */
 object BrulionAndroid {
   private const val TAG = "BrulionAndroid"
@@ -84,6 +87,9 @@ object BrulionAndroid {
 
   /** A permission dialog was answered: the app should re-check its permissions. */
   @JvmStatic external fun nativePermissionsChanged()
+
+  /** "Zrobione" was tapped ([DoneQueue] holds it): C++ takes the queue with [takeDoneRequests]. */
+  @JvmStatic external fun nativeDoneQueued()
 
   /**
    * The ringtone picker of [pickSound] answered for [kind] (0 reminders, 1 alarms): [json] is the
@@ -327,6 +333,21 @@ object BrulionAndroid {
     }
   }
 
+  /**
+   * The "Zrobione" taps of notebook [vault] not handed over yet ([DoneQueue], also those of while
+   * Brulion was closed): a JSON array of `{key, local, path, line, title, day, vault}`, `[]` when
+   * none. Forgets them (each tap is handed out once); the taps of other notebooks stay queued.
+   * Empty [vault]: all of them.
+   */
+  @JvmStatic
+  fun takeDoneRequests(context: Context, vault: String?): String =
+    try {
+      DoneQueue.take(context, vault ?: "")
+    } catch (e: RuntimeException) {
+      Log.e(TAG, "takeDoneRequests failed", e)
+      "[]"
+    }
+
   // -----------------------------------------------------------------------------------------
   // Picked documents (imports): any thread — C++ lists picked folders on a worker thread
   // -----------------------------------------------------------------------------------------
@@ -556,6 +577,21 @@ object BrulionAndroid {
       } catch (e: UnsatisfiedLinkError) {
         Log.w(TAG, "native gesture insets callback not registered", e)
         return false
+      }
+    }
+  }
+
+  /**
+   * A "Zrobione" tap was queued ([ReminderActions.done], main thread): tells C++ when it listens;
+   * otherwise it takes the queue once a notebook is ready after its start.
+   */
+  internal fun doneQueued() {
+    synchronized(lock) {
+      if (!nativeAttached) return
+      try {
+        nativeDoneQueued()
+      } catch (e: UnsatisfiedLinkError) {
+        Log.w(TAG, "native done callback not registered", e)
       }
     }
   }

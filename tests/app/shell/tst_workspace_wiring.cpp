@@ -464,6 +464,260 @@ private Q_SLOTS:
         QCOMPARE(ws->readFile(u"Dom.md"_s), u"- [ ] Wynieść śmieci ⏰ 2026-10-14 18:00\n- [ ] Podlać storczyki ⏰ 2026-10-14 13:10\n"_s);
     }
 
+    void completeFromNotification()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        const QString note = u"Wstęp o źródłach\r\n\r\n- [ ] Zadzwonić do Żanety ⏰ 2026-10-14 14:00\r\n"
+                             u"- Kupić chleb ⏰ 2026-10-14 15:00\r\n"_s;
+        auto ws = open({{u"Dom.md"_s, note}}, nullptr, &sink);
+        QVERIFY(ws->reminders()->isRunning());
+        const QList<ScheduledNotification> upcoming = ws->reminders()->scheduler()->upcoming();
+        QCOMPARE(upcoming.size(), 2);
+        const ScheduledNotification task = upcoming.at(0);
+        const ScheduledNotification plain = upcoming.at(1);
+        QCOMPARE(task.taskLine, 2);
+        QCOMPARE(plain.taskLine, -1);
+        // The maps of QML (the missed banner's "Done").
+        QCOMPARE(ws->reminders()->upcoming().at(0).toMap().value(u"task"_s), QVariant(true));
+        QCOMPARE(ws->reminders()->upcoming().at(1).toMap().value(u"task"_s), QVariant(false));
+
+        // Not a task (no notification offers "Done" for one): nothing changes, and the user is
+        // told — the platform has closed the notification already.
+        QSignalSpy errors(ws->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        QSignalSpy completed(ws->reminders(), &brulion::shell::WorkspaceReminders::taskCompleted);
+        QVERIFY(!ws->reminders()->completeNotification(plain));
+        QCOMPARE(ws->readFile(u"Dom.md"_s), note);
+        QCOMPARE(errors.size(), 1);
+        errors.clear();
+
+        // "Done": ✅ today (as the editor's status change), the rest of the file byte for byte.
+        QVERIFY(ws->reminders()->completeNotification(task));
+        QCOMPARE(ws->readFile(u"Dom.md"_s),
+                 u"Wstęp o źródłach\r\n\r\n- [x] Zadzwonić do Żanety ⏰ 2026-10-14 14:00 ✅ 2026-10-14\r\n"
+                 u"- Kupić chleb ⏰ 2026-10-14 15:00\r\n"_s);
+        QCOMPARE(completed.size(), 1);
+        QCOMPARE(completed.first().first().toString(), u"Zadzwonić do Żanety"_s);
+        QVERIFY(errors.isEmpty());
+        // The done task's reminder is no longer planned.
+        QTRY_COMPARE(sink.lastScheduledTitles(), QStringList{u"Kupić chleb"_s});
+
+        // Done again (a second device, a second button): the reminder is gone, nothing changes.
+        QVERIFY(!ws->reminders()->completeNotification(task));
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(ws->readFile(u"Dom.md"_s).contains(u"✅ 2026-10-14\r\n"_s));
+    }
+
+    void completeFollowsTheTaskNotItsOldLine()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        auto ws = open({{u"Dom.md"_s,
+                         u"- [ ] Podlać kwiaty ⏰ 2026-10-14 14:00\n- [ ] Wynieść śmieci ⏰ 2026-10-14 14:00\n"_s}},
+                       nullptr, &sink);
+        const ScheduledNotification shown = ws->reminders()->scheduler()->upcoming().first();
+        QCOMPARE(shown.title, u"Podlać kwiaty"_s);
+
+        // Lines inserted above: the task is found on its new line; the other task of the same
+        // time stays open.
+        QVERIFY(ws->write(u"Dom.md"_s, u"# Ogród\n\n- [ ] Podlać kwiaty ⏰ 2026-10-14 14:00\n"
+                                       u"- [ ] Wynieść śmieci ⏰ 2026-10-14 14:00\n"_s));
+        QVERIFY(ws->reminders()->completeNotification(shown));
+        QCOMPARE(ws->readFile(u"Dom.md"_s), u"# Ogród\n\n- [x] Podlać kwiaty ⏰ 2026-10-14 14:00 ✅ 2026-10-14\n"
+                                            u"- [ ] Wynieść śmieci ⏰ 2026-10-14 14:00\n"_s);
+
+        // The reminder's text was edited and another task now sits on its old line: nothing is
+        // completed (the other one must not be marked done instead).
+        // (The scheduler plans again after the index change, debounced.)
+        QTRY_COMPARE(ws->reminders()->scheduler()->upcoming().value(0).title, u"Wynieść śmieci"_s);
+        const ScheduledNotification other = ws->reminders()->scheduler()->upcoming().first();
+        const QString edited =
+                u"- [ ] Zrobić zakupy ⏰ 2026-10-14 16:00\n- [ ] Wynieść śmieci i szkło ⏰ 2026-10-14 14:00\n"_s;
+        QVERIFY(ws->write(u"Dom.md"_s, edited));
+        QSignalSpy errors(ws->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        QVERIFY(!ws->reminders()->completeNotification(other));
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(errors.first().first().toString().contains(u"Wynieść śmieci"_s));
+        QCOMPARE(ws->readFile(u"Dom.md"_s), edited);
+    }
+
+    void completeReadsTheNoteNotAStaleIndex()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        QString root;
+        auto ws = open({{u"Zakupy.md"_s, u"# Zakupy\n\n- [ ] Kupić mleko ⏰ 2026-10-14 14:00\n"_s}}, &root, &sink);
+        const ScheduledNotification shown = ws->reminders()->scheduler()->upcoming().first();
+        QCOMPARE(shown.taskLine, 2);
+        QSignalSpy errors(ws->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+
+        // Another editor saved the note in place a moment ago (the vault has not seen it: no
+        // watcher event handled yet): the task moved one line down. The completion lands on the
+        // task, not on what now sits on its old line.
+        QVERIFY(writeRaw(root + u"/Zakupy.md"_s, "# Zakupy\n\n- Chleb żytni\n- [ ] Kupić mleko ⏰ 2026-10-14 14:00\n"));
+        QVERIFY(ws->reminders()->completeNotification(shown));
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s),
+                 u"# Zakupy\n\n- Chleb żytni\n- [x] Kupić mleko ⏰ 2026-10-14 14:00 ✅ 2026-10-14\n"_s);
+        QVERIFY(errors.isEmpty());
+
+        // Snoozing too: the reminder moved, another one sits on its old line.
+        QVERIFY(ws->write(u"Zakupy.md"_s, u"- [ ] Odebrać buty ⏰ 2026-10-14 15:00\n"_s));
+        QTRY_COMPARE(ws->reminders()->scheduler()->upcoming().value(0).title, u"Odebrać buty"_s);
+        const ScheduledNotification shoes = ws->reminders()->scheduler()->upcoming().first();
+        QVERIFY(writeRaw(root + u"/Zakupy.md"_s,
+                         "- [ ] Zadzwonić do Łucji ⏰ 2026-10-14 15:30\n- [ ] Odebrać buty ⏰ 2026-10-14 15:00\n"));
+        QVERIFY(ws->reminders()->snoozeNotification(shoes, 10));
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s),
+                 u"- [ ] Zadzwonić do Łucji ⏰ 2026-10-14 15:30\n- [ ] Odebrać buty ⏰ 2026-10-14 13:10\n"_s);
+
+        // The task was deleted behind the index's back: nothing is written, the user is told.
+        QTRY_COMPARE(ws->reminders()->scheduler()->upcoming().value(0).title, u"Odebrać buty"_s);
+        const ScheduledNotification snoozed = ws->reminders()->scheduler()->upcoming().first();
+        QVERIFY(writeRaw(root + u"/Zakupy.md"_s, "- [ ] Zadzwonić do Łucji ⏰ 2026-10-14 15:30\n"));
+        QVERIFY(!ws->reminders()->completeNotification(snoozed));
+        QCOMPARE(ws->readFile(u"Zakupy.md"_s), u"- [ ] Zadzwonić do Łucji ⏰ 2026-10-14 15:30\n"_s);
+        QCOMPARE(errors.size(), 1);
+        QVERIFY(errors.first().first().toString().contains(u"Odebrać buty"_s));
+    }
+
+    void doneOfAnotherNotebookOrBeforeOne()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        // Two notebooks from the same template: the same note, text and time — the same id.
+        const QHash<QString, QString> files{{u"dziennik/2026-10-14.md"_s, u"- [ ] Leki ⏰ 2026-10-14 14:00\n"_s}};
+        QString rootA;
+        auto a = open(files, &rootA, &sink);
+        // What the platform is given carries the notebook.
+        QVERIFY(!sink.scheduled.isEmpty());
+        QCOMPARE(sink.scheduled.last().value(0).vault, a->vault()->id());
+        QCOMPARE(a->reminders()->doneTarget(), a->vault()->id());
+        const ScheduledNotification fromA = sink.scheduled.last().first();
+        a.reset();
+
+        QString rootB;
+        auto b = open(files, &rootB, &sink);
+        QVERIFY(b->vault()->id() != fromA.vault);
+        QCOMPARE(b->reminders()->scheduler()->upcoming().first().id, fromA.id);
+        QSignalSpy errors(b->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        // A's notification is refused in B (B's task of the same id stays open).
+        QVERIFY(!b->reminders()->completeNotification(fromA));
+        QVERIFY(!b->reminders()->snoozeNotification(fromA, 10));
+        QCOMPARE(errors.size(), 2);
+        QVERIFY(errors.at(0).first().toString().contains(u"Leki"_s));
+        QCOMPARE(b->readFile(u"dziennik/2026-10-14.md"_s), files.value(u"dziennik/2026-10-14.md"_s));
+        // B's own is applied.
+        ScheduledNotification fromB = fromA;
+        fromB.vault = b->vault()->id();
+        QVERIFY(b->reminders()->completeNotification(fromB));
+        QVERIFY(b->readFile(u"dziennik/2026-10-14.md"_s).startsWith(u"- [x] Leki"_s));
+
+        // A request kept while a notebook indexes is dropped when it closes: the next notebook
+        // must not get it. The ready notebook is announced (Android hands over its taps then).
+        errors.clear();
+        b.reset();
+        auto c = std::make_unique<Workspace>();
+        c->setClock([this] { return m_now; });
+        c->sync()->setSyncthingDiscovery(false);
+        c->reminders()->setSink(&sink);
+        QSignalSpy cErrors(c->reminders(), &brulion::shell::WorkspaceReminders::errorOccurred);
+        QSignalSpy target(c->reminders(), &brulion::shell::WorkspaceReminders::doneTargetChanged);
+        QSignalSpy completed(c->reminders(), &brulion::shell::WorkspaceReminders::taskCompleted);
+        // No notebook at all: refused at once, with a message.
+        QVERIFY(!c->reminders()->completeNotification(fromA));
+        QCOMPARE(cErrors.size(), 1);
+        QVERIFY(c->open(rootA, rootA + u"-state"_s));
+        QVERIFY(c->reminders()->doneTarget().isEmpty());      // still indexing
+        QVERIFY(c->reminders()->completeNotification(fromA)); // kept
+        c->close();
+        QVERIFY(c->reminders()->doneTarget().isEmpty());
+        QVERIFY(c->open(rootB, rootB + u"-state"_s));
+        c->finishIndexing();
+        QCOMPARE(c->reminders()->doneTarget(), c->vault()->id());
+        QVERIFY(!target.isEmpty());
+        QCOMPARE(cErrors.size(), 1); // the kept request went with notebook A
+        QVERIFY(completed.isEmpty());
+        QVERIFY(c->readFile(u"dziennik/2026-10-14.md"_s).startsWith(u"- [x] Leki"_s));
+        c->close();
+        QVERIFY(c->reminders()->doneTarget().isEmpty());
+        // Notebook A's task is still open.
+        auto again = reopen(rootA, &sink);
+        QCOMPARE(again->readFile(u"dziennik/2026-10-14.md"_s), files.value(u"dziennik/2026-10-14.md"_s));
+    }
+
+    void completeBareBulletRecurringAndDay()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(13, 0));
+        auto ws = open({{u"Leki.md"_s, u"- [ ] Łyknąć leki\n  - ⏰ 2026-10-14 14:00\n"_s},
+                        {u"Rośliny.md"_s, u"- [ ] Zraszać paprotkę 🔁 every day ⏰ 2026-10-14 15:00\n"_s}},
+                       nullptr, &sink);
+        const QList<ScheduledNotification> upcoming = ws->reminders()->scheduler()->upcoming();
+        QCOMPARE(upcoming.at(0).title, u"Łyknąć leki"_s);
+        QCOMPARE(upcoming.at(1).title, u"Zraszać paprotkę"_s);
+
+        // A snoozed bare bullet completes its parent task; the tap's day is the ✅ date (Android:
+        // tapped yesterday while Brulion was closed).
+        QVERIFY(ws->reminders()->completeNotification(upcoming.at(0), QDate(2026, 10, 13)));
+        QCOMPARE(ws->readFile(u"Leki.md"_s), u"- [x] Łyknąć leki ✅ 2026-10-13\n  - ⏰ 2026-10-14 14:00\n"_s);
+
+        // A recurring task: its next instance goes above it, as in the editor.
+        QVERIFY(ws->reminders()->completeNotification(upcoming.at(1)));
+        const QStringList lines = ws->readFile(u"Rośliny.md"_s).split(u'\n');
+        QCOMPARE(lines.size(), 3);
+        QVERIFY2(lines.at(0).startsWith(u"- [ ] Zraszać paprotkę 🔁 every day ⏰ 2026-10-15 15:00"_s),
+                 qPrintable(lines.at(0)));
+        QCOMPARE(lines.at(1), u"- [x] Zraszać paprotkę 🔁 every day ⏰ 2026-10-14 15:00 ✅ 2026-10-14"_s);
+    }
+
+    void completeMissedAndBeforeStart()
+    {
+        FakeSink sink;
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(6, 0));
+        QString root;
+        const QString note = u"- [ ] Odebrać paczkę ⏰ 2026-10-14 07:00\n- Spacer ⏰ 2026-10-14 08:00\n"
+                             u"- [ ] Zapłacić rachunki ⏰ 2026-10-14 20:00\n"_s;
+        auto ws = open({{u"journals/2026-10-14.md"_s, note}}, &root, &sink);
+        const ScheduledNotification evening = ws->reminders()->scheduler()->upcoming().last();
+        QCOMPARE(evening.title, u"Zapłacić rachunki"_s);
+
+        // Closed until 15:00: both morning reminders are missed; the banner offers "Done" for
+        // the task's only.
+        ws.reset();
+        m_now = QDateTime(QDate(2026, 10, 14), QTime(15, 0));
+        ws = reopen(root, &sink);
+        QCOMPARE(ws->reminders()->missedCount(), 2);
+        const QVariantMap parcel = ws->reminders()->missed().at(0).toMap();
+        const QVariantMap walk = ws->reminders()->missed().at(1).toMap();
+        QCOMPARE(parcel.value(u"task"_s), QVariant(true));
+        QCOMPARE(walk.value(u"task"_s), QVariant(false));
+        QVERIFY(!ws->reminders()->complete(walk.value(u"id"_s).toString()));
+        QVERIFY(!ws->reminders()->complete(u"nie-ma-takiego"_s));
+        QVERIFY(ws->reminders()->complete(parcel.value(u"id"_s).toString()));
+        QVERIFY(ws->readFile(u"journals/2026-10-14.md"_s)
+                        .startsWith(u"- [x] Odebrać paczkę ⏰ 2026-10-14 07:00 ✅ 2026-10-14\n"_s));
+        QCOMPARE(ws->reminders()->missedCount(), 1);
+
+        // A "Done" that arrives before the notebook is indexed (Android: tapped while Brulion was
+        // closed) waits for it, then is written.
+        ws.reset();
+        auto later = std::make_unique<Workspace>();
+        later->setClock([this] { return m_now; });
+        later->sync()->setSyncthingDiscovery(false);
+        later->reminders()->setSink(&sink);
+        QSignalSpy completed(later->reminders(), &brulion::shell::WorkspaceReminders::taskCompleted);
+        QVERIFY(later->open(root, root + u"-state"_s));
+        QVERIFY(!later->reminders()->isRunning());
+        QVERIFY(later->reminders()->completeNotification(evening, QDate(2026, 10, 14)));
+        QVERIFY(completed.isEmpty());
+        later->finishIndexing();
+        QVERIFY(later->reminders()->isRunning());
+        QCOMPARE(completed.size(), 1);
+        QVERIFY(later->readFile(u"journals/2026-10-14.md"_s)
+                        .endsWith(u"- [x] Zapłacić rachunki ⏰ 2026-10-14 20:00 ✅ 2026-10-14\n"_s));
+    }
+
     void remindersThroughTheSink()
     {
         const QString note = u"- [ ] Odebrać paczkę ⏰ 2026-10-14 07:00\n"

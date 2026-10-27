@@ -111,6 +111,16 @@ public:
     QByteArray takeShare();
 
     /**
+     * The "Zrobione" taps on reminder notifications and the alarm screen not handed over yet
+     * (queued by DoneQueue.kt — while Brulion was closed, too): a JSON array of
+     * `{key, local, path, line, title, day, vault}` (src/app/notify/androidpayload.h). Only the
+     * taps of notebook @p vault (and those without one: reminders armed by an older version);
+     * the others stay queued. Empty @p vault: all. Each tap is handed out once;
+     * doneRequestsQueued() says when there may be new ones.
+     */
+    QJsonArray takeDoneRequests(const QString &vault = {});
+
+    /**
      * Saves @p data as @p name in the public Download folder through MediaStore (Android 10+,
      * API 29): no storage permission is needed — with scoped storage a plain file write there
      * fails without "All files access". The system adds " (1)" to a taken name (`name` of the
@@ -172,6 +182,9 @@ Q_SIGNALS:
     void shared(const QByteArray &json);
     /// A permission may have changed (dialog answered, or the app returned to the front).
     void permissionsChanged();
+    /// "Zrobione" was tapped (or the app returned to the front): takeDoneRequests() may have
+    /// some. Also emitted once after start-up, from the event loop.
+    void doneRequestsQueued();
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).
     void soundPicked(int kind, const QJsonObject &choice);
