@@ -123,7 +123,7 @@ private Q_SLOTS:
 
         // Saved as edited in the dialog, and never through quick capture's dates.
         const QVariantMap saved = app->saveShare(
-                {{u"target"_s, u"journal"_s}, {u"text"_s, pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s}});
+                {{u"target"_s, u"journal"_s}, {u"text"_s, QString(pending.value(u"text"_s).toString() + u"\nDo zrobienia"_s)}});
         QVERIFY(saved.value(u"ok"_s).toBool());
         QCOMPARE(saved.value(u"count"_s).toInt(), 1);
         QVERIFY(journal(*app).contains(
@@ -286,12 +286,13 @@ private Q_SLOTS:
         const QString outside = m_tmp.filePath(u"cudzy folder"_s);
         QVERIFY(writeFile(outside + u"/ważne.md"_s, "ważne\n"));
         app->receiveShare(
-                {{u"dir"_s, outside}, {u"files"_s, QVariantList{QVariantMap{{u"path"_s, outside + u"/ważne.md"_s}}}}});
+                {{u"dir"_s, outside}, {u"files"_s, QVariantList{QVariantMap{{u"path"_s, QString(outside + u"/ważne.md"_s)}}}}});
         app->dismissShare();
         QVERIFY(QFileInfo::exists(outside + u"/ważne.md"_s));
         QVERIFY(writeFile(app->shareInboxPath() + u"/zostaje.md"_s, "x"));
-        for (const QString &dir : {app->shareInboxPath(), app->shareInboxPath() + u"/../share-in"_s,
-                                   app->shareInboxPath() + u"/x/../.."_s}) {
+        const QStringList notCopies{app->shareInboxPath(), app->shareInboxPath() + u"/../share-in"_s,
+                                    app->shareInboxPath() + u"/x/../.."_s};
+        for (const QString &dir : notCopies) {
             app->receiveShare({{u"dir"_s, dir}, {u"text"_s, u"t"_s}});
             app->dismissShare();
         }

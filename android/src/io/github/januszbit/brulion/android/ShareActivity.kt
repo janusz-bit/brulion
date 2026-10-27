@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
+import io.github.januszbit.brulion.R
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger

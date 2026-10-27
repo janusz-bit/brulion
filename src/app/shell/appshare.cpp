@@ -38,7 +38,7 @@ QString previewOf(const QString &content)
     QString preview = lines.join(u'\n').trimmed();
     if (preview.size() > MaxChars)
         return preview.left(MaxChars) + u'…';
-    return more ? preview + u"\n…"_s : preview;
+    return more ? QString(preview + u"\n…"_s) : preview;
 }
 
 /// Remove the platform's copies of a share: only a folder inside `inbox` — the share's JSON names
