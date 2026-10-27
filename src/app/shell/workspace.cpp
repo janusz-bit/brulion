@@ -89,6 +89,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
 {
 #ifdef Q_OS_WASM
     m_dataUrlAssets = true;
+    m_webPageScheme = platform::pageScheme();
 #endif
     m_indexTimer.setInterval(kIndexIntervalMs);
     connect(&m_indexTimer, &QTimer::timeout, this, &Workspace::indexChunk);

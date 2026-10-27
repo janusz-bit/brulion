@@ -114,6 +114,12 @@ public:
         , m_idPrefix(std::move(idPrefix))
     { }
 
+    /// src of an included copy of a picture from the internet (HtmlLinks::webPicture).
+    void setWebPicture(std::function<std::optional<QString>(const QString &url)> webPicture)
+    {
+        m_webPicture = std::move(webPicture);
+    }
+
     /// Links for rendering note `notePath` (links resolved from `notePath`); embeds allowed once.
     HtmlLinks links(const VaultPath &notePath, const VaultPath &outputNote, bool allowEmbeds) const
     {
@@ -155,6 +161,7 @@ public:
             return m_attachmentUrl(*resolved);
         };
         l.tag = [this](const QString &tag) { return tagLink(tag); };
+        l.webPicture = m_webPicture;
         l.block = [=, this](const QString &id) -> std::optional<std::pair<QString, QString>> {
             const auto block = m_vault.block(id);
             if (!block)
@@ -266,6 +273,7 @@ private:
     std::function<std::optional<QString>(const VaultPath &)> m_attachmentUrl;
     std::function<QString(const QString &)> m_tagHref;
     std::function<QString(const VaultPath &)> m_idPrefix;
+    std::function<std::optional<QString>(const QString &)> m_webPicture;
 };
 
 /// URL of vault file `to` from folder `fromDir` of the site. A first segment containing ':' is
@@ -311,11 +319,25 @@ public:
         QList<FileEntry> entries;
         const QString root = paths::sanitizeFileName(vault.vaultName()) + u'/';
         const QString footer = footerText(input);
+        // Included copies of pictures from the internet: assets/web/<name>, claimed on first use.
+        QHash<QString, QString> webFiles;
+        const auto webFile = [&](const QString &url) -> std::optional<QString> {
+            if (const auto it = webFiles.constFind(url); it != webFiles.constEnd())
+                return *it;
+            const auto copy = input.webPictures.constFind(url);
+            if (copy == input.webPictures.constEnd() || copy->data.isEmpty()
+                || mimeForPictureFormat(copy->format).isEmpty())
+                return std::nullopt;
+            const QString path = claims.claim(u"assets/web/"_s + webPictureFileName(*copy));
+            webFiles.insert(url, path);
+            entries.append(FileEntry{root + path, copy->data});
+            return path;
+        };
         for (const ExportVault::Note *n : orderedNotes(vault)) {
             const QString file = htmlFiles.value(n->path);
             const QString dir = paths::dirname(file);
             const auto href = [&, dir](const QString &to) -> QString { return relativeHref(dir, to); };
-            const Site site(
+            Site site(
                     vault,
                     [&, href](const VaultPath &to, const QString &fragment) -> QString {
                         return href(htmlFiles.value(to)) + (fragment.isEmpty() ? QString() : u'#' + fragment);
@@ -326,6 +348,10 @@ public:
                         return f.isEmpty() ? QString() : href(f);
                     },
                     {});
+            site.setWebPicture([&, href](const QString &url) -> std::optional<QString> {
+                const auto copy = webFile(url);
+                return copy ? std::optional<QString>(href(*copy)) : std::nullopt;
+            });
             QString header =
                     u"<a href=\""_s + esc(href(u"index.html"_s)) + u"\">"_s + esc(vault.vaultName()) + u"</a>"_s;
             for (const QString &segment : paths::dirname(n->path).split(u'/', Qt::SkipEmptyParts))
@@ -409,7 +435,7 @@ public:
         QHash<VaultPath, QString> anchors;
         for (qsizetype i = 0; i < notes.size(); ++i)
             anchors.insert(notes[i]->path, u"n"_s + QString::number(i + 1));
-        const Site site(
+        Site site(
                 vault,
                 [&](const VaultPath &to, const QString &fragment) -> QString {
                     return u'#' + (fragment.isEmpty() ? anchors.value(to) : fragment);
@@ -425,6 +451,19 @@ public:
                     return u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(a->data.toBase64());
                 },
                 {}, [&](const VaultPath &path) -> QString { return anchors.value(path) + u'-'; });
+        // Included copies of pictures from the internet: data: URIs of their bytes (only picture
+        // types: a copy is never a document that could run scripts).
+        QHash<QString, QString> webUris;
+        site.setWebPicture([&](const QString &url) -> std::optional<QString> {
+            if (const auto it = webUris.constFind(url); it != webUris.constEnd())
+                return *it;
+            const auto copy = input.webPictures.constFind(url);
+            const QString mime =
+                    copy == input.webPictures.constEnd() ? QString() : mimeForPictureFormat(copy->format);
+            if (mime.isEmpty() || copy->data.isEmpty())
+                return std::nullopt;
+            return *webUris.insert(url, u"data:"_s + mime + u";base64,"_s + QString::fromLatin1(copy->data.toBase64()));
+        });
         QStringList toc;
         QString sections;
         for (const ExportVault::Note *n : notes) {

@@ -33,6 +33,7 @@ constexpr auto kEditorFontSize = "editor/fontSize";
 constexpr auto kEditorWidth = "editor/maxWidth";
 constexpr auto kEditorSource = "editor/sourceMode";
 constexpr auto kWebPictures = "editor/webPicturesShown";
+constexpr auto kExportWebPictures = "export/webPictures";
 constexpr auto kCurrentVault = "vaults/current";
 constexpr auto kRecentVaults = "vaults/recent";
 constexpr auto kCloseToTray = "app/closeToTray";
@@ -274,6 +275,18 @@ void AppSettings::setWebPicturesShown(bool on)
 {
     if (store(key(kWebPictures), on, webPicturesShown()))
         Q_EMIT webPicturesShownChanged();
+}
+
+QString AppSettings::exportWebPictures() const
+{
+    return m_settings->value(key(kExportWebPictures)).toString() == u"include" ? u"include"_s : u"link"_s;
+}
+
+void AppSettings::setExportWebPictures(const QString &mode)
+{
+    const QString clean = mode == u"include" ? mode : u"link"_s;
+    if (store(key(kExportWebPictures), clean, exportWebPictures()))
+        Q_EMIT exportWebPicturesChanged();
 }
 
 // ---- Vaults ---------------------------------------------------------------------------------

@@ -709,10 +709,12 @@ FocusScope {
         if (!controller || spanRefuses())
             return
         const r = controller.pasteOverSelection()
-        if (r.row < 0)
+        if (r.row < 0) {
             notice(qsTr("Nothing to paste"), "info")
-        else
+        } else {
             ensureRowVisible(r.row)
+            offerPastedPictures(r)
+        }
     }
     /// Copy the exact characters [from, to) of the edited block `edit` (Ctrl+C, Ctrl+X, the text
     /// menu: TextEdit's own copy turns no-break spaces into spaces); `cut` removes them.
@@ -738,7 +740,45 @@ FocusScope {
             return false
         if (edit.preeditText !== "")
             EditorInput.commitPreedit(edit)
-        return controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd).row >= 0
+        const r = controller.pasteClipboard(edit.row, edit.selectionStart, edit.selectionEnd)
+        if (r.row < 0)
+            return false
+        offerPastedPictures(r)
+        return true
+    }
+    /// Pictures from the internet a paste brought (PageController.pasteClipboard): a picture's
+    /// address alone (a browser's "Kopiuj adres obrazu") — "Zapisz w notatniku" makes it the
+    /// picture and stores it in the notebook (urlToPicture); pictures of pasted HTML — stored
+    /// on "Zapisz w notatniku" (downloadWebPictures). Offered on a toast; nothing is fetched before.
+    function offerPastedPictures(r) {
+        const ctl = controller
+        if (!ctl || !r)
+            return
+        const path = ctl.path
+        const samePage = () => controller === ctl && ctl.path === path
+        if (r.pictureUrl) {
+            const row = r.row, from = r.pictureFrom, to = r.pictureTo, url = r.pictureUrl
+            notice(qsTr("Picture address pasted"), "info", {
+                text: qsTr("Save to notebook"),
+                run: () => {
+                    if (!samePage() || ctl.urlToPicture(row, from, to, url, true).row < 0)
+                        notice(qsTr("Not changed: the address was edited since"), "info")
+                }
+            })
+        } else if (r.webPictures && r.webPictures.length > 0) {
+            const urls = r.webPictures
+            notice(qsTr("Pasted %n picture(s) from the internet", "", urls.length), "info", {
+                text: qsTr("Save to notebook"),
+                run: () => {
+                    if (!samePage()) {
+                        notice(qsTr("Open that page again to save its pictures"), "info")
+                        return
+                    }
+                    for (let i = 0; i < urls.length; ++i)
+                        downloadWebPictures(urls[i])
+                }
+            })
+        }
     }
 
     /// The row drawn at (x, y) of the list's content item; -1 when none (the header, the footer, a
@@ -2126,8 +2166,8 @@ FocusScope {
         else if (count === 0 && !url)
             notice(qsTr("This page has no pictures from the internet"), "info")
     }
-    /// WebPictureMenu for a shown picture from the internet (EmbedView: a click, right-click or
-    /// long press on it). Created when first opened.
+    /// WebPictureMenu for a shown picture from the internet (EmbedView: a right-click or long
+    /// press on it; "⋯" in its viewer). Created when first opened.
     property WebPictureMenu webPictureMenu: null
     property string webPictureMenuUrl: ""
     property int webPictureMenuRow: -1
@@ -2141,15 +2181,46 @@ FocusScope {
         webPictureMenuUrl = url
         webPictureMenuRow = row
         webPictureMenu.host = host
+        webPictureMenu.canView = !(webPictureViewer && webPictureViewer.visible)
         webPictureMenu.bottomMargin = menuBottomMargin()
         webPictureMenu.popup(item, x, y)
+    }
+    /// WebPictureViewer: a shown picture from the internet on its own (EmbedView: a click on it;
+    /// "Powiększ" in its menu). `picture` is its embed. Created when first opened.
+    property WebPictureViewer webPictureViewer: null
+    property int webPictureViewerRow: -1
+    function openWebPictureViewer(row, picture) {
+        if (!controller || !picture || picture.state !== "ready")
+            return
+        if (!webPictureViewer)
+            webPictureViewer = webPictureViewerComponent.createObject(editor) as WebPictureViewer
+        menuAbove = null
+        closeSuggestions()
+        webPictureViewerRow = row
+        webPictureViewer.picture = picture
+        webPictureViewer.open()
+    }
+    /// The embed of the picture from the internet `url` in row `row` ({} when not shown there).
+    function webPictureEmbed(row, url) {
+        const item = list.itemAtIndex(row) as BlockDelegate
+        const embeds = item && item.embeds ? item.embeds : []
+        for (let i = 0; i < embeds.length; ++i) {
+            if (embeds[i].web && embeds[i].target === url)
+                return embeds[i]
+        }
+        return ({})
     }
     function chooseWebPictureAction(action) {
         const url = webPictureMenuUrl
         if (!controller || url === "")
             return
         switch (action) {
-        case "download": downloadWebPictures(url); break
+        case "view": openWebPictureViewer(webPictureMenuRow, webPictureEmbed(webPictureMenuRow, url)); break
+        case "download":
+            downloadWebPictures(url)
+            if (webPictureViewer)
+                webPictureViewer.close()
+            break
         case "open": controller.activateLink(webPictureMenuRow, "ext:" + url, false); break
         case "copy":
             if (controller.copyWebPictureUrl(url))
@@ -2163,6 +2234,22 @@ FocusScope {
         id: webPictureMenuComponent
         WebPictureMenu {
             onChosen: (action) => editor.chooseWebPictureAction(action)
+        }
+    }
+    Component {
+        id: webPictureViewerComponent
+        WebPictureViewer {
+            id: pictureViewer
+            onSaveRequested: {
+                const url = pictureViewer.picture ? pictureViewer.picture.target : ""
+                pictureViewer.close()
+                if (url)
+                    editor.downloadWebPictures(url)
+            }
+            onMenuRequested: (item) => {
+                const p = pictureViewer.picture || {}
+                editor.openWebPictureMenu(editor.webPictureViewerRow, p.target || "", p.host || "", item, 0, item.height)
+            }
         }
     }
 

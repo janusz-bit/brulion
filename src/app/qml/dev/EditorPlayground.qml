@@ -1129,7 +1129,7 @@ ApplicationWindow {
                 check(img !== null && img.sourceSize.width === 1024 && img.sourceSize.height === 420,
                       "an SVG from the internet is drawn to fit, not at 2048 × 2048: "
                       + (img ? img.sourceSize.width + "×" + img.sourceSize.height : "-"))
-                // A real right-click when QtTest is there (TestEvent), else the signal itself.
+                // Real clicks when QtTest is there (TestEvent), else the signals themselves.
                 if (!window.webEvents) {
                     try {
                         window.webEvents = Qt.createQmlObject('import QtTest; TestEvent {}', window, "webEvents")
@@ -1137,6 +1137,40 @@ ApplicationWindow {
                         window.webEvents = null
                     }
                 }
+                // A click opens the picture on its own (the viewer), not its menu.
+                if (frame && window.webEvents)
+                    window.webEvents.mouseClick(frame, frame.width / 2, frame.height / 2, Qt.LeftButton, Qt.NoModifier, -1)
+                else if (item && item.embeds.length > 0)
+                    item.embedView.webOpen(item.embeds[0])
+                window.waits = 0
+            },
+            () => {
+                const viewer = editor.webPictureViewer
+                const img = viewer ? window.findItem(viewer.contentItem, "webPictureViewerImage") as Image : null
+                const ready = viewer !== null && viewer.visible && img !== null && img.status === Image.Ready
+                if (!ready && window.waits++ < 2 * window.waitLimit) {
+                    window.stepIndex -= 1
+                    return
+                }
+                check(ready && img.source.toString().startsWith("file:"),
+                      "a click on the picture opens it in the viewer, from the cache: " + (img ? img.source : "-"))
+                const name = viewer ? window.findItem(viewer.contentItem, "webPictureViewerName") as Text : null
+                check(name !== null && name.text.indexOf("example.com") >= 0, "the viewer names the site: " + (name ? name.text : "-"))
+                check(editor.webPictureMenu === null || !editor.webPictureMenu.visible, "and no menu opens")
+                // An SVG fills the window (drawn to fit, its shape kept).
+                check(img !== null && Math.abs(img.width / img.height - 3) < 0.1 && img.width > 300,
+                      "the viewer draws the SVG fitted with its shape: " + (img ? img.width + "×" + img.height : "-"))
+                const close = viewer ? window.findItem(viewer.contentItem, "webPictureViewerClose") : null
+                if (close)
+                    close.clicked()
+                else if (viewer)
+                    viewer.close()
+            },
+            () => {
+                check(editor.webPictureViewer !== null && !editor.webPictureViewer.visible, "“Zamknij” closes the viewer")
+                const item = editor.listView.itemAtIndex(window.realRow) as BlockDelegate
+                const frame = item ? window.findItem(item.embedView, "embedPicture") : null
+                // A right-click: the picture's menu.
                 if (frame && window.webEvents)
                     window.webEvents.mouseClick(frame, frame.width / 2, frame.height / 2, Qt.RightButton, Qt.NoModifier, -1)
                 else if (item)
@@ -1152,6 +1186,9 @@ ApplicationWindow {
                       && first.text.indexOf("example.com") >= 0 && menu.itemAt(1) !== null
                       && menu.itemAt(1).objectName === "webPictureHostLine",
                       "the menu's first line names the site: " + (first ? first.text : "-"))
+                const view = menu ? menu.itemAt(2) as BMenuItem : null
+                check(view !== null && view.objectName === "webPictureView" && view.visible && view.enabled,
+                      "the menu offers the viewer too (“Powiększ”)")
                 const save = editor.webPictureMenu ? window.findItem(editor.webPictureMenu.contentItem, "webPictureDownload") : null
                 if (save)
                     save.triggered()

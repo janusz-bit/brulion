@@ -7,6 +7,9 @@
 #include "editorhost.h"
 
 #include "markdown/blockclipboard.h"
+#include "markdown/inline.h"
+#include "util/paths.h"
+#include "webpicture/webpicture.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -882,17 +885,81 @@ QString PageController::clipboardText() const
     return text;
 }
 
+bool PageController::isPictureAddress(const QString &text)
+{
+    if (text.isEmpty() || std::any_of(text.cbegin(), text.cend(), [](QChar c) { return c.isSpace(); }))
+        return false;
+    const QUrl url = webpicture::webUrl(text);
+    return url.isValid() && paths::isPicturePath(url.path());
+}
+
+void PageController::notePastedPictures(QVariantMap &out, const QStringList &before, const QString &pasted) const
+{
+    if (isOwnCopy(pasted))
+        return; // moved or copied in this app: nothing new to offer
+    QStringList added;
+    for (const QString &url : webPictureUrls()) {
+        if (!before.contains(url))
+            added.append(url);
+    }
+    if (!added.isEmpty())
+        out.insert(u"webPictures"_s, added);
+}
+
 QVariantMap PageController::pasteClipboard(int row, int from, int to)
 {
     const QString text = clipboardText();
     if (text.isEmpty() || !validRow(row))
         return {{u"row"_s, -1}, {u"cursor"_s, -1}};
-    return pasteText(row, from, to, text);
+    const QStringList before = webPictureUrls();
+    const bool showsPictures = showsEmbeds(m_model->shapeAt(row).view);
+    QVariantMap out = pasteText(row, from, to, text);
+    const int pastedRow = out.value(u"row"_s).toInt();
+    if (pastedRow < 0)
+        return out;
+    // A browser's "Kopiuj adres obrazu": the address alone, as a bare URL in the text. The editor
+    // offers it as a picture (urlToPicture()); the address stays what was pasted until then.
+    const QString address = text.trimmed();
+    QString markdown = text;
+    while (markdown.endsWith(u'\n') || markdown.endsWith(u'\r'))
+        markdown.chop(1);
+    if (showsPictures && pastedRow == row && !markdown.contains(u'\n') && isPictureAddress(address)) {
+        const int tail = int(markdown.size() - (markdown.lastIndexOf(address) + address.size()));
+        const int urlTo = out.value(u"cursor"_s).toInt() - tail;
+        const int urlFrom = urlTo - int(address.size());
+        const QString edit = m_model->editTextAt(row);
+        // Only where the text reads it as a bare address of its own: not in a link (`![](…)`,
+        // `[x](…)`: it is one already), an autolink `<…>`, inline code, a comment or a formula.
+        bool bare = false;
+        if (urlFrom >= 0 && edit.mid(urlFrom, address.size()) == address) {
+            for (const Link &link : markdown::extractInline(edit).links) {
+                if (link.kind == LinkKind::Url && link.from == urlFrom && link.to == urlTo)
+                    bare = true;
+                else if (link.from < urlTo && link.to > urlFrom) {
+                    bare = false;
+                    break;
+                }
+            }
+        }
+        if (bare) {
+            out.insert(u"pictureUrl"_s, address);
+            out.insert(u"pictureFrom"_s, urlFrom);
+            out.insert(u"pictureTo"_s, urlTo);
+            return out;
+        }
+    }
+    notePastedPictures(out, before, text);
+    return out;
 }
 
 QVariantMap PageController::pasteOverSelection()
 {
-    return replaceSelection(clipboardText());
+    const QString text = clipboardText();
+    const QStringList before = webPictureUrls();
+    QVariantMap out = replaceSelection(text);
+    if (out.value(u"row"_s).toInt() >= 0)
+        notePastedPictures(out, before, text);
+    return out;
 }
 
 } // namespace brulion::editor

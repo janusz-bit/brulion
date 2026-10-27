@@ -460,7 +460,8 @@ public:
     /// are never replaced: selected, the paste goes in below them. One undo step; the pasted
     /// blocks are selected. Returns { row, count } (row -1: nothing pasted, nothing changed).
     Q_INVOKABLE QVariantMap replaceSelection(const QString &text);
-    /// replaceSelection() with the clipboard's text (clipboardText()).
+    /// replaceSelection() with the clipboard's text (clipboardText()); pictures from the internet
+    /// new on the page add { webPictures } as pasteClipboard() does.
     Q_INVOKABLE QVariantMap pasteOverSelection();
     /// Copy [from, to) of a row's edit text exactly (no-break spaces kept — a TextEdit's own copy
     /// turns them into spaces): in-block Ctrl+C / Ctrl+X. { ok, reason } like copySelection().
@@ -474,8 +475,21 @@ public:
     /// "" when there is no text.
     Q_INVOKABLE QString clipboardText() const;
     /// In-block Ctrl+V: pasteText() of clipboardText() into [from, to). { row, cursor }, row -1
-    /// when the clipboard has no text.
+    /// when the clipboard has no text. Pictures from the internet the paste brought (not this
+    /// app's own copy): the address of one alone (a browser's "Kopiuj adres obrazu":
+    /// isPictureAddress(), pasted as a bare URL into a block showing pictures) adds
+    /// { pictureUrl, pictureFrom, pictureTo } (where it is in the row's edit text, for
+    /// urlToPicture()); else `![](https://…)` new on the page (HTML of a web page) add
+    /// { webPictures: [url as written] } (for downloadWebPictures()).
     Q_INVOKABLE QVariantMap pasteClipboard(int row, int from, int to);
+    /// The bare address `url` at [from, to) of the row's edit text (pasteClipboard()'s
+    /// pictureUrl) as the picture `![](url)` — one undo step —, with `download` stored in the
+    /// notebook right away (insertWebPicture()). { row, cursor }; row -1 when that text is no
+    /// longer there (edited since) or `url` is no web address: nothing changes.
+    Q_INVOKABLE QVariantMap urlToPicture(int row, int from, int to, const QString &url, bool download);
+    /// `text` is an http(s) address without blanks whose path names a picture file
+    /// (paths::isPicturePath: ".jpg", ".png", ".webp"…): a picture's address by its form alone.
+    static bool isPictureAddress(const QString &text);
 
     // --- Links to this page, its headings and blocks (docs/SYNTAX.md §2 "Copied links") -----------
     /// The text of a link of `kind` to `row`:
@@ -826,6 +840,9 @@ private:
     QSet<QString> cutIdsFor(const QString &text) const;
     /// `text` is what this app put on the clipboard last (line breaks aside).
     bool isOwnCopy(const QString &text) const;
+    /// { webPictures }: the pictures from the internet on the page now and not in `before`,
+    /// unless `pasted` is this app's own copy.
+    void notePastedPictures(QVariantMap &out, const QStringList &before, const QString &pasted) const;
     /// Remember a cut of `text` from this page that took `ids` with it (cutIdsFor()).
     void recordCut(const QString &text, const QSet<QString> &ids);
     /// A block of this page has `id`.
@@ -940,6 +957,9 @@ private:
     /// Insert `inserted` (embeds) into [from, to) of a text row with blanks around it, else as a
     /// block of its own after the row (at the end for -1); { row, cursor }.
     QVariantMap insertEmbedText(int row, int from, int to, const QString &inserted, bool newBlock);
+    /// insertWebPicture(); `inPlace`: [from, to) holds the address already (urlToPicture()), it is
+    /// replaced in any block showing pictures (a quote, a callout too), never moved to a new block.
+    QVariantMap placeWebPicture(int row, int from, int to, const QString &url, bool download, bool inPlace);
     /// Store the ready (or failed) picture `url` of m_webDownloads.
     void finishWebDownload(const QString &url, bool ready);
     QString m_commandBefore;

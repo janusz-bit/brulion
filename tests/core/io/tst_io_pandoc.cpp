@@ -350,6 +350,12 @@ private Q_SLOTS:
         QTest::newRow("unsafe link") << u"[x](javascript:alert(1))"_s << u"\\[x\\](javascript:alert(1))"_s;
         QTest::newRow("image url") << u"![logo](https://example.com/l.png)"_s
                                    << u"![logo](https://example.com/l.png)"_s;
+        QTest::newRow("embedded picture url") << u"![[https://example.com/kot.jpg]]"_s
+                                              << u"![](https://example.com/kot.jpg)"_s;
+        QTest::newRow("embedded picture url with alias") << u"![[https://example.com/kot.jpg|Mój kot]]"_s
+                                                         << u"![Mój kot](https://example.com/kot.jpg)"_s;
+        QTest::newRow("embedded picture url without extension")
+                << u"![[https://example.com/zdjęcie?id=5]]"_s << u"![](https://example.com/zdjęcie?id=5)"_s;
         QTest::newRow("tag") << u"zrób #zakupy/spożywcze"_s << u"zrób [#zakupy/spożywcze]{.tag}"_s;
         QTest::newRow("math") << u"$x_1 + y$ i $$\\int f$$"_s << u"$x_1 + y$ i $$\\int f$$"_s;
         QTest::newRow("tokens") << u"📅 2026-10-20 🛫 2026-10-01 ❌ 2026-10-02 🔺"_s
@@ -365,6 +371,64 @@ private Q_SLOTS:
         QFETCH(QString, markdown);
         QFETCH(QString, pandoc);
         QCOMPARE(inlineOf(markdown).trimmed(), pandoc);
+    }
+
+    // `![[javascript:…]]` and `![[data:…]]` name files (which do not exist), never a URL.
+    void embeddedPictureSchemes_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::newRow("javascript") << u"![[javascript:alert(1).png]]"_s;
+        QTest::newRow("data") << u"![[data:image/png;base64,AAAA]]"_s;
+        QTest::newRow("ftp") << u"![[ftp://example.com/a.png]]"_s;
+    }
+    void embeddedPictureSchemes()
+    {
+        QFETCH(QString, markdown);
+        const QString out = inlineOf(markdown);
+        QVERIFY2(!out.contains(u"]("_s), qPrintable(out));
+        QVERIFY2(out.contains(u"{.missing}"_s), qPrintable(out));
+    }
+
+    // "Obrazy z internetu: dołącz kopie": the copies are files of the archive, linked relatively;
+    // pictures without a copy keep their URL.
+    void webPictureCopies()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"Strona.md"_s,
+                                 u"![kot](https://a.pl/x/kot.jpg) ![[https://b.pl/y/kot.jpg|drugi]]\n\n"
+                                 u"![łąka](https://c.pl/Zdj%C4%99cie%20%C5%82%C4%85ki.jpg) "
+                                 u"![rysunek](https://d.pl/rysunek?id=1) ![bez kopii](https://e.pl/e.png)\n\n"
+                                 u"```\n![kod](https://a.pl/x/kot.jpg)\n```\n"_s),
+                    iotest::bytes(u"assets/web/kot.jpg"_s, "local-kot")};
+        in.vaultName = u"Notatki"_s;
+        in.webPictures = {
+                {u"https://a.pl/x/kot.jpg"_s, {QByteArray("JPEG-a"), u"jpg"_s, u"kot.jpg"_s}},
+                {u"https://b.pl/y/kot.jpg"_s, {QByteArray("JPEG-b"), u"jpg"_s, u"kot.jpg"_s}},
+                {u"https://c.pl/Zdj%C4%99cie%20%C5%82%C4%85ki.jpg"_s,
+                 {QByteArray("JPEG-c"), u"jpg"_s, u"Zdjęcie łąki.jpg"_s}},
+                {u"https://d.pl/rysunek?id=1"_s, {QByteArray("<svg/>"), u"svg"_s, u"rysunek.svg"_s}},
+                {u"https://f.pl/nieużywany.png"_s, {QByteArray("PNG-f"), u"png"_s, u"nieużywany.png"_s}},
+                {u"https://e.pl/e.png"_s, {QByteArray(), u"png"_s, u"e.png"_s}}, // no bytes: no copy
+        };
+        const QList<FileEntry> entries = readZip(exportPandoc(in).data);
+        const QString doc = QString::fromUtf8(iotest::entryData(entries, u"Notatki/Notatki.md"_s));
+        QCOMPARE(iotest::entryData(entries, u"Notatki/assets/web/kot 2.jpg"_s), QByteArray("JPEG-a"));
+        QCOMPARE(iotest::entryData(entries, u"Notatki/assets/web/kot 3.jpg"_s), QByteArray("JPEG-b"));
+        QCOMPARE(iotest::entryData(entries, u"Notatki/assets/web/Zdjęcie łąki.jpg"_s), QByteArray("JPEG-c"));
+        QCOMPARE(iotest::entryData(entries, u"Notatki/assets/web/rysunek.svg"_s), QByteArray("<svg/>"));
+        QVERIFY2(doc.contains(u"![kot](assets/web/kot%202.jpg) ![drugi](assets/web/kot%203.jpg)"_s), qPrintable(doc));
+        QVERIFY2(doc.contains(u"![łąka](assets/web/Zdjęcie%20łąki.jpg)"_s), qPrintable(doc));
+        QVERIFY2(doc.contains(u"![rysunek](assets/web/rysunek.svg)"_s), qPrintable(doc));
+        QVERIFY2(doc.contains(u"![bez kopii](https://e.pl/e.png)"_s), qPrintable(doc));
+        QVERIFY2(doc.contains(u"![kod](https://a.pl/x/kot.jpg)"_s), qPrintable(doc)); // code stays code
+        const QStringList paths = iotest::entryPaths(entries);
+        QVERIFY2(!paths.join(u'\n').contains(u"nieużywany"_s), qPrintable(paths.join(u", "_s)));
+        QVERIFY(!paths.contains(u"Notatki/assets/web/e.png"_s));
+
+        // Without copies every picture keeps its URL.
+        in.webPictures.clear();
+        const QString plain = documentOf(exportPandoc(in), u"Notatki"_s);
+        QVERIFY2(plain.contains(u"![kot](https://a.pl/x/kot.jpg) ![drugi](https://b.pl/y/kot.jpg)"_s), qPrintable(plain));
     }
 
     void malformed_data()

@@ -215,6 +215,15 @@ public:
     /// the internet; webpicture::isPrivateHost by default). Such a picture is not fetched without
     /// asking, and no redirect leads there from a host of the internet.
     void setWebPictureHostCheck(std::function<bool(const QString &)> isPrivate);
+    /// `host` is this device's or its private network's (setWebPictureHostCheck()): a bulk
+    /// fetch (the export's copies) leaves it out — such a picture is fetched only when asked for.
+    bool isPrivateWebHost(const QString &host) const;
+    /// The browser build: the scheme of the page Brulion runs on ("https", "http"; "" — not in a
+    /// browser, the default elsewhere). Pictures are fetched with requests a page may send to
+    /// another site (PictureFetcher::setSimpleRequests), and a failed connection names what a
+    /// browser forbids: a site that does not allow other pages its pictures (CORS), http:// on a
+    /// https:// page (mixed content).
+    void setWebPageScheme(const QString &scheme);
     QVariantMap vaultConfig() const override;
     /// Copied blocks as HTML (io::clipboardHtml: attachments as file links — none in the browser,
     /// whose assets are data: URLs —, block references as their text); workspaceclipboard.cpp.
@@ -534,6 +543,7 @@ private:
     QString m_webPictureCacheDir;
     qint64 m_webPictureCacheBytes = 0;
     std::function<bool(const QString &)> m_webPictureHostCheck;
+    QString m_webPageScheme;
     bool m_remindersPaused = false;
     bool m_wasInactive = false; ///< the app left the foreground since the last rescan
     mutable QHash<QString, QUrl> m_dataUrls;

@@ -99,8 +99,10 @@ void PictureFetcher::start(const QUrl &url)
     request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
     request.setRawHeader("Accept", "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8");
-    request.setHeader(QNetworkRequest::UserAgentHeader, u"Mozilla/5.0"_s);
-    request.setRawHeader("Accept-Language", "*");
+    if (!m_simpleRequests) {
+        request.setHeader(QNetworkRequest::UserAgentHeader, u"Mozilla/5.0"_s);
+        request.setRawHeader("Accept-Language", "*");
+    }
     request.setTransferTimeout(m_timeoutMs);
     QNetworkReply *reply = m_manager->get(request);
     m_running.insert(reply, url);

@@ -5,21 +5,16 @@ który zostanie zrobiony w repozytorium, po prostu znika z listy.
 
 ## Funkcje
 
-* **Zdjęcia z internetu.** Dziś obraz pokazuje się tylko jako załącznik z folderu notatek
-  (`![[plan.png]]`, `![](assets/plan.png)`); `![](https://…/foto.jpg)` jest zwykłym linkiem.
-  Brakuje:
-  * wyświetlania zdjęć spod adresu `http(s)://` w edytorze, osadzeniach i widoku zdjęcia (te
-    same rozszerzenia co `paths::pictureExtensions()`, a bez rozszerzenia — po typie odpowiedzi),
-    z miejscem zarezerwowanym na czas ładowania i czytelnym błędem bez sieci;
-  * pamięci podręcznej na dysku (zdjęcie widać offline po pierwszym pobraniu, limit rozmiaru);
-    samo indeksowanie niczego nie pobiera;
-  * ustawienia „ładuj obrazy z internetu” (zawsze / po kliknięciu), bo otwarcie notatki
-    z importu lub synchronizacji zdradzałoby adres IP; limit rozmiaru i czasu pobrania, tylko
-    formaty obrazów;
-  * „Zapisz w notatkach” — pobranie zdjęcia do `assets/` i podmiana linku na lokalny (jedna
-    zmiana do cofnięcia), także przy wklejaniu obrazu lub adresu z przeglądarki;
-  * w eksporcie HTML/Pandoc wyboru: zostawić adres albo dołączyć pobraną kopię; osobno
-    sprawdzić wersję webową (CORS) i Androida.
+* **Zdjęcia z internetu — sprawdzić na telefonie i w przeglądarce.** Funkcja jest zrobiona, ale
+  nie była uruchomiona na Androidzie ani w wersji webowej (listy kontrolne: docs/ANDROID.md
+  „Obrazy z internetu”, docs/WEB.md):
+  * Android: czy `http://` działa przy `cleartextTrafficPermitted` (jeśli nie — zdecydować
+    w `network_security_config.xml`), pamięć podręczna po restarcie i offline, dotknięcie →
+    przeglądarka zdjęcia i gest Wstecz, długie przytrzymanie → menu, wklejenie adresu z Chrome,
+    eksport z „Dołącz kopie”;
+  * przeglądarka: obraz z serwera z CORS i bez (komunikat nazywa CORS), `http://` na stronie
+    `https://` (komunikat o mieszanej treści), brak zapytania wstępnego (preflight) w Firefoksie,
+    eksport z kopiami.
 * **Rysunki w notatkach** — sprawdzić, czy da się dodać rysowanie (coś jak Excalidraw
   w Obsidianie, ale wygodniejsze na tablecie). Przypadek użycia: Natalia na studia,
   z synchronizacją przez Syncthing.

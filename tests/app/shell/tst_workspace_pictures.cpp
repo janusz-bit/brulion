@@ -8,6 +8,8 @@
 
 #include "blocklistmodel.h"
 
+#include "../minihttpserver.h"
+
 #include <QBuffer>
 #include <QDateTime>
 #include <QDir>
@@ -74,50 +76,6 @@ bool noPrivateHosts(const QString &)
 {
     return false;
 }
-
-/// A tiny HTTP/1.1 server on 127.0.0.1: `responses` by path, 404 for the rest.
-class MiniHttpServer : public QObject {
-public:
-    QHash<QByteArray, QByteArray> bodies; ///< path → picture bytes
-    QSet<QByteArray> stalled;             ///< paths never answered
-    QList<QByteArray> requests;
-
-    MiniHttpServer()
-    {
-        m_server.listen(QHostAddress::LocalHost);
-        connect(&m_server, &QTcpServer::newConnection, this, [this] {
-            while (QTcpSocket *socket = m_server.nextPendingConnection()) {
-                socket->setParent(this);
-                connect(socket, &QTcpSocket::readyRead, this, [this, socket] { onData(socket); });
-            }
-        });
-    }
-    QString url(const QString &path) const { return u"http://127.0.0.1:%1%2"_s.arg(m_server.serverPort()).arg(path); }
-
-private:
-    void onData(QTcpSocket *socket)
-    {
-        QByteArray &buffer = m_buffers[socket];
-        buffer += socket->readAll();
-        if (!buffer.contains("\r\n\r\n"))
-            return;
-        const QByteArray path = buffer.left(buffer.indexOf('\n')).split(' ').value(1);
-        m_buffers.remove(socket);
-        requests.append(path);
-        if (stalled.contains(path))
-            return;
-        const auto it = bodies.constFind(path);
-        const QByteArray body = it == bodies.constEnd() ? QByteArray("<html>Nie ma</html>") : *it;
-        const QByteArray status = it == bodies.constEnd() ? "404 Not Found" : "200 OK";
-        socket->write("HTTP/1.1 " + status + "\r\nContent-Length: " + QByteArray::number(body.size())
-                      + "\r\nConnection: close\r\n\r\n" + body);
-        socket->flush();
-        socket->disconnectFromHost();
-    }
-
-    QTcpServer m_server;
-    QHash<QTcpSocket *, QByteArray> m_buffers;
-};
 
 QVariantMap embedOf(PageController &page, int row)
 {
@@ -226,6 +184,8 @@ private Q_SLOTS:
 
     void automaticFetchesLimits();
     void browserDataUrlsFollowTheCache();
+    void browserNetworkErrorsNameTheBrowsersLimits_data();
+    void browserNetworkErrorsNameTheBrowsersLimits();
 };
 
 void TestWorkspacePictures::automaticFetchesLimits()
@@ -335,6 +295,39 @@ void TestWorkspacePictures::browserDataUrlsFollowTheCache()
     QCOMPARE(embedOf(page, 0).value(u"state"_s).toString(), u"ready"_s);
     QVERIFY(embedOf(page, 0).value(u"url"_s).toUrl() != first);
     QCOMPARE(embedOf(page, 0).value(u"width"_s).toInt(), 3);
+}
+
+void TestWorkspacePictures::browserNetworkErrorsNameTheBrowsersLimits_data()
+{
+    QTest::addColumn<QString>("pageScheme");
+    QTest::addColumn<QString>("expected");
+    QTest::newRow("the app") << QString() << u"No connection to 127.0.0.1."_s;
+    QTest::newRow("a page over http: CORS") << u"http"_s << u"(CORS)"_s;
+    QTest::newRow("a page over https: mixed content") << u"https"_s << u"over http:// into a page opened over https://"_s;
+}
+
+void TestWorkspacePictures::browserNetworkErrorsNameTheBrowsersLimits()
+{
+    // A browser tells a page no reason for a failed request: Brulion names what it forbids.
+    QFETCH(QString, pageScheme);
+    QFETCH(QString, expected);
+    quint16 port = 0;
+    {
+        QTcpServer closed;
+        QVERIFY(closed.listen(QHostAddress::LocalHost));
+        port = closed.serverPort();
+    }
+    const QString url = u"http://127.0.0.1:%1/%C5%82%C4%85ka.png"_s.arg(port);
+    Workspace ws;
+    ws.setWebPictureCacheDir(m_tmp.filePath(u"cache-cors"_s));
+    ws.setWebPageScheme(pageScheme);
+    QSignalSpy changed(&ws, &Workspace::webPictureChanged);
+    ws.loadWebPicture(url);
+    QTRY_COMPARE(ws.webPicture(url).value(u"state"_s).toString(), u"failed"_s);
+    const QString error = ws.webPicture(url).value(u"error"_s).toString();
+    QVERIFY2(error.contains(expected), qPrintable(error));
+    if (!pageScheme.isEmpty())
+        QVERIFY2(error.contains(u"Save the picture in the notebook in the app"_s), qPrintable(error));
 }
 
 QTEST_MAIN(TestWorkspacePictures)

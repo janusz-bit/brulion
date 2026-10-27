@@ -155,7 +155,15 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1455"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="770"/>
+        <source>Pasted %n picture(s) from the internet</source>
+        <translation>
+            <numerusform>Pasted %n picture from the internet</numerusform>
+            <numerusform>Pasted %n pictures from the internet</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1495"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -369,7 +377,7 @@
 <context>
     <name>ExportPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="235"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="240"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -377,7 +385,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/ExportPanel.qml" line="237"/>
+        <location filename="../src/app/qml/io/ExportPanel.qml" line="242"/>
         <source>%n attachment(s)</source>
         <translation>
             <numerusform>%n attachment</numerusform>
@@ -1171,6 +1179,17 @@
         <translation>
             <numerusform>%n block</numerusform>
             <numerusform>%n blocks</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::ioviews::ExportController</name>
+    <message numerus="yes">
+        <location filename="../src/app/io/exportcontroller.cpp" line="583"/>
+        <source>%n picture(s) from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</source>
+        <translation>
+            <numerusform>%n picture from the internet was not included – the copies are limited to %1 in all; the export keeps its address.</numerusform>
+            <numerusform>%n pictures from the internet were not included – the copies are limited to %1 in all; the export keeps their addresses.</numerusform>
         </translation>
     </message>
 </context>

@@ -287,6 +287,32 @@ Uwagi:
   pokazać jeszcze raz (albo zapisać w notatniku, wtedy jest załącznikiem w IndexedDB). Limit
   to 50 MB zamiast 200 MB, a adresy `data:` zdjęć wyrzuconych z pamięci podręcznej znikają z
   pamięci razem z plikami.
+  * **CORS**: zapytanie o zdjęcie wysyła przeglądarka (Qt for WebAssembly: `emscripten_fetch`),
+    a odpowiedź dostaje strona Brulionu tylko wtedy, gdy serwer zdjęcia na to pozwala
+    (`Access-Control-Allow-Origin`; np. `upload.wikimedia.org` wysyła `*`, większość stron nie).
+    Przeglądarka nie mówi stronie, dlaczego zapytanie się nie udało, więc nieudane połączenie
+    jest opisane jako „%1 nie pozwala innym stronom pobierać swoich obrazów (CORS) albo nie ma
+    połączenia…” z radą, by zapisać zdjęcie w notatniku w aplikacji na komputerze lub telefonie
+    (`Workspace::setWebPageScheme`, ustawiane z `location.protocol` — `platform::pageScheme()`).
+  * **Mixed content**: Brulion otwarty przez `https://` nie pobierze niczego spod `http://`
+    (przeglądarka blokuje takie zapytanie) — komunikat mówi to wprost.
+  * **Proste zapytania**: w przeglądarce `PictureFetcher::setSimpleRequests` nie ustawia
+    `User-Agent` ani `Accept-Language` (przeglądarka wysyła własne; inny nagłówek wymagałby
+    zapytania wstępnego OPTIONS, na które serwery zdjęć zwykle nie odpowiadają), zostaje tylko
+    `Accept: image/…` (nagłówek „bezpieczny” dla CORS). Qt i tak odrzuca nagłówki zabronione
+    (`Cookie`, `Referer`…); ciasteczka nie są wysyłane (`withCredentials` wyłączone).
+  * **Przekierowania** wykonuje sama przeglądarka: Qt for WebAssembly nie wysyła sygnału
+    `redirected`, więc ręczne sprawdzanie przekierowań (`webpicture::redirectAllowed`) działa
+    tylko w aplikacji. Przeglądarka i tak nie przejdzie z `https://` na `http://` (mixed
+    content), a Chrome ogranicza zapytania stron z internetu do adresów sieci prywatnej
+    (Private Network Access).
+  * **Eksport** z „Dołącz kopie” pobiera brakujące zdjęcia tak samo — z tymi samymi
+    ograniczeniami CORS; zdjęcie, którego nie da się pobrać, zostaje w eksporcie adresem. Kopii
+    jest najwyżej 256 MB łącznie (pamięć karty przeglądarki; jeden plik HTML trzyma je jeszcze
+    jako tekst `data:`), dalsze zostają adresami.
+  * Do sprawdzenia w przeglądarce (build wasm z GitHub Actions): zdjęcie z
+    `upload.wikimedia.org` (CORS dozwolony) i ze strony bez CORS, adres `http://` na stronie
+    `https://` (GitHub Pages).
 
 ## Powiadomienia (przypomnienia)
 

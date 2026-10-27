@@ -66,6 +66,13 @@ private:
 /// MIME type of a file by extension ("application/octet-stream" when unknown).
 QString mimeForPath(const QString &path);
 
+/// MIME type of a picture format ("png", "jpg", "svg" — WebPictureCopy::format): "image/png",
+/// "image/jpeg", "image/svg+xml"; "" when it names no picture format.
+QString mimeForPictureFormat(const QString &format);
+/// File name of a picture copy in an export (WebPictureCopy::fileName made file-name-safe, with
+/// the format's extension when it has none; "picture.<format>" when empty).
+QString webPictureFileName(const WebPictureCopy &copy);
+
 /// Is `id` a UUID (8-4-4-4-12 hex)?
 bool isUuid(const QString &id);
 /// Logseq id of a block id: the id itself when it is a UUID, else a deterministic UUID.

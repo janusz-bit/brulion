@@ -328,7 +328,7 @@ Block editor (handled in `qml/editor/BlockEditor.qml`, executed by `PageControll
 | `allPages` | `AllPagesView` — with `path` a folder browser: its subfolders as rows, its pages (with subfolders' or not), a breadcrumb in the top bar; follows the folder's renames and moves | `path?` (folder), `sort?` |
 | `tags` / `tag` | `TagsView` — every tag (a row opens the tag's page, its trailing button the tag overview) / the tag overview (the pages and blocks carrying the tag, parent and sub-tags, "Otwórz stronę" or "Utwórz stronę", "Zadania z tym tagiem"). A tag names a page (docs/SYNTAX.md §3): a click on `#tag` anywhere asks `Workspace::navigate({view: "tag", tag})`, which `resolveRoute()` turns into the page route (`Workspace.tagPage`); routes the shell navigates to itself (`AppController.navigate`, `--route`) and `overview: true` keep the overview | `tag?`, `overview?` |
 | `sync` | `SyncView` — Przegląd, Syncthing, Nextcloud (live progress, history of runs), Konflikty (merge) | `tab?`, `copy?`, `run?` (open a run's details) |
-| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer) | `tab?`, `importer?`, `files?`, … |
+| `importExport` | `ImportExportView` — import: the source apps as tiles (`ImportSourcePicker`), the chosen one's export steps (and the phone's), pick files / a folder / a typed path, the preview, the report. The Microsoft To Do card adds `MsTodoSignIn` above the file buttons: the Application (client) ID field, the authority under "Więcej" (both remembered on the device), **Zaloguj się w Microsoft**; then a well with the device code in large monospace, **Kopiuj kod**, the address as text and an **Otwórz microsoft.com/devicelogin** button, a spinner with the progress, the minutes left and **Anuluj**; an error box explains AADSTS failures; the downloaded lists go into the usual preview. In the browser only a hint (the file from Graph Explorer). Export (`ExportPanel`): the format tiles, what to export (notebook / folder / page), for the HTML and Pandoc formats **Obrazy z internetu**: Zostaw adresy / Dołącz kopie (`ExportController.webPictures`, remembered on the device: `AppSettings.exportWebPictures`; with copies the progress says "Pobieranie obrazów z internetu (1 z 3)…" and a picture that could not be fetched is a warning of the report; pictures of this device or its private network are included only from the cache — never fetched by the export —, and past 256 MB of copies the rest keep their addresses, each case one warning), Eksportuj…, the progress card, save | `tab?`, `importer?`, `files?`, … |
 | `history` | `HistoryView` — versions of a page, diff, restore; each says what replaced it (your edit, another program, sync, an import, the command line — "Zastąpiona z wiersza poleceń (agent)" with a terminal icon —, a restored version) | `path` |
 | `trash` | `TrashView` | — |
 | `settings` | `SettingsView` — Ogólne, Edytor, Notatnik, Przypomnienia, Synchronizacja, Aplikacja (on the desktop with "Dla programistów": the switch that lets AI agents drive the running app, docs/CLI.md "Remote control") | `section?` |
@@ -618,11 +618,18 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   one under the other when they do not fit, centred; a spinner while it loads. A picture fetched
   for the first time has no size until it is there: its row changes height when the fetch ends
   (with the setting below on, also while the journal only scrolls — "Scrolling performance",
-  "Still there"); later the size comes from the cached file. A click,
-  right-click (its own `WithinBounds` handler: the block menu does not open as well) or long
-  press on the shown picture opens `WebPictureMenu` — its first, disabled line "Obraz z <host>"
-  (BMenu shows no title), then Zapisz w notatniku, Otwórz w przeglądarce (the platform's
-  handler), Kopiuj adres obrazu — instead of the picture view. "Zapisz w notatniku"
+  "Still there"); later the size comes from the cached file. A click (a tap) on the shown
+  picture opens it on its own in `WebPictureViewer` (`EmbedView.webOpen` →
+  `BlockEditor.openWebPictureViewer`), as a click on an attachment opens the picture view: a
+  modal popup over the whole window with a bar — "<host> › <file>" (plain text), the size toggle
+  (fitted ↔ its own pixels, dragged around; a click on the picture toggles too), **Zapisz w
+  notatniku**, **⋯** (the menu below, without "Powiększ") and **Zamknij**; Escape and Back
+  (Android) close it. It draws the cached copy as the picture view draws an attachment (fitting
+  only shrinks a raster picture, an SVG fills; decoded at most 2048 px a side) — no references,
+  no text view. A right-click (its own `WithinBounds` handler: the block menu does not open as
+  well) or long press opens `WebPictureMenu` — its first, disabled line "Obraz z <host>" (BMenu
+  shows no title), then Powiększ (the viewer), Zapisz w notatniku, Otwórz w przeglądarce (the
+  platform's handler), Kopiuj adres obrazu. "Zapisz w notatniku"
   (`PageController.downloadWebPictures`) fetches it when not cached — also while pictures are not
   shown —, stores the attachment and points every picture of that URL on the page at it, one undo
   step; a toast says how many were saved or which failed (a picture edited away meanwhile, or whose
@@ -638,6 +645,22 @@ A page is edited as a list of **blocks** (Logseq model), backed by `BlockDocumen
   (`AppSettings.webPicturesShown`, device-local, off) → `Workspace.webPicturesShown` (not for
   private hosts — those keep "ask" —, once a session per picture; turned off, the fetches it
   queued are cancelled and their rows ask again, "Pokaż" / "Zapisz w notatniku" go on).
+  Pasting (`PageController.pasteClipboard`, Ctrl+V and the text menu's Wklej): a picture's address
+  alone (a browser's "Kopiuj adres obrazu": an http(s) URL without blanks whose path ends with a
+  picture extension, `PageController.isPictureAddress` — by its form, nothing is fetched) goes in
+  as the bare address it is, and a toast "Wklejono adres obrazu" offers **Zapisz w notatniku**:
+  `PageController.urlToPicture` turns exactly that text into `![](url)` (only while it is still
+  there — else "Nie zmieniono: adres zmieniono w międzyczasie") and stores the picture
+  (`insertWebPicture` with `download`; in a quote or callout it is replaced where it is too).
+  Offered only where the text reads it as a bare address of its own (a `LinkKind::Url` link of
+  exactly the pasted range): pasted into a link (`![](…)`, `[x](…)`), an autolink `<…>`, inline
+  code, a formula, a comment, a code block or a block that shows no pictures, nothing is offered. HTML of a web page (`htmlToMarkdown`) brings
+  its pictures as `![alt](https://…)`; the ones new on the page (not this app's own copy, not
+  `data:` pictures) are named in the result (`webPictures`), and a toast "Wklejono %n obraz(y) z
+  internetu" offers **Zapisz w notatniku** for them (`downloadWebPictures` each; the result toast
+  as usual). The same over selected blocks (`pasteOverSelection`). Nothing is fetched before the
+  user asks. A paste that only the system's keyboard or the browser's own paste delivers
+  (the text arrives as typed text) offers nothing.
 * Mobile toolbar (`MobileEditToolbar`, touch UIs, docked on the keyboard — "On-screen keyboard";
   scrolls sideways): for a block Zmniejsz / Zwiększ wcięcie, Przenieś w górę / w dół, Zadanie (a
   tap: the next status like Ctrl+Enter; held down: the task status menu, above the toolbar), Link

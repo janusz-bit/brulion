@@ -57,6 +57,10 @@ class AppSettings : public QObject {
     /// waits for "Pokaż" — a synced or imported note cannot make the device fetch anything).
     Q_PROPERTY(
             bool webPicturesShown READ webPicturesShown WRITE setWebPicturesShown NOTIFY webPicturesShownChanged FINAL)
+    /// The export's choice for pictures from the internet (ExportController::webPictures):
+    /// "link" (default: the addresses stay) | "include" (copies in the HTML and Pandoc exports).
+    Q_PROPERTY(QString exportWebPictures READ exportWebPictures WRITE setExportWebPictures NOTIFY
+                       exportWebPicturesChanged FINAL)
 
     // ---- Vaults -------------------------------------------------------------------------
     /// Absolute path of the vault opened last ("" before the first one).
@@ -123,6 +127,8 @@ public:
     void setEditorSourceMode(bool on);
     bool webPicturesShown() const;
     void setWebPicturesShown(bool on);
+    QString exportWebPictures() const;
+    void setExportWebPictures(const QString &mode);
 
     QString currentVault() const;
     void setCurrentVault(const QString &path);
@@ -218,6 +224,7 @@ Q_SIGNALS:
     void editorWidthChanged();
     void editorSourceModeChanged();
     void webPicturesShownChanged();
+    void exportWebPicturesChanged();
     void currentVaultChanged();
     void recentVaultsChanged();
     void closeToTrayChanged();

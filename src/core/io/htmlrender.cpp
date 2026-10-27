@@ -142,6 +142,14 @@ QString HtmlRenderer::blockAnchor(const QString &id)
     return u"block-"_s + id;
 }
 
+QString HtmlRenderer::webPictureHtml(const QString &url, const QString &alt) const
+{
+    if (m_links.mediaAsLinks)
+        return mediaHtml(url, alt.isEmpty() ? url : alt, QString());
+    const std::optional<QString> copy = m_links.webPicture ? m_links.webPicture(url) : std::nullopt;
+    return u"<img src="_s + attr(copy ? *copy : url) + u" alt="_s + attr(alt) + u" loading=\"lazy\">"_s;
+}
+
 QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
 {
     if (text.isEmpty())
@@ -198,7 +206,11 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         }
         case LinkKind::Embed: {
-            if (isAttachmentTarget(l.target)) {
+            if (isWebPictureTarget(l.target)) {
+                // `![[https://…/kot.jpg]]`: a picture from the internet, like `![](https://…)` —
+                // never a missing attachment for its extension.
+                html = webPictureHtml(l.target, l.display);
+            } else if (isAttachmentTarget(l.target)) {
                 const auto url = m_links.attachment ? m_links.attachment(l.target) : std::nullopt;
                 const QString label = l.display.isEmpty() ? paths::basename(l.target) : l.display;
                 html = url ? mediaHtml(*url, label, m_links.mediaAsLinks ? QString() : l.target)
@@ -216,6 +228,8 @@ QString HtmlRenderer::renderInline(QStringView text, bool insideLink) const
             if (hasScheme(l.target)) {
                 if (!safeExternal(l.target)) {
                     html = esc(source);
+                } else if (image && isWebPictureTarget(l.target)) {
+                    html = webPictureHtml(l.target, l.display);
                 } else if (image && m_links.mediaAsLinks) {
                     html = mediaHtml(l.target, l.display.isEmpty() ? l.target : l.display, QString());
                 } else if (image) {

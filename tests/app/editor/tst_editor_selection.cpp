@@ -1046,6 +1046,215 @@ private Q_SLOTS:
         QCOMPARE(f.page.pasteClipboard(0, 0, 0).value(u"row"_s).toInt(), -1);
     }
 
+    // A browser's "Kopiuj adres obrazu": the address alone, by its form (no network).
+    void pastePictureAddress_data()
+    {
+        QTest::addColumn<QString>("pasted");
+        QTest::addColumn<QString>("url"); ///< "": not offered as a picture
+        QTest::newRow("jpg") << u"https://example.com/kot.jpg"_s << u"https://example.com/kot.jpg"_s;
+        QTest::newRow("encoded Polish name, upper case")
+                << u"https://example.com/Zdj%C4%99cie%20%C5%82%C4%85ki.PNG"_s
+                << u"https://example.com/Zdj%C4%99cie%20%C5%82%C4%85ki.PNG"_s;
+        QTest::newRow("http with a query") << u"http://x.pl/a.webp?w=200"_s << u"http://x.pl/a.webp?w=200"_s;
+        QTest::newRow("blanks around") << u"  https://example.com/łąka.gif \n"_s << u"https://example.com/łąka.gif"_s;
+        QTest::newRow("a page") << u"https://example.com/strona"_s << QString();
+        QTest::newRow("ftp") << u"ftp://x.pl/a.png"_s << QString();
+        QTest::newRow("two addresses") << u"https://x.pl/a.png https://x.pl/b.png"_s << QString();
+        QTest::newRow("in a sentence") << u"zobacz https://x.pl/a.png"_s << QString();
+        QTest::newRow("data URL") << u"data:image/png;base64,iVBORw0KGgo="_s << QString();
+        QTest::newRow("two lines") << u"https://x.pl/a.png\nhttps://x.pl/b.png"_s << QString();
+    }
+    void pastePictureAddress()
+    {
+        QFETCH(QString, pasted);
+        QFETCH(QString, url);
+        Fixture f(u"- Zdjęcie: \n- dalej\n"_s);
+        f.page.startEditing(0, 9);
+        QGuiApplication::clipboard()->setText(pasted);
+        const QVariantMap r = f.page.pasteClipboard(0, 9, 9);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(r.value(u"pictureUrl"_s).toString(), url);
+        QVERIFY(!r.contains(u"webPictures"_s));
+        if (url.isEmpty())
+            return;
+        // Pasted as it is: a bare address until the user says otherwise.
+        const int from = r.value(u"pictureFrom"_s).toInt();
+        const int to = r.value(u"pictureTo"_s).toInt();
+        QCOMPARE(f.page.blocks()->editTextAt(0).mid(from, to - from), url);
+        const QString pastedText = f.text();
+        QVERIFY(pastedText.contains(url) && !pastedText.contains(u"]("_s));
+        // "Zapisz w notatniku": the picture `![](url)`, one undo step (stored once fetched).
+        const QVariantMap done = f.page.urlToPicture(0, from, to, url, false);
+        QCOMPARE(done.value(u"row"_s).toInt(), 0);
+        QVERIFY2(f.text().startsWith(u"- Zdjęcie: "_s) && f.text().contains(u"![]("_s + url + u")"_s)
+                         && f.text().endsWith(u"\n- dalej\n"_s),
+                 qPrintable(f.text()));
+        QCOMPARE(f.page.webPictureUrls(), QStringList{url});
+        f.page.undo();
+        QCOMPARE(f.text(), pastedText);
+        QGuiApplication::clipboard()->clear();
+    }
+
+    void pastedPictureAddressIntoALinkOrCode()
+    {
+        // Into a link's parentheses: it is a picture (or a link) already.
+        Fixture f(u"- Zdjęcie ![]() i [tu]()\n- ```\n  kod\n  ```\n"_s);
+        QGuiApplication::clipboard()->setText(u"https://example.com/kot.jpg"_s);
+        f.page.startEditing(0, 12);
+        QVariantMap r = f.page.pasteClipboard(0, 12, 12);
+        QVERIFY2(f.text().startsWith(u"- Zdjęcie ![](https://example.com/kot.jpg) i"_s), qPrintable(f.text()));
+        QVERIFY(!r.contains(u"pictureUrl"_s));
+        // A code block shows no pictures.
+        r = f.page.pasteClipboard(1, 0, 0);
+        QVERIFY(!r.contains(u"pictureUrl"_s));
+        QGuiApplication::clipboard()->clear();
+    }
+
+    // Pasted where the text does not read it as a bare address: nothing is offered (accepting
+    // would rewrite code, a formula, a comment or an autolink).
+    void pastedPictureAddressNotBare_data()
+    {
+        QTest::addColumn<QString>("before"); ///< the row's text before the cursor
+        QTest::addColumn<QString>("after");  ///< after it
+        QTest::newRow("inline code") << u"Użyj `curl "_s << u"` tutaj"_s;
+        QTest::newRow("empty code span") << u"Przykład: `"_s << u"`"_s;
+        QTest::newRow("autolink") << u"Źródło <"_s << u"> koniec"_s;
+        QTest::newRow("formula") << u"Wzór $x = "_s << u"$ żółw"_s;
+        QTest::newRow("comment") << u"Ślad %%"_s << u"%% dalej"_s;
+        QTest::newRow("HTML comment") << u"Łąka <!-- "_s << u" -->"_s;
+        QTest::newRow("glued to a word") << u"zdjęcie:"_s << QString();
+    }
+    void pastedPictureAddressNotBare()
+    {
+        QFETCH(QString, before);
+        QFETCH(QString, after);
+        const QString url = u"https://example.com/kot.jpg"_s;
+        Fixture f(u"- "_s + before + after + u"\n"_s);
+        const int at = int(before.size());
+        QCOMPARE(f.page.blocks()->editTextAt(0), before + after);
+        QGuiApplication::clipboard()->setText(url);
+        f.page.startEditing(0, at);
+        const QVariantMap r = f.page.pasteClipboard(0, at, at);
+        QCOMPARE(r.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.page.blocks()->editTextAt(0), before + url + after);
+        QVERIFY2(!r.contains(u"pictureUrl"_s), qPrintable(f.text()));
+        QGuiApplication::clipboard()->clear();
+    }
+
+    // A quote and a callout show pictures: "Zapisz w notatniku" turns the pasted address into the
+    // picture where it is, not a copy in a new block below.
+    void pastePictureAddressIntoAQuote_data()
+    {
+        QTest::addColumn<QString>("page");
+        QTest::newRow("quote") << u"> Cytat: \n\nDalej\n"_s;
+        QTest::newRow("callout") << u"> [!note] Uwaga\n> Zdjęcie żółwia: \n\nDalej\n"_s;
+    }
+    void pastePictureAddressIntoAQuote()
+    {
+        QFETCH(QString, page);
+        const QString url = u"https://example.com/żółw.png"_s;
+        Fixture f(page);
+        const int rows = f.page.blocks()->rowCount();
+        const QString edit = f.page.blocks()->editTextAt(0);
+        const int at = int(edit.size());
+        QGuiApplication::clipboard()->setText(url);
+        f.page.startEditing(0, at);
+        const QVariantMap r = f.page.pasteClipboard(0, at, at);
+        QCOMPARE(r.value(u"pictureUrl"_s).toString(), url);
+        const QString pasted = f.text();
+        const QVariantMap done =
+                f.page.urlToPicture(0, r.value(u"pictureFrom"_s).toInt(), r.value(u"pictureTo"_s).toInt(), url, false);
+        QCOMPARE(done.value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.page.blocks()->rowCount(), rows);
+        QCOMPARE(f.page.blocks()->editTextAt(0), edit + u"![]("_s + url + u")"_s);
+        QCOMPARE(f.text().count(url), 1);
+        QVERIFY2(f.text().endsWith(u"\n\nDalej\n"_s), qPrintable(f.text()));
+        f.page.undo();
+        QCOMPARE(f.text(), pasted);
+        QGuiApplication::clipboard()->clear();
+    }
+
+    void urlToPictureChecksTheText()
+    {
+        Fixture f(u"- Adres https://example.com/kot.jpg i dalej\n"_s);
+        const QString url = u"https://example.com/kot.jpg"_s;
+        const QString before = f.text();
+        const int to = 6 + int(url.size());
+        // Edited since: the range no longer holds the address — nothing changes.
+        QCOMPARE(f.page.urlToPicture(0, 7, to + 1, url, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.page.urlToPicture(0, 6, to - 1, url, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.page.urlToPicture(0, 6, to, u"https://example.com/pies.jpg"_s, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.page.urlToPicture(0, 6, 400, url, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.page.urlToPicture(5, 6, to, url, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.page.urlToPicture(0, 0, 5, u"Adres"_s, false).value(u"row"_s).toInt(), -1);
+        QCOMPARE(f.text(), before);
+        QCOMPARE(f.page.urlToPicture(0, 6, to, url, false).value(u"row"_s).toInt(), 0);
+        QCOMPARE(f.text(), u"- Adres ![](https://example.com/kot.jpg) i dalej\n"_s);
+        // An address with blanks or parentheses goes between angle brackets.
+        Fixture g(u"- x\n"_s);
+        const QString odd = u"https://example.com/zdjęcie (1).jpg"_s;
+        g.page.replaceRange(0, 1, 1, u" "_s + odd);
+        QCOMPARE(g.page.urlToPicture(0, 2, 2 + int(odd.size()), odd, false).value(u"row"_s).toInt(), 0);
+        QCOMPARE(g.text(), u"- x ![](<https://example.com/zdjęcie (1).jpg>)\n"_s);
+    }
+
+    void urlToPictureStoresInTheNotebook()
+    {
+        const QByteArray png = QByteArray::fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=");
+        Fixture f(u"- \n"_s);
+        const QString url = u"https://example.com/%C5%82%C4%85ka.png"_s;
+        f.host.setWebPicture(url, png);
+        QGuiApplication::clipboard()->setText(url);
+        f.page.startEditing(0, 0);
+        const QVariantMap r = f.page.pasteClipboard(0, 0, 0);
+        QCOMPARE(r.value(u"pictureUrl"_s).toString(), url);
+        QSignalSpy done(&f.page, &PageController::webPicturesDownloaded);
+        QCOMPARE(f.page.urlToPicture(0, r.value(u"pictureFrom"_s).toInt(), r.value(u"pictureTo"_s).toInt(), url, true)
+                         .value(u"row"_s)
+                         .toInt(),
+                 0);
+        QTRY_COMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).at(0).toInt(), 1);
+        QCOMPARE(f.text(), u"- ![](assets/łąka.png)\n"_s);
+        QGuiApplication::clipboard()->clear();
+    }
+
+    // HTML of a web page with pictures: they come as `![alt](https://…)`; the paste names the new
+    // ones (not data: pictures, not those on the page already) for "Zapisz w notatniku".
+    void pastedHtmlNamesItsWebPictures()
+    {
+        Fixture f(u"- Już jest ![](https://example.com/stary.png)\n- \n"_s);
+        auto *mime = new QMimeData;
+        mime->setText(u"Kot i pies"_s);
+        mime->setHtml(u"<p>Kot <img src=\"https://example.com/kot.jpg\" alt=\"Mój kot\"> i pies "
+                      u"<img src=\"https://example.com/pies.webp\"> <img src=\"data:image/png;base64,iVBORw0KGgo=\"> "
+                      u"<img src=\"https://example.com/stary.png\"></p>"_s);
+        QGuiApplication::clipboard()->setMimeData(mime);
+        f.page.startEditing(1, 0);
+        const QVariantMap r = f.page.pasteClipboard(1, 0, 0);
+        QVERIFY2(f.text().contains(u"![Mój kot](https://example.com/kot.jpg)"_s), qPrintable(f.text()));
+        QCOMPARE(r.value(u"webPictures"_s).toStringList(),
+                 (QStringList{u"https://example.com/kot.jpg"_s, u"https://example.com/pies.webp"_s}));
+        QVERIFY(!r.contains(u"pictureUrl"_s));
+        // This app's own copy brings nothing new to offer.
+        Fixture source(u"- ![](https://example.com/inny.png)\n"_s);
+        source.page.selectRange(0, 0);
+        source.page.copySelection();
+        Fixture g(u"- \n"_s);
+        QVERIFY(!g.page.pasteClipboard(0, 0, 0).contains(u"webPictures"_s));
+        // Over selected blocks: the same.
+        mime = new QMimeData;
+        mime->setText(u"Kot"_s);
+        mime->setHtml(u"<p>Kot <img src=\"https://example.com/kot2.jpg\"></p>"_s);
+        QGuiApplication::clipboard()->setMimeData(mime);
+        Fixture h(u"- a\n- b\n"_s);
+        h.page.selectRange(1, 1);
+        QCOMPARE(h.page.pasteOverSelection().value(u"webPictures"_s).toStringList(),
+                 QStringList{u"https://example.com/kot2.jpg"_s});
+        QGuiApplication::clipboard()->clear();
+    }
+
     void ownCopiesAreTheirMarkdown_data()
     {
         QTest::addColumn<QString>("text");

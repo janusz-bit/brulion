@@ -3,6 +3,7 @@
 #include "iotest.h"
 
 #include "index/vaultindex.h"
+#include "io/clipboardhtml.h"
 #include "io/csv.h"
 #include "io/exporter.h"
 #include "io/exportutil_p.h"
@@ -614,6 +615,141 @@ private Q_SLOTS:
         QVERIFY(!html.contains(u"data:text/html"_s));
         QCOMPARE(html.count(u"href=\"data:application/octet-stream;base64,"_s), 2);
         QVERIFY(html.contains(u"<img src=\"data:image/svg+xml;base64,"_s)); // scripts never run inside <img>
+    }
+
+    // `![[https://…/kot.jpg]]` is a picture from the internet (docs/SYNTAX.md §2), not a missing
+    // attachment for its ".jpg"; `![[javascript:…]]` stays a (missing) file name.
+    void htmlEmbeddedWebPictures_data()
+    {
+        QTest::addColumn<QString>("format");
+        QTest::newRow("site") << u"html-site"_s;
+        QTest::newRow("single") << u"html-single"_s;
+    }
+    void htmlEmbeddedWebPictures()
+    {
+        QFETCH(QString, format);
+        ExportInput in;
+        in.files = {iotest::text(u"A.md"_s, u"![[https://example.com/kot.jpg]] ![[https://example.com/kot.jpg|Mój kot]] "
+                                            u"![[https://example.com/foto?id=5]] ![[javascript:alert(1).png]]"_s)};
+        const ExportedFile f = exportWith(format, in);
+        const QString html = format == u"html-site" ? textOf(readZip(f.data), u"Brulion/A.html"_s)
+                                                    : QString::fromUtf8(f.data);
+        QVERIFY2(html.contains(u"<img src=\"https://example.com/kot.jpg\" alt=\"\" loading=\"lazy\">"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"<img src=\"https://example.com/kot.jpg\" alt=\"Mój kot\" loading=\"lazy\">"_s),
+                 qPrintable(html));
+        QVERIFY2(html.contains(u"<img src=\"https://example.com/foto?id=5\""_s), qPrintable(html));
+        QVERIFY2(!html.contains(u"missing\">https"_s) && !html.contains(u"missing\">Mój kot"_s), qPrintable(html));
+        QVERIFY2(!html.contains(u"src=\"javascript"_s, Qt::CaseInsensitive), qPrintable(html));
+        QVERIFY2(html.contains(u"<span class=\"missing\">javascript:alert(1).png</span>"_s), qPrintable(html));
+    }
+
+    // The clipboard's HTML links pictures (an office app or a mail would fetch them on paste).
+    void clipboardWebPictureEmbed()
+    {
+        const QString html = io::clipboardHtml(u"![[https://example.com/kot.jpg|Mój kot]]"_s);
+        QVERIFY2(html.contains(u"href=\"https://example.com/kot.jpg\""_s) && html.contains(u"Mój kot"_s),
+                 qPrintable(html));
+        QVERIFY2(!html.contains(u"<img"_s), qPrintable(html));
+    }
+
+    // "Obrazy z internetu: dołącz kopie": copies from the device's cache instead of the URLs.
+    void htmlWebPictureCopies_data()
+    {
+        QTest::addColumn<QString>("format");
+        QTest::newRow("site") << u"html-site"_s;
+        QTest::newRow("single") << u"html-single"_s;
+    }
+    void htmlWebPictureCopies()
+    {
+        QFETCH(QString, format);
+        ExportInput in;
+        in.files = {iotest::text(u"Projekty/Dom.md"_s,
+                                 u"![kot](https://a.pl/x/kot.jpg) ![[https://b.pl/y/kot.jpg|drugi]]\n\n"
+                                 u"![łąka](https://c.pl/Zdj%C4%99cie%20%C5%82%C4%85ki.jpg) "
+                                 u"![rysunek](https://d.pl/rysunek?id=1) ![bez kopii](https://e.pl/e.png) "
+                                 u"![zły](https://g.pl/zly.html)\n\n"
+                                 u"`![kod](https://a.pl/x/kot.jpg)`\n"_s),
+                    iotest::text(u"Start.md"_s, u"Też ![kot](https://a.pl/x/kot.jpg) [[Projekty/Dom]]"_s)};
+        in.webPictures = {
+                {u"https://a.pl/x/kot.jpg"_s, {QByteArray("JPEG-a"), u"jpg"_s, u"kot.jpg"_s}},
+                {u"https://b.pl/y/kot.jpg"_s, {QByteArray("JPEG-b"), u"jpg"_s, u"kot.jpg"_s}},
+                {u"https://c.pl/Zdj%C4%99cie%20%C5%82%C4%85ki.jpg"_s,
+                 {QByteArray("JPEG-c"), u"jpg"_s, u"Zdjęcie łąki.jpg"_s}},
+                {u"https://d.pl/rysunek?id=1"_s, {QByteArray("<svg/>"), u"svg"_s, u"rysunek.svg"_s}},
+                {u"https://f.pl/nieużywany.png"_s, {QByteArray("PNG-f"), u"png"_s, u"nieużywany.png"_s}},
+                {u"https://g.pl/zly.html"_s, {QByteArray("<script>"), u"html"_s, u"zly.html"_s}}, // no picture
+        };
+        const ExportedFile f = exportWith(format, in);
+        if (format == u"html-single") {
+            const QString html = QString::fromUtf8(f.data);
+            const auto uri = [](const char *mime, const QByteArray &data) {
+                return u"src=\"data:"_s + QLatin1String(mime) + u";base64,"_s + QString::fromLatin1(data.toBase64())
+                       + u'"';
+            };
+            QCOMPARE(html.count(uri("image/jpeg", "JPEG-a")), 2); // both notes
+            QVERIFY(html.contains(uri("image/jpeg", "JPEG-b")));
+            QVERIFY(html.contains(uri("image/jpeg", "JPEG-c")));
+            QVERIFY(html.contains(uri("image/svg+xml", "<svg/>"))); // the format, not the URL, names it
+            QVERIFY(html.contains(u"src=\"https://e.pl/e.png\""_s));
+            QVERIFY(html.contains(u"src=\"https://g.pl/zly.html\""_s));
+            QVERIFY(!html.contains(u"data:text/html"_s));
+            QVERIFY(!html.contains(u"src=\"https://a.pl"_s));
+            QVERIFY(html.contains(u"<code>![kod](https://a.pl/x/kot.jpg)</code>"_s));
+            return;
+        }
+        const QList<FileEntry> entries = readZip(f.data);
+        QCOMPARE(iotest::entryData(entries, u"Brulion/assets/web/kot.jpg"_s), QByteArray("JPEG-a"));
+        QCOMPARE(iotest::entryData(entries, u"Brulion/assets/web/kot 2.jpg"_s), QByteArray("JPEG-b"));
+        QCOMPARE(iotest::entryData(entries, u"Brulion/assets/web/Zdjęcie łąki.jpg"_s), QByteArray("JPEG-c"));
+        QCOMPARE(iotest::entryData(entries, u"Brulion/assets/web/rysunek.svg"_s), QByteArray("<svg/>"));
+        const QString paths = iotest::entryPaths(entries).join(u", "_s);
+        QVERIFY2(!paths.contains(u"nieużywany"_s) && !paths.contains(u"zly"_s), qPrintable(paths));
+        const QString dom = textOf(entries, u"Brulion/Projekty/Dom.html"_s);
+        QVERIFY2(dom.contains(u"<img src=\"../assets/web/kot.jpg\" alt=\"kot\""_s), qPrintable(dom));
+        QVERIFY2(dom.contains(u"<img src=\"../assets/web/kot%202.jpg\" alt=\"drugi\""_s), qPrintable(dom));
+        QVERIFY2(dom.contains(u"<img src=\"../assets/web/Zdjęcie%20łąki.jpg\""_s), qPrintable(dom));
+        QVERIFY2(dom.contains(u"<img src=\"https://e.pl/e.png\""_s), qPrintable(dom));
+        QVERIFY2(dom.contains(u"<code>![kod](https://a.pl/x/kot.jpg)</code>"_s), qPrintable(dom));
+        const QString start = textOf(entries, u"Brulion/Start.html"_s);
+        QVERIFY2(start.contains(u"<img src=\"assets/web/kot.jpg\""_s), qPrintable(start));
+    }
+
+    void htmlWithoutWebPictureCopiesKeepsUrls()
+    {
+        ExportInput in;
+        in.files = {iotest::text(u"A.md"_s, u"![kot](https://a.pl/x/kot.jpg) ![[https://b.pl/y/kot.jpg]]"_s)};
+        const QList<FileEntry> entries = readZip(exportWith(u"html-site"_s, in).data);
+        const QString a = textOf(entries, u"Brulion/A.html"_s);
+        QVERIFY2(a.contains(u"<img src=\"https://a.pl/x/kot.jpg\""_s) && a.contains(u"<img src=\"https://b.pl/y/kot.jpg\""_s),
+                 qPrintable(a));
+        QVERIFY(!iotest::entryPaths(entries).join(u'\n').contains(u"assets/web"_s));
+    }
+
+    void webPictureTargets_data()
+    {
+        QTest::addColumn<QString>("note");
+        QTest::addColumn<QStringList>("targets");
+        QTest::newRow("none") << u"Zwykły tekst [[Strona]] ![[assets/a.png]] ![](assets/b.png)"_s << QStringList();
+        QTest::newRow("markdown and embeds, in order, once")
+                << u"![[https://b.pl/ł.png|Łąka]] ![x](https://a.pl/kot.jpg) ![y](https://a.pl/kot.jpg)"_s
+                << QStringList{u"https://b.pl/ł.png"_s, u"https://a.pl/kot.jpg"_s};
+        QTest::newRow("no extension, query") << u"- ![](http://x.pl/foto?w=200)"_s
+                                             << QStringList{u"http://x.pl/foto?w=200"_s};
+        QTest::newRow("links, other schemes and code are no pictures")
+                << u"[link](https://a.pl/a.png) https://a.pl/b.png ![](ftp://a.pl/c.png) ![](data:image/png;base64,AA) "
+                   u"`![](https://a.pl/d.png)`\n\n```\n![](https://a.pl/e.png)\n```\n"_s
+                << QStringList();
+        QTest::newRow("a table and a quote")
+                << u"| a | b |\n| --- | --- |\n| ![](https://t.pl/t.png) | x |\n\n> ![](https://q.pl/q.gif)\n"_s
+                << QStringList{u"https://t.pl/t.png"_s, u"https://q.pl/q.gif"_s};
+    }
+    void webPictureTargets()
+    {
+        QFETCH(QString, note);
+        QFETCH(QStringList, targets);
+        ExportInput in;
+        in.files = {iotest::text(u"A.md"_s, note), iotest::text(u".trash/B.md"_s, u"![](https://kosz.pl/k.png)"_s)};
+        QCOMPARE(io::webPictureTargets(in), targets);
     }
 
     void json()

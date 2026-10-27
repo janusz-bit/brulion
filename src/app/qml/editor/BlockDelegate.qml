@@ -449,6 +449,7 @@ Item {
         onShowWeb: (url) => block.controller.showWebPicture(url)
         onDownloadWeb: (url) => block.editor.downloadWebPictures(url)
         onWebMenu: (url, host, item, x, y) => block.editor.openWebPictureMenu(block.index, url, host, item, x, y)
+        onWebOpen: (picture) => block.editor.openWebPictureViewer(block.index, picture)
     }
 
     TransclusionView {

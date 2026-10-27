@@ -32,6 +32,9 @@ struct PandocLinks {
     std::function<std::optional<QString>(const QString &tag)> tag;
     /// Pandoc Markdown of an embedded page (`![[Page]]` alone in a block); empty when unavailable.
     std::function<QString(const QString &target, const QString &heading, const QString &blockId)> embed;
+    /// Destination (a relative, encoded path) of the copy of a picture from the internet (the URL
+    /// as the link target gives it) the export includes; nullopt or unset: the picture keeps its URL.
+    std::function<std::optional<QString>(const QString &url)> webPicture;
     /// Prefix of identifiers (several notes in one document need distinct ones).
     QString idPrefix;
     /// Prefix of footnote labels, for the same reason.
@@ -73,6 +76,8 @@ private:
     QString idSpan(const Block &block) const;
     QString embeddedContent(const QString &text) const;
     QString link(const QString &label, const std::optional<QString> &destination) const;
+    /// Destination of a picture from the internet: its copy's (PandocLinks::webPicture) or the URL.
+    QString webPictureDestination(const QString &url) const;
 
     PandocLinks m_links;
 };

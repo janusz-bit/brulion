@@ -3,6 +3,7 @@
 #include "util/paths.h"
 
 #include <QRegularExpression>
+#include <QUrl>
 
 #include <algorithm>
 #include <array>
@@ -264,6 +265,15 @@ bool safeExternal(QStringView url)
         return false;
     const QString scheme = url.first(colon).toString().toLower();
     return scheme == u"http" || scheme == u"https" || scheme == u"mailto";
+}
+
+bool isWebPictureTarget(QStringView target)
+{
+    const QString text = target.trimmed().toString();
+    if (!text.startsWith(u"http://", Qt::CaseInsensitive) && !text.startsWith(u"https://", Qt::CaseInsensitive))
+        return false;
+    const QUrl url(text, QUrl::TolerantMode);
+    return url.isValid() && !url.host().isEmpty();
 }
 
 MediaKind mediaKind(const QString &path)

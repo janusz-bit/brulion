@@ -6,6 +6,10 @@
 //             with its subfolders) | "page" (one page) — folders and pages bring the attachments
 //             their pages link to (also from outside the folder), so pictures are never missing
 //   summary   { files, pages, attachments, bytes, sizeText, valid, error } of the selection
+//   webPictures  "link" (pictures from the internet keep their addresses) | "include" (the HTML
+//             and Pandoc exports carry copies: the device's cached ones, the missing ones fetched
+//             first — Workspace::loadWebPicture; a failure keeps the address, with a warning);
+//             webPicturesApply: the chosen format can include them
 //   state     "idle" → prepare() → "preparing" (reading in chunks, then the exporter off the GUI
 //             thread; progress) → "ready" (fileName, sizeText, warnings) → saveTo(url) /
 //             saveInBrowser() / saveToExportFolder() → "saved" (savedTo) | "error" (errorText)
@@ -24,9 +28,11 @@
 
 #include "io/exporter.h"
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -67,6 +73,11 @@ class ExportController : public QObject {
     /// Folders of the notebook (for the folder picker), sorted.
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged FINAL)
     Q_PROPERTY(QVariantMap summary READ summary NOTIFY summaryChanged FINAL)
+    /// Pictures from the internet in the HTML and Pandoc exports: "link" (default) | "include".
+    Q_PROPERTY(QString webPictures READ webPictures WRITE setWebPictures NOTIFY optionsChanged FINAL)
+    /// The chosen format can include copies of pictures from the internet (html-site,
+    /// html-single, pandoc).
+    Q_PROPERTY(bool webPicturesApply READ webPicturesApply NOTIFY optionsChanged FINAL)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged FINAL)
     Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged FINAL)
@@ -105,6 +116,9 @@ public:
     QString pageTitle() const;
     QStringList folders() const;
     QVariantMap summary() const { return m_summary; }
+    QString webPictures() const { return m_webPictures; }
+    void setWebPictures(const QString &mode);
+    bool webPicturesApply() const;
     QString state() const { return m_state; }
     bool busy() const { return m_state == u"preparing" || m_state == u"saving"; }
     qreal progress() const { return m_progress; }
@@ -134,6 +148,9 @@ public:
     QList<io::ExportedFile> result() const { return m_result; }
     /// Files read per event loop turn (default 64; tests).
     void setReadChunk(int files) { m_readChunk = qMax(1, files); }
+    /// The most bytes of copies of pictures from the internet one export includes ("include";
+    /// default 256 MB; tests). Past it the export keeps their addresses, with a warning.
+    void setWebCopiesLimit(qint64 bytes) { m_webLimit = qMax<qint64>(0, bytes); }
     /// Clock for the export's time stamps (default: Workspace::now()).
     void setClock(std::function<QDateTime()> clock) { m_clock = std::move(clock); }
 
@@ -159,6 +176,18 @@ private:
     void updateSummary();
     ExportSelection currentSelection() const;
     void readStep();
+    /// "include": the pictures from the internet of the read notes, copies from the cache, the
+    /// missing ones fetched — then runExporter().
+    void collectWebPictures();
+    /// The copies of `urls`: from the cache in chunks (webCacheStep()), the missing ones of the
+    /// internet fetched (not those of private hosts), then finishWebPictures().
+    void fetchWebPictures(const QStringList &urls);
+    void webCacheStep();
+    void finishWebPictures();
+    void webPictureChanged(const QString &url);
+    void addWebPicture(const QString &url, const QByteArray &data, const QString &format);
+    void webPictureProgress();
+    void stopWebPictures();
     void runExporter();
     QString exportName() const;
 
@@ -186,6 +215,20 @@ private:
     qsizetype m_readIndex = 0;
     QList<io::FileEntry> m_readFiles;
     QStringList m_readWarnings;
+    QString m_webPictures = QStringLiteral("link");
+    // The copies of pictures from the internet being collected (webPictures "include").
+    QHash<QString, io::WebPictureCopy> m_webCopies;
+    QStringList m_webQueue; ///< the pictures of the notes, looked up in the cache
+    qsizetype m_webIndex = 0;
+    QStringList m_webMissing;
+    QStringList m_webPrivateHosts;
+    qint64 m_webBytes = 0;
+    qint64 m_webLimit = 256LL * 1024 * 1024;
+    qsizetype m_webOverLimit = 0;
+    QTimer m_webTimer;
+    QSet<QString> m_webPending;
+    qsizetype m_webTotal = 0;
+    QMetaObject::Connection m_webConnection;
 };
 
 } // namespace brulion::ioviews

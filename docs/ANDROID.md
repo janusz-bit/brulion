@@ -399,6 +399,42 @@ licencji jedzie w APK (`assets/licenses/OpenSSL-LICENSE.txt`, z `android/assets/
 rozpowszechnia APK (wydania na GitHubie, F-Droid), przekazuje go razem z nim. Biblioteki nie są
 modyfikowane.
 
+## Obrazy z internetu
+
+Zdjęcia spod adresów `http(s)://` w notatkach (docs/SYNTAX.md §2, przewodnik „Linki i odnośniki
+zwrotne”) pobiera sam Brulion (`webpicture::PictureFetcher` przez `QNetworkAccessManager`), nigdy
+silnik QML — tak samo jak na komputerze:
+
+* **Uprawnienia**: wystarcza `android.permission.INTERNET` z manifestu; nic nie jest zapisywane
+  poza folderem aplikacji.
+* **HTTPS** idzie przez ten sam OpenSSL co synchronizacja (sekcja wyżej), z tymi samymi
+  urzędami certyfikacji (systemowe i zainstalowane przez użytkownika).
+* **http://**: Qt łączy się własnymi gniazdami, a nie przez `HttpURLConnection` Javy, więc
+  `cleartextTrafficPermitted` z Androida 9+ (domyślnie wyłączone, nie zmieniamy go w
+  `network_security_config.xml`) nie powinno blokować zdjęć spod `http://` —
+  **do potwierdzenia na telefonie**. Gdyby blokowało, zdjęcie pokaże „Brak połączenia z …”;
+  wtedy trzeba zdecydować: `<base-config cleartextTrafficPermitted="true">` albo zostawić `http://`
+  zablokowane z czytelnym komunikatem.
+* **Pamięć podręczna** leży w `QStandardPaths::CacheLocation`/`web-pictures`
+  (`/data/data/<pakiet>/cache/web-pictures`), do 200 MB, najdawniej oglądane znikają pierwsze.
+  Android może ją wyczyścić sam (mało miejsca, „Wyczyść pamięć podręczną” w ustawieniach
+  aplikacji) — wtedy zdjęcie czeka na **Pokaż** jak nowe; kopie zapisane w notatniku są
+  załącznikami w folderze notatnika i nie znikają.
+* **Ustawienie** „Pokazuj obrazy z internetu bez pytania” (Ustawienia → Edytor) jest domyślnie
+  wyłączone i dotyczy tylko tego urządzenia.
+* **Dotyk**: stuknięcie pokazanego zdjęcia otwiera je na cały ekran (`WebPictureViewer`, gest
+  **Wstecz** zamyka), przytrzymanie — menu (Powiększ, Zapisz w notatniku, Otwórz w przeglądarce,
+  Kopiuj adres obrazu); „Otwórz w przeglądarce” oddaje adres systemowi (`QDesktopServices`).
+* **Wklejanie**: „Kopiuj adres obrazu” w Chrome i wklejenie przez **Wklej** z menu tekstu
+  Brulionu proponuje „Zapisz w notatniku”; wklejenie z klawiatury systemowej (jej schowek wpisuje
+  tekst jak pisanie) wstawia sam adres bez propozycji.
+
+Do sprawdzenia na telefonie (APK z GitHub Actions — tu nie było urządzenia): zdjęcie spod
+`https://` i spod `http://`, pamięć podręczna po ponownym uruchomieniu i bez sieci, przytrzymanie →
+menu, „Otwórz w przeglądarce”, stuknięcie → powiększenie (dopasowane / rzeczywisty rozmiar,
+przesuwanie palcem) i Wstecz, wklejenie adresu z Chrome przez menu tekstu, eksport HTML z
+„Dołącz kopie”.
+
 ## Budowanie APK
 
 Całość robi `scripts/android-build.sh` (lokalnie i w GitHub Actions): doinstalowuje brakujące

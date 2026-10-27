@@ -9,6 +9,7 @@
 #include "index/vaultindex.h"
 #include "util/paths.h"
 #include "vault/vault.h"
+#include "webpicture/webpicture.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -117,6 +118,9 @@ ExportController::ExportController(QObject *parent)
     m_readTimer.setSingleShot(true);
     m_readTimer.setInterval(0);
     connect(&m_readTimer, &QTimer::timeout, this, &ExportController::readStep);
+    m_webTimer.setSingleShot(true);
+    m_webTimer.setInterval(0);
+    connect(&m_webTimer, &QTimer::timeout, this, &ExportController::webCacheStep);
     connect(this, &ExportController::optionsChanged, &m_summaryTimer, qOverload<>(&QTimer::start));
     // Switching the UI language installs another translator: the translated lists follow.
     if (QCoreApplication *app = QCoreApplication::instance())
@@ -210,6 +214,21 @@ void ExportController::setFormat(const QString &format)
     m_format = format;
     discard();
     Q_EMIT optionsChanged();
+}
+
+void ExportController::setWebPictures(const QString &mode)
+{
+    const QString clean = mode == u"include" ? mode : u"link"_s;
+    if (clean == m_webPictures)
+        return;
+    m_webPictures = clean;
+    discard();
+    Q_EMIT optionsChanged();
+}
+
+bool ExportController::webPicturesApply() const
+{
+    return m_format == u"html-site" || m_format == u"html-single" || m_format == u"pandoc";
 }
 
 void ExportController::setScope(const QString &scope)
@@ -423,7 +442,168 @@ void ExportController::readStep()
         m_readTimer.start();
         return;
     }
+    collectWebPictures();
+}
+
+// ---- Pictures from the internet ("include") ---------------------------------------------------------
+
+void ExportController::collectWebPictures()
+{
+    m_webCopies.clear();
+    if (m_webPictures != u"include" || !webPicturesApply() || !m_workspace) {
+        runExporter();
+        return;
+    }
+    io::ExportInput input;
+    input.files = m_readFiles;
+    input.config = m_workspace->vault() ? m_workspace->vault()->config() : VaultConfig();
+    setProgress(-1, tr("Looking for pictures from the internet…"));
+    const int generation = m_generation;
+    // Parsing every note: off the GUI thread.
+    runInBackground<QStringList>(
+            this, [input] { return io::webPictureTargets(input); },
+            [this, generation](QStringList urls) {
+                if (generation != m_generation || m_state != u"preparing")
+                    return;
+                fetchWebPictures(urls);
+            });
+}
+
+void ExportController::fetchWebPictures(const QStringList &urls)
+{
+    m_webQueue = urls;
+    m_webIndex = 0;
+    m_webMissing.clear();
+    m_webPrivateHosts.clear();
+    m_webBytes = 0;
+    m_webOverLimit = 0;
+    m_webTimer.start();
+}
+
+void ExportController::webCacheStep()
+{
+    if (m_state != u"preparing" || !m_workspace) {
+        m_webQueue.clear();
+        return;
+    }
+    // The cached copies, read a few per event loop turn like the notes (each may be megabytes).
+    int read = 0;
+    while (m_webIndex < m_webQueue.size() && read < m_readChunk) {
+        const QString url = m_webQueue.at(m_webIndex++);
+        ++read;
+        QString format;
+        const QByteArray data = m_workspace->webPictureData(url, &format);
+        if (!data.isEmpty() && !format.isEmpty()) {
+            addWebPicture(url, data, format);
+            continue;
+        }
+        const QString host = webpicture::webUrl(url).host();
+        if (m_workspace->isPrivateWebHost(host)) {
+            // This device or its network: fetched only when the user asks for that picture, never
+            // because a note (synced, imported) names it.
+            if (!m_webPrivateHosts.contains(host))
+                m_webPrivateHosts.append(host);
+            continue;
+        }
+        if (m_webBytes >= m_webLimit) {
+            ++m_webOverLimit;
+            continue;
+        }
+        m_webMissing.append(url);
+    }
+    if (m_webIndex < m_webQueue.size()) {
+        m_webTimer.start();
+        return;
+    }
+    m_webQueue.clear();
+    if (!m_webPrivateHosts.isEmpty())
+        m_readWarnings.append(tr("Pictures from this device or its network (%1) were not fetched – the export keeps "
+                                 "their addresses. Show them in the note first to include them.")
+                                      .arg(m_webPrivateHosts.join(u", "_s)));
+    if (m_webMissing.isEmpty()) {
+        finishWebPictures();
+        return;
+    }
+    // The user asked for copies: the missing ones fetched like "Zapisz w notatniku".
+    const QStringList missing = std::exchange(m_webMissing, {});
+    m_webPending = QSet<QString>(missing.cbegin(), missing.cend());
+    m_webTotal = m_webPending.size();
+    m_webConnection = connect(m_workspace, &shell::Workspace::webPictureChanged, this,
+                              &ExportController::webPictureChanged);
+    webPictureProgress();
+    for (const QString &url : missing)
+        m_workspace->loadWebPicture(url, true);
+}
+
+void ExportController::webPictureChanged(const QString &url)
+{
+    if (!m_webPending.contains(url) || m_state != u"preparing" || !m_workspace)
+        return;
+    const QVariantMap picture = m_workspace->webPicture(url);
+    const QString state = picture.value(u"state"_s).toString();
+    if (state == u"loading")
+        return;
+    QString format;
+    const QByteArray data = state == u"ready" ? m_workspace->webPictureData(url, &format) : QByteArray();
+    if (!data.isEmpty() && !format.isEmpty()) {
+        addWebPicture(url, data, format);
+    } else {
+        const QString host = webpicture::webUrl(url).host();
+        const QString error = picture.value(u"error"_s).toString();
+        m_readWarnings.append(error.isEmpty()
+                                      ? tr("The picture from %1 was not included – the export keeps its address.").arg(host)
+                                      : tr("The picture from %1 was not included (%2) – the export keeps its address.")
+                                                .arg(host, error));
+    }
+    m_webPending.remove(url);
+    if (!m_webPending.isEmpty()) {
+        webPictureProgress();
+        return;
+    }
+    stopWebPictures();
+    finishWebPictures();
+}
+
+void ExportController::addWebPicture(const QString &url, const QByteArray &data, const QString &format)
+{
+    // All copies are held until the exporter has run (and html-single makes text of them): a
+    // notebook with hundreds of large pictures keeps the rest as addresses instead of running out
+    // of memory.
+    if (m_webBytes + data.size() > m_webLimit) {
+        ++m_webOverLimit;
+        return;
+    }
+    m_webBytes += data.size();
+    m_webCopies.insert(url, io::WebPictureCopy{data, format, webpicture::attachmentName(webpicture::webUrl(url), format)});
+}
+
+void ExportController::finishWebPictures()
+{
+    if (m_webOverLimit > 0)
+        m_readWarnings.append(tr("%n picture(s) from the internet were not included – the copies are limited to %1 "
+                                 "in all; the export keeps their addresses.",
+                                 nullptr, int(m_webOverLimit))
+                                      .arg(QLocale().formattedDataSize(m_webLimit)));
+    m_webOverLimit = 0;
     runExporter();
+}
+
+void ExportController::webPictureProgress()
+{
+    const qsizetype done = m_webTotal - m_webPending.size();
+    setProgress(0.7 + (m_webTotal > 0 ? 0.2 * qreal(done) / qreal(m_webTotal) : 0.2),
+                tr("Fetching pictures from the internet (%1 of %2)…").arg(done + 1).arg(m_webTotal));
+}
+
+void ExportController::stopWebPictures()
+{
+    m_webTimer.stop();
+    m_webQueue.clear();
+    m_webMissing.clear();
+    if (m_webConnection)
+        disconnect(m_webConnection);
+    m_webConnection = {};
+    m_webPending.clear();
 }
 
 void ExportController::runExporter()
@@ -438,6 +618,7 @@ void ExportController::runExporter()
     input.config = m_workspace->vault()->config();
     input.vaultName = exportName();
     input.now = m_clock ? m_clock() : m_workspace->now();
+    input.webPictures = std::exchange(m_webCopies, {});
     m_readQueue.clear();
     setProgress(-1, tr("Creating “%1”…").arg(exporter->name()));
     const int generation = m_generation;
@@ -552,6 +733,8 @@ void ExportController::discard()
     if (m_state == u"preparing")
         ++m_generation;
     m_readTimer.stop();
+    stopWebPictures();
+    m_webCopies.clear();
     m_readQueue.clear();
     m_readFiles.clear();
     m_result.clear();

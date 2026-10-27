@@ -7,12 +7,23 @@
 
 #include <QByteArray>
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
 #include <QStringView>
 
 namespace brulion::io {
+
+/// A copy of a picture from the internet that an export includes instead of the picture's URL
+/// (the app takes it from the device's cache: exporters never touch the network).
+struct WebPictureCopy {
+    QByteArray data;
+    /// The picture's format by its bytes ("png", "jpg", "svg"… — webpicture::sniffFormat).
+    QString format;
+    /// File name of the copy in the export ("kot.jpg"; made unique and file-name-safe).
+    QString fileName;
+};
 
 /// What to export.
 struct ExportInput {
@@ -25,6 +36,11 @@ struct ExportInput {
     /// Local time of the export: file names, ZIP timestamps, iCalendar DTSTAMP, JSON exportedAt.
     /// Exporters never read the clock.
     QDateTime now;
+    /// Pictures from the internet that the HTML and Pandoc exports include as files ("html-site",
+    /// "pandoc": `assets/web/<fileName>`; "html-single": data: URIs), by the URL as the link
+    /// target gives it (webPictureTargets()). A picture not in here keeps its URL; other
+    /// exporters keep every URL (the notes' text is not changed).
+    QHash<QString, WebPictureCopy> webPictures;
 };
 
 /// A produced file: a suggested file name, its MIME type and content.
@@ -62,6 +78,12 @@ const QList<const Exporter *> &exporters();
 
 /// Exporter with the given id, or nullptr.
 const Exporter *exporterById(QStringView id);
+
+/// The pictures from the internet the HTML and Pandoc exports of `input` show (`![](https://…)`,
+/// `![[https://…]]` outside code, as the exporters see them), by their URL as written, in the
+/// order of first use — what ExportInput::webPictures may hold copies of. `input` is cleaned like
+/// runExport() does.
+QStringList webPictureTargets(const ExportInput &input);
 
 /// Clean `input` (paths normalised, empty / duplicate paths, ignored folders such as .trash/ and
 /// sync-conflict copies dropped; `.brulion/config.json` kept) and run `exporter`.
