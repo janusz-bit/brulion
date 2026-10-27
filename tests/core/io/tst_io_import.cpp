@@ -86,7 +86,8 @@ private Q_SLOTS:
             // Every importer survives empty input.
             QVERIFY(runImport(*i, {}, iotest::options()).files.isEmpty());
         }
-        QCOMPARE(ids, QStringList({u"obsidian"_s, u"logseq"_s, u"notion"_s, u"evernote"_s, u"keep"_s, u"joplin"_s,
+        QCOMPARE(ids, QStringList({u"obsidian"_s, u"logseq"_s, u"notion"_s, u"evernote"_s, u"keep"_s, u"mstodo"_s,
+                                   u"joplin"_s,
                                    u"simplenote"_s, u"roam"_s, u"trilium"_s, u"bear"_s, u"markdown"_s, u"html"_s,
                                    u"ics"_s}));
         QCOMPARE(importerById(u"keep")->name(), u"Google Keep"_s);
@@ -114,6 +115,35 @@ private Q_SLOTS:
                                 << u"notion"_s;
         QTest::newRow("evernote") << QList<InputFile>{text(u"Moje notatki.enex"_s, u"<en-export/>"_s)} << u"evernote"_s;
         QTest::newRow("keep") << QList<InputFile>{bytes(u"Takeout/Keep/Zakupy.json"_s, keepJson())} << u"keep"_s;
+        QTest::newRow("mstodo graph explorer")
+                << QList<InputFile>{text(u"response.json"_s,
+                                         u"{\"@odata.context\": \"https://graph.microsoft.com/v1.0/$metadata#users('x')/"
+                                         u"todo/lists(tasks())\", \"value\": [{\"displayName\": \"Zadania\", "
+                                         u"\"tasks\": []}]}"_s)}
+                << u"mstodo"_s;
+        QTest::newRow("mstodo bundle")
+                << QList<InputFile>{text(u"Microsoft To Do.json"_s,
+                                         u"{\"brulion\": \"mstodo-export\", \"version\": 1, \"lists\": []}"_s)}
+                << u"mstodo"_s;
+        QTest::newRow("mstodo tasks") << QList<InputFile>{text(u"Zakupy.json"_s,
+                                                               u"{\"value\": [{\"title\": \"Chleb\", "
+                                                               u"\"status\": \"notStarted\", \"importance\": "
+                                                               u"\"normal\"}]}"_s)}
+                                      << u"mstodo"_s;
+        QTest::newRow("mstodo zip") << QList<InputFile>{iotest::zip(
+                u"To Do.zip"_s, {{u"listy.json"_s, "{\"brulion\": \"mstodo-export\", \"lists\": []}"}})}
+                                    << u"mstodo"_s;
+        // Other JSON is not To Do's: a Graph answer about something else, a vault with a tasks.json.
+        QTest::newRow("graph mail is not mstodo")
+                << QList<InputFile>{text(u"mail.json"_s, u"{\"@odata.context\": \"https://graph.microsoft.com/v1.0/"
+                                                         u"$metadata#users('x')/messages\", \"value\": "
+                                                         u"[{\"subject\": \"x\"}]}"_s)}
+                << QString();
+        QTest::newRow("obsidian with tasks.json")
+                << QList<InputFile>{text(u"V/.obsidian/app.json"_s, u"{}"_s), text(u"V/a.md"_s, u"x"_s),
+                                    text(u"V/dane/tasks.json"_s,
+                                         u"{\"value\": [{\"title\": \"x\", \"status\": \"notStarted\"}]}"_s)}
+                << u"obsidian"_s;
         QTest::newRow("joplin") << QList<InputFile>{text(
                 u"0123456789abcdef0123456789abcdef.md"_s,
                 u"Tytuł\n\nTreść\n\nid: 0123456789abcdef0123456789abcdef\ntype_: 1"_s)}

@@ -12,6 +12,7 @@ std::unique_ptr<Importer> makeLogseqImporter();
 std::unique_ptr<Importer> makeNotionImporter();
 std::unique_ptr<Importer> makeEvernoteImporter();
 std::unique_ptr<Importer> makeKeepImporter();
+std::unique_ptr<Importer> makeMsTodoImporter();
 std::unique_ptr<Importer> makeJoplinImporter();
 std::unique_ptr<Importer> makeSimplenoteImporter();
 std::unique_ptr<Importer> makeRoamImporter();

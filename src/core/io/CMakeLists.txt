@@ -1,6 +1,6 @@
 # io — import from other apps and export to other formats (docs/ARCHITECTURE.md): importers
-# (Obsidian, Logseq, Notion, Evernote, Google Keep, Joplin, Simplenote, Roam, Trilium, Bear,
-# Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
+# (Obsidian, Logseq, Notion, Evernote, Google Keep, Microsoft To Do (Graph JSON), Joplin,
+# Simplenote, Roam, Trilium, Bear, Markdown, HTML, iCalendar), exporters (Markdown / Obsidian / Logseq ZIP, HTML site, single
 # HTML, Pandoc Markdown, JSON, iCalendar, OPML, CSV tasks), ZIP via vendored miniz, tar, CSV, iCalendar,
 # HTML <-> Markdown, the clipboard's HTML of copied blocks.
 # Public headers: io.h (overview) and the headers it includes; internal headers end in _p.h.
@@ -28,6 +28,7 @@ brulion_add_core_module(io
         import_notion.cpp
         import_evernote.cpp
         import_keep.cpp
+        import_mstodo.cpp
         import_joplin.cpp
         import_simplenote.cpp
         import_roam.cpp
