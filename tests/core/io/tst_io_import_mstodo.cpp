@@ -126,6 +126,21 @@ private Q_SLOTS:
                                       u"\"completedDateTime\": {\"dateTime\": \"2026-10-20T22:30:00.0000000\", "
                                       u"\"timeZone\": \"UTC\"}}"_s
                                    << warsaw << u"- [x] Zapłacić czynsz ✅ 2026-10-21"_s;
+        // To Do keeps the day of the completion as midnight UTC: that day, also west of Greenwich
+        // (and never before the due day).
+        QTest::newRow("completed midnight UTC in New York")
+                << u"{\"title\": \"Bilety\", \"status\": \"completed\", "
+                   u"\"dueDateTime\": {\"dateTime\": \"2026-10-27T00:00:00.0000000\", \"timeZone\": \"UTC\"}, "
+                   u"\"completedDateTime\": {\"dateTime\": \"2026-10-27T00:00:00.0000000\", \"timeZone\": \"UTC\"}}"_s
+                << newYork << u"- [x] Bilety 📅 2026-10-27 ✅ 2026-10-27"_s;
+        QTest::newRow("completed midnight in Warsaw sent as UTC")
+                << u"{\"title\": \"Żurek\", \"status\": \"completed\", "
+                   u"\"completedDateTime\": {\"dateTime\": \"2026-10-26T23:00:00.0000000\", \"timeZone\": \"UTC\"}}"_s
+                << warsaw << u"- [x] Żurek ✅ 2026-10-27"_s;
+        QTest::newRow("completed in the evening in New York")
+                << u"{\"title\": \"Raport\", \"status\": \"completed\", "
+                   u"\"completedDateTime\": {\"dateTime\": \"2026-10-27T01:30:00.0000000\", \"timeZone\": \"UTC\"}}"_s
+                << newYork << u"- [x] Raport ✅ 2026-10-26"_s;
         QTest::newRow("high") << u"{\"title\": \"Pilne\", \"status\": \"notStarted\", \"importance\": \"high\"}"_s << warsaw
                               << u"- [ ] Pilne ⏫"_s;
         QTest::newRow("low") << u"{\"title\": \"Kiedyś\", \"status\": \"notStarted\", \"importance\": \"low\"}"_s << warsaw
@@ -351,6 +366,17 @@ private Q_SLOTS:
         QCOMPARE(body(r), u"- [ ] Wyjazd\n  - [x] Spakować śpiwór\n  - [ ] Kupić bilety \\[\\[PKP\\]\\]"_s);
     }
 
+    void stepsOfACompletedTask()
+    {
+        // To Do completes a task with steps still unchecked: they are closed (cancelled), not
+        // left as open tasks under a done one.
+        const ImportResult r = importTasks({parse(
+                u"{\"title\": \"Wyjazd\", \"status\": \"completed\", \"checklistItems\": ["
+                u"{\"displayName\": \"Spakować śpiwór\", \"isChecked\": true},"
+                u"{\"displayName\": \"Kupić bilety\", \"isChecked\": false}]}"_s)});
+        QCOMPARE(body(r), u"- [x] Wyjazd\n  - [x] Spakować śpiwór\n  - [-] Kupić bilety"_s);
+    }
+
     void links()
     {
         const ImportResult r = importTasks({parse(
@@ -401,11 +427,20 @@ private Q_SLOTS:
     void attachmentsNotInFile()
     {
         // Graph Explorer's $expand=tasks has no attachments, only hasAttachments.
-        const ImportResult r = importTasks({parse(u"{\"title\": \"Skan\", \"hasAttachments\": true}"_s),
-                                            parse(u"{\"title\": \"Drugi skan\", \"hasAttachments\": true}"_s)});
+        const QJsonArray tasks{parse(u"{\"title\": \"Skan\", \"hasAttachments\": true}"_s),
+                               parse(u"{\"title\": \"Drugi skan\", \"hasAttachments\": true}"_s)};
+        const ImportResult r = runImport(*importerById(u"mstodo"),
+                                         {iotest::bytes(u"response.json"_s, explorer({list(u"Zadania"_s, tasks)}))},
+                                         iotest::options());
         QCOMPARE(body(r), u"- [ ] Skan\n- [ ] Drugi skan"_s);
         QCOMPARE(r.warnings.size(), 1);
         QVERIFY(r.warnings.first().contains(u"attachments that are not in this file"_s));
+
+        // In the download's bundle the download itself said what it could not get: no advice to
+        // sign in, which the user just did.
+        const ImportResult own = importTasks(tasks);
+        QCOMPARE(body(own), u"- [ ] Skan\n- [ ] Drugi skan"_s);
+        QVERIFY2(own.warnings.isEmpty(), qPrintable(own.warnings.join(u" | "_s)));
     }
 
     void shapes_data()
@@ -462,8 +497,45 @@ private Q_SLOTS:
                                              iotest::options());
             QCOMPARE(iotest::pathsOf(r), QStringList({u"Duża lista.md"_s}));
             QCOMPARE(r.warnings.size(), 1);
-            QVERIFY(r.warnings.first().contains(u"incomplete"_s));
+            QVERIFY(r.warnings.first().contains(u"export is incomplete"_s));
+            QVERIFY(r.warnings.first().contains(u"Sign in to Microsoft"_s));
         }
+    }
+
+    void nextLinkByShape_data()
+    {
+        QTest::addColumn<QByteArray>("data");
+        QTest::addColumn<QString>("warning");
+        QTest::addColumn<QString>("notInWarning");
+        const QJsonArray tasks{parse(u"{\"title\": \"Pierwsze\", \"status\": \"notStarted\"}"_s)};
+        QJsonObject cut = list(u"Duża lista"_s, tasks);
+        cut.insert(u"tasks@odata.nextLink"_s, u"(not downloaded)"_s);
+        // The download stopped at its task limit: the lists after it have no task at all.
+        QJsonObject after = list(u"Następna"_s, {});
+        after.insert(u"tasks@odata.nextLink"_s, u"(not downloaded)"_s);
+        QTest::newRow("download") << bundle({cut, after}) << u"download is incomplete"_s << u"Sign in"_s;
+        const QByteArray oneList =
+                QJsonDocument(QJsonObject{{u"@odata.context"_s, u"https://graph.microsoft.com/v1.0/$metadata#users('x')/"
+                                                                u"todo/lists('AAMk')/tasks"_s},
+                                          {u"@odata.nextLink"_s,
+                                           u"https://graph.microsoft.com/v1.0/me/todo/lists/AAMk/tasks?$skip=10"_s},
+                                          {u"value"_s, tasks}})
+                        .toJson();
+        QTest::newRow("one list's tasks") << oneList << u"only the first tasks of the list"_s
+                                          << u"export each list separately"_s;
+    }
+
+    void nextLinkByShape()
+    {
+        QFETCH(QByteArray, data);
+        QFETCH(QString, warning);
+        QFETCH(QString, notInWarning);
+        const ImportResult r = runImport(*importerById(u"mstodo"), {iotest::bytes(u"Duża lista.json"_s, data)},
+                                         iotest::options());
+        QCOMPARE(iotest::pathsOf(r), QStringList({u"Duża lista.md"_s}));
+        QCOMPARE(r.warnings.size(), 1); // no "empty list" for a list that was cut off
+        QVERIFY2(r.warnings.first().contains(warning), qPrintable(r.warnings.first()));
+        QVERIFY2(!r.warnings.first().contains(notInWarning), qPrintable(r.warnings.first()));
     }
 
     void lists()

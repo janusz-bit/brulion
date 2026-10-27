@@ -200,11 +200,19 @@ RuleResult recurrenceRule(const QJsonObject &recurrence)
     return out;
 }
 
+/// Where a list comes from: the warnings' advice differs.
+enum class Shape {
+    Bundle,   ///< Brulion's own download (sign-in)
+    Explorer, ///< Graph Explorer's lists?$expand=tasks
+    Tasks,    ///< one list's tasks
+};
+
 /// One input file's lists: {name, list object (tasks inside)}.
 struct SourceList {
     QString name;
     QJsonObject list;
     QJsonArray tasks;
+    Shape shape = Shape::Explorer;
     bool incomplete = false;
 };
 
@@ -255,16 +263,25 @@ public:
                 continue;
             }
             for (const SourceList &list : listsOf(o, f.path)) {
-                st.incomplete = st.incomplete || list.incomplete;
-                if (!importList(list, st))
+                if (list.incomplete)
+                    st.incomplete[int(list.shape)] = true;
+                st.shape = list.shape;
+                // A list cut off before its first task is no empty list: "incomplete" covers it.
+                if (!importList(list, st) && !list.incomplete)
                     ++emptyLists;
             }
         }
         if (emptyLists > 0)
             ctx.warn(IoMessages::tr("%n empty list(s) were skipped.", nullptr, emptyLists));
-        if (st.incomplete)
+        if (st.incomplete[int(Shape::Bundle)])
+            ctx.warn(IoMessages::tr("The download is incomplete: Microsoft To Do has more tasks than Brulion "
+                                    "downloaded."));
+        if (st.incomplete[int(Shape::Explorer)])
             ctx.warn(IoMessages::tr("The export is incomplete: Microsoft To Do sent more tasks than the file holds. "
                                     "Use “Sign in to Microsoft”, or export each list separately."));
+        if (st.incomplete[int(Shape::Tasks)])
+            ctx.warn(IoMessages::tr("The file holds only the first tasks of the list: Microsoft Graph sends long "
+                                    "lists in parts. Use “Sign in to Microsoft” to import all of them."));
         if (st.attachmentsMissing)
             ctx.warn(IoMessages::tr("Some tasks have attachments that are not in this file; sign in to Microsoft "
                                     "to import them."));
@@ -290,7 +307,9 @@ private:
     struct State {
         explicit State(ImportContext &context) : ctx(context) { }
         ImportContext &ctx;
-        bool incomplete = false;
+        /// Inputs that hold only part of a list, by Shape.
+        bool incomplete[3] = {false, false, false};
+        Shape shape = Shape::Explorer; ///< of the list being imported
         bool attachmentsMissing = false;
         bool attachmentsTooLarge = false;
         bool attachmentsUnreadable = false;
@@ -317,6 +336,8 @@ private:
                 if (v.isObject())
                     addList(v.toObject());
             }
+            for (SourceList &s : out)
+                s.shape = Shape::Bundle;
             return out;
         }
         const QJsonArray value = o.value(u"value"_s).toArray();
@@ -327,6 +348,7 @@ private:
             SourceList s;
             s.name = paths::basename(path).section(u'.', 0, -2).simplified();
             s.tasks = value;
+            s.shape = Shape::Tasks;
             s.incomplete = pagedTop;
             out.append(s);
             return out;
@@ -480,16 +502,17 @@ private:
                 line += u' ' + markdown::formatReminderToken(*at);
         }
         if (done) {
-            if (const auto completed = wallClock(field(u"completedDateTime"), st)) {
-                // Completion is an instant: its day in the vault's zone.
+            // To Do keeps the day of the completion, mostly as midnight UTC (that day, as for due
+            // dates); an exact instant is converted to its day in the vault's zone.
+            if (const auto completed = wallClock(field(u"completedDateTime"), st, true))
                 line += u' ' + markdown::tokens::Done.toString() + u' ' + isoDate(*completed);
-            }
         }
-        return withDetails(line, details(task, st));
+        return withDetails(line, details(task, done, st));
     }
 
-    /// Lines under the task: its note, then steps, links and attachments as sub-items.
-    static QStringList details(const QJsonObject &task, State &st)
+    /// Lines under the task: its note, then steps, links and attachments as sub-items. Steps
+    /// left unchecked in a completed task are closed as cancelled (`[-]`), not left open.
+    static QStringList details(const QJsonObject &task, bool done, State &st)
     {
         QStringList out;
         const QJsonObject body = task.value(u"body"_s).toObject();
@@ -510,7 +533,8 @@ private:
             const QString text = singleLine(step.value(u"displayName"_s).toString());
             if (text.isEmpty())
                 continue;
-            out.append((step.value(u"isChecked"_s).toBool() ? u"- [x] "_s : u"- [ ] "_s) + text);
+            const QString box = step.value(u"isChecked"_s).toBool() ? u"- [x] "_s : done ? u"- [-] "_s : u"- [ ] "_s;
+            out.append(box + text);
         }
         for (const QJsonValue &v : task.value(u"linkedResources"_s).toArray()) {
             const QJsonObject link = v.toObject();
@@ -533,7 +557,7 @@ private:
             for (const QJsonValue &v : attachments.toArray()) {
                 const QJsonObject a = v.toObject();
                 if (!a.contains(u"contentBytes"_s)) {
-                    st.attachmentsMissing = true;
+                    st.attachmentsMissing = st.attachmentsMissing || st.shape != Shape::Bundle;
                     continue;
                 }
                 const QByteArray base64 = a.value(u"contentBytes"_s).toString().toLatin1();
@@ -551,7 +575,8 @@ private:
                     fileName = u"attachment"_s + extensionForMime(a.value(u"contentType"_s).toString());
                 out.append(u"- "_s + attachmentLink(st.ctx.addAttachment(fileName, *decoded)));
             }
-        } else if (task.value(u"hasAttachments"_s).toBool()) {
+        } else if (task.value(u"hasAttachments"_s).toBool() && st.shape != Shape::Bundle) {
+            // (The download says itself which attachments it could not get.)
             st.attachmentsMissing = true;
         }
         return out;
