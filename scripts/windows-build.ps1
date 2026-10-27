@@ -275,7 +275,13 @@ function Invoke-Packaged([string] $Dir, [string] $Label) {
             if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
             Fail "$Label`: brulion.exe --selftest-shell did not finish in 5 minutes (output above)"
         }
-        if ($output) { ($output -split "`r?`n" | Select-Object -Last 60) -join "`n" | Write-Host }
+        if ($output) {
+            $lines = $output -split "`r?`n"
+            # The failed checks first: the last 60 lines often start after them.
+            $failed = $lines | Where-Object { $_ -match '^selftest: FAIL ' }
+            if ($failed) { "Failed checks:`n" + ($failed -join "`n") | Write-Host }
+            ($lines | Select-Object -Last 60) -join "`n" | Write-Host
+        }
         if ($process.ExitCode -ne 0) { Fail "$Label`: brulion.exe --selftest-shell exited with $($process.ExitCode)" }
         if ($output -match '(?i)is not installed|module .* not found|cannot load library|could not load the qt platform plugin|failed to load|TypeError|ReferenceError') {
             Fail "$Label`: Qt or QML errors in the run (above)"
