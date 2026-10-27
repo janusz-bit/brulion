@@ -115,6 +115,7 @@ QString mimeForPath(const QString &path)
             {u".png"_s, u"image/png"_s},       {u".jpg"_s, u"image/jpeg"_s},         {u".jpeg"_s, u"image/jpeg"_s},
             {u".gif"_s, u"image/gif"_s},       {u".webp"_s, u"image/webp"_s},        {u".svg"_s, u"image/svg+xml"_s},
             {u".bmp"_s, u"image/bmp"_s},       {u".heic"_s, u"image/heic"_s},        {u".avif"_s, u"image/avif"_s},
+            {u".ico"_s, u"image/x-icon"_s},
             {u".pdf"_s, u"application/pdf"_s}, {u".mp3"_s, u"audio/mpeg"_s},         {u".m4a"_s, u"audio/mp4"_s},
             {u".wav"_s, u"audio/wav"_s},       {u".ogg"_s, u"audio/ogg"_s},          {u".mp4"_s, u"video/mp4"_s},
             {u".webm"_s, u"video/webm"_s},     {u".mov"_s, u"video/quicktime"_s},    {u".html"_s, u"text/html"_s},
@@ -122,6 +123,27 @@ QString mimeForPath(const QString &path)
             {u".zip"_s, u"application/zip"_s}, {u".ics"_s, u"text/calendar"_s},      {u".opml"_s, u"text/x-opml"_s},
     };
     return map.value(paths::extension(path), u"application/octet-stream"_s);
+}
+
+QString mimeForPictureFormat(const QString &format)
+{
+    const QString lower = format.toLower();
+    if (lower.isEmpty() || !std::all_of(lower.cbegin(), lower.cend(), [](QChar c) { return c.isLetterOrNumber(); }))
+        return {};
+    const QString mime = mimeForPath(u"picture."_s + lower);
+    return mime.startsWith(u"image/") ? mime : QString();
+}
+
+QString webPictureFileName(const WebPictureCopy &copy)
+{
+    const QString format = copy.format.toLower();
+    QString name = paths::basename(paths::normalize(copy.fileName));
+    name = name.isEmpty() ? QString() : pageSegment(name);
+    if (name.isEmpty() || name == u"Untitled")
+        name = u"picture"_s;
+    if (paths::extension(name).isEmpty() && !format.isEmpty())
+        name += u'.' + format;
+    return name;
 }
 
 bool isUuid(const QString &id)

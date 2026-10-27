@@ -46,6 +46,9 @@ bool isAsciiPunct(QChar c);
 bool hasScheme(QStringView target);
 /// http, https and mailto URLs — the only external links exports make clickable.
 bool safeExternal(QStringView url);
+/// An http: or https: URL with a host — a picture from the internet when a picture (`![](…)`,
+/// `![[…]]`) names it (docs/SYNTAX.md §2; the app's webpicture::isWebUrl, without QtNetwork).
+bool isWebPictureTarget(QStringView target);
 
 enum class MediaKind { Image, Audio, Video, Other };
 /// The kind of an attachment by its file name (pictures as the app shows them).

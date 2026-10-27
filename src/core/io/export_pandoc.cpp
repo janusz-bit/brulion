@@ -5,6 +5,7 @@
 #include "index/vaultindex.h"
 #include "io/exporters_p.h"
 #include "io/exportutil_p.h"
+#include "io/importutil_p.h"
 #include "io/links_p.h"
 #include "io/messages_p.h"
 #include "io/pandocrender_p.h"
@@ -90,6 +91,10 @@ public:
         return out;
     }
 
+    /// The included copies of pictures from the internet the document links to: their paths in
+    /// the archive folder (assets/web/<name>) and bytes, in the order of first use.
+    const QList<FileEntry> &usedWebPictures() const { return m_webFiles; }
+
 private:
     /// Identifier a link to `target` (heading / block) leads to; "" for the single note itself.
     QString fragment(const VaultPath &target, const QString &heading, const QString &blockId) const
@@ -123,6 +128,28 @@ private:
         if (colon >= 0 && (slash < 0 || colon < slash))
             href.prepend(u"./"_s);
         return href;
+    }
+
+    /// Destination of the copy of a picture from the internet (ExportInput::webPictures), claimed
+    /// at its first use; nullopt: the picture keeps its URL.
+    std::optional<QString> webPicturePath(const QString &url) const
+    {
+        if (const auto it = m_webPaths.constFind(url); it != m_webPaths.constEnd())
+            return *it;
+        const QHash<QString, WebPictureCopy> &copies = m_vault.input().webPictures;
+        const auto copy = copies.constFind(url);
+        if (copy == copies.constEnd() || copy->data.isEmpty() || mimeForPictureFormat(copy->format).isEmpty())
+            return std::nullopt;
+        if (!m_claimsReady) {
+            // The archive holds the document and the attachments at their paths.
+            m_claims.reserve(paths::sanitizeFileName(m_vault.vaultName()) + u".md"_s);
+            for (const FileEntry &a : m_vault.attachments())
+                m_claims.reserve(a.path);
+            m_claimsReady = true;
+        }
+        const VaultPath path = m_claims.claim(u"assets/web/"_s + webPictureFileName(*copy));
+        m_webFiles.append(FileEntry{path, copy->data});
+        return *m_webPaths.insert(url, encodeLinkPath(path));
     }
 
     std::optional<QString> tagLink(const QString &tag) const
@@ -159,6 +186,7 @@ private:
             return attachmentPath(*resolved);
         };
         l.tag = [this](const QString &tag) { return tagLink(tag); };
+        l.webPicture = [this](const QString &url) { return webPicturePath(url); };
         l.block = [this](const QString &id) -> std::optional<std::pair<QString, QString>> {
             const auto block = m_vault.block(id);
             if (!block)
@@ -204,6 +232,10 @@ private:
     QHash<VaultPath, QString> m_anchors;
     QHash<VaultPath, int> m_titleHeadings;
     mutable QSet<VaultPath> m_used;
+    mutable PathClaims m_claims;
+    mutable bool m_claimsReady = false;
+    mutable QHash<QString, QString> m_webPaths;
+    mutable QList<FileEntry> m_webFiles;
 };
 
 class PandocExporter final : public Exporter {
@@ -223,6 +255,8 @@ public:
             if (const FileEntry *a = vault.attachment(path))
                 entries.append(FileEntry{root + u'/' + a->path, a->data});
         }
+        for (const FileEntry &copy : document.usedWebPictures())
+            entries.append(FileEntry{root + u'/' + copy.path, copy.data});
         ExportResult r;
         r.files.append(ExportedFile{vault.fileName(u"pandoc"_s, u".zip"_s), u"application/zip"_s, vault.zip(entries)});
         return r;

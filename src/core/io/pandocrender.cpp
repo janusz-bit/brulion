@@ -267,6 +267,13 @@ QString PandocRenderer::link(const QString &label, const std::optional<QString> 
     return u'[' + label + u"]("_s + *destination + u')';
 }
 
+QString PandocRenderer::webPictureDestination(const QString &url) const
+{
+    if (const std::optional<QString> copy = m_links.webPicture ? m_links.webPicture(url) : std::nullopt)
+        return *copy;
+    return urlDestination(url);
+}
+
 QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
 {
     if (text.isEmpty())
@@ -318,7 +325,10 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
             break;
         }
         case LinkKind::Embed: {
-            if (isAttachmentTarget(l.target)) {
+            if (isWebPictureTarget(l.target)) {
+                // `![[https://…/kot.jpg]]`: a picture from the internet, like `![](https://…)`.
+                out = u"!["_s + escape(l.display) + u"]("_s + webPictureDestination(l.target) + u')';
+            } else if (isAttachmentTarget(l.target)) {
                 const auto url = m_links.attachment ? m_links.attachment(l.target) : std::nullopt;
                 const QString label = escape(l.display.isEmpty() ? paths::basename(l.target) : l.display);
                 out = url && mediaKind(l.target) == MediaKind::Image ? u"!["_s + label + u"]("_s + *url + u')'
@@ -335,7 +345,9 @@ QString PandocRenderer::renderInline(QStringView text, bool insideLink) const
                 if (!safeExternal(l.target)) {
                     out = plainText(source);
                 } else if (image) {
-                    out = u"!["_s + escape(l.display) + u"]("_s + urlDestination(l.target) + u')';
+                    out = u"!["_s + escape(l.display) + u"]("_s
+                          + (isWebPictureTarget(l.target) ? webPictureDestination(l.target) : urlDestination(l.target))
+                          + u')';
                 } else {
                     QString shown = renderInline(l.display, true);
                     if (shown.isEmpty())

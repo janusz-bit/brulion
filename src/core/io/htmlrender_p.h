@@ -29,6 +29,9 @@ struct HtmlLinks {
     std::function<std::optional<std::pair<QString, QString>>(const QString &id)> block;
     /// HTML of an embedded page (`![[Page]]` alone in a block); empty when unavailable.
     std::function<QString(const QString &target, const QString &heading, const QString &blockId)> embed;
+    /// src of the copy of a picture from the internet (the URL as the link target gives it) the
+    /// export includes; nullopt or unset: the picture keeps its URL.
+    std::function<std::optional<QString>(const QString &url)> webPicture;
     /// Prefix of element ids (several notes in one document need distinct ids).
     QString idPrefix;
     /// Pictures, audio and video as links to them instead of <img> / <audio> / <video> (the
@@ -63,6 +66,9 @@ private:
     QString metaChips(const Block &block) const;
     /// HTML of the page embedded by `text` when it is a single page embed (`![[Page]]`), else "".
     QString embeddedContent(const QString &text) const;
+    /// A picture from the internet (`url` an http(s) URL): <img> of the URL or of its copy
+    /// (HtmlLinks::webPicture), a link with mediaAsLinks.
+    QString webPictureHtml(const QString &url, const QString &alt) const;
 
     HtmlLinks m_links;
 };
