@@ -158,14 +158,14 @@ Brulionu, a w To Do nic się nie zmienia. Ponowny import tworzy strony z dopiski
 | lista | strona `<folder importu>/<nazwa listy>.md` z `source: Microsoft To Do` we frontmatterze; lista bez zadań — nic (ostrzeżenie podaje, ile ich było) |
 | zadanie | `- [ ] Tytuł`; znaki, które w Brulionie coś znaczą (`#`, `[[`, `*`, `$`), dostają `\` |
 | w toku / czeka na innych, odroczone | `- [/]` / `- [>]` |
-| ukończone | `- [x] … ✅ 2026-10-25` — pod nieukończonymi, od ostatnio ukończonych |
+| ukończone | `- [x] … ✅ 2026-10-25` (dzień ukończenia, jak go zapisał To Do) — pod nieukończonymi, od ostatnio ukończonych |
 | ważne / niska ważność | `⏫` / `🔽` |
 | termin, data rozpoczęcia, utworzenia | `📅 2026-10-27`, `🛫 2026-10-20`, `➕ 2026-10-14` |
 | przypomnienie | `⏰ 2026-10-27 08:00` (tylko w nieukończonych zadaniach) |
 | powtarzanie | `🔁 every day`, `every 2 weeks on Monday, Friday`, `every weekday` (dni robocze), `every month on the 15th`, `every year`. „Drugi wtorek miesiąca” i podobne — bez 🔁, zostaje tylko termin (ostrzeżenie); koniec serii (data albo liczba powtórzeń) jest pomijany (ostrzeżenie) |
 | kategorie | tagi: „Praca domowa” → `#Praca-domowa` |
 | notatka | wiersze pod zadaniem (notatka w HTML — zamieniona na Markdown) |
-| kroki | podpunkty `- [ ]` / `- [x]` |
+| kroki | podpunkty `- [ ]` / `- [x]`; kroki nieodhaczone w ukończonym zadaniu — `- [-]` (anulowane), żeby nie wisiały jako otwarte zadania |
 | linki (np. do wiadomości w Outlooku) | podpunkty `[nazwa](adres)` |
 | pliki | załączniki w `assets/Microsoft To Do/`, osadzone pod zadaniem; większe niż 25 MB są pomijane (ostrzeżenie) |
 
@@ -222,7 +222,8 @@ publiczna, kodem urządzenia.
    urządzeniu, np. w telefonie —, wpisz kod, zaloguj się kontem, na którym są zadania, i zgódź
    się na odczyt zadań. Kod jest ważny około 15 minut.
 4. Brulion pobiera listy (pasek pokazuje postęp), a potem zwykły podgląd importu. Nic nie jest
-   zapisywane przed zatwierdzeniem.
+   zapisywane przed zatwierdzeniem. Wybranie w tym czasie pliku albo wpisanie ścieżki przerywa
+   logowanie — importuje się wtedy to, co wskazano.
 
 Bezpieczeństwo: Brulion prosi tylko o odczyt zadań (`Tasks.Read`) i łączy się tylko
 z `login.microsoftonline.com` i `graph.microsoft.com`. Token dostępu jest w pamięci tylko na
@@ -259,7 +260,8 @@ Przy dużych listach Microsoft może oddać tylko część zadań — Brulion os
 niepełny. Wtedy pobierz zadania każdej listy osobno: w odpowiedzi znajdź `id` listy, uruchom
 `GET https://graph.microsoft.com/v1.0/me/todo/lists/<id listy>/tasks`, zapisz odpowiedź jako
 `<nazwa listy>.json` (strona dostanie nazwę pliku) i zaimportuj wszystkie pliki naraz — można też
-spakować je do ZIP-a.
+spakować je do ZIP-a. Także taka odpowiedź bywa podzielona na części; jeśli Brulion ostrzeże, że
+plik ma tylko pierwsze zadania listy, całość pobierze **Zaloguj się w Microsoft**.
 
 W wersji w przeglądarce logowanie do Microsoft nie działa (Microsoft nie pozwala stronom WWW
 logować się kodem urządzenia) — tam użyj pliku z Graph Explorera.

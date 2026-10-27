@@ -4173,7 +4173,7 @@
     </message>
     <message>
         <location filename="../src/core/io/import_keep.cpp" line="117"/>
-        <location filename="../src/core/io/import_mstodo.cpp" line="249"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="257"/>
         <location filename="../src/core/io/import_roam.cpp" line="182"/>
         <source>“%1” is not valid JSON and was skipped.</source>
         <translation>Plik „%1” nie zawiera prawidłowego JSON-a i został pominięty.</translation>
@@ -4199,12 +4199,12 @@
         <translation>Pominięto wydarzenia bez daty rozpoczęcia.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="254"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="262"/>
         <source>“%1” is not a Microsoft To Do export and was skipped.</source>
         <translation>„%1” nie jest eksportem z Microsoft To Do i został pominięty.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_mstodo.cpp" line="264"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="275"/>
         <source>%n empty list(s) were skipped.</source>
         <translation>
             <numerusform>Pominięto %n pustą listę.</numerusform>
@@ -4213,50 +4213,60 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="266"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="277"/>
+        <source>The download is incomplete: Microsoft To Do has more tasks than Brulion downloaded.</source>
+        <translation>Pobieranie jest niepełne: Microsoft To Do ma więcej zadań, niż Brulion pobrał.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_mstodo.cpp" line="280"/>
         <source>The export is incomplete: Microsoft To Do sent more tasks than the file holds. Use “Sign in to Microsoft”, or export each list separately.</source>
         <translation>Eksport jest niepełny: Microsoft To Do ma więcej zadań, niż jest w pliku. Użyj „Zaloguj się w Microsoft” albo wyeksportuj każdą listę osobno.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="269"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="283"/>
+        <source>The file holds only the first tasks of the list: Microsoft Graph sends long lists in parts. Use “Sign in to Microsoft” to import all of them.</source>
+        <translation>Plik ma tylko pierwsze zadania listy: Microsoft Graph wysyła długie listy w częściach. Użyj „Zaloguj się w Microsoft”, żeby zaimportować wszystkie.</translation>
+    </message>
+    <message>
+        <location filename="../src/core/io/import_mstodo.cpp" line="286"/>
         <source>Some tasks have attachments that are not in this file; sign in to Microsoft to import them.</source>
         <translation>Niektóre zadania mają pliki, których nie ma w tym pliku; zaloguj się w Microsoft, aby je zaimportować.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="272"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="289"/>
         <source>Attachments larger than 25 MB were left out.</source>
         <translation>Pominięto pliki większe niż 25 MB.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="274"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="291"/>
         <source>Some attachments could not be read and were left out.</source>
         <translation>Niektórych plików nie udało się odczytać i zostały pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="276"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="293"/>
         <source>Some dates could not be read and were left out.</source>
         <translation>Niektórych dat nie udało się odczytać i zostały pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="278"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="295"/>
         <location filename="../src/core/io/import_ics.cpp" line="130"/>
         <source>Some time zones of the calendar are unknown; their times were kept as written.</source>
         <translation>Niektóre strefy czasowe kalendarza są nieznane; godziny zachowano tak, jak zapisano.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="281"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="298"/>
         <location filename="../src/core/io/import_ics.cpp" line="133"/>
         <source>Some recurrence rules have an end (COUNT/UNTIL) or details that are not supported; they were simplified.</source>
         <translation>Niektóre reguły powtarzania mają koniec (COUNT/UNTIL) lub nieobsługiwane szczegóły; zostały uproszczone.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="285"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="302"/>
         <location filename="../src/core/io/import_ics.cpp" line="137"/>
         <source>Some recurrence rules are not supported; only the first occurrence was imported.</source>
         <translation>Niektóre reguły powtarzania nie są obsługiwane; zaimportowano tylko pierwsze wystąpienie.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/import_mstodo.cpp" line="441"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="463"/>
         <location filename="../src/core/io/import_ics.cpp" line="260"/>
         <location filename="../src/core/io/import_ics.cpp" line="291"/>
         <source>(no title)</source>
@@ -5167,70 +5177,71 @@
     </message>
     <message>
         <location filename="../src/core/mstodo/download.cpp" line="72"/>
+        <location filename="../src/core/mstodo/download.cpp" line="260"/>
         <source>Not every list could be downloaded.</source>
         <translation>Nie udało się pobrać wszystkich list.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="103"/>
+        <location filename="../src/core/mstodo/download.cpp" line="116"/>
         <source>Microsoft Graph did not answer in time. Try again.</source>
         <translation>Microsoft Graph nie odpowiedział na czas. Spróbuj ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="104"/>
+        <location filename="../src/core/mstodo/download.cpp" line="117"/>
         <source>Microsoft Graph cannot be reached. Check the internet connection.</source>
         <translation>Nie można połączyć się z Microsoft Graph. Sprawdź połączenie z internetem.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="107"/>
+        <location filename="../src/core/mstodo/download.cpp" line="120"/>
         <source>Microsoft did not accept the sign-in (it may have expired). Sign in again.</source>
         <translation>Microsoft nie przyjął logowania (mogło wygasnąć). Zaloguj się ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="110"/>
+        <location filename="../src/core/mstodo/download.cpp" line="123"/>
         <source>Brulion may not read your tasks. Add the delegated permission Tasks.Read to the app registration and sign in again.</source>
         <translation>Brulion nie może czytać Twoich zadań. Dodaj w rejestracji aplikacji uprawnienie delegowane Tasks.Read i zaloguj się ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="113"/>
+        <location filename="../src/core/mstodo/download.cpp" line="126"/>
         <source>Microsoft To Do is not available for this account (it has no Exchange Online mailbox).</source>
         <translation>Microsoft To Do jest niedostępny dla tego konta (nie ma ono skrzynki Exchange Online).</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="116"/>
+        <location filename="../src/core/mstodo/download.cpp" line="129"/>
         <source>Microsoft is limiting requests right now. Try again in a few minutes.</source>
         <translation>Microsoft ogranicza teraz liczbę zapytań. Spróbuj ponownie za kilka minut.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="123"/>
+        <location filename="../src/core/mstodo/download.cpp" line="136"/>
         <source>Microsoft Graph answered with an error (HTTP %1).</source>
         <translation>Microsoft Graph odpowiedział błędem (HTTP %1).</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="125"/>
+        <location filename="../src/core/mstodo/download.cpp" line="138"/>
         <source>Microsoft Graph answered with an error (HTTP %1): %2</source>
         <translation>Microsoft Graph odpowiedział błędem (HTTP %1): %2</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="150"/>
+        <location filename="../src/core/mstodo/download.cpp" line="163"/>
         <source>Microsoft Graph sent an answer Brulion does not understand.</source>
         <translation>Microsoft Graph przysłał odpowiedź, której Brulion nie rozumie.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="272"/>
-        <location filename="../src/core/mstodo/download.cpp" line="355"/>
-        <location filename="../src/core/mstodo/download.cpp" line="367"/>
+        <location filename="../src/core/mstodo/download.cpp" line="289"/>
+        <location filename="../src/core/mstodo/download.cpp" line="374"/>
+        <location filename="../src/core/mstodo/download.cpp" line="384"/>
         <source>Some steps, links or attachments could not be downloaded.</source>
         <translation>Nie udało się pobrać niektórych kroków, linków lub plików.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="310"/>
-        <location filename="../src/core/mstodo/download.cpp" line="323"/>
+        <location filename="../src/core/mstodo/download.cpp" line="329"/>
+        <location filename="../src/core/mstodo/download.cpp" line="342"/>
         <source>Attachments larger than 25 MB were left out.</source>
         <translation>Pominięto pliki większe niż 25 MB.</translation>
     </message>
     <message>
-        <location filename="../src/core/mstodo/download.cpp" line="315"/>
-        <location filename="../src/core/mstodo/download.cpp" line="327"/>
+        <location filename="../src/core/mstodo/download.cpp" line="334"/>
+        <location filename="../src/core/mstodo/download.cpp" line="346"/>
         <source>Some attachments were left out: together they are too large to import at once.</source>
         <translation>Pominięto niektóre pliki: razem są za duże, by zaimportować je naraz.</translation>
     </message>
@@ -13043,22 +13054,22 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::ioviews::MsTodoImport</name>
     <message>
-        <location filename="../src/app/io/mstodoimport.cpp" line="176"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="186"/>
         <source>Waiting for the sign-in…</source>
         <translation>Czekam na zalogowanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/mstodoimport.cpp" line="181"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="191"/>
         <source>Signed in. Downloading the lists…</source>
         <translation>Zalogowano. Pobieram listy…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/mstodoimport.cpp" line="194"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="204"/>
         <source>Downloading the lists… %1 of %2</source>
         <translation>Pobieram listy… %1 z %2</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/io/mstodoimport.cpp" line="195"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="205"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n zadanie</numerusform>
@@ -13067,7 +13078,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/io/mstodoimport.cpp" line="227"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="237"/>
         <source>Asking Microsoft for a sign-in code…</source>
         <translation>Proszę Microsoft o kod logowania…</translation>
     </message>

@@ -585,7 +585,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/io/import_mstodo.cpp" line="264"/>
+        <location filename="../src/core/io/import_mstodo.cpp" line="275"/>
         <source>%n empty list(s) were skipped.</source>
         <translation>
             <numerusform>%n empty list was skipped.</numerusform>
@@ -1208,7 +1208,7 @@
 <context>
     <name>brulion::ioviews::MsTodoImport</name>
     <message numerus="yes">
-        <location filename="../src/app/io/mstodoimport.cpp" line="195"/>
+        <location filename="../src/app/io/mstodoimport.cpp" line="205"/>
         <source>%n task(s)</source>
         <translation>
             <numerusform>%n task</numerusform>
