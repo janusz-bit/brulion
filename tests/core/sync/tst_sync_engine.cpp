@@ -129,18 +129,51 @@ private Q_SLOTS:
 
     void remoteVersionPrefersTheEtag()
     {
-        QCOMPARE(remoteVersion(RemoteEntry{u"a"_s, false, u"abc"_s, 1, 2}), u"abc"_s);
-        QCOMPARE(remoteVersion(RemoteEntry{u"a"_s, false, QString(), 1, 2}), u"m1-s2"_s);
+        QCOMPARE(remoteVersion(RemoteEntry{u"a"_s, false, u"abc"_s, 1, 2, {}}), u"abc"_s);
+        QCOMPARE(remoteVersion(RemoteEntry{u"a"_s, false, QString(), 1, 2, {}}), u"m1-s2"_s);
     }
 
     void fileStateJsonRoundTrip()
     {
-        SyncFileState state{u"h"_s, u"e1"_s, 12, 1'760'000'000'123, 1'760'000'001'000};
+        SyncFileState state{u"h"_s, u"e1"_s, 12, 1'760'000'000'123, 1'760'000'001'000, {}};
         QCOMPARE(SyncFileState::fromJson(state.toJson()), std::optional<SyncFileState>(state));
         state.mtime.reset();
         QCOMPARE(SyncFileState::fromJson(state.toJson()), std::optional<SyncFileState>(state));
         QVERIFY(!SyncFileState::fromJson(QJsonObject{{u"localHash"_s, 1}}));
         QVERIFY(!SyncFileState::fromJson(QJsonObject()));
+        // The server's file id: written only when known; states of 0.4.x (none) still load.
+        QVERIFY(!state.toJson().contains(u"remoteId"_s));
+        state.remoteId = u"00000042ocabc"_s;
+        QCOMPARE(state.toJson().value(u"remoteId"_s).toString(), u"00000042ocabc"_s);
+        QCOMPARE(SyncFileState::fromJson(state.toJson()), std::optional<SyncFileState>(state));
+        const QJsonObject old{{u"localHash"_s, u"h"_s}, {u"remoteEtag"_s, u"e1"_s}, {u"size"_s, 12},
+                              {u"syncedAt"_s, 1}};
+        QVERIFY(SyncFileState::fromJson(old));
+        QVERIFY(SyncFileState::fromJson(old)->remoteId.isEmpty());
+        QJsonObject odd = old;
+        odd.insert(u"remoteId"_s, 42); // malformed: ignored
+        QVERIFY(SyncFileState::fromJson(odd)->remoteId.isEmpty());
+    }
+
+    void actionNames_data()
+    {
+        QTest::addColumn<int>("action");
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<bool>("folder");
+        QTest::newRow("upload") << int(SyncAction::Upload) << u"upload"_s << false;
+        QTest::newRow("move-remote") << int(SyncAction::MoveRemote) << u"move-remote"_s << true;
+        QTest::newRow("move-local") << int(SyncAction::MoveLocal) << u"move-local"_s << true;
+        QTest::newRow("file-move-remote") << int(SyncAction::MoveFileRemote) << u"file-move-remote"_s << false;
+        QTest::newRow("file-move-local") << int(SyncAction::MoveFileLocal) << u"file-move-local"_s << false;
+    }
+
+    void actionNames()
+    {
+        QFETCH(int, action);
+        QFETCH(QString, name);
+        QFETCH(bool, folder);
+        QCOMPARE(syncActionName(SyncAction(action)), name);
+        QCOMPARE(isFolderAction(SyncAction(action)), folder);
     }
 
     // --- one device ----------------------------------------------------------------------------

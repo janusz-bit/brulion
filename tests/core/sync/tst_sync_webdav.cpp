@@ -289,7 +289,44 @@ private Q_SLOTS:
             QCOMPARE(request.header("depth"), QByteArray("1"));
         const RemoteEntry file = r.entries.first();
         const qint64 eight = QDateTime(QDate(2026, 10, 14), QTime(8, 0), QTimeZone::UTC).toMSecsSinceEpoch();
-        QCOMPARE(file, (RemoteEntry{u"Strona.md"_s, false, s.server.etag(u"Notatki/Strona.md"_s), eight, 3}));
+        QCOMPARE(file, (RemoteEntry{u"Strona.md"_s, false, s.server.etag(u"Notatki/Strona.md"_s), eight, 3, {}}));
+    }
+
+    void listAndStatCarryTheFileIds_data()
+    {
+        QTest::addColumn<bool>("fileIds");
+        QTest::addColumn<bool>("unknown");
+        QTest::newRow("Nextcloud") << true << false;
+        QTest::newRow("a server without them (404 propstat)") << false << true;
+        QTest::newRow("a server that ignores them") << false << false;
+    }
+
+    void listAndStatCarryTheFileIds()
+    {
+        QFETCH(bool, fileIds);
+        QFETCH(bool, unknown);
+        FakeWebDavServer::Options options;
+        options.fileIds = fileIds;
+        options.fileIdsUnknown = unknown;
+        Setup s(options);
+        s.server.putText(u"Notatki/Łódź/żółw.md"_s, u"1"_s);
+        const auto expected = [&](const QString &rel) { return fileIds ? s.server.fileId(rel) : QString(); };
+        const ListResult r = await<ListResult>([&](auto cb) { s.client.list({}, cb); });
+        QVERIFY(!r.error.isError());
+        QCOMPARE(r.entries.size(), 2);
+        QCOMPARE(r.entries.at(0).fileId, expected(u"Notatki/Łódź"_s));
+        QCOMPARE(r.entries.at(1).fileId, expected(u"Notatki/Łódź/żółw.md"_s));
+        QCOMPARE(r.entries.at(1).etag, s.server.etag(u"Notatki/Łódź/żółw.md"_s));
+        if (fileIds)
+            QVERIFY(r.entries.at(0).fileId != r.entries.at(1).fileId);
+        const StatResult file = await<StatResult>([&](auto cb) { s.client.stat(u"Łódź/żółw.md"_s, cb); });
+        QVERIFY(file.entry);
+        QCOMPARE(file.entry->fileId, expected(u"Notatki/Łódź/żółw.md"_s));
+        // Kept when the file is overwritten and moved, like on Nextcloud.
+        const QString id = s.server.fileId(u"Notatki/Łódź/żółw.md"_s);
+        s.server.putText(u"Notatki/Łódź/żółw.md"_s, u"2"_s);
+        QVERIFY(s.server.moveNode(u"Notatki/Łódź"_s, u"Notatki/Kraków"_s));
+        QCOMPARE(s.server.fileId(u"Notatki/Kraków/żółw.md"_s), id);
     }
 
     void listWorksWithOtherHrefStylesAndPrefixes_data()
@@ -398,7 +435,7 @@ private Q_SLOTS:
         "</d:multistatus>");
         WebDavClient c(u"https://h/dav/N"_s, u"a"_s, u"b"_s, &transport);
         const ListResult r = await<ListResult>([&](auto cb) { c.list({}, cb); });
-        QCOMPARE(r.entries, (QList<RemoteEntry>{RemoteEntry{u"y.md"_s, false, u"1"_s, 0, 0}}));
+        QCOMPARE(r.entries, (QList<RemoteEntry>{RemoteEntry{u"y.md"_s, false, u"1"_s, 0, 0, {}}}));
     }
 
     void keepsTheServerSpellingOfNfdNames()
@@ -829,7 +866,7 @@ private Q_SLOTS:
         WebDavClient client(http.url(u"/dav/N"_s), u"jan"_s, u"hasło"_s, &transport);
         const ListResult r = await<ListResult>([&](auto cb) { client.list({}, cb); });
         QVERIFY2(!r.error.isError(), qPrintable(r.error.message));
-        QCOMPARE(r.entries, (QList<RemoteEntry>{RemoteEntry{u"ż.md"_s, false, u"7"_s, 0, 2}}));
+        QCOMPARE(r.entries, (QList<RemoteEntry>{RemoteEntry{u"ż.md"_s, false, u"7"_s, 0, 2, {}}}));
         QCOMPARE(http.requests.first().headers.value("authorization"), sync::basicAuth(u"jan"_s, u"hasło"_s));
     }
 
