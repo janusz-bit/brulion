@@ -13,7 +13,8 @@ import Brulion
 // editing, suggest, tags, slash, date, zoom, folded, selected, source, reminder, recurrence,
 // table, calc, query, embeds, title, empty, conflict, markup, task-menu (a checkbox's status
 // menu), task-menu-query (a query result's), task-slash (the status commands), date-menu /
-// date-menu-reminder (a 📅 / ⏰ chip's menu); the document
+// date-menu-reminder (a 📅 / ⏰ chip's menu), recurrence-menu (a 🔁 rule's), link-menu (a #tag's);
+// the document
 // mode on the sample trip plan (FakeEditorHost.documentPath): document (reading),
 // document-paragraph, document-list, document-heading, document-task (editing one),
 // document-outline (the same page switched to an outline); `selftest` runs keyboard/input-method
@@ -3251,6 +3252,21 @@ ApplicationWindow {
                 const box = blockTaskBox(row)
                 if (box)
                     editor.openTaskStatusMenu(row, box, 0, box.height)
+            })
+            break
+        }
+        case "recurrence-menu":
+        case "link-menu": {
+            // The menu of a 🔁 rule / of a #tag (screenshots).
+            const row = rowOf(name === "link-menu" ? "Kupić płytki" : "Podlać kwiaty")
+            editor.listView.positionViewAtIndex(row, ListView.Center)
+            scriptLater.run(() => {
+                const text = renderedIn(delegateAt(row))
+                const p = text ? linkPointIn(text, name === "link-menu" ? "tag:" : "recur:") : null
+                if (p && name === "link-menu")
+                    editor.openBlockLinkMenu(row, text.linkAt(p.x, p.y), text, p.x, p.y)
+                else if (p)
+                    editor.openDateMenu(row, text.linkAt(p.x, p.y), text, p.x, p.y)
             })
             break
         }
